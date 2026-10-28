@@ -149,7 +149,7 @@ impl VarBank {
         }
     }
 
-    /// The reserve bank number, when this is a `\vK` escape.
+    /// The reserve bank number, when this is a `\v1`..`\v9` escape.
     #[must_use]
     pub fn reserve(self) -> Option<u8> {
         match self {

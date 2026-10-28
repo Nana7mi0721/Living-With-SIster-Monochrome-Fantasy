@@ -18,16 +18,26 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use std::sync::Arc;
+
 use wolf_format::commonevent::CommonEventData;
+use wolf_format::mps::Map;
 use wolf_vm::{
-    ChoiceReply, DbOp, Host, LogLevel, PictureCmd, ProgramSet, SoundCmd, StepReport, Vm,
+    ChoiceReply, DbOp, Host, LogLevel, PictureCmd, Program, ProgramSet, SoundCmd, StepReport,
+    Vm,
 };
 
 use crate::assets::Assets;
-use crate::picture::{PictureKind, Screen};
+use crate::picture::{PictureKind, Screen, ANCHOR_CENTRE, SCREEN_H, SCREEN_W};
 
 /// The event the game opens with in this build (the "original title screen A").
 pub const TITLE_EVENT: u32 = 42;
+
+/// The map the original boots into (SysDatabase type 0, row 0).
+pub const BOOT_MAP: &str = "MapData/TitleMap.mps";
+
+/// The autorun event on [`BOOT_MAP`] that plays the splashes and reaches the title.
+pub const BOOT_EVENT: u32 = 2;
 
 /// One visible message window.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -145,12 +155,20 @@ pub struct Game {
     pub diagnostics: BTreeMap<String, u64>,
     /// Queued answers for choice prompts (front is delivered first).
     pub replies: std::collections::VecDeque<ChoiceReply>,
-    /// When true, messages dismiss immediately and choices answer index 0.
+    /// When true, messages dismiss immediately.
     pub auto_advance: bool,
+    /// When true, a choice prompt answers itself with the highlighted option.
+    pub auto_choice: bool,
+    /// Mouse position in logical pixels, [-1, -1] when the pointer is outside.
+    pub mouse: [i32; 2],
+    /// Mouse buttons held this frame: bit 0 left, bit 1 right, bit 2 middle.
+    pub mouse_buttons: u32,
     /// Which option the player has highlighted in the current choice prompt.
     choice_cursor: usize,
     /// Keys held on the previous frame, so a choice sees presses and not holds.
     previous_keys: u32,
+    /// Mouse buttons held on the previous frame, so a press can be told from a hold.
+    previous_mouse_buttons: u32,
     root: PathBuf,
 }
 
@@ -182,8 +200,12 @@ impl Game {
             diagnostics: BTreeMap::new(),
             replies: std::collections::VecDeque::new(),
             auto_advance: false,
+            auto_choice: false,
+            mouse: [-1, -1],
+            mouse_buttons: 0,
             choice_cursor: 0,
             previous_keys: 0,
+            previous_mouse_buttons: 0,
             root,
         })
     }
@@ -197,6 +219,48 @@ impl Game {
     /// Starts one common event as a coroutine. Returns false when the id is unknown.
     pub fn start_event(&mut self, id: u32) -> bool {
         self.vm.start_event(id).is_some()
+    }
+
+    /// Boots the game the way the original does: the autorun event on the title map.
+    ///
+    /// Common event 42 is *not* the entry point. The measured boot chain is
+    /// [`BOOT_MAP`] event 2 -> common event 549 (three splashes) -> a key wait ->
+    /// common event 42 (the three-option menu), which is why starting at 42 shows the
+    /// menu over a title graphic the original has not drawn yet.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the map file is missing or malformed, or when it has no event 2.
+    pub fn boot(&mut self) -> Result<(), GameError> {
+        let bytes = self.read(BOOT_MAP)?;
+        let map = Map::parse(&bytes).map_err(GameError::Format)?;
+        if self.start_map_event(&map, BOOT_EVENT) {
+            Ok(())
+        } else {
+            Err(GameError::MissingEvent(BOOT_EVENT))
+        }
+    }
+
+    /// Starts one map event first page as a coroutine.
+    ///
+    /// A map page is an ordinary instruction stream, so it compiles through the same
+    /// jump-table precompiler the common events use. Only the first page runs: later
+    /// pages need the page-switch machinery that M2 adds.
+    pub fn start_map_event(&mut self, map: &Map, event_id: u32) -> bool {
+        let Some(event) = map.events.iter().find(|event| event.id == event_id) else {
+            return false;
+        };
+        let Some(page) = event.pages.first() else {
+            return false;
+        };
+        let program = Program::from_slots(event.id, &event.name, page.commands.clone());
+        self.vm.start_program(Arc::new(program)).is_some()
+    }
+
+    fn read(&self, name: &str) -> Result<Vec<u8>, GameError> {
+        let relative: std::path::PathBuf = name.split('/').collect();
+        let path = self.root.join(relative);
+        std::fs::read(&path).map_err(|source| GameError::Io { path, source })
     }
 
     /// Starts the title screen event.
@@ -221,6 +285,25 @@ impl Game {
     #[must_use]
     pub fn choice_cursor(&self) -> usize {
         self.choice_cursor
+    }
+
+    /// Where the engine puts the current choice window, from system variables 3 (X) and
+    /// 4 (Y).
+    ///
+    /// WOLF has no centred default: [`102`] paints its window at exactly these two
+    /// numbers (docs/OPCODE_102.md). The title event sets them to (512, 1000), which is
+    /// why the original title screen shows no menu box at all.
+    #[must_use]
+    pub fn choice_anchor(&self) -> (i32, i32) {
+        (self.vm.vars.get_sys(3), self.vm.vars.get_sys(4))
+    }
+
+    /// Preselects an option of the current choice prompt.
+    ///
+    /// Headless captures use this together with [`Self::auto_choice`] to take a
+    /// specific branch without a keyboard.
+    pub fn set_choice_cursor(&mut self, index: usize) {
+        self.choice_cursor = index;
     }
 
     /// Applies this frame's key state to the open choice prompt, if there is one.
@@ -273,6 +356,11 @@ impl Game {
             stats: &mut self.stats,
             key_bits: self.key_bits,
             auto_advance: self.auto_advance,
+            auto_choice: self.auto_choice,
+            cursor: self.choice_cursor,
+            mouse: self.mouse,
+            mouse_buttons: self.mouse_buttons,
+            previous_mouse_buttons: self.previous_mouse_buttons,
         });
         // Age the UI state after the VM ran, so a message shown this frame is 0 frames old.
         for message in &mut self.messages {
@@ -283,13 +371,16 @@ impl Game {
         }
         self.screen.tick();
         self.previous_keys = self.key_bits;
+        self.previous_mouse_buttons = self.mouse_buttons;
         self.stats.frames += 1;
         self.stats.instructions += report.steps as u64;
         self.stats.peak_instances = self.stats.peak_instances.max(report.running);
         let outcome = FrameOutcome {
             pictures: self.screen.len(),
             sounds: self.sounds.len(),
-            idle: report.running == 0,
+            // A coroutine parked on a menu is alive but does no work, and that is what
+            // a renderer needs to know: idle means this frame executed nothing.
+            idle: report.steps == 0,
             report: StepReport::default(),
         };
         report.notes.clear();
@@ -322,12 +413,69 @@ struct GameHost<'a> {
     stats: &'a mut GameStats,
     key_bits: u32,
     auto_advance: bool,
+    auto_choice: bool,
+    cursor: usize,
+    mouse: [i32; 2],
+    mouse_buttons: u32,
+    previous_mouse_buttons: u32,
 }
 
 impl GameHost<'_> {
     fn note(&mut self, text: String) {
         *self.diagnostics.entry(text).or_insert(0) += 1;
         self.stats.unmodelled += 1;
+    }
+
+    /// 1 when the pointer is over the picture, 0 when not, -1 when there is no such
+    /// picture (docs/OPCODE_124.md field 8).
+    ///
+    /// The test is a plain axis-aligned box that includes transparent pixels, as the
+    /// engine documentation says: a picture hit area is its rectangle, not its alpha.
+    fn hover(&mut self, number: i32) -> i32 {
+        let Some(picture) = self.screen.get(number) else {
+            return -1;
+        };
+        let scale = f32::from(picture.scale.max(1) as i16) / 100.0;
+        let size = match picture.window {
+            Some((width, height)) if width > crate::window::MIN_BOX && height > crate::window::MIN_BOX => {
+                (width as f32 * scale, height as f32 * scale)
+            }
+            _ if picture.is_screen_layer() => (SCREEN_W as f32, SCREEN_H as f32),
+            _ => {
+                let Some((width, height)) = self.assets.texture_size(&picture.file) else {
+                    return -1;
+                };
+                (width as f32 * scale, height as f32 * scale)
+            }
+        };
+        let mut left = picture.x as f32;
+        let mut top = picture.y as f32;
+        if picture.anchor == ANCHOR_CENTRE {
+            left -= size.0 / 2.0;
+            top -= size.1 / 2.0;
+        }
+        let (px, py) = (self.mouse[0] as f32, self.mouse[1] as f32);
+        let inside_screen = self.mouse[0] >= 0
+            && self.mouse[1] >= 0
+            && px < SCREEN_W as f32
+            && py < SCREEN_H as f32;
+        let over = inside_screen
+            && px >= left
+            && px < left + size.0
+            && py >= top
+            && py < top + size.1;
+        i32::from(over)
+    }
+}
+
+/// WOLF reports a mouse button as 0 released, 1 held, 2 pressed this frame.
+fn mouse_state(held: bool, held_before: bool) -> i32 {
+    if !held {
+        0
+    } else if held_before {
+        1
+    } else {
+        2
     }
 }
 
@@ -364,9 +512,10 @@ impl Host for GameHost<'_> {
             *self.choices = None;
             return Some(reply);
         }
-        if self.auto_advance {
+        if self.auto_choice {
             *self.choices = None;
-            return Some(ChoiceReply::Index(0));
+            let index = self.cursor;
+            return Some(ChoiceReply::Index(index));
         }
         None
     }
@@ -465,8 +614,66 @@ impl Host for GameHost<'_> {
         }
     }
 
-    fn key_bits(&mut self) -> u32 {
-        self.key_bits
+    fn key_code(&mut self, mask: u32) -> i32 {
+        // The mask is deliberately unused: one mask can yield six different codes,
+        // see crates/wolf-game/src/key.rs.
+        let _ = mask;
+        crate::key::code(self.key_bits)
+    }
+
+    fn picture_state(&mut self, number: i32, field: i32) -> Option<i32> {
+        // Fields 8 and 9 answer for a picture that does not exist either (-1 vs 0),
+        // so they run before the existence check below.
+        if field == 8 {
+            return Some(self.hover(number));
+        }
+        if field == 9 {
+            return Some(i32::from(self.screen.get(number).is_some()));
+        }
+        let picture = self.screen.get(number)?;
+        match field {
+            0 => Some(picture.x),
+            1 => Some(picture.y),
+            2 | 3 => Some(picture.scale),
+            4 => picture.extras.first().copied(),
+            10 => Some(if PictureKind::from_code(picture.kind as u8).is_text() {
+                1
+            } else {
+                -1
+            }),
+            _ => None,
+        }
+    }
+
+    fn character_state(&mut self, target: i32, field: i32) -> Option<i32> {
+        // No map layer until M2: leaving the destination alone is honest, while
+        // fabricating coordinates would silently break follower logic.
+        let _ = (target, field);
+        None
+    }
+
+    fn engine_state(&mut self, field: i32) -> Option<i32> {
+        match field {
+            // Static map id and BGM data id: both unset in the port so far.
+            0 => Some(0),
+            1 => Some(-1),
+            7 => Some(mouse_state(
+                self.mouse_buttons & 1 != 0,
+                self.previous_mouse_buttons & 1 != 0,
+            )),
+            8 => Some(mouse_state(
+                self.mouse_buttons & 2 != 0,
+                self.previous_mouse_buttons & 2 != 0,
+            )),
+            9 => Some(mouse_state(
+                self.mouse_buttons & 4 != 0,
+                self.previous_mouse_buttons & 4 != 0,
+            )),
+            10 => Some(0),
+            20 => Some(self.mouse[0]),
+            21 => Some(self.mouse[1]),
+            _ => None,
+        }
     }
 }
 
@@ -489,6 +696,16 @@ mod tests {
         path
     }
 
+    fn have_data() -> Option<PathBuf> {
+        let root = data_root();
+        if root.join("BasicData").join("CommonEvent.dat").is_file() {
+            Some(root)
+        } else {
+            eprintln!("skipping: no game data at {}", root.display());
+            None
+        }
+    }
+
     #[test]
     fn a_missing_data_root_is_an_error_not_a_panic() {
         let err = match Game::new("no-such-root") {
@@ -499,19 +716,50 @@ mod tests {
     }
 
     #[test]
-    fn the_title_menu_advances_when_the_confirm_key_is_pressed() {
-        let root = data_root();
-        if !root.join("BasicData").join("CommonEvent.dat").is_file() {
-            eprintln!("skipping: no game data at {}", root.display());
-            return;
+    fn the_title_event_parks_on_its_menu_after_one_graphic() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.start_title().expect("title event");
+        let mut peak = 0usize;
+        let mut last = FrameOutcome::default();
+        for _ in 0..200 {
+            last = game.frame();
+            peak = peak.max(last.report.running);
         }
+        // The real title script: draw one full-screen graphic, start one BGM, open a
+        // three-option prompt. Everything the old capture showed beyond that came from a
+        // branch fall-through bug that reached the save/load screen chain.
+        assert!(
+            (30..=120).contains(&game.stats.instructions),
+            "{} instruction(s)",
+            game.stats.instructions
+        );
+        assert_eq!(peak, 1, "the title event is a single coroutine");
+        assert!(game.choices.is_some(), "the title prompt should be open");
+        assert_eq!(game.stats.pictures, 1);
+        assert!(last.idle, "a parked title does no work");
+        let pictures: Vec<_> = game.screen.iter().collect();
+        assert_eq!(pictures.len(), 1);
+        assert_eq!(pictures[0].number, -2, "the title layer is the whole screen");
+        assert!(pictures[0].is_screen_layer());
+        assert!(pictures[0].file.contains("TitleGraphic"));
+        assert_eq!(
+            game.stats.warnings, 0,
+            "diagnostics: {:?}",
+            game.diagnostics
+        );
+    }
+
+    #[test]
+    fn the_title_menu_advances_when_the_confirm_key_is_pressed() {
+        let Some(root) = have_data() else { return };
         let mut game = Game::new(&root).expect("game");
         game.start_title().expect("title event");
         for _ in 0..30 {
             game.frame();
         }
-        // With no keys held the title script parks on its menu: a handful of instructions
-        // and then nothing, which is exactly what the original game does.
+        // With no keys held the script parks on its menu: a handful of instructions and
+        // then nothing, which is what the original game does.
         let parked = game.stats.instructions;
         assert!(parked < 200, "the title should park quickly, ran {parked}");
         for _ in 0..30 {
@@ -522,7 +770,7 @@ mod tests {
             "a parked title must not keep executing"
         );
 
-        // A fresh confirm press has to wake it up.
+        // A fresh confirm press has to wake it up and close the prompt.
         game.key_bits = key::OK;
         game.frame();
         game.key_bits = 0;
@@ -530,55 +778,58 @@ mod tests {
             game.frame();
         }
         assert!(
-            game.stats.instructions > parked + 50,
+            game.stats.instructions > parked,
             "confirm did not advance the menu: {parked} -> {}",
             game.stats.instructions
         );
+        assert!(game.choices.is_none(), "the prompt should be answered");
     }
 
     #[test]
-    fn the_title_event_runs_200_frames_and_draws_pictures() {
-        let root = data_root();
-        if !root.join("BasicData").join("CommonEvent.dat").is_file() {
-            eprintln!("skipping: no game data at {}", root.display());
+    fn booting_reaches_the_title_art_and_confirm_opens_the_menu() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        if let Err(err) = game.boot() {
+            eprintln!("skipping: {err}");
             return;
         }
-        let mut game = Game::new(&root).expect("game");
-        game.auto_advance = true;
-        game.start_title().expect("title event");
+        for _ in 0..800 {
+            game.frame();
+        }
+        // Three splashes and then the real title art, which is a picture and not a common
+        // event: the boot map event draws it before it calls event 42.
+        let art = game
+            .screen
+            .iter()
+            .find(|picture| picture.file.contains("title01"))
+            .expect("the title art should be on screen");
+        assert_eq!(art.number, 12000);
+        assert_eq!((art.x, art.y), (0, 0));
+        let banner = game
+            .screen
+            .iter()
+            .find(|picture| picture.file.contains("Button01"))
+            .expect("the hint banner should be on screen");
+        assert_eq!(banner.anchor, ANCHOR_CENTRE, "head word 4096 centres it");
+        assert_eq!((banner.x, banner.y), (512, 520));
 
-        let mut peak = 0usize;
-        let mut last = FrameOutcome::default();
-        for _ in 0..200 {
-            last = game.frame();
-            peak = peak.max(last.report.running);
+        // One confirm press plays the door sound, erases the banner and enters the menu.
+        game.key_bits = key::OK;
+        game.frame();
+        game.key_bits = 0;
+        for _ in 0..240 {
+            game.frame();
         }
-        // The measured title closure: thousands of instructions, several coroutines,
-        // a full complement of pictures, and zero interpreter warnings.
-        assert!(game.stats.instructions > 10_000, "{}", game.stats.instructions);
-        assert!(peak >= 2, "peak coroutines {peak}");
-        assert!(!game.screen.is_empty(), "no pictures after 200 frames");
-        assert_eq!(game.stats.warnings, 0, "diagnostics: {:?}", game.diagnostics);
-        for picture in game.screen.iter() {
-            eprintln!(
-                "  pic {:>6} kind={} file={} text={} at ({},{}) scale {} alpha {:.2} screen-layer {}",
-                picture.number,
-                picture.kind as u8,
-                picture.file,
-                picture.text,
-                picture.x,
-                picture.y,
-                picture.scale,
-                picture.alpha(),
-                picture.is_screen_layer()
-            );
-        }
+        let choices = game
+            .choices
+            .as_ref()
+            .expect("confirm should land on the title menu");
+        assert_eq!(choices.options, ["1", "2", "3"]);
         assert!(
-            game.screen.iter().any(|picture| picture.file.contains("TitleGraphic")),
-            "no title graphic among {:?}",
-            game.screen.iter().map(|p| p.file.clone()).collect::<Vec<_>>()
+            game.screen
+                .iter()
+                .all(|picture| !picture.file.contains("Button01")),
+            "the hint banner is erased on the way into the menu"
         );
-        assert!(game.stats.pictures > 1000, "{} picture ops", game.stats.pictures);
-        assert!(last.report.steps > 0 || last.idle, "frame report {last:?}");
     }
 }

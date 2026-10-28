@@ -198,6 +198,9 @@ pub struct PictureCmd {
     pub text: String,
     /// x, y, scale-x, scale-y, opacity, rotation, blend, and the remaining slots.
     pub args: Vec<i32>,
+    /// Where args measures x/y from: 0 = top-left corner, 1 = centre (bit 0x1000 of the
+    /// head word). See crates/wolf-game/src/picture.rs for the measurement behind this.
+    pub anchor: u8,
     /// Trailing animation slots for the long form (docs/OPCODE_SPEC.md §5.31).
     pub animate: Vec<i32>,
 }
@@ -395,13 +398,46 @@ pub trait Host {
         let _ = event;
     }
 
-    /// Currently held keys as WOLF's 32-bit key bitmask, polled by opcode 123.
+    /// Reads one attribute of a picture for `124 SetVariableEx` (`0x4000` / `0x4400`).
     ///
-    /// The game never asks for one specific physical key: every poll carries a mask
-    /// and only tests for non-zero, so a host is free to map its input device however
-    /// it likes as long as it stays consistent between polls. Headless hosts return 0,
-    /// which reads exactly like "nobody is touching the keyboard".
-    fn key_bits(&mut self) -> u32 {
+    /// Returns `None` when the host has no opinion, which makes the interpreter leave
+    /// the destination variable untouched - the same behaviour the original engine has
+    /// for a picture number that does not exist (docs/OPCODE_124.md §3.1).
+    fn picture_state(&mut self, number: i32, field: i32) -> Option<i32> {
+        let _ = (number, field);
+        None
+    }
+
+    /// Reads one attribute of a map event or party member for `124` (`0x1000` / `0x1200`).
+    ///
+    /// The map layer only arrives in M2, so the default is "unknown".
+    fn character_state(&mut self, target: i32, field: i32) -> Option<i32> {
+        let _ = (target, field);
+        None
+    }
+
+    /// Reads one engine attribute for `124` (`0x3000`): mouse, map id, BGM id, ...
+    ///
+    /// `field 18` (the event being processed) is answered by the interpreter itself, so
+    /// hosts never have to know their own event id.
+    fn engine_state(&mut self, field: i32) -> Option<i32> {
+        let _ = field;
+        None
+    }
+
+    /// Key code a script reads for opcode 123, given the poll's key `mask`.
+    ///
+    /// The value is a CODE, not a bit pattern: 10 decide, 11 cancel, 12 sub, and the
+    /// numpad direction codes (2 down, 4 left, 6 right, 8 up), 0 when nothing is
+    /// held. The evidence is the developers' own debug comments next to the
+    /// comparisons in this game (crates/wolf-game/src/key.rs lists them).
+    ///
+    /// What the mask selects is still unknown, which is why it is handed to the host
+    /// instead of being applied here: one poll can yield six different codes.
+    /// Headless hosts return 0, which reads exactly like "nobody is touching the
+    /// keyboard".
+    fn key_code(&mut self, mask: u32) -> i32 {
+        let _ = mask;
         0
     }
 
@@ -530,6 +566,22 @@ impl Vm {
         let mut inst = Instance::new(id, None, program);
         inst.return_to = return_to;
         self.instances.push(inst);
+        Some(id)
+    }
+
+    /// Load an already-compiled program into a fresh coroutine.
+    ///
+    /// Map-event pages are not common events, so they have no entry in
+    /// [ProgramSet]; the caller compiles them with [Program::from_slots] and
+    /// hands them over here. Everything downstream (blocks, waits, return
+    /// values) behaves exactly as for a common event.
+    pub fn start_program(&mut self, program: Arc<Program>) -> Option<InstanceId> {
+        if self.instances.len() >= MAX_INSTANCES {
+            return None;
+        }
+        let id = self.next_id;
+        self.next_id += 1;
+        self.instances.push(Instance::new(id, None, program));
         Some(id)
     }
 
@@ -783,7 +835,14 @@ fn eval_num(raw: i32, inst: &Instance, vars: &Variables) -> i32 {
         MagicKind::SelfVar => inst.self_vars.get(magic.index() as usize),
         MagicKind::Var => vars.get(magic.index() as usize),
         MagicKind::SysVar => vars.get_sys(magic.index() as usize),
-        MagicKind::StrVar | MagicKind::Opaque => 0,
+        // A string bank read as a number is 0 (the editor never does this).
+        MagicKind::StrVar => 0,
+        // "Opaque" is not a bank at all: it is the negative-sentinel space
+        // (-1 keep, -2 whole screen, -1_000_000 unchanged) plus anything above
+        // the system bank. Those values are literals and must survive, otherwise
+        // picture -2 collapses to 0 and the full-screen layer is lost
+        // (docs/M1_CLOSURE.md Q3).
+        MagicKind::Opaque => raw,
     }
 }
 
@@ -983,11 +1042,16 @@ fn execute(
                 continue;
             }
             Control::Case { block } => {
-                let id = arg(cmd, 0);
+                // Reaching a case marker *by executing it* always means control
+                // fell through the previous case body into the next marker, and
+                // in WOLF that ends the branch: every 401 body runs from its
+                // marker to the next 401 (or the closing 499) and must not leak
+                // into the following case. Case *entry* never lands here -- it is
+                // done by enter_block() / poll_waits() through case_target(),
+                // which resume one slot PAST the marker. Getting this wrong makes
+                // the title menu run every option at once (docs/M1_CLOSURE.md Q1).
                 let block = &program.blocks[block];
-                inst.pc = block
-                    .case_target(id)
-                    .unwrap_or_else(|| block.end_target(program.len()));
+                inst.pc = block.end_target(program.len());
                 continue;
             }
             Control::LoopEnd { block } => {
@@ -1106,35 +1170,71 @@ fn execute(
                 None
             }
             123 => {
-                // Key-input poll (docs/OPCODE_SPEC.md 5.13): arg 1 is a bit MASK of
-                // the keys to watch, not a single key code, and the result is
-                // non-zero when any watched key is down. A headless host reports no
-                // keys, so the destination receives 0 - which is also what the game
-                // sees when the player is not touching the keyboard.
+                // Key-input poll (docs/OPCODE_SPEC.md 5.13). The destination receives
+                // the CODE of the held key, not a bit pattern - the game compares it
+                // against 10/11/12 and the numpad direction codes, which is why the
+                // old "key_bits & mask" model could never take a branch. A headless
+                // host reports 0, exactly like an untouched keyboard.
                 let target = arg(cmd, 0);
                 let mask = arg(cmd, 1) as u32;
-                store_num(inst, vars, target, (host.key_bits() & mask) as i32);
+                store_num(inst, vars, target, host.key_code(mask));
                 inst.pc += 1;
                 None
             }
             124 => {
-                // 124 SetVariableEx (``変数操作（拡張）``; WolfTL Command.hpp:112)
-                // is the least understood opcode in the set: 579 uses across five
-                // sub-operations (docs/OPCODE_SPEC.md §5.14, open item #4).
-                // 0x1000 / 0x3000 take a plain (target, value) pair and are
-                // implemented; 0x4000 / 0x4400 / 0x1200 still need reverse
-                // engineering, so they keep the old value and report at Info
-                // level instead of pretending to succeed.
+                // 124 SetVariableEx (``変数操作（拡張）``; WolfTL Command.hpp:112) is a pure
+                // query: pick a value out of the engine state and store it. It never
+                // blocks and never touches the block stack (docs/OPCODE_124.md §0).
+                //
+                // Shape: argc 4 = [dst, sub, object, field], argc 3 = [dst, sub, field]
+                // (only 0x3000 appears in the short form, 278/278 in this game). The
+                // object operand is a normal magic value - a picture number can be
+                // 5 digits or a variable reference - so it goes through eval_num.
                 let target = arg(cmd, 0);
-                let kind = arg(cmd, 1);
-                match kind {
-                    0x1000 | 0x3000 => store_num(inst, vars, target, arg(cmd, 2)),
-                    other => host.log(
-                        LogLevel::Info,
-                        &format!(
-                            "124 SetVariableEx: sub-op {other:#x} not reverse-engineered; value kept"
-                        ),
-                    ),
+                let sub = arg(cmd, 1);
+                let field = if argc(cmd) >= 4 {
+                    arg(cmd, 3)
+                } else {
+                    arg(cmd, 2)
+                };
+                let value = match sub {
+                    0x3000 => {
+                        // field 18 is "the event being processed", which only the
+                        // interpreter knows; common events report id + 500000.
+                        if field == 18 {
+                            Some(inst.event as i32 + 500_000)
+                        } else {
+                            host.engine_state(field)
+                        }
+                    }
+                    0x1000 | 0x1200 => {
+                        let object = if argc(cmd) >= 4 {
+                            eval_num(arg(cmd, 2), inst, vars)
+                        } else {
+                            0
+                        };
+                        host.character_state(object, field)
+                    }
+                    0x4000 | 0x4400 => {
+                        let object = if argc(cmd) >= 4 {
+                            eval_num(arg(cmd, 2), inst, vars)
+                        } else {
+                            0
+                        };
+                        host.picture_state(object, field)
+                    }
+                    other => {
+                        host.log(
+                            LogLevel::Info,
+                            &format!("124 SetVariableEx: sub-op {other:#x} unused in this game"),
+                        );
+                        None
+                    }
+                };
+                // `None` deliberately leaves the destination alone: the original engine does
+                // not write anything when the queried object does not exist (§3.1).
+                if let Some(value) = value {
+                    store_num(inst, vars, target, value);
                 }
                 inst.pc += 1;
                 None
@@ -1560,6 +1660,11 @@ fn picture_arg(raw: i32, inst: &Instance, vars: &Variables) -> i32 {
 fn decode_picture(inst: &Instance, vars: &Variables, cmd: &Command) -> PictureCmd {
     let head = arg(cmd, 0);
     let kind = ((head >> 4) & 0x07) as u8;
+    // Bits 12..14 of the head word anchor the picture: 0 means x/y is the top-left corner,
+    // 1 (0x1000) means it is the centre. Measured over 13,637 long-form draws - the 0x1000
+    // group sits on x=512 / y=288 (the logical screen centre), and the retail title hint
+    // banner only lines up when its 606x35 image is centred on (512, 520).
+    let anchor = ((head >> 12) & 0x07) as u8;
     let action = match head & 0x0F {
         0 => PictureAction::Draw,
         1 => PictureAction::Move,
@@ -1584,7 +1689,9 @@ fn decode_picture(inst: &Instance, vars: &Variables, cmd: &Command) -> PictureCm
     // than constants, so they must be evaluated here or the picture lands at 1,600,041.
     // Flag carriers (top nibble set, e.g. 0x02000000) and the negative sentinels
     // (-1 / -2 / -1000000) are passed through untouched: their high bits are meaningful.
-    let args: Vec<i32> = (2..argc(cmd)).map(|i| picture_arg(arg(cmd, i), inst, vars)).collect();
+    let args: Vec<i32> = (2..argc(cmd))
+        .map(|i| picture_arg(arg(cmd, i), inst, vars))
+        .collect();
     let animate = if args.len() > 11 {
         args[11..].to_vec()
     } else {
@@ -1597,6 +1704,7 @@ fn decode_picture(inst: &Instance, vars: &Variables, cmd: &Command) -> PictureCm
         file,
         text,
         args,
+        anchor,
         animate,
     }
 }
@@ -1666,6 +1774,12 @@ mod tests {
         teleports: Vec<(i32, i32, i32, i32)>,
         dismiss: bool,
         reply: Option<ChoiceReply>,
+        // Answers served to 124 picture queries, keyed by (number, field).
+        picture_answers: Vec<(i32, i32, Option<i32>)>,
+        // Every (number, field) pair 124 actually asked about.
+        picture_queries: Vec<(i32, i32)>,
+        // Canned engine answers for 124 0x3000, keyed by field.
+        engine_answers: Vec<(i32, i32)>,
     }
 
     impl Host for Recorder {
@@ -1694,6 +1808,70 @@ mod tests {
         fn log(&mut self, level: LogLevel, message: &str) {
             self.logs.push((level, message.to_owned()));
         }
+        fn picture_state(&mut self, number: i32, field: i32) -> Option<i32> {
+            self.picture_queries.push((number, field));
+            self.picture_answers
+                .iter()
+                .find(|(n, f, _)| *n == number && *f == field)
+                .and_then(|(_, _, value)| *value)
+        }
+        fn engine_state(&mut self, field: i32) -> Option<i32> {
+            self.engine_answers
+                .iter()
+                .find(|(f, _)| *f == field)
+                .map(|(_, value)| *value)
+        }
+    }
+
+    #[test]
+    fn opcode_124_writes_picture_and_engine_answers() {
+        // 0x4000 reads a picture field: field 8 is the hover test that drives the whole
+        // title menu (588 uses game-wide, docs/OPCODE_124.md section 5.3).
+        let ev = event(
+            42,
+            "queries",
+            vec![
+                cmd(124, &[2_000_000, 0x4000, 12_005, 8], &[]),
+                cmd(124, &[2_000_001, 0x4000, 12_005, 9], &[]),
+                // argc 3 is the short form and only 0x3000 uses it: [dst, sub, field].
+                cmd(124, &[2_000_002, 0x3000, 20], &[]),
+                // An unanswered field must leave the destination alone, not write 0:
+                // seed it with 7 first, then ask a field nobody answers.
+                cmd(121, &[2_000_003, 7, 0, 0], &[]),
+                cmd(124, &[2_000_003, 0x4000, 12_005, 77], &[]),
+            ],
+        );
+        let mut vm = vm_with(vec![ev]);
+        vm.start_event(42);
+        let mut host = Recorder {
+            picture_answers: vec![(12_005, 8, Some(1)), (12_005, 9, Some(0))],
+            engine_answers: vec![(20, 640)],
+            ..Recorder::default()
+        };
+        vm.step_frame(&mut host);
+        assert_eq!(vm.vars.get(0), 1, "hover answer");
+        assert_eq!(vm.vars.get(1), 0, "in-use answer");
+        assert_eq!(vm.vars.get(2), 640, "mouse x from the short form");
+        assert_eq!(vm.vars.get(3), 7, "unanswered field keeps the old value");
+        assert_eq!(
+            host.picture_queries,
+            vec![(12_005, 8), (12_005, 9), (12_005, 77)]
+        );
+        // The object operand is a magic value, so a 5-digit picture number arrives
+        // verbatim instead of being decoded as a variable reference.
+        assert!(host.logs.is_empty(), "unexpected logs");
+    }
+
+    #[test]
+    fn opcode_124_reports_the_running_event_for_field_18() {
+        // Field 18 answers 'which event is running' from the interpreter itself, and
+        // common events report id + 500000 so they cannot collide with map events.
+        let ev = event(77, "self id", vec![cmd(124, &[2_000_000, 0x3000, 18], &[])]);
+        let mut vm = vm_with(vec![ev]);
+        vm.start_event(77);
+        let mut host = Recorder::default();
+        vm.step_frame(&mut host);
+        assert_eq!(vm.vars.get(0), 500_077);
     }
 
     #[test]
@@ -1966,6 +2144,71 @@ mod tests {
     }
 
     #[test]
+    fn a_case_body_does_not_fall_through_into_the_next_case() {
+        // Choosing option 0 must run only the first body. The old interpreter
+        // executed the next 401 marker and jumped straight into the sibling
+        // case, so the title menu ran every entry at once (M1_CLOSURE Q1).
+        let e = event(
+            1,
+            "no fall-through",
+            vec![
+                cmd(102, &[2], &["first", "second"]),
+                cmd(401, &[2], &[]),
+                cmd(121, &[2_000_000, 10, 0, 0], &[]),
+                cmd(121, &[2_000_001, 10_000, 0, 0], &[]),
+                cmd(401, &[3], &[]),
+                cmd(121, &[2_000_001, 22_222, 0, 0], &[]),
+                cmd(499, &[], &[]),
+                cmd(121, &[2_000_002, 33_333, 0, 0], &[]),
+            ],
+        );
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder {
+            reply: Some(ChoiceReply::Index(0)),
+            ..Recorder::default()
+        };
+        vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+        vm.step_frame(&mut host);
+        assert_eq!(vm.vars.get(0), 10, "first case body ran");
+        assert_eq!(
+            vm.vars.get(1),
+            10_000,
+            "the next marker ended the branch instead of entering the sibling case"
+        );
+        // The branch ends at the 499, so the instruction after it still runs.
+        assert_eq!(
+            vm.vars.get(2),
+            33_333,
+            "execution continues past the branch"
+        );
+        assert!(vm.instance(0).is_none(), "event finished");
+    }
+
+    #[test]
+    fn opaque_operands_keep_their_negative_value() {
+        // -2 is the "whole screen" picture sentinel, -1_000_000 means "leave
+        // unchanged": both live in the MagicKind::Opaque space and used to decay
+        // to 0, which silently turned layer -2 into picture 0 (M1_CLOSURE Q3).
+        let e = event(
+            1,
+            "opaque",
+            vec![
+                cmd(121, &[2_000_000, -2, 0, 0], &[]),
+                cmd(121, &[2_000_001, -1_000_000, 0, 0], &[]),
+                cmd(150, &[0, -2, 30, 1, 1, 1, 255, 0, 0, 100, 0], &["a.jpg"]),
+            ],
+        );
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+        assert_eq!(vm.vars.get(0), -2);
+        assert_eq!(vm.vars.get(1), -1_000_000);
+        assert_eq!(host.pictures[0].number, -2, "screen-layer picture number");
+    }
+
+    #[test]
     fn common_event_call_spawns_a_child_and_blocks_the_caller() {
         let callee = event(
             2,
@@ -2054,6 +2297,28 @@ mod tests {
         assert_eq!(picture.file, "SystemGraphic/TitleGraphic01.jpg");
         assert_eq!(picture.args[0], 100);
         assert_eq!(picture.args[1], 200);
+        assert_eq!(picture.anchor, 0, "0x0000 anchors the top-left corner");
+    }
+
+    #[test]
+    fn picture_head_bits_12_to_14_carry_the_anchor() {
+        // The retail title banner: head 4096 = 0x1000, drawn at the screen centre.
+        let e = event(
+            1,
+            "banner",
+            vec![cmd(
+                150,
+                &[4096, 12001, 0, 1, 1, 1, 255, 512, 520],
+                &["SystemFile/Button01.png"],
+            )],
+        );
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+        assert_eq!(host.pictures[0].anchor, 1, "0x1000 anchors the centre");
+        assert_eq!(host.pictures[0].kind, 0);
+        assert_eq!(host.pictures[0].action, PictureAction::Draw);
     }
 
     #[test]

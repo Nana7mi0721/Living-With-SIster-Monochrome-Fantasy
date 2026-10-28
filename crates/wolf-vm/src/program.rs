@@ -200,7 +200,19 @@ impl Program {
     /// Resolve one event's control flow.
     #[must_use]
     pub fn compile(event: &wolf_format::commonevent::CommonEvent) -> Self {
-        let slots = &event.commands;
+        Self::from_slots(event.id, &event.title, event.commands.clone())
+    }
+
+    /// Same, for a bare instruction stream.
+    ///
+    /// Map events (`.mps` pages) are ordinary `Slot` streams with no owning
+    /// `CommonEvent`, and the interpreter needs exactly the same jump tables for
+    /// them: a map page can open an `111` branch chain and a `179` loop just like
+    /// a common event can. TitleMap.mps event 2 - the real title screen - is 133
+    /// slots of `111`/`179`/`498`/`213`, so keeping two compilers would mean two
+    /// chances to disagree about where a branch ends.
+    #[must_use]
+    pub fn from_slots(id: u32, title: &str, slots: Vec<Slot>) -> Self {
         let len = slots.len();
         let mut control = vec![Control::None; len];
         let mut blocks: Vec<Block> = Vec::new();
@@ -347,9 +359,9 @@ impl Program {
             .count();
 
         Self {
-            id: event.id,
-            title: event.title.clone(),
-            slots: slots.clone(),
+            id,
+            title: title.to_owned(),
+            slots,
             control,
             blocks,
             labels,

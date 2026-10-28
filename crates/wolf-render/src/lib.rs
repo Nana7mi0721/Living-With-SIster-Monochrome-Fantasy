@@ -30,12 +30,14 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod diff;
 mod error;
 mod renderer;
 mod scaler;
 mod sprite;
 mod text;
 
+pub use diff::{compare, diff_image, rgba_at, DiffReport, WorstPixel, DIFF_GAIN, WORST_LIMIT};
 pub use error::RenderError;
 pub use renderer::{Renderer, FRAME_FORMAT};
 pub use scaler::{integer_scale, Scaler, LOGICAL_H, LOGICAL_W};

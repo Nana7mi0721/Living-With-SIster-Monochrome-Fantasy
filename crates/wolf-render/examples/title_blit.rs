@@ -6,9 +6,10 @@
 //!   can say which driver produced the pixels;
 //! * the 1024x576 logical framebuffer renders headlessly to exactly that size
 //!   (`--out`) with no window, no compositor and no display;
-//! * the instanced sprite path draws straight-alpha geometry into an sRGB
-//!   target -- the second quad is a 50%-alpha stretch, which is only correct if
-//!   both the blend state and the sRGB round trip are right;
+//! * the instanced sprite path draws straight-alpha geometry into a gamma-space
+//!   (plain UNORM) target, the way DxLib does -- the second quad is a 50%-alpha
+//!   stretch, so both the blend state and the blend space have to be right for
+//!   the result to look like the retail game;
 //! * with a window, the integer upscale and letterbox behave (title bar shows
 //!   the scale factor).
 //!

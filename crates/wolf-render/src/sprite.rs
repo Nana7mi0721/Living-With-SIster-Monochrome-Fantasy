@@ -39,6 +39,21 @@ impl SpriteInstance {
         self.tint[3] = alpha;
         self
     }
+
+    /// Same quad with its rgb scaled by `tone` (DxLib `SetDrawBright` semantics:
+    /// brightness multiplies the colour channels and never the alpha).
+    ///
+    /// WOLF pictures carry such a tone: the title hint banner renders as its source
+    /// bitmap times 222/255 on rgb, alpha untouched. Keeping the tone in the
+    /// instance rather than in the blend path is what lets the renderer reproduce
+    /// that pixel-exactly; see `tests/offscreen.rs`.
+    #[must_use]
+    pub fn with_tint_rgb(mut self, r: f32, g: f32, b: f32) -> Self {
+        self.tint[0] = r;
+        self.tint[1] = g;
+        self.tint[2] = b;
+        self
+    }
 }
 
 /// Vertex layout for the instance buffer: three `vec4<f32>`, stepped once per instance.
@@ -59,5 +74,12 @@ mod tests {
     fn alpha_only_touches_the_alpha_slot() {
         let s = SpriteInstance::new([0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 1.0, 1.0]).with_alpha(0.5);
         assert_eq!(s.tint, [1.0, 1.0, 1.0, 0.5]);
+    }
+
+    #[test]
+    fn rgb_tint_only_touches_the_colour_slots() {
+        let s = SpriteInstance::new([0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 1.0, 1.0])
+            .with_tint_rgb(0.5, 0.25, 0.75);
+        assert_eq!(s.tint, [0.5, 0.25, 0.75, 1.0]);
     }
 }

@@ -343,15 +343,19 @@ pub fn texts(screen: &Screen) -> Vec<TextQuad> {
         .collect()
 }
 
-/// Rounds a destination rectangle to whole pixels.
+/// Snaps a destination rectangle to whole pixels.
 ///
-/// WOLF positions pictures in integers anyway, but the scale percent multiplication can
-/// introduce fractions; snapping keeps nearest-neighbour sampling on exact texel edges so
-/// a 16 px chip never shows a half-pixel seam.
+/// WOLF positions pictures in integers anyway, but two things introduce fractions: the
+/// scale percent multiplication, and the half-extent shift of a centre-anchored picture.
+/// The origin truncates, because the engine hands float coordinates to a blit that casts
+/// them to int; the retail title banner (606x35 at y 520, centre anchor) lands on row 502,
+/// not 503, which is only reproducible by truncating 502.5. The extent rounds instead, so
+/// nearest-neighbour sampling stays on exact texel edges and a 16 px chip never shows a
+/// half-pixel seam.
 fn snap(rect: [f32; 4]) -> [f32; 4] {
     [
-        rect[0].round(),
-        rect[1].round(),
+        rect[0].trunc(),
+        rect[1].trunc(),
         rect[2].round().max(1.0),
         rect[3].round().max(1.0),
     ]
@@ -449,6 +453,7 @@ mod tests {
             text: "hello".to_owned(),
             args: vec![0, 300, 200, 1, 255, 855, 200, 100, 0],
             animate: Vec::new(),
+            anchor: 0,
         });
         let mut atlas = Atlas::with_size(8, 8);
         let mut assets = Assets::new("no-such-root");
@@ -472,6 +477,7 @@ mod tests {
             text: "notice".to_owned(),
             args: vec![0, 300, 200, 1, 255, 855, 200, 100, 0],
             animate: Vec::new(),
+            anchor: 0,
         });
         let mut atlas = Atlas::with_size(64, 64);
         // Pre-pack the skin so the atlas never touches the filesystem: add_asset

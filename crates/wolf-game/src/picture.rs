@@ -30,6 +30,33 @@
 //! Reading x/y from args[0]/args[1] instead (as the editor docs suggest for short forms)
 //! would put the 1024x576 title image at scale 1% - a 10x6 pixel dot.
 //!
+//! # The head word carries an anchor code in bits 12..14
+//!
+//! Grouping the 13,637 long-form draws of this game by that nibble shows the x/y values
+//! are not free coordinates but are measured from an anchor:
+//!
+//! | bits | count | x seen | y seen | reading |
+//! |---|---|---|---|---|
+//! | 0x0000 | 8,911 | x=0 (5,782x) | y=0 (5,047x) | top-left, x/y is the corner |
+//! | 0x1000 | 4,393 | x=512 (788x) | y=288 (216x) | centred on x/y |
+//! | 0x2000 | 84 | x=384 (57x) | y=570 | unverified |
+//! | 0x3000 | 105 | x=1000 | y=60 | unverified |
+//! | 0x4000 | 67 | x=1024 | y=570 | unverified |
+//! | 0x5000 | 8 | x=512 | y=0/100 | unverified |
+//! | 0x6000 | 69 | x=800 | y=576 | unverified |
+//!
+//! 512 is exactly 1024/2 and 288 is exactly 576/2, i.e. the logical screen centre. The
+//! decisive check is the retail title screen: TitleMap event 2 draws SystemFile/Button01.png
+//! (606x35) with the 0x1000 flag at (512, 520). Anchored at the corner that banner would
+//! cover x 512..1118 (clipped at the right edge) and y 520..555; the real screenshot shows
+//! its ink at x 232..794, y 504..535 - which is the banner centred on (512, 520), with the
+//! transparent margin of the PNG accounting for the remaining pixels. So 0x1000 anchors
+//! BOTH axes on the centre.
+//!
+//! Only 0x0000 and 0x1000 are implemented; the other nibbles keep the corner behaviour and
+//! are listed as unverified in docs/UNVERIFIED.md, because no title-screen instruction uses
+//! them and guessing would move live pictures to the wrong place.
+//!
 //! # Negative numbers are whole-screen layers
 //!
 //! Picture numbers below zero are the screen-level pictures. Every instance in this game
@@ -54,6 +81,10 @@ pub const SCREEN_W: u32 = 1024;
 /// Logical screen height used when a picture is a whole-screen layer.
 pub const SCREEN_H: u32 = 576;
 
+/// Anchor code 0: x/y name the picture top-left corner.
+pub const ANCHOR_TOP_LEFT: u8 = 0;
+/// Anchor code 1 (head bit 0x1000): x/y name the picture centre.
+pub const ANCHOR_CENTRE: u8 = 1;
 /// Scale field value that means "no scaling" (percent).
 pub const SCALE_ONE: i32 = 100;
 
@@ -143,6 +174,8 @@ pub struct Picture {
     pub blend: i32,
     /// Window size for the window kinds.
     pub window: Option<(i32, i32)>,
+    /// Anchor code from the head word bits 12..14: 0 top-left, 1 centre.
+    pub anchor: u8,
     /// Kind-specific trailing arguments, kept verbatim for the animation layer.
     pub extras: Vec<i32>,
     /// Frames since the picture first appeared, for animation timing.
@@ -164,6 +197,7 @@ impl Picture {
             opacity: 255,
             blend: 0,
             window: None,
+            anchor: ANCHOR_TOP_LEFT,
             extras: Vec::new(),
             age: 0,
         }
@@ -277,6 +311,7 @@ impl Screen {
                 picture.kind = PictureKind::from_code(cmd.kind);
                 picture.file = cmd.file.clone();
                 picture.text = cmd.text.clone();
+                picture.anchor = cmd.anchor;
                 merge_args(&mut picture, &cmd.args);
                 self.pictures.insert(cmd.number, picture);
             }
@@ -293,6 +328,9 @@ impl Screen {
                 if !cmd.text.is_empty() {
                     picture.text.clone_from(&cmd.text);
                 }
+                // The anchor rides on every command, Move included: 56 of the 3,364 Move
+                // instructions in this game carry the centre flag.
+                picture.anchor = cmd.anchor;
                 merge_args(picture, &cmd.args);
             }
         }
@@ -314,49 +352,63 @@ impl Screen {
             if picture.opacity <= 0 {
                 continue;
             }
-            let (src, dst) = if picture.is_screen_layer() {
-                let size = tex_size(&picture.file);
-                let src = size.map_or([0, 0, SCREEN_W, SCREEN_H], |(w, h)| [0, 0, w, h]);
-                (src, [0.0, 0.0, SCREEN_W as f32, SCREEN_H as f32])
-            } else if picture.kind.is_text() {
+            // Whole-screen layers ignore x/y/scale entirely: whichever way a negative-number
+            // picture is anchored, it must cover the logical screen.
+            if picture.is_screen_layer() {
+                let src = tex_size(&picture.file)
+                    .map_or([0, 0, SCREEN_W, SCREEN_H], |(w, h)| [0, 0, w, h]);
+                out.push(ScreenQuad::from(
+                    picture,
+                    src,
+                    [0.0, 0.0, SCREEN_W as f32, SCREEN_H as f32],
+                ));
+                continue;
+            }
+            let (src, w, h) = if picture.kind.is_text() {
                 let (w, h) = picture.window.unwrap_or((0, 0));
-                (
-                    [0, 0, 0, 0],
-                    [
-                        picture.x as f32,
-                        picture.y as f32,
-                        w.max(0) as f32,
-                        h.max(0) as f32,
-                    ],
-                )
+                ([0, 0, 0, 0], w.max(0) as f32, h.max(0) as f32)
             } else {
                 let Some((w, h)) = tex_size(&picture.file) else {
                     continue;
                 };
                 let scale = picture.scale.max(0) as f32 / SCALE_ONE as f32;
-                (
-                    [0, 0, w, h],
-                    [
-                        picture.x as f32,
-                        picture.y as f32,
-                        w as f32 * scale,
-                        h as f32 * scale,
-                    ],
-                )
+                ([0, 0, w, h], w as f32 * scale, h as f32 * scale)
             };
-            out.push(ScreenQuad {
-                number: picture.number,
-                kind: picture.kind,
-                file: picture.file.clone(),
-                text: picture.text.clone(),
-                src,
-                dst,
-                alpha: picture.alpha(),
-                blend: picture.blend,
-            });
+            let dst = place(picture.anchor, picture.x, picture.y, w, h);
+            out.push(ScreenQuad::from(picture, src, dst));
         }
         out
     }
+}
+
+impl ScreenQuad {
+    /// Builds a quad from a picture plus its finished source/destination rectangles.
+    fn from(picture: &Picture, src: [u32; 4], dst: [f32; 4]) -> Self {
+        Self {
+            number: picture.number,
+            kind: picture.kind,
+            file: picture.file.clone(),
+            text: picture.text.clone(),
+            src,
+            dst,
+            alpha: picture.alpha(),
+            blend: picture.blend,
+        }
+    }
+}
+
+/// Turns an anchor code plus a w*h extent into the destination rectangle.
+///
+/// ANCHOR_CENTRE shifts by half the extent on both axes, which is what the retail title
+/// banner needs; every other code keeps the corner behaviour and is unverified.
+fn place(anchor: u8, x: i32, y: i32, w: f32, h: f32) -> [f32; 4] {
+    let mut left = x as f32;
+    let mut top = y as f32;
+    if anchor == ANCHOR_CENTRE {
+        left -= w / 2.0;
+        top -= h / 2.0;
+    }
+    [left, top, w, h]
 }
 
 /// Merges a command's field words into a picture, honouring the UNCHANGED sentinel.
@@ -401,7 +453,14 @@ mod tests {
     use wolf_vm::PictureCmd;
 
     /// Builds a command the way the interpreter does: args start at raw arg[2].
-    fn cmd(number: i32, kind: u8, action: PictureAction, file: &str, text: &str, args: &[i32]) -> PictureCmd {
+    fn cmd(
+        number: i32,
+        kind: u8,
+        action: PictureAction,
+        file: &str,
+        text: &str,
+        args: &[i32],
+    ) -> PictureCmd {
         PictureCmd {
             number,
             kind,
@@ -410,7 +469,65 @@ mod tests {
             text: text.to_owned(),
             args: args.to_vec(),
             animate: Vec::new(),
+            anchor: ANCHOR_TOP_LEFT,
         }
+    }
+
+    #[test]
+    fn place_only_shifts_the_centre_anchor() {
+        assert_eq!(
+            place(ANCHOR_TOP_LEFT, 512, 520, 606.0, 35.0),
+            [512.0, 520.0, 606.0, 35.0]
+        );
+        assert_eq!(
+            place(ANCHOR_CENTRE, 512, 520, 606.0, 35.0),
+            [209.0, 502.5, 606.0, 35.0]
+        );
+        // The unverified codes must behave like the corner, never like the centre.
+        assert_eq!(place(3, 100, 50, 20.0, 10.0), [100.0, 50.0, 20.0, 10.0]);
+    }
+
+    #[test]
+    fn a_centred_picture_places_its_middle_at_xy() {
+        let mut screen = Screen::new();
+        let mut command = cmd(
+            12001,
+            0,
+            PictureAction::Draw,
+            "SystemFile/Button01.png",
+            "",
+            &[4096, 1, 1, 1, 255, 512, 520, 100, 0],
+        );
+        command.anchor = ANCHOR_CENTRE;
+        screen.apply(&command);
+        let quads = screen.quads(|_| Some((606, 35)));
+        assert_eq!(quads.len(), 1);
+        assert_eq!(quads[0].dst, [209.0, 502.5, 606.0, 35.0]);
+    }
+
+    #[test]
+    fn a_move_can_switch_the_anchor() {
+        let mut screen = Screen::new();
+        screen.apply(&cmd(
+            7,
+            0,
+            PictureAction::Draw,
+            "a.png",
+            "",
+            &[0, 1, 1, 1, 255, 0, 0, 100, 0],
+        ));
+        let mut moved = cmd(
+            7,
+            0,
+            PictureAction::Move,
+            "",
+            "",
+            &[0, 1, 1, 1, 255, 512, 288, 100, 0],
+        );
+        moved.anchor = ANCHOR_CENTRE;
+        screen.apply(&moved);
+        let quads = screen.quads(|_| Some((100, 50)));
+        assert_eq!(quads[0].dst, [462.0, 263.0, 100.0, 50.0]);
     }
 
     /// The real title background command, verbatim from event 42 pc20:
@@ -473,7 +590,9 @@ mod tests {
             PictureAction::Move,
             "",
             "",
-            &[UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, 100, 200, 50, UNCHANGED],
+            &[
+                UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, 100, 200, 50, UNCHANGED,
+            ],
         ));
         let picture = screen.get(-2).expect("picture");
         assert_eq!(picture.x, 100);
@@ -493,7 +612,9 @@ mod tests {
             PictureAction::Move,
             "Kagura/bg.png",
             "",
-            &[UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, 10, 20, 100, 0],
+            &[
+                UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, 10, 20, 100, 0,
+            ],
         ));
         let picture = screen.get(7).expect("created by move");
         assert_eq!(picture.x, 10);
@@ -515,9 +636,23 @@ mod tests {
     #[test]
     fn opacity_is_clamped_and_transparent_pictures_are_not_drawn() {
         let mut screen = Screen::new();
-        screen.apply(&cmd(1, 0, PictureAction::Draw, "a.png", "", &[0, 0, 0, 0, 999, 0, 0, 100, 0]));
+        screen.apply(&cmd(
+            1,
+            0,
+            PictureAction::Draw,
+            "a.png",
+            "",
+            &[0, 0, 0, 0, 999, 0, 0, 100, 0],
+        ));
         assert_eq!(screen.get(1).expect("picture").opacity, 255);
-        screen.apply(&cmd(2, 0, PictureAction::Draw, "b.png", "", &[0, 0, 0, 0, -5, 0, 0, 100, 0]));
+        screen.apply(&cmd(
+            2,
+            0,
+            PictureAction::Draw,
+            "b.png",
+            "",
+            &[0, 0, 0, 0, -5, 0, 0, 100, 0],
+        ));
         assert_eq!(screen.get(2).expect("picture").opacity, 0);
         let quads = screen.quads(|_| Some((16, 16)));
         assert_eq!(quads.len(), 1);
@@ -547,7 +682,14 @@ mod tests {
     #[test]
     fn an_image_picture_with_an_unknown_texture_is_skipped() {
         let mut screen = Screen::new();
-        screen.apply(&cmd(3, 0, PictureAction::Draw, "missing.png", "", &[0, 0, 0, 0, 255, 5, 6, 100, 0]));
+        screen.apply(&cmd(
+            3,
+            0,
+            PictureAction::Draw,
+            "missing.png",
+            "",
+            &[0, 0, 0, 0, 255, 5, 6, 100, 0],
+        ));
         assert!(screen.quads(|_| None).is_empty());
         let quads = screen.quads(|_| Some((40, 20)));
         assert_eq!(quads.len(), 1);
@@ -557,7 +699,14 @@ mod tests {
     #[test]
     fn images_are_scaled_by_percent() {
         let mut screen = Screen::new();
-        screen.apply(&cmd(3, 0, PictureAction::Draw, "a.png", "", &[0, 0, 0, 0, 255, 5, 6, 250, 0]));
+        screen.apply(&cmd(
+            3,
+            0,
+            PictureAction::Draw,
+            "a.png",
+            "",
+            &[0, 0, 0, 0, 255, 5, 6, 250, 0],
+        ));
         let quads = screen.quads(|_| Some((40, 20)));
         assert_eq!(quads[0].dst, [5.0, 6.0, 100.0, 50.0]);
     }
@@ -566,11 +715,22 @@ mod tests {
     fn iteration_is_in_ascending_number_order_because_that_is_the_draw_order() {
         let mut screen = Screen::new();
         for number in [5, -2, 12, 0] {
-            screen.apply(&cmd(number, 0, PictureAction::Draw, "a.png", "", &[0, 0, 0, 0, 255, 0, 0, 100, 0]));
+            screen.apply(&cmd(
+                number,
+                0,
+                PictureAction::Draw,
+                "a.png",
+                "",
+                &[0, 0, 0, 0, 255, 0, 0, 100, 0],
+            ));
         }
         let order: Vec<i32> = screen.iter().map(|p| p.number).collect();
         assert_eq!(order, vec![-2, 0, 5, 12]);
-        let quad_order: Vec<i32> = screen.quads(|_| Some((1, 1))).into_iter().map(|q| q.number).collect();
+        let quad_order: Vec<i32> = screen
+            .quads(|_| Some((1, 1)))
+            .into_iter()
+            .map(|q| q.number)
+            .collect();
         assert_eq!(quad_order, vec![-2, 0, 5, 12]);
     }
 
@@ -589,7 +749,17 @@ mod tests {
     fn draw_replaces_a_previous_picture_rather_than_patching_it() {
         let mut screen = Screen::new();
         screen.apply(&title_background());
-        screen.apply(&cmd(0, 0, PictureAction::Draw, "b.png", "", &[UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED]));
+        screen.apply(&cmd(
+            0,
+            0,
+            PictureAction::Draw,
+            "b.png",
+            "",
+            &[
+                UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED, UNCHANGED,
+                UNCHANGED, UNCHANGED,
+            ],
+        ));
         // Draw with everything unchanged means "back to the defaults", not "keep the old".
         let picture = screen.get(0).expect("picture");
         assert_eq!(picture.scale, SCALE_ONE);

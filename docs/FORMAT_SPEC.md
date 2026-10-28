@@ -14,12 +14,18 @@
 | 项 | 值 |
 |---|---|
 | 游戏 | Living With Sister Monochrome Fantasy（妹相随～黑白世界的缤纷冒险～），Steam appid 2429860 |
-| 引擎 | WOLF RPG Editor v3.x（DxLib + DirectX，Data/ 下 26 个 .wolf 归档） |
+| 引擎 | WOLF RPG Editor v3.x（DxLib + DirectX，Data/ 下 26 个 .wolf 归档；★已实测纠正：实际是 **23 个 .wolf** + 4 个 .ttf 字体，见下方注） |
 | 安装目录 | E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy |
-| 归档目录 | <安装目录>\Data\（26 个 .wolf；注意没有任何散落的 .dat） |
+| 归档目录 | <安装目录>\Data\（★已实测：**23 个 .wolf**，不是 26；注意没有任何散落的 .dat） |
 | 存档目录 | <安装目录>\Save\（SaveData01..08.sav、System.sav） |
 | 解包参考 | work\full\<ArchiveName>\（已用 UberWolfCli.exe 解包，作为验证基准） |
 | 屏幕 / 帧率 | 1024×576，tile 16px，60fps，8 方向角色图，3 帧动画，主字体 LOLITA |
+
+> **★已实测纠正（归档数量）**：原文与任务书都写“Data/ 下 26 个 .wolf”，**实测是 23 个**
+> （`find Data -name '*.wolf'`，顶层与递归都是 23；Data/ 下总共 27 个文件，另外 4 个是字体：
+> 07yasashi.ttf、07yasashisagoshitsukubo-rudo.ttf、08YuanRougoshitsukubo-rudo.ttf、08gothic.ttf）。
+> Rust reader 的 `every_archive_reads` 测试就是
+> 按“扫目录、见 .wolf 就打开”写的，它扫到的正是这 23 个（4062 个条目）。以 23 为准。
 
 **为什么必须直接读二进制**：WolfTL.exe 把 Data 转成了 JSON，但该 JSON **有损**——
 丢掉了每条指令的 run_condition 附加段，指令数 124,204 vs 二进制 139,273（少约 11%）。

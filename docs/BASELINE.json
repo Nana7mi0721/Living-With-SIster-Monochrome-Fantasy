@@ -288,9 +288,171 @@
   "files_total": 4062,
   "bytes_total": 771585007
  },
+ "title_screen": {
+  "event": 42,
+  "event_title": "オリジナルタイトル画面Ａ",
+  "instructions": 39,
+  "frames_to_park": 16,
+  "peak_coroutines": 1,
+  "picture_ops": 1,
+  "pictures_live": 1,
+  "choice_prompt": [
+   "1",
+   "2",
+   "3"
+  ],
+  "choice_sys3_x": 512,
+  "choice_sys4_y": 1000,
+  "background": "SystemGraphic/TitleGraphic.jpg",
+  "background_picture_number": -2,
+  "bgm": "BGM/White_Base.mp3",
+  "note": "39 instructions is the whole title: draw one full-screen graphic, start one BGM, open a 3-option prompt. The earlier 39,753-instruction / 3,261-picture capture was the save/load chain reached through the 401 fall-through bug."
+ },
+ "boot_screen": {
+  "entry": "MapData/TitleMap.mps event 2 (autorun, 133 commands)",
+  "splash_event": 549,
+  "splash_event_title": "forSteam[caution]",
+  "sequence": [
+   {
+    "frames": "0-60",
+    "screen": "Kagura/bg.png (1024x576 solid black)"
+   },
+   {
+    "frames": "62-190",
+    "screen": "Kagura/Kagura.png (KAGURA GAMES fox-mask logo + CN thank-you lines)"
+   },
+   {
+    "frames": "~220-400",
+    "screen": "Kagura/Disc.png (disclaimer: fictitious characters, all 18+)"
+   },
+   {
+    "frames": "~450-620",
+    "screen": "Kagura/inusuku.png (inusuku developer logo card)"
+   },
+   {
+    "frames": "700+",
+    "screen": "Picture/title01.jpg (1024x576) + SystemFile/Button01.png hint banner, parked in the key-wait loop"
+   }
+  ],
+  "capture_frames": 800,
+  "instructions": 2813,
+  "picture_ops": 10,
+  "pictures_live": 2,
+  "quads": 2,
+  "non_black": 538282,
+  "non_black_total": 589824,
+  "non_black_percent": 91.3,
+  "hint_banner": {
+   "file": "SystemFile/Button01.png",
+   "size": [
+    606,
+    35
+   ],
+   "head_word": 4096,
+   "anchor": "centre",
+   "raw_xy": [
+    512,
+    520
+   ],
+   "placed_rect": [
+    209,
+    502,
+    606,
+    35
+   ]
+  },
+  "pixel_diff_vs_retail": {
+   "reference": "work/out/ScreenShot_2026_1028_21_21_35.png",
+   "mean_abs": 0.349,
+   "psnr_db": 37.75,
+   "within_2_percent": 98.58,
+   "above_32_percent": 0.52,
+   "note": "the remaining error is entirely inside the hint banner and is the srgb-vs-linear alpha blend space (measured: a 0-alpha-191 texel over a 251 background gives 63 in the retail frame, which is the gamma-space formula; our linear-space pipeline gives 136). Fixing wolf-render to blend in gamma space is task-10."
+  },
+  "picture_anchor": {
+   "field": "opcode 150 arg[0] bits 12..14",
+   "codes": {
+    "0x0000": "top-left (8,911 samples)",
+    "0x1000": "centre, both axes (4,393 samples)",
+    "0x2000-0x6000": "unverified, treated as top-left (333 samples)"
+   },
+   "rounding": "origin truncates (520 - 35/2 = 502.5 -> 502, which is the retail row); extent rounds"
+  }
+ },
  "verify": {
   "checks": 63,
   "pending": 0,
-  "sections": ["game", "common_events", "precompile", "maps", "tileset", "databases", "dxarchive", "save"]
+  "sections": [
+   "game",
+   "common_events",
+   "precompile",
+   "maps",
+   "tileset",
+   "databases",
+   "dxarchive",
+   "save"
+  ]
+ },
+ "key_input": {
+  "opcode": 123,
+  "model": "key code, not bitmask",
+  "codes": {
+   "none": 0,
+   "down": 2,
+   "left": 4,
+   "right": 6,
+   "up": 8,
+   "decide": 10,
+   "cancel": 11,
+   "sub": 12
+  },
+  "diagonals_inferred": [
+   1,
+   3,
+   7,
+   9
+  ],
+  "codes_seen_but_unnamed": [
+   13,
+   14,
+   20,
+   100,
+   300
+  ],
+  "sites": 218,
+  "mask_histogram": {
+   "145": 91,
+   "144": 28,
+   "176": 20,
+   "16": 10,
+   "177": 7,
+   "49": 3,
+   "241": 3,
+   "33": 2,
+   "1": 2,
+   "64": 5,
+   "32": 6,
+   "48": 5,
+   "784": 1,
+   "771": 1,
+   "183": 1,
+   "184": 1,
+   "160": 2,
+   "257": 1,
+   "512": 1,
+   "17": 27
+  },
+  "note": "The mask argument is still unexplained; the port answers with the code of whatever is held, which satisfies every comparison the game performs."
+ },
+ "choice_window": {
+  "position": "Sys3 (x), Sys4 (y); there is no centred default",
+  "sys3_writes_gamewide": 2,
+  "sys4_writes_gamewide": 87,
+  "title_event": {
+   "sys3": 512,
+   "sys4": 1000,
+   "note": "y=1000 is off the 576-tall screen, so the original title shows no engine window; the boot map repositions it to y=150 before calling event 42"
+  },
+  "cancel_rule": "102 bit4 = 0 means a 421 cancel branch exists (153 blocks); bit4 = 1 means cancel cannot be taken (342 blocks)"
  }
 }

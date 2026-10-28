@@ -3,7 +3,8 @@
 //! Two passes per frame, always in this order:
 //!
 //! 1. **Logical pass** -- everything the game draws goes into a fixed
-//!    1024x576 `Rgba8UnormSrgb` texture. All game coordinates are logical
+//!    1024x576 `Rgba8Unorm` texture (see `FRAME_FORMAT` for why not sRGB).
+//!    All game coordinates are logical
 //!    pixels in that space (WOLF hard-codes the 1024-wide canvas: Picture
 //!    positions, message windows and map scrolling are all authored against
 //!    it), so the game layer never learns the window size.
@@ -29,12 +30,33 @@ use crate::text::{TextItem, TextRenderer, TextStats};
 
 /// Colour format of the logical 1024x576 framebuffer.
 ///
-/// sRGB rather than plain `Rgba8Unorm` on purpose: the game's artwork is
-/// authored in sRGB, and blending 50%-alpha sprites in gamma space (which is
-/// what a UNORM target does) makes the result visibly too dark. An sRGB target
-/// makes the hardware linearise on sample and re-encode on write, so
-/// `BlendState::ALPHA_BLENDING` composites in linear light.
-pub const FRAME_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+/// Plain `Rgba8Unorm`, *not* sRGB, because that is what the retail game does.
+/// DxLib renders into a `D3DFMT_X8R8G8B8` back buffer: texture bytes and
+/// framebuffer bytes are both gamma-encoded and the fixed-function blend does
+/// `dst = src.rgb * src.a + dst * (1 - src.a)` on those bytes, with no
+/// linearisation anywhere.
+///
+/// This is measurable, not a guess. On the title screen, `Button01.png` has a
+/// texel with rgb=0 and alpha=191 sitting on a background of 251:
+///
+/// * gamma space (DxLib): `0 * 0.749 + 251 * 0.251 = 63.0` -> the retail
+///   screenshot measures **63**;
+/// * linear space (an sRGB target, what this renderer used to do):
+///   `s2l/l2s` of the same inputs gives 135 -> we measured **136**.
+///
+/// Physically "correct" linear compositing is therefore *wrong* here: it shifts
+/// every antialiased edge and every semi-transparent overlay, which over a whole
+/// title screen is a 0.5%-of-pixels-visible difference. An `Rgba8Unorm` target
+/// makes the hardware treat the stored bytes as the values to blend, exactly
+/// like D3D9 did.
+pub const FRAME_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
+/// Formats the logical frame may additionally be *viewed* as.
+///
+/// `Rgba8Unorm` and `Rgba8UnormSrgb` are the same bits reinterpreted, so the
+/// sRGB view costs nothing and only exists for the rare backend whose swapchain
+/// has no UNORM format at all (see `Renderer::new`).
+const FRAME_VIEW_FORMATS: &[wgpu::TextureFormat] = &[wgpu::TextureFormat::Rgba8UnormSrgb];
 
 const SPRITE_WGSL: &str = include_str!("shaders/sprite.wgsl");
 const BLIT_WGSL: &str = include_str!("shaders/blit.wgsl");
@@ -144,15 +166,21 @@ impl Renderer {
 
         let adapter_info = adapter.get_info();
         let caps = surface.get_capabilities(&adapter);
-        // Prefer an sRGB swapchain format so the blit is a byte-exact copy.
-        // A UNORM surface would make the sampled-linear values look washed out,
-        // and compensating in the shader would be a second code path to test
-        // for no benefit -- every backend we target offers an sRGB format.
+        // Prefer a NON-sRGB swapchain format, so the blit is a byte-exact copy of
+        // the logical framebuffer. `FRAME_FORMAT` already holds gamma-encoded
+        // bytes (that is what DxLib produces), so handing them to the compositor
+        // untouched reproduces the retail frame exactly. Sampling through an
+        // sRGB surface would re-encode on write and brighten everything.
+        //
+        // If a backend only offers sRGB formats we do not give up: `build` then
+        // creates an sRGB *view* of the UNORM frame, and sample-decode plus
+        // write-encode round-trips bit-exactly (both are the same 8-bit sRGB
+        // curve, so the pair is the identity for all 256 codes).
         let format = caps
             .formats
             .iter()
             .copied()
-            .find(wgpu::TextureFormat::is_srgb)
+            .find(|format| !format.is_srgb())
             .or_else(|| caps.formats.first().copied())
             .ok_or(RenderError::UnsupportedSurface)?;
 
@@ -247,9 +275,29 @@ impl Renderer {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
+            view_formats: FRAME_VIEW_FORMATS,
         });
+        // Two views of the same bits: everything that *renders* must use the
+        // UNORM view (blending happens on the stored bytes, like D3D9 did), while
+        // the blit may need the sRGB view to stay byte-exact on an sRGB-only
+        // swapchain -- see the format selection in `Renderer::new`.
         let frame_view = frame.create_view(&wgpu::TextureViewDescriptor::default());
+        let blit_srgb_format = config
+            .as_ref()
+            .map(|config| config.format)
+            .filter(wgpu::TextureFormat::is_srgb)
+            .map(|_| wgpu::TextureFormat::Rgba8UnormSrgb);
+        let frame_blit_view = match blit_srgb_format {
+            Some(format) => frame.create_view(&wgpu::TextureViewDescriptor {
+                label: Some("wolf-render frame blit view"),
+                format: Some(format),
+                ..Default::default()
+            }),
+            None => frame.create_view(&wgpu::TextureViewDescriptor {
+                label: Some("wolf-render frame blit view"),
+                ..Default::default()
+            }),
+        };
 
         // ---- sprite pipeline -------------------------------------------------
         let sprite_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -467,7 +515,7 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&frame_view),
+                    resource: wgpu::BindingResource::TextureView(&frame_blit_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
@@ -699,6 +747,9 @@ impl Renderer {
             });
         }
 
+        // `FRAME_FORMAT` (plain UNORM) so textureSample hands the shader the
+        // stored bytes and the blend then runs on those bytes: no sRGB decode
+        // here, no encode on write, i.e. the DxLib arithmetic.
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("wolf-render atlas"),
             size: wgpu::Extent3d {

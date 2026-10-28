@@ -91,7 +91,7 @@ WOLF RPG Editor 的 Message 指令（opcode 101）带一条字符串，它是**�
 DB 类码还接受两段式 `\cdb[T:D]`（D 是数据**名**）与一段式 `\cdb[T]`（T 是类型**名**）；
 `\sdb` / `\udb` 同。
 
-**嵌套优先级**（官方）：`\v` < `\vK` < `\self` < `\cself` < `\sys`
+**嵌套优先级**（官方）：`\v` < `\v1`..`\v9` < `\self` < `\cself` < `\sys`
 < `\udb` < `\cdb` < `\sdb` < `\s` < `\sysS`。
 括号里**只能**放优先级更低的码，所以 `\cself[\v[12]]` 合法、`\v[\cself[2]]` 不合法。
 这就是 `VarRef::args` 存 token 列表而不是整数、词法器必须递归的原因。
@@ -204,7 +204,7 @@ DB 类码还接受两段式 `\cdb[T:D]`（D 是数据**名**）与一段式 `\cd
 | --- | --- | --- |
 | **实现语义** | `\E` `\N` `\c` `\f` `\f+` `\m` `\font` `\cS` `\cE` `\wE` `\A+` `\A-` `\-` `\space` `\sp` `\>` `\<` `\.` `\!` `\^` `\bx` `\mx` `\my` `\ax` `\ay` `<L>` `<C>` `<R>` | 词法器给出**有类型的** `TextToken` 变体，渲染器/VM 直接消费，不需要再解析字符串 |
 | **保留原文** | `\img` `\imgS` `\se` `\r` | 括号体是**路径/地址/带指令的载荷**，不递归、不解释转义（`\img[ピクチャ\Test1.png]` 的路径里合法含反斜杠）。`\r` 按**第一个逗号**切成 `Ruby{text,ruby}` |
-| **结构完整、语义待接** | `\v` `\vK` `\s` `\sys` `\sysS` `\self` `\cself` `\udb` `\cdb` `\sdb` `\xy` `\xyN` | 词法器只给出 `VarRef{bank, args}`，**不查值**（本 crate 没有 VM 状态）。求值见 §5 |
+| **结构完整、语义待接** | `\v` `\v1`..`\v9` `\s` `\sys` `\sysS` `\self` `\cself` `\udb` `\cdb` `\sdb` `\xy` `\xyN` | 词法器只给出 `VarRef{bank, args}`，**不查值**（本 crate 没有 VM 状态）。求值见 §5 |
 | **原样透传** | 未在 §2 出现的任何 `\x` | 保持字面文字，`to_source` 逐字节还原 |
 
 ---
@@ -276,8 +276,17 @@ DB 类码还接受两段式 `\cdb[T:D]`（D 是数据**名**）与一段式 `\cd
 | `wolf-format::messagetext` | 只恢复**结构**。给出 `VarRef`，不查值（没有 VM 状态） |
 | `wolf-vm` | 把 `VarRef` 求值成文字，产出**可以直接交给渲染器**的 token 列表 |
 
-现有 `wolf-vm::text::expand(text: &str, lookup: &L) -> String` 是临时实现：它直接对原字符串
-做 64 轮「最内层替换」，只能处理 `\cself`/`\self`/`\v`/`\s`/`\sys` 与 `\\`。
+> **现状（M1）**：`crates/wolf-vm/src/text.rs::expand` 是**临时实现** —— 它不 token 化，
+> 直接对原字符串做最多 64 轮「最内层替换」，码表只有 `\cself`/`\self`/`\v`/`\s`/`\sys`
+> 及其别名拼写（`\cself_s`/`\self_s`/`\corgv`/`\corgs`/`\csys`），且只认 `[n]` 形式
+> —— 数据库类 `\cdb`/`\sdb`/`\udb`、`\xy`、以及括号里套括号的间接引用它都不处理。
+> 迁移到本节这套 tokenize + 一次遍历是 **M2 的重构项**。
+>
+> **分工写死，后来的人不要重复实现**：词法、结构、lossless 回写归 `wolf-format::messagetext`
+> （已实现并有 16 个测试兜底）；**只**有「把 `VarRef` 查成值」这一件事归 `wolf-vm`。
+> 所以在 `wolf-vm` 里不要再写第二个转义解析器 —— 需要新语义时改 `messagetext` 的码表
+> 或 `VarSource` 的实现，不要在 `text.rs` 里加正则。
+
 换成 token 化之后，替换变成一次自底向上遍历，**不需要轮数上限**，也不会误伤 `\E3000G`。
 
 ### 5.2 需要的 trait
@@ -294,7 +303,7 @@ use wolf_format::messagetext::{TextToken, VarBank, VarRef};
 /// keeping it immutable means a message can be expanded while the interpreter
 /// is mid-instruction without borrowing the mutable half of the world.
 pub trait VarSource {
-    /// \v[n], \vK[n], \sys[n], \self[n], \cself[n] — numeric slots.
+    /// \v[n], \v1[n]..\v9[n], \sys[n], \self[n], \cself[n] — numeric slots.
     fn number(&self, bank: VarBank, slot: u32) -> Option<i64>;
 
     /// \s[n], \sysS[n], \cself[5..9] — string slots.

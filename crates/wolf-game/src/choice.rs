@@ -1,0 +1,246 @@
+//! The runtime choice panel: WOLF draws opcode `102`'s options itself.
+//!
+//! A WOLF script never draws its own menu frame for a choice prompt. `102` hands the
+//! option strings to the engine, and the engine moves the cursor, paints the window
+//! skin and returns a 0-based index. Keeping that split is what makes a script written
+//! for the engine work here unchanged: the measured title event draws only its
+//! background (one `150` command) and then parks on a `102` with three options, so
+//! without a runtime panel the port shows a title screen with no menu at all.
+//!
+//! Geometry is inferred, not measured: the skin comes from
+//! `SystemGraphic/WindowBase.png` (see [`crate::window`]), and the panel is centred on
+//! the 1024x576 screen. The original game's exact placement is still unknown (open
+//! item H-MENU-1 in docs/UNVERIFIED.md), so every number here is a named constant a
+//! future measurement can replace in one place.
+
+use crate::atlas::{Atlas, SpriteQuad, TextQuad};
+use crate::assets::Assets;
+use crate::picture::{SCREEN_H, SCREEN_W};
+use crate::window::{self, WindowPiece};
+
+/// Distance in pixels between two option baselines.
+pub const LINE_HEIGHT: f32 = 30.0;
+/// Padding between the option text and the window frame.
+pub const PADDING: f32 = 14.0;
+/// Nominal advance width of one character, used to size the panel.
+///
+/// WOLF renders with a fixed-size bitmap font, so a flat estimate is close enough to
+/// lay a frame out; the text pass measures the real glyphs afterwards.
+pub const CHAR_WIDTH: f32 = 16.0;
+/// Smallest panel width, so a one-letter option is not a 16 px sliver.
+pub const MIN_WIDTH: f32 = 120.0;
+
+/// Where the panel and its option lines sit on the logical screen.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChoiceLayout {
+    /// Panel rectangle, `[x, y, w, h]` in logical pixels.
+    pub rect: [f32; 4],
+    /// One rectangle per option, top to bottom.
+    pub lines: Vec<[f32; 4]>,
+    /// Rectangle of the highlighted option (the cursor row).
+    pub cursor: [f32; 4],
+}
+
+/// Panel size in logical pixels, rounded so every row lands on a whole pixel.
+fn size(options: &[String]) -> (f32, f32) {
+    let columns = options
+        .iter()
+        .map(|option| option.chars().count())
+        .max()
+        .unwrap_or(0) as f32;
+    let width = (columns * CHAR_WIDTH + PADDING * 2.0).max(MIN_WIDTH);
+    let rows = options.len().max(1) as f32;
+    (width.round(), (rows * LINE_HEIGHT + PADDING * 2.0).round())
+}
+
+/// Builds rows and cursor rectangle for a panel whose top-left corner is `(x, y)`.
+fn build(options: &[String], cursor: usize, x: f32, y: f32) -> ChoiceLayout {
+    let (width, height) = size(options);
+    let rect = [x, y, width, height];
+    let mut lines = Vec::with_capacity(options.len());
+    for (index, _) in options.iter().enumerate() {
+        lines.push([
+            rect[0] + PADDING,
+            rect[1] + PADDING + index as f32 * LINE_HEIGHT,
+            rect[2] - PADDING * 2.0,
+            LINE_HEIGHT,
+        ]);
+    }
+    let cursor_rect = lines
+        .get(cursor)
+        .copied()
+        .or_else(|| lines.first().copied())
+        .unwrap_or([rect[0], rect[1], rect[2], LINE_HEIGHT]);
+    ChoiceLayout {
+        rect,
+        lines,
+        cursor: cursor_rect,
+    }
+}
+
+/// Lays out a choice panel for `options` with `cursor` highlighted, centred on the
+/// logical screen.
+///
+/// This is the layout for a host with no engine anchor (tests, offline tools). The
+/// game itself goes through [`layout_at`] with the script's own system variables,
+/// because the original engine never centres a choice window on its own.
+#[must_use]
+pub fn layout(options: &[String], cursor: usize) -> ChoiceLayout {
+    let (width, height) = size(options);
+    let x = ((SCREEN_W as f32) - width) / 2.0;
+    let y = ((SCREEN_H as f32) - height) / 2.0;
+    build(options, cursor, x.round(), y.round())
+}
+
+/// Lays out the panel at the engine's own choice-window anchor, `None` when it would
+/// not be visible.
+///
+/// WOLF places `102`'s window at system variables 3 (X) and 4 (Y), measured in
+/// docs/OPCODE_102.md. The title event parks that window at (512, 1000) on a
+/// 576-pixel-tall screen, i.e. deliberately off screen: `None` is then the faithful
+/// answer, because the engine would paint nothing either. Any other anchor is taken as
+/// the top-left corner, exactly like the manual describes.
+#[must_use]
+pub fn layout_at(options: &[String], cursor: usize, x: i32, y: i32) -> Option<ChoiceLayout> {
+    if options.is_empty() {
+        return None;
+    }
+    let panel = build(options, cursor, x as f32, y as f32);
+    let on_screen = panel.rect[0] < SCREEN_W as f32
+        && panel.rect[1] < SCREEN_H as f32
+        && panel.rect[0] + panel.rect[2] > 0.0
+        && panel.rect[1] + panel.rect[3] > 0.0;
+    if on_screen {
+        Some(panel)
+    } else {
+        None
+    }
+}
+
+/// The nine window pieces that paint `layout`'s frame.
+#[must_use]
+pub fn skin_pieces(layout: &ChoiceLayout, skin_w: u32, skin_h: u32) -> Vec<WindowPiece> {
+    window::nine_slice(layout.rect, skin_w, skin_h)
+}
+
+/// Builds the panel draw list: window pieces first, then one text row per option.
+///
+/// The selected row is marked with a leading angle quote because the port has no
+/// cursor sprite wired up yet; the sprite in `SystemGraphic/cursol.png` would be the
+/// faithful choice.
+fn draw(
+    atlas: &mut Atlas,
+    assets: &mut Assets,
+    options: &[String],
+    cursor: usize,
+    layout: &ChoiceLayout,
+) -> (Vec<SpriteQuad>, Vec<TextQuad>) {
+    let mut sprites = Vec::new();
+    if let Some(skin) = atlas.add_asset(assets, window::SKIN) {
+        for piece in skin_pieces(layout, skin.w, skin.h) {
+            sprites.push(SpriteQuad {
+                number: window::PANEL_PICTURE,
+                rect: piece.rect,
+                uv: skin.sub_uv(atlas.size()[0], atlas.size()[1], piece.src),
+                alpha: 1.0,
+            });
+        }
+    }
+    let mut texts = Vec::with_capacity(options.len());
+    for (index, option) in options.iter().enumerate() {
+        let marker = if index == cursor { "▶ " } else { "   " };
+        texts.push(TextQuad {
+            number: window::PANEL_PICTURE,
+            text: format!("{marker}{option}"),
+            rect: layout.lines[index],
+            alpha: 1.0,
+        });
+    }
+    (sprites, texts)
+}
+
+/// Builds the centred panel: window pieces first, then one text row per option.
+pub fn overlay(
+    atlas: &mut Atlas,
+    assets: &mut Assets,
+    options: &[String],
+    cursor: usize,
+) -> (Vec<SpriteQuad>, Vec<TextQuad>) {
+    if options.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+    let panel = layout(options, cursor);
+    draw(atlas, assets, options, cursor, &panel)
+}
+
+/// Builds the engine-anchored draw list, `None` when the window would be invisible.
+///
+/// Telling the caller that nothing was painted is better than silently dropping a
+/// prompt a player still has to answer.
+pub fn overlay_at(
+    atlas: &mut Atlas,
+    assets: &mut Assets,
+    options: &[String],
+    cursor: usize,
+    x: i32,
+    y: i32,
+) -> Option<(Vec<SpriteQuad>, Vec<TextQuad>)> {
+    let panel = layout_at(options, cursor, x, y)?;
+    Some(draw(atlas, assets, options, cursor, &panel))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn options(count: usize) -> Vec<String> {
+        (0..count).map(|index| format!("option {index}")).collect()
+    }
+
+    #[test]
+    fn a_three_option_panel_is_centred_and_stacked() {
+        let layout = layout(&options(3), 0);
+        assert!((layout.rect[0] + layout.rect[2] / 2.0 - 512.0).abs() <= 1.0);
+        assert!((layout.rect[1] + layout.rect[3] / 2.0 - 288.0).abs() <= 1.0);
+        assert_eq!(layout.lines.len(), 3);
+        assert!(layout.lines[1][1] > layout.lines[0][1]);
+        assert_eq!(layout.cursor, layout.lines[0]);
+    }
+
+    #[test]
+    fn the_cursor_follows_the_selected_row() {
+        let panel = layout(&options(3), 2);
+        assert_eq!(panel.cursor, panel.lines[2]);
+        // Out-of-range cursors clamp to a real row instead of panicking.
+        assert_eq!(layout(&options(3), 99).cursor, panel.lines[0]);
+    }
+
+    #[test]
+    fn a_long_option_widens_the_panel() {
+        let narrow = layout(&["a".to_owned()], 0);
+        let wide = layout(&["a".repeat(40)], 0);
+        assert_eq!(narrow.rect[2], MIN_WIDTH);
+        assert!(wide.rect[2] > narrow.rect[2]);
+    }
+
+    #[test]
+    fn an_empty_prompt_draws_nothing() {
+        let mut atlas = Atlas::new();
+        let mut assets = Assets::new("no-such-root");
+        let (sprites, texts) = overlay(&mut atlas, &mut assets, &[], 0);
+        assert!(sprites.is_empty() && texts.is_empty());
+    }
+
+    #[test]
+    fn the_overlay_marks_the_cursor_row() {
+        let mut atlas = Atlas::new();
+        let mut assets = Assets::new("no-such-root");
+        // Without the skin asset on disk only the rows come back: the panel degrades
+        // to text instead of failing the frame.
+        let (sprites, texts) = overlay(&mut atlas, &mut assets, &options(2), 1);
+        assert!(sprites.is_empty(), "no skin available in a bare root");
+        assert_eq!(texts.len(), 2);
+        assert!(!texts[0].text.starts_with('\u{25b6}'));
+        assert!(texts[1].text.starts_with('\u{25b6}'));
+    }
+}

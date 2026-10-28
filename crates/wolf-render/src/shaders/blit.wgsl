@@ -45,9 +45,12 @@ fn vs(@builtin(vertex_index) vi: u32) -> VsOut {
 
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    // Source and destination are both sRGB formats, so sample (decode) + write
-    // (encode) round-trips exactly; the nearest sampler plus a ClampToEdge
-    // address mode means uv == 1.0 lands on the last texel, not on a wrapped
-    // neighbour.
+    // Plain copy: the frame is Rgba8Unorm and the swapchain is a NON-sRGB
+    // format whenever the backend offers one, so these bytes land on screen
+    // unchanged -- which is what makes the window and the retail screenshot
+    // agree. On an sRGB-only swapchain the caller samples an sRGB view of the
+    // frame instead (sample-decode + write-encode is the identity), so either
+    // way this line stays a copy. The nearest sampler plus a ClampToEdge address
+    // mode means uv == 1.0 lands on the last texel, not on a wrapped neighbour.
     return textureSample(src_tex, src_smp, in.uv);
 }

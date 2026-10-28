@@ -18,7 +18,7 @@ use wolf_format::command::SlotStats;
 use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
 use wolf_game::atlas::{self, Atlas};
-use wolf_game::Game;
+use wolf_game::{choice, Game};
 use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 use wolf_vm::{
     ChoiceReply, DbOp, Host, LogLevel, PictureCmd, PrecompileStats, ProgramSet, SoundCmd,
@@ -75,7 +75,10 @@ fn main() -> ExitCode {
     let mut frames: usize = 600;
     let mut trace = false;
     let mut out: Option<PathBuf> = None;
+    let mut answer: Option<usize> = None;
+    let mut filter: Option<String> = None;
     let mut frame_limit: Option<u64> = None;
+    let mut boot = true;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -98,6 +101,14 @@ fn main() -> ExitCode {
             "--out" | "-o" => {
                 out = args.next().map(PathBuf::from);
             }
+            "--answer" | "-a" => {
+                answer = args.next().and_then(|value| value.parse().ok());
+            }
+            "--boot" => boot = true,
+            "--menu-only" => boot = false,
+            "--filter" | "-F" => {
+                filter = args.next();
+            }
             "--help" | "-h" => {
                 print_help();
                 return ExitCode::SUCCESS;
@@ -115,10 +126,11 @@ fn main() -> ExitCode {
     match command.as_deref() {
         Some("verify") => run_verify(&root),
         Some("precompile") => run_precompile(&root),
-        Some("capture") => run_capture(&root, out, frames),
-        Some("play") => play::run(&root, frame_limit),
+        Some("capture") => run_capture(&root, out, frames, answer, boot),
+        Some("list") => run_list(&root, filter.as_deref()),
+        Some("play") => play::run(&root, frame_limit, boot),
         Some("run") => match event {
-            Some(id) => run_event(&root, id, frames, trace),
+            Some(id) => run_event(&root, id, frames, trace, answer),
             None => {
                 eprintln!("run needs --event <ID>");
                 ExitCode::from(2)
@@ -143,8 +155,9 @@ fn print_help() {
     println!("    wolf-cli [--root <DIR>] verify");
     println!("    wolf-cli [--root <DIR>] precompile");
     println!("    wolf-cli [--root <DIR>] run --event <ID> [--frames <N>] [--trace]");
-    println!("    wolf-cli [--root <DIR>] capture [--frames <N>] [--out <FILE.png>]");
+    println!("    wolf-cli [--root <DIR>] capture [--frames <N>] [--out <FILE.png>] [--menu-only]");
     println!("    wolf-cli [--root <DIR>] play");
+    println!("    wolf-cli [--root <DIR>] list [--filter <TEXT>]");
     println!();
     println!("COMMANDS:");
     println!(
@@ -152,15 +165,23 @@ fn print_help() {
     );
     println!("    precompile  Compile all 550 common events into jump tables; print the stats.");
     println!("    run         Execute one common event headlessly and report what it did.");
-    println!("    capture     Run the title screen for N frames and render it to a PNG.");
+    println!("    capture     Run the boot sequence for N frames and render it to a PNG.");
+    println!("                Starts on the boot map (splashes + title art), then holds on the menu.");
+    println!("                Choice prompts STAY OPEN unless --answer is given.");
+    println!("                because answering it branches away from the title screen.");
     println!("    play        Run the title screen in a window (arrows move, Enter/Z confirm).");
+    println!("    list        Print every common event: id, slots, real instructions, title.");
     println!();
     println!("OPTIONS:");
     println!("    -e, --event <ID>  Common event id to run with 'run'.");
     println!("    -f, --frames <N>  Frame budget for 'run' (default 600, one frame = 1/60 s).");
     println!("    -t, --trace       Print every host callback in 'run', not just the summary.");
     println!("    -o, --out <FILE>  PNG path for 'capture' (default work/out/title.png).");
+    println!("    -a, --answer <N>  Answer choice prompts with option N instead of holding the menu.");
+    println!("    -F, --filter <T>  Only list events whose title contains T (with 'list').");
     println!("    --until <N>       Quit 'play' after N frames (smoke test; default: until closed).");
+    println!("    --menu-only       Start common event 42 directly instead of the boot map.");
+    println!("    --boot            Start on the boot map (default for capture and play).");
     println!("    -r, --root <DIR>  Unpacked data root containing BasicData/ and MapData/.");
     println!("                      Defaults to ./work/full, then $WOLF_DATA_ROOT.");
     println!("    -h, --help        Print this help.");
@@ -642,6 +663,8 @@ struct TraceHost {
     trace: bool,
     messages: Vec<String>,
     choices: Vec<usize>,
+    /// None = hold at the first prompt, which is how the title screen is captured.
+    answer: Option<usize>,
     pictures: usize,
     sounds: usize,
     databases: usize,
@@ -662,11 +685,12 @@ struct TraceHost {
 }
 
 impl TraceHost {
-    fn new(trace: bool) -> Self {
+    fn new(trace: bool, answer: Option<usize>) -> Self {
         TraceHost {
             trace,
             messages: Vec::new(),
             choices: Vec::new(),
+            answer,
             pictures: 0,
             sounds: 0,
             databases: 0,
@@ -715,13 +739,16 @@ impl Host for TraceHost {
         self.note(format!("  102 choices  {options:?}"));
     }
 
-    // Always take the first option: deterministic, and the interesting
-    // branches are reachable by re-running with a different event.
+    // Without --answer the prompt is held: a headless trace then shows the menu
+    // frame instead of branching away from it, which is what M1's screenshot
+    // needs (docs/M1_CLOSURE.md §5).
     fn choice_made(&mut self) -> Option<ChoiceReply> {
+        let index = self.answer?;
         if self.choices.is_empty() {
-            self.choices.push(0);
+            self.choices.push(index);
+            self.note(format!("  -> answered option {index}"));
         }
-        Some(ChoiceReply::Index(0))
+        Some(ChoiceReply::Index(index))
     }
 
     fn picture(&mut self, cmd: &PictureCmd) {
@@ -860,7 +887,54 @@ fn short(text: &str) -> String {
 /// This is the M1 debugging workhorse from PLAN.md: \`wolf-cli run --event N\`
 /// executes the event against a recording host so a branch can be checked
 /// without a window, a GPU or a save file.
-fn run_event(root: &Path, id: u32, frames: usize, trace: bool) -> ExitCode {
+/// Print every common event with its size, so a caller can find the event that
+/// drives a given screen without opening the editor.
+///
+/// The real-instruction count excludes the NOP slots the editor leaves behind,
+/// which is why it is smaller than the slot count (docs/OPCODE_SPEC.md §0.1).
+fn run_list(root: &Path, filter: Option<&str>) -> ExitCode {
+    let basic = if root.join("BasicData").is_dir() {
+        root.join("BasicData")
+    } else {
+        root.to_path_buf()
+    };
+    let Some(bytes) = read(&basic.join("CommonEvent.dat")) else {
+        return ExitCode::FAILURE;
+    };
+    let events = match wf::commonevent::CommonEventData::parse(&bytes) {
+        Ok(events) => events,
+        Err(err) => {
+            eprintln!("CommonEvent.dat: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let needle = filter.map(str::to_lowercase);
+    println!("events in {}/CommonEvent.dat", basic.display());
+    let mut shown = 0usize;
+    for event in &events.events {
+        let title = &event.title;
+        if let Some(needle) = &needle {
+            if !title.to_lowercase().contains(needle) {
+                continue;
+            }
+        }
+        let mut stats = SlotStats::default();
+        stats.extend(&event.commands);
+        shown += 1;
+        println!(
+            "{:>4}  {:>5} slot(s)  {:>5} real  {:>3} op(s)  {}",
+            event.id,
+            stats.slots,
+            stats.real(),
+            stats.distinct_opcodes(),
+            title
+        );
+    }
+    println!("{shown} event(s) listed");
+    ExitCode::SUCCESS
+}
+
+fn run_event(root: &Path, id: u32, frames: usize, trace: bool, answer: Option<usize>) -> ExitCode {
     println!("wolf-cli run --event {id} --frames {frames}");
     let basic = if root.join("BasicData").is_dir() {
         root.join("BasicData")
@@ -896,7 +970,7 @@ fn run_event(root: &Path, id: u32, frames: usize, trace: bool) -> ExitCode {
     println!();
 
     let mut vm = Vm::new(programs);
-    let mut host = TraceHost::new(trace);
+    let mut host = TraceHost::new(trace, answer);
     if vm.start_event(id).is_none() {
         eprintln!("  ! cannot start event {id}");
         return ExitCode::FAILURE;
@@ -939,6 +1013,12 @@ fn run_event(root: &Path, id: u32, frames: usize, trace: bool) -> ExitCode {
     println!("  save/load        {}", host.saves);
     println!("  reserves         {}", host.reserves);
     println!("  pro features     {}", host.pro);
+    if answer.is_none() && !host.choices.is_empty() {
+        println!(
+            "  holding          the event is parked on choice prompt {} (pass --answer <N> to take a branch)",
+            host.choices.len()
+        );
+    }
     if !host.messages.is_empty() {
         println!();
         println!("  first message    {}", short(&host.messages[0]));
@@ -1166,7 +1246,13 @@ fn find_font(root: &Path) -> Option<(PathBuf, Vec<u8>)> {
     None
 }
 
-fn run_capture(root: &Path, out: Option<PathBuf>, frames: usize) -> ExitCode {
+fn run_capture(
+    root: &Path,
+    out: Option<PathBuf>,
+    frames: usize,
+    answer: Option<usize>,
+    boot: bool,
+) -> ExitCode {
     let out = out.unwrap_or_else(|| PathBuf::from("work/out/title.png"));
     let mut game = match Game::new(root) {
         Ok(game) => game,
@@ -1175,13 +1261,27 @@ fn run_capture(root: &Path, out: Option<PathBuf>, frames: usize) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    // A capture has no keyboard: messages dismiss immediately and prompts take option 0,
-    // which is the same policy 'run' uses, so both commands see the same script path.
+    // A capture has no keyboard, so messages dismiss immediately. Choice prompts are
+    // HELD by default: the title's first prompt is its menu, and answering it teleports
+    // into the game (docs/M1_CLOSURE.md §5), so a held run is what photographs the title.
     game.auto_advance = true;
-    if let Err(err) = game.start_title() {
+    if let Some(index) = answer {
+        game.set_choice_cursor(index);
+        game.auto_choice = true;
+    }
+    // Two entry points: the real boot path (map autorun event -> splashes -> title art
+    // -> menu) and the bare menu event 42, kept for regression captures of the menu
+    // overlay on its own.
+    let started = if boot {
+        game.boot().map_err(|err| err.to_string())
+    } else {
+        game.start_title().map_err(|err| err.to_string())
+    };
+    if let Err(err) = started {
         eprintln!("{err}");
         return ExitCode::FAILURE;
     }
+    println!("  entry     : {}", if boot { "boot map (TitleMap.mps event 2)" } else { "common event 42" });
 
     let mut peak = 0usize;
     for _ in 0..frames {
@@ -1190,8 +1290,19 @@ fn run_capture(root: &Path, out: Option<PathBuf>, frames: usize) -> ExitCode {
     }
 
     let mut atlas = Atlas::new();
-    let sprites = atlas.sprites(&game.screen, &mut game.assets);
-    let texts = atlas::texts(&game.screen);
+    let mut sprites = atlas.sprites(&game.screen, &mut game.assets);
+    let mut texts = atlas::texts(&game.screen);
+    // A WOLF script never draws its own choice frame: the engine paints a window skin and
+    // moves a cursor over it. Without this overlay a held capture photographs a title
+    // screen with no visible menu at all, because the three option strings "1"/"2"/"3"
+    // are placeholders the runtime is supposed to replace with the prompt.
+    if let Some(choices) = &game.choices {
+        let options = choices.options.clone();
+        let cursor = game.choice_cursor();
+        let (panel, rows) = choice::overlay(&mut atlas, &mut game.assets, &options, cursor);
+        sprites.extend(panel);
+        texts.extend(rows);
+    }
     let [atlas_w, atlas_h] = atlas.size();
 
     println!("capture");
@@ -1203,6 +1314,15 @@ fn run_capture(root: &Path, out: Option<PathBuf>, frames: usize) -> ExitCode {
         sprites.len(),
         texts.len()
     );
+    match &game.choices {
+        Some(choices) => println!(
+            "  choice    : HELD on prompt with {} option(s) {:?}, cursor {}",
+            choices.options.len(),
+            choices.options,
+            game.choice_cursor()
+        ),
+        None => println!("  choice    : none open"),
+    }
     println!(
         "  atlas     : {} image(s), {:.1}% of {atlas_w}x{atlas_h}",
         atlas.len(),

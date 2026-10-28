@@ -62,9 +62,11 @@ fn vs(
 
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    // The atlas is Rgba8UnormSrgb, so textureSample returns *linear* values and
-    // hardware blending happens in linear space; the sRGB framebuffer re-encodes
-    // on write. That is the "srgb-correct" half of the contract.
+    // The atlas is plain Rgba8Unorm, so textureSample returns the stored bytes
+    // unchanged and the fixed-function blend then runs on those bytes -- no
+    // linearisation anywhere. That deliberately mirrors DxLib/D3D9, which the
+    // retail game uses; see `FRAME_FORMAT` in renderer.rs for the measurement
+    // that pins this (63 vs 136 on one title-screen pixel).
     let texel = textureSample(atlas_tex, atlas_smp, in.uv);
     // alpha comes from tint.a, rgb from tint.rgb. Straight (non-premultiplied)
     // alpha: we deliberately do NOT multiply texel.rgb by texel.a here -- the

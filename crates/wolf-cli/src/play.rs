@@ -25,19 +25,25 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
-use wolf_game::atlas::{self, Atlas};
-use wolf_game::{key, Game};
-use wolf_render::{Renderer, SpriteInstance, LOGICAL_H, LOGICAL_W};
+use wolf_game::atlas::{self, Atlas, TextQuad};
+use wolf_game::{choice, key, Game};
+use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 
 /// One frame at 60 Hz.
 const FRAME_TIME: Duration = Duration::from_micros(16_667);
+
+/// Glyph size for text pictures and the runtime choice panel, in logical pixels.
+///
+/// WOLF's default font is a 24 px bitmap glyph set and the title screens are laid out
+/// for it, so anything much smaller renders a menu that looks empty at 1x.
+const TEXT_PX: f32 = 22.0;
 
 /// Runs the title screen in a window until the user closes it (or `frames` pass).
 ///
 /// A non-zero frame budget makes the window self-closing, which is how the interactive
 /// path gets smoke-tested: the same code that a player drives also has to survive an
 /// unattended run without panicking or wedging the event loop.
-pub fn run(root: &std::path::Path, frames: Option<u64>) -> std::process::ExitCode {
+pub fn run(root: &std::path::Path, frames: Option<u64>, boot: bool) -> std::process::ExitCode {
     let mut game = match Game::new(root) {
         Ok(game) => game,
         Err(err) => {
@@ -45,7 +51,15 @@ pub fn run(root: &std::path::Path, frames: Option<u64>) -> std::process::ExitCod
             return std::process::ExitCode::FAILURE;
         }
     };
-    if let Err(err) = game.start_title() {
+    // The original boots into the TitleMap map, whose autorun event plays the three
+    // publisher/developer splashes, draws the title art and only then calls the menu
+    // event 42 (docs/M1_CLOSURE.md). --menu-only skips straight to the menu.
+    let started = if boot {
+        game.boot().map_err(|err| err.to_string())
+    } else {
+        game.start_title().map_err(|err| err.to_string())
+    };
+    if let Err(err) = started {
         eprintln!("{err}");
         return std::process::ExitCode::FAILURE;
     }
@@ -61,6 +75,7 @@ pub fn run(root: &std::path::Path, frames: Option<u64>) -> std::process::ExitCod
         game,
         atlas: Atlas::new(),
         sprites: Vec::new(),
+        texts: Vec::new(),
         held: HashSet::new(),
         window: None,
         renderer: None,
@@ -94,6 +109,7 @@ struct App {
     game: Game,
     atlas: Atlas,
     sprites: Vec<SpriteInstance>,
+    texts: Vec<TextQuad>,
     held: HashSet<u32>,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
@@ -119,14 +135,44 @@ impl App {
             // Nothing is running any more: keep presenting the last frame rather than
             // tearing the window down, so the capture stays inspectable.
         }
-        self.sprites = self.build_sprites();
+        self.rebuild();
     }
 
-    fn build_sprites(&mut self) -> Vec<SpriteInstance> {
+    /// Rebuilds the draw list: script pictures, the runtime choice panel, and text.
+    ///
+    /// The panel is appended last so it composites over every script layer, which is
+    /// what the engine does: a choice prompt is an engine overlay, not a picture slot.
+    fn rebuild(&mut self) {
         let quads = self.atlas.sprites(&self.game.screen, &mut self.game.assets);
-        quads
+        let mut sprites: Vec<SpriteInstance> = quads
             .iter()
             .map(|quad| SpriteInstance::new(quad.rect, quad.uv).with_alpha(quad.alpha))
+            .collect();
+        let mut texts = atlas::texts(&self.game.screen);
+        if let Some(choices) = &self.game.choices {
+            let options = choices.options.clone();
+            let cursor = self.game.choice_cursor();
+            let (panel, rows) = choice::overlay(
+                &mut self.atlas,
+                &mut self.game.assets,
+                &options,
+                cursor,
+            );
+            sprites.extend(
+                panel
+                    .iter()
+                    .map(|quad| SpriteInstance::new(quad.rect, quad.uv).with_alpha(quad.alpha)),
+            );
+            texts.extend(rows);
+        }
+        self.sprites = sprites;
+        self.texts = texts;
+    }
+
+    fn build_text_items(&self) -> Vec<TextItem> {
+        self.texts
+            .iter()
+            .map(|text| TextItem::new(text.text.clone(), text.rect, TEXT_PX).with_alpha(text.alpha))
             .collect()
     }
 
@@ -191,7 +237,18 @@ impl ApplicationHandler for App {
             info.name, info.device_type, info.backend, LOGICAL_W, LOGICAL_H
         );
         self.upload_if_needed(&mut renderer);
+        // The original game keeps its TTFs next to Game.exe, and the font covers the
+        // Chinese patch text that the bitmap font would render as boxes.
+        match crate::find_font(self.game.root()) {
+            Some((path, bytes)) => match renderer.set_font(&bytes) {
+                Ok(()) => println!("font: {}", path.display()),
+                Err(err) => eprintln!("font rejected ({}): {err}", path.display()),
+            },
+            None => eprintln!("no font found; text will not be drawn"),
+        }
         renderer.draw(&self.sprites);
+        let items = self.build_text_items();
+        renderer.draw_text(&items);
         self.window = Some(window);
         self.renderer = Some(renderer);
         self.next_frame = Instant::now() + FRAME_TIME;
@@ -227,6 +284,8 @@ impl ApplicationHandler for App {
                 if let Some(mut renderer) = self.renderer.take() {
                     self.upload_if_needed(&mut renderer);
                     renderer.draw(&self.sprites);
+                    let items = self.build_text_items();
+                    renderer.draw_text(&items);
                     renderer.present();
                     self.renderer = Some(renderer);
                 }

@@ -29,6 +29,13 @@ pub const CORNER: u32 = 3;
 /// real panel.
 pub const MIN_BOX: i32 = 2;
 
+/// Picture number reported for runtime-drawn panels.
+///
+/// The engine's own UI is not a script picture, so it needs a number that can never
+/// collide with one: scripts use >= -2, so a large negative sentinel sorts it behind
+/// every script layer while still being recognisable in a trace.
+pub const PANEL_PICTURE: i32 = -100;
+
 /// One stretched piece of the skin.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WindowPiece {
