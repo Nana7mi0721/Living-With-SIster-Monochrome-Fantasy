@@ -502,5 +502,21 @@
    "note": "y=1000 is off the 576-tall screen, so the original title shows no engine window; the boot map repositions it to y=150 before calling event 42"
   },
   "cancel_rule": "102 bit4 = 0 means a 421 cancel branch exists (153 blocks); bit4 = 1 means cancel cannot be taken (342 blocks)"
+ },
+ "map_runtime": {
+  "map": "MapData/SampleMapA.mps (the game's H-scene UI map: 64x36 tiles, 40 events, 134 pages, 87 automatic)",
+  "automatic_pages": 87,
+  "trigger_counts": {
+   "1": 19,
+   "2": 68
+  },
+  "note": "Page triggers in this game: 0 action key (14 pages), 1 autorun (26), 2 parallel (90), 3 parallel-while-running (4). A parallel page is a permanent coroutine: when its stream ends the interpreter drops the instance and WOLF starts it again on the next frame. Only 6 maps are registered and none of them (TitleMap, SampleMapA, SampleMapA_1, Map003, Map024, Map031) has a page chip; the three engine sample maps (Dungeon, Map002, SampleMapB) are the only ones with CharaChip graphics.",
+  "measured_run": {
+   "frames": 120,
+   "instructions": 21023494,
+   "page_starts": 933,
+   "commands": "cargo test -p wolf-game --test map_runtime -- --nocapture",
+   "note": "Heavy: the click-detection pages busy-poll key/mouse opcodes instead of waiting, so a frame costs ~175k instructions. This is why PLAN chose an explicit per-instance state machine over OS threads."
+  }
  }
 }

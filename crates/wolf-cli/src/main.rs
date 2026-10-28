@@ -22,7 +22,7 @@ use wolf_game::tilemap::TileMap;
 use wolf_game::{choice, Game};
 use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 use wolf_vm::{
-    ChoiceReply, DbOp, Host, LogLevel, PictureCmd, PrecompileStats, ProgramSet, SoundCmd,
+    ChoiceReply, DbOp, Host, LogLevel, PictureCmd, PrecompileStats, Program, ProgramSet, SoundCmd,
     StepReport, Vm,
 };
 
@@ -137,9 +137,14 @@ fn main() -> ExitCode {
         },
         Some("list") => run_list(&root, filter.as_deref()),
         Some("play") => play::run(&root, frame_limit, boot),
-        Some("run") => match event {
-            Some(id) => run_event(&root, id, frames, trace, answer),
-            None => {
+        Some("run") => match (map.as_deref(), event) {
+            (Some(name), Some(id)) => run_map_event(&root, name, id, frames, trace, answer),
+            (Some(_), None) => {
+                eprintln!("run --map needs --event <ID>");
+                ExitCode::from(2)
+            }
+            (None, Some(id)) => run_event(&root, id, frames, trace, answer),
+            (None, None) => {
                 eprintln!("run needs --event <ID>");
                 ExitCode::from(2)
             }
@@ -1492,6 +1497,21 @@ fn run_capture_map(root: &Path, out: Option<PathBuf>, name: &str) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
+    let mut graphics: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    for event in &map.events {
+        for page in &event.pages {
+            if !page.graphic.is_empty() {
+                *graphics.entry(page.graphic.clone()).or_insert(0) += 1;
+            }
+        }
+    }
+    if !graphics.is_empty() {
+        println!("  graphics  : {} distinct page chip(s)", graphics.len());
+        for (name, count) in graphics.iter().take(20) {
+            println!("              {count:>3}x {name}");
+        }
+    }
+
     let tile_map = TileMap::new(&map, tileset, tilesets.version);
     let [map_w, map_h] = tile_map.size_px();
     let screen = [LOGICAL_W as i32, LOGICAL_H as i32];
@@ -1579,5 +1599,176 @@ fn run_capture_map(root: &Path, out: Option<PathBuf>, name: &str) -> ExitCode {
         lit as f64 * 100.0 / total as f64
     );
     println!("  wrote     : {}", out.display());
+    ExitCode::SUCCESS
+}
+
+/// Run one MAP event page through the interpreter.
+///
+/// The M1 title screen lives in a map (TitleMap.mps event 2), and PLAN's M2
+/// acceptance closure is keyed on SampleMapA event 1, so map command streams
+/// need the same treatment common events already get: compile the page with
+/// `Program::from_slots` (it builds the identical jump tables) and step it.
+/// Common events stay loaded because map scripts reach them through opcode 210.
+fn run_map_event(
+    root: &Path,
+    map_name: &str,
+    event_id: u32,
+    frames: usize,
+    trace: bool,
+    answer: Option<usize>,
+) -> ExitCode {
+    println!("wolf-cli run --map {map_name} --event {event_id} --frames {frames}");
+    let basic = if root.join("BasicData").is_dir() {
+        root.join("BasicData")
+    } else {
+        root.to_path_buf()
+    };
+    println!("  data root : {}", root.display());
+
+    let events =
+        match read(&basic.join("CommonEvent.dat")).map(|bytes| CommonEventData::parse(&bytes)) {
+            Some(Ok(events)) => events,
+            Some(Err(err)) => {
+                eprintln!("  ! CommonEvent.dat: {err}");
+                return ExitCode::FAILURE;
+            }
+            None => {
+                eprintln!("  ! CommonEvent.dat not found under {}", basic.display());
+                return ExitCode::FAILURE;
+            }
+        };
+    let programs = ProgramSet::from_common_events(&events);
+
+    let cleaned = map_name.replace(std::path::MAIN_SEPARATOR, "/");
+    let relative: PathBuf = if cleaned.contains('/') || cleaned.ends_with(".mps") {
+        PathBuf::from(cleaned)
+    } else {
+        PathBuf::from(format!("MapData/{cleaned}.mps"))
+    };
+    let map_bytes = match read(&root.join(&relative)) {
+        Some(bytes) => bytes,
+        None => {
+            eprintln!("  ! cannot read {}", root.join(&relative).display());
+            return ExitCode::FAILURE;
+        }
+    };
+    let map = match wf::mps::Map::parse(&map_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("  ! {}: {err}", relative.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    println!(
+        "  map       {} {}x{} tile(s), {} event(s)",
+        relative.display(),
+        map.width,
+        map.height,
+        map.events.len()
+    );
+
+    let found = map.events.iter().find(|event| event.id == event_id);
+    let Some(event) = found else {
+        eprintln!("  ! no event with id {event_id}; present ids:");
+        for event in &map.events {
+            eprintln!("      [{:>6}] {}", event.id, event.name);
+        }
+        return ExitCode::from(2);
+    };
+    let Some(page) = event.pages.first() else {
+        eprintln!("  ! event {event_id} has no page");
+        return ExitCode::from(2);
+    };
+    println!(
+        "  event     [{event_id}] {} at ({}, {}), {} page(s)",
+        event.name,
+        event.x,
+        event.y,
+        event.pages.len()
+    );
+
+    for (index, page) in event.pages.iter().enumerate() {
+        println!(
+            "  page {index}    trigger {} graphic {:?} chip {} slots {}",
+            page.trigger,
+            page.graphic,
+            page.graphic_chip_id,
+            page.commands.len()
+        );
+    }
+
+    let program = Program::from_slots(event.id, &event.name, page.commands.clone());
+    let slots = program.len();
+    println!("  slots     {slots}");
+    println!();
+
+    let mut vm = Vm::new(programs);
+    let mut host = TraceHost::new(trace, answer);
+    if vm.start_program(Arc::new(program)).is_none() {
+        eprintln!("  ! cannot start map event {event_id}");
+        return ExitCode::FAILURE;
+    }
+
+    let mut total_steps = 0usize;
+    let mut peak_instances = 1usize;
+    let mut frames_run = 0usize;
+    for _ in 0..frames {
+        let report: StepReport = vm.step_frame(&mut host);
+        frames_run += 1;
+        total_steps += report.steps;
+        peak_instances = peak_instances.max(report.running);
+        if report.running == 0 {
+            break;
+        }
+    }
+
+    println!();
+    println!("  frames run       {frames_run}");
+    println!("  instructions     {total_steps}");
+    println!("  peak coroutines  {peak_instances}");
+    println!("  messages         {}", host.messages.len());
+    println!("  choices          {}", host.choices.len());
+    println!("  pictures         {}", host.pictures);
+    println!("  sounds           {}", host.sounds);
+    println!("  database ops     {}", host.databases);
+    println!("  move routes      {}", host.move_routes);
+    println!("  teleports        {}", host.teleports);
+    println!("  transitions      {}", host.transitions);
+    println!("  party ops        {}", host.parties);
+    println!("  scrolls          {}", host.scrolls);
+    println!("  effects          {}", host.effects);
+    println!("  save/load        {}", host.saves);
+    println!("  reserves         {}", host.reserves);
+    println!("  pro features     {}", host.pro);
+    if !host.infos.is_empty() {
+        println!();
+        println!(
+            "  unmodelled       {} (documented gaps, not failures)",
+            host.infos.len()
+        );
+        let mut seen: Vec<&String> = Vec::new();
+        for note in &host.infos {
+            if !seen.contains(&note) {
+                seen.push(note);
+            }
+        }
+        for note in seen.iter().take(10) {
+            println!("    {note}");
+        }
+    }
+    if !host.warnings.is_empty() {
+        println!();
+        println!("  warnings         {}", host.warnings.len());
+        let mut seen: Vec<&String> = Vec::new();
+        for note in &host.warnings {
+            if !seen.contains(&note) {
+                seen.push(note);
+            }
+        }
+        for note in seen.iter().take(10) {
+            println!("    {note}");
+        }
+    }
+
     ExitCode::SUCCESS
 }
