@@ -29,6 +29,9 @@
 
 - **已验证**：脚本跑过真实文件，解析末位置与文件长度、footer、内部断言全部一致。
 - **未验证**：仅从参考源码或其他项目推断，或部分字段未逐字节比对。文末「待解清单」给出下一步。
+- **★已实测纠正**（本文第二轮修订新增）：Rust 侧（crates/wolf-format）已经实现了 .mps / TileSetData /
+  数据库三个 loader 且测试全绿，实现过程中发现本文有若干处**写错或写漏**。凡带此标记的段落都是
+  用真实文件重新统计后改的，并**保留原文说明**（不静默删除），便于回溯。
 
 ### 0.3 验证脚本索引（都在 work\ 下，可直接重跑）
 
@@ -43,6 +46,9 @@
 | work\fs_wolf_verify.py + work\fs_wolf_verify_all.py | .wolf 解包（DXArchive v8） | 已验证（5 归档 636/636 文件与基准逐字节相等） |
 | work\fs_sav.py + work\fs_sav_p1.py | .sav 解密、头部、校验和、SavePart1 前段 | 已验证（9/9 存档）；正文其余部分未验证 |
 | work\uberwolf\WolfDec.cpp | UberWolf 参考源码（.wolf 内建 key 表，MIT） | 参考来源 |
+| crates\wolf-format\src\mps.rs + tests | Rust 侧 .mps loader | 9/9 地图走到 EOF（★本文据此纠正了 5.3 / 5.4 / 5.6） |
+| crates\wolf-format\src\tileset.rs + tests | Rust 侧 TileSetData loader | 6/6 tileset、60,786 B（★本文据此纠正了 7.3 / 7.4） |
+| crates\wolf-format\src\database.rs + tests | Rust 侧数据库 loader | 三个库 98 个类型（★本文据此纠正了 6.2 / 6.3） |
 
 ### 0.4 解包后文件的 sha256（基准值；不一致说明解包通道有误）
 
@@ -709,7 +715,9 @@ route_data.type 枚举（_wolfref\route.ksy，0x00..0x3A）：
 
 游戏实际注册 6 张地图（SysDatabase 的 マップ設定，见 6.4）。
 **9 张地图合计 73 个事件 / 134 页 / 37,610 条指令槽（30,558 条真实指令）/ 40 个 opcode**（详见 5.6.2）。
-**地图事件总数仅 67 个——游戏几乎全靠 550 个公共事件驱动。**
+**地图事件总数 73 个**（早期侦察曾记成 67，是漏算了 Dungeon 的 5 个与 Map002 的 5 个中的一部分；
+上表 9 行相加 = 73，与 5.6.2 的合计一致）。
+⇒ 游戏几乎全靠 550 个公共事件驱动，地图侧只有 73 个入口。
 
 ### 5.2 头部布局（已验证）
 
@@ -732,6 +740,10 @@ route_data.type 枚举（_wolfref\route.ksy，0x00..0x3A）：
 
 （v3.5 及以上会在 title 之后多出 unknown4 u4 与 layer_count u4，本游戏 version == 0x66 恒为 3 层。）
 
+**★已实测（9/9 张地图，Rust loader 已全绿）**：每张地图都能**精确走到 EOF**（trailing 0），
+且头部四个值在 9 个文件里完全一致：version_header = 0x55、unknown1 = 100（0x64）、version = 0x66、
+title = "なし"（本游戏所有地图名都是这个占位名，不要用它做地图标识）。
+
 ### 5.3 图块数据块与 -1 哨兵（**最容易踩的坑**）
 
 ~~~
@@ -746,6 +758,13 @@ else:
 事件头 6f 39 30 ...（0x6F + u4 0x3039）；其余 7 张地图读满 w*h*3*4 字节后事件头正好落在预期位置。
 
 图块层顺序：layer0（地表）→ layer1（装饰）→ layer2（顶层），每层 w*h 个 u4，行优先。
+
+**★已实测纠正（Rust 实现者踩到）：这块是“层优先（layer-major）”。**
+内存排布是 先整层 layer0 的 w*h 个 u4（行优先），再整层 layer1，再整层 layer2；
+而 _wolfref/mps.ksy 里的 mapdata_block 把它写成“像素优先”（一个像素连读 3 层，w*h*3 交错）。
+两种理解的总字节跨度完全相同（w*h*3*4），所以顺序遍历仍然能正确走到事件区，
+但**按像素取 tile 时会读错每一个图块**（layer1/layer2 会串到邻居像素上）。
+Rust 侧正确写法：tile(layer, x, y) = u32@(块起点 + ((layer * height + y) * width + x) * 4)。
 
 ### 5.4 单个 u4 图块值的解码
 
@@ -763,7 +782,13 @@ else:                          // 普通图块
 ~~~
 
 实测 SampleMapA 的一层前 6 个值全为 104444（autotile_id=1，四角模式 0/4/4/4）。
-0xFFFFFFFF 作为填充值表示"无图块"（仅高层/空位出现）。
+0xFFFFFFFF 作为填充值表示"无图块"。
+
+**★已实测纠正**：在本游戏**所有 7 张有图块层的地图里，图块区内部从来没有出现过 0xFFFFFFFF**——
+空图块不是用填充值表示，而是干脆不存在（该格不被写入/被上层覆盖）。
+0xFFFFFFFF 只在**块首**作为“整块省略”的哨兵出现（Map024 / Map031，见 5.3）。
+⇒ loader 里“Tile::Empty”分支（raw == 0xFFFFFFFF）实现了也**不会被真实数据触发**，
+属于防御性代码；不要反过来假设地图内部一定有空图块。
 
 ### 5.5 事件结构（已验证）
 
@@ -797,14 +822,14 @@ page:
   u1  col_in_tileset
   u1  opacity
   u1  display_type               // 0 正常 / 1 乘算 / 2 加算 / 3 减算
-  u1  trigger_condition          // 0 确认键 / 1 自动(autorun) / 2 并行 / 3 主角接触 / 4 事件接触
+  u1  trigger_condition          // 0 确认键 / 1 自动(autorun) / 2 并行 / 3 主角接触 / 4 事件接触（★本游戏实测 4 从未出现，见下）
   u1[4] trigger_switch           // 每字节：高 4 位 = operator，低 4 位 = enabled
   u4[4] trigger_variable
   s4[4] trigger_value
   route_info route
   u4  command_count
   event_command[ command_count ]
-  u4  unknown3                   // 恒 3
+  u4  unknown3                   // features；★134 页实测全为 3（>3 时才会多一个 pageTransfer 字节）
   u1  shadow_graphic_id
   u1  range_extension_x          // 上限 250
   u1  range_extension_y
@@ -815,12 +840,29 @@ page:
 但真实文件里该字节常见 0x20（operator 2、enabled 0）、0x21、0x11、0x31。
 → 应当**保留原始 u1**，取低 4 位当 enabled、高 4 位当 operator，不要断言取值范围。
 
-实测 SampleMapA event1 的 page0：graphic_chipid = 0xFFFFFFFF、graphic_filename = ""、
-row 2、col 1、opacity 255、display_type 0、trigger_condition 2（并行处理）、
-trigger_switch = [0x33,0x33,0x33,0x33]、trigger_variable = [3,3,3,0]、trigger_value = [3,2]（第 5 个字段为 route）、
-route = animation_frequency 3 / move_speed 3 / move_frequency 3 / move_route_mode 0 /
-behavior_options 3 / route_options 2 / route_length 0、
-command_count 113、unknown3 3、shadow 0、range 0/0、footer 0x7A。
+**★已实测纠正（9 张图全部 134 页，共 536 个 trigger_switch 字节的完整直方图）**：
+
+| 原始字节 | 0x10 | 0x11 | 0x20 | 0x21 | 0x31 | 0x50 | 0x51 |
+|---|---|---|---|---|---|---|---|
+| 出现次数 | 2 | 25 | 324 | 173 | 3 | 2 | 7 |
+
+- 合计 536 = 134 页 × 4 槽位，**只有这 7 种取值**，其余一概没有。
+- 低 4 位（enabled）实测只有 **0 或 1**；高 4 位（operator）实测有 1/2/3/5。
+  ⇒ 低 4 位可以断言 ≤ 1，但**高 4 位不要断言 0..6 的闭合范围**（operator 5 = not_equal 出现 7 次）。
+- 0x50（operator 5、enabled 0）与 0x51（operator 5、enabled 1）都存在——Kaitai 的 any-of [0,1] 写法在这里彻底不成立。
+
+实测 SampleMapA event1 的 page0：
+
+- graphic_chipid = 0xFFFFFFFF、graphic_filename = ""、row 2、col 1、opacity 255、display_type 0
+- trigger_condition = 2（并行处理）
+- trigger_switch = [0x21, 0x21, 0x21, 0x21]
+  **★已实测纠正**：本文早先把这里写成 0x33，那是把 work\fs_mps.py 输出的**十进制 33** 误当成了十六进制。
+  真实字节是 **0x21**（operator 2、enabled 1），在 536 字节直方图里出现 173 次；
+  0x33 在全库从未出现，且其低 4 位为 3，也与“低 4 位只有 0/1”的实测结论矛盾。
+- trigger_variable = [3, 3, 3, 0]、trigger_value = [3, 2, 0, 0]
+- route = animation_frequency 3 / move_speed 3 / move_frequency 3 / move_route_mode 0 /
+  behavior_options 3 / route_options 2 / route_length 0
+- command_count 113、unknown3(features) 3、shadow 0、range 0/0、footer 0x7A
 
 ### 5.6.1 页布局的完整字节图（Lead 逐字节验证，9/9 张地图全部解析成功）
 
@@ -843,9 +885,16 @@ u1   0x7A                     页结束（容错见下）
 
 - 这与 Kaitai 的字段表等价：Kaitai 的 row_in_tileset / col_in_tileset 就是这里的 direction / frame；
   37 字节 conditions 完全覆盖 Kaitai 的 trigger_condition + trigger_switch[4] + trigger_variable[4] + trigger_value[4]。
-- **容错（必须实现）**：有 2 张地图（Dungeon 偏移 17716、Map024 偏移 234）的页结束字节是 **0x00** 而非 0x7A，
-  其后紧跟 0x70（事件结束）。实现时应接受“0x00 之后接 0x70 或 0x79”作为合法页结束。
-- commandCount 之后读 features；features > 3 时多一个 pageTransfer 字节（常规地图 features == 3，无此字节）。
+- **★已实测（trigger_condition 直方图，134 页）**：{0: 14, 1: 26, 2: 90, 3: 4}——
+  **取值 4（事件接触）在本游戏中从未出现**。⇒ 不要按“0..4 全都会出现”写分支覆盖测试；
+  枚举照规格保留 5 个值，但测试与容错只需覆盖 0/1/2/3（其中 2 并行占 67%）。
+- **容错（必须实现，★已实测确认：全库恰好 2 处）**：页结束字节有 2 处是 **0x00** 而非 0x7A——
+  Dungeon 偏移 17716 与 Map024 偏移 234，**两处后面都紧跟 0x70**（事件结束）。
+  Rust 侧规则：读到的结束字节**只有在下一位是 0x70 / 0x79 或已到 EOF 时**才接受 0x00，
+  否则按解析错误处理；并且**保留原始 footer 字节**（0x00 或 0x7A）供上层诊断，不要强行归一化。
+- commandCount 之后读 features；features > 3 时多一个 pageTransfer 字节。
+  **★已实测：134 页的 features 全部 == 3**，所以 pageTransfer 这个字节在本游戏中**一次都没有出现过**，
+  该分支属于“按规格实现但未被真实数据触发”。
 
 ### 5.6.2 9 张地图的最终统计（Lead 逐字节）
 
@@ -907,7 +956,7 @@ DataBase.dat 94967 B / 40 类型、CDataBase.dat 81832 B / 30 类型、SysDataba
 ~~~
 type_data:
   u1[4]  sub_header          // 恒 FE FF FF FF
-  u4     data_id_method      // 0 手动 / 1 与首字段同 / 2 与前类型同 / 10000 由类型推
+  u4     data_id_method      // 0 手动 / 1 与首字段同 / 2 与前类型同 / 10000 由类型推（★不要当闭区间校验，见下）
   u4     property_count
   u4[ property_count ]  property_position
   u4     data_size2          // 本类型的“数据行数”
@@ -923,13 +972,30 @@ raw >= 1000 (INT_START)    ⇒ 数值字段，  字段序号 = raw - 1000
 
 （Kaitai 写成 block = raw/1000、pos = raw%1000 也成立；但“边界 ≥ 2000”才是 WolfTL 的原始判据。
 特殊值：STRING_INDICATOR = 0x0001D4C0 出现在类型的 sub_header 后第二个 u4 位置时，
-表示该类型跟着一个 unknown_2 字符串。）
+表示该类型跟着一个 unknown_2 字符串。
+**★已实测：这个分支在本游戏的三个 .dat（DataBase / CDataBase / SysDatabase）里一次都没有出现**
+⇒ 按规格实现即可，但属于“实现但未被真实数据触发”，不要为它写测试断言。）
+
+**★已实测纠正（data_id_method 不是 0/1/2 的闭区间）**：Kaitai 的枚举只列了 0 / 1 / 2 / 10000，
+但 CDataBase.dat 里实际还出现了 **20002、20003、20004** 和 **30000**。
+⇒ loader **不得**把它当封闭枚举校验（否则 CDataBase 直接解析失败）；
+按 u4 原样读出、只把已知的 0/1/2/10000 映射成名字，其余当 unknown 保留。
 
 ~~~
 vdata（每个数据行）:
   s4[ 数值字段个数 ]     // 严格按字段表的出现顺序
   t_str[ 字符串字段个数 ] // 同样按出现顺序
 ~~~
+
+**★已实测补充（零字段类型，必须支持）**：SysDatabase.dat 里有大量 **property_count == 0** 的类型——
+类型 **4、5、6、14、15..23** 的字段数为 0，而它们的**数据行数**分别是
+30 / 80 / 150 / 800 / 4 / 7 / 4 / 1 / 1 / 1 / 6 / 1 / 10（其中类型 14 是 800 行全零字节）。
+这种类型的每一行是“0 个 s4 + 0 个 t_str”，即**每个数据行占 0 字节**。
+
+⇒ **这是 Rust 实现最容易踩的坑**：如果用 “row_count <= 剩余字节数 / 行最小长度” 之类的边界来校验，
+剩余字节数除以 0 会直接 panic 或把整个文件判为损坏。正确做法是：
+用 checked_div（或先判字段数为 0 则跳过该判断）+ 一个“行数上限”的 sanity cap（例如 ≤ 100000），
+而不是用剩余字节数去卡行数。零字段类型的 data_size2 只能**信任**（无法用字节数交叉验证）。
 
 **关键：先全部数值、再全部字符串**，不是在字段顺序里交错。
 所以一行的读取取决于字段表里数值/字符串各自的个数：
@@ -946,6 +1012,10 @@ vdata（每个数据行）:
 | DataBase.dat | dm=1，18 字段（14 数值 + 4 字符串），44 行 | dm=0，15 字段（13+2），34 行 | dm=1，21 字段（16+5），40 行 |
 | CDataBase.dat | dm=1，51 字段（46+5），17 行 | dm=2，100 字段全数值，16 行 | dm=2，48 字段全数值，22 行 |
 | SysDatabase.dat | dm=0，8 字段（4+4），50 行 | 4 字段（3+1），16 行 | 4 字段（3+1），6 行 |
+
+**★已实测（Rust loader 全绿，与本文数值一致）**：DataBase.dat 94,967 B / 40 类型 / 类型 0 是 18 字段
+（14 数值 + 4 字符串）/ 44 行；CDataBase.dat 81,832 B / 30 类型 / 类型 0 是 51 字段（46 + 5）/ 17 行；
+SysDatabase.dat 11,607 B / 28 类型 / 类型 0 是 8 字段（4 + 4）/ 50 行。三者 footer 均 0xC2、trailing 0。
 
 DataBase 类型 0 的 property_position 原值：
 2000, 2001, 1000, 1001, 1002, 1003, 1004, 1005, 2002, 1006, 2003, 1007, ..., 1013。
@@ -964,6 +1034,11 @@ SysDatabase 类型 0（4 数值 + 4 字符串，50 行）的行样本：
 
 - 第一列是 .mps 路径（字符串字段），后面是数值字段。
 - -1 / -2 是“无 / 交给事件”哨兵，不要当真实索引用。
+- **★已实测：50 行里只有 6 行路径非空，按游戏顺序是**
+  MapData/TitleMap.mps、MapData/SampleMapA.mps、MapData/SampleMapA_1.mps、
+  MapData/Map003.mps、MapData/Map024.mps、MapData/Map031.mps
+  （对应 5.1 表里的 6 张已注册地图；SampleMapB / Map002 / Dungeon 三个 .mps 存在但未注册）。
+- 行 0 的数值部分是 [-1, -1, 0, -1]，行 1 是 [-2, -1, 0, 2]，行 2 是 [-2, -1, 0, 1]。
 - 游戏只注册 6 张地图；Data/MapData/ 下有 9 个 .mps，多出的 3 个没有被注册。
 - **不要用文件名猜地图顺序**，一律从 SysDatabase マップ設定 读。
 
@@ -1069,10 +1144,11 @@ else:
     bit 5  rightwards_not_passable
     bit 6  leftwards_not_passable
     bit 7  downwards_not_passable
-bits 8..13  na（应为 0）
+bits 8..9   na（★已实测：**不是 0**，携带真实数据，含义未知）
+bits 10..13 na（实测恒 0）
 bit 14 downarrow
 bit 15 triangle
-u2 后两字节 na（应为 0）
+u2 后两字节 na（★已实测：6 个 tileset 里**全部为 0**，可以断言）
 ~~~
 
 ### 7.4 实测 6 个 tileset
@@ -1092,7 +1168,20 @@ tileset 0 的 31 个自动图块槽位里 15 个非空（其余是单个 NUL 的
 Flower、Snow、Snow_Grass4、Snow_Dirt2、Ice2、Dirt1-Dirt2、Wall-Up1、Wall-Up2。
 **这 15 个名字与存档 SavePart1 里的 memdata 列表完全一致**（见 9.4）——互相印证。
 
-**TODO（未验证）**：tile_passable 的 “bits 8..13 与末两字节必为 0” 只做了抽样，未做全文件断言。
+**★已实测（Rust loader 全绿）**：文件 60,786 字节；每个 tileset 固定 **31 个 autotile 槽位**；
+6 个 tileset 的非空槽位数依次为 **15 / 15 / 15 / 15 / 15 / 12**（空槽是长度 1 的单个 NUL 串）。
+tileset 5（海岸ダンジョン）有**恰好 9 个不是合法 UTF-8 的 autotile 名**，必须按原始字节保存（见 1.4 与 7.2 的编码注记）。
+
+**★已实测纠正（原 TODO 作废）**：本文早先写的 “bits 8..13 与末两字节必为 0” 是**错的**。
+Rust loader 对 6 个 tileset 的全部 passable 项做了直方图，结论是：
+
+| tileset | bits 8..9 取值直方图 | 说明 |
+|---|---|---|
+| tileset 0（街） | {0: 1644, 1: 79, 2: 432, 3: 221} | bits 8..9 明显是两位真实数据 |
+| tileset 3（ワールドマップ） | {0: 120, 2: 90, 3: 6} | 同上，取值 1 未出现 |
+
+- **bits 8..9 携带真实数据，含义仍未知** ⇒ 规格里就叫 na，loader 原样保留、不要断言为 0。
+- **bits 10..13 实测恒 0**；**整个高 16 位（u16 后两字节）在 6 个 tileset 里全部为 0**，这两条可以断言。
 
 ---
 
@@ -1469,8 +1558,12 @@ WolfSaveParser::init 会去读 <存档相对路径>\../Data\BasicData\CDataBase.
 2. CommonEvent.dat 容器 + 550 事件全字段 + 事件尾部布局 + run_condition nibble。
 3. event_command 骨架 + opcode 210/211/300/111 的参数布局 + route 块 + 全 50 opcode 的参数字节大小表。
 4. .mps 头部、空地图哨兵、事件、事件页（含 0x00 页尾容错）。
+   **★已在 Rust 中实现并通过（crates/wolf-format/src/mps.rs + tests）：9/9 张地图全部走到 EOF。**
 5. 三个数据库的容器 + type/field/data 自描述结构 + 行编码（数值在前、字符串在后）。
+   **★已在 Rust 中实现并通过（database.rs）：三个库 98 个类型全部读完，含零字段类型。**
 6. TileSetData.dat 容器 + 每个 tileset 的字段 + tile_passable 位域 + 6 个 tileset 的实测值。
+   **★已在 Rust 中实现并通过（tileset.rs）：6/6 tileset、60,786 B 全部读完。
+   注意 7.3 的位域已被实测纠正（bits 8..9 不是 0）。**
 7. .wolf/DXArchive v8 全链路解包（636/636 文件逐字节校验通过）。
 8. .sav 解密算法、头部布局、checksum、fileVersion、SavePart1 前段。
 
@@ -1480,10 +1573,11 @@ WolfSaveParser::init 会去读 <存档相对路径>\../Data\BasicData\CDataBase.
 |---|---|---|
 | 1 | 存档正文 SavePart2..7 + VariableDatabase 的逐字段布局 | 按 docs\vendor\WolfSave\SavePartN.h 逐行移植成 Python，用 9 个存档逐个断言“读完不越界且恰好落在末字节 0x19 前” |
 | 2 | 若干 opcode 的参数语义（112 / 121 / 123 / 124 / 140 / 150 / 160 / 221 / 222 / 250 / 290 / 1000） | 同 opcode 样本对齐打印推字段；或改一个参数再存盘做差分（最可靠） |
-| 3 | tile_passable 的 “bits 8..13 与末两字节必为 0” 全文件断言 | 在 work\fs_ts.py 里对全部 6 个 tileset 断言 |
+| 3 | tile_passable 的 **bits 8..9 含义**（★已实测：不是 0，携带真实数据；直方图见 7.4） | 已确认 bits 10..13 与高 16 位恒 0；剩下 bits 8..9 需要在编辑器里改通行性再存盘做差分才能定名。loader 原样保留即可 |
 | 4 | .project 的类型码 / unknown1 / string_args / args / 默认值语义 | 只在做数据库编辑器时需要 |
 | 5 | SysDataBaseBasic.dat / MapTree.dat / MapTreeOpenStatus.dat | loader 不需要；要做先解各自容器 header |
 | 6 | 文本内嵌控制码（\cself[n]、\v[n] 等） | grep word.wolf / 文本，做转义解析器；决定 Message / Choices 显示是否正确 |
+| 7 | 若干“规格写了但真实数据不触发”的分支 | 已实测未触发：STRING_INDICATOR(0x0001D4C0) 分支、页 pageTransfer 字节(features>3)、Tile::Empty(0xFFFFFFFF 出现在图块区内部)、trigger_condition == 4。按规格实现，但**不要写会被数据证伪的断言**（详见 5.4 / 5.6.1 / 6.2） |
 
 ### 10.3 给 Rust loader 的最小实现顺序
 
@@ -1512,5 +1606,8 @@ WolfSaveParser::init 会去读 <存档相对路径>\../Data\BasicData\CDataBase.
 | 5 | 一度认为 “.wolf 必须先拿到 Game.dat 的 encryption_key” 是循环依赖，且 head 区 key 找不到 | key 不是从 encryption_key 派生，而是引擎内建版本表；cryptVersion 就写在**明文** DARC_HEAD 的 Flags 高 16 位 | Flags = 0x013A0000 ⇒ cryptVersion 0x13A = v3.14 ⇒ 用 v3.14 的 44 字节 key；只有 Name/File/Dir 三段被 XOR，才需要 key |
 
 | 6 | 以为 TileSetData 所有字符串都是 UTF-8，写 loader 时统一 decode / re-encode | tileset 5 的 9 个 autotile 文件名在原文件里就是坏字节（双重编码残留） | 字符串一律保留原始字节做文件名比较，只在显示时 lossy UTF-8 解码，不要 re-encode（详见 1.4） |
+| 7 | Rust 实现按 Kaitai 的 mps.ksy 读图块，**每个图块都取错**，但事件仍能正常解析 | mapdata_block 在 ksy 里是“像素优先”（w*h*3 交错），真实文件是**层优先**（整层 layer0 再 layer1 再 layer2）；两者字节跨度相同，所以顺序遍历照样能走到事件区，错位只在取 tile 时暴露 | 按层优先取址（详见 5.3）；这是“跨度相同掩盖了索引错误”的典型 |
+| 8 | 文档里把某页的 trigger_switch 写成 0x33，与实测直方图（只有 0x10/0x11/0x20/0x21/0x31/0x50/0x51）矛盾 | 把调试脚本输出的**十进制 33** 当成了十六进制 | 真实字节是 0x21；凡是从 Python print 抄进文档的数值都要标清进制（详见 5.6） |
+| 9 | 用“行数 ≤ 剩余字节 / 行最小长度”校验数据库行数，SysDatabase 直接失败 | SysDatabase 有 13 个 **property_count == 0** 的类型（类型 4/5/6/14/15..23），每行 0 字节，除零即崩 | 零字段类型只能信任 data_size2；用 checked_div + 行数 sanity cap（详见 6.2） |
 
 （文档完。所有“已验证”项均可用 0.3 节列出的脚本重跑复现。）

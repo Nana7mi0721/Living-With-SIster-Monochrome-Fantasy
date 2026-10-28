@@ -18,6 +18,7 @@ pub mod database;
 pub mod dxarchive;
 pub mod error;
 pub mod gamedat;
+pub mod messagetext;
 pub mod mps;
 pub mod tileset;
 

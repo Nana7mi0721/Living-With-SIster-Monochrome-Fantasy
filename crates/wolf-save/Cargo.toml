@@ -8,3 +8,4 @@ publish.workspace = true
 description = "WOLF RPG Editor save file (.sav) decoding"
 
 [dependencies]
+wolf-format = { workspace = true }

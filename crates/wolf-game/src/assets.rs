@@ -1,0 +1,434 @@
+//! Resolving WOLF asset names and decoding them to RGBA8.
+//!
+//! Every asset reference in the game data is a *relative* path with forward slashes,
+//! resolved against the game root - for example `SystemGraphic/TitleGraphic.jpg`,
+//! `MapChip/kiri_project.png` or `Kagura/bg.png`. Three quirks matter:
+//!
+//! 1. **The name may have no extension.** Some `150` commands store a bare stem and let
+//!    the engine probe the codecs, so resolution has to try the extensions the game
+//!    actually ships before giving up.
+//! 2. **DxLib is case-insensitive on Windows.** A data tree extracted on a
+//!    case-sensitive filesystem must still resolve `Kagura/bg.png` when the file on disk
+//!    is `kagura/BG.png`, so lookup falls back to a segment-by-segment case-insensitive
+//!    walk instead of failing.
+//! 3. **Missing assets are normal.** The M1 title screen only needs one image, and the
+//!    map backgrounds live in `Picture.wolf` which is not unpacked yet, so the caller
+//!    gets a typed error and draws nothing rather than a panic.
+//!
+//! Decoding yields premultiplied-free RGBA8 in sRGB space, which is exactly what the
+//! renderer uploads as `Rgba8UnormSrgb`.
+
+use std::collections::HashMap;
+use std::fmt;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+/// Extensions probed when an asset name carries none, in the order WOLF tries them.
+pub const PROBE_EXTENSIONS: [&str; 5] = ["png", "jpg", "bmp", "jpeg", "webp"];
+
+/// Refuse absurd dimensions early: a corrupt header must not ask for a 4 GiB buffer.
+pub const MAX_DIMENSION: u32 = 16_384;
+
+/// One decoded image, ready to be uploaded as a texture.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImageData {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+    /// Tightly packed RGBA8, `width * height * 4` bytes, row-major, no padding.
+    pub rgba: Vec<u8>,
+}
+
+impl ImageData {
+    /// Wraps raw pixels, rejecting a buffer whose length disagrees with the size.
+    #[must_use]
+    pub fn new(width: u32, height: u32, rgba: Vec<u8>) -> Option<Self> {
+        let expected = (width as usize)
+            .checked_mul(height as usize)?
+            .checked_mul(4)?;
+        if rgba.len() != expected {
+            return None;
+        }
+        Some(Self {
+            width,
+            height,
+            rgba,
+        })
+    }
+
+    /// Size as the tuple tex_size callbacks want.
+    #[must_use]
+    pub fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    /// Bytes per row, for `Queue::write_texture`.
+    #[must_use]
+    pub fn stride(&self) -> u32 {
+        self.width * 4
+    }
+
+    /// True when the image has no pixels at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.width == 0 || self.height == 0
+    }
+
+    /// Reads one pixel, or None when out of bounds.
+    #[must_use]
+    pub fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
+        let offset = (y as usize * self.width as usize + x as usize) * 4;
+        let slice = self.rgba.get(offset..offset + 4)?;
+        Some([slice[0], slice[1], slice[2], slice[3]])
+    }
+}
+
+/// Why an asset could not be produced.
+#[derive(Debug)]
+pub enum AssetError {
+    /// The name is not a legal relative path (empty, absolute, or containing "..").
+    BadName {
+        /// The offending name.
+        name: String,
+    },
+    /// Nothing on disk matched the name, even case-insensitively and with extensions.
+    NotFound {
+        /// The requested name.
+        name: String,
+        /// Root the search was anchored at.
+        root: PathBuf,
+    },
+    /// The file exists but could not be read.
+    Io {
+        /// The requested name.
+        name: String,
+        /// Underlying error.
+        source: std::io::Error,
+    },
+    /// The bytes are not a PNG/JPEG the decoder accepts.
+    Decode {
+        /// The requested name.
+        name: String,
+        /// Underlying error.
+        source: image::ImageError,
+    },
+    /// Decoded, but the dimensions are unusable (zero, or above `MAX_DIMENSION`).
+    BadSize {
+        /// The requested name.
+        name: String,
+        /// Decoded width.
+        width: u32,
+        /// Decoded height.
+        height: u32,
+    },
+}
+
+impl fmt::Display for AssetError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BadName { name } => write!(f, "invalid asset name: {name}"),
+            Self::NotFound { name, root } => {
+                write!(f, "asset not found: {name} under {}", root.display())
+            }
+            Self::Io { name, source } => write!(f, "cannot read asset {name}: {source}"),
+            Self::Decode { name, source } => write!(f, "cannot decode asset {name}: {source}"),
+            Self::BadSize {
+                name,
+                width,
+                height,
+            } => write!(f, "asset {name} has unusable size {width}x{height}"),
+        }
+    }
+}
+
+impl std::error::Error for AssetError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io { source, .. } => Some(source),
+            Self::Decode { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
+/// The asset database: a data-root path plus a decode cache.
+///
+/// The cache is keyed by the *requested* name rather than the resolved path (the two are
+/// usually identical and the requested name is what the interpreter keeps handing us). It
+/// stores `Arc<ImageData>` so the renderer can hold a texture reference while the game
+/// keeps loading other pictures.
+#[derive(Clone, Debug)]
+pub struct Assets {
+    root: PathBuf,
+    cache: HashMap<String, Arc<ImageData>>,
+}
+
+impl Assets {
+    /// Anchors the database at an unpacked game root (the folder holding BasicData/).
+    #[must_use]
+    pub fn new(root: impl Into<PathBuf>) -> Self {
+        Self {
+            root: root.into(),
+            cache: HashMap::new(),
+        }
+    }
+
+    /// The data root this database resolves against.
+    #[must_use]
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// Number of decoded images held.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.cache.len()
+    }
+
+    /// True when nothing has been decoded yet.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.cache.is_empty()
+    }
+
+    /// Drops every decoded image. Called when returning to the title.
+    pub fn clear(&mut self) {
+        self.cache.clear();
+    }
+
+    /// Returns an already decoded image without touching the disk.
+    #[must_use]
+    pub fn cached(&self, name: &str) -> Option<Arc<ImageData>> {
+        self.cache.get(name).cloned()
+    }
+
+    /// Resolves a WOLF asset name to a file, or None when the data tree lacks it.
+    ///
+    /// Public because the M0 verifier and the packer tooling want to know what is
+    /// present without paying for a decode.
+    #[must_use]
+    pub fn resolve(&self, name: &str) -> Option<PathBuf> {
+        let relative = normalize(name)?;
+        let direct = self.root.join(&relative);
+        if direct.is_file() {
+            return Some(direct);
+        }
+        // A name without an extension: probe the codecs the game ships.
+        if Path::new(&relative).extension().is_none() {
+            for extension in PROBE_EXTENSIONS {
+                let candidate = self.root.join(format!("{relative}.{extension}"));
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+        // Case-insensitive walk, one path segment at a time.
+        let mut current = self.root.clone();
+        for segment in relative.split('/') {
+            let entries = std::fs::read_dir(&current).ok()?;
+            let mut found: Option<PathBuf> = None;
+            for entry in entries.flatten() {
+                let candidate = entry.path();
+                let Some(file_name) = candidate.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                if file_name.eq_ignore_ascii_case(segment) {
+                    found = Some(candidate);
+                    break;
+                }
+            }
+            current = found?;
+        }
+        if current.is_file() {
+            Some(current)
+        } else {
+            None
+        }
+    }
+
+    /// Decodes an image, reusing the cache.
+    ///
+    /// # Errors
+    ///
+    /// `BadName` for illegal names, `NotFound` when the data tree lacks the file,
+    /// `Io`/`Decode` for unreadable or corrupt files, `BadSize` for zero or absurd
+    /// dimensions.
+    pub fn load(&mut self, name: &str) -> Result<Arc<ImageData>, AssetError> {
+        if let Some(hit) = self.cache.get(name) {
+            return Ok(Arc::clone(hit));
+        }
+        if normalize(name).is_none() {
+            return Err(AssetError::BadName {
+                name: name.to_owned(),
+            });
+        }
+        let path = self.resolve(name).ok_or_else(|| AssetError::NotFound {
+            name: name.to_owned(),
+            root: self.root.clone(),
+        })?;
+        let bytes = std::fs::read(&path).map_err(|source| AssetError::Io {
+            name: name.to_owned(),
+            source,
+        })?;
+        let decoded = image::load_from_memory(&bytes).map_err(|source| AssetError::Decode {
+            name: name.to_owned(),
+            source,
+        })?;
+        let (width, height) = (decoded.width(), decoded.height());
+        if width == 0 || height == 0 || width > MAX_DIMENSION || height > MAX_DIMENSION {
+            return Err(AssetError::BadSize {
+                name: name.to_owned(),
+                width,
+                height,
+            });
+        }
+        let rgba = decoded.to_rgba8().into_raw();
+        let data = ImageData {
+            width,
+            height,
+            rgba,
+        };
+        let shared = Arc::new(data);
+        self.cache.insert(name.to_owned(), Arc::clone(&shared));
+        Ok(shared)
+    }
+
+    /// tex_size callback for [`crate::picture::Screen::quads`](crate::picture::Screen).
+    ///
+    /// Decodes on demand; a missing asset returns None, which makes the picture layer
+    /// skip that slot instead of drawing a garbage-sized quad.
+    pub fn texture_size(&mut self, name: &str) -> Option<(u32, u32)> {
+        if name.is_empty() {
+            return None;
+        }
+        match self.load(name) {
+            Ok(image) => Some(image.size()),
+            Err(err) => {
+                // Not a warning per call: the picture layer re-asks every frame and the
+                // same missing background would bury the log.
+                let _ = err;
+                None
+            }
+        }
+    }
+}
+
+/// Normalises a WOLF asset name, rejecting anything that could escape the data root.
+///
+/// Returns None for an empty name, an absolute path, or a name containing ".." - the
+/// game never stores those, so treating them as invalid is free fidelity plus free safety.
+fn normalize(name: &str) -> Option<String> {
+    let trimmed = name.trim().replace('\\', "/");
+    let trimmed = trimmed.trim_start_matches("./").trim_start_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.contains(':') {
+        return None;
+    }
+    let mut parts: Vec<&str> = Vec::new();
+    for segment in trimmed.split('/') {
+        match segment {
+            "" | "." => continue,
+            ".." => return None,
+            other => parts.push(other),
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("/"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_cleans_up_separators() {
+        assert_eq!(normalize("SystemGraphic/TitleGraphic.jpg").as_deref(), Some("SystemGraphic/TitleGraphic.jpg"));
+        assert_eq!(normalize("./Kagura/bg.png").as_deref(), Some("Kagura/bg.png"));
+        assert_eq!(normalize("/Kagura/bg.png").as_deref(), Some("Kagura/bg.png"));
+        assert_eq!(normalize("Kagura//bg.png").as_deref(), Some("Kagura/bg.png"));
+    }
+
+    #[test]
+    fn normalize_rejects_escapes_and_empties() {
+        assert!(normalize("").is_none());
+        assert!(normalize("   ").is_none());
+        assert!(normalize("../secret.png").is_none());
+        assert!(normalize("Kagura/../../secret.png").is_none());
+        assert!(normalize("C:/Windows/system32/x.png").is_none());
+    }
+
+    #[test]
+    fn image_data_validates_length() {
+        assert!(ImageData::new(2, 2, vec![0; 16]).is_some());
+        assert!(ImageData::new(2, 2, vec![0; 15]).is_none());
+        let image = ImageData::new(2, 1, vec![1, 2, 3, 4, 5, 6, 7, 8]).expect("image");
+        assert_eq!(image.stride(), 8);
+        assert_eq!(image.pixel(0, 0), Some([1, 2, 3, 4]));
+        assert_eq!(image.pixel(1, 0), Some([5, 6, 7, 8]));
+        assert_eq!(image.pixel(2, 0), None);
+    }
+
+    #[test]
+    fn missing_asset_is_an_error_not_a_panic() {
+        let mut assets = Assets::new("no-such-root");
+        assert!(matches!(
+            assets.load("SystemGraphic/TitleGraphic.jpg"),
+            Err(AssetError::NotFound { .. })
+        ));
+        assert_eq!(assets.texture_size("SystemGraphic/TitleGraphic.jpg"), None);
+        assert!(assets.is_empty());
+    }
+
+    /// Builds a throwaway directory tree under the crate's target dir.
+    ///
+    /// Deliberately NOT %TEMP%: on this machine a bash-spawned child gets
+    /// PermissionDenied when it creates files there, which has already cost two
+    /// debugging sessions. target/ is always writable by the build that runs the test.
+    fn scratch_dir(tag: &str) -> PathBuf {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.pop(); // crates/
+        path.pop(); // workspace root
+        path.push("target");
+        path.push("test-scratch");
+        path.push(format!("assets-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).expect("scratch dir");
+        path
+    }
+
+    #[test]
+    fn resolves_case_insensitively_and_without_extension() {
+        let root = scratch_dir("resolve");
+        std::fs::create_dir_all(root.join("systemgraphic")).expect("dir");
+        // 1x1 PNG, the smallest legal file the decoder accepts.
+        const PNG: [u8; 67] = [
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
+            0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78,
+            0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        ];
+        std::fs::write(root.join("systemgraphic").join("titlegraphic.png"), PNG).expect("write");
+
+        let mut assets = Assets::new(&root);
+        // Mixed case on the directory, bare stem on the file: both quirks at once.
+        let image = assets
+            .load("SystemGraphic/TitleGraphic")
+            .expect("resolved case-insensitively with a probed extension");
+        assert_eq!(image.size(), (1, 1));
+        assert_eq!(image.rgba.len(), 4);
+        assert_eq!(assets.len(), 1);
+        assert!(assets.cached("SystemGraphic/TitleGraphic").is_some());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}

@@ -5,14 +5,20 @@
 //! in `docs/BASELINE.json`. Those numbers are a regression ratchet — if a
 //! parser change moves one of them, the change is a bug until proven otherwise.
 
+mod play;
+
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use std::sync::Arc;
 
 use wolf_format as wf;
+use wolf_format::command::SlotStats;
 use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
+use wolf_game::atlas::{self, Atlas};
+use wolf_game::Game;
+use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 use wolf_vm::{
     ChoiceReply, DbOp, Host, LogLevel, PictureCmd, PrecompileStats, ProgramSet, SoundCmd,
     StepReport, Vm,
@@ -67,6 +73,8 @@ fn main() -> ExitCode {
     let mut event: Option<u32> = None;
     let mut frames: usize = 600;
     let mut trace = false;
+    let mut out: Option<PathBuf> = None;
+    let mut frame_limit: Option<u64> = None;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -83,6 +91,12 @@ fn main() -> ExitCode {
                     .unwrap_or(600);
             }
             "--trace" | "-t" => trace = true,
+            "--until" => {
+                frame_limit = args.next().and_then(|value| value.parse().ok());
+            }
+            "--out" | "-o" => {
+                out = args.next().map(PathBuf::from);
+            }
             "--help" | "-h" => {
                 print_help();
                 return ExitCode::SUCCESS;
@@ -100,6 +114,8 @@ fn main() -> ExitCode {
     match command.as_deref() {
         Some("verify") => run_verify(&root),
         Some("precompile") => run_precompile(&root),
+        Some("capture") => run_capture(&root, out, frames),
+        Some("play") => play::run(&root, frame_limit),
         Some("run") => match event {
             Some(id) => run_event(&root, id, frames, trace),
             None => {
@@ -110,11 +126,11 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             print_help();
-            return ExitCode::from(2);
+            ExitCode::from(2)
         }
         None => {
             print_help();
-            return ExitCode::from(2);
+            ExitCode::from(2)
         }
     }
 }
@@ -126,6 +142,8 @@ fn print_help() {
     println!("    wolf-cli [--root <DIR>] verify");
     println!("    wolf-cli [--root <DIR>] precompile");
     println!("    wolf-cli [--root <DIR>] run --event <ID> [--frames <N>] [--trace]");
+    println!("    wolf-cli [--root <DIR>] capture [--frames <N>] [--out <FILE.png>]");
+    println!("    wolf-cli [--root <DIR>] play");
     println!();
     println!("COMMANDS:");
     println!(
@@ -133,11 +151,15 @@ fn print_help() {
     );
     println!("    precompile  Compile all 550 common events into jump tables; print the stats.");
     println!("    run         Execute one common event headlessly and report what it did.");
+    println!("    capture     Run the title screen for N frames and render it to a PNG.");
+    println!("    play        Run the title screen in a window (arrows move, Enter/Z confirm).");
     println!();
     println!("OPTIONS:");
     println!("    -e, --event <ID>  Common event id to run with 'run'.");
     println!("    -f, --frames <N>  Frame budget for 'run' (default 600, one frame = 1/60 s).");
     println!("    -t, --trace       Print every host callback in 'run', not just the summary.");
+    println!("    -o, --out <FILE>  PNG path for 'capture' (default work/out/title.png).");
+    println!("    --until <N>       Quit 'play' after N frames (smoke test; default: until closed).");
     println!("    -r, --root <DIR>  Unpacked data root containing BasicData/ and MapData/.");
     println!("                      Defaults to ./work/full, then $WOLF_DATA_ROOT.");
     println!("    -h, --help        Print this help.");
@@ -269,10 +291,132 @@ fn run_verify(root: &Path) -> ExitCode {
         None => checks.push(Check::text("ce.parse", "ok", "FILE MISSING")),
     }
 
+    // --- MapData/*.mps ----------------------------------------------------
+    //
+    // Every map must parse to its footer byte; a single mis-walked page would
+    // desynchronise the rest of the file, so the aggregate counts below are a
+    // stronger check than any per-map assertion.
+    let map_files = map_file_list(&map_dir);
+    if map_files.is_empty() {
+        checks.push(Check::text("mps.parse", "9 maps", "NO .mps FILES"));
+    } else {
+        let mut maps = 0u64;
+        let mut events = 0u64;
+        let mut pages = 0u64;
+        let mut empty_tiles = 0u64;
+        let mut stats = SlotStats::default();
+        let mut errors: Vec<String> = Vec::new();
+        for path in &map_files {
+            let Some(bytes) = read(path) else {
+                errors.push(format!("{}: unreadable", path.display()));
+                continue;
+            };
+            match wf::mps::Map::parse(&bytes) {
+                Ok(map) => {
+                    maps += 1;
+                    if !map.has_tile_data {
+                        empty_tiles += 1;
+                    }
+                    events += map.events.len() as u64;
+                    for event in &map.events {
+                        pages += event.pages.len() as u64;
+                        for page in &event.pages {
+                            stats.extend(page.commands.iter());
+                        }
+                    }
+                }
+                Err(err) => {
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    errors.push(format!("{name}: {err}"));
+                }
+            }
+        }
+        let parse_note = if errors.is_empty() {
+            "0 parse errors".to_owned()
+        } else {
+            errors.join("; ")
+        };
+        checks.push(Check::text("mps.parse", "0 parse errors", &parse_note));
+        checks.push(Check::num("mps.maps", 9, maps));
+        checks.push(Check::num("mps.events", 73, events));
+        checks.push(Check::num("mps.pages", 134, pages));
+        checks.push(Check::num("mps.slots", 37_610, stats.slots as u64));
+        checks.push(Check::num("mps.blank", 7_052, stats.blank() as u64));
+        checks.push(Check::num("mps.real", 30_558, stats.real() as u64));
+        checks.push(Check::num(
+            "mps.distinct_opcodes",
+            40,
+            stats.distinct_opcodes() as u64,
+        ));
+        checks.push(Check::num("mps.empty_maps", 2, empty_tiles));
+    }
+
+    // --- TileSetData.dat --------------------------------------------------
+    match read(&basic.join("TileSetData.dat")).map(|b| wf::tileset::TileSetData::parse(&b)) {
+        Some(Ok(sets)) => {
+            checks.push(Check::num("tileset.version", 0xD2, u64::from(sets.version)));
+            checks.push(Check::num("tileset.count", 6, sets.tilesets.len() as u64));
+            checks.push(Check::num("tileset.footer", 0xCF, u64::from(sets.footer)));
+            let base = sets
+                .tilesets
+                .get(4)
+                .map(|set| set.base_image.as_str())
+                .unwrap_or("<missing>");
+            checks.push(Check::text("tileset.base.4", "MapChip/kiri_project.png", base));
+        }
+        Some(Err(err)) => {
+            checks.push(Check::text("tileset.parse", "ok", &format!("FAILED: {err}")));
+        }
+        None => checks.push(Check::text("tileset.parse", "ok", "FILE MISSING")),
+    }
+
+    // --- the three databases ----------------------------------------------
+    //
+    // Type counts plus one row count each: the row count is what proves the
+    // numeric-then-string row layout was walked correctly.
+    for (label, file, expected_types, expected_rows) in [
+        ("database.types", "DataBase.dat", 40u64, 44u64),
+        ("cdata.types", "CDataBase.dat", 30, 17),
+        ("sysdata.types", "SysDatabase.dat", 28, 50),
+    ] {
+        match read(&basic.join(file)).map(|b| wf::database::Database::parse(&b)) {
+            Some(Ok(db)) => {
+                checks.push(Check::num(label, expected_types, db.types.len() as u64));
+                let rows = db.types.first().map(|t| t.rows.len() as u64).unwrap_or(0);
+                checks.push(Check::num(
+                    match label {
+                        "database.types" => "database.rows.0",
+                        "cdata.types" => "cdata.rows.0",
+                        _ => "sysdata.rows.0",
+                    },
+                    expected_rows,
+                    rows,
+                ));
+                if label == "sysdata.types" {
+                    let settings = db.map_settings();
+                    checks.push(Check::num("database.map_settings", 6, settings.len() as u64));
+                    let first = settings
+                        .first()
+                        .map(|s| s.path.as_str())
+                        .unwrap_or("<none>");
+                    checks.push(Check::text(
+                        "database.map_settings.0",
+                        "MapData/TitleMap.mps",
+                        first,
+                    ));
+                }
+            }
+            Some(Err(err)) => {
+                checks.push(Check::text("database.parse", "ok", &format!("FAILED: {err}")));
+            }
+            None => checks.push(Check::text("database.parse", "ok", "FILE MISSING")),
+        }
+    }
+
     // --- sections whose loaders land next --------------------------------
-    checks.push(Check::skip("mps.events"));
-    checks.push(Check::skip("tileset.count"));
-    checks.push(Check::skip("database.types"));
     checks.push(Check::skip("dxarchive.header"));
     checks.push(Check::skip("save.header"));
 
@@ -310,7 +454,7 @@ fn run_precompile(root: &Path) -> ExitCode {
         };
 
     let programs = ProgramSet::from_common_events(&events);
-    let stats: PrecompileStats = programs.stats.clone();
+    let stats: PrecompileStats = programs.stats;
 
     println!("  blocks      {}", stats.blocks);
     println!("    conditions  {}", stats.conditions);
@@ -340,7 +484,7 @@ fn run_precompile(root: &Path) -> ExitCode {
     println!("  unresolved  {} label jump(s)", stats.unresolved_labels);
     println!();
 
-    let mut checks = vec![
+    let checks = vec![
         Check::num("slots", 163_828, stats.slots as u64),
         Check::num("blocks", 13_310, stats.blocks as u64),
         // 111 / 102 / 170+179+176 marker counts from docs/BASELINE.json: the
@@ -710,7 +854,7 @@ fn run_event(root: &Path, id: u32, frames: usize, trace: bool) -> ExitCode {
         );
         let mut seen: Vec<&String> = Vec::new();
         for note in &host.infos {
-            if !seen.iter().any(|first| *first == note) {
+            if !seen.contains(&note) {
                 seen.push(note);
             }
         }
@@ -723,7 +867,7 @@ fn run_event(root: &Path, id: u32, frames: usize, trace: bool) -> ExitCode {
         println!("  warnings         {}", host.warnings.len());
         let mut seen: Vec<&String> = Vec::new();
         for note in &host.warnings {
-            if !seen.iter().any(|first| *first == note) {
+            if !seen.contains(&note) {
                 seen.push(note);
             }
         }
@@ -739,7 +883,7 @@ fn run_event(root: &Path, id: u32, frames: usize, trace: bool) -> ExitCode {
         }
     }
 
-    let mut checks = vec![
+    let checks = vec![
         Check::num("started", 1, 1),
         Check::num("frames_run > 0", 1, u64::from(frames_run > 0)),
         // Zero warnings means every opcode this event touched is implemented and
@@ -764,6 +908,23 @@ fn run_condition_label(condition: u8) -> &'static str {
         2 => "ce.run_condition.2",
         _ => "ce.run_condition.3",
     }
+}
+
+/// All .mps files in a map directory, sorted so the output is stable.
+fn map_file_list(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("mps"))
+        })
+        .collect();
+    files.sort();
+    files
 }
 
 fn read(path: &Path) -> Option<Vec<u8>> {
@@ -825,4 +986,194 @@ fn report(checks: &[Check]) -> ExitCode {
         println!("FAIL — {failures} check(s) disagree with the baseline");
         ExitCode::FAILURE
     }
+}
+
+/// Runs the title screen headlessly for N frames and writes the logical framebuffer to PNG.
+///
+/// This is the M1 acceptance artifact: 1024x576 of pixels produced by the real event
+/// script through the real picture stack, comparable side by side with a screenshot of
+/// the original game. The messages the interpreter reports are printed too, because a
+/// capture that looks right but logged forty warnings is not actually right.
+/// Default font size for text pictures, in logical pixels.
+///
+/// WOLF does not store a font size in the picture command; the runtime uses the Game.dat
+/// font (Lolita) at the size set in the editor's text settings. 22 px matches the CN
+/// notice's measured 7 lines in a 300x200 window.
+const TEXT_PX: f32 = 22.0;
+
+/// Finds a TTF to draw WOLF text with.
+///
+/// Search order: `<root>/Fonts`, `<root>`, then `$WOLF_GAME_DIR`, then the documented
+/// Steam install path. A missing font is not fatal - the capture still renders the art
+/// and reports that text was skipped.
+fn find_font(root: &Path) -> Option<(PathBuf, Vec<u8>)> {
+    const NAMES: [&str; 4] = [
+        "Lolita.ttf",
+        "07yasashi.ttf",
+        "GenJyuuGothicXPB.ttf",
+        "MSGOTHIC.TTF",
+    ];
+    const GAME_DIR: &str = "E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy";
+    let mut bases: Vec<PathBuf> = vec![root.join("Fonts"), root.to_path_buf()];
+    if let Ok(dir) = std::env::var("WOLF_GAME_DIR") {
+        if !dir.is_empty() {
+            bases.push(PathBuf::from(dir));
+        }
+    }
+    bases.push(PathBuf::from(GAME_DIR));
+    for base in bases {
+        for name in NAMES {
+            let candidate = base.join(name);
+            if let Ok(bytes) = std::fs::read(&candidate) {
+                return Some((candidate, bytes));
+            }
+        }
+    }
+    None
+}
+
+fn run_capture(root: &Path, out: Option<PathBuf>, frames: usize) -> ExitCode {
+    let out = out.unwrap_or_else(|| PathBuf::from("work/out/title.png"));
+    let mut game = match Game::new(root) {
+        Ok(game) => game,
+        Err(err) => {
+            eprintln!("cannot load the game data: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // A capture has no keyboard: messages dismiss immediately and prompts take option 0,
+    // which is the same policy 'run' uses, so both commands see the same script path.
+    game.auto_advance = true;
+    if let Err(err) = game.start_title() {
+        eprintln!("{err}");
+        return ExitCode::FAILURE;
+    }
+
+    let mut peak = 0usize;
+    for _ in 0..frames {
+        let outcome = game.frame();
+        peak = peak.max(outcome.report.running);
+    }
+
+    let mut atlas = Atlas::new();
+    let sprites = atlas.sprites(&game.screen, &mut game.assets);
+    let texts = atlas::texts(&game.screen);
+    let [atlas_w, atlas_h] = atlas.size();
+
+    println!("capture");
+    println!("  data root : {}", root.display());
+    println!("  frames    : {frames} (peak {peak} coroutine(s))");
+    println!(
+        "  pictures  : {} live -> {} textured quad(s), {} text picture(s)",
+        game.screen.len(),
+        sprites.len(),
+        texts.len()
+    );
+    println!(
+        "  atlas     : {} image(s), {:.1}% of {atlas_w}x{atlas_h}",
+        atlas.len(),
+        atlas.fill_ratio() * 100.0
+    );
+    for quad in &sprites {
+        println!(
+            "    quad pic {:>6} at [{:.0},{:.0},{:.0},{:.0}] uv [{:.3},{:.3},{:.3},{:.3}]",
+            quad.number, quad.rect[0], quad.rect[1], quad.rect[2], quad.rect[3],
+            quad.uv[0], quad.uv[1], quad.uv[2], quad.uv[3]
+        );
+    }
+    for text in &texts {
+        let preview: String = text.text.chars().take(40).collect();
+        println!(
+            "    text pic {:>6} at [{:.0},{:.0},{:.0},{:.0}] {}",
+            text.number, text.rect[0], text.rect[1], text.rect[2], text.rect[3], preview
+        );
+    }
+
+    let mut renderer = match Renderer::new_offscreen() {
+        Ok(renderer) => renderer,
+        Err(err) => {
+            eprintln!("no usable GPU adapter: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(err) = renderer.set_atlas(atlas.pixels(), atlas_w, atlas_h) {
+        eprintln!("atlas upload failed: {err}");
+        return ExitCode::FAILURE;
+    }
+    // Text pictures need a font; the original game keeps its TTFs next to Game.exe, not
+    // inside the unpacked data root, so the lookup falls back to the install directory.
+    match find_font(root) {
+        Some((path, bytes)) => match renderer.set_font(&bytes) {
+            Ok(()) => println!("  font      : {}", path.display()),
+            Err(err) => eprintln!("  font rejected ({}): {err}", path.display()),
+        },
+        None => println!("  font      : none found; text pictures will not draw"),
+    }
+    let instances: Vec<SpriteInstance> = sprites
+        .iter()
+        .map(|quad| SpriteInstance::new(quad.rect, quad.uv).with_alpha(quad.alpha))
+        .collect();
+    renderer.draw(&instances);
+    let items: Vec<TextItem> = texts
+        .iter()
+        .map(|text| TextItem::new(text.text.clone(), text.rect, TEXT_PX).with_alpha(text.alpha))
+        .collect();
+    renderer.draw_text(&items);
+
+    renderer.present();
+    // Text statistics are only known after the pass has been encoded, so they are reported
+    // here rather than next to the item list.
+    let text_stats = renderer.text_stats();
+    println!(
+        "  text      : {} item(s), {} glyph(s), {} line(s), {} substituted",
+        text_stats.items, text_stats.glyphs, text_stats.lines, text_stats.substituted
+    );
+    if let Some(missing) = text_stats.missing.first() {
+        eprintln!("  warning   : font has no glyph for {missing:?}");
+    }
+    let pixels = match renderer.capture_rgba() {
+        Ok(pixels) => pixels,
+        Err(err) => {
+            eprintln!("readback failed: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() {
+            if let Err(err) = std::fs::create_dir_all(parent) {
+                eprintln!("cannot create {}: {err}", parent.display());
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    if let Err(err) = image::save_buffer(&out, &pixels, LOGICAL_W, LOGICAL_H, image::ColorType::Rgba8)
+    {
+        eprintln!("cannot write {}: {err}", out.display());
+        return ExitCode::FAILURE;
+    }
+
+    let lit = pixels
+        .chunks_exact(4)
+        .filter(|pixel| pixel[0] | pixel[1] | pixel[2] != 0)
+        .count();
+    let total = (LOGICAL_W * LOGICAL_H) as usize;
+    println!(
+        "  rendered  : {LOGICAL_W}x{LOGICAL_H}, {lit}/{total} non-black pixel(s) = {:.1}%",
+        lit as f64 * 100.0 / total as f64
+    );
+    println!("  wrote     : {}", out.display());
+
+    let warnings = game.stats.warnings;
+    println!(
+        "  stats     : {} instruction(s), {} picture op(s), {} sound(s), {} db access(es), {warnings} warning(s)",
+        game.stats.instructions, game.stats.pictures, game.stats.sounds, game.stats.databases
+    );
+    if !game.diagnostics.is_empty() {
+        println!("  diagnostics ({} distinct):", game.diagnostics.len());
+        for (text, count) in game.diagnostics.iter().take(12) {
+            println!("    {count:>6}x {text}");
+        }
+    }
+    ExitCode::SUCCESS
 }

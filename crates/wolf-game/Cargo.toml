@@ -8,3 +8,9 @@ publish.workspace = true
 description = "Game state, scene stack and asset database"
 
 [dependencies]
+wolf-format = { workspace = true }
+wolf-vm = { workspace = true }
+# Only what the WOLF asset set actually ships: every picture in this game is a PNG or a
+# JPEG (SystemGraphic/TitleGraphic.jpg, MapChip/*.png ...). Enabling the other decoders
+# triples the cold build and buys nothing.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

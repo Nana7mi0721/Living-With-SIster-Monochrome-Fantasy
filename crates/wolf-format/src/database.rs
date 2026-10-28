@@ -1,3 +1,364 @@
 //! `DataBase.dat` / `CDataBase.dat` / `SysDatabase.dat` loaders.
 //!
-//! TODO(format-spec): implement per `docs/FORMAT_SPEC.md` §6.
+//! Layout is documented in `docs/FORMAT_SPEC.md` §6. Every `.dat` is a container
+//! with a type list; each type declares how many fields it has and where each
+//! field lives, then stores its rows. The field table is the only description of
+//! the row shape, and it is positional: a raw value below `1000` means "field
+//! absent", `1000..2000` selects numeric column `raw - 1000` and `>= 2000`
+//! selects string column `raw - 2000` (WolfTL `Database.hpp` §Field::IsString).
+//!
+//! A row is stored as *all* numeric values first, then *all* strings — not
+//! interleaved — so a row is read into two cursors and the field table decides
+//! which cursor advances. Values are kept in the on-disk column order
+//! ([`Row::numbers`] / [`Row::strings`]) and the field table is what maps them
+//! back to logical columns.
+
+use crate::bytes::Reader;
+use crate::error::{Error, Result};
+
+/// A parsed database file.
+#[derive(Debug, Clone)]
+pub struct Database {
+    /// Container version byte, `0xC2` in this game.
+    pub version: u8,
+    /// Types in file order; index 0 is the game's first data type.
+    pub types: Vec<DatabaseType>,
+    /// Footer byte, `0xC2`.
+    pub footer: u8,
+}
+
+impl Database {
+    /// Container magic: `00 57 00 00 4F 4C`.
+    pub const MAGIC: [u8; 6] = [0x00, 0x57, 0x00, 0x00, 0x4F, 0x4C];
+    /// Container type magic: `FM\0`.
+    pub const MAGIC_TYPE: [u8; 3] = [0x46, 0x4D, 0x00];
+    /// Container version this loader implements (`0xC4` is the packed variant).
+    pub const VERSION: u8 = 0xC2;
+    /// Footer byte.
+    pub const FOOTER: u8 = 0xC2;
+    /// Per-type sub-header, `FE FF FF FF`.
+    pub const TYPE_SEPARATOR: [u8; 4] = [0xFE, 0xFF, 0xFF, 0xFF];
+    /// Raw field value at or above this is a string column.
+    pub const STRING_START: u32 = 2000;
+    /// Raw field value at or above this is a numeric column.
+    pub const INT_START: u32 = 1000;
+    /// `data_id_method` value that adds an extra name string after the field count.
+    pub const STRING_INDICATOR: u32 = 0x0001_D4C0;
+    /// Type index of the map settings table in `SysDatabase.dat`.
+    pub const MAP_SETTINGS_TYPE: usize = 0;
+
+    /// Parse a whole database file.
+    pub fn parse(data: &[u8]) -> Result<Self> {
+        let mut r = Reader::new(data);
+        r.expect(&Self::MAGIC, "database magic")?;
+        let _version_header = r.u8()?;
+        r.expect(&Self::MAGIC_TYPE, "database magic type")?;
+        let version = r.u8()?;
+        if version != Self::VERSION {
+            return Err(Error::field(
+                "database version",
+                r.pos() - 1,
+                format!("unsupported database version 0x{version:02X}"),
+            ));
+        }
+        let type_count = r.u32()? as usize;
+        // A type is at least 16 bytes (sub-header, id method, field count, row
+        // count), so this bound can never reject a well-formed file and stops a
+        // corrupt count from allocating wildly.
+        if type_count > r.remaining() / 16 {
+            return Err(Error::field(
+                "database type count",
+                r.pos() - 4,
+                format!("{type_count} types do not fit in {} bytes", r.remaining()),
+            ));
+        }
+        let mut types = Vec::with_capacity(type_count);
+        for _ in 0..type_count {
+            types.push(DatabaseType::read(&mut r)?);
+        }
+        let footer = r.u8()?;
+        if footer != Self::FOOTER {
+            return Err(Error::magic(
+                "database footer",
+                r.pos() - 1,
+                &[footer],
+                &[Self::FOOTER],
+            ));
+        }
+        while !r.at_end() {
+            if r.u8()? != 0 {
+                return Err(Error::trailing(r.pos() - 1, r.remaining() + 1));
+            }
+        }
+        Ok(Self {
+            version,
+            types,
+            footer,
+        })
+    }
+
+    /// The map settings table (type 0 of `SysDatabase.dat`).
+    ///
+    /// This is the only correct source for the registered map list: 9 `.mps`
+    /// files ship on disk but only 6 are registered here, and the order is the
+    /// one the game uses (not the file order, not the file names).
+    pub fn map_settings(&self) -> Vec<MapSetting> {
+        let Some(table) = self.types.get(Self::MAP_SETTINGS_TYPE) else {
+            return Vec::new();
+        };
+        table
+            .rows
+            .iter()
+            .filter_map(|row| {
+                let path = row.strings.first()?;
+                if path.is_empty() {
+                    return None;
+                }
+                Some(MapSetting {
+                    path: path.clone(),
+                    numbers: row.numbers.clone(),
+                    strings: row.strings.clone(),
+                })
+            })
+            .collect()
+    }
+}
+
+/// One data type: a field table plus its rows.
+#[derive(Debug, Clone)]
+pub struct DatabaseType {
+    /// How the game derives a row's id, see `docs/FORMAT_SPEC.md` §6.2.
+    ///
+    /// 0 manual, 1 same as the first field, 2 same as the previous type,
+    /// 10000 and up derived by the engine; all of these occur in this game.
+    pub data_id_method: u32,
+    /// Field table in logical column order.
+    pub fields: Vec<FieldKind>,
+    /// Rows in file order.
+    pub rows: Vec<Row>,
+}
+
+impl DatabaseType {
+    /// Number of numeric columns the row layout contains.
+    ///
+    /// Every field below [`Database::STRING_START`] occupies a numeric slot —
+    /// including absent fields, whose raw value is below [`Database::INT_START`].
+    pub fn numeric_columns(&self) -> usize {
+        self.fields
+            .iter()
+            .filter(|field| !matches!(field, FieldKind::Str(_)))
+            .count()
+    }
+
+    /// Number of string columns the row layout contains.
+    pub fn string_columns(&self) -> usize {
+        self.fields
+            .iter()
+            .filter(|field| matches!(field, FieldKind::Str(_)))
+            .count()
+    }
+
+    /// Read one logical column of a row, or `None` when the field is absent.
+    pub fn value<'a>(&self, row: &'a Row, column: usize) -> Option<RowValue<'a>> {
+        match self.fields.get(column)? {
+            FieldKind::Num(index) => row.numbers.get(*index).map(|v| RowValue::Num(*v)),
+            FieldKind::Str(index) => row.strings.get(*index).map(|v| RowValue::Str(v)),
+        }
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self> {
+        r.expect(&Database::TYPE_SEPARATOR, "database type separator")?;
+        let data_id_method = r.u32()?;
+        let field_count = r.u32()? as usize;
+        if data_id_method == Database::STRING_INDICATOR {
+            // Documented extra name string; no shipped file uses it, but skipping
+            // it keeps the walk correct if one ever does.
+            let _unknown2 = r.t_str()?;
+        }
+        if field_count > r.remaining() / 4 {
+            return Err(Error::field(
+                "database field count",
+                r.pos() - 4,
+                format!("{field_count} fields do not fit in {} bytes", r.remaining()),
+            ));
+        }
+        let positions = r.u32_array(field_count)?;
+        let mut fields = Vec::with_capacity(field_count);
+        for raw in positions {
+            fields.push(FieldKind::decode(raw, r.pos())?);
+        }
+        let row_count = r.u32()? as usize;
+        // The narrowest row is 4 bytes per numeric column plus 4 per string
+        // (a zero-length `t_str` still costs its length word). A type with no
+        // fields at all stores zero-byte rows — `SysDatabase.dat` type 14 is
+        // exactly that: 800 rows of nothing — so only a non-zero row size bounds
+        // the count against the remaining bytes.
+        let row_bytes = fields.len() * 4;
+        let fits = match r.remaining().checked_div(row_bytes) {
+            Some(max_rows) => row_count <= max_rows,
+            // A type with no fields stores zero-byte rows, so the remaining
+            // bytes cannot bound the count; only a sanity limit applies.
+            None => row_count <= MAX_EMPTY_ROWS,
+        };
+        if !fits {
+            return Err(Error::field(
+                "database row count",
+                r.pos() - 4,
+                format!("{row_count} rows do not fit in {} bytes", r.remaining()),
+            ));
+        }
+        let mut rows = Vec::with_capacity(row_count);
+        for _ in 0..row_count {
+            rows.push(Row::read(r, &fields)?);
+        }
+        Ok(Self {
+            data_id_method,
+            fields,
+            rows,
+        })
+    }
+}
+
+/// Upper bound on rows of a type that has no fields, where every row occupies
+/// zero bytes and the remaining-bytes check cannot constrain the count.
+const MAX_EMPTY_ROWS: usize = 1_000_000;
+
+/// Number of string columns in a field table.
+fn string_columns(fields: &[FieldKind]) -> usize {
+    fields
+        .iter()
+        .filter(|field| matches!(field, FieldKind::Str(_)))
+        .count()
+}
+
+/// Where one logical column of a row lives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldKind {
+    /// Numeric column `n` of [`Row::numbers`].
+    Num(usize),
+    /// String column `n` of [`Row::strings`].
+    Str(usize),
+}
+
+impl FieldKind {
+    /// Decode a raw field position word.
+    pub fn decode(raw: u32, pos: usize) -> Result<Self> {
+        if raw >= Database::STRING_START {
+            Ok(Self::Str((raw - Database::STRING_START) as usize))
+        } else if raw >= Database::INT_START {
+            Ok(Self::Num((raw - Database::INT_START) as usize))
+        } else {
+            // Absent fields are documented but never occur in this game's three
+            // databases, so refuse rather than silently shifting every later column.
+            Err(Error::field(
+                "database field position",
+                pos,
+                format!("invalid field position {raw}"),
+            ))
+        }
+    }
+
+    /// The raw position word this field was decoded from.
+    pub fn raw(&self) -> u32 {
+        match self {
+            Self::Num(index) => Database::INT_START + *index as u32,
+            Self::Str(index) => Database::STRING_START + *index as u32,
+        }
+    }
+}
+
+/// One row: numeric values first, then strings, in on-disk column order.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Row {
+    /// Numeric columns in the order they appear in the file.
+    pub numbers: Vec<i32>,
+    /// String columns in the order they appear in the file.
+    pub strings: Vec<String>,
+}
+
+impl Row {
+    fn read(r: &mut Reader<'_>, fields: &[FieldKind]) -> Result<Self> {
+        let strings_count = string_columns(fields);
+        let numbers = r.i32_array(fields.len() - strings_count)?;
+        let mut strings = Vec::with_capacity(strings_count);
+        for _ in 0..strings_count {
+            strings.push(r.t_str()?);
+        }
+        Ok(Self { numbers, strings })
+    }
+
+    /// Value of logical column `column`, if the field table points at a slot
+    /// that this row actually has.
+    pub fn value(&self, fields: &[FieldKind], column: usize) -> Option<RowValue<'_>> {
+        match fields.get(column)? {
+            FieldKind::Num(index) => self.numbers.get(*index).map(|v| RowValue::Num(*v)),
+            FieldKind::Str(index) => self.strings.get(*index).map(|v| RowValue::Str(v)),
+        }
+    }
+}
+
+/// A single cell, borrowed from a [`Row`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowValue<'a> {
+    /// A numeric cell.
+    Num(i32),
+    /// A string cell.
+    Str(&'a str),
+}
+
+/// One row of the map settings table, see [`Database::map_settings`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MapSetting {
+    /// `.mps` path relative to the game root, e.g. `MapData/TitleMap.mps`.
+    pub path: String,
+    /// Numeric columns in on-disk order.
+    pub numbers: Vec<i32>,
+    /// String columns in on-disk order; column 0 is [`Self::path`].
+    pub strings: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn container_constants_match_the_spec() {
+        assert_eq!(Database::MAGIC, [0x00, 0x57, 0x00, 0x00, 0x4F, 0x4C]);
+        assert_eq!(Database::MAGIC_TYPE, *b"FM\0");
+        assert_eq!(Database::VERSION, 0xC2);
+        assert_eq!(Database::FOOTER, 0xC2);
+        assert_eq!(Database::TYPE_SEPARATOR, [0xFE, 0xFF, 0xFF, 0xFF]);
+        assert_eq!(Database::STRING_START, 2000);
+        assert_eq!(Database::INT_START, 1000);
+        assert_eq!(Database::STRING_INDICATOR, 0x0001_D4C0);
+    }
+
+    #[test]
+    fn field_kind_decodes_the_two_column_spaces() {
+        assert_eq!(FieldKind::decode(2000, 0), Ok(FieldKind::Str(0)));
+        assert_eq!(FieldKind::decode(2004, 0), Ok(FieldKind::Str(4)));
+        assert_eq!(FieldKind::decode(1000, 0), Ok(FieldKind::Num(0)));
+        assert_eq!(FieldKind::decode(1013, 0), Ok(FieldKind::Num(13)));
+        assert!(FieldKind::decode(999, 0).is_err());
+        assert_eq!(FieldKind::Str(2).raw(), 2002);
+        assert_eq!(FieldKind::Num(2).raw(), 1002);
+    }
+
+    #[test]
+    fn row_value_walks_the_field_table() {
+        let fields = [FieldKind::Str(0), FieldKind::Num(0), FieldKind::Str(1)];
+        let row = Row {
+            numbers: vec![7],
+            strings: vec!["a".into(), "b".into()],
+        };
+        assert_eq!(row.value(&fields, 0), Some(RowValue::Str("a")));
+        assert_eq!(row.value(&fields, 1), Some(RowValue::Num(7)));
+        assert_eq!(row.value(&fields, 2), Some(RowValue::Str("b")));
+        assert_eq!(row.value(&fields, 3), None);
+        assert_eq!(
+            row.value(&[FieldKind::Num(9)], 0),
+            None,
+            "a field table pointing past the row must not panic"
+        );
+    }
+}

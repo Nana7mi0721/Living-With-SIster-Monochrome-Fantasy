@@ -34,6 +34,10 @@ impl<'a> Reader<'a> {
 
     /// Total length of the underlying buffer.
     #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.buf.is_empty()
+    }
+
     pub const fn len(&self) -> usize {
         self.buf.len()
     }

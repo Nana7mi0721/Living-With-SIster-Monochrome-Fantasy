@@ -80,7 +80,7 @@ impl Magic {
         // resolve to a real variable; the flag itself is kept in `raw`.
         let flags = (raw >> 28) as u8 & 0x0F;
         let body = raw & 0x0FFF_FFFF;
-        let (kind, index) = if flags != 0 && body >= SELF_BASE && body < STR_BASE {
+        let (kind, index) = if flags != 0 && (SELF_BASE..STR_BASE).contains(&body) {
             // Flagged operand that still names a variable.
             classify(body)
         } else if flags != 0 {

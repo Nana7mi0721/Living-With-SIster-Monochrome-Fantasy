@@ -1,0 +1,659 @@
+# WOLF 存档（.sav）格式规格 — 已验证实现版
+
+本文是 `crates/wolf-save` 的规格说明。它**取代** `docs/FORMAT_SPEC.md` §9 中标注「TODO 未验证」的存档章节，
+并明确纠正其中两处错误（见 §1.3、§1.4）。
+
+所有结论必须同时满足两条来源才写进本文：
+
+1. **参考实现**：`docs/vendor/WolfSave/`（MIT）。这是社区里唯一一份逐字节读过 WOLF 存档的 C++ 代码，
+   每个 `Parse()` 都是直白的 `ReadUInt8/16/32` 序列，没有压缩、没有指针。
+2. **实测**：本游戏 `Save/` 目录下的 9 个文件（`SaveData01..08.sav` + `System.sav`）。
+   解析器跑完后断言「读到的位置 + 1 == 文件长度」且「最后一个字节 == 0x19」，9/9 通过。
+   这条断言是 C++ 的 `parseSave()` 结尾照抄的，比任何抽样都强：段边界错一个字节就立刻失败。
+
+标注约定：
+
+- **已验证** — 参考实现和 9 个存档实测一致。
+- **已实测** — 9 个存档实测一致，但参考实现没有对应注释解释语义（只有字节布局，没有含义）。
+- **未验证** — 参考实现里有代码，但本游戏 `file_version = 0x8C` 走不到该分支，本仓库从未执行过。
+  实现照抄了代码，但没有真实数据可以证明它是对的。
+
+---
+
+## 1. 总览
+
+### 1.1 一个存档不是 chunk 容器
+
+解密后，文件是**固定顺序的连续流**：
+
+```text
+[0x00 .. 0x14)  明文头（0x14 字节）
+[0x14]          u8 起始标记，恒 0x19
+[0x15 .. )      MemData<u16> 存档名
+                u16 fileVersion
+                SavePart1 -> SavePart2 -> SavePart3 -> SavePart4
+                -> SavePart5 -> VariableDatabase -> SavePart7
+[EOF-1]         u8 结束标记，恒 0x19
+```
+
+**没有 chunk id，没有长度前缀，没有任何索引表。** 想跳到第 N 段只能从头顺序解析。
+`crates/wolf-save` 因此提供的是「伪 chunk」：`SaveChunk { id: 0..=6, name, offset, len }`，
+id 就是段序号，offset/len 是解析时实测出来的真实字节范围。这样上层要按段取原始字节仍然很方便，
+但不要误以为文件里存在这样的表。
+
+### 1.2 9 个存档的实测段表
+
+以 `SaveData01.sav`（366146 字节）为例，**已验证**：
+
+| 段 | 起始偏移 | 长度 | 结束偏移 |
+|---|---:|---:|---:|
+| 明文头 + 起始标记 + 名字 + 版本 | 0x00 | 0x44 | 0x44 |
+| SavePart1 | 0x000044 | 34318 | 0x008652 |
+| SavePart2 | 0x008652 | 595 | 0x0088A5 |
+| SavePart3 | 0x0088A5 | 218610 | 0x03DE97 |
+| SavePart4 | 0x03DE97 | 1213 | 0x03E354 |
+| SavePart5 | 0x03E354 | 29489 | 0x045685 |
+| VariableDatabase | 0x045685 | 81851 | 0x059640 |
+| SavePart7 | 0x059640 | 1 | 0x059641 |
+| 结束标记 | 0x059641 | 1 | 0x059642 = EOF |
+
+九文件里**只有 SavePart1 恒为 34318 字节、SavePart7 恒为 1 字节**；其余各段随内容变化，
+不要把它们当常量（详见 §11 的断言表）。
+
+### 1.3 纠正 FORMAT_SPEC §9.3
+
+§9.3 的表格把正文写成「顺序 1 SavePart1 / 2 SavePart2 / … / 7 SavePart7」并列成一张表，
+读起来像 chunk 序列。**顺序是对的，但「chunk」这个词是错的**：文件里没有 id、没有长度、
+没有偏移。§9.3 的表格全部标了「TODO 未验证」，本文给出的是实测长度（§11）。
+
+### 1.4 纠正 FORMAT_SPEC §9.5
+
+§9.5 原文说：变量库「是**用 .project 自描述**的」，「纯 Rust 读取器应当**读 .project 文件**，
+而不是把字段名硬编码」。
+
+**前半句对，后半句错。** 正确的说法是：
+
+- `Data/BasicData/CDataBase.project` 提供的是**字段名**（显示层）。
+- 存档里的 `VariableDatabase` **自带**每个类型的字段配置数组（`m_typeConfig`）和每一行的全部值。
+  **字节布局完全不依赖 .project**：不知道字段叫什么，照样能把 30 个类型、每个类型的每一行读出来。
+- `crates/wolf-save` **不读 .project**。理由有三：字段名是可选增强；.project 的容器格式
+  （u4 计数 + 嵌套 t_str）在第一个类型之后就不是纯 t_str 序列了（实测在 offset 3851979595
+  处要求一个 3.8GB 的缓冲，即结构判断错误），稳定解析它需要另一份工作；而存档读取本身
+  不需要它。
+
+如果上层想要字段名，正确做法是**另外**写一个 .project 解析器，把「类型序号 → 字段名数组」
+交给 `VariableType::config` 的**下标**去对齐（不是按值对齐）。实测第 0 类型的 51 个 cfg 项
+（前 5 个 >= 2000 是字符串，后 46 个 < 2000 是数字）与 CDataBase.project 第 0 类型
+「主人公ステータス」的 51 个字段名一一对应，**这条对应关系已验证**。
+
+---
+
+## 2. 解密（**已验证**，9/9）
+
+对应 `docs/FORMAT_SPEC.md` §9.1。实现见 `crates/wolf-save/src/lib.rs` 的 `decrypt()`。
+
+- 只有 `[0x14, EOF)` 区间被加密；头 0x14 字节是明文。
+- 三个种子直接存在明文头里：`seeds = [b[0], b[3], b[9]]`。这三个字节**从不被异或**。
+- 三趟，步长分别是 1、2、5：
+
+```text
+for pass, step in [(0,1), (1,2), (2,5)]:
+    state = seeds[pass]
+    for at in range(0x14, len(buf), step):
+        state = (state * 214013 + 2531011) & 0xFFFFFFFF   # MSVC rand()
+        r = (state >> 16) & 0x7FFF
+        buf[at] ^= (r >> 12) & 0xFF
+```
+
+- `rand() >> 12` 在 C++ 里是 `BYTE` 截断，等价于上面取 19 位中的低 3 位。所以**每个字节只有低 3 位被翻**，
+  高 5 位永远是明文 —— 这就是为什么 strings 还能从 .sav 里捞出可读文本。
+- 加密是同一算法的反向：种子顺序变成 `[b[9], b[3], b[0]]`，步长 5/2/1，再重算校验和写到 offset 2。
+  因此「解密 = 用反向种子顺序对同一 buffer 再 XOR 一遍」，可以原地做。
+
+### 2.1 校验和（**已验证**，9/9）
+
+`offset 2` 的一个字节 = **解密后** `b[0x14..EOF]` 逐字节和 `& 0xFF`。
+参考实现里这是 `WolfSaveParser::fixCheckSum()`。
+
+`crates/wolf-save` 在解析时顺带算出 `computed_checksum`，与 `stored_checksum` 比对，
+`checksum_ok()` 返回结果。**9 个文件全部匹配**（见 §11 表里的 checksum 列）。
+
+---
+
+## 3. 明文头（**已验证**，9/9）
+
+| 偏移 | 宽度 | 含义 |
+|---|---:|---|
+| 0x00 | u8 | 种子 0 |
+| 0x01 | u8 | 未知，实测全 0 |
+| 0x02 | u8 | 校验和（§2.1） |
+| 0x03 | u8 | 种子 1 |
+| 0x04 | u16 | 未知，实测全 0 |
+| 0x06 | u8 | 0x55 = 字符串是 UTF-8；否则是 Shift-JIS |
+| 0x07 | u16 | 未知，实测全 0 |
+| 0x09 | u8 | 种子 2 |
+| 0x0A | 10 字节 | 未知，实测全 0 |
+| 0x14 | u8 | 起始标记，**恒 0x19**，否则整个文件拒绝 |
+| 0x15 | MemData<u16> | 存档名：u16 字节数 + 载荷，末尾带 NUL |
+| — | u16 | `fileVersion`，本游戏恒 **0x8C (140)**；上限 0x8E，超过即拒绝 |
+
+实测：9 个文件全部 `b[6] == 0x55`（UTF-8）、名字 = `妹相随～黑白世界的缤纷冒险～` + NUL
+（namelen = 43，含 NUL），`fileVersion = 0x8C`。因此正文从 **0x44** 开始。
+文件最后一个字节**恒 0x19**。
+
+> 注意：参考实现把 `m_header` 定为 `std::array<BYTE, 0x14>`，即 0x14 处那个字节**不属于** header。
+> 实现时别把 0x14 那个 0x19 算进头里。
+
+**未验证**：`fileVersion` 为 0x8D、0x8E 时的尾部（本游戏走不到）。代码照抄了参考实现，
+但没有任何真实文件验证过。
+
+---
+
+## 4. SavePart1 — 地图快照与对象表（**已验证**）
+
+`docs/vendor/WolfSave/SavePart1.h:478`。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `m_var1` / `m_var2` / `m_var3` | u32 ×3 | 实测恒 1 / 0 / 0 |
+| `m_var4` / `m_var5` | u32 ×2 | `fileVersion >= 0x69`。地图宽高（**tile 数**），实测 64 × 36 |
+| `m_var6` | u32 | **哨兵探测**。见下 |
+| `m_vars1` | u32 × 3·w·h | 三个图块层，**层优先**：`[z][y][x]` |
+| `m_md1` | MemData<u32> | 图块图文件名，实测 `MapChip/kiri_project.png` |
+| `m_vars_140` | MemData<u32> × N | 自动图块名。N = 31（>=0x8A）/ 15（>=0x73）/ 7 |
+| `m_var7` | u32 | 按 `(int)` 判 > 0；>=0x64 时跟 `m_vars2New`（u32），否则 `m_vars2Old`（u8） |
+| `m_var8` | u32 | 按 `(int)` 判 > 0；跟 `m_var8` 个 `SavePart1_1` |
+| `m_var9..m_var19` | u32 × 11 | `fileVersion >= 0x72` |
+| `m_var20` | u32 | 按 `(int)` 判 > 0；跟 `m_vars3`（u32） |
+
+### 4.1 哨兵 `m_var6`（**已验证**，关键坑）
+
+参考实现的写法很绕，照抄才不会错：
+
+```text
+m_var4 = u32; m_var5 = u32
+pos = 当前位置
+m_var6 = u32                      // 只为探测，先读进来
+if m_var6 != 0xFFFFFFFF:
+    Seek(pos)                     // 回退 4 字节，把它当第一个图块重读
+    for i in 0..3:                // 层
+        for j in 0..m_var4:       // x
+            for k in 0..m_var5:   // y
+                m_vars1.push(u32)
+```
+
+即：`m_var6 == 0xFFFFFFFF` 表示**这个存档没写地图图块**，此时 `m_vars1` 为空；
+否则把刚才那个 u32 当成第一个图块，共读 `3 * m_var4 * m_var5` 个。
+
+实测 `SaveData01`：`m_var4 = 64`、`m_var5 = 36`、`m_var6 = 104444`（**不是** 0xFFFFFFFF），
+所以走的是「回退 + 读 6912 个 u32」这条分支。这 6912 个值**全部等于 104444**（distinct = 1）——
+整张图块层都是同一个默认图块 id。这是真实值，不是解析错位。
+
+### 4.2 `m_vars2New`（**已实测**，9 文件一致）
+
+`m_var7 = 192`，即 192 个 u32。distinct = 11，分布是 `0 ×103, 15 ×50, 768 ×26, 2 ×3, 4 ×3`。
+这是「已开启的地图/开关类位掩码数组」。本 crate 原样保留，不解释位含义。
+
+### 4.3 `m_vars_140` 自动图块（**已验证**）
+
+31 个 `MemData<u32>`，实测 **15 个非空**，全部是 `MapChip/[A]..._pipo.png`：
+
+```text
+MapChip/[A]Grass1-Dirt1_pipo.png      MapChip/[A]Grass1-Grass2_pipo.png
+MapChip/[A]Grass1-Grass3_pipo.png     MapChip/[A]Water2_pipo.png
+MapChip/[A]Water5_pipo.png            MapChip/[A]Water7_pipo.png
+MapChip/[A]WaterFall2_pipo.png        MapChip/[A]Flower_pipo.png
+MapChip/[A]Snow_pipo.png              MapChip/[A]Snow_Grass4_pipo.png
+MapChip/[A]Snow_Dirt2_pipo.png        MapChip/[A]Ice2_pipo.png
+MapChip/[A]Dirt1-Dirt2_pipo.png       MapChip/[A]Wall-Up_Forest1_pipo.png
+MapChip/[A]Wall-Up_Forest2_pipo.png
+```
+
+与 `TileSetData` 的 tileset0 的 15 个自动图块名一致 —— 这是 Part1 解析正确的旁证。
+
+### 4.4 SavePart1_1 — 一个对象（地图事件实例）
+
+`docs/vendor/WolfSave/SavePart1.h:172`。C++ 里字段名就是 `m_var1..m_var39`，
+没有任何语义命名，所以本 crate 也保持编号（不要凭空起名）。
+
+| 字段 | 类型 | 实测（`SaveData01` 的 objects[0]） |
+|---|---|---|
+| `m_var1` | u32 | 0 |
+| `m_var2` | u32 | 60（对象的地图事件页/模板索引） |
+| `m_var3` | u32 | 0 |
+| `m_var4` | u32 | 0 |
+| `m_var5` | u8 | 0 |
+| `m_var6` | u32 | 0xFFFFFFFF（40 个对象全一样） |
+| `m_md1` | MemData<u16> | 一个 NUL 字节 |
+| `m_var7..m_var10` | u16 ×4 | 255 / 0 / 2 / 0 |
+| `m_var11` / `m_var12` | u8 ×2 | 0 / 1 |
+| `m_sp1` / `m_sp2` | SavePart1_1_1 ×2 | 见 4.5 |
+| `m_var13..m_var18` | u16 ×6 | 全 0 |
+| `m_var19..m_var21` | u8 ×3 | 0 / 0 / 0 |
+| `m_var22` | u32 | 按 `(int)` 判 > 0；跟 `m_vars1`（u32）。实测恒 0 |
+| `m_var23` / `m_var24` | u8 ×2 | >=0x70。实测 1 / 1 |
+| `m_var25..m_var28` | u32 ×4 | >=0x73 |
+| `m_var29` | u32 | >=0x78。实测 1 |
+| `m_var30..m_var32` | u32 ×3 | >=0x85 |
+| `m_var33` | u16 | >=0x8A，**按 `(int16_t)` 判 > 0**；跟 `m_var33` 个 `MemData<u16>` |
+| `m_var34..m_var37` | u32 / u8 / u32 / u32 | >=0x8A |
+| `m_var38` | u32 | >=0x8B |
+| `m_var39` | u32 | >=0x8C。实测 131073 |
+
+40 个对象的 `m_var1` 是 0..39 顺序编号（**已实测**），`m_var2` 取 60/126/2/4/6/58/8/12/14/18/20/22/24/10/64 等。
+
+### 4.5 SavePart1_1_1 — 页表
+
+`docs/vendor/WolfSave/SavePart1.h` 里的嵌套类。结构：
+
+```text
+6 × u8   (head)
+u32      count      // > 0x10000 直接判失败
+count × SavePart1_1_1_1 {
+    u8  var1
+    u8  n1; n1 × u32
+    u8  n2; n2 × u8
+}
+```
+
+实测：`head = [3, 3, 3, 0, 3, 2]`（**9 个文件、40 个对象全一样**），`count = 0`（sp1 与 sp2 都是），
+所以 40 个对象的两个页表都只有 6 + 4 = 10 字节。**不要**因为 `count = 0` 就以为这段只有 6 字节。
+
+### 4.6 SavePart1 的收尾
+
+`m_var9..m_var19` 实测 `[0, 0, 0, 0, 100, 100, 0, 0, 0, 0, 100]`（9 文件一致），
+`m_var20 = 0` 所以 `m_vars3` 为空。
+
+### 4.7 Rust 视图
+
+`SavePart1` 把 `m_var1/2/3` 保留原名，其余换成可读名：`map_width`、`map_height`、
+`map_tiles`、`chip_image`、`auto_tiles`、`vars2_new` / `vars2_old`、
+`objects`、`tail_vars`（= `m_var9..m_var19`）、`vars3`。
+`SavePart1_1` 因为 C++ 里就没有语义名，Rust 也保持 `var1..var39` 编号
+（`md1`、`sp1` / `sp2`、`vars1`、`mds1` 是同名直译）。
+
+---
+
+## 5. SavePart2 — 全局设定快照（**已验证**）
+
+`docs/vendor/WolfSave/SavePart2.h:39`。这一段版本闸门最多，共 20 个；本游戏 `0x8C` 全部打开。
+实现是逐行的直译，字段名保持 C++ 的编号。**唯一容易翻车的地方**：`m_md1..m_md9` 全是
+`MemData<WORD>`（u16 长度），**只有 `m_md10` 是 `MemData<DWORD>`（u32 长度）**。
+
+实测（`SaveData01`）：
+
+| 字段 | 值 |
+|---|---|
+| `m_var3..m_var21` | `[16642, 0, 0xFFFFFFFD, 0xFFFFFFFD, 0x3F800000, 0, 1, 8, 2000, 512, 240, 0, 1, 2, 0, 0, 0, 0, 0]` |
+| `m_var22..24` | `[0, 65535, 65535]` |
+| `m_var29..37` | `[20, 2, 0, 0, 0xFFFFFFFF, 0, 0, 0, 255]` |
+| `m_var39` | 2 |
+| `m_var40/41` | 14 / 8 |
+| `m_var42..45` | `[160, 68, 75, 200]`（像 RGBA 颜色） |
+| `m_var46..48` | `[120, 1000000, 6]` |
+| `m_var54..56` | 0xFFFFFFFF / 10 / 1 |
+| `m_var58` + `m_vars2` | 5 个 `0xFFFFFFFF` |
+| `m_var64..69` | `[144, 16, 145, 32, 146, 64]` |
+| `m_var70` | 2（u16） |
+| `m_md1` / `m_md2` | 各一个 NUL 字节 |
+| `m_var71` | **每文件不同**，存档时间戳（`SaveData01 = 967479`） |
+| `m_var72..74` | 100 / 100 / 100 |
+| `m_md3` + `m_var75..77` | `BGM/yuuyake.mp3` + 音量/声像/循环 = 50 / 90 / 0 |
+| `m_md4` + `m_var78..80` | `BGM/se_akimusi2.ogg` + 75 / 100 / 0 |
+| `m_md5` | 当前背景 CG：`cg/bg_01_home_d.jpg` |
+| `m_md6` | 一个 NUL 字节 |
+| `m_var81` / `m_var82` | 1 / 1 |
+| `m_md7..m_md9` | 各一个 NUL 字节 |
+| `m_var86` | 12 |
+| `m_var88/89` | 0 / 5 |
+| `m_var92..95` | `[100, 100, 0, 0]` |
+| `m_var96` / `m_var97` | 1 / 1 |
+| `m_var98..101` + `m_vars2` | `[1, 0, 0, 0]` + 24 个 0 |
+| `m_var102..105` | `[0, 14, 14, 0xFFFFFFFF]` |
+| `m_md10` + `m_var106` | 一个 NUL 字节 + 5 |
+| `m_mds2` | 5 个 NUL 字节 |
+
+`System.sav` 与 `SaveData01` 的差别（**已实测**）：`m_var3..m_var21` 的第 10 个是 280 而不是 240；
+`m_md3` = `BGM/se_akimusi2.ogg`、`m_md4` = `BGM/Clock-Second_Hand03-…`；
+`m_var75..77` = 60/100/0、`m_var78..80` = 45/100/0。说明这一段确实是「当前播放状态」。
+`m_var71` 在 `System.sav` 是 982000。
+
+Rust 视图：版本闸门下的可选块各自成结构体 —— `block100`（`Option<SavePart2Block100>`）、
+`bgm`（`Option<SavePart2Bgm>`，含 `path1/vars75_77/path2/vars78_80`）、
+`block109`、`block137`、`block8a`；单字段直接平铺（`vars3_21`、`vars42_45`、
+`vars46_48`、`background`、`var86` …）。未触发的闸门对应 `None` 或零值。
+
+---
+
+## 6. SavePart3 — 地图/事件运行时大表（**已验证**）
+
+`docs/vendor/WolfSave/SavePart3.h:38`。这是**最大的一段**（218610 字节，占 `SaveData01` 的 60%）。
+
+四层嵌套全部挂在有符号判定下面，**任何一层负数都会静默截断整段尾部**（参考实现就是这样，
+本 crate 对「负数计数」报错而不是静默截断，因为静默截断会让后续段全部错位）：
+
+```text
+m_var1 = u32; m_var2 = u32
+if (int)m_var2 >= 0:
+    repeat m_var2:
+        v1 = u32;  if (int)v1 < 0 -> 失败
+        repeat v1:
+            v2 = u8
+            repeat v2: u32
+    m_var3 = u32
+    if m_var3 <= 0x270F:
+        if (int)m_var3 > 0:
+            repeat m_var3:
+                v = u32; if (int)v < 0 -> 失败
+                repeat v: u32
+        m_var4 = u32
+        if (int)m_var4 >= 0:
+            repeat m_var4: MemData<u16>(<0x6F) / MemData<u32>(>=0x6F)
+            m_var5 = u32
+            if (int)m_var5 < 0 || m_var5 > 10000 -> 失败
+            repeat m_var5: { v = u8; repeat v: u32 }
+            m_var6 = u32
+            if m_var6 <= 10000:
+                if (int)m_var6 <= 0 -> 失败
+                repeat m_var6: { v = u8; if v: repeat v: MemData<u16|u32> }
+```
+
+实测（`SaveData01`）：`m_var1 = 1179839859`（每文件不同，像时间戳/随机种子）、
+`m_var2 = 2`（组数）、`m_var3 = 10`、`m_var4 = 26`、`m_var5 = 500`、`m_var6 = 500`
+（`SaveData05` / `SaveData08` 的 `m_var5` / `m_var6` 是 550）。
+
+`m_var4 = 26` 那 26 个 `MemData<u32>` 的实测内容是**星期 + 存档缩略图路径 + 章节名**：
+
+```text
+[0] "周一"  [4] "大冒险！"  [5] "../save/save1.jpg"
+```
+
+其余槽位是空串。`SaveData01` 的第 5 个是 `../save/save8.jpg`，`SaveData03` 是 `../save/save3.jpg` ——
+**这就是 `Save/saveN.jpg` 是每个存档槽缩略图的证据**（缩略图文件真实存在于 `Save/` 目录，
+大小 108167..123108 字节）。
+
+`m_var5` 的 500 项每项是 `u8 count(=100)` + 100 个 u32，即一张 500 × 100 的二维表。
+`m_var6` 的 500 项每项是 `u8 count(=5)` + 5 个 `MemData<u32>`（实测全是 NUL 字节）。
+
+Rust 视图：为了不让 500×100 的嵌套变成 `Vec<Vec<u32>>` 的开销，实现把每层拆成
+「计数数组 + 扁平数据数组」两件：`group_counts/group_bytes/group_words`（`m_var2` 组）、
+`row_counts/row_words`（`m_var3` 行）、`list_counts/list_words`（`m_var5` 表）、
+`slot_counts/slot_strings`（`m_var6` 槽）、`mds1`（`m_var4`）。
+上层按计数切片即可还原嵌套结构。
+
+---
+
+## 7. SavePart4 — 对象表续（**已验证**）
+
+`docs/vendor/WolfSave/SavePart4.h:39`：
+
+```text
+SavePart1_1 (lead)
+u32 n; n × SavePart1_1
+u8 m_var2; u8 m_var3
+u32 n; n × u32          // m_vars2
+if fileVersion >= 0x8A:
+    u32 n; n × u64      // m_vars3
+```
+
+实测（`SaveData01`）：`lead.m_var1 = 0xFFFFFFFE`、`lead.m_var2 = 62`、`lead.m_var39 = 131073`；
+后面 5 个对象；`m_var2 = m_var3 = 0`；`m_vars2` 有 100 个 u32（首元素 8）；`m_vars3` 为空。
+整段 1213 字节（部分存档 1194）。
+
+> 注意 `lead` 是一个**独立的** `SavePart1_1`，不是数组的第一个元素。`m_var1 = 0xFFFFFFFE`
+> 在这里是正常值（对比 SavePart1 的对象里 `m_var1 = 0..39`）。
+
+---
+
+## 8. SavePart5 — 公共事件运行时状态（**已验证**）
+
+`docs/vendor/WolfSave/SavePart5.h:661`（外层）与 `:44`（`SavePart5_1`）。
+
+外层只有两个字段：
+
+```text
+m_var1 = u16
+if (m_var1 & 0x8000) == 0:
+    m_var1 × SavePart5_1
+```
+
+实测 `m_var1` = 58..84（各文件不同），bit 15 从未置位，所以总能读到 `m_var1` 个条目。
+**这就是「哪些公共事件当前有运行时状态」的列表** —— 与公共事件总数 550 无关。
+
+`SavePart5_1` 的字段（20 个版本闸门，本游戏全部打开）：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `m_var1` | u32 | 事件 id。实测第一条是 `0xFFFFFFF6`（= -10） |
+| `m_var2` / `m_var3` | u8 ×2 | |
+| `m_var4` | u16 | |
+| `m_var5` / `m_var6` | u8 ×2 | |
+| `m_md1` | MemData<u16> | 实测第一条是 22 字节 ASCII：`cg/bg_14_sunset_a.jpg` |
+| `m_vars7_18` | u32 ×12 | |
+| `m_vals1` | u32 ×6 | 源码里是 `m_vals1[0..3]`，实际 6 个 |
+| `m_vars19_36` | u32 ×18 | >=0x69 |
+| `m_var37` | u8 | >=0x6B |
+| `m_var38` / `m_var39` | u8 ×2 | >=0x72 |
+| `m_vals2` / `m_vals3` | u32 ×4 each | >=0x72 |
+| `m_vars40_43` | u32 ×4 | >=0x73 |
+| `m_vars44_48` | u32 ×5 | >=0x74 |
+| `m_vars49_54` | u32 ×6 | >=0x75 |
+| `m_vars55_60` | u32 ×6 | >=0x73（**注意闸门是 0x73，不是 0x75**） |
+| `m_vars61_63` | u32 ×3 | >=0x76 |
+| `m_vars64_84` | u32 ×21 | >=0x81 |
+| `m_vars85_89` | u32 ×5 | >=0x87 |
+| `m_var90` | u32 | >=0x89，子表个数 |
+| 子表 | `{u32 n; n × u32}` × m_var90 | >=0x89 |
+| `m_vars91_97` | u32 ×7 | >=0x89 |
+
+`m_var90` 的子表在参考实现里是「先读一个 u32，再读那么多个 u32」，与 §6 的 `m_var5` 同构。
+
+---
+
+## 9. VariableDatabase — 变量库（**已验证**）
+
+`docs/vendor/WolfSave/VariableDatabase.h:281`（外层）、`:162`（`VariableType`）、
+`:56`（`TypeData`）。
+
+```text
+u8  m_unknown        // 源码注释原文：「Is here 1 byte just skipped?」实测 0x6F
+u32 m_typeCount      // 实测 30
+m_typeCount × VariableType
+```
+
+`VariableType`：
+
+```text
+i32 m_unknown
+int32 fieldCount = m_unknown
+if m_unknown <= -1:
+    if m_unknown <= -2: i32 m_dis
+    u32 m_fieldCount; fieldCount = m_fieldCount
+if fieldCount > 0: fieldCount × u32   // m_typeConfig
+u32 m_typeDataCount                   // 行数
+m_typeDataCount × TypeData
+```
+
+`TypeData`（**这一段最容易写错**）：
+
+```text
+第一趟：按 m_typeConfig 顺序，读全部 < 2000 的项，每项一个 i32
+第二趟：按 m_typeConfig 顺序，读全部 >= 2000 的项，每项一个 MemData<u32>
+最后：按字段 id 排序（std::sort，比较 ID）
+```
+
+**两趟，不是交织。** 存档里先存该行所有数字字段，再存该行所有字符串字段；参考实现读完才按 id
+排回字段顺序。按交织顺序读会在第一个字符串字段处立刻错位。
+
+实测 30 个类型的形状（`SaveData01`，dis / fieldCount / 行数 / 数字字段数 / 字符串字段数）：
+
+```text
+ 0: dis=1     fc=51  rows=17   46+5
+ 1: dis=2     fc=100 rows=16  100+0
+ 2: dis=2     fc=48  rows=22   48+0
+ 3: dis=2     fc=100 rows=40  100+0
+ 4: dis=2     fc=100 rows=16  100+0
+ 5: dis=2     fc=100 rows=16  100+0
+ 6: dis=0     fc=7   rows=1    7+0
+ 7: dis=20002 fc=1   rows=40   1+0
+ 8: dis=20003 fc=1   rows=10   1+0
+ 9: dis=20004 fc=1   rows=10   1+0
+10: dis=1     fc=16  rows=40   15+1
+11: dis=2     fc=100 rows=11  100+0
+12: dis=2     fc=100 rows=11  100+0
+13: dis=2     fc=100 rows=11  100+0
+14: dis=0     fc=4   rows=100  4+0
+15: dis=0     fc=60  rows=1   60+0
+16: dis=0     fc=14  rows=15  11+3
+17: dis=30000 fc=21  rows=20  20+1
+18: dis=0     fc=2   rows=100  1+1
+19: dis=0     fc=11  rows=200  5+6
+20: dis=0     fc=6   rows=1    6+0
+21: dis=1     fc=9   rows=17   3+6
+22: dis=0     fc=0   rows=1    0+0
+23: dis=0     fc=1   rows=1    0+1
+24: dis=0     fc=1   rows=1    0+1
+25: dis=0     fc=9   rows=1    9+0
+26: dis=0     fc=0   rows=1    0+0
+27: dis=0     fc=6   rows=1    4+2
+28: dis=0     fc=1   rows=1    0+1
+29: dis=0     fc=1   rows=1    0+1
+```
+
+注意 `m_unknown` 实测**恒为 -2**（`0xFFFFFFFE`），所以每个类型都走 `<= -2` 分支、都读 `m_dis`。
+类型 22 和 26 的 `fc = 0`（配置数组为空），这是合法的 —— 此时行数据只有字符串或什么都没有。
+
+第 0 类型实测：`m_typeConfig[0..5] = [2000, 2001, 2002, 2003, 2004]`（字符串字段），
+后面 46 项是 1000..1045（数字字段）。行 0 的实测内容：
+
+```text
+数字字段: 99, 99, 50, 50, 20, 20, 2, 1, 1, 1, 2, 90, …
+字符串字段: "勇者先生", "勇者", "", "CharaChip/[Chara]Hero3_USM.png", ""
+```
+
+对照 `Data/BasicData/CDataBase.project` 第 0 类型「主人公ステータス」的 51 个字段名
+（头衔1/2/3、歩行グラフィック画像、顔画像、勇气、机巧、运动、心、技、体、精神、賢さ、器用…），
+前 5 个正好是 3 个头衔 + 行走图 + 脸图 —— **这条对应关系已验证**，但它需要 .project 解析器才能用上，
+本 crate 不提供（§1.4）。
+
+### 9.1 `m_dis` 的作用（**已实测**，语义未确认）
+
+参考实现的 `TypeData::name()`：
+
+```text
+if m_dis > 1:                         return 基类名（不按行名显示）
+if m_type.GetDataStr(m_idx).empty():  return 基类名
+return m_type.GetDataStr(m_idx)
+```
+
+即只有 `dis <= 1` 的类型才用「行名字符串」当显示名。实测 `dis` 取值是
+`0 / 1 / 2 / 20002 / 20003 / 20004 / 30000` —— 大于 1 的那些看起来是「特殊数据源标记」
+（20002..20004、30000 这种大数是 WOLF 的类型引用常量）。**这些大数的确切含义未确认**，
+本 crate 只原样保留 `dis`。
+
+Rust 视图：`VariableDatabase { unknown, type_count, types }`、
+`VariableType { unknown, dis, field_count, config, row_count, rows }`、
+`VariableRow { index, fields }`、`VariableField { id, value }`、
+`VariableValue::{ Number(i32), String(Vec<u8>) }`。
+便捷访问器：`number(id)` / `string(id)` 按**字段 id**取值（不是按 cfg 下标）；
+`number_field_count()` / `string_field_count()` 返回该类型的数字/字符串字段数。
+
+---
+
+## 10. SavePart7 — 尾部小表（**已验证**）
+
+`docs/vendor/WolfSave/SavePart7.h:40`：
+
+```text
+u8 m_var1
+if m_var1 != 1: return          // 段到此结束
+u32 m_var2
+m_var2 × { u8 tag; tag < 0xFA ? u8 : u32 }
+```
+
+实测 9 个文件 `m_var1 = 0`，所以这一段**只有 1 字节**。若哪天读到 1，才需要继续读表。
+这也是为什么 `SaveFile::chunks()` 里 SavePart7 的长度恒为 1 —— 不是漏读。
+
+---
+
+## 11. 测试断言表（`crates/wolf-save/tests/save.rs`）
+
+测试用 `WOLF_GAME_DIR` 定位安装目录（默认
+`E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy`，
+注意文件夹名里 `SIster` 的大小写），只 glob `Save/*.sav`（**不要**把 `saveN.jpg` 也算进去）。
+目录不存在时 `eprintln!` 跳过而不是失败（存档是受版权保护的游戏数据，不能进仓库）。
+
+| 文件 | 大小 | seeds | cksum | p1 | p2 | p3 | p4 | p5 | vardb | p7 | 事件数 |
+|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| SaveData01.sav | 366146 | 136,182,95 | 0xB2 | 34318 | 595 | 218610 | 1213 | 29489 | 81851 | 1 | 66 |
+| SaveData02.sav | 361637 | 241,177,136 | 0xFA | 34318 | 595 | 217708 | 1194 | 25910 | 81842 | 1 | 58 |
+| SaveData03.sav | 364263 | 11,134,74 | 0x71 | 34318 | 595 | 218472 | 1194 | 27772 | 81842 | 1 | 62 |
+| SaveData04.sav | 365071 | 142,176,12 | 0xEC | 34318 | 595 | 218466 | 1194 | 28586 | 81842 | 1 | 64 |
+| SaveData05.sav | 385978 | 184,10,18 | 0x3A | 34318 | 595 | 239821 | 1194 | 28138 | 81842 | 1 | 63 |
+| SaveData06.sav | 364257 | 123,1,39 | 0xE0 | 34318 | 595 | 218462 | 1213 | 27748 | 81851 | 1 | 62 |
+| SaveData07.sav | 364399 | 134,201,14 | 0xB9 | 34318 | 595 | 218574 | 1213 | 27778 | 81851 | 1 | 62 |
+| SaveData08.sav | 395566 | 141,100,148 | 0xD8 | 34318 | 617 | 240000 | 1213 | 37497 | 81851 | 1 | 84 |
+| System.sav | 374216 | 186,159,232 | 0xA4 | 34318 | 617 | 218650 | 1213 | 37497 | 81851 | 1 | 84 |
+
+九文件**恒定**、可直接断言的内部值：
+
+- `header.start_byte == 0x19`、`end_byte == 0x19`、`file_version == 0x8C`、`is_utf8 == true`、
+  `name == "妹相随～黑白世界的缤纷冒险～"`、`checksum_ok()` 为真。
+- `part1.var1 == 1`、`var2 == 0`、`var3 == 0`、`map_width == 64`、`map_height == 36`、
+  `map_tiles.len() == 6912`、`chip_image == "MapChip/kiri_project.png"`、
+  `auto_tiles.len() == 31`（15 个非空）、`vars2_new.len() == 192`、
+  `objects.len() == 40`、`vars3` 为空、`tail_vars == [0,0,0,0,100,100,0,0,0,0,100]`。
+- `part1.objects[0].sp1.head == [3,3,3,0,3,2]`、`sp1.count == 0`、`sp2.count == 0`。
+- `part2.var39 == 2`、`block100.var55 == 10`、`var86 == 12`、`var96 == 1`、`var97 == 1`。
+- `part3.var2 == 2`、`var3 == 10`、`var4 == 26`；`var5` / `var6` 是 500 或 550。
+- `part4.lead.var1 == 0xFFFFFFFE`、`part4.objects.len() == 5`、`part4.var2 == 0`、`part4.var3 == 0`。
+- `vardb.unknown == 0x6F`、`vardb.type_count == 30`、`vardb.types[0].unknown == -2`、
+  `vardb.types[0].dis == 1`、`vardb.types[0].config.len() == 51`、
+  `vardb.types[0].number_field_count() == 46`、`string_field_count() == 5`。
+- `part7.var1 == 0`、`part7.entries` 为空。
+
+**只有 SavePart1 的 34318 字节和 SavePart7 的 1 字节是跨文件常量**；`p2` 有 595 / 617 两种，
+`p3/p4/p5/vardb` 每个文件都不同。把它们当常量写死会在第二个存档上失败。
+
+运行：
+
+```bash
+cd '/e/Study/github program/imoto life'
+source tools/env.sh
+cargo test -p wolf-save -- --nocapture
+```
+
+实测输出 `checked 9 save file(s)`，1 passed。
+
+---
+
+## 12. 实现坑点汇总（都是实际踩过的）
+
+1. **`m_md1..m_md9` 是 u16 长度，只有 `m_md10` 是 u32 长度**（§5）。全按 u32 读会在
+   `0x8652` 处直接跑飞。
+2. **所有计数字段按 `(int)` 判正负**，不是按无符号。`0xFFFFFFFF` 意味着「没有」，不是「四十亿」。
+   涉及 SavePart1 的 `m_var7/m_var8/m_var20`、SavePart3 的 `m_var2/m_var3/m_var4/m_var5/m_var6/m_var90`、
+   SavePart5 的 `m_var90`、SavePart1_1 的 `m_var33`（这一处是 `int16_t`）。
+3. **VariableDatabase 的行数据是「先全部数字，再全部字符串」两趟**（§9）。按字段交织读必错。
+4. **SavePart1 的哨兵要回退 4 字节重读**（§4.1），不能「先读进 m_var6 就跳过」。
+5. **`MemData` 的长度是字节数**，不是元素数；长度为 0 时一个字节都不读；
+   长度 <= 1 时 `toString()` 返回空串（只有 NUL 终止符）。
+6. **`Save/` 目录里还有 `save1.jpg..save8.jpg`**，glob 必须只取 `*.sav`，否则会在 jpg 上解析失败。
+7. **段边界没有魔数保护**，唯一的收尾校验是「位置 + 1 == 长度」且「末字节 == 0x19」。
+   任何一段读错都会在这条断言上暴露 —— 建议照抄这条断言，不要只信任段长。
+
+---
+
+## 13. 未确认项清单
+
+| 项 | 状态 |
+|---|---|
+| 明文头 offset 0x01 / 0x04 / 0x07 / 0x0A..0x13 的含义 | **未确认**。实测全 0，可能是保留位 |
+| `fileVersion` 0x8D / 0x8E 的尾部结构 | **未验证**。代码照抄参考实现，无真实数据 |
+| SavePart1 的 `m_vars2New` 位掩码每一位的含义 | **未确认**。只知道是 192 个 u32 |
+| SavePart2 各字段的语义（除 BGM/背景/时间戳） | **部分未确认**。字段值是实测的，含义多为推测 |
+| SavePart3 的 `m_var1` 到底是什么 | **未确认**。每文件不同，形似时间戳或随机种子 |
+| SavePart4 的 `lead.m_var1 = 0xFFFFFFFE` 的含义 | **未确认**。只知道是稳定值 |
+| SavePart5_1 各字段的语义 | **未确认**。只知道事件 id 和 `m_md1` 是图片路径 |
+| `m_dis` 取值 20002/20003/20004/30000 的含义 | **未确认**。形似 WOLF 类型引用常量 |
+| `Data/BasicData/CDataBase.project` 的完整容器格式 | **未确认**。只验证了「30 个类型 + 字段名」的头部；第一个类型之后结构不同 |

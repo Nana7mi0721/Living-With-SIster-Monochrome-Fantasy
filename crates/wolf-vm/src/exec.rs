@@ -395,6 +395,16 @@ pub trait Host {
         let _ = event;
     }
 
+    /// Currently held keys as WOLF's 32-bit key bitmask, polled by opcode 123.
+    ///
+    /// The game never asks for one specific physical key: every poll carries a mask
+    /// and only tests for non-zero, so a host is free to map its input device however
+    /// it likes as long as it stays consistent between polls. Headless hosts return 0,
+    /// which reads exactly like "nobody is touching the keyboard".
+    fn key_bits(&mut self) -> u32 {
+        0
+    }
+
     /// `106 DebugMessage`.
     fn debug_message(&mut self, text: &str) {
         let _ = text;
@@ -540,7 +550,7 @@ impl Vm {
 
         self.poll_waits(host);
         self.run_instances(host, &mut budget, &mut report);
-        self.reap_finished(host, &mut report);
+        self.reap_finished(host);
 
         report.steps = self.budget - budget.min(self.budget);
         report.running = self.instances.len();
@@ -710,7 +720,7 @@ impl Vm {
     }
 
     /// Drop ended coroutines and hand their return values to the parents.
-    fn reap_finished(&mut self, host: &mut dyn Host, report: &mut StepReport) {
+    fn reap_finished(&mut self, host: &mut dyn Host) {
         let finished: Vec<InstanceId> = self
             .instances
             .iter()
@@ -738,8 +748,6 @@ impl Vm {
                     // The child's return value lives in the self slot the event
                     // declared (docs/OPCODE_SPEC.md §2.5: `return_value_id`).
                     if let Some(target) = self.instances[idx].return_to.take() {
-                        let slot = inst.program.title.len().min(0);
-                        let _ = slot;
                         let value = inst.self_vars.get(return_slot(&inst.program) as usize);
                         store_num(&mut self.instances[idx], &mut self.vars, target, value);
                     }
@@ -754,7 +762,6 @@ impl Vm {
                     }
                 }
             }
-            report.finished += 0;
         }
     }
 }
@@ -1099,10 +1106,14 @@ fn execute(
                 None
             }
             123 => {
-                // Key-input poll. A headless run has no keys down, so the
-                // destination receives 0; the mask in arg 1 selects the bits.
+                // Key-input poll (docs/OPCODE_SPEC.md 5.13): arg 1 is a bit MASK of
+                // the keys to watch, not a single key code, and the result is
+                // non-zero when any watched key is down. A headless host reports no
+                // keys, so the destination receives 0 - which is also what the game
+                // sees when the player is not touching the keyboard.
                 let target = arg(cmd, 0);
-                store_num(inst, vars, target, 0);
+                let mask = arg(cmd, 1) as u32;
+                store_num(inst, vars, target, (host.key_bits() & mask) as i32);
                 inst.pc += 1;
                 None
             }
@@ -1281,7 +1292,7 @@ fn execute(
                 inst.pc += 1;
                 None
             }
-            220 | 221 | 222 => {
+            220..=222 => {
                 let args: Vec<i32> = (0..argc(cmd)).map(|i| arg(cmd, i)).collect();
                 host.save_load(&args);
                 inst.pc += 1;
@@ -1536,6 +1547,16 @@ fn call_arguments(cmd: &Command, inst: &Instance, vars: &Variables) -> (Vec<i32>
 }
 
 /// Decode a `150 Picture` instruction (docs/OPCODE_SPEC.md §5.31).
+/// One `150` argument: evaluate magic storage references, pass flags and sentinels through.
+fn picture_arg(raw: i32, inst: &Instance, vars: &Variables) -> i32 {
+    // 0x0F00_0000 is the flag nibble Magic::decode strips; those bits are data here.
+    if (raw as u32) & 0x0F00_0000 != 0 {
+        raw
+    } else {
+        eval_num(raw, inst, vars)
+    }
+}
+
 fn decode_picture(inst: &Instance, vars: &Variables, cmd: &Command) -> PictureCmd {
     let head = arg(cmd, 0);
     let kind = ((head >> 4) & 0x07) as u8;
@@ -1558,7 +1579,12 @@ fn decode_picture(inst: &Instance, vars: &Variables, cmd: &Command) -> PictureCm
         }
         _ => (String::new(), String::new()),
     };
-    let args: Vec<i32> = (2..argc(cmd)).map(|i| arg(cmd, i)).collect();
+    // Every argument past the head is a value: the measured title script passes its menu
+    // coordinates as self-variable references (picture 0 sits at self[41]/self[42]) rather
+    // than constants, so they must be evaluated here or the picture lands at 1,600,041.
+    // Flag carriers (top nibble set, e.g. 0x02000000) and the negative sentinels
+    // (-1 / -2 / -1000000) are passed through untouched: their high bits are meaningful.
+    let args: Vec<i32> = (2..argc(cmd)).map(|i| picture_arg(arg(cmd, i), inst, vars)).collect();
     let animate = if args.len() > 11 {
         args[11..].to_vec()
     } else {
@@ -1698,7 +1724,7 @@ mod tests {
             "random",
             vec![
                 cmd(121, &[2_000_000, 1, 6, 0x6000], &[]),
-                cmd(121, &[2_000_001, 0, 2_000_000, 0x0000 | 0x000], &[]),
+                cmd(121, &[2_000_001, 0, 2_000_000, 0x0000], &[]),
             ],
         );
         let mut vm = vm_with(vec![ev]);
