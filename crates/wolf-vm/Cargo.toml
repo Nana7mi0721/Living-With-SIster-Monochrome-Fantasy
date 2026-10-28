@@ -8,3 +8,4 @@ publish.workspace = true
 description = "WOLF RPG Editor event interpreter"
 
 [dependencies]
+wolf-format = { workspace = true }

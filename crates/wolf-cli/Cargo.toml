@@ -13,3 +13,4 @@ path = "src/main.rs"
 
 [dependencies]
 wolf-format = { workspace = true }
+wolf-vm = { workspace = true }

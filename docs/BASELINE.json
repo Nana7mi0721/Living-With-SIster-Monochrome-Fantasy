@@ -1,5 +1,5 @@
 {
- "generated_from": "work/_ce_full.json + work/maps_full.json + decoded Game.dat",
+ "generated_from": "work/_ce_full.json + work/maps_full.json + decoded Game.dat + cargo run -p wolf-cli -- precompile",
  "common_events": {
   "count": 550,
   "slots": 163828,
@@ -195,6 +195,28 @@
   "105": 1,
   "161": 1,
   "162": 1
+ },
+ "precompile": {
+  "slots": 163828,
+  "programs": 550,
+  "titles_indexed": 505,
+  "blocks": 13310,
+  "conditions": 10743,
+  "choices": 495,
+  "loops": 2072,
+  "cases": 18460,
+  "else_cases": 3246,
+  "cancel_cases": 150,
+  "orphan_cases": 131,
+  "orphan_ends": 138,
+  "implicit_closes": 66,
+  "unclosed_blocks": 3,
+  "max_depth": 91,
+  "labels": 606,
+  "label_jumps": 1543,
+  "dynamic_labels": 3,
+  "unresolved_labels": 2,
+  "malformed_conditions": 0
  },
  "game_dat": {
   "title": "妹相随～黑白世界的缤纷冒险～",
