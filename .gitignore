@@ -1,0 +1,15 @@
+/target
+**/*.rs.bk
+*.pdb
+*.exe
+/work/
+/.recon/
+/_wolfref/
+/_tmp_*.py
+/ce.txt
+/tools/bin/
+/tools/cmake/
+/tools/ffmpeg/
+/tools/rustup-init.exe
+/tools/smoke/target/
+/tools/wgpusmoke/target/
