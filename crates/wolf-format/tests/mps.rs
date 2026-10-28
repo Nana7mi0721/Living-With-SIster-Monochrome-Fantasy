@@ -226,9 +226,11 @@ fn every_map_parses_to_its_baseline_numbers() {
                 // The feature word is 3 in every shipped page, so the optional
                 // page-transfer byte never appears.
                 assert_eq!(page.features, 3, "{}: page features", expect.file);
-                // Switch bytes are kept raw. The low nibble is the "enabled"
+                // Condition bytes are kept raw. The low nibble is the "enabled"
                 // flag, so it is only ever 0 or 1; the high nibble is the
-                // operator id. The full histogram is checked after the totals.
+                // comparison operator. The full histogram is checked after the
+                // totals, and the decoded meaning in
+                // `page_conditions_are_variable_comparisons_without_switch_ids`.
                 for &byte in &page.trigger_switches {
                     assert!(
                         byte & 0x0F <= 1,
@@ -261,7 +263,7 @@ fn every_map_parses_to_its_baseline_numbers() {
     assert_eq!(all_stats.real(), 30_558, "real slots");
     assert_eq!(all_stats.distinct_opcodes(), 40, "distinct opcodes");
 
-    // Measured over all 134 pages: the 536 switch bytes take exactly seven
+    // Measured over all 134 pages: the 536 condition bytes take exactly seven
     // values, and only trigger conditions 0-3 appear (4 = event-touch is unused
     // in this game, so the loader must not assume the whole documented range).
     assert_eq!(
@@ -275,7 +277,7 @@ fn every_map_parses_to_its_baseline_numbers() {
             (0x50, 2),
             (0x51, 7),
         ],
-        "switch byte histogram"
+        "condition byte histogram"
     );
     assert_eq!(
         triggers.into_iter().collect::<Vec<_>>(),
@@ -384,4 +386,232 @@ fn tile_words_decode_as_documented() {
     }
     assert!(saw_base, "SampleMapB has base tiles");
     assert!(saw_autotile, "SampleMapB has autotiles");
+}
+
+/// The four condition bytes of a page are `operator << 4 | enabled` for the
+/// *variable* condition stored in the same slot. There is no switch id: the block
+/// is a fixed 1 + 4 + 4*4 + 4*4 bytes (WolfTL `Map.hpp:55`), so nothing could hold
+/// one, and the operators that actually appear (`>=`, `==`, `<=`, `!=`) are
+/// numeric comparisons rather than the on/off test a switch would need.
+#[test]
+fn page_conditions_are_variable_comparisons_without_switch_ids() {
+    if load(EXPECTED[0].file).is_none() {
+        eprintln!("skipping: no map data under {}", data_root().display());
+        return;
+    }
+
+    let mut slots = 0usize;
+    let mut enabled = 0usize;
+    let mut operators: BTreeMap<u8, usize> = BTreeMap::new();
+    let mut enabled_operators: BTreeMap<u8, usize> = BTreeMap::new();
+    let mut enabled_per_page: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut stale_disabled = 0usize;
+
+    for expect in &EXPECTED {
+        let data = load(expect.file).expect("map file present");
+        let map = Map::parse(&data).unwrap_or_else(|e| panic!("{}: {e}", expect.file));
+        for event in &map.events {
+            for page in &event.pages {
+                let conditions = page.conditions();
+                assert_eq!(conditions.len(), 4, "{}: condition slots", expect.file);
+                let mut used = 0;
+                for (index, condition) in conditions.iter().enumerate() {
+                    // `conditions()` is a pure decode of the raw arrays.
+                    let byte = page.trigger_switches[index];
+                    assert_eq!(condition.operator, byte >> 4, "{}: operator", expect.file);
+                    assert_eq!(
+                        condition.enabled,
+                        byte & 0x0F == 1,
+                        "{}: enabled flag",
+                        expect.file
+                    );
+                    assert_eq!(
+                        condition.variable, page.trigger_variables[index],
+                        "{}: variable",
+                        expect.file
+                    );
+                    assert_eq!(
+                        condition.value, page.trigger_values[index],
+                        "{}: value",
+                        expect.file
+                    );
+                    slots += 1;
+                    *operators.entry(condition.operator).or_default() += 1;
+                    if condition.enabled {
+                        used += 1;
+                        enabled += 1;
+                        *enabled_operators.entry(condition.operator).or_default() += 1;
+                    } else if (condition.variable, condition.value) != (1_000_000, 0) {
+                        // Disabled slots keep whatever the editor left behind.
+                        stale_disabled += 1;
+                    }
+                }
+                *enabled_per_page.entry(used).or_default() += 1;
+            }
+        }
+    }
+
+    assert_eq!(slots, 536, "condition slots over all pages");
+    assert_eq!(enabled, 208, "enabled conditions");
+    assert_eq!(
+        operators.into_iter().collect::<Vec<_>>(),
+        vec![(1, 27), (2, 497), (3, 3), (5, 9)],
+        "operator histogram over every slot"
+    );
+    assert_eq!(
+        enabled_operators.into_iter().collect::<Vec<_>>(),
+        vec![(1, 25), (2, 173), (3, 3), (5, 7)],
+        "operator histogram over enabled slots"
+    );
+    assert_eq!(
+        enabled_per_page.into_iter().collect::<Vec<_>>(),
+        vec![(0, 19), (1, 68), (2, 15), (3, 18), (4, 14)],
+        "enabled conditions per page"
+    );
+    assert_eq!(stale_disabled, 24, "disabled slots with leftover id/value");
+}
+
+/// One page per event is on screen: the *highest* page whose enabled conditions all
+/// hold (official editor documentation, `docs/FORMAT_SPEC.md` §5.6.3). The trigger,
+/// graphic and commands all belong to that page, which is why 8 of the 25 shipped
+/// multi-page events mix triggers between their pages.
+#[test]
+fn the_highest_matching_page_decides_what_the_event_is() {
+    let Some(sample) = load("SampleMapA.mps") else {
+        eprintln!("skipping: no map data under {}", data_root().display());
+        return;
+    };
+    let sample = Map::parse(&sample).expect("SampleMapA parses");
+    let event = |id: u32| {
+        sample
+            .events
+            .iter()
+            .find(|event| event.id == id)
+            .unwrap_or_else(|| panic!("SampleMapA has no event {id}"))
+    };
+
+    // Event 9: ten pages, page i keyed `var 2000062 == i + 1`, page 0 adding three
+    // more conditions. Every state of the variable picks a different page.
+    let dispatch = event(9);
+    assert_eq!(dispatch.pages.len(), 10);
+    let state = |value: i32| {
+        let variables = BTreeMap::from([
+            (2_000_062u32, value),
+            (2_000_140, 0),
+            (2_000_164, 0),
+            (2_000_364, 0),
+        ]);
+        let page = dispatch.active_page(|id| variables.get(&id).copied().unwrap_or(0));
+        page.map(|page| (page.trigger, page.commands.len()))
+    };
+    assert_eq!(state(1).map(|(trigger, _)| trigger), Some(2));
+    assert_eq!(state(5).map(|(trigger, _)| trigger), Some(2));
+    // Out of range: no page matches, so the event is not on the map at all.
+    assert_eq!(
+        dispatch.active_page_index(|id| if id == 2_000_062 { 11 } else { 0 }),
+        None
+    );
+    assert_eq!(
+        dispatch.active_page_index(|id| if id == 2_000_062 { 1 } else { 0 }),
+        Some(0)
+    );
+
+    // Event 10 continues the same dispatch for states 11..16.
+    let continuation = event(10);
+    assert_eq!(continuation.pages.len(), 6);
+    assert_eq!(
+        continuation.active_page_index(|id| if id == 2_000_062 { 16 } else { 0 }),
+        Some(5)
+    );
+    assert_eq!(
+        continuation.active_page_index(|id| if id == 2_000_062 { 17 } else { 0 }),
+        None
+    );
+
+    // Event 8 mixes a parallel fallback page 0 with eight autorun pages keyed
+    // `var 1100009 == 1..8`: the same event is a parallel event in one state and an
+    // autorun event in another, so the trigger must come from the active page.
+    let mixed = event(8);
+    assert_eq!(mixed.pages.len(), 9);
+    assert_eq!(mixed.pages[0].trigger, 2);
+    assert!(mixed.pages[1..].iter().all(|page| page.trigger == 1));
+    let fallback = |id: u32| match id {
+        2_000_340 => 1,
+        2_000_350 | 2_000_035 | 1_100_009 => 0,
+        _ => 0,
+    };
+    assert_eq!(mixed.active_page_index(fallback), Some(0));
+    assert_eq!(
+        mixed
+            .active_page(|id| if id == 1_100_009 { 3 } else { fallback(id) })
+            .map(|page| page.trigger),
+        Some(1)
+    );
+
+    // A write in one page's command stream drives the next page's condition: Dungeon
+    // event 3 sets self variable 1100000 = 1, Map002 event 3 sets global 2000009 = 2
+    // while its own page needs 1.
+    let dungeon = std::fs::read(data_root().join("MapData").join("Dungeon.mps")).expect("map file");
+    let dungeon = Map::parse(&dungeon).expect("Dungeon parses");
+    let dungeon_event = dungeon
+        .events
+        .iter()
+        .find(|event| event.id == 3)
+        .expect("Dungeon event 3");
+    assert_eq!(dungeon_event.pages.len(), 2);
+    assert!(dungeon_event.pages[0]
+        .conditions()
+        .iter()
+        .all(|c| !c.enabled));
+    assert_eq!(dungeon_event.active_page_index(|_| 0), Some(0));
+    assert_eq!(
+        dungeon_event.active_page_index(|id| if id == 1_100_000 { 1 } else { 0 }),
+        Some(1)
+    );
+
+    let map002 = std::fs::read(data_root().join("MapData").join("Map002.mps")).expect("map file");
+    let map002 = Map::parse(&map002).expect("Map002 parses");
+    let page_switch = map002
+        .events
+        .iter()
+        .find(|event| event.id == 3)
+        .expect("Map002 event 3");
+    assert_eq!(page_switch.pages.len(), 2);
+    assert_eq!(
+        page_switch.active_page_index(|id| if id == 2_000_009 { 1 } else { 0 }),
+        Some(0)
+    );
+    assert_eq!(
+        page_switch.active_page_index(|id| if id == 2_000_009 { 2 } else { 0 }),
+        Some(1)
+    );
+    assert_eq!(page_switch.active_page_index(|_| 0), None);
+
+    // The eight multi-page events whose pages disagree about the trigger.
+    let mut mixed_events = Vec::new();
+    for expect in &EXPECTED {
+        let data = load(expect.file).expect("map file present");
+        let map = Map::parse(&data).unwrap_or_else(|e| panic!("{}: {e}", expect.file));
+        for event in &map.events {
+            let distinct: BTreeMap<u8, ()> =
+                event.pages.iter().map(|page| (page.trigger, ())).collect();
+            if event.pages.len() > 1 && distinct.len() > 1 {
+                mixed_events.push((expect.file, event.id));
+            }
+        }
+    }
+    assert_eq!(
+        mixed_events,
+        vec![
+            ("SampleMapA.mps", 4),
+            ("SampleMapA.mps", 8),
+            ("SampleMapA.mps", 11),
+            ("SampleMapA.mps", 14),
+            ("SampleMapA.mps", 18),
+            ("SampleMapA.mps", 21),
+            ("SampleMapA.mps", 22),
+            ("SampleMapA.mps", 24),
+        ],
+        "multi-page events with mixed triggers"
+    );
 }

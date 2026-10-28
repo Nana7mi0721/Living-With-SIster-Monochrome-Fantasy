@@ -12,6 +12,12 @@
 //!   so callers can still tell them apart from healthy pages.
 //! * Event names are editor-truncated (e.g. `"妹クリック判定（夜"`); they are decoded
 //!   lossily and never normalised.
+//!
+//! The four condition bytes of a page are `operator << 4 | enabled` for the
+//! *variable* condition in the same slot, not "switch conditions": the shipped data
+//! proves there is no switch id anywhere in the 37-byte block, so page selection is
+//! driven by variables only. See [`MapEventPage::conditions`] and
+//! `docs/FORMAT_SPEC.md` §5.6.3.
 
 use crate::bytes::Reader;
 use crate::command::{RouteData, Slot, SlotStats};
@@ -20,6 +26,13 @@ use crate::error::{Error, Result};
 /// Number of tile layers in a `0x66` map file. The spec allows a `layer_count`
 /// field from v3.5 on, but every map in this game uses the fixed three-layer format.
 pub const LAYER_COUNT: usize = 3;
+
+/// Number of activation-condition slots in a map page, see `docs/FORMAT_SPEC.md` §5.6.
+///
+/// The condition block is a fixed `1 + 4 + 4 * 4 + 4 * 4` bytes, so four slots is
+/// the whole story — there is no room for switch ids, and the shipped data uses all
+/// four slots as variable conditions.
+pub const CONDITION_SLOTS: usize = 4;
 
 /// A parsed `.mps` map.
 #[derive(Debug, Clone)]
@@ -276,16 +289,44 @@ impl MapEvent {
             pages,
         })
     }
+
+    /// Index of the page WOLF would display right now.
+    ///
+    /// The official editor documentation quoted in `docs/FORMAT_SPEC.md` §5.6.3 is
+    /// explicit: "the highest page number whose activation conditions are met is
+    /// displayed", and a page with more conditions therefore overrides the earlier
+    /// fallback pages. `None` means no page matches, i.e. the event is not present
+    /// on the map at all.
+    ///
+    /// The whole event executes as the returned page — its trigger, graphic and
+    /// command list — which is why a single event can be a parallel page in one
+    /// state and an action-key page in another (8 of the 25 shipped multi-page
+    /// events do exactly that).
+    pub fn active_page_index(&self, mut get_variable: impl FnMut(u32) -> i32) -> Option<usize> {
+        (0..self.pages.len())
+            .rev()
+            .find(|&index| self.pages[index].conditions_met(&mut get_variable))
+    }
+
+    /// The page WOLF would display right now, see [`Self::active_page_index`].
+    pub fn active_page(&self, get_variable: impl FnMut(u32) -> i32) -> Option<&MapEventPage> {
+        self.active_page_index(get_variable)
+            .map(|index| &self.pages[index])
+    }
 }
 
 /// One page of a map event.
 ///
-/// The condition block is kept raw on purpose: each `trigger_switches` byte packs
-/// an operator in the high nibble and an "enabled" flag in the low nibble. Across
-/// the 134 shipped pages the 536 bytes take exactly the values `0x10`, `0x11`,
-/// `0x20`, `0x21`, `0x31`, `0x50`, `0x51` (see docs/FORMAT_SPEC.md §5.6), so the
-/// low nibble is a flag and the high nibble is a small operator id — the spec
-/// documents both halves but never as a closed range, hence raw storage.
+/// Which page is on screen is decided by the four condition slots: WOLF displays
+/// the *highest* page whose enabled conditions all hold, see
+/// [`MapEvent::active_page_index`].
+///
+/// The condition bytes stay raw (`trigger_switches`) so no existing consumer has to
+/// change, and the decoded view is derived on demand by [`Self::conditions`]. Across
+/// the 134 shipped pages the 536 bytes take exactly seven values — `0x10`, `0x11`,
+/// `0x20`, `0x21`, `0x31`, `0x50`, `0x51` — i.e. a low nibble of `0`/`1` and an
+/// operator from `_wolfref/common.ksy` in the high nibble
+/// (`docs/FORMAT_SPEC.md` §5.6.3).
 #[derive(Debug, Clone)]
 pub struct MapEventPage {
     /// Graphic chip id, `0xFFFFFFFF` when the graphic comes from [`Self::graphic`].
@@ -303,11 +344,14 @@ pub struct MapEventPage {
     /// Trigger condition: 0 confirm, 1 autorun, 2 parallel, 3 player-touch,
     /// 4 event-touch. Only 0-3 occur in this game.
     pub trigger: u8,
-    /// Raw trigger switch bytes: high nibble operator, low nibble enabled.
+    /// Raw condition flag bytes of the four slots: high nibble is the comparison
+    /// operator, low nibble is `1` when the slot is enabled. The name predates the
+    /// measurement — these bytes carry **no** switch id, see [`Self::conditions`].
     pub trigger_switches: [u8; 4],
-    /// Switch / variable numbers referenced by the condition block.
+    /// Variable number of each condition slot (WOLF magic numbers, so
+    /// `2_000_062` is global variable 62 and `1_100_000` a self variable).
     pub trigger_variables: [u32; 4],
-    /// Comparison values for [`Self::trigger_variables`].
+    /// Value each condition compares its variable against.
     pub trigger_values: [i32; 4],
     /// Page movement settings and custom move route.
     pub route: RouteData,
@@ -408,6 +452,103 @@ impl MapEventPage {
             footer,
         })
     }
+
+    /// Decoded view of the four condition slots.
+    ///
+    /// This is a pure decode of [`Self::trigger_switches`], [`Self::trigger_variables`]
+    /// and [`Self::trigger_values`], so the struct keeps its shape for every other
+    /// crate that builds pages by hand (e.g. the runtime's test fixtures).
+    pub fn conditions(&self) -> [PageCondition; CONDITION_SLOTS] {
+        std::array::from_fn(|slot| PageCondition {
+            enabled: self.trigger_switches[slot] & 0x0F == 1,
+            operator: self.trigger_switches[slot] >> 4,
+            variable: self.trigger_variables[slot],
+            value: self.trigger_values[slot],
+        })
+    }
+
+    /// True when every enabled condition holds.
+    ///
+    /// A page with no enabled condition always matches, which is why page 0 of an
+    /// event is usually the unconditional fallback page. An operator outside the
+    /// verified set counts as "does not match" — the caller can inspect
+    /// [`PageCondition::operator`] if it wants to log that case.
+    pub fn conditions_met(&self, mut get_variable: impl FnMut(u32) -> i32) -> bool {
+        self.conditions().iter().all(|condition| {
+            !condition.enabled
+                || condition
+                    .compare(get_variable(condition.variable))
+                    .unwrap_or(false)
+        })
+    }
+}
+
+/// One decoded activation-condition slot of a map event page.
+///
+/// `docs/FORMAT_SPEC.md` §5.6.3: the page's 37-byte condition block is one trigger
+/// byte, four flag bytes, four `u32` variable numbers and four `i32` values. The flag
+/// byte of a slot is `operator << 4 | enabled`, so the operator belongs to the
+/// variable in the *same* slot. Measured over all 134 shipped pages: 536 slots, 208
+/// enabled, operators only `>=`(25) `==`(173) `<=`(3) `!=`(7) — clear numeric
+/// comparisons, not the on/off test a switch condition would need.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PageCondition {
+    /// `true` when this slot takes part in page selection.
+    pub enabled: bool,
+    /// Comparison operator; one of the `OP_*` constants.
+    pub operator: u8,
+    /// Variable number compared (WOLF magic number).
+    pub variable: u32,
+    /// Value the variable is compared against.
+    pub value: i32,
+}
+
+impl PageCondition {
+    /// `>` — never used by a shipped page condition.
+    pub const OP_GREATER_THAN: u8 = 0;
+    /// `>=` — 25 of the 208 enabled shipped conditions.
+    pub const OP_GREATER_OR_EQUAL: u8 = 1;
+    /// `==` — 173 of the 208 enabled shipped conditions.
+    pub const OP_EQUAL: u8 = 2;
+    /// `<=` — 3 of the 208 enabled shipped conditions.
+    pub const OP_LESS_OR_EQUAL: u8 = 3;
+    /// `<` — never used by a shipped page condition.
+    pub const OP_LESS_THAN: u8 = 4;
+    /// `!=` — 7 of the 208 enabled shipped conditions.
+    pub const OP_NOT_EQUAL: u8 = 5;
+    /// `&` bitwise test; never used by a shipped page condition and deliberately
+    /// left out of [`Self::compare`].
+    pub const OP_BITWISE_AND: u8 = 6;
+
+    /// Evaluate the condition against the variable's current value.
+    ///
+    /// Returns `None` for an operator outside the verified set so a caller can log
+    /// the case instead of silently folding it into `false`.
+    pub fn compare(&self, actual: i32) -> Option<bool> {
+        Some(match self.operator {
+            Self::OP_GREATER_THAN => actual > self.value,
+            Self::OP_GREATER_OR_EQUAL => actual >= self.value,
+            Self::OP_EQUAL => actual == self.value,
+            Self::OP_LESS_OR_EQUAL => actual <= self.value,
+            Self::OP_LESS_THAN => actual < self.value,
+            Self::OP_NOT_EQUAL => actual != self.value,
+            _ => return None,
+        })
+    }
+
+    /// Operator spelled the way `_wolfref/common.ksy::operator` names it.
+    pub fn operator_name(&self) -> &'static str {
+        match self.operator {
+            Self::OP_GREATER_THAN => ">",
+            Self::OP_GREATER_OR_EQUAL => ">=",
+            Self::OP_EQUAL => "==",
+            Self::OP_LESS_OR_EQUAL => "<=",
+            Self::OP_LESS_THAN => "<",
+            Self::OP_NOT_EQUAL => "!=",
+            Self::OP_BITWISE_AND => "&",
+            _ => "?",
+        }
+    }
 }
 
 /// Decoded meaning of a raw tile word, see docs/FORMAT_SPEC.md §5.4.
@@ -485,6 +626,7 @@ mod tests {
     #[test]
     fn layout_constants_match_the_spec() {
         assert_eq!(LAYER_COUNT, 3);
+        assert_eq!(CONDITION_SLOTS, 4);
         assert_eq!(Map::EVENT_MAGIC, 0x6F);
         assert_eq!(Map::EVENT_MAGIC2, 0x3039);
         assert_eq!(Map::EVENT_FOOTER, 0x70);
@@ -492,5 +634,129 @@ mod tests {
         assert_eq!(Map::PAGE_FOOTER, 0x7A);
         assert_eq!(Map::FOOTER, 0x66);
         assert_eq!(Map::UNKNOWN1, 100);
+    }
+
+    /// A page whose four condition slots are set from `flags`/`vars`/`values`.
+    fn page(flags: [u8; 4], vars: [u32; 4], values: [i32; 4]) -> MapEventPage {
+        MapEventPage {
+            graphic_chip_id: 0xFFFF_FFFF,
+            graphic: String::new(),
+            direction: 2,
+            frame: 1,
+            opacity: 255,
+            display_type: 0,
+            trigger: 0,
+            trigger_switches: flags,
+            trigger_variables: vars,
+            trigger_values: values,
+            route: RouteData::default(),
+            commands: Vec::new(),
+            features: 3,
+            shadow_graphic: 0,
+            collision_width: 0,
+            collision_height: 0,
+            footer: Map::PAGE_FOOTER,
+        }
+    }
+
+    #[test]
+    fn condition_bytes_decode_into_operator_and_flag() {
+        let slots = page([0x21, 0x20, 0x11, 0x50], [10, 20, 30, 40], [1, 2, 3, 4]).conditions();
+        assert!(slots[0].enabled);
+        assert_eq!(slots[0].operator, PageCondition::OP_EQUAL);
+        assert_eq!(slots[0].variable, 10);
+        assert_eq!(slots[0].value, 1);
+        assert!(!slots[1].enabled);
+        assert!(slots[2].enabled);
+        assert_eq!(slots[2].operator, PageCondition::OP_GREATER_OR_EQUAL);
+        assert!(!slots[3].enabled);
+        assert_eq!(slots[3].operator, PageCondition::OP_NOT_EQUAL);
+    }
+
+    #[test]
+    fn every_documented_operator_compares_correctly() {
+        let cases = [
+            (PageCondition::OP_GREATER_THAN, 3, true),
+            (PageCondition::OP_GREATER_OR_EQUAL, 2, true),
+            (PageCondition::OP_EQUAL, 2, true),
+            (PageCondition::OP_LESS_OR_EQUAL, 2, true),
+            (PageCondition::OP_LESS_THAN, 1, true),
+            (PageCondition::OP_NOT_EQUAL, 7, true),
+            (PageCondition::OP_EQUAL, 3, false),
+            (PageCondition::OP_LESS_THAN, 3, false),
+        ];
+        for (operator, actual, expected) in cases {
+            let condition = PageCondition {
+                enabled: true,
+                operator,
+                variable: 0,
+                value: 2,
+            };
+            assert_eq!(
+                condition.compare(actual),
+                Some(expected),
+                "op {} against {}",
+                condition.operator_name(),
+                actual
+            );
+        }
+        let unknown = PageCondition {
+            enabled: true,
+            operator: PageCondition::OP_BITWISE_AND,
+            variable: 0,
+            value: 2,
+        };
+        assert_eq!(unknown.compare(2), None);
+        assert_eq!(unknown.operator_name(), "&");
+    }
+
+    #[test]
+    fn conditions_met_ignores_disabled_slots() {
+        // Enabled `var 10 == 1` plus three disabled slots holding junk.
+        let conditional = page([0x21, 0x20, 0x20, 0x20], [10, 11, 12, 13], [1, 9, 9, 9]);
+        assert!(conditional.conditions_met(|id| if id == 10 { 1 } else { 0 }));
+        assert!(!conditional.conditions_met(|_| 0));
+        // A page without any enabled condition always matches.
+        assert!(page([0x20; 4], [0; 4], [0; 4]).conditions_met(|_| 0));
+    }
+
+    #[test]
+    fn highest_matching_page_wins() {
+        let event = MapEvent {
+            id: 1,
+            name: String::new(),
+            x: 0,
+            y: 0,
+            pages: vec![
+                page([0x20; 4], [0; 4], [0; 4]), // page 1: always shown
+                page([0x21, 0x20, 0x20, 0x20], [100, 0, 0, 0], [1, 0, 0, 0]), // page 2
+                page([0x21, 0x20, 0x20, 0x20], [100, 0, 0, 0], [2, 0, 0, 0]), // page 3
+            ],
+        };
+        // state 2 -> page 3; state 1 -> page 2; anything else -> page 1.
+        assert_eq!(
+            event.active_page_index(|id| if id == 100 { 2 } else { 0 }),
+            Some(2)
+        );
+        assert_eq!(
+            event.active_page_index(|id| if id == 100 { 1 } else { 0 }),
+            Some(1)
+        );
+        assert_eq!(event.active_page_index(|_| 0), Some(0));
+        assert_eq!(
+            event
+                .active_page(|id| if id == 100 { 2 } else { 0 })
+                .map(|page| page.trigger),
+            Some(0)
+        );
+        // No unconditional page and no match -> the event is not on the map.
+        let conditional = MapEvent {
+            id: 2,
+            name: String::new(),
+            x: 0,
+            y: 0,
+            pages: vec![page([0x21, 0x20, 0x20, 0x20], [100, 0, 0, 0], [1, 0, 0, 0])],
+        };
+        assert_eq!(conditional.active_page_index(|_| 0), None);
     }
 }

@@ -835,6 +835,8 @@ page:
   u1  display_type               // 0 正常 / 1 乘算 / 2 加算 / 3 减算
   u1  trigger_condition          // 0 确认键 / 1 自动(autorun) / 2 并行 / 3 主角接触 / 4 事件接触（★本游戏实测 4 从未出现，见下）
   u1[4] trigger_switch           // 每字节：高 4 位 = operator，低 4 位 = enabled
+                                 // ★名字有误导：这不是"开关条件"，槽位 j 的字节属于
+                                 //   trigger_variable[j] 这一个变量条件，见 5.6.3
   u4[4] trigger_variable
   s4[4] trigger_value
   route_info route
@@ -850,6 +852,11 @@ page:
 **实测纠正（trigger_switch）**：Kaitai 的 mps.ksy 把 trigger_switch 的 enabled 位限制为 0/1，
 但真实文件里该字节常见 0x20（operator 2、enabled 0）、0x21、0x11、0x31。
 → 应当**保留原始 u1**，取低 4 位当 enabled、高 4 位当 operator，不要断言取值范围。
+
+> **★已实测纠正（字段含义）**：这 4 个字节**不是"开关条件"**，也不存在任何 switch id——
+> 它们是 4 组**变量条件**的 operator<<4|enabled 标志，变量号在同一个槽位的
+> trigger_variable[j] 里。完整证据、直方图与"哪一页生效"的判定规则见 **§5.6.3**。
+> Rust 侧对应 MapEventPage::conditions()（保留原始 4 字节，按需解码）。
 
 **★已实测纠正（9 张图全部 134 页，共 536 个 trigger_switch 字节的完整直方图）**：
 
@@ -882,7 +889,8 @@ u1   0x79                     页开始
 u4   chipid                   // 常 0xFFFFFFFF = 使用下面的图形文件名
 t_str graphicName
 u1[4] direction, frame, opacity, renderMode
-u1[37] conditions             // 1 trigger + 4 (switch+operator) + 4 triggerVar(u4) + 4 triggerVal(s4)
+u1[37] conditions             // 1 trigger + 4×(operator<<4|enabled) + 4 triggerVar(u4) + 4 triggerVal(s4)
+                              // ★37 字节是定长、没有 switch id 的余地，见 5.6.3
 u1[4] movement                // animation_frequency, move_speed, move_frequency, move_route_mode
 u1   flags                    // behavior_options
 u1   routeFlags               // character_move_route_options
@@ -896,6 +904,10 @@ u1   0x7A                     页结束（容错见下）
 
 - 这与 Kaitai 的字段表等价：Kaitai 的 row_in_tileset / col_in_tileset 就是这里的 direction / frame；
   37 字节 conditions 完全覆盖 Kaitai 的 trigger_condition + trigger_switch[4] + trigger_variable[4] + trigger_value[4]。
+  **★已实测纠正（direction / frame 的真实含义，134 页）**：这两个字节**不是**图块表内的行列，
+  而是角色的**方向与动画帧**——direction 是数字小键盘编码（2=下 4=左 6=右 8=上 9=右上），
+  实测直方图 {2: 129, 4: 1, 6: 2, 9: 2}（8=上在本游戏中从未使用）；frame 实测 {0: 6, 1: 128}。
+  ⇒ 只对 8 个带 CharaChip 图的页有意义，"图块表行列"的读法是错的。
 - **★已实测（trigger_condition 直方图，134 页）**：{0: 14, 1: 26, 2: 90, 3: 4}——
   **取值 4（事件接触）在本游戏中从未出现**。⇒ 不要按“0..4 全都会出现”写分支覆盖测试；
   枚举照规格保留 5 个值，但测试与容错只需覆盖 0/1/2/3（其中 2 并行占 67%）。
@@ -924,6 +936,83 @@ u1   0x7A                     页结束（容错见下）
 
 地图侧用到 40 个 opcode，与公共事件（47 种非空）重合 37 种。**不是严格子集：`151 ChangeColor` / `161 PrepareTransition` / `162 ExecuteTransition` 这 3 种只在地图事件里出现**（公共事件侧 0 次）——转场/调色语义恰好全在地图侧。公共事件侧另有 10 种地图侧 0 次（106/107/160/171/175/176/211/222/281/1000）。**并集 50 种 = 必须实现的全集**（`work/probe97.py` 实测）。
 （注意：本文 5.1 表里的“事件数”列与上表一致；WolfTL 本身解析失败的 Dungeon 与 Map024 也全部解析成功。）
+
+### 5.6.3 页条件 = 4 组「变量比较」，**没有开关条件、也没有 switch id**（★已实测纠正）
+
+**结论**（M2「哪一页事件生效」判定所需的全部依据）：
+
+- `trigger_switch[4]` 这 4 个字节**不是开关条件**，里面没有任何 switch id。
+  槽位 j 的字节 = 第 j 组**变量条件**的 `operator << 4 | enabled`，变量号与比较值在**同一个槽位**的
+  `trigger_variable[j]` / `trigger_value[j]` 里。
+- WOLF 的事件页条件**只有变量比较一种**：WOLF 官方编辑器文档（`work/_yado_0600.txt`）里「起動条件」的
+  例子全是 `セルフ変数[0] が 1 と同じ` / `… が 0 と同じ`，「スイッチ」一词在 docs/ 与官方文档里 0 命中。
+- 一页可以有 0 组启用条件，此时它无条件成立；**同一个事件最多 10 页**（官方原文：最大１０ページ；
+  本游戏 SampleMapA 事件 9 正好 10 页）。
+
+#### 证据 1：37 字节定长，没有装 switch id 的空间
+
+WolfTL `Map.hpp:55`：`m_conditions = coder.Read(1 + 4 + 4 * 4 + 4 * 4);` = 1（trigger）+ 4（标志字节）
++ 4×u4（变量号）+ 4×s4（比较值）= **37 字节定长**；紧接其后就是 movement(4) / flags / routeFlags /
+routeCount+RouteCommand[] / commandCount+Command[] / features / 3 个 u1 / 0x7A。
+134 页按此宽度逐字节走完 9 张地图，恰好落在 0x70 / 0x79 / 0x66 上（含 §5.6.1 的两处 0x00 容错），
+**一个字节都没剩**；要装 4 个开关 ID 至少还需 8~16 字节，文件里不存在这段。
+
+#### 证据 2：标志字节与变量行是同一个下标（536 槽位交叉制表）
+
+把每个槽位按「启用？」×「(变量号, 值) 是否等于编辑器默认值 `(1000000, 0)`」分类：
+
+| | 默认值 `(1000000, 0)` | 非默认 |
+|---|---|---|
+| 未启用 | 304 | 24（编辑器残留） |
+| 启用 | **1** | 207 |
+
+唯一的「启用 + 默认值」是 SampleMapA.mps 事件 0 页 0 槽位 0：`0x21` + 变量 `1000000`(Self[0]) 值 `0`，
+即真实条件 **「セルフ変数[0] == 0」**，不是异常。⇒「启用」位描述的就是同一行那条变量条件，
+而不是另外 4 个开关的开关位（否则启用的行不会总带着有意义的变量号）。
+
+#### 证据 3：统计（9 图 / 134 页 / 536 槽位）
+
+- 启用 208 组、未启用 328 组；每页启用数直方图 `{0:19, 1:68, 2:15, 3:18, 4:14}`。
+- 启用条件的运算符：`>=` 25 / `==` 173 / `<=` 3 / `!=` 7（即 `_wolfref/common.ksy::operator` 的
+  1/2/3/5）。0=`>` 与 4=`<` 在全部 536 个槽位里**一次都没出现**（运算符只有 1/2/3/5 四种）。
+- **全是数值比较**：若真是「开关条件」只需要 `==` 一种，而 35 组用的是 `>=`/`<=`/`!=`。
+- 变量号落在 `docs/OPCODE_SPEC.md` §2.1 已实测的两个区段：`2000000+n`（普通变量/可変DB[0]）与
+  `1000000+n`（事件局部变量）——例如 `2000062` = 普通变量 62、`1100000` = 事件局部变量 100000。
+
+#### 证据 4：语义链（一页写变量 → 下一页的条件读它）
+
+编辑器里「切页」的标准写法：第 N 页把某变量写成 k，第 N+1 页的条件是「该变量 == k」。
+
+- Map002.mps 事件 3：页 0 条件 `2000009 == 1`、页 1 条件 `2000009 == 2`；
+  页 0 的指令流（opcode 121）把 `2000009` 写成 2 ⇒ 正好切到页 1。
+- Dungeon.mps 事件 3：页 0 无启用条件（无条件），其指令流把 `1100000` 写成 1；页 1 的唯一条件 `1100000 == 1`。
+- SampleMapA.mps 事件 9（10 页，官方上限）：页 i 条件 `2000062 == i+1`，即一个变量把一个事件分成 10 种形态；
+  事件 10 接着 `2000062 == 11..16`。
+- SampleMapA.mps 事件 8（9 页）：页 0 是并行页，条件 `2000340 == 1` 且 `2000350 == 0` 且 `2000035 <= 0`；
+  页 1..8 是自动页，条件 `1100009 == 1..8`。
+  ⇒ **同一事件的 trigger 会随生效页变化**：本游戏 25 个多页事件里有 8 个页间 trigger 不一致
+  （SampleMapA 的 4 / 8 / 11 / 14 / 18 / 21 / 22 / 24），所以 trigger、图形、指令全都属于**页**而不是事件。
+
+#### 页选择的正确规则（照官方文档）
+
+> 「起動条件を満たした**最も大きいページ番号**が画面上に表示されます。」
+
+即在所有启用条件都成立的页里**取页号最大的那一页**（从末页往前找第一个满足的），
+该页的 trigger / 图形 / 指令就是这个事件此刻的全部行为；一页都不满足 ⇒ 事件此刻不出现在地图上
+（**不是"用页 0 兜底"**：页 0 也常有条件，19 页没有任何启用条件但它们是各自的最后一层兜底）。
+
+Rust 侧已实现（`crates/wolf-format/src/mps.rs`；**不新增结构体字段**，因为
+`crates/wolf-game/src/map_runtime.rs` 的测试夹具用完整的结构体字面量构造 `MapEventPage`）：
+
+- `MapEventPage::conditions() -> [PageCondition; 4]`：把 4 个原始字节 + 变量 + 值解码为
+  `{enabled, operator, variable, value}`，原始 `trigger_switches` 字段原样保留。
+- `PageCondition::compare(actual) -> Option<bool>`（未验证的运算符返回 `None`，不静默当成 false）。
+- `MapEventPage::conditions_met(get_variable)`、`MapEvent::active_page_index(get_variable)`、
+  `MapEvent::active_page(…)`。
+
+⇒ `wolf-game/src/map_runtime.rs::collect` 的正确做法：**每个事件只挑一页**（`active_page`），
+再用**那一页**的 trigger 判断是否为 1/2/3；不能像现在这样让 trigger=1/2/3 的页各自独立启动，
+否则 SampleMapA 事件 9 的 10 个并行页会同时跑起来。
 
 ### 5.7 地图事件的指令流
 
