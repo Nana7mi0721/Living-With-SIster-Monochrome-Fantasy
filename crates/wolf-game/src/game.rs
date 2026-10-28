@@ -262,6 +262,36 @@ impl Game {
         self.runtime.start_pending(&mut self.vm)
     }
 
+    /// Start one event of a named map, collecting that map's other pages too.
+    ///
+    /// This is what a new game does once the title menu answers: it switches to
+    /// SampleMapA and runs event 0, the opening story script. The event itself
+    /// is skipped by the page collector so its coroutine is only started once.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the map file is missing or malformed, or when the map has no
+    /// event with that id.
+    pub fn start_map_event_by_name(
+        &mut self,
+        map_name: &str,
+        event_id: u32,
+    ) -> Result<(), GameError> {
+        let name = if map_name.contains('.') {
+            map_name.to_owned()
+        } else {
+            format!("MapData/{map_name}.mps")
+        };
+        let bytes = self.read(&name)?;
+        let map = Map::parse(&bytes).map_err(GameError::Format)?;
+        self.start_pages(&map, Some(event_id));
+        if self.start_map_event(&map, event_id) {
+            Ok(())
+        } else {
+            Err(GameError::MissingEvent(event_id))
+        }
+    }
+
     pub fn start_map_event(&mut self, map: &Map, event_id: u32) -> bool {
         let Some(event) = map.events.iter().find(|event| event.id == event_id) else {
             return false;
@@ -587,10 +617,15 @@ impl Host for GameHost<'_> {
     }
 
     fn effect(&mut self, kind: i32, duration: i32, args: &[i32]) {
-        self.note(format!(
-            "290 Effect: kind {kind} for {duration} frame(s) ({} args) not drawn yet",
-            args.len()
-        ));
+        // Colour effects belong to the picture store, not to the interpreter, because they
+        // outlive the instruction: a type 5 flash keeps cycling for as long as the picture
+        // exists. Everything else is recorded but not drawn - see Screen::effect.
+        if !self.screen.effect(kind, duration, args) {
+            self.note(format!(
+                "290 Effect: kind {kind} for {duration} frame(s) ({} args) not drawn yet",
+                args.len()
+            ));
+        }
     }
 
     fn save_load(&mut self, args: &[i32]) {

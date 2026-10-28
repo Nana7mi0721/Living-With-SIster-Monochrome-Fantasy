@@ -504,19 +504,58 @@
   "cancel_rule": "102 bit4 = 0 means a 421 cancel branch exists (153 blocks); bit4 = 1 means cancel cannot be taken (342 blocks)"
  },
  "map_runtime": {
-  "map": "MapData/SampleMapA.mps (the game's H-scene UI map: 64x36 tiles, 40 events, 134 pages, 87 automatic)",
-  "automatic_pages": 87,
-  "trigger_counts": {
-   "1": 19,
-   "2": 68
+  "map": "MapData/SampleMapA.mps (64x36, 40 events, 134 pages)",
+  "selection_rule": "per event, the highest page whose activation conditions hold; page 0 is not a fallback; an event whose conditions all fail does not run",
+  "tracked_events": 40,
+  "active_with_fresh_vm": 4,
+  "active_triggers": {
+   "1": 1,
+   "2": 3
   },
-  "note": "Page triggers in this game: 0 action key (14 pages), 1 autorun (26), 2 parallel (90), 3 parallel-while-running (4). A parallel page is a permanent coroutine: when its stream ends the interpreter drops the instance and WOLF starts it again on the next frame. Only 6 maps are registered and none of them (TitleMap, SampleMapA, SampleMapA_1, Map003, Map024, Map031) has a page chip; the three engine sample maps (Dungeon, Map002, SampleMapB) are the only ones with CharaChip graphics.",
-  "measured_run": {
+  "active_events": [
+   {
+    "event": 0,
+    "page": 0,
+    "trigger": 1,
+    "slots": 846,
+    "title_kind": "new game processing (linear story script)"
+   },
+   {
+    "event": 13,
+    "page": 0,
+    "trigger": 2,
+    "slots": 2
+   },
+   {
+    "event": 15,
+    "page": 0,
+    "trigger": 2,
+    "slots": 295
+   },
+   {
+    "event": 25,
+    "page": 0,
+    "trigger": 2,
+    "slots": 34
+   }
+  ],
+  "page_switch_probe": {
+   "variable": 62,
+   "event": 9,
+   "pages": 10,
+   "measured": {
+    "1": 0,
+    "5": 4,
+    "10": 9,
+    "99": null
+   }
+  },
+  "parallel_restart_run": {
    "frames": 120,
-   "instructions": 21023494,
-   "page_starts": 933,
-   "commands": "cargo test -p wolf-game --test map_runtime -- --nocapture",
-   "note": "Heavy: the click-detection pages busy-poll key/mouse opcodes instead of waiting, so a frame costs ~175k instructions. This is why PLAN chose an explicit per-instance state machine over OS threads."
-  }
+   "pages": 3,
+   "starts": 360,
+   "instructions": 3720
+  },
+  "note": "An earlier revision started every automatic page unconditionally (87 pages, 21,023,494 instructions over 120 frames). That is superseded: page conditions cut the live set to 4 and 3,720 instructions. SampleMapA event 0 spins through a whole 200,000 instruction budget per frame when the host answers nothing (it is a story script waiting on messages and choices), so perf tests must exclude it with collect_except."
  }
 }

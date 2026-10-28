@@ -585,6 +585,59 @@ impl Vm {
         Some(id)
     }
 
+    /// Stop one coroutine, and every coroutine it spawned, right now.
+    ///
+    /// A map event page owns exactly one coroutine, so switching pages has to
+    /// retire the old one. Ending the program instead of removing the instance
+    /// would keep it alive for the rest of the frame and, worse, would hand its
+    /// return value to a parent that never asked for it. Waking the parent is
+    /// this function's job: a caller waiting in [WaitState::Child] must not
+    /// block forever on a coroutine that no longer exists.
+    ///
+    /// Returns true when the instance was found.
+    pub fn stop_instance(&mut self, id: InstanceId) -> bool {
+        if !self.instances.iter().any(|instance| instance.id == id) {
+            return false;
+        }
+        // Descendants die with their ancestor: a child coroutine without its
+        // caller has nobody left to return to.
+        let mut doomed = vec![id];
+        loop {
+            let mut grew = false;
+            for instance in &self.instances {
+                if doomed.contains(&instance.id) {
+                    continue;
+                }
+                let mut parent = instance.parent;
+                while let Some(pid) = parent {
+                    if doomed.contains(&pid) {
+                        doomed.push(instance.id);
+                        grew = true;
+                        break;
+                    }
+                    parent = self
+                        .instances
+                        .iter()
+                        .find(|other| other.id == pid)
+                        .and_then(|other| other.parent);
+                }
+            }
+            if !grew {
+                break;
+            }
+        }
+        // Wake anyone waiting on a doomed coroutine before it disappears.
+        for index in 0..self.instances.len() {
+            if let WaitState::Child(child) = self.instances[index].wait {
+                if doomed.contains(&child) {
+                    self.instances[index].wait = WaitState::None;
+                }
+            }
+        }
+        self.instances.retain(|instance| !doomed.contains(&instance.id));
+        true
+    }
+
     /// Load an event by title. Returns `None` when no title matches.
     pub fn start_event_by_name(&mut self, name: &str) -> Option<InstanceId> {
         let event = self.programs.id_by_name(name)?;
