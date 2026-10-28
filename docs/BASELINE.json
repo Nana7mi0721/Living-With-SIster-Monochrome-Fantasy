@@ -379,6 +379,54 @@
    "rounding": "origin truncates (520 - 35/2 = 502.5 -> 502, which is the retail row); extent rounds"
   }
  },
+ "boot_screens": {
+  "event_chain": "MapData/TitleMap.mps event 2 -> common event 549 (three splashes) -> title art + Button01 hint -> common event 42 menu",
+  "fade_slot": "150 int[2] (our PictureCmd args[0]) is the fade-in length in frames: 20 on all three splashes, 0 on the title art, 30 on event 42 background",
+  "fade_rule": "alpha = opacity/255 * min(1, age/fade)",
+  "acceptance_vs_retail_printscreen": [
+   {
+    "frame": 248,
+    "screen": "Kagura/Disc.png disclaimer",
+    "retail": "ScreenShot_2026_1028_21_21_28.png",
+    "mean_abs": 0.126,
+    "max_abs": 1,
+    "psnr_db": 57.14
+   },
+   {
+    "frame": 480,
+    "screen": "Kagura/inusuku.png developer logo",
+    "retail": "ScreenShot_2026_1028_21_21_32.png",
+    "mean_abs": 0.0,
+    "max_abs": 0,
+    "identical": true
+   },
+   {
+    "frame": 700,
+    "screen": "Picture/title01.jpg + SystemFile/Button01.png",
+    "retail": "ScreenShot_2026_1028_21_21_35.png",
+    "mean_abs": 0.283,
+    "max_abs": 33,
+    "psnr_db": 39.22,
+    "residual": "entirely inside the hint banner: the original multiplies that one picture by a 222/255 source tone (DxLib SetDrawBright); the source of the tone is still unknown (Q-v2-1 / docs/OPCODE_124.md task-11)"
+   }
+  ],
+  "map_capture": {
+   "SampleMapA": {
+    "size_px": [
+     1024,
+     576
+    ],
+    "tiles": [
+     64,
+     36
+    ],
+    "tileset": 4,
+    "quads": 27648,
+    "non_black": 1.0,
+    "tile": "104444 = autotile 1 of MapChip/kiri_project.png, quadrants 4,4,4,4"
+   }
+  }
+ },
  "verify": {
   "checks": 63,
   "pending": 0,

@@ -18,6 +18,7 @@ use wolf_format::command::SlotStats;
 use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
 use wolf_game::atlas::{self, Atlas};
+use wolf_game::tilemap::TileMap;
 use wolf_game::{choice, Game};
 use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 use wolf_vm::{
@@ -79,6 +80,7 @@ fn main() -> ExitCode {
     let mut filter: Option<String> = None;
     let mut frame_limit: Option<u64> = None;
     let mut boot = true;
+    let mut map: Option<String> = None;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -104,6 +106,9 @@ fn main() -> ExitCode {
             "--answer" | "-a" => {
                 answer = args.next().and_then(|value| value.parse().ok());
             }
+            "--map" | "-m" => {
+                map = args.next();
+            }
             "--boot" => boot = true,
             "--menu-only" => boot = false,
             "--filter" | "-F" => {
@@ -126,7 +131,10 @@ fn main() -> ExitCode {
     match command.as_deref() {
         Some("verify") => run_verify(&root),
         Some("precompile") => run_precompile(&root),
-        Some("capture") => run_capture(&root, out, frames, answer, boot),
+        Some("capture") => match map.as_deref() {
+            Some(name) => run_capture_map(&root, out, name),
+            None => run_capture(&root, out, frames, answer, boot),
+        },
         Some("list") => run_list(&root, filter.as_deref()),
         Some("play") => play::run(&root, frame_limit, boot),
         Some("run") => match event {
@@ -181,6 +189,7 @@ fn print_help() {
     println!("    -F, --filter <T>  Only list events whose title contains T (with 'list').");
     println!("    --until <N>       Quit 'play' after N frames (smoke test; default: until closed).");
     println!("    --menu-only       Start common event 42 directly instead of the boot map.");
+    println!("    -m, --map <NAME>  Capture a map instead of the boot sequence (e.g. SampleMapA.mps).");
     println!("    --boot            Start on the boot map (default for capture and play).");
     println!("    -r, --root <DIR>  Unpacked data root containing BasicData/ and MapData/.");
     println!("                      Defaults to ./work/full, then $WOLF_DATA_ROOT.");
@@ -1429,5 +1438,146 @@ fn run_capture(
             println!("    {count:>6}x {text}");
         }
     }
+    ExitCode::SUCCESS
+}
+
+/// Renders one map frame to a PNG. This is M2 step one: the tile pipeline end to end.
+///
+/// The camera centres on the map's first event, which is where the engine puts the
+/// player when a map starts; a map with no events looks at the top-left corner. Only
+/// the cells inside the 1024x576 window are tessellated, so the 70x170 map costs the
+/// same as the 53x30 one.
+fn run_capture_map(root: &Path, out: Option<PathBuf>, name: &str) -> ExitCode {
+    let out = out.unwrap_or_else(|| PathBuf::from("work/out/map.png"));
+    let basic = if root.join("BasicData").is_dir() {
+        root.join("BasicData")
+    } else {
+        root.to_path_buf()
+    };
+    let tileset_bytes = match read(&basic.join("TileSetData.dat")) {
+        Some(bytes) => bytes,
+        None => {
+            eprintln!("no TileSetData.dat under {}", basic.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    let tilesets = match wf::tileset::TileSetData::parse(&tileset_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("TileSetData.dat: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let relative: PathBuf = if name.contains('/') || name.ends_with(".mps") {
+        PathBuf::from(name)
+    } else {
+        PathBuf::from(format!("MapData/{name}.mps"))
+    };
+    let map_bytes = match read(&root.join(&relative)) {
+        Some(bytes) => bytes,
+        None => {
+            eprintln!("cannot read {}", root.join(&relative).display());
+            return ExitCode::FAILURE;
+        }
+    };
+    let map = match wf::mps::Map::parse(&map_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("{}: {err}", relative.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    let Some(tileset) = tilesets.get(map.tileset_index) else {
+        eprintln!("map points at tileset {} but only {} exist", map.tileset_index, tilesets.tilesets.len());
+        return ExitCode::FAILURE;
+    };
+
+    let tile_map = TileMap::new(&map, tileset, tilesets.version);
+    let [map_w, map_h] = tile_map.size_px();
+    let screen = [LOGICAL_W as i32, LOGICAL_H as i32];
+    let focus = match map.events.first() {
+        Some(event) => [
+            event.x as i32 * wolf_game::tilemap::TILE_PX as i32,
+            event.y as i32 * wolf_game::tilemap::TILE_PX as i32,
+        ],
+        None => [0, 0],
+    };
+    let camera = [
+        (focus[0] - screen[0] / 2).clamp(0, (map_w - screen[0]).max(0)),
+        (focus[1] - screen[1] / 2).clamp(0, (map_h - screen[1]).max(0)),
+    ];
+
+    let mut atlas = Atlas::new();
+    let mut assets = wolf_game::Assets::new(root);
+    let sprites = tile_map.quads(&mut atlas, &mut assets, camera, [LOGICAL_W, LOGICAL_H], 0);
+    let [atlas_w, atlas_h] = atlas.size();
+
+    println!("capture --map {name}");
+    println!("  data root : {}", root.display());
+    println!(
+        "  map       : {} {}x{} tile(s) = {}x{} px, {} layer(s), {} event(s)",
+        relative.display(),
+        tile_map.width,
+        tile_map.height,
+        map_w,
+        map_h,
+        tile_map.layer_count(),
+        map.events.len()
+    );
+    println!(
+        "  tileset   : index {} base {}",
+        tile_map.tileset_index, tileset.base_image
+    );
+    println!("  camera    : [{}, {}]", camera[0], camera[1]);
+    println!("  quads     : {} tile(s)", sprites.len());
+    println!("  atlas     : {} image(s), {:.1}% of {atlas_w}x{atlas_h}", atlas.len(), atlas.fill_ratio() * 100.0);
+
+    let mut renderer = match Renderer::new_offscreen() {
+        Ok(renderer) => renderer,
+        Err(err) => {
+            eprintln!("no usable GPU adapter: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(err) = renderer.set_atlas(atlas.pixels(), atlas_w, atlas_h) {
+        eprintln!("atlas upload failed: {err}");
+        return ExitCode::FAILURE;
+    }
+    let instances: Vec<SpriteInstance> = sprites
+        .iter()
+        .map(|quad| SpriteInstance::new(quad.rect, quad.uv).with_alpha(quad.alpha))
+        .collect();
+    renderer.draw(&instances);
+    renderer.draw_text(&[]);
+    renderer.present();
+    let pixels = match renderer.capture_rgba() {
+        Ok(pixels) => pixels,
+        Err(err) => {
+            eprintln!("readback failed: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() {
+            if let Err(err) = std::fs::create_dir_all(parent) {
+                eprintln!("cannot create {}: {err}", parent.display());
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    if let Err(err) = image::save_buffer(&out, &pixels, LOGICAL_W, LOGICAL_H, image::ColorType::Rgba8) {
+        eprintln!("cannot write {}: {err}", out.display());
+        return ExitCode::FAILURE;
+    }
+    let lit = pixels
+        .chunks_exact(4)
+        .filter(|pixel| pixel[0] | pixel[1] | pixel[2] != 0)
+        .count();
+    let total = (LOGICAL_W * LOGICAL_H) as usize;
+    println!(
+        "  rendered  : {LOGICAL_W}x{LOGICAL_H}, {lit}/{total} non-black pixel(s) = {:.1}%",
+        lit as f64 * 100.0 / total as f64
+    );
+    println!("  wrote     : {}", out.display());
     ExitCode::SUCCESS
 }

@@ -26,6 +26,7 @@ pub mod choice;
 pub mod game;
 pub mod key;
 pub mod picture;
+pub mod tilemap;
 pub mod window;
 
 pub use assets::{AssetError, Assets, ImageData};
@@ -33,4 +34,5 @@ pub use atlas::{Atlas, AtlasRect, SpriteQuad, TextQuad, ATLAS_SIZE};
 pub use choice::{layout as choice_layout, ChoiceLayout};
 pub use game::{Choices, FrameOutcome, Game, GameError, GameStats, Message, TITLE_EVENT};
 pub use picture::{Picture, PictureKind, Screen, ScreenQuad, UNCHANGED};
+pub use tilemap::{autotile_src, base_src, cull_range, TileMap, QUADRANT_PX, TILE_NUMBER, TILE_PX};
 pub use window::{nine_slice, WindowPiece, PANEL_PICTURE};

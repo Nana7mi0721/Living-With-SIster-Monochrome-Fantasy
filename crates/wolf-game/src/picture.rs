@@ -92,6 +92,10 @@ pub const SCALE_ONE: i32 = 100;
 pub mod field {
     /// Unknown flag word; 0 except for the title background (30).
     pub const FLAG: usize = 0;
+    /// Fade-in length in frames, same slot as FLAG. 0 means the picture appears at once.
+    /// Evidence: every splash draw in the boot chain carries 20 here and the retail
+    /// disclaimer frame is exactly trunc(255 * age / 20) of the source art.
+    pub const FADE_IN: usize = 0;
     /// Window width, for the window picture kinds.
     pub const WINDOW_W: usize = 1;
     /// Window height, for the window picture kinds.
@@ -178,6 +182,8 @@ pub struct Picture {
     pub anchor: u8,
     /// Kind-specific trailing arguments, kept verbatim for the animation layer.
     pub extras: Vec<i32>,
+    /// Fade-in length in frames (0 = instant).
+    pub fade: u32,
     /// Frames since the picture first appeared, for animation timing.
     pub age: u32,
 }
@@ -199,6 +205,7 @@ impl Picture {
             window: None,
             anchor: ANCHOR_TOP_LEFT,
             extras: Vec::new(),
+            fade: 0,
             age: 0,
         }
     }
@@ -210,9 +217,18 @@ impl Picture {
     }
 
     /// Opacity as 0.0..=1.0, clamped the way the renderer wants it.
+    ///
+    /// A picture with a fade-in ramp is multiplied by its progress through that ramp, which
+    /// is how the boot chain's splashes appear: the retail disclaimer frame is 63/255 of the
+    /// source art at age 5 of a 20-frame fade, and 5/20 * 255 = 63.75.
     #[must_use]
     pub fn alpha(&self) -> f32 {
-        (self.opacity.clamp(0, 255) as f32) / 255.0
+        let opacity = (self.opacity.clamp(0, 255) as f32) / 255.0;
+        if self.fade == 0 {
+            return opacity;
+        }
+        let progress = (self.age as f32 / self.fade as f32).min(1.0);
+        opacity * progress
     }
 }
 
@@ -435,6 +451,9 @@ fn merge_args(picture: &mut Picture, args: &[i32]) {
             picture.window = Some((w, h));
         }
     }
+    if let Some(value) = take(args, field::FADE_IN) {
+        picture.fade = value.clamp(0, 600) as u32;
+    }
     if args.len() > field::EXTRAS {
         picture.extras = args[field::EXTRAS..].to_vec();
     }
@@ -556,6 +575,14 @@ mod tests {
         assert_eq!(picture.scale, 100);
         assert_eq!(picture.opacity, 255);
         assert_eq!(picture.blend, 0);
+        // The command carries 30 in the fade slot, so the art ramps in over 30 frames
+        // instead of popping; the fully faded state is the steady one to assert here.
+        assert_eq!(picture.fade, 30);
+        assert_eq!(picture.alpha(), 0.0);
+        for _ in 0..30 {
+            screen.tick();
+        }
+        let picture = screen.get(-2).expect("picture");
         assert_eq!(picture.alpha(), 1.0);
         assert!(picture.is_screen_layer());
     }
