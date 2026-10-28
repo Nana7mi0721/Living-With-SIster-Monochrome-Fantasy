@@ -1260,7 +1260,17 @@ fn find_font(root: &Path) -> Option<(PathBuf, Vec<u8>)> {
     None
 }
 
-fn run_capture(
+
+/// Builds a render instance from an atlas quad, carrying its alpha and its picture tone.
+///
+/// The tone is per picture, not per frame: a `290` flash changes what one picture
+/// multiplies its texels by while everything else on screen keeps drawing at full
+/// brightness, so it has to ride on the instance rather than on a global draw state.
+fn tint_instance(quad: &wolf_game::atlas::SpriteQuad) -> SpriteInstance {
+    SpriteInstance::new(quad.rect, quad.uv)
+        .with_alpha(quad.alpha)
+        .with_tint_rgb(quad.tint[0], quad.tint[1], quad.tint[2])
+}fn run_capture(
     root: &Path,
     out: Option<PathBuf>,
     frames: usize,
@@ -1379,7 +1389,7 @@ fn run_capture(
     }
     let instances: Vec<SpriteInstance> = sprites
         .iter()
-        .map(|quad| SpriteInstance::new(quad.rect, quad.uv).with_alpha(quad.alpha))
+        .map(tint_instance)
         .collect();
     renderer.draw(&instances);
     let items: Vec<TextItem> = texts
@@ -1565,7 +1575,7 @@ fn run_capture_map(root: &Path, out: Option<PathBuf>, name: &str) -> ExitCode {
     }
     let instances: Vec<SpriteInstance> = sprites
         .iter()
-        .map(|quad| SpriteInstance::new(quad.rect, quad.uv).with_alpha(quad.alpha))
+        .map(tint_instance)
         .collect();
     renderer.draw(&instances);
     renderer.draw_text(&[]);

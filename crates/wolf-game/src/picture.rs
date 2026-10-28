@@ -114,6 +114,16 @@ pub mod field {
     pub const BLEND: usize = 8;
     /// First field that is kind-specific.
     pub const EXTRAS: usize = 9;
+    /// Red channel of the base tone, percent (100 = neutral).
+    ///
+    /// docs/OPCODE_290.md section 3.1 numbers these slots 15..17 in the raw
+    /// instruction; PictureCmd::args starts at raw arg 2, so they land at 13..15
+    /// here. Only the long form (raw argc 18 or more) carries them at all.
+    pub const TONE_R: usize = 13;
+    /// Green channel of the base tone, percent.
+    pub const TONE_G: usize = 14;
+    /// Blue channel of the base tone, percent.
+    pub const TONE_B: usize = 15;
 }
 
 /// The five picture kinds, decoded from `(arg0 >> 4) & 7` by the interpreter.
@@ -155,6 +165,91 @@ impl PictureKind {
     }
 }
 
+/// Per-channel draw brightness in percent: 100 is neutral, 0 is black.
+///
+/// This is the shape DxLib SetDrawBright takes, and the measurements in docs/OPCODE_290.md
+/// force it: the retail title banner is its own artwork times 222/255 on every channel,
+/// independent of the pixels behind it.
+pub type Tone = [i32; 3];
+
+/// The tone a picture has before any effect touches it.
+pub const TONE_NEUTRAL: Tone = [SCALE_ONE, SCALE_ONE, SCALE_ONE];
+
+/// Effect kind 0 (head nibble): single flash, the colour jumps to the target and decays back.
+pub const EFFECT_FLASH: u8 = 0;
+/// Effect kind 1: cancel the running flash and return to the base tone.
+pub const EFFECT_OFF: u8 = 1;
+/// Effect kind 5: automatic flash, the same ramp repeated for as long as the picture lives.
+pub const EFFECT_BLINK: u8 = 5;
+
+/// One running `290` colour effect on a picture.
+///
+/// The official documentation insists an effect is processed "independently of what the
+/// picture command specified", which is why this lives in a list beside the `150` fields
+/// instead of mutating them: when the effect ends the picture has to fall back to its own
+/// base tone, not to neutral. Keeping the base tone on Picture and only the phase here is
+/// the same split, and it is also what makes the boot banner testable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PictureEffect {
+    /// Effect type: the high nibble of the head word.
+    pub kind: u8,
+    /// Frames in one cycle, never zero because the ramp divides by it.
+    pub duration: u32,
+    /// Per-channel target offset in percent, straight from args 4..6.
+    pub target: Tone,
+    /// Frames elapsed, i.e. the phase inside the cycle.
+    pub age: u32,
+}
+
+impl PictureEffect {
+    /// Builds an effect at phase zero.
+    #[must_use]
+    pub fn new(kind: u8, duration: i32, target: Tone) -> Self {
+        Self {
+            kind,
+            duration: duration.max(1) as u32,
+            target,
+            age: 0,
+        }
+    }
+
+    /// Builds an effect from the interpreter raw `290` argument list.
+    ///
+    /// The list is head, duration, picture A, picture B, then the three channel targets, so
+    /// the targets are simply args 4..6. The interpreter hands over the whole instruction,
+    /// which is why this module never has to look at the opcode encoding itself.
+    #[must_use]
+    pub fn from_args(kind: u8, duration: i32, args: &[i32]) -> Self {
+        let channel = |index: usize| args.get(index).copied().unwrap_or(0);
+        Self::new(kind, duration, [channel(4), channel(5), channel(6)])
+    }
+
+    /// True when the effect asks for no colour change at all.
+    #[must_use]
+    pub fn is_neutral(&self) -> bool {
+        self.target == [0, 0, 0]
+    }
+
+    /// True once a one-shot effect has run its course; type 5 never finishes.
+    #[must_use]
+    pub fn is_finished(&self) -> bool {
+        self.kind != EFFECT_BLINK && self.age >= self.duration
+    }
+
+    /// The channel multiplier at the current phase, scaled by the cycle length.
+    ///
+    /// Returned as percent-times-duration so the caller divides exactly once and the whole
+    /// chain stays in integers, which keeps the result reproducible frame for frame. The
+    /// ramp is the one docs/OPCODE_290.md section 5.2 derives from the measurements: the
+    /// colour changes with no wait, then walks linearly back to neutral over `duration`.
+    #[must_use]
+    pub fn percent_times_duration(&self, channel: usize) -> i64 {
+        let from = i64::from(SCALE_ONE + self.target[channel]);
+        let span = i64::from(self.duration);
+        let phase = i64::from(self.age % self.duration);
+        from * (span - phase) + i64::from(SCALE_ONE) * phase
+    }
+}
 /// One live picture slot.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Picture {
@@ -186,6 +281,10 @@ pub struct Picture {
     pub fade: u32,
     /// Frames since the picture first appeared, for animation timing.
     pub age: u32,
+    /// Base per-channel brightness in percent, from the 150 colour slots.
+    pub tone: Tone,
+    /// Running 290 colour effects, applied on top of tone.
+    pub effects: Vec<PictureEffect>,
 }
 
 impl Picture {
@@ -207,6 +306,8 @@ impl Picture {
             extras: Vec::new(),
             fade: 0,
             age: 0,
+            tone: TONE_NEUTRAL,
+            effects: Vec::new(),
         }
     }
 
@@ -230,8 +331,51 @@ impl Picture {
         let progress = (self.age as f32 / self.fade as f32).min(1.0);
         opacity * progress
     }
+    /// The per-channel draw brightness this picture currently asks for, 0..=255.
+    ///
+    /// Two layers, in this order: the base tone from the 150 colour slots, then every
+    /// live 290 effect multiplying it. DxLib expresses the result as SetDrawBright, which
+    /// scales the colour channels of whatever is drawn and never the alpha, so alpha()
+    /// stays independent of this and the banner still blends at its own opacity.
+    #[must_use]
+    pub fn tone_byte(&self) -> [u8; 3] {
+        let mut out = [0u8; 3];
+        for (channel, slot) in out.iter_mut().enumerate() {
+            let mut value = i64::from(percent_to_byte(self.tone[channel]));
+            for effect in &self.effects {
+                let numerator = effect.percent_times_duration(channel);
+                let denominator = i64::from(SCALE_ONE) * i64::from(effect.duration);
+                value = (value * numerator + denominator / 2) / denominator;
+            }
+            *slot = value.clamp(0, 255) as u8;
+        }
+        out
+    }
+
+    /// Starts a colour effect, replacing whatever colour effect was already running.
+    ///
+    /// WOLF keeps one colour state per picture rather than a stack, so a second flash takes
+    /// over from the first instead of multiplying with it.
+    fn start_effect(&mut self, effect: PictureEffect) {
+        self.stop_effects();
+        self.effects.push(effect);
+    }
+
+    /// Cancels the colour effects, leaving the 150 base tone in charge again.
+    fn stop_effects(&mut self) {
+        self.effects
+            .retain(|effect| !matches!(effect.kind, EFFECT_FLASH | EFFECT_BLINK));
+    }
 }
 
+/// Converts a percentage tone into the 0..=255 byte the draw call wants.
+///
+/// Rounds half up and clamps: a tone above 100 percent asks for more than a channel can
+/// hold, and DxLib saturates there rather than scaling the whole picture down.
+fn percent_to_byte(percent: i32) -> i32 {
+    let scaled = i64::from(percent.clamp(0, 200)) * 255;
+    ((scaled + 50) / 100).clamp(0, 255) as i32
+}
 /// A draw request for one picture, already flattened into logical-pixel coordinates.
 ///
 /// The renderer only has to place a textured quad; every WOLF-specific rule (sentinel
@@ -252,6 +396,8 @@ pub struct ScreenQuad {
     pub dst: [f32; 4],
     /// Opacity 0.0..=1.0.
     pub alpha: f32,
+    /// Per-channel draw brightness, 0..=255, alpha excluded.
+    pub tone: [u8; 3],
     /// Blend mode, verbatim.
     pub blend: i32,
 }
@@ -305,6 +451,11 @@ impl Screen {
     pub fn tick(&mut self) {
         for picture in self.pictures.values_mut() {
             picture.age = picture.age.saturating_add(1);
+            for effect in &mut picture.effects {
+                effect.age = effect.age.saturating_add(1);
+            }
+            // One-shot effects narrate themselves out of existence; type 5 repeats.
+            picture.effects.retain(|effect| !effect.is_finished());
         }
     }
 
@@ -352,6 +503,38 @@ impl Screen {
         }
     }
 
+    /// Applies one 290 effect command, returning false when the type is not implemented.
+    ///
+    /// args is the interpreter raw argument list, so args 2 and 3 are the two picture
+    /// numbers and args 4..6 the per-channel targets. Only the colour family is handled -
+    /// types 0 (flash), 1 (cancel) and 5 (automatic flash) - because docs/OPCODE_290.md
+    /// sections 2.1, 2.2 and 2.5 show those are the only types whose three trailing args
+    /// are colour percentages. The coordinate and scale families need picture fields this
+    /// module does not own yet, so they are reported as unhandled instead of guessed at.
+    pub fn effect(&mut self, kind: i32, duration: i32, args: &[i32]) -> bool {
+        let Ok(kind) = u8::try_from(kind) else {
+            return false;
+        };
+        if !matches!(kind, EFFECT_FLASH | EFFECT_OFF | EFFECT_BLINK) {
+            return false;
+        }
+        let effect = PictureEffect::from_args(kind, duration, args);
+        let targets = [args.get(2).copied(), args.get(3).copied()];
+        for number in targets.into_iter().flatten() {
+            let Some(picture) = self.pictures.get_mut(&number) else {
+                continue;
+            };
+            // Every stopping spelling in the data means the same thing: back to the base
+            // tone the picture command set. A cancel, a zero length and an all-zero target
+            // are the three ways WOLF writes that.
+            if kind == EFFECT_OFF || duration <= 0 || effect.is_neutral() {
+                picture.stop_effects();
+            } else {
+                picture.start_effect(effect);
+            }
+        }
+        true
+    }
     /// Flattens the live pictures into draw requests, in draw order.
     ///
     /// tex_size resolves an asset path to its pixel size; returning None skips the
@@ -408,6 +591,7 @@ impl ScreenQuad {
             src,
             dst,
             alpha: picture.alpha(),
+            tone: picture.tone_byte(),
             blend: picture.blend,
         }
     }
@@ -456,6 +640,17 @@ fn merge_args(picture: &mut Picture, args: &[i32]) {
     }
     if args.len() > field::EXTRAS {
         picture.extras = args[field::EXTRAS..].to_vec();
+    }
+    // The 150 long form also carries the base colour in the three slots the opcode
+    // notes number 15..17; PictureCmd::args starts at raw arg 2, so they land at
+    // 13..15 here. The short forms simply do not have them, which leaves the
+    // default neutral tone in place.
+    if let (Some(r), Some(g), Some(b)) = (
+        take(args, field::TONE_R),
+        take(args, field::TONE_G),
+        take(args, field::TONE_B),
+    ) {
+        picture.tone = [r.clamp(0, 200), g.clamp(0, 200), b.clamp(0, 200)];
     }
 }
 
@@ -792,5 +987,73 @@ mod tests {
         assert_eq!(picture.scale, SCALE_ONE);
         assert_eq!(picture.opacity, 255);
         assert_eq!(picture.file, "b.png");
+    }
+}
+
+#[cfg(test)]
+mod tone_tests {
+    use super::*;
+
+    /// Pins the ramp that has to reproduce the retail banner tone of 222/255.
+    ///
+    /// TitleMap event 2 runs 290 with head 80, duration 30 and targets (-50, -50, -50):
+    /// type 5, a 30 frame cycle, target 50 percent. The ramp therefore visits
+    /// 50 + 50 * phase/30 percent, which converts to 128 + 127 * phase/30 bytes.
+    /// A 30 frame cycle can only land on 128, 132, ... 255; 222 itself is unreachable
+    /// because it needs phase 22.2. Phase 22 gives 221, the closest the cycle ever comes,
+    /// so the assertion allows two bytes of slack rather than pretending the model has
+    /// more resolution than the cycle length gives it. The retail screenshot is one
+    /// arbitrary frame of that cycle and measures 222, between our 221 and 225.
+    #[test]
+    fn blink_ramp_reaches_the_retail_banner_tone() {
+        let mut picture = Picture::new(12001);
+        picture
+            .effects
+            .push(PictureEffect::new(EFFECT_BLINK, 30, [-50, -50, -50]));
+
+        let mut closest: i32 = 0;
+        for age in 0..30 {
+            picture.effects[0].age = age;
+            let byte = i32::from(picture.tone_byte()[0]);
+            if (byte - 222).abs() < (closest - 222).abs() {
+                closest = byte;
+            }
+        }
+        assert!(
+            (closest - 222).abs() <= 2,
+            "closest byte to the retail 222 was {closest}"
+        );
+        picture.effects[0].age = 22;
+        assert_eq!(picture.tone_byte(), [221, 221, 221]);
+    }
+
+    /// An effect multiplies the command base tone instead of replacing it.
+    #[test]
+    fn effect_multiplies_the_command_tone() {
+        let mut picture = Picture::new(1);
+        picture.tone = [100, 50, 0];
+        assert_eq!(picture.tone_byte(), [255, 128, 0]);
+        picture
+            .effects
+            .push(PictureEffect::new(EFFECT_FLASH, 25, [-50, 0, 0]));
+        assert_eq!(picture.tone_byte(), [128, 128, 0]);
+        assert_eq!(picture.alpha(), 1.0);
+    }
+
+    /// A finished one-shot drops out of the list, so the base tone takes over again.
+    #[test]
+    fn finished_flash_falls_back_to_the_base_tone() {
+        let mut screen = Screen::new();
+        let mut picture = Picture::new(7);
+        picture.tone = [50, 50, 50];
+        picture
+            .effects
+            .push(PictureEffect::new(EFFECT_FLASH, 2, [-50, -50, -50]));
+        screen.pictures.insert(7, picture);
+        assert_eq!(screen.get(7).unwrap().tone_byte(), [64, 64, 64]);
+        screen.tick();
+        screen.tick();
+        assert!(screen.get(7).unwrap().effects.is_empty());
+        assert_eq!(screen.get(7).unwrap().tone_byte(), [128, 128, 128]);
     }
 }

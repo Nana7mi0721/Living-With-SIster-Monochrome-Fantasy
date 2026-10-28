@@ -162,6 +162,7 @@ impl TileMap {
                                 ],
                                 uv: rect.sub_uv(atlas_w, atlas_h, src),
                                 alpha: 1.0,
+                                tint: [1.0, 1.0, 1.0],
                             });
                         }
                         Tile::Autotile { id, corners } => {
@@ -189,6 +190,7 @@ impl TileMap {
                                     ],
                                     uv: rect.sub_uv(atlas_w, atlas_h, src),
                                     alpha: 1.0,
+                                    tint: [1.0, 1.0, 1.0],
                                 });
                             }
                         }

@@ -401,13 +401,15 @@
     "identical": true
    },
    {
-    "frame": 700,
+    "frame": 716,
     "screen": "Picture/title01.jpg + SystemFile/Button01.png",
     "retail": "ScreenShot_2026_1028_21_21_35.png",
-    "mean_abs": 0.283,
-    "max_abs": 33,
-    "psnr_db": 39.22,
-    "residual": "entirely inside the hint banner: the original multiplies that one picture by a 222/255 source tone (DxLib SetDrawBright); the source of the tone is still unknown (Q-v2-1 / docs/OPCODE_124.md task-11)"
+    "mean_abs": 0.012,
+    "max_abs": 1,
+    "psnr_db": 67.2,
+    "residual": "packed: 100% of pixels within 2; the last 1-byte difference is the blink phase (see picture_tone)",
+    "within_2_pct": 100.0,
+    "phase_note": "frame 700 sits on blink phase 6 (tone byte 153) and measures 0.587; frame 716 sits on phase 22 (tone byte 221) and matches retail's 222 to within 1"
    }
   ],
   "map_capture": {
@@ -557,5 +559,13 @@
    "instructions": 3720
   },
   "note": "An earlier revision started every automatic page unconditionally (87 pages, 21,023,494 instructions over 120 frames). That is superseded: page conditions cut the live set to 4 and 3,720 instructions. SampleMapA event 0 spins through a whole 200,000 instruction budget per frame when the host answers nothing (it is a story script waiting on messages and choices), so perf tests must exclude it with collect_except."
+ },
+ "picture_tone": {
+  "source": "290 Effect kind 5 (blink B / auto flash), e.g. TitleMap event 2 pc91 [80, 30, 12001, 12001, -50, -50, -50]",
+  "law": "period = duration frames; percent ramps from 100+target to 100; byte = round(255*percent/100); colour = round(src*byte/255) per channel; alpha untouched (DxLib SetDrawBright semantics)",
+  "measured": "byte = 128 + 127*(age % 30)/30 for the title banner, so it flashes twice per second; retail frame 21_21_35 caught byte 222 and another capture caught 188",
+  "unreachable": "222 is not exactly reachable with a 30 frame period (step ~4.23); 221 is the nearest phase and leaves a 1-byte residual",
+  "baseline_frame": 716,
+  "note": "pixel comparisons against the retail PrintScreen must be taken at frame % 30 == 26 while the title menu is parked, or the phase, not the renderer, decides the score"
  }
 }

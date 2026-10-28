@@ -144,10 +144,7 @@ impl App {
     /// what the engine does: a choice prompt is an engine overlay, not a picture slot.
     fn rebuild(&mut self) {
         let quads = self.atlas.sprites(&self.game.screen, &mut self.game.assets);
-        let mut sprites: Vec<SpriteInstance> = quads
-            .iter()
-            .map(|quad| SpriteInstance::new(quad.rect, quad.uv).with_alpha(quad.alpha))
-            .collect();
+        let mut sprites: Vec<SpriteInstance> = quads.iter().map(Self::tint_instance).collect();
         let mut texts = atlas::texts(&self.game.screen);
         if let Some(choices) = &self.game.choices {
             let options = choices.options.clone();
@@ -158,15 +155,22 @@ impl App {
                 &options,
                 cursor,
             );
-            sprites.extend(
-                panel
-                    .iter()
-                    .map(|quad| SpriteInstance::new(quad.rect, quad.uv).with_alpha(quad.alpha)),
-            );
+            sprites.extend(panel.iter().map(Self::tint_instance));
             texts.extend(rows);
         }
         self.sprites = sprites;
         self.texts = texts;
+    }
+
+    /// Builds a render instance from an atlas quad, carrying its alpha and its picture tone.
+    ///
+    /// The tone is per picture, not per frame: a 290 flash changes what one picture
+    /// multiplies its texels by while everything else on screen keeps drawing at full
+    /// brightness, so it has to ride on the instance rather than on a global draw state.
+    fn tint_instance(quad: &wolf_game::atlas::SpriteQuad) -> SpriteInstance {
+        SpriteInstance::new(quad.rect, quad.uv)
+            .with_alpha(quad.alpha)
+            .with_tint_rgb(quad.tint[0], quad.tint[1], quad.tint[2])
     }
 
     fn build_text_items(&self) -> Vec<TextItem> {

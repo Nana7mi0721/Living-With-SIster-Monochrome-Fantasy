@@ -17,7 +17,7 @@
 use std::collections::HashMap;
 
 use crate::assets::{Assets, ImageData};
-use crate::picture::{PictureKind, Screen, SCALE_ONE, SCREEN_H, SCREEN_W};
+use crate::picture::{Picture, PictureKind, Screen, SCALE_ONE, SCREEN_H, SCREEN_W};
 use crate::window;
 
 /// Edge length of the atlas texture. 2048 is inside every adapter's limit (the smallest
@@ -65,6 +65,19 @@ impl AtlasRect {
     }
 }
 
+/// Converts a picture tone in 0..=255 into the 0.0..=1.0 multiplier the shader wants.
+///
+/// Divided at the last moment and in one place, so the byte value stays the single
+/// source of truth for what the framebuffer will contain.
+fn tone_tint(picture: &Picture) -> [f32; 3] {
+    let [r, g, b] = picture.tone_byte();
+    [
+        f32::from(r) / 255.0,
+        f32::from(g) / 255.0,
+        f32::from(b) / 255.0,
+    ]
+}
+
 /// One textured quad, in the shape the renderer wants.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpriteQuad {
@@ -76,6 +89,13 @@ pub struct SpriteQuad {
     pub uv: [f32; 4],
     /// Opacity 0.0..=1.0.
     pub alpha: f32,
+    /// Per-channel brightness multiplier, normally 1.0 on every channel.
+    ///
+    /// This is where a picture tone becomes pixels: the retail title banner is drawn
+    /// at 222/255 of its own artwork on every channel, which is exactly a tint of
+    /// 222/255 multiplied into the texel. Alpha is a separate slot and the tone never
+    /// touches it, matching DxLib SetDrawBright.
+    pub tint: [f32; 3],
 }
 
 /// One text picture that still needs glyphs.
@@ -256,7 +276,7 @@ impl Atlas {
         // their content painted on top. Panels are queued before the content loop and the
         // whole list is stably sorted by picture number afterwards, so a panel sits
         // directly under its own content and in script order relative to other pictures.
-        let panels: Vec<(i32, [f32; 4], f32)> = screen
+        let panels: Vec<(i32, [f32; 4], f32, [f32; 3])> = screen
             .iter()
             .filter_map(|picture| {
                 if !matches!(
@@ -279,19 +299,21 @@ impl Atlas {
                         h as f32 * scale,
                     ],
                     picture.alpha(),
+                    tone_tint(picture),
                 ))
             })
             .collect();
         if !panels.is_empty() {
             if let Some(skin) = self.add_asset(assets, window::SKIN) {
                 let tex = self.source_size(window::SKIN).unwrap_or([0, 0]);
-                for (number, dst, alpha) in panels {
+                for (number, dst, alpha, tint) in panels {
                     for piece in window::nine_slice(dst, tex[0], tex[1]) {
                         out.push(SpriteQuad {
                             number,
                             rect: snap(piece.rect),
                             uv: skin.sub_uv(self.width, self.height, piece.src),
                             alpha,
+                            tint,
                         });
                     }
                 }
@@ -316,6 +338,11 @@ impl Atlas {
                 rect: snap(quad.dst),
                 uv,
                 alpha: quad.alpha,
+                tint: [
+                    f32::from(quad.tone[0]) / 255.0,
+                    f32::from(quad.tone[1]) / 255.0,
+                    f32::from(quad.tone[2]) / 255.0,
+                ],
             });
         }
         out.sort_by_key(|quad| quad.number);
