@@ -490,3 +490,84 @@ fn angle_tags_are_exact() {
         vec![TextToken::Text("<L".to_string())]
     );
 }
+
+/// Every pathological input from the design notes round-trips byte for byte.
+///
+/// This is the table the tokeniser was hardened against: unbalanced brackets,
+/// empty brackets, escapes with no body, nested escapes, image paths that
+/// contain a backslash, reserve-bank digits, control characters and the
+/// \E-followed-by-digits case that must stay prose. Invariant 1 and 2 are
+/// asserted together here — nothing may panic and nothing may be rewritten.
+#[test]
+fn pathological_inputs_round_trip() {
+    const CASES: [&str; 60] = [
+        "\\",
+        "\\[",
+        "\\c[",
+        "\\c[]",
+        "\\v[",
+        "\\v[\\v[\\v[1]]]",
+        "<",
+        "<L",
+        "<X>",
+        "\\E\\E\\E",
+        "\\img[",
+        "\\r[",
+        "\\r[a]",
+        "\\r[a,b]",
+        "\\cdb[1:2]",
+        "\\cdb[1:2:3:4]",
+        "\\v9[1]",
+        "\\v0[1]",
+        "\\A",
+        "\\A+",
+        "\\A-",
+        "\\c[-1]",
+        "\\cE[-1]",
+        "\\wE[99]",
+        "\\f+[-3]",
+        "\u{0}\u{1}\u{feff}",
+        "\\\\",
+        "\\\\E",
+        "\\<",
+        "\\>",
+        "\\!",
+        "\\^",
+        "\\.",
+        "\\font[3]",
+        "\\isize[150]",
+        "\\img[ピクチャ\\Test1.png]",
+        "\\se[10,80,100]",
+        "\\cself[\\v[12]]",
+        "\\cdb[0:\\cdb[6:0:1]:0]",
+        "\\v1[30]",
+        "\\sysS[4]",
+        "\\xyN[a b:1:2]",
+        "\\i[1234]",
+        "\\iS[3]",
+        "\\space[8]",
+        "\\bx[40]",
+        "\\mx[-100]",
+        "\\ay[12]",
+        "\\-[-2]",
+        "\\m[20]",
+        "\\f[18]\\c[3]\\E text <C>\\N",
+        "\\E3000G诶……要买么？",
+        "\\E，哥哥",
+        "\\E\"独家新闻！\"",
+        "\\",
+        "\\",
+        "\\\\\\",
+        "\\\\\\E",
+        "<L><C><R>",
+        "\\N\\E",
+    ];
+    for source in CASES {
+        let tokens = messagetext::tokenize(source);
+        assert_eq!(
+            messagetext::to_source(&tokens),
+            source,
+            "round trip failed for {source:?}"
+        );
+    }
+}

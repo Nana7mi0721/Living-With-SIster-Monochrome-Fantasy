@@ -2820,6 +2820,7 @@ dependencies = [
  "wolf-format",
  "wolf-game",
  "wolf-render",
+ "wolf-save",
  "wolf-vm",
 ]
 

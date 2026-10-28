@@ -6,8 +6,9 @@
 //! derived by CRC-32 from the archive key string plus the file's uppercased
 //! Shift-JIS name and the uppercased names of its parent directories.
 //!
-//! Reference: `KeyCreate` and `KeyConv` in `docs/vendor/WolfDec-master/src/
-//! WolfDec/3rdParty/DXArchive.cpp` (lines 503 and 563).
+//! Reference: `KeyCreate` and `KeyConv` in
+//! `docs/vendor/WolfDec-master/src/WolfDec/3rdParty/DXArchive.cpp` (lines 503
+//! and 563).
 
 use super::crc32::crc32;
 
@@ -116,7 +117,7 @@ pub(super) fn key_create(source: &[u8]) -> [u8; KEY_BYTES] {
 /// XOR `data` with `key`, resuming the 7-byte cycle at `position`.
 ///
 /// The position is a byte offset into the file's *plaintext*, which is why the
-/// callers pass `DataSize` (or `DataSize + bytes already written`) rather than
+/// callers pass `DataSize` (or `DataSize` plus the bytes already written) rather than
 /// an offset into the compressed data.
 pub(super) fn key_conv(data: &mut [u8], key: &[u8; KEY_BYTES], position: u64) {
     let mut index = (position % KEY_BYTES as u64) as usize;
@@ -136,7 +137,10 @@ mod tests {
     #[test]
     fn v3_14_derives_the_measured_archive_key() {
         // The archive-wide key of every `.wolf` file in the reference game.
-        assert_eq!(key_create(&V3_14), [0x3F, 0x05, 0xF9, 0xEE, 0xF7, 0x1E, 0xCC]);
+        assert_eq!(
+            key_create(&V3_14),
+            [0x3F, 0x05, 0xF9, 0xEE, 0xF7, 0x1E, 0xCC]
+        );
         assert_eq!(mode_key(0x013A), Some(&V3_14[..]));
         assert_eq!(mode_key(0x0999), None);
     }

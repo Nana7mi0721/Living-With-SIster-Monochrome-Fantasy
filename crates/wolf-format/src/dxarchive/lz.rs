@@ -5,8 +5,8 @@
 //! byte. Tokens are then either a literal, a doubled escape byte, or a
 //! back-reference with a variable-width distance.
 //!
-//! Reference: `Decode` in `docs/vendor/WolfDec-master/src/WolfDec/3rdParty/
-//! DXArchive.cpp` (line 1785).
+//! Reference: `Decode` in
+//! `docs/vendor/WolfDec-master/src/WolfDec/3rdParty/DXArchive.cpp` (line 1785).
 
 use crate::error::{Error, Result};
 
@@ -31,7 +31,10 @@ pub(super) fn decode(src: &[u8], what: &'static str) -> Result<Vec<u8>> {
         return Err(Error::field(
             what,
             0,
-            format!("LZ block is {} byte(s), shorter than its 9-byte header", src.len()),
+            format!(
+                "LZ block is {} byte(s), shorter than its 9-byte header",
+                src.len()
+            ),
         ));
     }
     let dest_size = u32::from_le_bytes([src[0], src[1], src[2], src[3]]);
@@ -45,25 +48,26 @@ pub(super) fn decode(src: &[u8], what: &'static str) -> Result<Vec<u8>> {
     };
     let keycode = src[8];
 
-    let dest_size = usize::try_from(dest_size)
-        .map_err(|_| Error::field(what, 0, format!("LZ block declares {dest_size} byte(s), which does not fit this platform")))?;
+    let dest_size = usize::try_from(dest_size).map_err(|_| {
+        Error::field(
+            what,
+            0,
+            format!("LZ block declares {dest_size} byte(s), which does not fit this platform"),
+        )
+    })?;
     let mut coded_size = coded_size as usize;
     let mut out = Vec::with_capacity(dest_size.min(INITIAL_CAPACITY));
     let mut sp = HEADER_SIZE;
 
     while coded_size > 0 {
-        let byte = *src
-            .get(sp)
-            .ok_or_else(|| Error::eof(sp, 1, 0))?;
+        let byte = *src.get(sp).ok_or_else(|| Error::eof(sp, 1, 0))?;
         if byte != keycode {
             out.push(byte);
             sp += 1;
             coded_size -= 1;
             continue;
         }
-        let next = *src
-            .get(sp + 1)
-            .ok_or_else(|| Error::eof(sp + 1, 1, 0))?;
+        let next = *src.get(sp + 1).ok_or_else(|| Error::eof(sp + 1, 1, 0))?;
         if next == keycode {
             out.push(keycode);
             sp += 2;
@@ -141,7 +145,10 @@ pub(super) fn decode(src: &[u8], what: &'static str) -> Result<Vec<u8>> {
         return Err(Error::field(
             what,
             0,
-            format!("LZ block decoded to {} byte(s), header declares {dest_size}", out.len()),
+            format!(
+                "LZ block decoded to {} byte(s), header declares {dest_size}",
+                out.len()
+            ),
         ));
     }
     Ok(out)
@@ -159,7 +166,7 @@ mod tests {
         block.extend_from_slice(&11u32.to_le_bytes());
         block.extend_from_slice(&16u32.to_le_bytes()); // whole block: 9-byte header + 7 coded bytes
         block.push(0xFF);
-        block.extend_from_slice(&[b'a', b'b']);
+        block.extend_from_slice(b"ab");
         block.extend_from_slice(&[0xFF, 0xFF]);
         // code: length 8 - MIN_COMPRESS(4) = 4 -> code = 4 << 3 = 32, distance 2 - 1 = 1 -> 1-byte index
         block.push(0xFF);

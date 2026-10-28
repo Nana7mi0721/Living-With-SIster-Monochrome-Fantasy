@@ -25,7 +25,10 @@ pub mod atlas;
 pub mod game;
 pub mod key;
 pub mod picture;
+pub mod window;
 
 pub use assets::{AssetError, Assets, ImageData};
+pub use atlas::{Atlas, AtlasRect, SpriteQuad, TextQuad, ATLAS_SIZE};
 pub use game::{Choices, FrameOutcome, Game, GameError, GameStats, Message, TITLE_EVENT};
 pub use picture::{Picture, PictureKind, Screen, ScreenQuad, UNCHANGED};
+pub use window::{nine_slice, WindowPiece};

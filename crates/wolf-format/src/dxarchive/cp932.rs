@@ -13,7 +13,7 @@ pub(super) const TRAIL_COUNT: usize = 188;
 
 /// `TABLE[lead_index * TRAIL_COUNT + trail_index]` -> Unicode scalar, 0 when undefined.
 #[rustfmt::skip]
-pub(super) const TABLE: [u16; LEAD_COUNT * TRAIL_COUNT] = [
+pub(super) static TABLE: [u16; LEAD_COUNT * TRAIL_COUNT] = [
     // lead 0x81
     0x3000, 0x3001, 0x3002, 0xFF0C, 0xFF0E, 0x30FB, 0xFF1A, 0xFF1B, 0xFF1F, 0xFF01, 0x309B, 0x309C,
     0x00B4, 0xFF40, 0x00A8, 0xFF3E, 0xFFE3, 0xFF3F, 0x30FD, 0x30FE, 0x309D, 0x309E, 0x3003, 0x4EDD,

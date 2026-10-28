@@ -16,6 +16,7 @@ wolf-format = { workspace = true }
 wolf-vm = { workspace = true }
 wolf-game = { workspace = true }
 wolf-render = { workspace = true }
+wolf-save = { workspace = true }
 # PNG only: captures are the artifact compared against the original game, and every
 # other codec would be dead weight inside a diagnostic binary.
 image = { version = "0.25", default-features = false, features = ["png"] }

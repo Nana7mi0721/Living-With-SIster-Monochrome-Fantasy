@@ -1,19 +1,19 @@
 //! Shift-JIS (CP932) decoder for archive entry names.
 //!
-//! `DARC_HEAD.CharCodeFormat» is 932 in every WOLF archive, so names on disk are
-//! CP932 bytes while `ArchiveEntry» exposes `String». This decoder follows the
+//! `DARC_HEAD.CharCodeFormat` is 932 in every WOLF archive, so names on disk are
+//! CP932 bytes while `ArchiveEntry` exposes `String`. This decoder follows the
 //! CP932 code page including its vendor single-byte assignments, and it mirrors
 //! what a CP932-to-Unicode converter does with an undefined pair: emit U+FFFD
 //! and re-read the second byte as a fresh character.
 //!
-//! The double-byte table is generated — see `cp932.rs».
+//! The double-byte table is generated — see `cp932.rs`.
 
 use super::cp932::{TABLE, TRAIL_COUNT};
 
 /// Substituted for every byte or pair CP932 does not define.
 const REPLACEMENT: char = '\u{FFFD}';
 
-/// Decode CP932 bytes into a `String».
+/// Decode CP932 bytes into a `String`.
 #[must_use]
 pub(super) fn decode(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len());
@@ -45,7 +45,7 @@ pub(super) fn decode(bytes: &[u8]) -> String {
     out
 }
 
-/// Row of `byte» in the double-byte table, if it is a CP932 lead byte.
+/// Row of `byte` in the double-byte table, if it is a CP932 lead byte.
 fn lead_index(byte: u8) -> Option<usize> {
     match byte {
         0x81..=0x9F => Some(usize::from(byte - 0x81)),
@@ -54,7 +54,7 @@ fn lead_index(byte: u8) -> Option<usize> {
     }
 }
 
-/// Column of `byte» inside a double-byte row, if it is a CP932 trail byte.
+/// Column of `byte` inside a double-byte row, if it is a CP932 trail byte.
 fn trail_index(byte: u8) -> Option<usize> {
     match byte {
         0x40..=0x7E => Some(usize::from(byte - 0x40)),
@@ -69,7 +69,7 @@ fn single(byte: u8) -> char {
         0x00..=0x7F => byte as char,
         0x80 => '\u{0080}',
         0xA0 => '\u{F8F0}',
-        0xA1..=0xDF => char::from_u32(u32::from(0xFF61 + (byte - 0xA1))).unwrap_or(REPLACEMENT),
+        0xA1..=0xDF => char::from_u32(0xFF61 + u32::from(byte - 0xA1)).unwrap_or(REPLACEMENT),
         0xFD => '\u{F8F1}',
         0xFE => '\u{F8F2}',
         0xFF => '\u{F8F3}',

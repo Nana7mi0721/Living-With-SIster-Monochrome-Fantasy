@@ -17,7 +17,8 @@
 use std::collections::HashMap;
 
 use crate::assets::{Assets, ImageData};
-use crate::picture::{Screen, SCREEN_H, SCREEN_W};
+use crate::picture::{PictureKind, Screen, SCALE_ONE, SCREEN_H, SCREEN_W};
+use crate::window;
 
 /// Edge length of the atlas texture. 2048 is inside every adapter's limit (the smallest
 /// guaranteed by wgpu is 8192) while still holding four full-screen backgrounds.
@@ -251,6 +252,51 @@ impl Atlas {
     /// [`texts`]'s job.
     pub fn sprites(&mut self, screen: &Screen, assets: &mut Assets) -> Vec<SpriteQuad> {
         let mut out = Vec::new();
+        // Window pictures (types 3 and 4) own a UI panel drawn from the 18x18 skin, with
+        // their content painted on top. Panels are queued before the content loop and the
+        // whole list is stably sorted by picture number afterwards, so a panel sits
+        // directly under its own content and in script order relative to other pictures.
+        let panels: Vec<(i32, [f32; 4], f32)> = screen
+            .iter()
+            .filter_map(|picture| {
+                if !matches!(
+                    picture.kind,
+                    PictureKind::WindowFile | PictureKind::WindowString
+                ) {
+                    return None;
+                }
+                let (w, h) = picture.window?;
+                if w <= window::MIN_BOX || h <= window::MIN_BOX {
+                    return None;
+                }
+                let scale = picture.scale.max(0) as f32 / SCALE_ONE as f32;
+                Some((
+                    picture.number,
+                    [
+                        picture.x as f32,
+                        picture.y as f32,
+                        w as f32 * scale,
+                        h as f32 * scale,
+                    ],
+                    picture.alpha(),
+                ))
+            })
+            .collect();
+        if !panels.is_empty() {
+            if let Some(skin) = self.add_asset(assets, window::SKIN) {
+                let tex = self.source_size(window::SKIN).unwrap_or([0, 0]);
+                for (number, dst, alpha) in panels {
+                    for piece in window::nine_slice(dst, tex[0], tex[1]) {
+                        out.push(SpriteQuad {
+                            number,
+                            rect: snap(piece.rect),
+                            uv: skin.sub_uv(self.width, self.height, piece.src),
+                            alpha,
+                        });
+                    }
+                }
+            }
+        }
         for quad in screen.quads(|name| assets.texture_size(name)) {
             if quad.kind.is_text() || quad.src[2] == 0 || quad.src[3] == 0 {
                 continue;
@@ -272,6 +318,7 @@ impl Atlas {
                 alpha: quad.alpha,
             });
         }
+        out.sort_by_key(|quad| quad.number);
         out
     }
 }
@@ -410,6 +457,40 @@ mod tests {
         assert_eq!(texts.len(), 1);
         assert_eq!(texts[0].rect, [855.0, 200.0, 300.0, 200.0]);
         assert_eq!(texts[0].text, "hello");
+    }
+
+    #[test]
+    fn a_window_picture_paints_its_skin_under_the_content() {
+        use crate::picture::Screen;
+        use crate::window;
+        let mut screen = Screen::new();
+        screen.apply(&wolf_vm::PictureCmd {
+            number: 12500,
+            kind: 4,
+            action: wolf_vm::exec::PictureAction::Draw,
+            file: String::new(),
+            text: "notice".to_owned(),
+            args: vec![0, 300, 200, 1, 255, 855, 200, 100, 0],
+            animate: Vec::new(),
+        });
+        let mut atlas = Atlas::with_size(64, 64);
+        // Pre-pack the skin so the atlas never touches the filesystem: add_asset
+        // returns the existing rectangle and the panel geometry is what is tested.
+        let skin = atlas
+            .add(window::SKIN, &image(18, 18, 0x7F))
+            .expect("skin");
+        let mut assets = Assets::new("no-such-root");
+        let quads = atlas.sprites(&screen, &mut assets);
+        assert_eq!(quads.len(), 9, "nine-slice of the 18x18 skin");
+        // Frame 3 px, body stretched: 300-6 = 294 wide, 200-6 = 194 tall.
+        assert_eq!(quads[0].rect, [855.0, 200.0, 3.0, 3.0]);
+        assert_eq!(quads[4].rect, [858.0, 203.0, 294.0, 194.0]);
+        assert_eq!(quads[8].rect, [1152.0, 397.0, 3.0, 3.0]);
+        assert!(quads.iter().all(|quad| quad.number == 12500));
+        assert!(quads.iter().all(|quad| (quad.alpha - 1.0).abs() < 1e-6));
+        assert_eq!(atlas.entry(window::SKIN), Some(skin));
+        // The text itself still belongs to the glyph pass, on top of the panel.
+        assert_eq!(texts(&screen).len(), 1);
     }
 }
 

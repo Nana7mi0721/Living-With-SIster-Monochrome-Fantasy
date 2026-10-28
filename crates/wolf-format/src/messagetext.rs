@@ -2,26 +2,26 @@
 //!
 //! A message string is not plain text. It is literal characters interleaved with
 //! half-width backslash codes that change drawing state (colour, outline, font
-//! size), inject values (\v[12], \cself[13], \cdb[21:78:0]), or drive the
-//! typewriter (\sp[40], \., \!). The renderer cannot draw the raw string and the
-//! VM cannot execute it, so both consume the token list produced here.
+//! size), inject values (`\v[12]`, `\cself[13]`, `\cdb[21:78:0]`), or drive the
+//! typewriter (`\sp[40]`, `\.`, `\!`). The renderer cannot draw the raw string
+//! and the VM cannot execute it, so both consume the token list produced here.
 //!
 //! Grammar: docs/TEXT_SPEC.md section 2 lists every documented code, section 3
 //! records which of them this game actually ships. Every code is half-width
-//! ASCII and case-sensitive — \E is not \e, and the full-width yen sign that
-//! some reference pages print for \A+ is a rendering artefact, not part of the
+//! ASCII and case-sensitive — `\E` is not `\e`, and the full-width yen sign that
+//! some reference pages print for `\A+` is a rendering artefact, not part of the
 //! syntax.
 //!
 //! Three invariants, each covered by tests/messagetext.rs:
 //!
-//! 1. [tokenize] never panics, whatever bytes it is handed. An unclosed bracket,
-//!    a trailing backslash, a lone '<' — all degrade to literal text.
+//! 1. [`tokenize`] never panics, whatever bytes it is handed. An unclosed bracket,
+//!    a trailing backslash, a lone `<` — all degrade to literal text.
 //! 2. No byte is silently dropped. An unrecognised escape stays literal, and
-//!    [to_source] re-renders every accepted construct back to its exact
+//!    [`to_source`] re-renders every accepted construct back to its exact
 //!    spelling, so to_source(tokenize(s)) == s holds for all 12,027 shipped
 //!    messages.
-//! 3. \E is a token, not a decoration on a text run. The renderer draws an
-//!    outlined run as four offset copies of the same glyphs, so flattening \E
+//! 3. `\E` is a token, not a decoration on a text run. The renderer draws an
+//!    outlined run as four offset copies of the same glyphs, so flattening `\E`
 //!    into styled text would lose the draw order the original engine relies on.
 //!
 //! Why those three, in order:
@@ -29,8 +29,8 @@
 //! Lossless round-tripping is the load-bearing one. A message string is game
 //! data the player can never edit but the tooling must: a future editor writes
 //! the string back into CommonEvent.dat, and a tokeniser that normalises
-//! \c[07] to \c[7] or drops an escape it did not recognise would corrupt the
-//! file. Keeping [to_source] an exact inverse makes editing safe by
+//! `\c[07]` to `\c[7]` or drops an escape it did not recognise would corrupt
+//! the file. Keeping [`to_source`] an exact inverse makes editing safe by
 //! construction, and it is also what lets the test assert over all 12,027
 //! shipped strings rather than over hand-picked samples.
 //!
@@ -47,11 +47,11 @@
 //! shows up as visible garbage — obvious, reportable, and fixable by adding one
 //! row to the table.
 //!
-//! Substitution is deliberately not done here. Resolving \v[12] needs VM state
+//! Substitution is deliberately not done here. Resolving `\v[12]` needs VM state
 //! this crate does not have, so the split is: this module recovers structure and
-//! keeps a nested escape such as \cself[\v[12]] intact as [TextToken::Var],
-//! and wolf-vm::text::expand walks the token list afterwards to turn each
-//! [TextToken::Var] into digits. See docs/TEXT_SPEC.md section 5 for the
+//! keeps a nested escape such as `\cself[\v[12]]` intact as [`TextToken::Var`],
+//! and `wolf_vm::text::expand` walks the token list afterwards to turn each
+//! [`TextToken::Var`] into digits. See docs/TEXT_SPEC.md section 5 for the
 //! recommended call shape.
 
 use std::fmt;
@@ -59,23 +59,23 @@ use std::fmt::Write as _;
 
 /// Deepest bracket nesting [tokenize] descends into.
 ///
-/// WOLF nests one level in practice (\cdb[0:\cdb[6:0:1]:0]); the limit exists
+/// WOLF nests one level in practice (`\cdb[0:\cdb[6:0:1]:0]`); the limit exists
 /// only so that pathological input cannot recurse without bound. Past the limit
 /// a backslash is literal text.
 pub const MAX_DEPTH: u8 = 8;
 
-/// Per-line alignment, set by the <L>, <C> and <R> tags.
+/// Per-line alignment, set by the `<L>`, `<C>` and `<R>` tags.
 ///
 /// Alignment is measured against the widest line of the whole message, so a
 /// single-line message always renders left-aligned no matter what it asks for
 /// (docs/TEXT_SPEC.md section 2.9).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Align {
-    /// <L> — the default, and the only alignment a single-line message can use.
+    /// `<L>` — the default, and the only alignment a single-line message can use.
     Left,
-    /// <C>.
+    /// `<C>`.
     Center,
-    /// <R>.
+    /// `<R>`.
     Right,
 }
 
@@ -94,37 +94,37 @@ impl Align {
 /// Which variable bank an escape reads from.
 ///
 /// The documented precedence order is
-/// \v < \vK < \self < \cself < \sys < \udb < \cdb < \sdb < \s < \sysS, and a
-/// bracket may only contain codes of *lower* precedence. That is why
-/// [VarRef::args] holds token lists rather than integers: \cself[\v[12]] is
+/// `\v` < `\v1`..`\v9` < `\self` < `\cself` < `\sys` < `\udb` < `\cdb` < `\sdb` < `\s`
+/// < `\sysS`, and a bracket may only contain codes of *lower* precedence. That is why
+/// [VarRef::args] holds token lists rather than integers: `\cself[\v[12]]` is
 /// legal and must keep its inner escape until the VM can resolve it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VarBank {
-    /// \v[n] — ordinary numeric variables.
+    /// `\v[n]` — ordinary numeric variables.
     Normal,
-    /// \v1[n] through \v9[n] — reserve variable banks 1 to 9. The digit is
+    /// `\v1[n]` through `\v9[n]` — reserve variable banks 1 to 9. The digit is
     /// written between the code letter and the bracket, with no separator.
     Reserve(u8),
-    /// \s[n] — string variables.
+    /// `\s[n]` — string variables.
     Str,
-    /// \sys[n] — system variables.
+    /// `\sys[n]` — system variables.
     Sys,
-    /// \sysS[n] — system strings. The capital S is mandatory.
+    /// `\sysS[n]` — system strings. The capital S is mandatory.
     SysStr,
-    /// \self[n] — the map event's own self variables.
+    /// `\self[n]` — the map event's own self variables.
     SelfVar,
-    /// \cself[n] — the running common event's self variables. Slots 0 to 4 and
+    /// `\cself[n]` — the running common event's self variables. Slots 0 to 4 and
     /// 10 to 99 are numeric, 5 to 9 are strings.
     CommonSelf,
-    /// \udb[A:B:C] — user database.
+    /// `\udb[A:B:C]` — user database.
     UserDb,
-    /// \cdb[A:B:C] — variable database.
+    /// `\cdb[A:B:C]` — variable database.
     VarDb,
-    /// \sdb[A:B:C] — system database.
+    /// `\sdb[A:B:C]` — system database.
     SysDb,
-    /// \xy[N:X:Y] — XY array cell addressed by number.
+    /// `\xy[N:X:Y]` — XY array cell addressed by number.
     Xy,
-    /// \xyN[NAME:X:Y] — XY array cell addressed by name.
+    /// `\xyN[NAME:X:Y]` — XY array cell addressed by name.
     XyNamed,
 }
 
@@ -149,7 +149,7 @@ impl VarBank {
         }
     }
 
-    /// The reserve bank number, when this is a \vK escape.
+    /// The reserve bank number, when this is a `\vK` escape.
     #[must_use]
     pub fn reserve(self) -> Option<u8> {
         match self {
@@ -176,8 +176,8 @@ pub struct VarRef {
     pub bank: VarBank,
     /// Colon-separated bracket fields, each a token list of its own.
     ///
-    /// A plain \v[12] yields one field holding the literal text "12"; a
-    /// \cdb[0:\v[0]:0] yields three.
+    /// A plain `\v[12]` yields one field holding the literal text "12"; a
+    /// `\cdb[0:\v[0]:0]` yields three.
     pub args: Vec<Vec<TextToken>>,
 }
 
@@ -185,7 +185,7 @@ impl VarRef {
     /// The slot number, when the first field is a plain decimal integer.
     ///
     /// This is the shape every escape in this game takes; the Option exists for
-    /// \cself[\v[12]]-style indirection, which needs the VM.
+    /// `\cself[\v[12]]`-style indirection, which needs the VM.
     #[must_use]
     pub fn slot(&self) -> Option<u32> {
         match self.args.first().map(Vec::as_slice) {
@@ -211,53 +211,53 @@ impl fmt::Display for VarRef {
 ///
 /// Every code in docs/TEXT_SPEC.md section 2 takes a decimal argument, so the
 /// common case gets a dedicated [TextToken] variant. A code lands in
-/// [TextToken::Code] only when its argument is computed, such as \c[\v[3]], or
+/// [TextToken::Code] only when its argument is computed, such as `\c[\v[3]]`, or
 /// malformed; the raw field text is preserved so the round trip still holds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CodeKind {
-    /// \wE[n] — outline thickness, 1 to 5.
+    /// `\wE[n]` — outline thickness, 1 to 5.
     OutlineWidth,
-    /// \cE[n] — outline colour; \cE[-1] restores the default black.
+    /// `\cE[n]` — outline colour; `\cE[-1]` restores the default black.
     OutlineColor,
-    /// \c[n] — font colour, a data id in SystemDB [12:文字色].
+    /// `\c[n]` — font colour, a data id in the SystemDB row `12:文字色`.
     Color,
-    /// \cS[n] — shadow colour, same database.
+    /// `\cS[n]` — shadow colour, same database.
     ShadowColor,
-    /// \cR[n] — ruby colour.
+    /// `\cR[n]` — ruby colour.
     RubyColor,
-    /// \fR[n] — ruby size.
+    /// `\fR[n]` — ruby size.
     RubySize,
-    /// \f[n] — absolute font size in pixels.
+    /// `\f[n]` — absolute font size in pixels.
     FontSize,
-    /// \f+[n] — relative font size; a negative value shrinks.
+    /// `\f+[n]` — relative font size; a negative value shrinks.
     FontSizeDelta,
-    /// \m[n] — baseline for the current line, reset by a newline.
+    /// `\m[n]` — baseline for the current line, reset by a newline.
     Baseline,
-    /// \font[n] — font slot, 0 to 3.
+    /// `\font[n]` — font slot, 0 to 3.
     FontSlot,
-    /// \-[n] — letter spacing tweak; a negative value widens.
+    /// `\-[n]` — letter spacing tweak; a negative value widens.
     LetterSpacing,
-    /// \space[n] — line gap in pixels for subsequent newlines.
+    /// `\space[n]` — line gap in pixels for subsequent newlines.
     LineGap,
-    /// \sp[n] — typewriter speed in characters per second; 0 is instant.
+    /// `\sp[n]` — typewriter speed in characters per second; 0 is instant.
     Speed,
-    /// \bx[n] — X start for subsequent lines.
+    /// `\bx[n]` — X start for subsequent lines.
     LineStartX,
-    /// \mx[n] — relative X offset for the next character.
+    /// `\mx[n]` — relative X offset for the next character.
     OffsetX,
-    /// \my[n] — relative Y offset for the next character.
+    /// `\my[n]` — relative Y offset for the next character.
     OffsetY,
-    /// \ax[n] — absolute X within the picture for the next character.
+    /// `\ax[n]` — absolute X within the picture for the next character.
     AbsoluteX,
-    /// \ay[n] — absolute Y within the picture for the next character.
+    /// `\ay[n]` — absolute Y within the picture for the next character.
     AbsoluteY,
-    /// \i[n] — inline icon, smooth-scaled.
+    /// `\i[n]` — inline icon, smooth-scaled.
     Icon,
-    /// \iS[n] — inline icon, nearest-scaled.
+    /// `\iS[n]` — inline icon, nearest-scaled.
     IconNearest,
-    /// \isize[n] — percent scale for subsequent icons and images.
+    /// `\isize[n]` — percent scale for subsequent icons and images.
     IconScale,
-    /// \r[text,ruby] — ruby annotation, used only when the bracket has no
+    /// `\r[text,ruby]` — ruby annotation, used only when the bracket has no
     /// comma and so cannot be split into a base and an annotation.
     Ruby,
 }
@@ -302,80 +302,80 @@ impl CodeKind {
 pub enum TextToken {
     /// Literal characters, never containing a newline.
     Text(String),
-    /// A line break. Carried as a token because it also ends \m and <L> scope.
+    /// A line break. Carried as a token because it also ends `\m` and `<L>` scope.
     Newline,
     /// A literal backslash, written as a doubled backslash in source.
     Backslash,
-    /// <L>, <C> or <R> — per-line alignment.
+    /// `<L>`, `<C>` or `<R>` — per-line alignment.
     Align(Align),
-    /// \E enables the outline, \N disables it. Outline off is the default.
+    /// `\E` enables the outline, `\N` disables it. Outline off is the default.
     Outline(bool),
-    /// \wE[n] — outline thickness in pixels.
+    /// `\wE[n]` — outline thickness in pixels.
     OutlineWidth(u8),
-    /// \cE[n] — outline colour; None means \cE[-1], the default black.
+    /// `\cE[n]` — outline colour; None means `\cE[-1]`, the default black.
     OutlineColor(Option<u32>),
-    /// \c[n] — font colour.
+    /// `\c[n]` — font colour.
     Color(u32),
-    /// \cS[n] — shadow colour.
+    /// `\cS[n]` — shadow colour.
     ShadowColor(u32),
-    /// \cR[n] — ruby colour.
+    /// `\cR[n]` — ruby colour.
     RubyColor(u32),
-    /// \fR[n] — ruby size.
+    /// `\fR[n]` — ruby size.
     RubySize(i32),
-    /// \f[n] — font size in pixels.
+    /// `\f[n]` — font size in pixels.
     FontSize(u32),
-    /// \f+[n] — relative font size change.
+    /// `\f+[n]` — relative font size change.
     FontSizeDelta(i32),
-    /// \m[n] — baseline for this line only.
+    /// `\m[n]` — baseline for this line only.
     Baseline(i32),
-    /// \font[n] — font slot 0 to 3.
+    /// `\font[n]` — font slot 0 to 3.
     FontSlot(u8),
-    /// \A+ enables anti-aliasing, \A- disables it.
+    /// `\A`+ enables anti-aliasing, `\A`- disables it.
     AntiAlias(bool),
-    /// \-[n] — letter spacing tweak.
+    /// `\-[n]` — letter spacing tweak.
     LetterSpacing(i32),
-    /// \space[n] — line gap for subsequent newlines.
+    /// `\space[n]` — line gap for subsequent newlines.
     LineGap(i32),
-    /// \sp[n] — typewriter speed in characters per second.
+    /// `\sp[n]` — typewriter speed in characters per second.
     Speed(u32),
-    /// \bx[n] — X start for subsequent lines.
+    /// `\bx[n]` — X start for subsequent lines.
     LineStartX(i32),
-    /// \mx[n] — relative X offset for the next character.
+    /// `\mx[n]` — relative X offset for the next character.
     OffsetX(i32),
-    /// \my[n] — relative Y offset for the next character.
+    /// `\my[n]` — relative Y offset for the next character.
     OffsetY(i32),
-    /// \ax[n] — absolute X for the next character.
+    /// `\ax[n]` — absolute X for the next character.
     AbsoluteX(i32),
-    /// \ay[n] — absolute Y for the next character.
+    /// `\ay[n]` — absolute Y for the next character.
     AbsoluteY(i32),
-    /// \! — stop the typewriter until the player presses a key, then continue.
+    /// `\!` — stop the typewriter until the player presses a key, then continue.
     Wait,
-    /// \^ — close the message window without waiting for a key.
+    /// `\^` — close the message window without waiting for a key.
     Close,
-    /// \. — pause for a quarter of a second.
+    /// `\.` — pause for a quarter of a second.
     Pause,
-    /// \> turns instant display on, \< turns it back off.
+    /// `\>` turns instant display on, `\<` turns it back off.
     Instant(bool),
-    /// \i[n] — inline icon, smooth-scaled.
+    /// `\i[n]` — inline icon, smooth-scaled.
     Icon(u32),
-    /// \iS[n] — inline icon, nearest-scaled.
+    /// `\iS[n]` — inline icon, nearest-scaled.
     IconNearest(u32),
-    /// \isize[n] — percent scale for subsequent icons and images.
+    /// `\isize[n]` — percent scale for subsequent icons and images.
     IconScale(u32),
-    /// \img[path] — inline image, smooth-scaled.
+    /// `\img[path]` — inline image, smooth-scaled.
     ///
     /// The bracket body is kept raw: a path may legitimately contain a literal
     /// backslash, and the body may carry <DIV/X6/Y4/8>-style directives that are
     /// not text markup at all.
     Image(String),
-    /// \imgS[path] — inline image, nearest-scaled.
+    /// `\imgS[path]` — inline image, nearest-scaled.
     ImageNearest(String),
-    /// \se[address,volume,pitch] — play a sound effect inline.
+    /// `\se[address,volume,pitch]` — play a sound effect inline.
     ///
     /// Kept raw for the same reason as [TextToken::Image]; the caller splits on
     /// commas. Only the address is mandatory.
     Sound(String),
-    /// \r[text,ruby] — ruby annotation drawn above text.
+    /// `\r[text,ruby]` — ruby annotation drawn above text.
     Ruby {
         /// The base text, which occupies the normal pen positions.
         text: String,
@@ -629,7 +629,7 @@ fn flush(tokens: &mut Vec<TextToken>, text: &mut String) {
     }
 }
 
-/// Match <L>, <C> or <R> exactly, or nothing.
+/// Match `<L>`, `<C>` or `<R>` exactly, or nothing.
 ///
 /// A '<' that is not one of these three tags is literal text: messages contain
 /// <状態A> and <装着A?> as ordinary writing, so a looser rule would corrupt them.
@@ -750,7 +750,7 @@ fn var(bank: VarBank, body: &str, depth: u8) -> TextToken {
 /// Fall back to [TextToken::Code] when the argument is not a canonical integer.
 ///
 /// The fallback keeps the field text verbatim, so a computed argument such as
-/// \c[\v[3]] still round-trips through [to_source].
+/// `\c[\v[3]]` still round-trips through [to_source].
 fn code<F>(kind: CodeKind, body: &str, typed: F) -> TextToken
 where
     F: FnOnce(&str) -> Option<TextToken>,

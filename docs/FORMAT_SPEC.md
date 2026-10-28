@@ -32,6 +32,10 @@
 - **★已实测纠正**（本文第二轮修订新增）：Rust 侧（crates/wolf-format）已经实现了 .mps / TileSetData /
   数据库三个 loader 且测试全绿，实现过程中发现本文有若干处**写错或写漏**。凡带此标记的段落都是
   用真实文件重新统计后改的，并**保留原文说明**（不静默删除），便于回溯。
+- **★已实测纠正（第三轮修订）**：Rust 侧的 .wolf / DXArchive v8 reader 也已全绿
+  （`crates\wolf-format\src\dxarchive\`，23 个归档 / 4062 个文件 / 771,585,007 字节全通），
+  据此在第 8 章补了 4 处纠正（CRC 输入不含 NUL、head 区必须读到 EOF、parity 只算大写名、
+  第二级压缩是自带 LZ 而非 LZ4）并新增 8.7「Rust 实现索引与回归基线」。标记规范同上。
 
 ### 0.3 验证脚本索引（都在 work\ 下，可直接重跑）
 
@@ -44,6 +48,7 @@
 | work\fs_ts.py | TileSetData.dat 6 个 tileset | 已验证（end 60785、footer 0xCF、trailing 0） |
 | work\fs_mps.py | 9 张 .mps | 已验证（9/9 trailing 0、footer 0x66、事件数匹配） |
 | work\fs_wolf_verify.py + work\fs_wolf_verify_all.py | .wolf 解包（DXArchive v8） | 已验证（5 归档 636/636 文件与基准逐字节相等） |
+| crates\wolf-format\src\dxarchive\ + tests | Rust 侧 .wolf / DXArchive v8 reader | 23 归档 / 4062 文件 / 771,585,007 B 全部解出；636/636 逐字节相等（★本文据此纠正了 8.3 / 8.4 步骤 2、4 / 8.5） |
 | work\fs_sav.py + work\fs_sav_p1.py | .sav 解密、头部、校验和、SavePart1 前段 | 已验证（9/9 存档）；正文其余部分未验证 |
 | work\uberwolf\WolfDec.cpp | UberWolf 参考源码（.wolf 内建 key 表，MIT） | 参考来源 |
 | crates\wolf-format\src\mps.rs + tests | Rust 侧 .mps loader | 9/9 地图走到 EOF（★本文据此纠正了 5.3 / 5.4 / 5.6） |
@@ -1192,6 +1197,12 @@ BasicData/MapData/SystemFile/scene/word 5 个归档 **636/636 文件与 UberWolf
 覆盖“无压缩 / 仅 LZ / Huffman+LZ / 仅 Huffman”四个分支以及“首尾 Huffman”特例。）
 **也可以直接先用 UberWolfCli.exe 解包**（本仓库已有基准），但自己实现只多约 2000-3000 行。
 
+**★已实测（Rust 实现全绿，第三轮修订）**：`crates\wolf-format\src\dxarchive\` 已把本章完整实现，
+并把验证面从 5 个归档扩到 **Data\ 下全部 23 个 .wolf**：**4062 个文件条目、771,585,007 字节全部解出**，
+五个已解包归档 **636/636 逐字节相等**。实现细节与回归基线见新增的 **8.7**；
+本轮据此纠正了 4 处（8.3 的 NUL、8.4 步骤 2 的 EOF、8.4 步骤 4 的 parity 范围、8.5 的“不是 LZ4”），
+每处都用 ★ 标记保留原文。
+
 ### 8.1 文件地图（磁盘顺序）
 
 ~~~
@@ -1265,6 +1276,27 @@ UberWolf 的 work\uberwolf\WolfDec.cpp 第 57-69 行的 DEFAULT_CRYPT_MODES 里�
 选择规则：**cryptVersion = Flags >> 16**（本游戏 = 0x13A ⇒ v3.14）。
 WolfDec.h 里注明：key 末尾要补一个 0x00 作为字符串终止符。完整表见 work\uberwolf\WolfDec.cpp（MIT）。
 
+> **★已实测纠正（Rust 实现 `crates\wolf-format\src\dxarchive\key.rs` 全绿）——CRC 输入不含结尾 NUL。**
+> 原文说“key 末尾要补 0x00 作为字符串终止符”，这句话本身没错（C 侧 `KeyCreate` 收到的是
+> NUL 结尾的 `KeyString`），但**极易被误读成“CRC 也要把那颗 NUL 算进去”**，一旦算进去，
+> 派生出的密钥就是错的，后面一个文件名都读不出来。准确规则是：
+>
+> | 量 | 值 | 是否进 CRC |
+> |---|---|---|
+> | key 主体（v3.14） | **45 字节**（31 F9 01 … D0 7C 82，即上表该行**去掉末尾 00**） | **是** |
+> | 字符串终止符 | 1 字节 0x00 | **否** |
+>
+> 理由在 C 源码里：`DecodeArchive` 用 `KeyStringBytes = CL_strlen(ASCII, KeyString_)` 求长度
+> （strlen 天然不含 NUL），再把 `KeyStringBytes` 传给 `KeyCreate`；`KeyCreate` 的
+> `if (SourceBytes == 0) SourceBytes = CL_strlen(...)` 与偶数/奇数半段 CRC32 都只看这
+> `SourceBytes` 个字节。所以：**缓冲区里补 0x00，但 CRC 只吃 45 字节。**
+> 上表 v3.00 / v3.14 / v3.31 / v3.50 四行末尾的 `00` 属于字节转储，**不参与 CRC 输入**。
+>
+> Rust 侧断言（回归护栏，别删）：`key_create(&V3_14) == 3F 05 F9 EE F7 1E CC`，
+> 这正是本作 23 个 .wolf 归档实测出来的全局密钥（`key.rs` 的
+> `v3_14_derives_the_measured_archive_key`）。少算或多算那颗 NUL，这个断言立刻失败。
+> 另注：`KeyCreate` 里“源短于 4 字节就补 `DXLIBARC`”的分支同样**不含**补进去的 NUL。
+
 > 关于“必须先拿到 Game.dat 的 encryption_key”：
 > encryption_key 只用于 **Pro 加密的 Game.dat**（WolfDxArcKey.hpp 那套 AES/CTR）。
 > 本游戏的 Game.dat 是明文；被加密的是 .wolf 归档，用的是引擎内建 key。
@@ -1280,7 +1312,7 @@ WolfDec.h 里注明：key 末尾要补一个 0x00 作为字符串终止符。完
 1. 打开 .wolf，**原样**读前 64 字节（不解密）。
 2. 校验 Head == 0x5844、Version == 0x0008。
 3. cryptVersion = Flags >> 16；从 8.3 取 key 字节，末尾补 0x00 得到 KeyString。
-   本游戏 = v3.14 的 44 字节 + 0x00。
+   本游戏 = v3.14 的 **45 字节** + 0x00（缓冲区共 46 字节；★已实测纠正：早先写的“44 字节”少数了一个）。
 
 **第 1 步：算全局 key（7 字节）。**
 
@@ -1301,6 +1333,24 @@ CRC32 参数：多项式 0xEDB88320（反射）、初值 0xFFFFFFFF、末尾异�
 3. 解压（本游戏 Flags bit1 = 0 ⇒ 压缩）：先 Huffman 解码，再对结果做 LZ 解码；长度必须 == HeadSize。
    （若 Flags bit1 = 1，则 head 未压缩，跳过。）
 
+> **★已实测纠正——“读到 EOF”是硬要求，不是偷懒。** 这一条最容易被“优化”掉：既然
+> `HeadSize` 就是 head 区的解压后大小，很多人会顺手写成“读 `HeadSize` 字节”（甚至
+> `NameTab + HeadSize`），结果在**小归档**上静默截断 Huffman 流。实测两例：
+>
+> | 归档 | HeadSize（解压后） | 盘上 head 段实际字节数（= 文件长度 - NameTab） |
+> |---|---|---|
+> | BasicData.wolf | 15240 | **4159**（压缩后比明文小得多，读 15240 会被 Python/Rust 切片悄悄夹到 EOF，反而“碰巧对”） |
+> | Kagura.wolf | 500 | **516**（压缩后**比明文大**；Huffman 头 316 B + 压数据 200 B = 516，只读 500 会短 16 B） |
+>
+> 所以两个方向的夹取都会出错：读 `HeadSize` 在 Kagura 上截断，读 `NameTab+HeadSize` 在
+> BasicData 上截断（Rust 的切片越界会 panic，Python 的切片会静默夹取——**Python 的夹取正是
+> 早期脚本能跑通的原因**，换成 Rust 后必须显式写成 `&data[name_tab..]` 才能复现）。
+> 正确写法只有一句：**从 `FileNameTableStartAddress` 一直取到文件末尾**，Huffman 解码器
+> 自己知道该吃多少（`Huffman_Decode` 先解头再按 `OriginalSize` 输出，多余的尾巴它不碰）。
+> 截断的后果不是报错而是**乱码**：Huffman 读到半截会用 0 补位，LZ 层再把错误的 head 区解出来，
+> 名字表全花。Rust 侧 `read_head_region` 就是按这条写的，且解完立刻断言
+> `len(head) == HeadSize`。
+
 **第 3 步：切三段。**
 ~~~
 NameP = head 区起点
@@ -1320,6 +1370,24 @@ u1[ align4(len+1) ]  // 原始大小写的名字，NUL 补齐
 
 实测例：apple.png ⇒ pack=3、parity=0x0285、upper "APPLE.PNG\0\0\0"、orig "apple.png\0\0\0"（12 字节）。
 **逐条扫描并校验 parity，扫到 FileTab 为止**即可建立名字表（BasicData.wolf 149 个名字全部校验通过）。
+
+> **★已实测纠正——parity 只覆盖“大写化后的名字字节”，不含 NUL 填充。**
+> 原文“名字大写形式的全部字节之和 & 0xFFFF”容易被读成“把 `pack*4` 那一整块都加起来”
+> （那样会把 1~3 个补齐用的 0x00 也加进去，但因为加的是 0，结果**恰好**相同——所以这个坑不会
+> 立刻暴露，一旦有人改成“补齐字节非 0”就炸）。精确定义：
+>
+> ```
+> parity = sum( 大写副本的第 0..len 字节 ) & 0xFFFF      # len = 名字长度（不含 NUL）；NUL 补齐段不计
+> ```
+>
+> 也就是说：遍历原始名字 `FileName[0..len]`，逐字符取它**写进大写副本的那个字节**
+> （小写 ASCII 折成大写；Shift-JIS 双字节字符两字节原样照抄并**两字节都累加**），累加后取低 16 位。
+> 依据是 C 侧 `AddFileNameData`（`DXArchive.cpp:256`）：`Parity` 只在那个
+> `for (i = 0; FileName[i] != 0;)` 循环里累加，循环条件天然排除 NUL 与补齐段。
+>
+> 实测规模（Rust 侧对 **23 个 .wolf 归档的全部 4062 个文件条目**逐个重算并比对）：
+> **4062/4062 全部吻合，0 个不符**。所以 `parity` 是一个**可以硬校验**的字段（Rust 的
+> `Tables::name` 就是不符即报 `Error::field`），不要只当装饰跳过。
 
 **第 5 步：读目录树。** 根目录 = DirP + 0：
 
@@ -1384,6 +1452,17 @@ XOR 本身是 7 字节循环，position 先 % 7。无压缩分支的相位随写
 
 位流从每个字节的 **MSB 优先**读；但**解码输出时从每个字节的 LSB 优先**取位。这是最容易写错的地方。
 
+> **★已实测纠正——第二级压缩不是 LZ4。** 任务书和若干二手资料把它写成 “LZ4 block decode”，
+> **错的**。本格式用的两级压缩是：第一级 **DXArchive 自带的 Huffman**（§8.5），第二级
+> **DXArchive 自带的 LZ**（`Decode`，`docs\vendor\WolfDec-master\src\WolfDec\3rdParty\DXArchive.cpp:1785`，见 §8.6）。
+> 那个 LZ 是 WOLF 自己的字节级方案（literal / doubled-escape / back-reference，距离 1..3 字节，
+> 最短匹配 4 字节，见 §8.6 的 opcode 表），**和 LZ4 的帧格式、token 编码、hash 表全都不同**，
+> 用任何 LZ4 实现去解都只会得到垃圾。
+>
+> **实现要求：自己按 §8.6 写解码器，不要引 `lz4` / `lz4_flex` / `lz-fear` 之类的 crate。**
+> 本仓库 `crates\wolf-format` 是 `#![forbid(unsafe_code)]` + 零外部依赖的，LZ 解码只有
+> 约 60 行（`crates\wolf-format\src\dxarchive\lz.rs`），引 crate 既没必要也跑不通。
+
 ~~~
 头:
   OriginalSize = Read(Read(6) + 1)      # 先读 6 位得 n，再读 n+1 位
@@ -1437,6 +1516,91 @@ while srcsize > 0:
 > **最大的坑**：复制必须是“逐字节、允许重叠”（out.append(out[-index]) 循环）。
 > 若写成 out += out[-index:][-conbo:]（取窗口的**最后** conbo 字节），
 > 在 conbo < index 时会产出错误数据——head 区约 96 字节后就烂掉，文件名表全花。
+
+> **★已实测补充（同一条坑的 Rust 写法）。** Rust 里的正确写法是
+> `for _ in 0..length { let byte = out[out.len() - index]; out.push(byte); }`，
+> **不要**写成 `out.extend_from_slice(&out[len - index..len - index + length])` 之类的
+> 切片拷贝——那正是在“取窗口一段”的思路，遇到 `length > index`（自重叠游程，真实数据里很常见）
+> 就会借到还没写出来的字节，或者干脆 panic。逐字节 push 天然处理自重叠：
+> 每写一个字节，窗口就跟着长一格，这正是 LZ 想要的语义。
+> 实测确认：`crates\wolf-format\src\dxarchive\lz.rs` 用逐字节写法，
+> 单测里专门构造了 `conbo=32 > index=2` 的自重叠游程，输出与 Python 基准逐字节相同。
+>
+> **另注（`indexsize == 3`）**：C 源码的 `switch` 只写了 case 0/1/2，case 3 没有分支，
+> `index` 保持未初始化值就往下走——那是 C 的未定义行为，不是“格式允许 4 字节距离”。
+> Rust 侧必须显式报错（`lz.rs` 抛 `Error::field(..., "LZ token uses a 3-byte distance, which the format never emits")`）。
+> 本作 4062 个文件全部读完也没触发过该分支，可以放心当“不可能事件”处理。
+
+---
+
+### 8.7 Rust 实现索引与回归基线（★已实测）
+
+本章已在 Rust 侧完整实现并通过全部字节级比对，代码在 `crates\wolf-format\src\dxarchive\`。
+crate 是 `#![forbid(unsafe_code)]` + **零外部依赖**，所以 CRC32 / Huffman / LZ / Shift-JIS 全部手写。
+
+| 文件 | 行数量级 | 负责什么 | 对应本章 |
+|---|---|---|---|
+| `mod.rs` | ~760 | `DARC_HEAD` 解析与不变量校验、名字表 / 目录表 / 文件头表遍历、`DxArchive` / `ArchiveEntry` 公开 API、四个存储分支的 `read()` | 8.1 / 8.2 / 8.4 |
+| `key.rs` | ~155 | 内建 key 表（v3.00 / v3.14 / v3.31 / v3.50）、`key_create`（偶/奇半段 CRC32 → 4+3 字节）、7 字节循环 `key_conv` | 8.3 / 8.4 步骤 1、6 |
+| `crc32.rs` | ~41 | 反射 CRC-32（0xEDB88320，初值/末异或 0xFFFFFFFF），逐位实现（输入只有几十字节，不需要查表） | 8.4 步骤 1 |
+| `huffman.rs` | ~227 | 头部位流（MSB 优先）、权重表重建、与 C 完全一致的建树（最小两项扫描 + u64 权重求和）、解码（**LSB 优先**、朴素地从根 510 走） | 8.5 |
+| `lz.rs` | ~181 | literal / doubled-escape / back-reference 三种 token、1~3 字节距离、**逐字节重叠拷贝** | 8.6 |
+| `sjis.rs` | ~110 | CP932（Shift-JIS）→ UTF-8 名字解码；未定义双字节对按 Python `errors='replace'` 语义回退（输出 U+FFFD 后把尾字节当新字节重解） | 8.2 `CharCodeFormat=932` |
+| `cp932.rs` | ~1037 | **生成文件**：60 lead × 188 trail 的 `u16` 双字节表（0 = 未定义），由 `work\gen_cp932.py` 从 Python 的 cp932 codec 生成，**不要手改** | 同上 |
+
+**公开 API**（`crates\wolf-format\src\dxarchive\mod.rs`）：
+
+~~~
+DxArchive::open(data: &[u8]) -> Result<DxArchive>
+DxArchive::entries(&self) -> &[ArchiveEntry]
+DxArchive::entry(&self, name: &str) -> Option<&ArchiveEntry>   // 先按根级名字，再按完整路径
+DxArchive::read(&self, entry: &ArchiveEntry) -> Result<Vec<u8>> // 返回明文
+ArchiveEntry { name, directory, data_offset, size, press_size, huff_press_size, is_compressed }
+ArchiveEntry::path(&self) -> String                            // directory + "/" + name
+// 另有只读 getter：version / char_code_format / flags / crypt_version /
+// huffman_encode_kb / is_encrypted / data_start_address
+~~~
+
+**四个存储分支都已被真实数据覆盖**（`read()` 按 `PressDataSize` / `HuffPressDataSize` 是否为 NOC 分派）：
+
+| 分支 | 本作命中情况 | 备注 |
+|---|---|---|
+| a 无压缩（两者皆 NOC） | 有（小 .dat / 小 .png 常见） | 分块 0x1000000 读，XOR 相位随写入进度累加 |
+| b 仅 LZ | 有 | 无首尾拼接 |
+| c Huffman + LZ | 有（大文件主力） | **会走首尾拼接**（`PressDataSize > HuffmanEncodeKB*2048` 时） |
+| d 仅 Huffman | 有 | 首尾拼接的判据换成 `DataSize` |
+
+**回归基线（本机实测，改任何一处都要重跑）**：
+
+| 项 | 数字 |
+|---|---|
+| 全量扫描的归档数 | **23 个 .wolf**（Data\ 下的全部） |
+| 全部条目数 | **4062 个文件条目**（名字表 parity 4062/4062 校验通过） |
+| 解出的总字节数 | **771,585,007 字节** |
+| 与 UberWolfCli 基准逐字节相等 | **636/636**（BasicData 149、MapData 9、SystemFile 32、scene 327、word 119） |
+| 头部字段 | 23/23 全部 Version 8、CharCodeFormat 932、Flags 0x013A0000、HuffmanEncodeKB 12、cryptVersion 0x13A |
+| 目录深度 | 全部归档 **maxdepth = 0**（没有子目录；祖先目录那半边 key 派生逻辑本作不触发，但仍按 §8.4 步骤 6 正确实现） |
+
+各归档条目数：1.4.0=199、BGM=49、BalloonBase_CafeLatte=13、BasicData=149、BattleEffect=92、
+CharaChip=91、DLC_data=633、EnemyGraphic=118、FIcon=10、Fog_BackGround=10、Kagura=4、MapChip=102、
+MapData=9、Picture=539、SE=273、SystemFile=32、SystemGraphic=28、cg=596、cutin=223、hscene=327、
+hword=119、scene=327、word=119。
+
+**怎么重跑**：
+
+~~~
+WOLF_DATA_ROOT=work/full cargo test -p wolf-format --test dxarchive
+#   6 项：BasicData / MapData / SystemFile / scene+word 逐字节比对，外加两个头部拒绝用例
+cargo test -p wolf-format --test dxarchive -- --ignored --nocapture
+#   every_archive_reads：把 Data\ 下 23 个归档全部打开并逐条解出（约 2.5 秒）
+~~~
+
+游戏目录不存在时测试自动 skip（可用 `WOLF_GAME_DIR` 覆盖路径；本机是
+`E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy\Data`，注意目录名拼写是 SIster）。
+
+**Shift-JIS 名字**：本作有 30 个非 ASCII 名字（FIcon 10、MapChip 11、Picture 2、SE 6、cg 1），
+例如 `82 AD 82 B5 82 E1 82 AD 82 B5 82 E1 2E 70 6E 67` → `くしゃくしゃ.png`。
+名字既用作查表键又用作测试比对键，所以 `sjis.rs` 必须与 Python 的 cp932 codec 逐字符一致（已单测覆盖）。
 
 ---
 
@@ -1565,6 +1729,9 @@ WolfSaveParser::init 会去读 <存档相对路径>\../Data\BasicData\CDataBase.
    **★已在 Rust 中实现并通过（tileset.rs）：6/6 tileset、60,786 B 全部读完。
    注意 7.3 的位域已被实测纠正（bits 8..9 不是 0）。**
 7. .wolf/DXArchive v8 全链路解包（636/636 文件逐字节校验通过）。
+   **★已在 Rust 中实现并通过（crates/wolf-format/src/dxarchive/ + tests/dxarchive.rs）：
+   23 个归档 / 4062 个文件 / 771,585,007 字节全部解出，636/636 逐字节相等。
+   注意本章有 4 处已被实测纠正（见 8.3 / 8.4 步骤 2、4 / 8.5 的 ★ 标记）。**
 8. .sav 解密算法、头部布局、checksum、fileVersion、SavePart1 前段。
 
 ### 10.2 未验证 / TODO（按优先级）

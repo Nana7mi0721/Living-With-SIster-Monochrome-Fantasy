@@ -7,6 +7,7 @@
 
 mod play;
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -416,9 +417,111 @@ fn run_verify(root: &Path) -> ExitCode {
         }
     }
 
-    // --- sections whose loaders land next --------------------------------
-    checks.push(Check::skip("dxarchive.header"));
-    checks.push(Check::skip("save.header"));
+    // --- save files (wolf-save) -----------------------------------------
+    // Saves are the one input that lives next to the executable rather than in
+    // the unpacked data root, so a missing install directory downgrades this
+    // whole section to SKIP instead of failing a fresh checkout.
+    let saves = save_file_list();
+    if saves.is_empty() {
+        checks.push(Check::skip("save.header"));
+    } else {
+        let mut parsed = 0u64;
+        let mut checksum_ok = 0u64;
+        let mut versions: BTreeSet<u16> = BTreeSet::new();
+        let mut names: BTreeSet<String> = BTreeSet::new();
+        let mut endings: BTreeSet<u8> = BTreeSet::new();
+        for path in &saves {
+            let Some(bytes) = read(path) else { continue };
+            match wolf_save::SaveFile::parse(&bytes) {
+                Ok(save) => {
+                    parsed += 1;
+                    if save.checksum_ok() {
+                        checksum_ok += 1;
+                    }
+                    versions.insert(save.file_version);
+                    names.insert(save.name.clone());
+                    endings.insert(save.end_byte);
+                }
+                Err(err) => checks.push(Check::text(
+                    "save.parse",
+                    "ok",
+                    &format!("FAILED {}: {err}", path.display()),
+                )),
+            }
+        }
+        checks.push(Check::num("save.files", saves.len() as u64, parsed));
+        checks.push(Check::num("save.checksum_ok", saves.len() as u64, checksum_ok));
+        checks.push(Check::num("save.versions", 1, versions.len() as u64));
+        let version = versions.iter().next().copied().unwrap_or(0);
+        checks.push(Check::text(
+            "save.version",
+            "0x8C",
+            &format!("0x{version:02X}"),
+        ));
+        checks.push(Check::num("save.end_bytes", 1, endings.len() as u64));
+        let end = endings.iter().next().copied().unwrap_or(0);
+        checks.push(Check::text("save.end_byte", "0x19", &format!("0x{end:02X}")));
+        checks.push(Check::text(
+            "save.name",
+            "妹相随～黑白世界的缤纷冒险～",
+            names.iter().next().map(String::as_str).unwrap_or("<none>"),
+        ));
+    }
+
+    // --- .wolf DXArchive v8 (wolf-format::dxarchive) ----------------------
+    // work/full was unpacked by UberWolf, so opening the same archive with our own
+    // reader and re-parsing a file out of it pins the decryption end to end. The
+    // archive is 1.2 GB in total; BasicData.wolf is the smallest one that still
+    // exercises the Huffman + LZ path.
+    match read(&game_dir().join("Data").join("BasicData.wolf"))
+        .map(|bytes| wf::dxarchive::DxArchive::open(&bytes))
+    {
+        Some(Ok(archive)) => {
+            checks.push(Check::num(
+                "dxarchive.version",
+                8,
+                u64::from(archive.version()),
+            ));
+            checks.push(Check::num(
+                "dxarchive.charcode",
+                932,
+                u64::from(archive.char_code_format()),
+            ));
+            checks.push(Check::num(
+                "dxarchive.flags",
+                20_578_304,
+                u64::from(archive.flags()),
+            ));
+            checks.push(Check::num(
+                "dxarchive.huffman_kb",
+                12,
+                u64::from(archive.huffman_encode_kb()),
+            ));
+            checks.push(Check::num(
+                "dxarchive.entries",
+                149,
+                archive.entries().len() as u64,
+            ));
+            let extracted = archive
+                .entry("Game.dat")
+                .and_then(|entry| archive.read(entry).ok());
+            let verdict = match extracted {
+                Some(bytes) => match GameDat::parse(&bytes) {
+                    Ok(game) if game.title() == "妹相随～黑白世界的缤纷冒险～" => "ok",
+                    Ok(_) => "wrong title",
+                    Err(_) => "parse failed",
+                },
+                None => "extract failed",
+            };
+            checks.push(Check::text("dxarchive.game_dat", "ok", verdict));
+        }
+        Some(Err(err)) => checks.push(Check::text(
+            "dxarchive.open",
+            "ok",
+            &format!("FAILED: {err}"),
+        )),
+        None => checks.push(Check::skip("dxarchive.header")),
+    }
 
     report(&checks)
 }
@@ -911,6 +1014,30 @@ fn run_condition_label(condition: u8) -> &'static str {
 }
 
 /// All .mps files in a map directory, sorted so the output is stable.
+/// Locate the game's `.sav` files.
+///
+/// Ordering matters: `SaveData01`..`SaveData08` are user slots and
+/// `System` is the settings file, and sorting by path keeps the report
+/// reproducible across runs.
+fn save_file_list() -> Vec<PathBuf> {
+    let dir = std::env::var_os("WOLF_SAVE_DIR")
+        .map_or_else(|| game_dir().join("Save"), PathBuf::from);
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("sav"))
+        })
+        .collect();
+    files.sort();
+    files
+}
+
 fn map_file_list(dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -1001,6 +1128,19 @@ fn report(checks: &[Check]) -> ExitCode {
 /// notice's measured 7 lines in a 300x200 window.
 const TEXT_PX: f32 = 22.0;
 
+/// Install directory of the original game.
+///
+/// `$WOLF_GAME_DIR` wins; the literal default is this machine's Steam library and is
+/// the only hard-coded path in the project (fonts and saves are not in the unpacked
+/// data root, and both are optional inputs).
+fn game_dir() -> PathBuf {
+    const DEFAULT: &str = "E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy";
+    match std::env::var("WOLF_GAME_DIR") {
+        Ok(dir) if !dir.is_empty() => PathBuf::from(dir),
+        _ => PathBuf::from(DEFAULT),
+    }
+}
+
 /// Finds a TTF to draw WOLF text with.
 ///
 /// Search order: `<root>/Fonts`, `<root>`, then `$WOLF_GAME_DIR`, then the documented
@@ -1013,14 +1153,8 @@ fn find_font(root: &Path) -> Option<(PathBuf, Vec<u8>)> {
         "GenJyuuGothicXPB.ttf",
         "MSGOTHIC.TTF",
     ];
-    const GAME_DIR: &str = "E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy";
     let mut bases: Vec<PathBuf> = vec![root.join("Fonts"), root.to_path_buf()];
-    if let Ok(dir) = std::env::var("WOLF_GAME_DIR") {
-        if !dir.is_empty() {
-            bases.push(PathBuf::from(dir));
-        }
-    }
-    bases.push(PathBuf::from(GAME_DIR));
+    bases.push(game_dir());
     for base in bases {
         for name in NAMES {
             let candidate = base.join(name);

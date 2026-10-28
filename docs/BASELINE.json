@@ -276,5 +276,21 @@
   "TileSetData.dat": 210,
   ".mps": 102,
   ".wolf": 8
+ },
+ "dxarchive_reader": {
+  "version": 8,
+  "char_code_format": 932,
+  "flags": 20578304,
+  "crypt_version": 314,
+  "huffman_encode_kb": 12,
+  "basicdata_entries": 149,
+  "archives_total": 23,
+  "files_total": 4062,
+  "bytes_total": 771585007
+ },
+ "verify": {
+  "checks": 63,
+  "pending": 0,
+  "sections": ["game", "common_events", "precompile", "maps", "tileset", "databases", "dxarchive", "save"]
  }
 }

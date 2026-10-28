@@ -1,7 +1,7 @@
 //! Huffman decoder for DXArchive blocks (docs/FORMAT_SPEC.md §8.5).
 //!
-//! Blocks are produced by `Huffman_Encode» in
-//! `docs/vendor/WolfDec-master/src/WolfDec/3rdParty/Huffman.cpp»: a bit-packed
+//! Blocks are produced by `Huffman_Encode` in
+//! `docs/vendor/WolfDec-master/src/WolfDec/3rdParty/Huffman.cpp`: a bit-packed
 //! header (the two sizes plus 256 delta-coded weights), then the symbols. The
 //! header is read most-significant-bit first, while the symbol stream is read
 //! least-significant-bit first from each byte — that asymmetry is the one part
@@ -14,7 +14,7 @@
 
 use crate::error::{Error, Result};
 
-/// Leaf symbols (`unsigned char» in the original).
+/// Leaf symbols (`unsigned` char in the original).
 const SYMBOL_COUNT: usize = 256;
 
 /// Total nodes: one leaf per byte value plus one internal node per merge.
@@ -43,8 +43,8 @@ impl<'a> BitReader<'a> {
         }
     }
 
-    /// Read `bits» bits into the low end of the result, first bit most
-    /// significant (`BitStream_Read» in the reference).
+    /// Read `bits` bits into the low end of the result, first bit most
+    /// significant (`BitStream_Read` in the reference).
     fn read(&mut self, bits: u32) -> Result<u64> {
         let mut result = 0u64;
         for index in 0..bits {
@@ -64,7 +64,7 @@ impl<'a> BitReader<'a> {
     }
 
     /// Bytes consumed so far, rounding a partial byte up
-    /// (`BitStream_GetBytes» in the reference).
+    /// (`BitStream_GetBytes` in the reference).
     const fn consumed(&self) -> usize {
         self.byte + if self.bit == 0 { 0 } else { 1 }
     }
@@ -72,7 +72,7 @@ impl<'a> BitReader<'a> {
 
 /// Decompress one Huffman block.
 ///
-/// `what» names the block in error messages.
+/// `what` names the block in error messages.
 pub(super) fn decode(press: &[u8], what: &'static str) -> Result<Vec<u8>> {
     let mut reader = BitReader::new(press);
     let size_bits = reader.read(6)?;
@@ -125,8 +125,7 @@ pub(super) fn decode(press: &[u8], what: &'static str) -> Result<Vec<u8>> {
             if min_first == -1 || node_weight[min_first as usize] > node_weight[node_index] {
                 min_second = min_first;
                 min_first = node_index as i32;
-            } else if min_second == -1
-                || node_weight[min_second as usize] > node_weight[node_index]
+            } else if min_second == -1 || node_weight[min_second as usize] > node_weight[node_index]
             {
                 min_second = node_index as i32;
             }
