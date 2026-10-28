@@ -99,8 +99,16 @@ impl MapRuntime {
     /// Pages with an empty command stream are skipped: WOLF treats them as
     /// blank pages, and starting them would burn an instance slot for nothing.
     pub fn collect(map: &Map) -> Self {
+        Self::collect_except(map, None)
+    }
+
+    /// Same, but never collects `skip` (the boot event is started by the caller).
+    pub fn collect_except(map: &Map, skip: Option<u32>) -> Self {
         let mut slots = Vec::new();
         for event in &map.events {
+            if Some(event.id) == skip {
+                continue;
+            }
             for (index, page) in event.pages.iter().enumerate() {
                 let trigger = Trigger::from_byte(page.trigger);
                 if !trigger.is_automatic() || page.commands.is_empty() {

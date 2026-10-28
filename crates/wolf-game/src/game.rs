@@ -28,6 +28,7 @@ use wolf_vm::{
 };
 
 use crate::assets::Assets;
+use crate::map_runtime::MapRuntime;
 use crate::picture::{PictureKind, Screen, ANCHOR_CENTRE, SCREEN_H, SCREEN_W};
 
 /// The event the game opens with in this build (the "original title screen A").
@@ -159,6 +160,8 @@ pub struct Game {
     pub auto_advance: bool,
     /// When true, a choice prompt answers itself with the highlighted option.
     pub auto_choice: bool,
+    /// The automatic pages of the map the game booted into.
+    pub runtime: MapRuntime,
     /// Mouse position in logical pixels, [-1, -1] when the pointer is outside.
     pub mouse: [i32; 2],
     /// Mouse buttons held this frame: bit 0 left, bit 1 right, bit 2 middle.
@@ -201,6 +204,7 @@ impl Game {
             replies: std::collections::VecDeque::new(),
             auto_advance: false,
             auto_choice: false,
+            runtime: MapRuntime::new(),
             mouse: [-1, -1],
             mouse_buttons: 0,
             choice_cursor: 0,
@@ -234,6 +238,7 @@ impl Game {
     pub fn boot(&mut self) -> Result<(), GameError> {
         let bytes = self.read(BOOT_MAP)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
+        self.start_pages(&map, Some(BOOT_EVENT));
         if self.start_map_event(&map, BOOT_EVENT) {
             Ok(())
         } else {
@@ -246,6 +251,17 @@ impl Game {
     /// A map page is an ordinary instruction stream, so it compiles through the same
     /// jump-table precompiler the common events use. Only the first page runs: later
     /// pages need the page-switch machinery that M2 adds.
+    /// Start every automatic page of `map` and remember them.
+    ///
+    /// The boot map's own event is started separately by `start_map_event`,
+    /// because `BOOT_EVENT` is the title script and must run exactly once
+    /// (an autorun page would be started by `MapRuntime` too, and starting it
+    /// twice is a behaviour change nobody asked for).
+    pub fn start_pages(&mut self, map: &Map, skip: Option<u32>) -> usize {
+        self.runtime = MapRuntime::collect_except(map, skip);
+        self.runtime.start_pending(&mut self.vm)
+    }
+
     pub fn start_map_event(&mut self, map: &Map, event_id: u32) -> bool {
         let Some(event) = map.events.iter().find(|event| event.id == event_id) else {
             return false;
@@ -371,6 +387,9 @@ impl Game {
         }
         self.screen.tick();
         self.previous_keys = self.key_bits;
+        // Automatic pages are restarted here, i.e. at the end of a frame, so a
+        // parallel page that just ended comes back on the next tick.
+        self.runtime.start_pending(&mut self.vm);
         self.previous_mouse_buttons = self.mouse_buttons;
         self.stats.frames += 1;
         self.stats.instructions += report.steps as u64;
