@@ -16,7 +16,7 @@ mean abs 0.012）。M2 的验收对象是**玩家真正开始游戏后的第一�
 
 | 项 | 值 |
 |---|---|
-| git HEAD | `51bd7a3`（"M2: message window (101) — db layer, hide action, type-4 skin names, engine metrics"） |
+| git HEAD | `51bd7a3` + 本文档同属的**第二批 M2 提交**（250 写路径 / 移动插值 / 离屏裁剪 / 引擎事件 12 个 / `.project` 名字） |
 | 数据根 | `work/full`（23 个 .wolf 全解，4,085 文件） |
 | 屏幕 | 1024x576，60 fps，tile 16 px |
 | 工具链 | Rust 1.99.1 msvc；`cargo test -q --workspace` 全绿；`wolf-cli verify` 63/63 |
@@ -34,6 +34,8 @@ mean abs 0.012）。M2 的验收对象是**玩家真正开始游戏后的第一�
 | C7 | `cargo run -p wolf-render --example imgdiff -- A.png B.png` | 像素比对（M1 遗留工具） |
 | C8 | `cargo run -p wolf-format --example dbdump -- work/full DataBase 16` | 数据库单元格转储 |
 | C9 | `wolf-cli capture --map SampleMapA` | 地图渲染（27,648 quad）——M2 不再作为验收项，见 §5.3 |
+| C10 | `wolf-cli capture --frames 716 --engine-events '' --out a.png` 与 `--engine-events 271 --out b.png` 再 `imgdiff a.png b.png` | §4.2 的常时协程 A/B |
+| C11 | `wolf-cli capture --map-run SampleMapA --event 0 --frames 600 --engine-events <id>` | 单个常时协程的影响面 |
 
 ---
 
@@ -66,20 +68,25 @@ Map031）的页面图形全部为空，只有未注册的引擎示例地图（Du
 ### 2.1 选择窗口态（C1）
 
 ```
-pictures  : 3 live -> 19 textured quad(s), 4 text picture(s)
-choice    : HELD on prompt with 4 option(s) ["广阔的战场", "广袤的森林", "微风吹拂而过的麦田", "有人在等我的家"], cursor 0 at anchor (512, 240)
-  text pic   -100 at [526,254,235,30] ▶ 广阔的战场
-  text pic   -100 at [526,284,235,30]    广袤的森林
-  text pic   -100 at [526,314,235,30]    微风吹拂而过的麦田
-  text pic   -100 at [526,344,235,30]    有人在等我的家
-text      : 8 item(s), 84 glyph(s), 8 line(s), 0 substituted
-rendered  : 1024x576, 200260/589824 non-black pixel(s) = 34.0%
-stats     : 46370 instruction(s), 3662 picture op(s), 1 sound(s), 81 db access(es), 0 warning(s)
+pictures  : 21 live -> 10 textured quad(s), 4 text picture(s)
+choice    : HELD on prompt with 4 option(s) ["广阔的战场", "广袤的森林", "微风吹拂而过的麦田", "有人在等我的家"], cursor 0 at anchor (512, 192)
+          : engine rect [512.0, 192.0, 242.0, 148.0], 4 row(s)
+  text pic   -100 at [526,206,214,30] ▶ 广阔的战场
+  text pic   -100 at [526,236,214,30]    广袤的森林
+  text pic   -100 at [526,266,214,30]    微风吹拂而过的麦田
+  text pic   -100 at [526,296,214,30]    有人在等我的家
+text      : 4 item(s), 37 glyph(s), 4 line(s), 0 substituted
+rendered  : 1024x576, 35816/589824 non-black pixel(s) = 6.1%
+stats     : 30539 instruction(s), 748 picture op(s), 1 sound(s), 128 db access(es) (15 write), 2 message(s), 1 choice(s), 0 warning(s)
 ```
 
+> **口径**：21 个活图片里 19 个是第三方气泡库（event 98，由常时协程 271 启动）停在库自己的停车场
+> `(-2784, 2880)` 的控件；`picture::on_screen` 判定它们碰不到屏幕，于是 10 个 quad 才是真正画出来的量。
+> 早先记录里的 `3 live -> 19 quad / 200,260 px / 46,370 指令` 是**离屏裁剪之前**的数字，已作废。
+
 - **已验证**：选择窗锚点 `(512, 240)` 来自 Sys3/Sys4；面板矩形 `[512, 240, 263, 148]`
-  （宽 = 最长选项 `微风吹拂而过的麦田` 9 个全角字 × 22 px + 光标 33 + 内边距 28 + 4 slack）。
-- **已在 M2 修正的错误**：面板宽度曾按 `CHAR_WIDTH = 16` 估算而绘制字号是 22，导致最长选项被折行、
+  （宽 = 最长选项 `微风吹拂而过的麦田` 9 个全角字 × 20 px（Sys8）+ 光标 30 + 内边距 28 + 4 slack = 242）。
+- **已在 M2 修正的错误**：面板宽度曾按 `CHAR_WIDTH = 16` 估算而绘制字号是 20/22，导致最长选项被折行、
   第二行覆盖下一行（`微风吹拂而` 伪影）。现在面板与字形共用 `choice::TEXT_PX`，不可能再漂移。
 - **已在 M2 修正的错误**：选择窗曾被居中绘制。docs/OPCODE_102.md §4.2 明确 Sys3/Sys4 是
   **屏幕绝对像素的左上角**且**没有居中默认值**；标题事件正是靠把 Sys4 写成 1000（屏幕外）来让引擎不画窗。
@@ -88,13 +95,16 @@ stats     : 46370 instruction(s), 3662 picture op(s), 1 sound(s), 81 db access(e
 ### 2.2 消息窗口态（C2）
 
 ```
-pictures  : 2 live -> 9 textured quad(s), 0 text picture(s)
+pictures  : 21 live -> 9 textured quad(s), 0 text picture(s)
     pic 999    WindowFile at (0, 0) alpha 0.00 window Some((100, 50)) file "<SQUARE>"
     pic 19500  WindowString at (512, 480) alpha 1.00 window Some((960, 168)) file "SystemFile/WindowBase.png"
 message   : 7 row(s), 73/73 char(s), font 20 at [64,412], wrap 928, cursor at [576,556]
+text      : 7 item(s), 68 glyph(s), 7 line(s), 0 substituted
 rendered  : 1024x576, 161336/589824 non-black pixel(s) = 27.4%
-stats     : 30577 instruction(s), 2366 picture op(s), 0 sound(s), 51 db access(es), 0 warning(s)
+stats     : 31427 instruction(s), 2392 picture op(s), 0 sound(s), 98 db access(es) (13 write), 1 message(s), 0 choice(s), 0 warning(s)
 ```
+
+> 这里的 `21 live` 与 §2.1 同源：19 个气泡库控件停在 `(-2784, 2880)`，被裁剪掉，真正绘制的是 9 个九宫格 quad。
 
 面板九个九宫格 quad（C2 输出节选）：
 
@@ -189,6 +199,25 @@ head 低位 = 3。语义是**保留槽位/文件/矩形/位置，只是不再绘
 - **已验证**：全部 375 条系统图形都是类型 3（窗口类）。若不先判定 `sysgraphic::parse`，它们会被当九宫格面板
   用 `SystemGraphic/WindowBase.png` 画出来，作者画的形状永远不出现。
 
+### 3.6 移动的尾部帧数是**插值时长**（★已实测）
+
+`150` 的移动形态可以在尾部多带一个 `[head | 0x1000000, …, 帧数, …]`：帧数 1..=600 表示**线性插值**
+（x/y/scale/opacity 四个量一起从原位滑到新位），0、缺省或无法求值的 self 变量表示**瞬移**。
+全作 3,365 条移动的分布（已验证，探针 work/_probe_move_*.py）：
+
+| 形态 | 条数 | 处理 |
+|---|---|---|
+| 无尾部（瞬移） | 2,817 | 直接改位 |
+| 尾部 0 | 168 | 直接改位 |
+| 尾部是无法求值的 self 变量 | 52 | 直接改位 |
+| 尾部 1..=600 | 328（实测时长 2..16 帧） | 插值 |
+
+**决定性成对样本**：ev63 pc93 无尾部地把消息窗停在 (512, 672)（屏幕下方 96 px，等于"出场前藏起来"），
+pc94 用**同样的参数**加 `16777216, 3` 把它滑到 (512, 480)，滑完 3 帧才该出现在零售画面里。
+实现：`picture::Pose` / `Transition` / `Screen::advance()`，由 `Game::frame` 每帧推进一步；
+`Screen::apply` 在合并参数**之前**记下起点，合并后立刻把 x/y/scale/opacity 回滚到起点，
+于是 `destination()` / `alpha()` / `quads()` 的读法完全不变（`MAX_TRANSITION_FRAMES = 600`）。
+
 ---
 
 ## 4. 数据库层与引擎协程（消息窗口的前提）
@@ -212,9 +241,22 @@ ev63 的几何**全部来自数据库**：`250 [18, 97, 0, 69632, self88]`（座
 
 **已验证**：common event 63（`X[共]メッセージウィンドウ`）**没有任何静态调用点**，是引擎在
 `101` 出现时以"常时作动"协程启动的：它写入 Sys1..Sys6、用 `150` 画出消息窗、`Sys12 = 1` 表示"消息显示中"。
-本项目的实现是 `Game::start_engine_events()` 启动 {48, 63}，并让引擎自己发布 Sys12。
-**未验证**：其余常时协程（ev41 マウス感知 / ev213 クリックエフェクト / ev214 健康監視 / ev224 ウインドウ処理 /
-ev225 フィールド上処理 / ev261，以及 17 个 run_condition = 2 的事件）尚未启动，目前只有 48 与 63。
+
+现在启动的是**三组共 12 个事件**（crates/wolf-game/src/game.rs 的三个常量，验收命令 C10/C11）：
+
+| 常量 | 事件 | 依据 |
+|---|---|---|
+| `ENGINE_ALWAYS` | 48, 261, 269, 270, 271, 224, 225, 213, 214, 41 | header = `parallel_process_always(3)`；顺序有意义（48 先填系统变量，261 先于 270，269 先于 270，225 发布 Sys71/72） |
+| `ENGINE_AUTO_START` | 241 | `auto_start(1)`：启动一次就自己清条件变量并结束 |
+| `ENGINE_IMPLICIT` | 63 | 引擎特性启动（`101` 一出现就调用），不是脚本调用 |
+
+**已验证（A/B 实测）**：标题帧 716 上，`--engine-events ''`（一个都不启）与逐个单独启动 48/261/269/270/224/225/213/214/41 的
+渲染结果 `imgdiff` 全部 `identical: true`；九个全启后与零售截图仍是 mean abs 0.012 / psnr 67.20 dB。
+`271` 曾被排除过（它启动第三方气泡库 event 98，19 个控件落到 (0,0) 变成可见垃圾），现在这些控件落到库自己的停车场
+`(-2784, 2880)` 并被 `picture::on_screen` 裁掉，单独启动 271 也 `identical: true`，所以恢复启用
+（docs/ENGINE_EVENTS.md §10.5）。
+
+**未验证**：343（44 个 by-id 调用点，但它读的条件变量全作没有写者）与 43（零调用点）仍未启动。
 
 ### 4.3 `210/300` 的返回值
 
@@ -222,6 +264,26 @@ ev225 フィールド上処理 / ev261，以及 17 个 run_condition = 2 的事�
 目标槽位是**被调 550 事件自己声明的** `return_value_id`（74 个事件声明了，70 个真的写），
 地址是 `1,600,000 + return_value_id`（callee self group 6）。返回值目标操作数位于参数表**末尾**
 （`a[2+num+str]`），不是 `2+num`——旧公式在 6 处退化成字面量 0（值被静默丢弃）、在 16 处写到无关槽位。
+
+### 4.4 写路径（250 的 direction / op）
+
+**已验证**（docs/OPCODE_250.md）：`flags & 0x1000` 表示**方向**，置位才是读，清零是**写**；
+`container = (flags >> 8) & 3`（0 CDataBase / 1 SysDatabase / 2 DataBase）；`op = (flags >> 4) & 7`。
+写路径本项目实现为**读-改-写**：操作数来自 int 实参 4（argc >= 5）或字符串实参（argc == 4），
+按 op 与当前值合成后落盘，**整个写指令不回写源变量**（早期把写当读，会把脚本自己的值覆盖成 0）：
+
+| op | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| 语义 | assign | add | sub | mul | div | rem | max | min |
+
+除零/取余零时**保留原值**（与原作 `1 加 → 6 夹上限 → 7 夹下限` 的用法一致）。
+`The Interpreter` 侧：`DbOp { container, direction, op, type_label, field_label, source, destination }`，
+其中 `destination` 只在读且 argc >= 5 时存在；游戏侧 `combine_cell(op, current, operand)` 是唯一的合成点
+（`a_database_write_operator_is_the_flags_nibble` / `a_script_write_lands_in_the_cell_the_next_read_sees` 两个测试）。
+
+**未实现**：`250` 的 `stringArgs[1]/[3]` 标签解析。`.project` 名字加载已在 wolf-format 落地
+（`Database::type_name/field_name/row_name`，三个文件都精确走到 EOF），但 `crates/wolf-game/src/db.rs`
+还没接上，所以运行时仍按 arg0/arg2 的数值 id 取格。
 
 ---
 
@@ -243,6 +305,10 @@ ev225 フィールド上処理 / ev261，以及 17 个 run_condition = 2 的事�
 4. **消息窗口（101）**：ev63 画框、引擎排版（原点/字号/行距/折行/打字机/▼ 光标）。
 5. **数据库层**：DataBase / CDataBase / SysDatabase + opcode 250 应答 + 引擎兜底单元格。
 6. **调用返回值**：377 个 bit24 调用点的目标槽位解析与回写。
+7. **数据库写路径**：250 的方向/op 解码与读-改-写（8 个合成运算），写指令不回写源变量。
+8. **移动插值**：328 条带时长的 `150` 移动按帧线性插值（其余 3,037 条瞬移）。
+9. **常时协程**：三组共 12 个事件由引擎启动（§4.2），并用 A/B 证明对标题帧像素零影响。
+10. **离屏裁剪**：碰不到屏幕的图片不再产生 quad / 皮肤包（第三方气泡库的 19 个控件）。
 
 ### 5.3 地图渲染不再是 M2 验收项
 
@@ -267,12 +333,14 @@ ev225 フィールド上処理 / ev261，以及 17 个 run_condition = 2 的事�
 
 | 项 | 现状 |
 |---|---|
-| 移动动画 | `150` 移动尾部带的帧数（如 ev63 的 `3` / `2`）目前是**瞬移**，未插值 |
-| `TextItem::with_alpha` | 无效（`Attrs` 把 alpha 固定 255），文字不会淡入淡出 |
+| 移动插值的**缓动** | 现在统一线性 `age/duration`；原作是否有缓动曲线未验证（ev63 的 3 帧太短，看不出） |
+| `TextItem::with_alpha` | **已修**：`Attrs` 改用 `Color::rgba`，文字与描边一同淡出（3 个测试，标题帧仍逐字节相同） |
 | `125 AutoInput` | 只保存掩码，不真的注入按键（需要宿主） |
 | `126 BanInput` | 已在 `123` 的掩码里过滤（本作 1,115 处 123 指令按位生效） |
-| 常时协程 | 只启动 48 / 63（§4.2） |
-| `290` tone 类型 3/7/8/9/10 | 未确认语义，当前当无操作处理 |
+| 常时协程 | 已启动 12 个（§4.2）；343 / 43 仍未启动 |
+| `250` 的标签解析 | `stringArgs[1]/[3]` 尚未参与取格，仍按 arg0/arg2 数值 id（§4.4） |
+| `290` 效果**全部 11 个 type** | 语义已在 docs/OPCODE_290.md 逐类型定死（枚举从 Editor.exe 读出，不再是推断），但 renderer 仍只实现 `1/5` 的色调；`3` シェイク(250 条)、`2` 描画座標シフト(146 条)、`4` ズーム(49)、`7` 自動拡大縮小(25)、`0` フラッシュ(9)、`8/9/10` パターン切替(176) 仍是 no-op |
+| `290` 的图片号是**区间** | `args[2..3]` 是闭区间 [lo, hi]（官方「□～□ の欄に…」）；若按单张实现，type 4 的 7 对按钮、type 5 的整幕压暗、CE85 的「全カーソル」都会只作用一半（docs/OPCODE_290.md §0.4） |
 | 字符串实参 | `210/300` 的字符串参数尚未投递给被调事件 |
 | 存档/读档（220/221/222）、`270 Party`、`160/162 Transition` | 仍是记录型 no-op |
 

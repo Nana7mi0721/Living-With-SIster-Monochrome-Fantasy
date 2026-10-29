@@ -157,9 +157,10 @@ impl VarLookup for Instance {
 
     fn lookup_str(&self, bank: EscapeBank, index: usize) -> String {
         match bank {
-            EscapeBank::SelfVar => {
-                self.self_vars.get_str(self.program.self_base + index).to_owned()
-            }
+            EscapeBank::SelfVar => self
+                .self_vars
+                .get_str(self.program.self_base + index)
+                .to_owned(),
             _ => String::new(),
         }
     }
@@ -274,23 +275,109 @@ pub enum SoundAction {
 /// A decoded `250 DatabaseAccess` instruction.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DbOp {
-    /// Database type (0..=24).
+    /// Which of the three databases this addresses, from `(flags >> 8) & 3`
+    /// (docs/OPCODE_250.md section 3.2: 2,195 of 2,195 labelled sites agree).
+    pub container: DbContainer,
+    /// Read (cell -> variable) or write (variable -> cell), from `flags & 0x1000`
+    /// (docs/OPCODE_250.md section 3.3).
+    pub direction: DbDirection,
+    /// The cell arithmetic, `(flags >> 4) & 7`: 0 assign, 1 add, 2 sub, 3 mul,
+    /// 4 div, 5 rem, 6 max, 7 min (docs/OPCODE_250.md section 3.4).
+    pub op: u8,
+    /// Database type (0..=24), already evaluated.
     pub db_type: i32,
-    /// Row id.
+    /// Row id, already evaluated (it is often a `1_600_000+` self variable).
     pub data_id: i32,
-    /// Column id.
+    /// Column id, already evaluated.
     pub item_id: i32,
-    /// Raw addressing bitfield (bit 16 marks a write, docs/OPCODE_SPEC.md §5.44).
+    /// Raw addressing bitfield, kept verbatim for logging.
     pub flags: i32,
-    /// Destination variable address, for the 5-argument form.
+    /// Destination variable address (a magic operand) for a read.
     ///
-    /// All 2,592 `250` instructions in this game are reads and nothing ever
-    /// writes a database (there is no 251/252/253 anywhere), so the fifth operand
-    /// is where the answer goes rather than a value to store.
+    /// Always `None` for a write: there the fifth operand is the *source* value,
+    /// which travels in [`DbOp::source`] instead (docs/OPCODE_250.md section 0.1
+    /// item 5).
     pub destination: Option<i32>,
+    /// Source value for a write, already evaluated.
+    ///
+    /// [`DbValue::Num`] is the fifth operand; [`DbValue::Str`] is
+    /// `stringArgs[0]` for the 16 `argc == 4` sites that carry no operand at all
+    /// (docs/OPCODE_250.md section 1.3).
+    pub source: Option<DbValue>,
+    /// `stringArgs[1]`: the type name the editor recorded (empty for 9 sites).
+    ///
+    /// This is the most reliable key for resolving [`DbOp::db_type`], which is a
+    /// runtime type id rather than a `.dat` index (docs/OPCODE_250.md section 4).
+    pub type_label: Option<String>,
+    /// `stringArgs[3]`: the column name the editor recorded.
+    pub field_label: Option<String>,
 }
 
-/// The answer to a [`DbOp`] read.
+impl DbOp {
+    /// True when the instruction carries no value operand and the string in
+    /// `stringArgs[0]` is what gets written (docs/OPCODE_250.md section 1.3).
+    #[must_use]
+    pub const fn string_write(&self) -> bool {
+        matches!(self.source, Some(DbValue::Str(_)))
+    }
+}
+
+/// Which database a `250` addresses, from `(flags >> 8) & 3`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DbContainer {
+    /// `BasicData/CDataBase.dat` (可変DB), flag value 0.
+    CData,
+    /// `BasicData/SysDatabase.dat` (システムDB), flag value 1.
+    Sys,
+    /// `BasicData/DataBase.dat` (ユーザーDB), flag value 2.
+    Data,
+}
+
+impl DbContainer {
+    /// Decode the container from a `250` flags word.
+    ///
+    /// Never use bit 9: it happens to look right for `Data` but maps
+    /// `Sys` (which only sets bit 8) onto `CData` (docs/OPCODE_250.md section 3.2).
+    #[must_use]
+    pub const fn from_flags(flags: i32) -> Self {
+        match (flags >> 8) & 3 {
+            1 => Self::Sys,
+            2 => Self::Data,
+            // 0 is the variable database; 3 never appears in this game and the
+            // engine has no fourth container, so fall back to CDataBase.
+            _ => Self::CData,
+        }
+    }
+}
+
+/// Which way a `250` moves data, from `flags & 0x1000`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DbDirection {
+    /// Bit 12 set: database cell -> the variable in [`DbOp::destination`].
+    Read,
+    /// Bit 12 clear: [`DbOp::source`] -> database cell, through [`DbOp::op`].
+    Write,
+}
+
+impl DbDirection {
+    /// Decode the direction from a `250` flags word.
+    ///
+    /// Bit 16 is *not* the direction: it only records that `stringArgs[1]` is
+    /// non-empty (docs/OPCODE_250.md section 3.5).
+    #[must_use]
+    pub const fn from_flags(flags: i32) -> Self {
+        if flags & 0x1000 == 0 {
+            Self::Write
+        } else {
+            Self::Read
+        }
+    }
+}
+
+/// One cell value crossing the [`DbOp`] boundary.
+///
+/// A read hands an answer back in this shape; a write carries its source value the
+/// same way, in [`DbOp::source`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DbValue {
     /// A numeric cell.
@@ -760,6 +847,11 @@ impl Vm {
                 }
                 WaitState::Message => {
                     if host.message_dismissed() {
+                        // The engine closes the window on the confirm key and drops
+                        // system variable 12 (表示中) back to 0. Clearing the wait
+                        // alone would leave the text on screen forever and keep
+                        // ev63 convinced the window is still open.
+                        host.close_message();
                         self.instances[i].wait = WaitState::None;
                     }
                 }
@@ -1020,6 +1112,31 @@ fn eval_num(raw: i32, inst: &Instance, vars: &Variables) -> i32 {
         // (docs/M1_CLOSURE.md Q3).
         MagicKind::Opaque => raw,
     }
+}
+
+/// Read one `250` address operand (type / row / column) as a number.
+///
+/// All three are ordinary magic operands, and the hottest cells of this game are
+/// addressed through self variables (docs/OPCODE_250.md section 0.1 item 3). A
+/// literal passes through unchanged and a negative sentinel such as `-1` keeps its
+/// sign, because [`eval_num`] treats both as opaque values rather than banks.
+///
+/// A string-bank operand (the `3_000_000` range) reads as 0 here; that form does
+/// not occur on any of the 2,663 address operands (docs/OPCODE_250.md section 2).
+fn eval_address(raw: i32, inst: &Instance, vars: &Variables) -> i32 {
+    eval_num(raw, inst, vars)
+}
+
+/// One of the label strings a `250` carries, when it is non-empty.
+///
+/// `stringArgs[1]` is the editor's type name and `stringArgs[3]` its column name;
+/// both are the most reliable keys for resolving a runtime type id or column
+/// number (docs/OPCODE_250.md sections 4 and 6).
+fn label(cmd: &wolf_format::command::Command, index: usize) -> Option<String> {
+    cmd.strings
+        .get(index)
+        .filter(|text| !text.is_empty())
+        .cloned()
 }
 
 /// Read one magic operand as a string.
@@ -1598,31 +1715,64 @@ fn execute(
                 None
             }
             250 => {
-                let db_type = arg(cmd, 0);
-                let db_type = if Magic::decode(db_type).is_storage() {
-                    eval_num(db_type, inst, vars)
-                } else {
-                    db_type
+                // 250 DatabaseAccess addresses one cell of one of the three
+                // databases. Everything about the address lives in the flags word
+                // (docs/OPCODE_250.md section 3):
+                //   bits 8..9 (0x300)  container: 0 CDataBase, 1 SysDatabase, 2 DataBase
+                //   bit 12 (0x1000)    direction: 1 read (cell -> variable), 0 write
+                //   bits 4..6 (0x70)   cell arithmetic: 0 assign .. 7 min
+                // Bits 16..18 are editor bookkeeping (they only record which of the
+                // three label strings is non-empty) and carry no runtime meaning.
+                let flags = arg(cmd, 3);
+                let container = DbContainer::from_flags(flags);
+                let direction = DbDirection::from_flags(flags);
+                let op = ((flags >> 4) & 7) as u8;
+                let type_label = label(cmd, 1);
+                let field_label = label(cmd, 3);
+                // The type, the row and the column are all magic operands: the
+                // hottest cells in this game are read through self variables
+                // (docs/OPCODE_250.md section 0.1 item 3).
+                let db_type = eval_address(arg(cmd, 0), inst, vars);
+                let data_id = eval_address(arg(cmd, 1), inst, vars);
+                let item_id = eval_address(arg(cmd, 2), inst, vars);
+                // The 16 argc-4 sites have no value operand at all: the value is the
+                // first string (docs/OPCODE_250.md section 1.3).
+                let (destination, source) = match direction {
+                    DbDirection::Read if argc(cmd) >= 5 => (Some(arg(cmd, 4)), None),
+                    DbDirection::Read => (None, None),
+                    DbDirection::Write if argc(cmd) >= 5 => {
+                        (None, Some(DbValue::Num(eval_num(arg(cmd, 4), inst, vars))))
+                    }
+                    DbDirection::Write => (
+                        None,
+                        Some(DbValue::Str(
+                            cmd.strings
+                                .first()
+                                .map_or(String::new(), |raw| expand(raw, inst, vars)),
+                        )),
+                    ),
                 };
-                // argc 5 is [type, row, column, flags, destination]; the 16
-                // argc-4 sites carry no destination (docs/OPCODE_250.md).
-                let destination = if argc(cmd) >= 5 {
-                    Some(arg(cmd, 4))
-                } else {
-                    None
-                };
-                if let Some(answer) = host.database(&DbOp {
+                let answer = host.database(&DbOp {
+                    container,
+                    direction,
+                    op,
                     db_type,
-                    data_id: arg(cmd, 1),
-                    item_id: arg(cmd, 2),
-                    flags: arg(cmd, 3),
+                    data_id,
+                    item_id,
+                    flags,
                     destination,
-                }) {
-                    if let Some(target) = destination {
-                        match answer {
-                            DbValue::Num(value) => store_num(inst, vars, target, value),
-                            DbValue::Str(text) => store_str(inst, vars, target, &text),
-                        }
+                    source,
+                    type_label,
+                    field_label,
+                });
+                // A write must never touch a variable: its fifth operand is the
+                // source value, not a destination (docs/OPCODE_250.md section 0.1).
+                if let (DbDirection::Read, Some(answer), Some(target)) =
+                    (direction, answer, destination)
+                {
+                    match answer {
+                        DbValue::Num(value) => store_num(inst, vars, target, value),
+                        DbValue::Str(text) => store_str(inst, vars, target, &text),
                     }
                 }
                 inst.pc += 1;
@@ -2036,6 +2186,13 @@ mod tests {
         picture_queries: Vec<(i32, i32)>,
         // Canned engine answers for 124 0x3000, keyed by field.
         engine_answers: Vec<(i32, i32)>,
+        // How many times the interpreter told the host to close the window.
+        closed: usize,
+        // Every 250 DatabaseAccess the interpreter decoded, in order.
+        databases: Vec<DbOp>,
+        // The answer served back for a 250 read, if any. Served for writes too, so a
+        // test can prove the interpreter drops it.
+        db_answer: Option<DbValue>,
     }
 
     impl Host for Recorder {
@@ -2077,6 +2234,33 @@ mod tests {
                 .find(|(f, _)| *f == field)
                 .map(|(_, value)| *value)
         }
+        fn database(&mut self, op: &DbOp) -> Option<DbValue> {
+            self.databases.push(op.clone());
+            self.db_answer.clone()
+        }
+        fn close_message(&mut self) {
+            self.closed += 1;
+        }
+    }
+
+    #[test]
+    fn a_dismissed_message_is_closed_on_the_host() {
+        let ev = event(
+            31,
+            "message",
+            vec![cmd(101, &[], &["\\Ehello"]), cmd(103, &[], &[])],
+        );
+        let mut vm = vm_with(vec![ev]);
+        let mut host = Recorder::default();
+        vm.start_event(31).unwrap();
+        vm.step_frame(&mut host);
+        assert_eq!(host.messages, vec!["\\Ehello".to_owned()]);
+        assert_eq!(host.closed, 0, "nothing dismissed yet");
+
+        host.dismiss = true;
+        vm.step_frame(&mut host);
+        assert_eq!(host.closed, 1, "the window closes exactly once");
+        assert_eq!(host.messages.len(), 1, "no second message");
     }
 
     #[test]
@@ -2603,6 +2787,159 @@ mod tests {
     }
 
     #[test]
+    fn db_op_decode_splits_container_direction_and_operation() {
+        // Real sites: ev63 pc25 [18,0,24,0x51200,self9] reads the user database,
+        // ev63 pc119 [24,self49,0,0x51100,self8] reads the system database (only bit 8
+        // tells it apart from CDataBase), and ev48 pc101 [18,51,0,0x10000,6] writes one.
+        let ev = event(
+            5,
+            "db decode",
+            vec![
+                cmd(
+                    250,
+                    &[18, 0, 24, 0x51200, 2_000_000],
+                    &["", "画像/音声設定", "", "メッセ—ジウィンドウ ベ—ス画像"],
+                ),
+                cmd(121, &[1_600_049, 2, 0, 0], &[]),
+                cmd(
+                    250,
+                    &[24, 1_600_049, 0, 0x51100, 2_000_001],
+                    &["", "顔グラフィック名", "", "顔画像ファイル"],
+                ),
+                cmd(
+                    250,
+                    &[18, 97, 0, 0x10000, 6],
+                    &["", "マップ設定", "", "座標倍率X"],
+                ),
+                // The clamp idiom of ev50 pc30 / ev53 pc5: max() instead of assign.
+                cmd(
+                    250,
+                    &[19, 0, 26, 0x10060, 3],
+                    &["", "システム設定", "", "顔倍率"],
+                ),
+            ],
+        );
+        let mut vm = vm_with(vec![ev]);
+        vm.start_event(5).unwrap();
+        let mut host = Recorder::default();
+        vm.step_frame(&mut host);
+        assert_eq!(host.databases.len(), 4);
+
+        let user = &host.databases[0];
+        assert_eq!(
+            user.container,
+            DbContainer::Data,
+            "bit 9 is Data, not bit 8"
+        );
+        assert_eq!(user.direction, DbDirection::Read);
+        assert_eq!(user.op, 0, "assign");
+        assert_eq!((user.db_type, user.data_id, user.item_id), (18, 0, 24));
+        assert_eq!(user.destination, Some(2_000_000));
+        assert_eq!(user.source, None);
+        assert_eq!(user.type_label.as_deref(), Some("画像/音声設定"));
+        assert_eq!(
+            user.field_label.as_deref(),
+            Some("メッセ—ジウィンドウ ベ—ス画像")
+        );
+
+        let system = &host.databases[1];
+        assert_eq!(system.container, DbContainer::Sys, "only bit 8 is set");
+        assert_eq!(system.direction, DbDirection::Read);
+        assert_eq!(system.data_id, 2, "the row is self[49], not 1600049");
+        assert_eq!(system.item_id, 0);
+
+        let write = &host.databases[2];
+        assert_eq!(
+            write.container,
+            DbContainer::CData,
+            "bit 16 is not a container"
+        );
+        assert_eq!(
+            write.direction,
+            DbDirection::Write,
+            "bit 16 is not the direction"
+        );
+        assert_eq!(write.op, 0);
+        assert_eq!(write.destination, None, "a write has no destination");
+        assert_eq!(write.source, Some(DbValue::Num(6)));
+        assert!(!write.string_write());
+
+        let clamp = &host.databases[3];
+        assert_eq!(clamp.direction, DbDirection::Write);
+        assert_eq!(clamp.op, 6, "max()");
+        assert_eq!(clamp.source, Some(DbValue::Num(3)));
+        assert!(host.logs.is_empty(), "unexpected logs");
+    }
+
+    #[test]
+    fn db_write_never_touches_the_source_variable() {
+        // A write's fifth operand is the value to store, so even an answer from the
+        // host must be dropped: v[1] has to stay 5 after the cell is written.
+        let ev = event(
+            6,
+            "db write",
+            vec![
+                cmd(121, &[2_000_001, 5, 0, 0], &[]),
+                cmd(250, &[18, 51, 0, 0x10000, 2_000_001], &[]),
+                // Bogus ids still route to the container bits, not to the string form.
+                cmd(250, &[18, 52, 0, 0x10000, 2_000_002], &[]),
+                // argc 4 is the string form: the value is stringArgs[0] and bit 1 says so.
+                cmd(250, &[21, 90, 1, 0x10002], &["習得した"]),
+            ],
+        );
+        let mut vm = vm_with(vec![ev]);
+        vm.start_event(6).unwrap();
+        let mut host = Recorder {
+            db_answer: Some(DbValue::Num(99)),
+            ..Recorder::default()
+        };
+        vm.step_frame(&mut host);
+        assert_eq!(vm.vars.get(1), 5, "the source variable was overwritten");
+        assert_eq!(vm.vars.get(2), 0, "a write must not store into a variable");
+        assert_eq!(host.databases.len(), 3);
+
+        assert_eq!(host.databases[0].source, Some(DbValue::Num(5)));
+        assert_eq!(host.databases[0].data_id, 51);
+        assert_eq!(host.databases[1].source, Some(DbValue::Num(0)));
+
+        let string_write = &host.databases[2];
+        assert_eq!(string_write.direction, DbDirection::Write);
+        assert_eq!(string_write.op, 0);
+        assert_eq!(
+            string_write.source,
+            Some(DbValue::Str("習得した".to_owned()))
+        );
+        assert!(string_write.string_write());
+        assert!(host.logs.is_empty(), "unexpected logs");
+    }
+
+    #[test]
+    fn db_read_writes_the_answer_into_the_destination_variable() {
+        // ev63 pc119 stores a picture file name into self[8] through the system
+        // database, which is the only Sys container in the whole game.
+        let ev = event(
+            7,
+            "db read",
+            vec![cmd(
+                250,
+                &[24, 1_600_049, 0, 0x51100, 3_000_000],
+                &["", "顔グラフィック名", "", "顔画像ファイル"],
+            )],
+        );
+        let mut vm = vm_with(vec![ev]);
+        let mut host = Recorder {
+            db_answer: Some(DbValue::Str("Picture/face01.png".to_owned())),
+            ..Recorder::default()
+        };
+        vm.start_event(7).unwrap();
+        vm.step_frame(&mut host);
+        // The destination is a magic operand like any other: string variable 0 here,
+        // self[8] (1_600_008) at the real site ev63 pc119.
+        assert_eq!(host.databases[0].destination, Some(3_000_000));
+        assert_eq!(vm.vars.get_str(0), "Picture/face01.png");
+    }
+
+    #[test]
     fn label_jump_lands_on_the_set_label() {
         let e = event(
             1,
@@ -2702,11 +3039,7 @@ mod tests {
     #[test]
     fn the_short_picture_form_with_head_three_is_a_hide() {
         // ev63: 150 [3, 19500] under the comment フェードが1以外ならウィンドウを非表示.
-        let e = event(
-            1,
-            "hide",
-            vec![cmd(150, &[3, 19500], &[])],
-        );
+        let e = event(1, "hide", vec![cmd(150, &[3, 19500], &[])]);
         let mut vm = vm_with(vec![e]);
         let mut host = Recorder::default();
         vm.start_event(1).unwrap();

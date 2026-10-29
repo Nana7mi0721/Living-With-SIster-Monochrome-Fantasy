@@ -41,8 +41,9 @@ pub mod text;
 pub mod vars;
 
 pub use exec::{
-    BlockResult, ChoiceReply, DbOp, DbValue, Host, Instance, LogLevel, PictureAction, PictureCmd, Signal,
-    SoundAction, SoundChannel, SoundCmd, StepReport, WaitState, Vm,
+    BlockResult, ChoiceReply, DbContainer, DbDirection, DbOp, DbValue, Host, Instance, LogLevel,
+    PictureAction, PictureCmd, Signal, SoundAction, SoundChannel, SoundCmd, StepReport, Vm,
+    WaitState,
 };
 pub use magic::{Magic, MagicKind};
 pub use program::{Block, BlockKind, Control, PrecompileStats, Program, ProgramSet};

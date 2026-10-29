@@ -81,6 +81,7 @@ fn main() -> ExitCode {
     let mut filter: Option<String> = None;
     let mut frame_limit: Option<u64> = None;
     let mut hold_message = false;
+    let mut engine_events: Option<Vec<u32>> = None;
     let mut boot = true;
     let mut map: Option<String> = None;
     let mut map_run: Option<String> = None;
@@ -118,6 +119,17 @@ fn main() -> ExitCode {
                 map_run = args.next();
             }
             "--hold-message" => hold_message = true,
+            // Which parallel-process-always events the engine starts, replacing
+            // ENGINE_ALWAYS. An empty value starts none of them, which is the A/B
+            // baseline (docs/ENGINE_EVENTS.md section 8.3).
+            "--engine-events" => {
+                let value = args.next().unwrap_or_default();
+                let ids: Vec<u32> = value
+                    .split(',')
+                    .filter_map(|part| part.trim().parse().ok())
+                    .collect();
+                engine_events = Some(ids);
+            }
             "--boot" => boot = true,
             "--menu-only" => boot = false,
             "--filter" | "-F" => {
@@ -151,7 +163,7 @@ fn main() -> ExitCode {
                     None if boot => Entry::Boot,
                     None => Entry::Menu,
                 };
-                run_capture(&root, out, frames, answer, hold_message, entry)
+                run_capture(&root, out, frames, answer, hold_message, engine_events, entry)
             }
         },
         Some("list") => run_list(&root, filter.as_deref()),
@@ -214,6 +226,9 @@ fn print_help() {
     println!("    --until <N>       Quit 'play' after N frames (smoke test; default: until closed).");
     println!("    --menu-only       Start common event 42 directly instead of the boot map.");
     println!("    --hold-message    Park on the first 101 message instead of dismissing it.");
+    println!("    --engine-events <ids>  Comma separated ids that replace ENGINE_ALWAYS");
+    println!("                      (the parallel-process-always events the engine owns).");
+    println!("                      Pass an empty value to start none of them.");
     println!("    -m, --map <NAME>  Capture a map instead of the boot sequence (e.g. SampleMapA.mps).");
     println!("    --boot            Start on the boot map (default for capture and play).");
     println!("    -r, --root <DIR>  Unpacked data root containing BasicData/ and MapData/.");
@@ -1297,6 +1312,7 @@ fn run_capture(
     frames: usize,
     answer: Option<usize>,
     hold_message: bool,
+    engine_events: Option<Vec<u32>>,
     entry: Entry<'_>,
 ) -> ExitCode {
     let out = out.unwrap_or_else(|| PathBuf::from("work/out/title.png"));
@@ -1313,6 +1329,7 @@ fn run_capture(
     // --hold-message parks the run on the first 101 message instead, which is how a
     // capture photographs the message window (the story scripts talk before they branch).
     game.auto_advance = !hold_message;
+    game.engine_always = engine_events;
     if let Some(index) = answer {
         game.set_choice_cursor(index);
         game.auto_choice = true;
@@ -1379,6 +1396,18 @@ fn run_capture(
     println!("capture");
     println!("  data root : {}", root.display());
     println!("  frames    : {frames} (peak {peak} coroutine(s))");
+    // Every live coroutine with the state it is parked in. A message or a prompt that
+    // outlives the script that showed it is visible here first: the wait state names the
+    // opcode that is holding it.
+    for instance in game.vm.instances() {
+        println!(
+            "    coro {:<3} event {:<6} pc {:<5} wait {:?}",
+            format!("{:?}", instance.id),
+            instance.event,
+            instance.pc,
+            instance.wait
+        );
+    }
     println!(
         "  pictures  : {} live -> {} textured quad(s), {} text picture(s)",
         game.screen.len(),
@@ -1572,8 +1601,14 @@ fn run_capture(
 
     let warnings = game.stats.warnings;
     println!(
-        "  stats     : {} instruction(s), {} picture op(s), {} sound(s), {} db access(es), {warnings} warning(s)",
-        game.stats.instructions, game.stats.pictures, game.stats.sounds, game.stats.databases
+        "  stats     : {} instruction(s), {} picture op(s), {} sound(s), {} db access(es) ({} write), {} message(s), {} choice(s), {warnings} warning(s)",
+        game.stats.instructions,
+        game.stats.pictures,
+        game.stats.sounds,
+        game.stats.databases,
+        game.stats.database_writes,
+        game.stats.messages,
+        game.stats.choices
     );
     if !game.diagnostics.is_empty() {
         println!("  diagnostics ({} distinct):", game.diagnostics.len());

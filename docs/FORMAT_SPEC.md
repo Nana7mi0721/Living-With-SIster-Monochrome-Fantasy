@@ -1161,7 +1161,7 @@ type × type_count:
     u4     field_count
     field × field_count:  t_str  field_name
     u4     data_count
-    data × data_count:    （行数据，与 .dat 的行同样编码）
+    data × data_count:    t_str 行名（是名字，不是 .dat 编码的行数据；见 6.8）
     t_str  description
     u4     field_type_list_size
     u1[ field_count ]   每字段类型码
@@ -1171,6 +1171,9 @@ type × type_count:
     u4 index ; index × ( u4 args_count + args_count × u4 )      (args)
     u4 index ; index × u4                                       (默认值)
 ~~~
+
+逐字节验证过的完整记录布局（含字段数/行数的实测表与勘误）见 **6.8**——按那里的顺序把四个块读过去，
+三个文件的走查都精确落在文件末尾。
 
 **TODO（未验证）**：类型码的具体含义、unknown1 / string_args / args / 默认值的语义尚未逐个解码。
 重写游戏时这些只是编辑器元数据，运行时用不到——运行时只需要字段名与“数值/字符串”分类。
@@ -1212,13 +1215,64 @@ type × type_count:
    CDataBase.dat 里才出现 20002/20003/20004/30000 这类值。所以 loader 不能假设取值集合，
    只能「等于 0x0001D4C0 时多读一个 t_str」。
 2. 6.5 的 .project 记录里，字段名之后那一块实测是 **data_count 个 t_str 的行名**（不是 .dat 编码的行数据）；
-   其后才是 description、u4 field_type_list_size、u1[field_count] 类型码，以及若干未解码块。
-   **记录之间还夹着未解码块**（实测间隔 0/792/460/291/723/125/266/…/125 字节），按长度顺序走会失步。
-   Rust 实现改为「先校验 u4 type_count == .dat 的类型数，再为每个类型从上一个记录末尾向后扫描第一个满足
-   名字 + 恰好 field_count 个字段名 + 恰好 data_count 个行名的位置」，本文件 28/28 全部命中。
+   其后才是 description、u4 field_type_list_size、u1[field_count] 类型码，以及 6.8 里的四个编辑器元数据块。
+   **修正此前的误判**：这四个块并不是「未解码的夹缝」——只要按 6.8 的顺序把四个块都读过去，
+   三个文件的走查都**精确落在文件末尾**（SysDatabase 35972/35972、DataBase 174721/174721、CDataBase 170977/170977，
+   剩余 0 字节），因此不需要「从上一个记录末尾向后扫描找对齐点」那种启发式做法。实测数据见 6.8。
 3. 因此**类型名与行名都只存在于 .project**：0 字段类型（4/5/6/14..23）如类型 6（システム変数名，150 行）
    在 .dat 里取不到任何名字，只能由 .project 补齐（row1 = ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ X座標）。
    loader 把补名做成可选步骤：缺 .project 时名字为空、不报错。
+
+### 6.8 .project 记录布局（★三个文件都精确走到 EOF，实测）
+
+.dat 是纯位置式的：它给出「第 i 个字段是数值还是字符串」和每行的值，**一个名字都没有**。
+名字在与之同名的 .project 里（DataBase.project / CDataBase.project / SysDatabase.project）。
+记录与 .dat 的类型表**按下标一一对应**：.project 的第 i 条记录就是 .dat 的第 i 个类型。
+
+~~~
+u4  type_count                      ; 必须等于 .dat 的 u4 type_count
+type × type_count:
+    t_str  type_name                ; 编辑器里显示的类型名，可以为空串
+    u4     field_count
+    t_str × field_count   field_name
+    u4     data_count
+    t_str × data_count    row_name  ; 行名（不是 .dat 编码的行数据）
+    t_str  description              ; 编辑器帮助文本，运行时用不到
+    u4     field_type_bytes
+    u1[field_type_bytes]            ; 每字段一个类型码（语义未解码）
+    ; 以下四个块是编辑器元数据，长度必须读准，否则下一条记录会失步：
+    u4 n1 ; t_str × n1                              ; 每字段的说明（unknown1）
+    u4 n2 ; n2 × ( u4 k ; t_str × k )               ; string_args
+    u4 n3 ; n3 × ( u4 k ; u4 × k )                  ; args
+    u4 n4 ; u4 × n4                                 ; 默认值
+~~~
+
+t_str 与 .dat 相同：u4 字节数（**含**结尾 NUL）+ 负载。这里负载是 UTF-8（不像 .dat 的 SJIS 混排），
+所以「结尾不是 NUL」或「不是合法 UTF-8」就可以判定这个偏移不是名字。
+
+实测（work/full/BasicData/）：
+
+| 文件 | 字节数 | 类型数 | 有名字的类型 | 字段名总数 | 行名总数 | 走查结束位置 |
+|---|---|---|---|---|---|---|
+| SysDatabase.project | 35972 | 28 | 25 | 39 | 1632 | 35972（剩余 0） |
+| DataBase.project | 174721 | 40 | 23 | 592 | 723 | 174721（剩余 0） |
+| CDataBase.project | 170977 | 30 | 24 | 973 | 723 | 170977（剩余 0） |
+
+- **空名字是常态**：DataBase 有 17 个类型名是空串（18、19、21、22、23、24、29、30..39），
+  CDataBase 有 6 个（22、23、24、26、28、29），SysDatabase 有 3 个（25、26、27）。
+  这些槽位在编辑器里就是分隔行，loader 应把它们当作「无名」而不是错误。
+- **字段数会与 .dat 不一致**：编辑器在记录里保留了 .dat 导出时丢掉的那个字段——
+  DataBase 的 18、19、21、22、23、24、30、31（project 1 个字段 / .dat 0 个）与 CDataBase 的 22、26。
+  这类类型**不能**把字段名贴到列上（列根本不存在），但类型名照常可用；行数则全部一致。
+- 类型名举例（DataBase）：0 技能、2 アイテム、3 武器、17 システム設定、26 メッセージウィンドウ種類；
+  type0 字段 0/1 = 技能の名前 / スキル説明，行 0/1 = 什么都不做 / 观察状况。
+  CDataBase：0 主人公ステータス（字段 0 = 头衔1，行 0 = 勇者先生）、1 ┣ 技能習得Lv（字段 0 = <能力>覚えるレベル，16 行全无名）。
+- Rust API（crates/wolf-format）：`Database::apply_project_names(&[u8]) -> usize` 返回**对上的记录数**
+  （不等于 .dat 类型数时返回 0 且一个名字都不贴，避免把别的库/别的版本的名字错贴过来），
+  之后用 `type_name(ty)` / `field_name(ty, column)` / `row_name(ty, row)`；
+  `ProjectNames` / `ProjectTypeNames` 暴露原始记录与 `named_types()/named_fields()/named_rows()`。
+  `SysDatabase` 共用同一套走查（`SysDatabase::apply_project_names` + `SysType::field_name`，
+  见 6.7），空名字与「字段数不一致就不贴字段名」的规则完全相同。
 
 ---
 

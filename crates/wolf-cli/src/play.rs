@@ -176,10 +176,32 @@ impl App {
     }
 
     fn build_text_items(&self) -> Vec<TextItem> {
-        self.texts
+        let mut items: Vec<TextItem> = self
+            .texts
             .iter()
-            .map(|text| TextItem::new(text.text.clone(), text.rect, self.game.font_px()).with_alpha(text.alpha))
-            .collect()
+            .map(|text| {
+                TextItem::new(text.text.clone(), text.rect, self.game.font_px())
+                    .with_alpha(text.alpha)
+            })
+            .collect();
+        // A 101 message is engine text, not a picture: the frame comes from common event 63
+        // as ordinary pictures, the glyphs come from the message layout. Only the newest
+        // message is on screen, which is the order the interpreter produces.
+        if let Some(message) = self.game.messages.last() {
+            let vars = self.game.message_vars();
+            let layout = wolf_game::message::layout(&message.text, &vars, message.frames);
+            for row in &layout.rows {
+                items.push(TextItem::new(row.text.clone(), row.rect, layout.font_px));
+            }
+            if let Some(at) = layout.cursor {
+                items.push(TextItem::new(
+                    "▼",
+                    [at[0], at[1], layout.font_px * 2.0, layout.line_height],
+                    layout.font_px,
+                ));
+            }
+        }
+        items
     }
 
     fn upload_if_needed(&mut self, renderer: &mut Renderer) {

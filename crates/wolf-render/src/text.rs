@@ -160,12 +160,17 @@ pub struct TextItem {
     /// Body colour (WOLF `\c[n]`), RGB. Defaults to opaque white, which is what
     /// every text picture without a colour escape uses.
     ///
-    /// WHY RGB and not RGBA: glyphon resolves a glyph's colour as
-    /// `glyph.color_opt.unwrap_or(area.default_color)`, and cosmic-text copies
-    /// `Attrs::color` into every glyph, so a body colour always wins over the
-    /// area colour -- alpha included. Picture opacity therefore stays on the
-    /// area's default colour (see `TextRenderer::prepare`) and must not be folded
-    /// into this field.
+    /// WHY RGB and not RGBA: the alpha axis of a glyph is not a property of the
+    /// colour, it is the picture's opacity, which lives in `Self::alpha` and is
+    /// folded into `Attrs::color` at prepare time. Keeping the two apart is what
+    /// lets a caller recolour a picture without accidentally un-fading it.
+    ///
+    /// WHY the opacity has to ride on `Attrs` at all: glyphon resolves a glyph's
+    /// colour as `glyph.color_opt.unwrap_or(area.default_color)`, and
+    /// cosmic-text copies `Attrs::color` into every glyph, so a body colour
+    /// always wins over the area colour -- alpha channel included. A
+    /// `TextArea::default_color` alpha is therefore dead for any item that
+    /// carries a body colour, which is every item. See `TextRenderer::prepare`.
     pub colour: [u8; 3],
     /// Optional `\E` outline, drawn behind the body.
     pub outline: Option<Outline>,
@@ -577,6 +582,7 @@ impl TextRenderer {
         bx: &LayoutBox,
         align: TextAlign,
         colour: [u8; 3],
+        alpha: u8,
     ) -> usize {
         let family = self.font_family.clone();
         let mut buffer = Buffer::new(
@@ -587,7 +593,7 @@ impl TextRenderer {
         buffer.set_wrap(Wrap::WordOrGlyph);
         let attrs = Attrs::new()
             .family(Family::Name(&family))
-            .color(Color::rgb(colour[0], colour[1], colour[2]));
+            .color(Color::rgba(colour[0], colour[1], colour[2], alpha));
         buffer.set_text(text, &attrs, Shaping::Advanced, Some(align.to_cosmic()));
         buffer.shape_until_scroll(&mut self.font_system, false);
         self.buffers.push(buffer);
@@ -637,18 +643,29 @@ impl TextRenderer {
             // CJK has no spaces, so word wrapping alone would overflow the box;
             // WordOrGlyph breaks inside a word only when it has to.
             buffer.set_wrap(Wrap::WordOrGlyph);
-            // WHY the colour rides on `Attrs` and not on `TextArea::default_color`:
-            // glyphon resolves a glyph's colour as
+            // WHY the colour *and the opacity* ride on `Attrs` and not on
+            // `TextArea::default_color`: glyphon resolves a glyph's colour as
             // `glyph.color_opt.unwrap_or(area.default_color)`, and cosmic-text
             // copies `Attrs::color` into every `LayoutGlyph`, so a per-glyph value
-            // always wins. `Attrs` is therefore the only place a body colour can
-            // come from -- and for the same reason the only place an outline
-            // colour can come from.
-            let attrs = Attrs::new().family(Family::Name(&family)).color(Color::rgb(
-                item.colour[0],
-                item.colour[1],
-                item.colour[2],
-            ));
+            // always wins -- alpha channel included. `Attrs` is therefore the only
+            // place a body colour can come from, and (for the same reason) the
+            // only place the picture's opacity can come from.
+            //
+            // WHY straight alpha rather than premultiplied: glyphon's pipeline is
+            // `BlendState::ALPHA_BLENDING` (SrcAlpha / OneMinusSrcAlpha) and its
+            // shader emits `vec4(color.rgb, color.a * mask)`, i.e. the fixed
+            // function multiplies by src alpha. That is exactly the contract
+            // `crate::SpriteInstance::tint` uses, so a faded glyph composites
+            // identically to a faded sprite and no premultiplication happens on
+            // either path.
+            let attrs = Attrs::new()
+                .family(Family::Name(&family))
+                .color(Color::rgba(
+                    item.colour[0],
+                    item.colour[1],
+                    item.colour[2],
+                    alpha,
+                ));
             buffer.set_text(
                 &item.text,
                 &attrs,
@@ -691,7 +708,10 @@ impl TextRenderer {
             // atlas entries and cost one extra shaping pass, not four extra
             // rasterisations.
             if let Some(outline) = item.outline {
-                let index = self.shape_buffer(&shaped, size, &bx, item.align, outline.colour);
+                // The ring fades with the body: a 50% picture whose outline stayed
+                // opaque would grow a bright halo exactly where the glyphs vanish.
+                let index =
+                    self.shape_buffer(&shaped, size, &bx, item.align, outline.colour, alpha);
                 let pad = i32::from(outline.width_px);
                 let clip = expand_clip(bx.clip, pad, self.screen);
                 let w = f32::from(outline.width_px);
@@ -737,10 +757,10 @@ impl TextRenderer {
                     right: placed.clip[2],
                     bottom: placed.clip[3],
                 },
-                // TextArea has no alpha of its own in glyphon 0.12, so picture
-                // opacity has to ride on the default colour -- which glyphon
-                // ignores whenever the glyph carries its own colour (always, see
-                // the `Attrs` note above).
+                // Dead in practice: every glyph carries its own colour from
+                // `Attrs` (see the note in `prepare`), so glyphon never falls back
+                // to this value. It is kept alpha-matched anyway so that a future
+                // glyphon that honours it cannot silently make the text opaque.
                 default_color: Color::rgba(255, 255, 255, placed.alpha),
                 custom_glyphs: &[],
             })
@@ -1060,6 +1080,140 @@ mod tests {
         assert!(
             ringed_lit > bare_lit,
             "outline must add coverage: {ringed_lit} vs {bare_lit}"
+        );
+    }
+
+    /// Peak of one channel over the whole frame, on a black clear.
+    fn peak_channel(pixels: &[u8]) -> u8 {
+        pixels
+            .chunks_exact(4)
+            .flat_map(|c| [c[0], c[1], c[2]])
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Draw `item` alone over the black clear and return (frame, peak channel).
+    fn render_and_peak(renderer: &mut crate::Renderer, item: TextItem) -> (Vec<u8>, u8) {
+        renderer.draw_text(std::slice::from_ref(&item));
+        renderer.present();
+        let frame = renderer.capture_rgba().expect("offscreen capture");
+        let peak = peak_channel(&frame);
+        (frame, peak)
+    }
+
+    /// The bug this task exists for: `with_alpha` used to be a no-op because the
+    /// glyph colour was pinned at `Color::rgb` (alpha 255) on `Attrs`, and
+    /// glyphon's per-glyph colour always wins over `TextArea::default_color`.
+    /// A half-opacity white glyph over a black clear must therefore peak near
+    /// 128, not 255.
+    #[test]
+    fn alpha_fades_the_glyphs() {
+        let Some(mut renderer) = offscreen() else {
+            return;
+        };
+        let (opaque, peak_opaque) =
+            render_and_peak(&mut renderer, TextItem::new("M", BODY_RECT, 96.0));
+        let (half, peak_half) = render_and_peak(
+            &mut renderer,
+            TextItem::new("M", BODY_RECT, 96.0).with_alpha(0.5),
+        );
+
+        assert_eq!(
+            peak_opaque, 255,
+            "an opaque white glyph should reach full white"
+        );
+        let delta = (i32::from(peak_half) - 128).abs();
+        assert!(
+            delta <= 3,
+            "half-opacity glyph peaked at {peak_half}, expected ~128 (+/-3)"
+        );
+        // And the fade must be uniform, not a handful of pixels: the lit area
+        // stays essentially the same, only its brightness halves. It is not
+        // bit-identical because an anti-aliased edge pixel at coverage c drops
+        // from round(255*c) to round(127.5*c) and the faintest ones round to 0.
+        let (lit_opaque, lit_half) = (lit(&opaque), lit(&half));
+        let drift = lit_opaque.abs_diff(lit_half);
+        assert!(
+            drift * 100 <= lit_opaque * 2,
+            "alpha changed glyph coverage by {drift} px ({lit_opaque} -> {lit_half})"
+        );
+        assert!(lit_half > 100, "no glyph coverage to fade: {lit_half}");
+    }
+
+    /// Peak of the green channel over pixels that only the ring can have painted
+    /// (pure green: the white body always lights red and blue as well).
+    fn green_only(pixels: &[u8]) -> (usize, u8) {
+        let mut count = 0;
+        let mut peak = 0;
+        for c in pixels.chunks_exact(4) {
+            if c[0] == 0 && c[2] == 0 && c[1] > 0 {
+                count += 1;
+                peak = peak.max(c[1]);
+            }
+        }
+        (count, peak)
+    }
+
+    /// An outlined item has to fade as a whole: the ring shares the body's
+    /// opacity, otherwise a fading picture grows a bright halo as its glyphs
+    /// disappear.
+    ///
+    /// WHY the ring's peak is bounded from above instead of being pinned at 128:
+    /// glyphon stamps the ring as four offset copies of the same glyph, so where
+    /// two copies overlap their alphas compose (0.5 then 0.5*(1-0.5) = 0.75) and
+    /// such a pixel lands at 191 rather than 128. What must not happen is a
+    /// single copy staying at 255 -- that would mean the ring never faded.
+    #[test]
+    fn alpha_fades_the_outline_too() {
+        let Some(mut renderer) = offscreen() else {
+            return;
+        };
+        let ringed = TextItem::new("M", BODY_RECT, 96.0).with_outline(3, [0, 255, 0]);
+        let (opaque, _) = render_and_peak(&mut renderer, ringed.clone());
+        let (half, _) = render_and_peak(&mut renderer, ringed.with_alpha(0.5));
+
+        let (opaque_ring, opaque_peak) = green_only(&opaque);
+        let (half_ring, half_peak) = green_only(&half);
+        assert!(opaque_ring > 100, "no ring pixels at all: {opaque_ring}");
+        assert_eq!(opaque_peak, 255, "an opaque ring must reach full green");
+        assert!(
+            half_peak >= 120,
+            "ring faded more than the body did: peak {half_peak}"
+        );
+        // The ceiling is the four-fold overlap case, not 128: 1 - (1 - 0.5)^4 =
+        // 0.9375 -> 239. Anything at 255 means at least one copy kept the
+        // picture's opacity.
+        assert!(
+            half_peak < 255,
+            "some ring copy stayed fully opaque: peak {half_peak}"
+        );
+        assert!(
+            half_peak <= 240,
+            "ring composited brighter than four half-alpha copies allow: {half_peak}"
+        );
+        assert!(
+            half_ring > 100,
+            "the ring vanished instead of fading: {half_ring} px"
+        );
+    }
+
+    /// Zero alpha means "invisible", not "opaque": the item is skipped entirely
+    /// and the frame stays black.
+    #[test]
+    fn zero_alpha_draws_nothing() {
+        let Some(mut renderer) = offscreen() else {
+            return;
+        };
+        let (frame, peak) = render_and_peak(
+            &mut renderer,
+            TextItem::new("M", BODY_RECT, 96.0).with_alpha(0.0),
+        );
+        assert_eq!(peak, 0, "alpha 0 must leave the frame black");
+        assert_eq!(lit(&frame), 0);
+        assert_eq!(
+            renderer.text_stats().items,
+            0,
+            "the item is skipped, not drawn"
         );
     }
 

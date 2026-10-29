@@ -321,6 +321,11 @@ impl Atlas {
                 // The anchor and the scale live in Picture::destination, the same law the
                 // sprite pass and the message metrics use, so a centred panel lands centred.
                 let dst = picture.destination(w as f32, h as f32);
+                // The balloon library parks its panels off screen between bubbles; a panel
+                // that cannot touch the screen would still cost nine quads and a skin pack.
+                if !crate::picture::on_screen(dst) {
+                    return None;
+                }
                 Some((
                     picture.number,
                     dst,

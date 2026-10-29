@@ -96,8 +96,33 @@ fn the_opening_script_runs_and_draws_its_pictures() {
         ["广阔的战场", "广袤的森林", "微风吹拂而过的麦田", "有人在等我的家"],
         "the opening prompt changed"
     );
-    // Nothing the script draws is a text picture any more - the prompt came through the
-    // choice path - so only the textured side of the atlas is asserted.
+    // The prompt arrives through the choice path, so no text picture is on screen. The
+    // only text pictures alive belong to the third-party balloon-message library that
+    // event 98 initialises: it parks its 24 controls at (-2784, 2880) until a bubble is
+    // opened, and `atlas::texts` reports them because a parked control is still a live
+    // picture. Asserting on the numbers instead of the count keeps the check honest when
+    // the library adds a control.
+    let on_screen_texts: Vec<i32> = game
+        .screen
+        .iter()
+        .filter(|picture| picture.kind.is_text())
+        .filter(|picture| (0..1024).contains(&picture.x) && (0..576).contains(&picture.y))
+        .map(|picture| picture.number)
+        .collect();
+    assert!(
+        on_screen_texts.is_empty(),
+        "text pictures on screen: {on_screen_texts:?} (texts {})",
+        texts.len()
+    );
     assert!(!quads.is_empty(), "nothing textured on screen");
-    assert!(texts.is_empty(), "unexpected text pictures: {}", texts.len());
+    // The narration was shown and dismissed: a 101 that is never closed leaves the
+    // message in Game::messages for the rest of the session and pins Sys12 at 1, which
+    // makes common event 63 repaint the window frame every frame (measured: +150
+    // instructions per frame). One frame of a dismissed message must leave nothing.
+    assert!(
+        game.messages.is_empty(),
+        "{} message(s) stayed on screen after the prompt opened",
+        game.messages.len()
+    );
+    assert!(game.stats.messages > 0, "the opening narration never arrived");
 }

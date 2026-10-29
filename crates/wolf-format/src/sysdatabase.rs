@@ -18,7 +18,7 @@
 //! [`SysDatabase::num`] and [`SysDatabase::text`] take a *logical* column (the one
 //! the editor shows), not a physical slot in [`Row::numbers`] / [`Row::strings`].
 
-use crate::database::{Database, FieldKind, Row, RowValue};
+use crate::database::{Database, FieldKind, ProjectNames, Row, RowValue};
 use crate::error::Result;
 
 /// A parsed `SysDatabase.dat` plus the names from its `.project` companion.
@@ -58,6 +58,7 @@ impl SysDatabase {
             .map(|database_type| SysType {
                 name: String::new(),
                 fields: database_type.fields,
+                field_names: Vec::new(),
                 rows: database_type.rows,
                 row_names: Vec::new(),
             })
@@ -85,6 +86,16 @@ impl SysDatabase {
     /// companion was not loaded — the container itself has no row names.
     pub fn name_of(&self, ty: usize, row: usize) -> Option<&str> {
         self.types.get(ty)?.row_name(row)
+    }
+
+    /// Editor name of logical column `column` in type `ty`.
+    ///
+    /// `None` when the type or column does not exist, when the `.project`
+    /// companion was not loaded, or when the companion's field list disagrees
+    /// with the table's field count (a label must never be attached to a column
+    /// that is not there).
+    pub fn field_name(&self, ty: usize, column: usize) -> Option<&str> {
+        self.types.get(ty)?.field_name(column)
     }
 
     /// Numeric cell in logical column `col` of row `row`, widened to `i64`.
@@ -125,46 +136,36 @@ impl SysDatabase {
         Some([channel(0)?, channel(1)?, channel(2)?])
     }
 
-    /// Read type and row names from the editor's `SysDatabase.project` companion.
+    /// Read type, field and row names from the editor's `SysDatabase.project`
+    /// companion.
     ///
-    /// A `.project` file starts with the type count and then stores, per type,
-    /// the same tuple the `.dat` type table uses — type name, field count, field
-    /// names, row count, row names — but the editor wedges layout blocks of
-    /// undocumented length *between* those tuples, so the next record cannot be
-    /// reached by walking lengths alone. Each record is therefore located by
-    /// matching the field and row counts already parsed from the `.dat`: the
-    /// scan resumes right after the previous record and stops at the first offset
-    /// that is followed by exactly `fields.len()` field names and exactly
-    /// `rows.len()` row names. A count mismatch is not something a wrong offset
-    /// satisfies by accident for the shapes in this game, and a companion written
-    /// by a different game version fails the type-count check up front and leaves
-    /// every name empty.
+    /// The `.dat` carries no labels at all; the editor keeps them in the
+    /// `.project` file next to it, one self-describing record per type, and the
+    /// records are index-aligned with this database's type list. The record walk
+    /// lives in [`ProjectNames`] and is exact: it follows each record's four
+    /// editor-metadata blocks and lands on the end of the file, so no scanning is
+    /// needed (see `docs/FORMAT_SPEC.md` §6.8).
     ///
-    /// Returns how many types got a name; the names of unfound types stay empty.
+    /// Labels are attached per shape: the type name always, the field names only
+    /// when the companion's field count matches the table, the row names only
+    /// when the row count does. A companion from a different game version fails
+    /// the leading type count and names nothing.
+    ///
+    /// Returns how many types the companion described — `0` when it does not
+    /// belong to this database — counting a type whose editor name is empty
+    /// (types 25..=27 of this game) as described too.
     pub fn apply_project_names(&mut self, project: &[u8]) -> usize {
-        if u32_at(project, 0) != Some(self.types.len() as u32) {
-            return 0;
-        }
-        let mut cursor = 4;
+        let names = ProjectNames::parse(project, self.types.len());
         let mut filled = 0;
-        for table in &mut self.types {
-            let mut at = cursor;
-            while at < project.len() {
-                if let Some(record) =
-                    project_type_at(project, at, table.fields.len(), table.rows.len())
-                {
-                    table.name = record.name.to_owned();
-                    table.row_names = record
-                        .row_names
-                        .iter()
-                        .map(|name| (*name).to_owned())
-                        .collect();
-                    cursor = record.end;
-                    filled += 1;
-                    break;
-                }
-                at += 1;
+        for (table, record) in self.types.iter_mut().zip(names.iter()) {
+            table.name.clone_from(&record.name);
+            if record.fields.len() == table.fields.len() {
+                table.field_names.clone_from(&record.fields);
             }
+            if record.rows.len() == table.rows.len() {
+                table.row_names.clone_from(&record.rows);
+            }
+            filled += 1;
         }
         filled
     }
@@ -178,6 +179,9 @@ pub struct SysType {
     pub name: String,
     /// Field table in logical column order.
     pub fields: Vec<FieldKind>,
+    /// Editor name per field, parallel to [`Self::fields`]; empty until
+    /// [`SysDatabase::apply_project_names`] runs.
+    pub field_names: Vec<String>,
     /// Rows in file order; the engine indexes them by slot number.
     pub rows: Vec<Row>,
     /// Editor name per row, parallel to [`Self::rows`]; empty until
@@ -214,79 +218,12 @@ impl SysType {
     pub fn row_name(&self, row: usize) -> Option<&str> {
         self.row_names.get(row).map(String::as_str)
     }
-}
 
-/// Longest name accepted from a `.project` file, in bytes.
-///
-/// Type names are a few dozen bytes and the longest row name measured is 28; the
-/// bound only stops a corrupt length word from being followed.
-const MAX_NAME_BYTES: usize = 4096;
-
-/// One type record of a `.project` file.
-struct ProjectType<'a> {
-    /// Editor name of the type.
-    name: &'a str,
-    /// Editor name per row.
-    row_names: Vec<&'a str>,
-    /// Offset just past the record, where the search for the next one starts.
-    end: usize,
-}
-
-/// Little-endian `u32` at `at`.
-fn u32_at(data: &[u8], at: usize) -> Option<u32> {
-    let bytes = data.get(at..at + 4)?;
-    Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
-}
-
-/// Read one `.project` name at `at`: a `u32` byte count, then that many bytes
-/// whose last one is the NUL terminator — the same `t_str` the `.dat` files use,
-/// minus the lossy decode: the editor writes UTF-8, so bytes that are not valid
-/// UTF-8 mean this offset is not a name.
-fn name_at(data: &[u8], at: usize) -> Option<(&str, usize)> {
-    let len = u32_at(data, at)? as usize;
-    if len == 0 || len > MAX_NAME_BYTES {
-        return None;
+    /// Editor name of logical column `column`, once the `.project` names were
+    /// applied.
+    pub fn field_name(&self, column: usize) -> Option<&str> {
+        self.field_names.get(column).map(String::as_str)
     }
-    let start = at + 4;
-    let raw = data.get(start..start + len)?;
-    let (terminator, text) = raw.split_last()?;
-    if *terminator != 0 {
-        return None;
-    }
-    Some((std::str::from_utf8(text).ok()?, start + len))
-}
-
-/// Try to read a whole type record at `at`, requiring the declared field and row
-/// counts to match the `.dat` type table.
-fn project_type_at(
-    project: &[u8],
-    at: usize,
-    field_count: usize,
-    row_count: usize,
-) -> Option<ProjectType<'_>> {
-    let (name, mut offset) = name_at(project, at)?;
-    if u32_at(project, offset)? as usize != field_count {
-        return None;
-    }
-    offset += 4;
-    for _ in 0..field_count {
-        offset = name_at(project, offset)?.1;
-    }
-    if u32_at(project, offset)? as usize != row_count {
-        return None;
-    }
-    offset += 4;
-    let mut row_names = Vec::with_capacity(row_count);
-    for _ in 0..row_count {
-        let (row_name, next) = name_at(project, offset)?;
-        row_names.push(row_name);
-        offset = next;
-    }
-    Some(ProjectType {
-        name,
-        row_names,
-        end: offset,
-    })
 }
 
 #[cfg(test)]
@@ -338,6 +275,7 @@ mod tests {
             types: vec![SysType {
                 name: "種別".to_owned(),
                 fields: vec![FieldKind::Str(0), FieldKind::Num(0), FieldKind::Num(1)],
+                field_names: vec!["文字列".to_owned(), "数値".to_owned(), "個数".to_owned()],
                 rows: vec![Row {
                     numbers: vec![7, 300],
                     strings: vec!["文字".to_owned()],
@@ -578,6 +516,20 @@ mod tests {
         assert_eq!(database.name_of(12, 1), Some("青色"));
         assert_eq!(database.name_of(24, 2), Some("妹（制服）"));
         assert_eq!(database.name_of(4, 0), Some("一時文字列"));
+
+        // Field names come from the same record; the map list's eight fields are
+        // the ones this port reads (§6.4 / §6.8).
+        assert_eq!(database.field_name(0, 0), Some("マップファイル名"));
+        assert_eq!(database.field_name(0, 1), Some("BGM番号(リスト読込)"));
+        assert_eq!(database.field_name(0, 5), Some("BGMﾌｧｲﾙ名[BGM番号=-3]"));
+        assert_eq!(database.field_name(0, 8), None, "type 0 has eight fields");
+        assert_eq!(database.types[0].field_name(4), Some("遠景番号"));
+        assert_eq!(
+            database.field_name(6, 0),
+            None,
+            "the name-only table has no field"
+        );
+        assert_eq!(database.field_name(28, 0), None, "past the last type");
     }
 
     #[test]

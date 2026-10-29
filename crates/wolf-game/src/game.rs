@@ -42,19 +42,46 @@ pub const BOOT_MAP: &str = "MapData/TitleMap.mps";
 /// The autorun event on [`BOOT_MAP`] that plays the splashes and reaches the title.
 pub const BOOT_EVENT: u32 = 2;
 
-/// Common events the WOLF runtime itself keeps alive, whatever the map is.
+/// Events the engine starts unconditionally, because their header says
+/// `parallel_process_always(3)` (docs/ENGINE_EVENTS.md section 7).
 ///
-/// These are not started by any script: the engine runs them.
+/// The condition byte they also carry is an editor artefact: e.g. `270` names variable
+/// `2700020`, which never appears anywhere in the 550 common events or the 9 map
+/// resources, so the original cannot be gating on it.
 ///
-/// * `48` X[共]基本システム自動初期化 - run_condition 3 (parallel, always). It is the
-///   boot initialiser for the system variables, so without it Sys8/Sys9 carry the
-///   defaults we invented instead of the ones the game ships with.
-/// * `63` X[共]メッセージウィンドウ - run_condition 0 (call only), and the *engine* is
-///   its only caller: work/yado.txt says 【文章の表示】が実行されると、コモンイベント
-///   [063:X[共]メッセージウィンドウ]にて表示位置の初期化が行われます. A scan of all 550
-///   events finds zero 210/300/211 sites targeting 500063, so if the runtime does not
-///   start it, the message-window frame never appears.
-pub const ENGINE_EVENTS: &[u32] = &[48, 63];
+/// Order matters: 48 fills the system variables; 261 must precede 270 (270 reads
+/// `2700000..2700005`); 269 must precede 270 (270 tests the flag `1600099` that 269
+/// sets); 225 publishes Sys71/72, which 224 and 213 consume.
+pub const ENGINE_ALWAYS: &[u32] = &[
+    48,  // X[共]基本システム自動初期化 - system variables first
+    261, // ×◆座標変数初期化      - writes 2700000..2700005 for 270
+    269, // ×┣[メッセ—ジ]初期化·設定 - sets self 1600099 for 270
+    270, // ×┣[メッセ—ジ]表示処理
+    271, // ×┗[メッセ—ジ]オートスキップ - writes sysstr 26/27
+    224, // ウィンドウ処理         - needs 225's Sys71/72 and other events' picture numbers
+    225, // フィールド上処理         - publishes Sys71/72, draws the picture cursor
+    213, // クリックエフェクト        - needs 225's Sys71/72
+    214, // 健康監視
+    41,  // マウス感知コモン
+];
+// 271 is the balloon-message library's initiator: it calls event 98, which registers 19
+// window pictures (10225..10248). It used to be left out, because starting it alone
+// moved retail title parity from mean abs 0.012 to 0.130 at max 255: those widgets
+// landed at (0,0) and came out visible. They now land at (-2784, 2880), i.e. on the
+// library's own parking spot, once the call arguments reach their self bank and the
+// database writes behind them resolve; `picture::on_screen` then drops them, because a
+// quad that cannot touch the screen is not a drawing. Re-measured with 271 alone:
+// `imgdiff` reports the frame identical to not starting it, and retail parity is back
+// at mean abs 0.012 / psnr 67.20 dB (docs/ENGINE_EVENTS.md section 10.5).
+
+/// `auto_start(1)`: run once when the game starts. It clears its own condition variable
+/// (slot 628 writes `v350 = 0`) and ends, so it never becomes a resident coroutine.
+pub const ENGINE_AUTO_START: &[u32] = &[241];
+
+/// Started by an engine *feature* rather than by `run_condition`: YADOT-WOLF documents
+/// that every 【文章の表示】 executes 063 (work/yado.txt:61-63 and :68-70), and no script
+/// anywhere targets 500063, so without this the message-window frame never appears.
+pub const ENGINE_IMPLICIT: &[u32] = &[63];
 
 /// One visible message window.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -91,6 +118,8 @@ pub struct GameStats {
     pub sounds: u64,
     /// Database accesses seen.
     pub databases: u64,
+    /// Of those, the ones that wrote a cell (`250` with bit 12 clear).
+    pub database_writes: u64,
     /// Messages shown.
     pub messages: u64,
     /// Choice prompts shown.
@@ -191,7 +220,10 @@ pub struct Game {
     previous_keys: u32,
     /// Mouse buttons held on the previous frame, so a press can be told from a hold.
     previous_mouse_buttons: u32,
-    /// True once [`ENGINE_EVENTS`] have been started, so a map switch cannot start a
+    /// Replaces [`ENGINE_ALWAYS`] when set, so a capture can A/B one engine event at a
+    /// time without editing the constant (see `wolf-cli --engine-events`).
+    pub engine_always: Option<Vec<u32>>,
+    /// True once the engine events have been started, so a map switch cannot start a
     /// second copy of a coroutine that is meant to live for the whole session.
     engine_events_started: bool,
     root: PathBuf,
@@ -246,6 +278,7 @@ impl Game {
             choice_cursor: 0,
             previous_keys: 0,
             previous_mouse_buttons: 0,
+            engine_always: None,
             engine_events_started: false,
             root,
         })
@@ -272,10 +305,22 @@ impl Game {
             return 0;
         }
         self.engine_events_started = true;
-        ENGINE_EVENTS
-            .iter()
-            .filter(|id| self.start_event(**id))
-            .count()
+        // The three groups have different lifetimes: ENGINE_ALWAYS lives for the whole
+        // session, ENGINE_AUTO_START runs once and ends, ENGINE_IMPLICIT belongs to an
+        // engine feature. A future load-game path rebuilds only the first group.
+        let mut ids: Vec<u32> = match &self.engine_always {
+            Some(ids) => ids.clone(),
+            None => ENGINE_ALWAYS.to_vec(),
+        };
+        ids.extend_from_slice(ENGINE_AUTO_START);
+        ids.extend_from_slice(ENGINE_IMPLICIT);
+        let mut started = 0;
+        for id in ids {
+            if self.start_event(id) {
+                started += 1;
+            }
+        }
+        started
     }
 
     /// Boots the game the way the original does: the autorun event on the title map.
@@ -535,6 +580,9 @@ impl Game {
             choices.frames = choices.frames.saturating_add(1);
         }
         self.screen.tick();
+        // Slides (150 Move with a duration tail) live on the same screen and advance
+        // one frame at a time, so they are stepped with the fades rather than the VM.
+        self.screen.advance();
         // Sys12 (文章の表示 実行中？) is the engine's flag, not a script variable: a
         // scan of all 550 common events finds 7 reads and zero writes, and common
         // event 63 polls it every frame to decide whether to paint or erase the
@@ -575,6 +623,26 @@ fn read_events(path: &Path) -> Result<CommonEventData, GameError> {
         source,
     })?;
     CommonEventData::parse(&bytes).map_err(GameError::Format)
+}
+
+/// One `250` write operator, `(flags >> 4) & 7` (docs/OPCODE_250.md section 3.1).
+///
+/// 0 assign / 1 add / 2 sub / 3 mul / 4 div / 5 rem / 6 max / 7 min. The money and
+/// HP clamp idiom is add, then max with 0, then min with the cap. Division and
+/// remainder by zero leave the cell alone, the same rule opcode 121 follows.
+fn combine_cell(op: u8, current: i32, operand: i32) -> i32 {
+    match op {
+        1 => current.wrapping_add(operand),
+        2 => current.wrapping_sub(operand),
+        3 => current.wrapping_mul(operand),
+        4 if operand != 0 => current / operand,
+        4 => current,
+        5 if operand != 0 => current % operand,
+        5 => current,
+        6 => current.max(operand),
+        7 => current.min(operand),
+        _ => operand,
+    }
 }
 
 /// Per-frame borrow shim: the VM lives inside Game, so the host cannot borrow Game.
@@ -715,15 +783,43 @@ impl Host for GameHost<'_> {
 
     fn database(&mut self, op: &DbOp) -> Option<DbValue> {
         self.stats.databases += 1;
+        // Which of the three .dat files this addresses is (flags >> 8) & 3, verified on
+        // 2,195 labelled sites with no exceptions (docs/OPCODE_250.md section 3.2). The
+        // interpreter decodes it, so no flags work is left here.
+        let container = crate::db::Container::from(op.container);
         let (db_type, row, column) = (op.db_type, op.data_id, op.item_id);
-        if let Some(value) = self.databases.num(db_type, row, column) {
+        // Bit 12 clear means the cell is written, and the operator is (flags >> 4) & 7.
+        // A write never hands a value back: the source of truth is the table.
+        if op.direction == wolf_vm::DbDirection::Write {
+            match op.source.as_ref() {
+                Some(DbValue::Num(operand)) => {
+                    let current = self
+                        .databases
+                        .num(container, db_type, row, column)
+                        .unwrap_or(0);
+                    let value = combine_cell(op.op, current, *operand);
+                    self.databases.set_num(container, db_type, row, column, value);
+                    self.stats.database_writes += 1;
+                }
+                Some(DbValue::Str(text)) => {
+                    self.databases
+                        .set_text(container, db_type, row, column, text);
+                    self.stats.database_writes += 1;
+                }
+                None => self.note(format!(
+                    "250 DatabaseWrite: {container:?} ({db_type}, {row}, {column}) carries no value"
+                )),
+            }
+            return None;
+        }
+        if let Some(value) = self.databases.num(container, db_type, row, column) {
             return Some(DbValue::Num(value));
         }
-        if let Some(text) = self.databases.text(db_type, row, column) {
+        if let Some(text) = self.databases.text(container, db_type, row, column) {
             return Some(DbValue::Str(text.to_owned()));
         }
         self.note(format!(
-            "250 DatabaseAccess: ({db_type}, {row}, {column}) flags {:#x} unanswered",
+            "250 DatabaseAccess: {container:?} ({db_type}, {row}, {column}) flags {:#x} unanswered",
             op.flags
         ));
         None
@@ -1024,5 +1120,34 @@ mod tests {
                 .all(|picture| !picture.file.contains("Button01")),
             "the hint banner is erased on the way into the menu"
         );
+    }
+
+    #[test]
+    fn a_database_write_operator_is_the_flags_nibble() {
+        // docs/OPCODE_250.md section 3.1: 0 assign / 1 add / 2 sub / 3 mul / 4 div /
+        // 5 rem / 6 max / 7 min. The money clamp in the game is add then max 0 then
+        // min cap, so both ends of that chain are covered here.
+        assert_eq!(combine_cell(0, 999, 7), 7, "op 0 assigns");
+        assert_eq!(combine_cell(1, 10, 5), 15, "op 1 adds");
+        assert_eq!(combine_cell(2, 10, 5), 5, "op 2 subtracts");
+        assert_eq!(combine_cell(3, 10, 5), 50, "op 3 multiplies");
+        assert_eq!(combine_cell(4, 10, 5), 2, "op 4 divides");
+        assert_eq!(combine_cell(5, 11, 5), 1, "op 5 takes the remainder");
+        assert_eq!(combine_cell(6, -3, 0), 0, "op 6 raises to the operand");
+        assert_eq!(combine_cell(7, 40, 99), 40, "op 7 caps at the operand");
+        assert_eq!(combine_cell(4, 10, 0), 10, "dividing by zero keeps the cell");
+        assert_eq!(combine_cell(5, 10, 0), 10, "remainder by zero keeps the cell");
+    }
+
+    #[test]
+    fn a_script_write_lands_in_the_cell_the_next_read_sees() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        // The player stat block the game keeps in the variable database: type 0 row 0
+        // column 0 exists in CDataBase, so a write has a real cell to land in.
+        let container = crate::db::Container::CData;
+        let before = game.databases.num(container, 0, 0, 0).unwrap_or(0);
+        game.databases.set_num(container, 0, 0, 0, before + 1);
+        assert_eq!(game.databases.num(container, 0, 0, 0), Some(before + 1));
     }
 }

@@ -63,6 +63,47 @@ pub const DEFAULT_SCREEN: (u32, u32) = (1024, 576);
 /// The engine's virtual screen, in units of one coordinate step.
 pub const SCREEN_STEPS: (u32, u32) = (32, 24);
 
+/// Which of the three database files a `250` instruction addresses.
+///
+/// The value comes from `(flags >> 8) & 3` and is verified on 2,195 labelled sites
+/// with zero exceptions (docs/OPCODE_250.md section 3.2): 0 = CDataBase,
+/// 1 = SysDatabase, 2 = DataBase. Testing bit 9 instead would misread every
+/// SysDatabase access, and testing bit 12 would misread all of them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Container {
+    /// The game's variable database (可変DB), `BasicData/CDataBase.dat`.
+    #[default]
+    CData,
+    /// The engine's system database, `BasicData/SysDatabase.dat`.
+    Sys,
+    /// The editor's fixed database, `BasicData/DataBase.dat`.
+    Data,
+}
+
+impl Container {
+    /// Decodes the container from a `250` flags word.
+    #[must_use]
+    pub fn from_flags(flags: i32) -> Self {
+        match (flags >> 8) & 3 {
+            1 => Container::Sys,
+            2 => Container::Data,
+            _ => Container::CData,
+        }
+    }
+}
+
+/// The interpreter decodes `(flags >> 8) & 3` itself, so the game layer borrows that
+/// decoding rather than repeating it; the two enums stay in step through this impl.
+impl From<wolf_vm::DbContainer> for Container {
+    fn from(value: wolf_vm::DbContainer) -> Self {
+        match value {
+            wolf_vm::DbContainer::CData => Container::CData,
+            wolf_vm::DbContainer::Sys => Container::Sys,
+            wolf_vm::DbContainer::Data => Container::Data,
+        }
+    }
+}
+
 /// The coordinate scale pair (rateX, rateY) for a screen size: one step is one
 /// 32nd of the width and one 24th of the height (docs/OPCODE_101.md section 3.1).
 pub fn coordinate_scale(screen: (u32, u32)) -> (i32, i32) {
@@ -79,10 +120,10 @@ pub struct Databases {
     data: Option<Database>,
     cdata: Option<Database>,
     sys: Option<SysDatabase>,
-    /// Engine-owned numeric cells, keyed (type, row, column).
-    cells: BTreeMap<(i32, i32, i32), i32>,
+    /// Engine-owned numeric cells, keyed (container, type, row, column).
+    cells: BTreeMap<(Container, i32, i32, i32), i32>,
     /// Engine-owned string cells, same key.
-    texts: BTreeMap<(i32, i32, i32), String>,
+    texts: BTreeMap<(Container, i32, i32, i32), String>,
 }
 
 impl Databases {
@@ -114,11 +155,26 @@ impl Databases {
     /// message-window skin name.
     pub fn apply_engine_defaults(&mut self, screen: (u32, u32)) {
         let (scale_x, scale_y) = coordinate_scale(screen);
-        self.set_num(COORDINATE_SCALE_TYPE, COORDINATE_SCALE_X_ROW, 0, scale_x);
-        self.set_num(COORDINATE_SCALE_TYPE, COORDINATE_SCALE_Y_ROW, 0, scale_y);
-        self.texts.insert(
-            (WINDOW_SKIN_TYPE, WINDOW_SKIN_ROW, WINDOW_SKIN_COLUMN),
-            WINDOW_SKIN_FILE.to_owned(),
+        self.set_num(
+            Container::CData,
+            COORDINATE_SCALE_TYPE,
+            COORDINATE_SCALE_X_ROW,
+            0,
+            scale_x,
+        );
+        self.set_num(
+            Container::CData,
+            COORDINATE_SCALE_TYPE,
+            COORDINATE_SCALE_Y_ROW,
+            0,
+            scale_y,
+        );
+        self.set_text(
+            Container::Data,
+            WINDOW_SKIN_TYPE,
+            WINDOW_SKIN_ROW,
+            WINDOW_SKIN_COLUMN,
+            WINDOW_SKIN_FILE,
         );
     }
 
@@ -127,70 +183,88 @@ impl Databases {
         self.data.is_none() && self.cdata.is_none() && self.sys.is_none()
     }
 
-    /// Row count of `db_type` from the first table that owns the type (CDataBase
-    /// first, then DataBase). SysDatabase is not consulted: the two .dat files share
-    /// the type numbering but not the type meanings.
-    pub fn row_count(&self, db_type: i32) -> Option<usize> {
-        self.database(db_type)
-            .and_then(|table| table.types.get(db_type as usize))
-            .map(|table| table.rows.len())
+    /// Row count of `db_type` in `container`.
+    ///
+    /// SysDatabase answers through its own API; the two .dat containers share the type
+    /// numbering but not the type meanings, so a caller must say which one it means.
+    pub fn row_count(&self, container: Container, db_type: i32) -> Option<usize> {
+        match container {
+            Container::Sys => self
+                .sys
+                .as_ref()
+                .and_then(|table| Some(table.row_count(usize::try_from(db_type).ok()?))),
+            _ => self
+                .table(container)
+                .and_then(|table| table.types.get(usize::try_from(db_type).ok()?))
+                .map(|table| table.rows.len()),
+        }
     }
 
-    /// Numeric read: engine cells win, then CDataBase, then DataBase.
-    pub fn num(&self, db_type: i32, row: i32, column: i32) -> Option<i32> {
-        if let Some(value) = self.cells.get(&(db_type, row, column)) {
+    /// Numeric read: engine cells win, then the addressed container.
+    pub fn num(&self, container: Container, db_type: i32, row: i32, column: i32) -> Option<i32> {
+        if let Some(value) = self.cells.get(&(container, db_type, row, column)) {
             return Some(*value);
         }
         if row < 0 || column < 0 {
             return None;
         }
         let (row, column) = (row as usize, column as usize);
-        self.cdata
-            .as_ref()
+        self.table(container)
             .and_then(|table| numeric_cell(table, db_type, row, column))
-            .or_else(|| {
-                self.data
-                    .as_ref()
-                    .and_then(|table| numeric_cell(table, db_type, row, column))
-            })
     }
 
-    /// String read: engine cells win, then SysDatabase, CDataBase, DataBase.
-    pub fn text(&self, db_type: i32, row: i32, column: i32) -> Option<&str> {
-        if let Some(value) = self.texts.get(&(db_type, row, column)) {
+    /// String read: engine cells win, then the addressed container.
+    pub fn text(&self, container: Container, db_type: i32, row: i32, column: i32) -> Option<&str> {
+        if let Some(value) = self.texts.get(&(container, db_type, row, column)) {
             return Some(value);
         }
         if row < 0 || column < 0 {
             return None;
         }
         let (row, column) = (row as usize, column as usize);
-        self.sys
-            .as_ref()
-            .and_then(|table| table.text(db_type as usize, row, column))
-            .or_else(|| {
-                self.cdata
-                    .as_ref()
-                    .and_then(|table| string_cell(table, db_type, row, column))
-            })
-            .or_else(|| {
-                self.data
-                    .as_ref()
-                    .and_then(|table| string_cell(table, db_type, row, column))
-            })
+        match container {
+            Container::Sys => self
+                .sys
+                .as_ref()
+                .and_then(|table| table.text(db_type as usize, row, column)),
+            _ => self
+                .table(container)
+                .and_then(|table| string_cell(table, db_type, row, column)),
+        }
     }
 
     /// Overwrites a numeric cell in the engine layer.
-    pub fn set_num(&mut self, db_type: i32, row: i32, column: i32, value: i32) {
-        self.cells.insert((db_type, row, column), value);
+    pub fn set_num(
+        &mut self,
+        container: Container,
+        db_type: i32,
+        row: i32,
+        column: i32,
+        value: i32,
+    ) {
+        self.cells.insert((container, db_type, row, column), value);
     }
 
-    /// The table that owns `db_type`, CDataBase first.
-    fn database(&self, db_type: i32) -> Option<&Database> {
-        let index = usize::try_from(db_type).ok()?;
-        [self.cdata.as_ref(), self.data.as_ref()]
-            .into_iter()
-            .flatten()
-            .find(|table| table.types.get(index).is_some())
+    /// Overwrites a string cell in the engine layer.
+    pub fn set_text(
+        &mut self,
+        container: Container,
+        db_type: i32,
+        row: i32,
+        column: i32,
+        value: &str,
+    ) {
+        self.texts
+            .insert((container, db_type, row, column), value.to_owned());
+    }
+
+    /// The .dat table behind one container; SysDatabase has its own type.
+    fn table(&self, container: Container) -> Option<&Database> {
+        match container {
+            Container::CData => self.cdata.as_ref(),
+            Container::Data => self.data.as_ref(),
+            Container::Sys => None,
+        }
     }
 }
 
@@ -247,10 +321,21 @@ mod tests {
     fn the_engine_owns_the_coordinate_scale_and_the_window_skin() {
         let databases = Databases::with_engine_defaults(DEFAULT_SCREEN);
         assert!(databases.is_empty());
-        assert_eq!(databases.num(COORDINATE_SCALE_TYPE, 97, 0), Some(32));
-        assert_eq!(databases.num(COORDINATE_SCALE_TYPE, 98, 0), Some(24));
         assert_eq!(
-            databases.text(WINDOW_SKIN_TYPE, WINDOW_SKIN_ROW, WINDOW_SKIN_COLUMN),
+            databases.num(Container::CData, COORDINATE_SCALE_TYPE, 97, 0),
+            Some(32)
+        );
+        assert_eq!(
+            databases.num(Container::CData, COORDINATE_SCALE_TYPE, 98, 0),
+            Some(24)
+        );
+        assert_eq!(
+            databases.text(
+                Container::Data,
+                WINDOW_SKIN_TYPE,
+                WINDOW_SKIN_ROW,
+                WINDOW_SKIN_COLUMN
+            ),
             Some("SystemFile/WindowBase.png")
         );
     }
@@ -265,16 +350,26 @@ mod tests {
     #[test]
     fn an_empty_store_answers_only_the_engine_cells() {
         let databases = Databases::with_engine_defaults(DEFAULT_SCREEN);
-        assert_eq!(databases.num(16, 0, 2), None);
-        assert_eq!(databases.text(16, 0, 2), None);
-        assert_eq!(databases.row_count(18), None);
+        assert_eq!(databases.num(Container::CData, 16, 0, 2), None);
+        assert_eq!(databases.text(Container::Data, 16, 0, 2), None);
+        assert_eq!(databases.row_count(Container::CData, 18), None);
+        assert_eq!(databases.row_count(Container::Sys, 24), None);
     }
 
     #[test]
     fn the_engine_layer_wins_over_the_file() {
         let mut databases = Databases::with_engine_defaults(DEFAULT_SCREEN);
-        databases.set_num(COORDINATE_SCALE_TYPE, COORDINATE_SCALE_X_ROW, 0, 24);
-        assert_eq!(databases.num(COORDINATE_SCALE_TYPE, 97, 0), Some(24));
+        databases.set_num(
+            Container::CData,
+            COORDINATE_SCALE_TYPE,
+            COORDINATE_SCALE_X_ROW,
+            0,
+            24,
+        );
+        assert_eq!(
+            databases.num(Container::CData, COORDINATE_SCALE_TYPE, 97, 0),
+            Some(24)
+        );
     }
 
     #[test]
@@ -284,8 +379,14 @@ mod tests {
         let Some(root) = have_data() else { return };
         let databases = Databases::load(&root.join("BasicData"), DEFAULT_SCREEN);
         assert!(!databases.is_empty());
-        assert_eq!(databases.text(24, 2, 0), Some("Picture/face01.png"));
-        assert_eq!(databases.text(24, 4, 0), Some("DLC_data/member_20_s.png"));
+        assert_eq!(
+            databases.text(Container::Sys, 24, 2, 0),
+            Some("Picture/face01.png")
+        );
+        assert_eq!(
+            databases.text(Container::Sys, 24, 4, 0),
+            Some("DLC_data/member_20_s.png")
+        );
     }
 
     #[test]
@@ -293,14 +394,35 @@ mod tests {
         let Some(root) = have_data() else { return };
         let databases = Databases::load(&root.join("BasicData"), DEFAULT_SCREEN);
         // CDataBase type 18 stores 0 in rows 97/98; the engine value must win.
-        assert_eq!(databases.num(COORDINATE_SCALE_TYPE, 97, 0), Some(32));
-        assert_eq!(databases.num(COORDINATE_SCALE_TYPE, 98, 0), Some(24));
-        assert_eq!(databases.row_count(COORDINATE_SCALE_TYPE), Some(100));
-        // A file-backed cell still resolves through the fallback chain.
         assert_eq!(
-            databases.text(16, 0, 2),
+            databases.num(Container::CData, COORDINATE_SCALE_TYPE, 97, 0),
+            Some(32)
+        );
+        assert_eq!(
+            databases.num(Container::CData, COORDINATE_SCALE_TYPE, 98, 0),
+            Some(24)
+        );
+        assert_eq!(
+            databases.row_count(Container::CData, COORDINATE_SCALE_TYPE),
+            Some(100)
+        );
+        // A file-backed cell still resolves in its own container.
+        assert_eq!(
+            databases.text(Container::Data, 16, 0, 2),
             Some("SystemFile/WindowBase.png"),
             "DataBase type 16 row 0 column 2 must still be reachable"
         );
+    }
+
+    #[test]
+    fn the_interpreter_container_maps_onto_the_right_table() {
+        // The VM decodes (flags >> 8) & 3 itself; this impl is the only bridge, so a
+        // mismatch here would silently route 250 reads into the wrong .dat file.
+        assert_eq!(
+            Container::from(wolf_vm::DbContainer::CData),
+            Container::CData
+        );
+        assert_eq!(Container::from(wolf_vm::DbContainer::Sys), Container::Sys);
+        assert_eq!(Container::from(wolf_vm::DbContainer::Data), Container::Data);
     }
 }

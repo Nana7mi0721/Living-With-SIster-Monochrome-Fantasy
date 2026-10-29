@@ -57,6 +57,28 @@
 //! are listed as unverified in docs/UNVERIFIED.md, because no title-screen instruction uses
 //! them and guessing would move live pictures to the wrong place.
 //!
+//! # A move with a frame count slides instead of popping
+//!
+//! The long form of `150` can carry a frame count after the flag word: docs/OPCODE_SPEC.md
+//! section 5.19 documents slots `[13..]` as 动画参数 and its worked example (`ev63 pc94`)
+//! ends on `3`, the number of frames. The interpreter hands that tail over as
+//! `PictureCmd::animate` (`args[11..]`, see crates/wolf-vm/src/exec.rs decode_picture), so
+//! `animate[0]` is the duration and the slots after it are editor leftovers.
+//!
+//! Of the 3,365 moves in this game, 2,817 carry no tail at all and must keep teleporting, 168
+//! carry a literal 0, 52 carry a self-variable reference that is not a frame count, and 328
+//! carry a usable 2..=16 frames. The shape that matters is a PAIR: common event 63 parks its
+//! message window with `... -1000000 -1000000 0 16777216` (pc93, no duration) and then repeats
+//! the same command with `3` appended (pc94) to slide it into place over three frames;
+//! pc102/pc103 do the same at opacity 255 with 2 frames, and event 64 repeats the pattern
+//! with 2 and 4. The first command of every pair writes the state the picture is LEAVING, so a
+//! slide has to start from the picture's own current x/y/scale/opacity - never from the
+//! -1000000 UNCHANGED sentinels in slots 5/6/9/10, which mean "leave this field as it is".
+//!
+//! `Screen::advance` is the clock for those slides while `Screen::tick` stays the fade-in and
+//! colour-effect clock; the host calls both once per frame. A finished slide is dropped and the
+//! picture then draws exactly the fields the command asked for.
+//!
 //! # Negative numbers are whole-screen layers
 //!
 //! Picture numbers below zero are the screen-level pictures. Every instance in this game
@@ -95,6 +117,13 @@ pub const SCALE_ONE: i32 = 100;
 /// picture number. 329 of the 1,115 erase instructions in this game use that form; the
 /// remaining 751 are the short `[fade]` form and 35 carry a stray short tail.
 pub const ERASE_SPAN: usize = 3;
+
+/// Longest slide a `150` move may ask for, in frames.
+///
+/// The measured durations are 2..=16 and the fade-in ramp clamps at 600 for the same reason: a
+/// larger word in the slot is a misread argument, and honouring one would park a picture in a
+/// ten-second crawl instead of a two-frame nudge.
+pub const MAX_TRANSITION_FRAMES: u32 = 600;
 
 /// Field indices inside PictureCmd::args, from the table in the module docs.
 pub mod field {
@@ -271,6 +300,79 @@ impl PictureEffect {
         from * (span - phase) + i64::from(SCALE_ONE) * phase
     }
 }
+/// The four picture fields a `150` slide moves, as the whole numbers the layer stores.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Pose {
+    /// Left edge / centre x, logical pixels.
+    pub x: i32,
+    /// Top edge / centre y, logical pixels.
+    pub y: i32,
+    /// Uniform scale in percent.
+    pub scale: i32,
+    /// Opacity, 0..=255.
+    pub opacity: i32,
+}
+
+impl Pose {
+    /// The pose a picture holds right now.
+    fn of(picture: &Picture) -> Self {
+        Self {
+            x: picture.x,
+            y: picture.y,
+            scale: picture.scale,
+            opacity: picture.opacity,
+        }
+    }
+}
+
+/// An in-flight `150` move: where the picture started, where it is heading and how far it got.
+///
+/// Whole numbers on both ends keep `Picture: Eq` - the store is compared in tests and a
+/// renderer may hash a frame - while the in-between frames are computed in `f64` and rounded,
+/// so a three-frame slide still passes through whole pixels only.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Transition {
+    /// The pose the picture left when the move arrived.
+    pub from: Pose,
+    /// The pose the move asks for; the picture fields get it back when the slide lands.
+    pub to: Pose,
+    /// Length of the slide in frames, 1..=[`MAX_TRANSITION_FRAMES`].
+    pub duration: u32,
+    /// Frames elapsed: 0 on the frame the move was applied.
+    pub age: u32,
+}
+
+impl Transition {
+    /// How far along the slide is, 0.0 at the origin and 1.0 on arrival.
+    #[must_use]
+    pub fn progress(&self) -> f32 {
+        if self.age >= self.duration {
+            1.0
+        } else {
+            self.age as f32 / self.duration as f32
+        }
+    }
+
+    /// The slide a move asks for, or None when the instruction carries no usable frame count.
+    ///
+    /// `animate` is the instruction tail the interpreter copies out of `args[11..]`, so slot 0
+    /// is the frame count. A missing tail, a literal 0 (168 moves), a self-variable reference
+    /// (1,600,0xx, 52 moves) and anything past [`MAX_TRANSITION_FRAMES`] all mean "no
+    /// duration": the move teleports, which is what the 2,817 duration-less moves already do.
+    fn from_command(cmd: &PictureCmd, from: Pose, to: Pose) -> Option<Self> {
+        let frames = u32::try_from(*cmd.animate.first()?).ok()?;
+        if frames == 0 || frames > MAX_TRANSITION_FRAMES {
+            return None;
+        }
+        Some(Self {
+            from,
+            to,
+            duration: frames,
+            age: 0,
+        })
+    }
+}
+
 /// One live picture slot.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Picture {
@@ -312,6 +414,13 @@ pub struct Picture {
     /// fade is not 1") and expects the next draw to bring it back, so the slot - and every
     /// field in it - has to survive being hidden.
     pub hidden: bool,
+    /// The slide this picture is in the middle of, if any.
+    ///
+    /// x/y/scale/opacity hold the CURRENT frame of a slide, not its destination: a capture
+    /// taken mid-slide, the renderer's `destination` and a later command that re-bases the
+    /// picture all have to agree on where it is. The destination travels in `to` and only
+    /// reaches the fields when the slide lands.
+    pub transition: Option<Transition>,
 }
 
 impl Picture {
@@ -336,6 +445,7 @@ impl Picture {
             tone: TONE_NEUTRAL,
             effects: Vec::new(),
             hidden: false,
+            transition: None,
         }
     }
 
@@ -362,6 +472,59 @@ impl Picture {
     #[must_use]
     pub fn is_screen_layer(&self) -> bool {
         self.number < 0
+    }
+
+    /// True while a `150` move is still sliding this picture.
+    #[must_use]
+    pub fn is_moving(&self) -> bool {
+        self.transition.is_some()
+    }
+
+    /// Steps an in-flight move by exactly one frame, landing on its target at the end.
+    ///
+    /// A slide writes the current frame back into the fields every step so the whole store
+    /// stays consistent - `destination`, `quads`, `alpha` and any opcode that reads a picture
+    /// field all see the same numbers, with no second copy of the state to keep in sync. The
+    /// arrival frame assigns the stored target rather than a rounded interpolation, so a slide
+    /// cannot leave the picture a pixel short of where the script put it.
+    pub fn advance(&mut self) {
+        let Some(mut transition) = self.transition else {
+            return;
+        };
+        transition.age = transition.age.saturating_add(1);
+        if transition.age >= transition.duration {
+            self.x = transition.to.x;
+            self.y = transition.to.y;
+            self.scale = transition.to.scale;
+            self.opacity = transition.to.opacity;
+            self.transition = None;
+            return;
+        }
+        self.x = blend(
+            transition.from.x,
+            transition.to.x,
+            transition.age,
+            transition.duration,
+        );
+        self.y = blend(
+            transition.from.y,
+            transition.to.y,
+            transition.age,
+            transition.duration,
+        );
+        self.scale = blend(
+            transition.from.scale,
+            transition.to.scale,
+            transition.age,
+            transition.duration,
+        );
+        self.opacity = blend(
+            transition.from.opacity,
+            transition.to.opacity,
+            transition.age,
+            transition.duration,
+        );
+        self.transition = Some(transition);
     }
 
     /// Opacity as 0.0..=1.0, clamped the way the renderer wants it.
@@ -506,6 +669,18 @@ impl Screen {
         }
     }
 
+    /// Steps every in-flight `150` move by exactly one frame and drops the ones that arrive.
+    ///
+    /// Deliberately separate from [`Screen::tick`]: the fade-in ramp and the colour effects are
+    /// clocked by `tick`, the slides by this, and a host calls both once per frame. Keeping the
+    /// two clocks apart means a test can age a slide without touching the fade ramp, and a
+    /// capture taken between them shows the frame the script actually asked for.
+    pub fn advance(&mut self) {
+        for picture in self.pictures.values_mut() {
+            picture.advance();
+        }
+    }
+
     /// Applies one `150` picture command.
     ///
     /// The four actions are not symmetric: Draw and Set build a fresh slot (so UNCHANGED
@@ -530,7 +705,8 @@ impl Screen {
                 match cmd.args.get(ERASE_SPAN) {
                     Some(other) => {
                         let (lo, hi) = (cmd.number.min(*other), cmd.number.max(*other));
-                        self.pictures.retain(|number, _| *number < lo || *number > hi);
+                        self.pictures
+                            .retain(|number, _| *number < lo || *number > hi);
                     }
                     None => {
                         self.pictures.remove(&cmd.number);
@@ -577,7 +753,25 @@ impl Screen {
                 if cmd.anchor != ANCHOR_TOP_LEFT {
                     picture.anchor = cmd.anchor;
                 }
+                // A slide starts from where the picture is DRAWN right now - its own fields, not
+                // the destination a previous move has not reached yet, and certainly not the
+                // -1000000 sentinels: those mean "leave this field alone", and the origin of an
+                // unchanged field is its current value, which interpolates to itself.
+                let origin = Pose::of(picture);
                 merge_args(picture, &cmd.args);
+                // With a usable duration the merged fields are only the TARGET: rewind them to
+                // where the picture already is and let `advance` walk there. Without one the
+                // merged fields are final, i.e. the teleport every duration-less move expects.
+                match Transition::from_command(cmd, origin, Pose::of(picture)) {
+                    Some(transition) => {
+                        picture.x = transition.from.x;
+                        picture.y = transition.from.y;
+                        picture.scale = transition.from.scale;
+                        picture.opacity = transition.from.opacity;
+                        picture.transition = Some(transition);
+                    }
+                    None => picture.transition = None,
+                }
             }
         }
     }
@@ -663,10 +857,29 @@ impl Screen {
                 ([0, 0, w, h], w as f32 * scale, h as f32 * scale)
             };
             let dst = place(picture.anchor, picture.x, picture.y, w, h);
+            if !on_screen(dst) {
+                continue;
+            }
             out.push(ScreenQuad::from(picture, src, dst));
         }
         out
     }
+}
+
+/// True when a destination rectangle overlaps the logical screen at all.
+///
+/// Pictures are routinely parked far outside it: the third-party balloon-message library
+/// that event 98 sets up keeps its 24 controls at (-2784, 2880) until a bubble opens, and a
+/// quad that cannot touch the screen contributes no pixels. Dropping it here keeps the draw
+/// list honest instead of relying on every downstream stage to clip it.
+#[must_use]
+pub fn on_screen(dst: [f32; 4]) -> bool {
+    dst[2] > 0.0
+        && dst[3] > 0.0
+        && dst[0] + dst[2] > 0.0
+        && dst[1] + dst[3] > 0.0
+        && dst[0] < SCREEN_W as f32
+        && dst[1] < SCREEN_H as f32
 }
 
 impl Picture {
@@ -730,6 +943,17 @@ where
     }
     let shape = crate::sysgraphic::parse(&picture.file)?;
     crate::sysgraphic::box_size(shape, picture.window)
+}
+
+/// One frame of a linear slide between two whole numbers, rounded half away from zero.
+///
+/// Both endpoints are whole numbers because that is what the layer stores; interpolating in
+/// `f64` keeps a 20-frame ramp from accumulating the error `f32` would leave behind. The
+/// arrival frame never comes through here - `Picture::advance` assigns the stored target.
+fn blend(from: i32, to: i32, age: u32, duration: u32) -> i32 {
+    let step = f64::from(age) / f64::from(duration);
+    let value = f64::from(from) + (f64::from(to) - f64::from(from)) * step;
+    value.round() as i32
 }
 
 /// Merges a command's field words into a picture, honouring the UNCHANGED sentinel.
@@ -813,6 +1037,40 @@ mod tests {
         }
     }
 
+    /// A move built the way the interpreter builds one: `args` is the full argument list from
+    /// raw arg 2, and `animate` is its tail from slot 11, which is where the frame count lives.
+    fn animated_move(number: i32, args: &[i32]) -> PictureCmd {
+        let mut command = cmd(number, 0, PictureAction::Move, "", "", args);
+        command.animate = if args.len() > 11 {
+            args[11..].to_vec()
+        } else {
+            Vec::new()
+        };
+        command
+    }
+
+    /// The argument list of a long-form move that writes x/y and leaves everything else alone.
+    ///
+    /// Slots 0..10 are the head of a real instruction (fade, window, opacity, x, y, scale,
+    /// blend, extras) plus the 0x01000000 flag word; `frames` is the animation tail.
+    fn slide_args(x: i32, y: i32, frames: &[i32]) -> Vec<i32> {
+        let mut args = vec![
+            0,
+            UNCHANGED,
+            UNCHANGED,
+            1,
+            UNCHANGED,
+            x,
+            y,
+            UNCHANGED,
+            UNCHANGED,
+            UNCHANGED,
+            0x0100_0000,
+        ];
+        args.extend_from_slice(frames);
+        args
+    }
+
     #[test]
     fn place_only_shifts_the_centre_anchor() {
         assert_eq!(
@@ -843,6 +1101,35 @@ mod tests {
         let quads = screen.quads(|_| Some((606, 35)));
         assert_eq!(quads.len(), 1);
         assert_eq!(quads[0].dst, [209.0, 502.5, 606.0, 35.0]);
+    }
+
+
+    #[test]
+    fn a_picture_parked_outside_the_screen_is_not_queued() {
+        // The balloon library that event 98 sets up parks its controls at (-2784, 2880)
+        // until a bubble opens. Those pictures are alive, but a quad there cannot reach a
+        // pixel, and queueing it cost 30 quads plus a nine-slice skin pack per panel.
+        let mut screen = Screen::new();
+        screen.apply(&cmd(
+            10225,
+            0,
+            PictureAction::Draw,
+            "SystemFile/WindowBase.png",
+            "",
+            &[0, 368, 1872, 1, 255, -2784, 2880, 100, 0],
+        ));
+        assert_eq!(screen.len(), 1, "the picture is still alive");
+        assert!(screen.quads(|_| Some((18, 18))).is_empty(), "parked picture drawn");
+        // A picture that only clips at an edge still draws: (1000, 500) overlaps.
+        screen.apply(&cmd(
+            7,
+            0,
+            PictureAction::Draw,
+            "a.png",
+            "",
+            &[0, 1, 1, 1, 255, 1000, 500, 100, 0],
+        ));
+        assert_eq!(screen.quads(|_| Some((100, 100))).len(), 1);
     }
 
     #[test]
@@ -990,12 +1277,37 @@ mod tests {
     fn the_long_erase_form_clears_every_slot_between_its_endpoints() {
         let mut screen = Screen::new();
         for number in 50000..=50003 {
-            screen.apply(&cmd(number, 0, PictureAction::Draw, "a.png", "", &short_draw_args()));
+            screen.apply(&cmd(
+                number,
+                0,
+                PictureAction::Draw,
+                "a.png",
+                "",
+                &short_draw_args(),
+            ));
         }
-        screen.apply(&cmd(50004, 0, PictureAction::Draw, "a.png", "", &short_draw_args()));
+        screen.apply(&cmd(
+            50004,
+            0,
+            PictureAction::Draw,
+            "a.png",
+            "",
+            &short_draw_args(),
+        ));
         // ce221 pc36, verbatim: the pair is 50000 and 50003.
-        screen.apply(&cmd(50000, 0, PictureAction::Erase, "", "", &[5, 5, 0, 50003]));
-        assert_eq!(screen.len(), 1, "only the picture outside the pair survives");
+        screen.apply(&cmd(
+            50000,
+            0,
+            PictureAction::Erase,
+            "",
+            "",
+            &[5, 5, 0, 50003],
+        ));
+        assert_eq!(
+            screen.len(),
+            1,
+            "only the picture outside the pair survives"
+        );
         assert!(screen.get(50004).is_some());
     }
 
@@ -1003,7 +1315,14 @@ mod tests {
     fn the_erase_range_is_read_between_its_endpoints_not_in_argument_order() {
         let mut screen = Screen::new();
         for number in [-2, -1] {
-            screen.apply(&cmd(number, 0, PictureAction::Draw, "a.png", "", &short_draw_args()));
+            screen.apply(&cmd(
+                number,
+                0,
+                PictureAction::Draw,
+                "a.png",
+                "",
+                &short_draw_args(),
+            ));
         }
         // Map003.mps:ev1 pc24 passes the endpoints the wrong way round.
         screen.apply(&cmd(-1, 0, PictureAction::Erase, "", "", &[0, 0, 0, -2]));
@@ -1014,7 +1333,14 @@ mod tests {
     fn the_short_erase_form_removes_only_its_own_slot() {
         let mut screen = Screen::new();
         for number in [10, 11, 12] {
-            screen.apply(&cmd(number, 0, PictureAction::Draw, "a.png", "", &short_draw_args()));
+            screen.apply(&cmd(
+                number,
+                0,
+                PictureAction::Draw,
+                "a.png",
+                "",
+                &short_draw_args(),
+            ));
         }
         screen.apply(&cmd(11, 0, PictureAction::Erase, "", "", &[0]));
         assert_eq!(screen.len(), 2);
@@ -1062,7 +1388,10 @@ mod tests {
         assert!(picture.hidden);
         assert_eq!(picture.file, "SystemFile/WindowBase.png");
         assert_eq!(picture.window, Some((960, 168)));
-        assert_eq!(picture.destination(960.0, 168.0), [32.0, 396.0, 960.0, 168.0]);
+        assert_eq!(
+            picture.destination(960.0, 168.0),
+            [32.0, 396.0, 960.0, 168.0]
+        );
     }
 
     #[test]
@@ -1242,6 +1571,181 @@ mod tests {
         assert_eq!(picture.scale, SCALE_ONE);
         assert_eq!(picture.opacity, 255);
         assert_eq!(picture.file, "b.png");
+    }
+
+    #[test]
+    fn a_three_frame_move_slides_to_the_target_and_only_then() {
+        let mut screen = Screen::new();
+        screen.apply(&cmd(
+            7,
+            0,
+            PictureAction::Draw,
+            "a.png",
+            "",
+            &short_draw_args(),
+        ));
+        // Applying the move must not jump the picture to the destination, or the first frame
+        // of the slide would already show the end of it.
+        screen.apply(&animated_move(7, &slide_args(300, 100, &[3])));
+        let left = |screen: &Screen| screen.quads(|_| Some((100, 50)))[0].dst;
+        assert_eq!(left(&screen), [0.0, 0.0, 100.0, 50.0]);
+        assert!(screen.get(7).expect("picture").is_moving());
+
+        let mut trail = vec![left(&screen)];
+        for step in 1..=3 {
+            screen.advance();
+            trail.push(left(&screen));
+            assert_eq!(
+                screen.get(7).expect("picture").is_moving(),
+                step < 3,
+                "the slide is in flight until the third advance"
+            );
+        }
+        assert_eq!(
+            trail,
+            vec![
+                [0.0, 0.0, 100.0, 50.0],
+                [100.0, 33.0, 100.0, 50.0],
+                [200.0, 67.0, 100.0, 50.0],
+                [300.0, 100.0, 100.0, 50.0],
+            ]
+        );
+        assert!(
+            trail
+                .windows(2)
+                .all(|pair| pair[1][0] > pair[0][0] && pair[1][1] > pair[0][1]),
+            "every frame of the slide is further along than the one before"
+        );
+        // Landed to the pixel, and one more frame does not overshoot.
+        screen.advance();
+        assert_eq!(left(&screen), [300.0, 100.0, 100.0, 50.0]);
+    }
+
+    #[test]
+    fn a_move_without_a_usable_duration_teleports_in_one_apply() {
+        let mut screen = Screen::new();
+        screen.apply(&cmd(
+            7,
+            0,
+            PictureAction::Draw,
+            "a.png",
+            "",
+            &short_draw_args(),
+        ));
+
+        // 2,817 of the game's 3,365 moves carry no tail at all.
+        screen.apply(&animated_move(7, &slide_args(300, 100, &[])));
+        let picture = screen.get(7).expect("picture");
+        assert_eq!((picture.x, picture.y), (300, 100));
+        assert!(!picture.is_moving());
+
+        // A literal 0 in the duration slot (168 moves) means the same thing.
+        screen.apply(&animated_move(7, &slide_args(40, 60, &[0])));
+        let picture = screen.get(7).expect("picture");
+        assert_eq!((picture.x, picture.y), (40, 60));
+        assert!(!picture.is_moving());
+
+        // And so does a self-variable reference the interpreter left unresolved.
+        screen.apply(&animated_move(7, &slide_args(50, 70, &[1_600_032])));
+        let picture = screen.get(7).expect("picture");
+        assert_eq!((picture.x, picture.y), (50, 70));
+        assert!(!picture.is_moving());
+    }
+
+    #[test]
+    fn an_alpha_only_move_fades_the_alpha_while_the_rect_stays_put() {
+        let mut screen = Screen::new();
+        screen.apply(&cmd(
+            7,
+            0,
+            PictureAction::Draw,
+            "a.png",
+            "",
+            &[0, 1, 1, 1, 255, 10, 20, 100, 0],
+        ));
+        // ev63 pc102/pc103 shape: the position slots stay at the sentinel and only the opacity
+        // travels, so every frame of the slide has to keep the same rectangle.
+        let mut args = slide_args(UNCHANGED, UNCHANGED, &[4]);
+        args[field::OPACITY] = 0;
+        screen.apply(&animated_move(7, &args));
+
+        let alpha = |screen: &Screen| screen.get(7).expect("picture").alpha();
+        let rect = |screen: &Screen| screen.quads(|_| Some((40, 20)))[0].dst;
+        assert_eq!(rect(&screen), [10.0, 20.0, 40.0, 20.0]);
+        assert_eq!(alpha(&screen), 1.0);
+
+        for (step, expected) in [191.0_f32, 128.0, 64.0].into_iter().enumerate() {
+            screen.advance();
+            assert_eq!(rect(&screen), [10.0, 20.0, 40.0, 20.0], "step {step}");
+            assert_eq!(alpha(&screen), expected / 255.0, "step {step}");
+        }
+
+        screen.advance();
+        assert_eq!(alpha(&screen), 0.0);
+        assert!(!screen.get(7).expect("picture").is_moving());
+        assert!(
+            screen.quads(|_| Some((40, 20))).is_empty(),
+            "opacity 0 is not drawn"
+        );
+    }
+
+    #[test]
+    fn advance_without_a_slide_changes_nothing() {
+        let mut screen = Screen::new();
+        screen.apply(&title_background());
+        screen.tick();
+        assert!(screen.iter().all(|picture| !picture.is_moving()));
+        let state: Vec<(i32, i32, i32, i32, f32)> = screen
+            .iter()
+            .map(|p| (p.x, p.y, p.scale, p.opacity, p.alpha()))
+            .collect();
+        let quads = screen.quads(|_| Some((1024, 576)));
+        for _ in 0..5 {
+            screen.advance();
+        }
+        let after: Vec<(i32, i32, i32, i32, f32)> = screen
+            .iter()
+            .map(|p| (p.x, p.y, p.scale, p.opacity, p.alpha()))
+            .collect();
+        assert_eq!(state, after);
+        assert_eq!(quads, screen.quads(|_| Some((1024, 576))));
+    }
+
+    #[test]
+    fn a_slide_interpolates_from_the_current_fields_not_from_the_sentinels() {
+        let mut screen = Screen::new();
+        screen.apply(&cmd(
+            7,
+            0,
+            PictureAction::Draw,
+            "a.png",
+            "",
+            &[0, 1, 1, 1, 255, 10, 20, 100, 0],
+        ));
+        // Only x travels; y, scale and opacity stay at the sentinel and must keep their current
+        // values instead of being interpolated from -1000000.
+        screen.apply(&animated_move(7, &slide_args(250, UNCHANGED, &[2])));
+        for step in 1..=2 {
+            screen.advance();
+            let picture = screen.get(7).expect("picture");
+            assert_eq!(picture.y, 20, "unchanged y stays put (step {step})");
+            assert_eq!(
+                picture.scale, 100,
+                "unchanged scale stays put (step {step})"
+            );
+            assert_eq!(
+                picture.opacity, 255,
+                "unchanged opacity stays put (step {step})"
+            );
+        }
+        assert_eq!(screen.get(7).expect("picture").x, 250);
+
+        // A second move while the first is still in flight re-bases from the frame on screen.
+        screen.apply(&animated_move(7, &slide_args(UNCHANGED, 80, &[2])));
+        screen.advance();
+        let picture = screen.get(7).expect("picture");
+        assert_eq!(picture.x, 250, "x is not part of the second move");
+        assert_eq!(picture.y, 50, "y slides from 20 to 80 over 2 frames");
     }
 }
 

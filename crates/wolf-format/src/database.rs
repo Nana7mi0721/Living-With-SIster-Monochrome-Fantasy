@@ -25,6 +25,10 @@ pub struct Database {
     pub types: Vec<DatabaseType>,
     /// Footer byte, `0xC2`.
     pub footer: u8,
+    /// Editor names from the `.project` companion; empty until
+    /// [`Database::apply_project_names`] has been called, because the `.dat`
+    /// itself carries no label at all.
+    pub names: ProjectNames,
 }
 
 impl Database {
@@ -94,6 +98,7 @@ impl Database {
             version,
             types,
             footer,
+            names: ProjectNames::default(),
         })
     }
 
@@ -121,6 +126,64 @@ impl Database {
                 })
             })
             .collect()
+    }
+
+    /// Read the type, field and row names from the `.project` companion file.
+    ///
+    /// Every `.dat` is purely positional: it carries field tables and rows but not
+    /// a single label. The editor keeps the labels next to it in a `.project`
+    /// file with the same base name (`DataBase.project` for `DataBase.dat`,
+    /// `CDataBase.project` for `CDataBase.dat`, `SysDatabase.project` for
+    /// `SysDatabase.dat`), one self-describing record per type, and the records
+    /// are index-aligned with the `.dat` type list — see `docs/FORMAT_SPEC.md`
+    /// §6.8 for the measured layout.
+    ///
+    /// Returns how many types the companion described — `0` when it does not
+    /// belong to this database. A type whose editor name is empty still counts
+    /// here (17 of the 40 `DataBase.dat` types are unnamed separators); use
+    /// [`ProjectNames::named_types`] for how many carry a label.
+    ///
+    /// A companion whose leading type count differs says nothing, which is what
+    /// keeps a `.project` written by another game version — or belonging to a
+    /// different database — from mis-labelling a type.
+    pub fn apply_project_names(&mut self, project: &[u8]) -> usize {
+        self.names = ProjectNames::parse(project, self.types.len());
+        self.names.len()
+    }
+
+    /// Editor name of type `ty`.
+    ///
+    /// `None` when the type has no name in the editor (17 of the 40
+    /// `DataBase.dat` types are unnamed separators) or when no `.project` was
+    /// applied.
+    pub fn type_name(&self, ty: usize) -> Option<&str> {
+        self.names.type_name(ty)
+    }
+
+    /// Editor name of logical column `column` of type `ty`.
+    ///
+    /// `None` when the companion's field list disagrees with the `.dat` field
+    /// table: measured on this game, 8 types of `DataBase.dat` and 2 of
+    /// `CDataBase.dat` keep one field in the editor that the exported table no
+    /// longer has, and a label must never be attached to a column that is not
+    /// there (§6.8).
+    pub fn field_name(&self, ty: usize, column: usize) -> Option<&str> {
+        let table = self.types.get(ty)?;
+        let record = self.names.record(ty)?;
+        if record.fields.len() != table.fields.len() {
+            return None;
+        }
+        record.field_name(column)
+    }
+
+    /// Editor name of row `row` of type `ty`, when the row counts agree.
+    pub fn row_name(&self, ty: usize, row: usize) -> Option<&str> {
+        let table = self.types.get(ty)?;
+        let record = self.names.record(ty)?;
+        if record.rows.len() != table.rows.len() {
+            return None;
+        }
+        record.row_name(row)
     }
 }
 
@@ -315,6 +378,259 @@ pub struct MapSetting {
     pub numbers: Vec<i32>,
     /// String columns in on-disk order; column 0 is [`Self::path`].
     pub strings: Vec<String>,
+}
+
+/// Editor labels read from a `.project` companion file.
+///
+/// The `.dat` files describe the *shape* of a database and carry no names at
+/// all, so a database read cannot resolve the type and field labels that
+/// `docs/OPCODE_250.md` uses as its most reliable key (`stringArgs[1]` = type
+/// label, `stringArgs[3]` = field label) without this companion. The layout is in
+/// `docs/FORMAT_SPEC.md` §6.8.
+///
+/// The record walk is exact rather than heuristic: every record ends with four
+/// editor-metadata blocks (field notes, string args, numeric args, defaults) and
+/// following them lands exactly on the end of the file for all three companions
+/// shipped with this game (35972, 174721 and 170977 bytes).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProjectNames {
+    /// One record per type, in `.dat` order.
+    types: Vec<ProjectTypeNames>,
+}
+
+impl ProjectNames {
+    /// Longest name accepted from a `.project` file, in bytes.
+    ///
+    /// Field and row names are short; only the type description runs to a few
+    /// hundred bytes. The bound stops a corrupt length word from being followed.
+    pub const MAX_NAME_BYTES: usize = 4096;
+
+    /// Read the names of a `.project` file belonging to a database with
+    /// `type_count` types.
+    ///
+    /// The leading word must equal `type_count`, otherwise nothing is named: a
+    /// companion from another game version names no type rather than the wrong
+    /// one. Records are then walked in order, and a record that does not parse
+    /// stops the walk and leaves every later type unnamed.
+    pub fn parse(project: &[u8], type_count: usize) -> Self {
+        if u32_at(project, 0) != Some(type_count as u32) {
+            return Self::default();
+        }
+        let mut types = Vec::with_capacity(type_count);
+        let mut at = 4usize;
+        for _ in 0..type_count {
+            let Some((record, end)) = project_type_at(project, at) else {
+                break;
+            };
+            types.push(record);
+            at = end;
+        }
+        Self { types }
+    }
+
+    /// Record of type `ty`, or `None` when the companion did not reach that far.
+    pub fn record(&self, ty: usize) -> Option<&ProjectTypeNames> {
+        self.types.get(ty)
+    }
+
+    /// Every record, in `.dat` type order.
+    pub fn iter(&self) -> impl Iterator<Item = &ProjectTypeNames> {
+        self.types.iter()
+    }
+
+    /// How many types the companion described.
+    pub fn len(&self) -> usize {
+        self.types.len()
+    }
+
+    /// Whether the companion described no type at all.
+    pub fn is_empty(&self) -> bool {
+        self.types.is_empty()
+    }
+
+    /// Editor name of type `ty`; `None` when it is empty or absent.
+    pub fn type_name(&self, ty: usize) -> Option<&str> {
+        self.record(ty)?.name()
+    }
+
+    /// Editor name of logical column `column` of type `ty`.
+    pub fn field_name(&self, ty: usize, column: usize) -> Option<&str> {
+        self.record(ty)?.field_name(column)
+    }
+
+    /// Editor name of row `row` of type `ty`.
+    pub fn row_name(&self, ty: usize, row: usize) -> Option<&str> {
+        self.record(ty)?.row_name(row)
+    }
+
+    /// How many types carry a non-empty name.
+    pub fn named_types(&self) -> usize {
+        self.types
+            .iter()
+            .filter(|record| record.name().is_some())
+            .count()
+    }
+
+    /// How many field names the companion carries over all types.
+    pub fn named_fields(&self) -> usize {
+        self.types.iter().map(|record| record.fields.len()).sum()
+    }
+
+    /// How many row names the companion carries over all types.
+    pub fn named_rows(&self) -> usize {
+        self.types.iter().map(|record| record.rows.len()).sum()
+    }
+}
+
+/// One type record of a `.project` file: the editor's labels for a `.dat` type.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProjectTypeNames {
+    /// Editor name of the type, e.g. `技能` or `マップ設定`.
+    pub name: String,
+    /// Editor name per field, parallel to the `.dat` field table.
+    pub fields: Vec<String>,
+    /// Editor name per row, parallel to the `.dat` rows.
+    pub rows: Vec<String>,
+}
+
+impl ProjectTypeNames {
+    /// Editor name of the type; `None` when the editor left it empty.
+    pub fn name(&self) -> Option<&str> {
+        non_empty(&self.name)
+    }
+
+    /// Editor name of field `column`.
+    pub fn field_name(&self, column: usize) -> Option<&str> {
+        self.fields.get(column).and_then(|name| non_empty(name))
+    }
+
+    /// Editor name of row `row`.
+    pub fn row_name(&self, row: usize) -> Option<&str> {
+        self.rows.get(row).and_then(|name| non_empty(name))
+    }
+}
+
+/// `Some(name)` unless the editor left the name empty.
+fn non_empty(name: &str) -> Option<&str> {
+    if name.is_empty() {
+        None
+    } else {
+        Some(name)
+    }
+}
+
+/// Little-endian `u32` at `at`.
+fn u32_at(data: &[u8], at: usize) -> Option<u32> {
+    let bytes = data.get(at..at + 4)?;
+    Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+}
+
+/// Read one `.project` string at `at`: a `u32` byte count *including* the NUL
+/// terminator, then that many bytes.
+///
+/// This is the same `t_str` the `.dat` files use, except that the editor writes
+/// UTF-8 here, so bytes that are not valid UTF-8 mean this offset is not a name.
+fn name_at(data: &[u8], at: usize) -> Option<(&str, usize)> {
+    let len = u32_at(data, at)? as usize;
+    if len == 0 || len > ProjectNames::MAX_NAME_BYTES {
+        return None;
+    }
+    let start = at + 4;
+    let raw = data.get(start..start + len)?;
+    let (terminator, text) = raw.split_last()?;
+    if *terminator != 0 {
+        return None;
+    }
+    Some((std::str::from_utf8(text).ok()?, start + len))
+}
+
+/// Read one whole type record at `at`, returning it with the offset just past it.
+///
+/// A record is the `.dat` type tuple plus the editor's metadata (§6.8): the type
+/// name, the field names, the row names, a description, one type code per field,
+/// then the four trailing blocks. The blocks are unnamed editor metadata, but
+/// they cannot be skipped — their lengths are what make the next record land
+/// where it does.
+fn project_type_at(project: &[u8], at: usize) -> Option<(ProjectTypeNames, usize)> {
+    let (name, mut offset) = name_at(project, at)?;
+    let field_count = u32_at(project, offset)? as usize;
+    offset += 4;
+    // A field name is at least 5 bytes (length word plus terminator), so a count
+    // larger than the file cannot be honest; the bound only stops a wild
+    // allocation from a corrupt word.
+    if field_count > project.len() / 5 {
+        return None;
+    }
+    let mut fields = Vec::with_capacity(field_count);
+    for _ in 0..field_count {
+        let (field, next) = name_at(project, offset)?;
+        fields.push(field.to_owned());
+        offset = next;
+    }
+    let row_count = u32_at(project, offset)? as usize;
+    offset += 4;
+    if row_count > project.len() / 5 {
+        return None;
+    }
+    let mut rows = Vec::with_capacity(row_count);
+    for _ in 0..row_count {
+        let (row, next) = name_at(project, offset)?;
+        rows.push(row.to_owned());
+        offset = next;
+    }
+    // Description (the editor's help text; unused here, but it is a t_str and
+    // has to be stepped over).
+    offset = name_at(project, offset)?.1;
+    // Field type codes: a byte count, then that many bytes.
+    let type_bytes = u32_at(project, offset)? as usize;
+    offset = offset.checked_add(4)?.checked_add(type_bytes)?;
+    if offset > project.len() {
+        return None;
+    }
+    // Block 1: one note per field.
+    let notes = u32_at(project, offset)? as usize;
+    offset += 4;
+    for _ in 0..notes {
+        offset = name_at(project, offset)?.1;
+    }
+    // Block 2: per field, a list of string arguments.
+    let entries = u32_at(project, offset)? as usize;
+    offset += 4;
+    for _ in 0..entries {
+        let arguments = u32_at(project, offset)? as usize;
+        offset += 4;
+        for _ in 0..arguments {
+            offset = name_at(project, offset)?.1;
+        }
+    }
+    // Block 3: per field, a list of numeric arguments.
+    let entries = u32_at(project, offset)? as usize;
+    offset += 4;
+    for _ in 0..entries {
+        let arguments = u32_at(project, offset)? as usize;
+        offset = offset
+            .checked_add(4)?
+            .checked_add(arguments.checked_mul(4)?)?;
+        if offset > project.len() {
+            return None;
+        }
+    }
+    // Block 4: one default value per field.
+    let defaults = u32_at(project, offset)? as usize;
+    offset = offset
+        .checked_add(4)?
+        .checked_add(defaults.checked_mul(4)?)?;
+    if offset > project.len() {
+        return None;
+    }
+    Some((
+        ProjectTypeNames {
+            name: name.to_owned(),
+            fields,
+            rows,
+        },
+        offset,
+    ))
 }
 
 #[cfg(test)]

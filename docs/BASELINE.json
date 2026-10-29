@@ -566,7 +566,8 @@
   "measured": "byte = 128 + 127*(age % 30)/30 for the title banner, so it flashes twice per second; retail frame 21_21_35 caught byte 222 and another capture caught 188",
   "unreachable": "222 is not exactly reachable with a 30 frame period (step ~4.23); 221 is the nearest phase and leaves a 1-byte residual",
   "baseline_frame": 716,
-  "note": "pixel comparisons against the retail PrintScreen must be taken at frame % 30 == 26 while the title menu is parked, or the phase, not the renderer, decides the score"
+  "note": "pixel comparisons against the retail PrintScreen must be taken at frame % 30 == 26 while the title menu is parked, or the phase, not the renderer, decides the score",
+  "type_5_name": "点滅A [明滅]"
  },
  "picture_erase": {
   "total_sites": 2835,
@@ -651,22 +652,22 @@
   "entry": "SampleMapA event 0 (autorun page 0)",
   "choice_state": {
    "frames": 600,
-   "instructions": 46370,
-   "picture_ops": 3662,
-   "db_accesses": 81,
+   "instructions": 30539,
+   "picture_ops": 748,
+   "db_accesses": 128,
    "warnings": 0,
-   "quads": 19,
+   "quads": 10,
    "text_pictures": 4,
-   "non_black": 200260,
-   "live_pictures": 3,
+   "non_black": 35816,
+   "live_pictures": 21,
    "choice_anchor": [
     512,
-    240
+    192
    ],
    "choice_rect": [
     512,
-    240,
-    263,
+    192,
+    242,
     148
    ],
    "choice_options": [
@@ -674,19 +675,23 @@
     "广袤的森林",
     "微风吹拂而过的麦田",
     "有人在等我的家"
-   ]
+   ],
+   "database_writes": 15,
+   "messages": 2
   },
   "message_state": {
    "frames": 400,
-   "instructions": 30577,
-   "picture_ops": 2366,
-   "db_accesses": 51,
+   "instructions": 31427,
+   "picture_ops": 2392,
+   "db_accesses": 98,
    "warnings": 0,
    "quads": 9,
    "non_black": 161336,
-   "live_pictures": 2,
+   "live_pictures": 21,
    "rows": 7,
-   "chars": 73
+   "chars": 73,
+   "database_writes": 13,
+   "text_pictures": 0
   },
   "note": "both states are produced by wolf-cli capture --map-run SampleMapA --event 0; --hold-message stops auto-advancing so the 101 message stays on screen"
  },
@@ -707,6 +712,88 @@
    "(18, 0, 22) flags 0x51200",
    "(20, 69, 0) flags 0x10000"
   ],
-  "note": "(18, 0, 22) is asked by ev48 pc158 and 7 more sites, not by ev63; ev63 asks (18, 0, 24) which the engine layer answers"
+  "note": "(18, 0, 22) is asked by ev48 pc158 and 7 more sites, not by ev63; ev63 asks (18, 0, 24) which the engine layer answers",
+  "engine_defaults": "apply_engine_defaults writes the coordinate scale into CData (18, 97) / (18, 98) and the message-window skin name into Data (18, 0, 24)",
+  "write_ops": {
+   "0": "assign",
+   "1": "add",
+   "2": "sub",
+   "3": "mul",
+   "4": "div",
+   "5": "rem",
+   "6": "max",
+   "7": "min"
+  },
+  "write_law": "flags & 0x1000 == 0 means WRITE; the operand comes from int arg 4 (argc >= 5) or from the string argument (argc == 4); a write never stores anything back into the source variable"
+ },
+ "effect_290": {
+  "doc": "docs/OPCODE_290.md v2",
+  "source": "the 11 type ids were read out of WOLF RPG Editor 3.735 Editor.exe as a zero-gap const array of u16 + UTF-16LE names at 0xA847E0",
+  "types": {
+   "0": "フラッシュ flash",
+   "1": "カラー補正 colour assign",
+   "2": "描画座標シフト draw shift",
+   "3": "シェイク shake",
+   "4": "ズーム zoom",
+   "5": "点滅A blink",
+   "6": "点滅B blink (0 uses)",
+   "7": "自動拡大縮小 breathe",
+   "8": "パターン切替 1回",
+   "9": "パターン切替 ループ",
+   "10": "パターン切替 往復"
+  },
+  "sites_total": 810,
+  "sites_common_events": 640,
+  "sites_map_events": 170,
+  "argument_shape": "290 is argc 7 = [head, duration, lo, hi, p1, p2, p3]; args[2..3] is a CLOSED picture range [lo, hi], not picture A -> picture B (type 4 has 43/49 sites with arg3 = arg2 + 1 = button art + button text; type 5 [390, 500] dims 72 pictures at once)",
+  "implemented": "type 5 blink only (picture_tone above)",
+  "unimplemented": "types 0, 2, 3, 4, 7, 8, 9, 10"
+ },
+ "transitions": {
+  "source": "opcode 150 move whose tail carries [head | 0x1000000, nothing, duration, nothing, nothing]",
+  "sites_moves_total": 3365,
+  "sites_teleport": 2817,
+  "sites_duration_zero": 168,
+  "sites_unresolved_self_var": 52,
+  "sites_animated": 328,
+  "durations_observed": [
+   2,
+   16
+  ],
+  "cap": "MAX_TRANSITION_FRAMES 600",
+  "law": "from = the pose before merge_args, to = the merged pose, linear over age/duration; duration 0, above the cap, or an unresolved self variable teleports instead",
+  "decisive_pair": "ev63 pc93 parks the message window with no tail; ev63 pc94 is the same arguments plus 16777216,3 and slides over 3 frames"
+ },
+ "offscreen_cull": {
+  "rule": "picture::on_screen(dst): positive extent, dst[0]+dst[2] > 0, dst[1]+dst[3] > 0, dst[0] < 1024, dst[1] < 576",
+  "why": "event 98 (the balloon-message library) parks its 24 controls at (-2784, 2880); without the test each panel still cost a skin pack and up to 30 quads",
+  "effect": "opening choice capture 38 -> 10 quads and 11 -> 4 text pictures; message capture 37 -> 9 quads and 7 -> 0 text pictures",
+  "pixel_proof": "imgdiff reports identical: true on both captures before and after"
+ },
+ "engine_events": {
+  "always": [
+   48,
+   261,
+   269,
+   270,
+   271,
+   224,
+   225,
+   213,
+   214,
+   41
+  ],
+  "auto_start": [
+   241
+  ],
+  "implicit": [
+   63
+  ],
+  "unique_total": 12,
+  "doc": "docs/ENGINE_EVENTS.md (section 10 is the Lead appendix with the measured A/B)",
+  "order_matters": "48 fills the system variables; 261 precedes 270 (270 reads 2700000..2700005); 269 precedes 270 (270 tests 1600099); 225 publishes Sys71/72 that 224 and 213 consume",
+  "title_parity": "each of the nine ENGINE_ALWAYS candidates alone is pixel-identical to starting none; all together mean abs 0.012 / psnr 67.20 dB at frame 716",
+  "excluded": "343 has 44 by-id calls but its condition variable has no writer; 43 has zero call sites",
+  "cli_switch": "wolf-cli capture --engine-events <id,id,...> (an empty value starts none)"
  }
 }
