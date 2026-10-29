@@ -1023,9 +1023,10 @@
    "wolf-game a_save_write_reaches_the_next_read",
    "wolf-game a_save_file_round_trips_through_the_writer",
    "wolf-game a_saved_game_reloads_its_live_picture_layer",
-   "wolf-game a_saved_game_keeps_the_database_cells"
+   "wolf-game a_saved_game_keeps_the_database_cells",
+   "wolf-game a_title_new_game_can_be_saved_and_reloaded_after_the_opening"
   ],
-  "partial": "220 mode 0 (full save constructed from Game state) is implemented (see live_writer); 221 flag=1 sites ev94 pc335/345/348 remain unverified; retail escape 04 in SavePart5 text records is semantically but not byte-identically re-encoded",
+  "partial": "220 mode 0 is implemented (see live_writer); 221 flag=1 sites ev94 pc335/345/348 remain unverified; retail escape 04 in SavePart5 text records is semantically but not byte-identically re-encoded; reading a Rust-written .sav back into the official game is not yet demonstrated",
   "live_writer": {
    "entry": "Game::save_to(path)",
    "template": "base_save (the save the game was loaded from), or Save/System.sav for a new game",
@@ -1039,8 +1040,11 @@
    "vardb": "Databases::write_into(&mut save.vardb) runs after set_part5 and before to_bytes_rebuilt(); a missed cell increments stats.unmodelled and records a 220 SaveLoad diagnostic",
    "tests": [
     "wolf-game a_saved_game_reloads_its_live_picture_layer",
-    "wolf-game a_saved_game_keeps_the_database_cells"
-   ]
+    "wolf-game a_saved_game_keeps_the_database_cells",
+    "wolf-game a_title_new_game_can_be_saved_and_reloaded_after_the_opening"
+   ],
+   "picture_roundtrip": "empty FileString/WindowString slots are kept as invisible pictures; scale 0 is preserved (retail picture 6233 has [9]=62 / [10]=100, so 0 means hidden, not missing)",
+   "end_to_end": "a_title_new_game_can_be_saved_and_reloaded_after_the_opening: boot -> title menu -> new game -> 1200 frames -> save >300000 bytes -> fresh Game load; visible picture layer, 800 normal variables, playtime and Sys3/Sys4 equal"
   }
  },
  "map_teleport": {

@@ -16,7 +16,7 @@ mean abs 0.012）。M2 的验收对象是**玩家真正开始游戏后的第一�
 
 | 项 | 值 |
 |---|---|
-| git HEAD | `ba761be`（`130` 地图传送与标题→新游戏链；此前 `dc85636` 为 styled 101 message / SavePart5 图片表写回 / vardb `write_into` / 220 mode 0） |
+| git HEAD | `107205e`（新游戏→存档→读档往返；此前 `ba761be` 为 `130` 地图传送与标题→新游戏链） |
 | 数据根 | `work/full`（23 个 .wolf 全解，4,085 文件） |
 | 屏幕 | 1024x576，60 fps，tile 16 px |
 | 工具链 | Rust 1.99.1 msvc；`cargo test -q --workspace` 全绿；`wolf-cli verify` 63/63 |
@@ -41,6 +41,7 @@ mean abs 0.012）。M2 的验收对象是**玩家真正开始游戏后的第一�
 | C14 | `wolf-cli precompile` | 块栈计数器（§3.7） |
 | C15 | `wolf-cli capture --load-save work/retail_backup/Save/SaveData01.sav --frames 1 --out work/out/save1_load3.png` | 存档载入态（§2.4） |
 | C16 | `cargo test -q -p wolf-game a_saved_game_reloads_its_live_picture_layer` 与 `a_saved_game_keeps_the_database_cells` | 整档回写（§2.5） |
+| C17 | `cargo test -q -p wolf-game --test opening a_title_new_game_can_be_saved_and_reloaded_after_the_opening` | 标题→新游戏→存档→读档整条链（§2.5） |
 
 ---
 
@@ -199,6 +200,12 @@ Part3 的 800 个通常变量与活着的公共事件 self 数值 + `CSelf5..9` 
 以及 `Databases::write_into` 收集的 CDataBase 运行时单元格。测试：`a_saved_game_reloads_its_live_picture_layer`
 （66 张图逐字段相同）与 `a_saved_game_keeps_the_database_cells`（(0,12,5)=4242 保存后重新载入仍是 4242）。
 唯一非字节等价的写回是 retail 文本图 escape 04（带字距字体）：语义上仍是 `[n]`，写回成 05。
+
+**端到端（本批新增）**：`a_title_new_game_can_be_saved_and_reloaded_after_the_opening` 从 boot 走标题菜单第一项 →
+开场对话/选择 → 1200 帧 → `Game::save_to`（>300,000 字节）→ 新 `Game::load_save`。断言：屏幕上**可见**图片层逐字段相同、
+800 个通常変数全等、playtime 与 Sys3/Sys4 全等。该测试同时暴露并修复了两个 SavePart5 往返缺陷：
+空文件名的 `FileString` / `WindowString` 槽位不再被丢弃；`scale = 0` 不再被当成 `100`（零售 6233 的 [9]=62 / [10]=100
+说明 0 是真实的「隐藏」，不是缺省值）。
 
 ## 3. `150` 图片指令的四个语义修正（M2 的核心发现）
 
@@ -521,6 +528,7 @@ playtime、Sys3/Sys4、800 个通常変数、全部活着的公共事件 self �
 14. **存档载入**：`--load-save` 按 SavePart5 重建当前画面（66 图 / 800 个通常变量 / 17 quad / 34 文本图），HUD 与零售 save1.jpg 对齐；普通文件图按 6x2 精灵表取格。
 15. **存档操作码**：220 读档排队、221 读档内变量、222 写档内变量并落盘；地址映射与存档写回测试见 §4.5。
 16. **地图传送与标题新游戏链**：`130` 的 `-1/-2` 解码为 SysDatabase 行号，切图时停旧图协程、启新图自动页；`boot → 标题 → 菜单 → 新游戏 → 开场四选一` 已有集成测试（§4.6）。
+17. **端到端日常链**：标题 → 新游戏 → 开场对话/选择 → 1200 帧剧情态 → `save_to` → 新 Game `load_save`，可见图片层 / 800 通常変数 / playtime / Sys3-4 全部一致（§2.5，C17）。
 
 ### 5.3 地图渲染不再是 M2 验收项
 
@@ -557,7 +565,7 @@ playtime、Sys3/Sys4、800 个通常変数、全部活着的公共事件 self �
 | HUD 文本排版 | **已修**：`Game::text_quads()` 按 `\f[n]` / anchor / `<R>` / `\c[n]` / `\E` 切片出图（crates/wolf-game/src/textpic.rs，25 个单测），见 §3.9；半角 advance 仍按 0.5 em 估算，anchor 1/3/4 有 ≤6% 偏差（`measure_with` 未接 cosmic-text） |
 | `290` 的图片号是**区间** | `args[2..3]` 是闭区间 [lo, hi]（官方「□～□ の欄に…」）；若按单张实现，type 4 的 7 对按钮、type 5 的整幕压暗、CE85 的「全カーソル」都会只作用一半（docs/OPCODE_290.md §0.4） |
 | 字符串实参 | **已实现**：8,260 个带字符串实参的 210/300 调用点写入 CSelf5..8（docs/OPCODE_210_RETURN.md §8），零反例 |
-| 存档/读档（220/221/222） | **读侧、221/222 与 220 mode 0 均已落地**：`--load-save` 重建画面（Part3 通常变量 / セルフ変数 / 指文字列、Part2 时间与 Sys3/4、Part5 图片表）；221/222 经 `SaveOp` 读写并落盘，9 档 9/9 逐字节可逆；`Game::save_to` 从模板 + 运行时状态重建 Part2/3/5 与 vardb（见 §4.5）。剩 221 flag=1 站点与 retail 04 字体记录的字节级写回未验证 |
+| 存档/读档（220/221/222） | **读侧、221/222 与 220 mode 0 均已落地**：`--load-save` 重建画面（Part3 通常变量 / セルフ変数 / 指文字列、Part2 时间与 Sys3/4、Part5 图片表）；221/222 经 `SaveOp` 读写并落盘，9 档 9/9 逐字节可逆；`Game::save_to` 从模板 + 运行时状态重建 Part2/3/5 与 vardb（见 §4.5）。剩 221 flag=1 站点、retail 04 字体记录的字节级写回，以及「Rust 写出的 .sav 被官方游戏读回」未验证 |
 | `270 Party`、`160/162 Transition` | 仍是记录型 no-op |
 
 ---
