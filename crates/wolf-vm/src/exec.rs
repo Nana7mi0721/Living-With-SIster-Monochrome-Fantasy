@@ -765,7 +765,11 @@ impl TransitionState {
     #[must_use]
     pub const fn frames(&self) -> u32 {
         let frames = (self.flags & 0xFF) as u32;
-        if frames == 0 { 1 } else { frames }
+        if frames == 0 {
+            1
+        } else {
+            frames
+        }
     }
 }
 
@@ -1191,9 +1195,7 @@ impl Vm {
             .instances
             .iter()
             .filter(|i| {
-                i.pc >= i.program.len()
-                    && i.wait == WaitState::None
-                    && !i.retain_after_finish
+                i.pc >= i.program.len() && i.wait == WaitState::None && !i.retain_after_finish
             })
             .map(|i| i.id)
             .collect();
@@ -1608,6 +1610,14 @@ fn execute(
                 inst.pc += 1;
                 None
             }
+            104 => {
+                // One site in the whole corpus (CE341 pc615) with argc 0. WolfTL's
+                // CommandType has no 104, docs/OPCODE_SPEC.md section 5.5 leaves it
+                // unconfirmed, and an empty-argument command cannot have a side effect
+                // we could observe, so it is a no-op until a second site appears.
+                inst.pc += 1;
+                None
+            }
             105 => {
                 host.close_message();
                 inst.pc += 1;
@@ -1673,7 +1683,12 @@ fn execute(
                 // A key the script banned with 126 must read as not pressed; a key
                 // it asked for with 125 is handed to the host, which owns the keyboard.
                 let mask = arg(cmd, 1) as u32 & !input.ban_keys;
-                store_num(inst, vars, target, host.key_code_auto(mask, input.auto_keys));
+                store_num(
+                    inst,
+                    vars,
+                    target,
+                    host.key_code_auto(mask, input.auto_keys),
+                );
                 inst.pc += 1;
                 None
             }
@@ -2915,7 +2930,11 @@ mod tests {
         vm.step_frame(&mut host);
         assert_eq!(host.messages, vec!["hello".to_owned()]);
         assert_eq!(host.faces, vec![Some(2)]);
-        assert_eq!(vm.vars.get_sys(0), 2, "`@2` must reach Sys0 for the frame painter");
+        assert_eq!(
+            vm.vars.get_sys(0),
+            2,
+            "`@2` must reach Sys0 for the frame painter"
+        );
         assert_eq!(vm.vars.get(0), 0);
         host.dismiss = true;
         vm.step_frame(&mut host);
@@ -3466,7 +3485,11 @@ mod tests {
         assert_eq!(read.owner, 7);
 
         let slot_read = &host.saves[1];
-        assert_eq!(slot_read.file, SaveTarget::Slot(0), "a numeric operand is a slot");
+        assert_eq!(
+            slot_read.file,
+            SaveTarget::Slot(0),
+            "a numeric operand is a slot"
+        );
 
         let write = &host.saves[2];
         assert_eq!(write.opcode, 222);
