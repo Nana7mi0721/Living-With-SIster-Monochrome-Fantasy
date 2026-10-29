@@ -16,7 +16,7 @@ mean abs 0.012）。M2 的验收对象是**玩家真正开始游戏后的第一�
 
 | 项 | 值 |
 |---|---|
-| git HEAD | `51bd7a3` + **第二批 M2 提交**（250 写路径 / 移动插值 / 离屏裁剪 / 引擎事件 12 个 / `.project` 名字）+ **第三批**（`112` 开块 / `290` 十一种效果 / `blocks` 诊断命令 / `--answer-delay`）+ **第四批**（`69d7b9c`：暂停光标贴图 / 鼠标选项命中 / `210` 字符串实参 / **`121` 运算符表纠错** / 消息原点 410） |
+| git HEAD | `51bd7a3` + **第二批 M2 提交**（250 写路径 / 移动插值 / 离屏裁剪 / 引擎事件 12 个 / `.project` 名字）+ **第三批**（`112` 开块 / `290` 十一种效果 / `blocks` 诊断命令 / `--answer-delay`）+ **第四批**（`69d7b9c`：暂停光标贴图 / 鼠标选项命中 / `210` 字符串实参 / **`121` 运算符表纠错** / 消息原点 410）+ **第五批**（`8825723` 存档 220/221/222 与精灵表 pattern；`ea96c1f` 290 效果实参求值） |
 | 数据根 | `work/full`（23 个 .wolf 全解，4,085 文件） |
 | 屏幕 | 1024x576，60 fps，tile 16 px |
 | 工具链 | Rust 1.99.1 msvc；`cargo test -q --workspace` 全绿；`wolf-cli verify` 63/63 |
@@ -39,6 +39,7 @@ mean abs 0.012）。M2 的验收对象是**玩家真正开始游戏后的第一�
 | C12 | `wolf-cli capture --map-run SampleMapA --event 0 --frames 900 --answer 3 --answer-delay 1 --out work/out/m2story900.png` | 剧情态（§2.3） |
 | C13 | `wolf-cli blocks --map SampleMapA --event 0` | 块表诊断（§3.7） |
 | C14 | `wolf-cli precompile` | 块栈计数器（§3.7） |
+| C15 | `wolf-cli capture --load-save work/retail_backup/Save/SaveData01.sav --frames 1 --out work/out/save1_load3.png` | 存档载入态（§2.4） |
 
 ---
 
@@ -424,6 +425,28 @@ ev63 的几何**全部来自数据库**：`250 [18, 97, 0, 69632, self88]`（座
 建出来的角色行，新开局没有它；行不存在的读该回 0 还是不动目标变量，**原作未验证**，所以这里是留空并计数，
 不做猜测。诊断行现在会把标签一起打出来（`labels "..."/"..."`），下一轮定位不必再翻字节码。
 
+### 4.5 存档操作码：220 / 221 / 222（★已实测）
+
+`docs/OPCODE_220_SAVE.md` 的实际参数：220 是 `argc 2 = [mode, file]`（mode 0 保存 / 1 读取）；
+221 是 `argc 4 = [destination, file, address, flag]`；222 是 `argc 4 = [value, file, address, flag]`。
+`file` 可以是字符串变量（路径）或数值（槽号）；`Slot(n)` 映射到 `root/Save/SaveData{n:02}.sav`。
+
+解释器侧只有一个钩子：`Host::save_load(&SaveOp) -> Option<i32>`，`SaveOp` 带
+`opcode / mode / file / destination / address / value / flag / owner`。221 的返回值由解释器写回
+`destination`，220/222 返回 `None`。地址映射（本轮实测）：`2_000_000+n` 是通常変数 `n`，
+`1_600_000+n` 是 owner 事件的セルフ変数 `n`，`9_000_000+29` 是游戏时间的秒数，
+`9_000_000+0..12` 是 `part2.vars3_21[n+6]`。
+
+引擎侧 `GameHost::save_load`：220 mode 1 排队 `SaveRequest::Load(path)`，`Game::frame` 在
+`vm.step_frame` 返回后调用 `savegame::load_into`（清屏、按 Part5 重建图片、恢复 800 个通常变量与
+`playtime`、Sys3/Sys4）；221 读文件并返回 `save_address`（缺档回 0）；222 读→`write_save_address`→
+`write_save` 写回。测试：`wolf-vm save_ops_decode_slot_paths_and_store_the_221_answer`、
+`wolf-game a_save_address_finds_normal_self_and_system_variables` / `a_save_write_reaches_the_next_read` /
+`a_save_file_round_trips_through_the_writer`。
+
+**仍未实现**：220 mode 0（从 Game 状态构造完整 `SaveFile` 的 part1/part2/part4/part5）只有一条诊断记录；
+221 的 `flag=1` 三个站点（ev94 pc335/345/348，地址 `1600062`/`1600064`）语义未验证。
+
 ---
 
 ## 5. 与 PLAN.md 的偏差（M2 项的作废与替换）
@@ -452,6 +475,7 @@ ev63 的几何**全部来自数据库**：`250 [18, 97, 0, 69632, self88]`（座
 12. **`290` 十一种效果**：type 0/1/2/3/4/5/7 已实现、6 全库 0 条、8/9/10 状态机就位；图片号按**闭区间** [lo, hi] 处理。
 13. **诊断命令**：`wolf-cli blocks`（块表）与 `--answer-delay`（按帧作答，避免把菜单循环烧进一帧）。
 14. **存档载入**：`--load-save` 按 SavePart5 重建当前画面（66 图 / 800 个通常变量 / 17 quad / 34 文本图），HUD 与零售 save1.jpg 对齐；普通文件图按 6x2 精灵表取格。
+15. **存档操作码**：220 读档排队、221 读档内变量、222 写档内变量并落盘；地址映射与存档写回测试见 §4.5。
 
 ### 5.3 地图渲染不再是 M2 验收项
 
@@ -483,12 +507,12 @@ ev63 的几何**全部来自数据库**：`250 [18, 97, 0, 69632, self88]`（座
 | `126 BanInput` | 已在 `123` 的掩码里过滤（本作 1,115 处 123 指令按位生效） |
 | 常时协程 | 已启动 12 个（§4.2）；343 / 43 仍未启动 |
 | `250` 的标签解析 | **已接上**（`resolve_labels`，开口实测 10 次命中，§4.4）；剩的是**行不存在**的读（CData 行 100 / 行 -1），原作语义未验证 |
-| `290` 效果的绘制接线 | 语义与状态机已全部实现（`picture.rs` 的 `Zoom/Shake/Breath/PatternFx/color_corr/shift`，126 个测试），但 `8/9/10` パターン切替只算出当前该用第几帧，`Picture` 还没有 pattern 字段，atlas 仍画整张纹理；`0` フラッシュ 的数学未与零售对照 |
-| `290` 的实参求值 | `exec.rs` 把 `290` 的 args 原样交给 host，self 变量 magic（`1600021` 等）未 `eval_num`，所以 type 0/2/5 里大量 self 图号取不到图（只记 note） |
+| `290` 效果的绘制接线 | **已实现**：`picture.rs` 的 `Zoom/Shake/Breath/PatternFx/color_corr/shift` 全部接到 `destination()` / `tone_byte()`；`8/9/10` パターン切替已按 `pattern_now()` 选精灵表格子（159 个 wolf-game 测试）。`0` フラッシュ 的数学仍未与零售逐像素对照 |
+| `290` 的实参求值 | **已修**：`exec.rs` 的 290 分支对每个 int 实参调用 `eval_num`，self 变量 magic（`1600021` 等）现在能取到图号（测试 `effect_operands_are_evaluated_before_the_host_sees_them`） |
 | HUD 文本排版 | **已修**：`Game::text_quads()` 按 `\f[n]` / anchor / `<R>` / `\c[n]` / `\E` 切片出图（crates/wolf-game/src/textpic.rs，25 个单测），见 §3.9；半角 advance 仍按 0.5 em 估算，anchor 1/3/4 有 ≤6% 偏差（`measure_with` 未接 cosmic-text） |
 | `290` 的图片号是**区间** | `args[2..3]` 是闭区间 [lo, hi]（官方「□～□ の欄に…」）；若按单张实现，type 4 的 7 对按钮、type 5 的整幕压暗、CE85 的「全カーソル」都会只作用一半（docs/OPCODE_290.md §0.4） |
 | 字符串实参 | **已实现**：8,260 个带字符串实参的 210/300 调用点写入 CSelf5..8（docs/OPCODE_210_RETURN.md §8），零反例 |
-| 存档/读档（220/221/222） | **读侧已落地**：`--load-save` 重建画面（Part3 通常变量 / セルフ変数 / 指文字列、Part2 时间与 Sys3/4、Part5 图片表）；写侧 `wolf-save` 有 `to_bytes`（9 档 9/9 逐字节可逆）。220/221/222 的 GameHost 打包仍未接 |
+| 存档/读档（220/221/222） | **读侧与 221/222 已落地**：`--load-save` 重建画面（Part3 通常变量 / セルフ変数 / 指文字列、Part2 时间与 Sys3/4、Part5 图片表）；221/222 经 `SaveOp` 读写并落盘，9 档 9/9 逐字节可逆。**220 mode 0 的整档保存仍未实现**（见 §4.5） |
 | `270 Party`、`160/162 Transition` | 仍是记录型 no-op |
 
 ---

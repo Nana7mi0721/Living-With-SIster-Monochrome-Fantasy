@@ -800,8 +800,8 @@
   "sites_common_events": 640,
   "sites_map_events": 170,
   "argument_shape": "290 is argc 7 = [head, duration, lo, hi, p1, p2, p3]; args[2..3] is a CLOSED picture range [lo, hi], not picture A -> picture B (type 4 has 43/49 sites with arg3 = arg2 + 1 = button art + button text; type 5 [390, 500] dims 72 pictures at once)",
-  "implemented": "type 5 blink only (picture_tone above)",
-  "unimplemented": "types 0, 2, 3, 4, 7, 8, 9, 10"
+  "implemented": "types 0 flash / 1 colour assign / 2 draw shift / 3 shake / 4 zoom / 5 blink / 7 breathe are implemented in crates/wolf-game/src/picture.rs; types 8/9/10 pattern switching select the sprite-sheet cell through Picture::pattern_now; type 6 has zero sites in this game",
+  "unimplemented": "none known; the flash curve and shake amplitude have no retail pixel comparison yet"
  },
  "transitions": {
   "source": "opcode 150 move whose tail carries [head | 0x1000000, nothing, duration, nothing, nothing]",
@@ -981,5 +981,26 @@
    "retail_reference": "Save/save1.jpg",
    "diff": "mean abs 5.226 / <=2 83.20% / 顶行 18.56 (JPEG 源 + 文本抗锯齿), 其余区域 0.58..1.45"
   }
+ },
+ "save_opcodes": {
+  "doc": "docs/OPCODE_220_SAVE.md section 11",
+  "decoded": "220 argc2 [mode, file]; 221 argc4 [destination, file, address, flag]; 222 argc4 [value, file, address, flag]; the file operand is a string variable path or a numeric save slot",
+  "engine": "Host::save_load(&SaveOp) -> Option<i32>; SaveOp { opcode, mode, file: SaveTarget::{Slot,Path}, destination, address, value, flag, owner }",
+  "slot_path": "root/Save/SaveData{slot:02}.sav",
+  "read": "220 mode 1 queues SaveRequest::Load; Game::frame calls savegame::load_into after vm.step_frame",
+  "write": "222 reads the save, applies SaveOp.value through write_save_address and writes it back; 221 answers save_address (a missing file answers 0)",
+  "address_map": {
+   "2000000+n": "normal_var(n)",
+   "1600000+n": "self_var(owner, n)",
+   "9000000+29": "playtime_frames / 60",
+   "9000000+0..12": "part2.vars3_21[n+6]"
+  },
+  "tests": [
+   "wolf-vm save_ops_decode_slot_paths_and_store_the_221_answer",
+   "wolf-game a_save_address_finds_normal_self_and_system_variables",
+   "wolf-game a_save_write_reaches_the_next_read",
+   "wolf-game a_save_file_round_trips_through_the_writer"
+  ],
+  "partial": "220 mode 0 (full save constructed from Game state) is still a diagnostic note; flag=1 sites ev94 pc335/345/348 are unverified"
  }
 }
