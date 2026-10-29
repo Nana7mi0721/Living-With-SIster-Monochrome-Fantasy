@@ -384,19 +384,33 @@ impl Databases {
         let Some(table) = self.table(container) else {
             return (db_type, column);
         };
-        let named_type = type_label
-            .filter(|label| !label.is_empty())
-            .and_then(|label| {
-                (0..table.types.len()).find(|index| table.type_name(*index) == Some(label))
+        let type_wanted = type_label.map(normalise_label).filter(|label| !label.is_empty());
+        let named_type = type_wanted
+            .as_deref()
+            .and_then(|want| {
+                (0..table.types.len()).find(|index| {
+                    table
+                        .type_name(*index)
+                        .map(normalise_label)
+                        .as_deref()
+                        == Some(want)
+                })
             })
             .map(|index| index as i32)
             .unwrap_or(db_type);
-        let named_column = field_label
-            .filter(|label| !label.is_empty())
-            .and_then(|label| {
+        let field_wanted = field_label.map(normalise_label).filter(|label| !label.is_empty());
+        let named_column = field_wanted
+            .as_deref()
+            .and_then(|want| {
                 let index = usize::try_from(named_type).ok()?;
                 let fields = table.types.get(index)?.fields.len();
-                (0..fields).find(|column| table.field_name(index, *column) == Some(label))
+                (0..fields).find(|column| {
+                    table
+                        .field_name(index, *column)
+                        .map(normalise_label)
+                        .as_deref()
+                        == Some(want)
+                })
             })
             .map(|index| index as i32)
             .unwrap_or(column);
@@ -413,6 +427,20 @@ impl Databases {
     }
 }
 
+/// Normalises an editor label for comparison.
+///
+/// The .project companions mix U+2014 and U+2015 dashes and full-width spaces;
+/// both spellings mean the same label to the engine.
+fn normalise_label(label: &str) -> String {
+    label
+        .trim_end_matches(char::from(0))
+        .replace('—', "-")
+        .replace('―', "-")
+        .replace('　', " ")
+        .trim()
+        .to_owned()
+}
+
 /// A `250` address as indices into a save file variable database.
 ///
 /// Scripts address row -1 (and a table with no fields can address column -1), which
@@ -427,6 +455,10 @@ fn cell_address(db_type: i32, row: i32, column: i32) -> Option<(usize, usize, us
 fn numeric_cell(table: &Database, db_type: i32, row: usize, column: usize) -> Option<i32> {
     let index = usize::try_from(db_type).ok()?;
     let table = table.types.get(index)?;
+    // Scripts use negative rows as "last" sentinels and sometimes carry a row one
+    // past the end (the editor counts a separator row). Clamp instead of leaving
+    // the whole read unanswered; the engine treats the nearest existing row as the cell.
+    let row = row.min(table.rows.len().checked_sub(1)?);
     let row = table.rows.get(row)?;
     match table.value(row, column)? {
         RowValue::Num(value) => Some(value),
@@ -437,6 +469,7 @@ fn numeric_cell(table: &Database, db_type: i32, row: usize, column: usize) -> Op
 fn string_cell(table: &Database, db_type: i32, row: usize, column: usize) -> Option<&str> {
     let index = usize::try_from(db_type).ok()?;
     let table = table.types.get(index)?;
+    let row = row.min(table.rows.len().checked_sub(1)?);
     let row = table.rows.get(row)?;
     match table.value(row, column)? {
         RowValue::Str(text) => Some(text),
@@ -653,6 +686,24 @@ mod tests {
             databases.resolve_labels(Container::Sys, 6, 0, None, None),
             (6, 0)
         );
+    }
+
+    #[test]
+    fn the_party_label_resolves_onto_the_player_row() {
+        // CE105 asks for the member of party position 0 and labels the table
+        // パーティー情報, member 1. The numeric type 3 is 属性耐性, so only the label
+        // route reaches the row that says the party leader is status row 12.
+        let Some(root) = have_data() else { return };
+        let databases = Databases::load(&root.join("BasicData"), DEFAULT_SCREEN);
+        let (db_type, column) = databases.resolve_labels(
+            Container::CData,
+            3,
+            1,
+            Some("パーティー情報"),
+            Some("メンバー1"),
+        );
+        assert_eq!((db_type, column), (6, 1));
+        assert_eq!(databases.num(Container::CData, db_type, 0, column), Some(12));
     }
 
     fn retail_save() -> Option<wolf_save::SaveFile> {

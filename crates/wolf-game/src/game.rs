@@ -1367,17 +1367,23 @@ impl Host for GameHost<'_> {
             }
             return None;
         }
-        // The numeric pair is right for 99% of the sites, so it is tried first; the labels
-        // only get a turn when it answers nothing, because the editor numbering drifts from
-        // the file's (the separator type 14 counts in one and not the other).
-        if let Some(value) = lookup_cell(self.databases, container, op.db_type, row, op.item_id) {
-            return Some(value);
-        }
+        // Labels are authoritative, not a fallback. The editor numbering drifts from
+        // the file's numbering (it counts separator types the .dat does not), and the
+        // numeric pair can even hit a *different* table that happens to have a cell at
+        // that address: CE105 asks for the party table member 1 as (3, 0, 1), but
+        // CDataBase type 3 is 属性耐性, whose row 0 is all 100s. Reading numerically
+        // first returned 100 and the status panel was drawn for a non-existent
+        // character id. Resolve the labels first; a table without labels simply
+        // returns the original pair.
         let (db_type, column) = resolve_cell(self.databases, self.stats, op, container);
-        if (db_type, column) != (op.db_type, op.item_id) {
-            if let Some(value) = lookup_cell(self.databases, container, db_type, row, column) {
-                return Some(value);
-            }
+        if row == -1 {
+            // CE48 pc153 reads (0, -1, 33) as the loop bound over every row of
+            // 主人公ステータス; the engine answers with the row count.
+            let count = self.databases.row_count(container, db_type).unwrap_or(0);
+            return Some(DbValue::Num(i32::try_from(count).unwrap_or(i32::MAX)));
+        }
+        if let Some(value) = lookup_cell(self.databases, container, db_type, row, column) {
+            return Some(value);
         }
         // The labels ride along, because they are the only clue that a drifted type id is
         // the reason the read missed (an unresolvable label means the .project walk lost
