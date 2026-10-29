@@ -621,14 +621,14 @@
   ],
   "text_origin": [
    64,
-   412
+   410
   ],
   "font_px": 20,
   "line_pitch": 26,
   "wrap_width": 928,
   "pause_cursor": [
    576,
-   556
+   554
   ],
   "chars_per_second": 500,
   "preroll_frames": 9,
@@ -645,21 +645,35 @@
     32,
     24
    ],
-   "origin": "Sys1 = 2*rateX = 64, Sys2 = 17*rateY + trunc(rateY/5) = 412"
-  }
+   "origin": "Sys1 = 2*rateX = 64, Sys2 = 17*rateY + trunc(rateY/10) = 410 (the /10 was proved only after opcode 121 0x3000 turned out to be division: 24/10 = 2)"
+  },
+  "pause_cursor_sprite": {
+   "file": "SystemFile/Text_Pause.png",
+   "sheet": "17x90",
+   "frame": [
+    17,
+    15
+   ],
+   "frames": 6,
+   "shape": "one 16x10 downward triangle per frame, top edge y = 3,2,1,0,1,3 inside the frame",
+   "step_frames": 8,
+   "step_frames_verified": false,
+   "doc": "docs/OPCODE_101.md"
+  },
+  "overflow": "a 7-row message at 26 px pitch needs 182 px but the ev63 frame is 168 px tall; the last row and the cursor sit on the bottom border. Whether retail paginates, shrinks the font or wraps wider is unverified: there is no retail PrintScreen of a 101 window yet"
  },
  "opening_slice": {
   "entry": "SampleMapA event 0 (autorun page 0)",
   "choice_state": {
    "frames": 600,
-   "instructions": 30539,
-   "picture_ops": 748,
+   "instructions": 29367,
+   "picture_ops": 750,
    "db_accesses": 128,
    "warnings": 0,
    "quads": 10,
    "text_pictures": 4,
    "non_black": 35816,
-   "live_pictures": 21,
+   "live_pictures": 22,
    "choice_anchor": [
     512,
     192
@@ -677,21 +691,32 @@
     "有人在等我的家"
    ],
    "database_writes": 15,
-   "messages": 2
+   "messages": 2,
+   "db_labels": 11,
+   "choices": 1
   },
   "message_state": {
    "frames": 400,
-   "instructions": 31427,
-   "picture_ops": 2392,
+   "instructions": 30619,
+   "picture_ops": 2394,
    "db_accesses": 98,
    "warnings": 0,
-   "quads": 9,
-   "non_black": 161336,
-   "live_pictures": 21,
+   "quads": 10,
+   "non_black": 161282,
+   "live_pictures": 22,
    "rows": 7,
    "chars": 73,
    "database_writes": 13,
-   "text_pictures": 0
+   "text_pictures": 0,
+   "db_labels": 9,
+   "cursor": [
+    576,
+    554
+   ],
+   "text_origin": [
+    64,
+    410
+   ]
   },
   "note": "both states are produced by wolf-cli capture --map-run SampleMapA --event 0; --hold-message stops auto-advancing so the 101 message stays on screen",
   "story_state": {
@@ -889,5 +914,29 @@
    "-"
   ],
   "doc": "docs/TEXT_SPEC.md §9"
+ },
+ "opcode_121_operators": {
+  "law": "high nibble of the operator word = binary op, low bits masked with 0x0F00 = compound op; 0x3000 is INTEGER DIVISION and 0x4000 is REMAINDER (the widely copied WolfTL table has them swapped)",
+  "binary": {
+   "0x0": "add",
+   "0x1": "sub",
+   "0x2": "mul",
+   "0x3": "div",
+   "0x4": "rem",
+   "0x5": "and",
+   "0x6": "rand(min,max) inclusive",
+   "0x7": "or",
+   "0x8": "xor",
+   "0x9": "shl"
+  },
+  "compound": "0x000 =, 0x100 +=, 0x200 -=, 0x300 *=, 0x400 /=, 0x500 %=, 0x600 floor, 0x700 ceil, 0x800 abs, 0x900 atan2x10, 0xA00 sin, 0xB00 cos, 0xC00 sqrt",
+  "zero_divisor": "division and remainder by zero keep the left value",
+  "evidence": [
+   "CE48 pc30 121 [cs25, Sys116, 32, 0x3000] must give 32 = rateX (a remainder would give 0)",
+   "CE63 pc46 121 [Sys2, cs89, 10, 0x3100] = 408 + 24/10 = 410, which OPCODE_101 derives independently",
+   "CE74 pc148 121 [cs43, cs44, 100, 0x3302] is a percent scale (=* then /)",
+   "reverse: CE48 pc172 self20 = self20 % 10000 and CE86 pc44/48/52 self15 = self27 % 10000/20000/30000"
+  ],
+  "doc": "docs/OPCODE_SPEC.md 3.2"
  }
 }

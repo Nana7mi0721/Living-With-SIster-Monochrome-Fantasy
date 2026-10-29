@@ -16,7 +16,7 @@ mean abs 0.012）。M2 的验收对象是**玩家真正开始游戏后的第一�
 
 | 项 | 值 |
 |---|---|
-| git HEAD | `51bd7a3` + **第二批 M2 提交**（250 写路径 / 移动插值 / 离屏裁剪 / 引擎事件 12 个 / `.project` 名字）+ **第三批**（`112` 开块 / `290` 十一种效果 / `blocks` 诊断命令 / `--answer-delay`） |
+| git HEAD | `51bd7a3` + **第二批 M2 提交**（250 写路径 / 移动插值 / 离屏裁剪 / 引擎事件 12 个 / `.project` 名字）+ **第三批**（`112` 开块 / `290` 十一种效果 / `blocks` 诊断命令 / `--answer-delay`）+ **第四批**（`69d7b9c`：暂停光标贴图 / 鼠标选项命中 / `210` 字符串实参 / **`121` 运算符表纠错** / 消息原点 410） |
 | 数据根 | `work/full`（23 个 .wolf 全解，4,085 文件） |
 | 屏幕 | 1024x576，60 fps，tile 16 px |
 | 工具链 | Rust 1.99.1 msvc；`cargo test -q --workspace` 全绿；`wolf-cli verify` 63/63 |
@@ -83,14 +83,14 @@ choice    : HELD on prompt with 4 option(s) ["广阔的战场", "广袤的森林
   text pic   -100 at [526,296,214,30]    有人在等我的家
 text      : 4 item(s), 37 glyph(s), 4 line(s), 0 substituted
 rendered  : 1024x576, 35816/589824 non-black pixel(s) = 6.1%
-stats     : 30539 instruction(s), 748 picture op(s), 1 sound(s), 128 db access(es) (15 write), 2 message(s), 1 choice(s), 0 warning(s)
+stats     : 29367 instruction(s), 750 picture op(s), 1 sound(s), 128 db access(es) (15 write, 11 label), 2 message(s), 1 choice(s), 0 warning(s)
 ```
 
-> **口径**：21 个活图片里 19 个是第三方气泡库（event 98，由常时协程 271 启动）停在库自己的停车场
+> **口径**：22 个活图片里 19 个是第三方气泡库（event 98，由常时协程 271 启动）停在库自己的停车场
 > `(-2784, 2880)` 的控件；`picture::on_screen` 判定它们碰不到屏幕，于是 10 个 quad 才是真正画出来的量。
 > 早先记录里的 `3 live -> 19 quad / 200,260 px / 46,370 指令` 是**离屏裁剪之前**的数字，已作废。
 
-- **已验证**：选择窗锚点 `(512, 240)` 来自 Sys3/Sys4；面板矩形 `[512, 240, 263, 148]`
+- **已验证**：选择窗锚点 `(512, 192)` 来自 Sys3/Sys4；面板矩形 `[512, 192, 242, 148]`
   （宽 = 最长选项 `微风吹拂而过的麦田` 9 个全角字 × 20 px（Sys8）+ 光标 30 + 内边距 28 + 4 slack = 242）。
 - **已在 M2 修正的错误**：面板宽度曾按 `CHAR_WIDTH = 16` 估算而绘制字号是 20/22，导致最长选项被折行、
   第二行覆盖下一行（`微风吹拂而` 伪影）。现在面板与字形共用 `choice::TEXT_PX`，不可能再漂移。
@@ -101,16 +101,16 @@ stats     : 30539 instruction(s), 748 picture op(s), 1 sound(s), 128 db access(e
 ### 2.2 消息窗口态（C2）
 
 ```
-pictures  : 21 live -> 9 textured quad(s), 0 text picture(s)
+pictures  : 22 live -> 10 textured quad(s), 0 text picture(s)
     pic 999    WindowFile at (0, 0) alpha 0.00 window Some((100, 50)) file "<SQUARE>"
     pic 19500  WindowString at (512, 480) alpha 1.00 window Some((960, 168)) file "SystemFile/WindowBase.png"
-message   : 7 row(s), 73/73 char(s), font 20 at [64,412], wrap 928, cursor at [576,556]
+message   : 7 row(s), 73/73 char(s), font 20 at [64,410], wrap 928, cursor at [576,554]
 text      : 7 item(s), 68 glyph(s), 7 line(s), 0 substituted
-rendered  : 1024x576, 161336/589824 non-black pixel(s) = 27.4%
-stats     : 31427 instruction(s), 2392 picture op(s), 0 sound(s), 98 db access(es) (13 write), 1 message(s), 0 choice(s), 0 warning(s)
+rendered  : 1024x576, 161282/589824 non-black pixel(s) = 27.3%
+stats     : 30619 instruction(s), 2394 picture op(s), 0 sound(s), 98 db access(es) (13 write, 9 label), 1 message(s), 0 choice(s), 0 warning(s)
 ```
 
-> 这里的 `21 live` 与 §2.1 同源：19 个气泡库控件停在 `(-2784, 2880)`，被裁剪掉，真正绘制的是 9 个九宫格 quad。
+> 这里的 `22 live` 与 §2.1 同源：19 个气泡库控件停在 `(-2784, 2880)`，被裁剪掉，真正绘制的是 10 个 quad（九宫格 9 + 暂停光标 1）。
 
 面板九个九宫格 quad（C2 输出节选）：
 
@@ -124,19 +124,21 @@ quad pic  19500 at [32,561,3,3]     quad pic 19500 at [35,561,954,3]    quad pic
 |---|---|---|---|
 | 面板矩形 | `(32,396) 960x168` | ev63 pc90 `150 [4160, 19500, 5, self38, self39, 1, 255, self32, self33, 100, 0, 1600009]`，锚点 0x1000 = 中心 (512,480) | 已验证 |
 | 面板皮肤 | `SystemFile/WindowBase.png`（灰，18x18，3 px 边） | ev63 pc25 `250 [18, 0, 24, 332288, 1600009]` → 引擎单元格 (18,0,24) | 已验证 |
-| 文字原点 | `(64, 412)` | Sys1 = 2·rateX = 64，Sys2 = 17·rateY + trunc(rateY/5) = 412 | 已验证 |
+| 文字原点 | `(64, 410)` | Sys1 = 2·rateX = 64，Sys2 = 17·rateY + trunc(rateY/10) = 410 | 已验证 |
 | 字号 | `20` | Sys8 = `rateY*12/10 - 8`（ev48 新処理分支） | 已验证 |
 | 行距 | `26` | Sys8 + Game.dat `text_line_spacing` = 20 + 6 | 已验证 |
 | 折行宽度 | `928` = 面板右沿 992 − Sys1 64 | 由活着的面板矩形推出，不写死 | 已验证 |
-| 暂停光标 | `(576, 556)` | Sys1+Sys5 = 64+512，Sys2+Sys6 = 412+144 | 已验证 |
+| 暂停光标 | `(576, 554)` | Sys1+Sys5 = 64+512，Sys2+Sys6 = 410+144 | 已验证（坐标）|
+| 暂停光标贴图 | `SystemFile/Text_Pause.png` 17x90 = 6 帧 x 17x15 | 每帧一个 16x10 下三角，帧内顶边 y = 3,2,1,0,1,3 上下弹跳；`message::cursor_frame` 选帧 + `atlas::sprite_from` 贴图 | 已验证（图）/ 未验证（每帧 8 个渲染帧的节奏）|
 | 打字机 | Sys9 = 500 字/秒，Sys10 = 9 帧预等待 | ev48 pc117 / ev63 pc36 | 已验证（速率）/ 未验证（积累方式为浮点累加） |
 | 文本来源 | `101` argc 恒 0 / strc 恒 1，全文 12,027 条 | docs/OPCODE_101.md | 已验证 |
 
 **★已实测纠正（三处，均与本项目早先的实现或文档冲突）**
 
-1. **Sys2 = 412，不是 410**。字节码是 `121 [9000002, 1600089, 10, 12544]`（12544 = 0x3100，
-   复合 +`= `、二元 0x3000 = `%`），即 `Sys2 += rateY % 10` = 408 + 4 = 412；
-   work/yado.txt（官方文档抄本）把同一行写作 `Sys2 += rateY / 5`，也是 412。docs/OPCODE_101.md 的 410 用了 /10，作废。
+1. **Sys2 = 410，不是 412**（曾经写反过，已推翻）。字节码是 `121 [9000002, 1600089, 10, 12544]`（12544 = 0x3100，
+   复合 +`=`、二元 0x3000 = **整除**），即 `Sys2 += rateY / 10` = 408 + 2 = 410。
+   早先的记录把 0x3000 当成取余（得 4）而写成 412，并一度以此否定 docs/OPCODE_101.md的 410。
+   反向证据见 §3.8：CE48 pc30 的 `1024 / 32 = 32` 只能是除法。
 2. **消息窗皮肤是灰色 SystemFile 版，不是蓝色 SystemGraphic 版**。两张都叫 `WindowBase.png`、都是 18x18，
    但像素完全不同：`SystemGraphic/WindowBase.png` 是深蓝渐变（零售**选择窗**用它），
    `SystemFile/WindowBase.png` 是灰皮（fill 0x1f2425 @ alpha 0xdf）。两者的边框都是 **3 px**，
@@ -269,6 +271,20 @@ block 21 Choices head 475 (102, [25]) cases [(2, 477), (3, 501), (4, 525), (5, 5
 
 ---
 
+### 3.8 `121` 的运算符表曾经整体错位（★已实测纠正）
+
+`121` 的运算符字 = 高半字节二元运算 + `0x0F00` 掩码的复合运算。长期被引用的 WolfTL 表把 **`0x3000` 当取余、`0x4000` 当按位与**，本作字节码给出的却是 **`0x3000` 整除、`0x4000` 取余**：
+
+- CE48 pc30 `121 [cs25, Sys116, 32, 0x3000]`：Sys116 = 1024（屏幕宽），1024 op 32 必须 = 32 = rateX；取余会得 0。
+- CE63 pc46 `121 [Sys2, cs89, 10, 0x3100]`：Sys2 = 408 再加 24 op 10；除法得 410，与 docs/OPCODE_101.md 的独立推导一致（取余得 412）。
+- CE74 pc148 `121 [cs43, cs44, 100, 0x3302]`（复合 `*=`）是百分比缩放，必须先乘后除。
+- 反向证据：CE48 pc172 `self20 = self20 % 10000`、CE86 pc44/48/52 `self15 = self27 % 10000/20000/30000`。
+
+**为什么这条排在 M2 里**：消息窗原点 Sys2 正是 `17*rateY + rateY/10`。旧表把 `/10` 算成 `%10`，于是 message.rs 一度「实测」出 412 并把这条当成对 OPCODE_101 的反驳；改正运算符后同一命令给出 **410**，与文档一致。教训：用一个未验证的运算符去「实测」另一个量，会把两个错误互相印证成实测值。
+
+实现见 crates/wolf-vm/src/exec.rs `fn binary_op`（除零/模零保留左值），文档见 docs/OPCODE_SPEC.md §3.2。
+
+---
 ## 4. 数据库层与引擎协程（消息窗口的前提）
 
 ### 4.1 为什么 M2 必须先做数据库
@@ -388,6 +404,7 @@ ev63 的几何**全部来自数据库**：`250 [18, 97, 0, 69632, self88]`（座
 1. **消息窗口（101）的真实外观**。现有 26 张真实截图全是标题 / 开场 / 存档界面，
    没有任何一张显示 101 消息窗。因此 §2.2 的"灰皮 + 底部 960x168"是**由字节码与像素双重推导**的结果，
    不是与零售像素比对的结果。要闭掉它需要人肉在游戏里截一张带消息窗的 PrintScreen。
+   **同样缺参照的一个量**：7 行 x 26 px = 182 px 高于面板 168 px，本项的第七行与 ▼ 压在底边框上。零售是分页、缩字号还是更宽的折行，尚未定量。
    （**注意**：自动化前台窗口 + 模拟按键已经被明令禁止——它会抢走用户的操作权；只能用游戏内
    PrintScreen 键，由人驱动。）
 2. **Sys3/Sys4 是否真的是选择窗左上角**。docs/OPCODE_102.md §4.2 标【已验证】、字节码与标题事件
@@ -407,7 +424,7 @@ ev63 的几何**全部来自数据库**：`250 [18, 97, 0, 69632, self88]`（座
 | `290` 的实参求值 | `exec.rs` 把 `290` 的 args 原样交给 host，self 变量 magic（`1600021` 等）未 `eval_num`，所以 type 0/2/5 里大量 self 图号取不到图（只记 note） |
 | HUD 文本排版 | 剧情态（§2.3）发现顶栏三段文字压叠、状态面板数字漏到右沿：**根因已定位**为文本图片的 `\f[n]`（字号）未解析，全库 1,206 条图内字符串带它（48/64 不可能是脸图编号），见 docs/TEXT_SPEC.md §9 与 BASELINE `text_picture_escapes`；修复需要按片段切字号出图 |
 | `290` 的图片号是**区间** | `args[2..3]` 是闭区间 [lo, hi]（官方「□～□ の欄に…」）；若按单张实现，type 4 的 7 对按钮、type 5 的整幕压暗、CE85 的「全カーソル」都会只作用一半（docs/OPCODE_290.md §0.4） |
-| 字符串实参 | `210/300` 的字符串参数尚未投递给被调事件 |
+| 字符串实参 | **已实现**：8,260 个带字符串实参的 210/300 调用点写入 CSelf5..8（docs/OPCODE_210_RETURN.md §8），零反例 |
 | 存档/读档（220/221/222）、`270 Party`、`160/162 Transition` | 仍是记录型 no-op |
 
 ---
