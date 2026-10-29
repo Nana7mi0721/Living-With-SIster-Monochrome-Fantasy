@@ -380,6 +380,39 @@ impl Game {
         (self.vm.vars.get_sys(3), self.vm.vars.get_sys(4))
     }
 
+    /// The message-window system variables, as the engine reads them.
+    ///
+    /// WOLF keeps message geometry in system variables 1, 2, 5, 6, 8, 9 and 10, and
+    /// common event 63 initialises them on the engine behalf before every message. The
+    /// wrap width comes from the frame picture that same event paints
+    /// (message::FRAME_PICTURE), so the text laid out here and the frame drawn by the
+    /// script agree on the box; when the frame is not up yet the screen edge is the bound.
+    #[must_use]
+    pub fn message_vars(&self) -> crate::message::Vars {
+        let sys = |index: usize| self.vm.vars.get_sys(index);
+        let (cursor_x, cursor_y) = (sys(5), sys(6));
+        let cursor_offset = if cursor_x >= 0 && cursor_y >= 0 {
+            Some((cursor_x as f32, cursor_y as f32))
+        } else {
+            None
+        };
+        let width = self.screen.get(crate::message::FRAME_PICTURE).map(|frame| {
+            let painted = frame.window.map_or(0, |(w, _)| w);
+            let painted = if painted > 0 { painted } else { frame.x };
+            (painted as f32 - sys(1) as f32).max(0.0)
+        });
+        crate::message::Vars {
+            x: sys(1) as f32,
+            y: sys(2) as f32,
+            font_px: sys(8) as f32,
+            chars_per_second: sys(9),
+            preroll: sys(10),
+            width,
+            cursor_offset,
+            screen_w: crate::picture::SCREEN_W as f32,
+        }
+    }
+
     /// Preselects an option of the current choice prompt.
     ///
     /// Headless captures use this together with [`Self::auto_choice`] to take a

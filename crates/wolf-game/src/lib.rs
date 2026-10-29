@@ -26,6 +26,7 @@ pub mod choice;
 pub mod game;
 pub mod key;
 pub mod map_runtime;
+pub mod message;
 pub mod picture;
 pub mod sysgraphic;
 pub mod tilemap;

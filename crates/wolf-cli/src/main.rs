@@ -80,6 +80,7 @@ fn main() -> ExitCode {
     let mut answer: Option<usize> = None;
     let mut filter: Option<String> = None;
     let mut frame_limit: Option<u64> = None;
+    let mut hold_message = false;
     let mut boot = true;
     let mut map: Option<String> = None;
     let mut map_run: Option<String> = None;
@@ -116,6 +117,7 @@ fn main() -> ExitCode {
             "--map-run" => {
                 map_run = args.next();
             }
+            "--hold-message" => hold_message = true,
             "--boot" => boot = true,
             "--menu-only" => boot = false,
             "--filter" | "-F" => {
@@ -149,7 +151,7 @@ fn main() -> ExitCode {
                     None if boot => Entry::Boot,
                     None => Entry::Menu,
                 };
-                run_capture(&root, out, frames, answer, entry)
+                run_capture(&root, out, frames, answer, hold_message, entry)
             }
         },
         Some("list") => run_list(&root, filter.as_deref()),
@@ -211,6 +213,7 @@ fn print_help() {
     println!("    -F, --filter <T>  Only list events whose title contains T (with 'list').");
     println!("    --until <N>       Quit 'play' after N frames (smoke test; default: until closed).");
     println!("    --menu-only       Start common event 42 directly instead of the boot map.");
+    println!("    --hold-message    Park on the first 101 message instead of dismissing it.");
     println!("    -m, --map <NAME>  Capture a map instead of the boot sequence (e.g. SampleMapA.mps).");
     println!("    --boot            Start on the boot map (default for capture and play).");
     println!("    -r, --root <DIR>  Unpacked data root containing BasicData/ and MapData/.");
@@ -1292,6 +1295,7 @@ fn run_capture(
     out: Option<PathBuf>,
     frames: usize,
     answer: Option<usize>,
+    hold_message: bool,
     entry: Entry<'_>,
 ) -> ExitCode {
     let out = out.unwrap_or_else(|| PathBuf::from("work/out/title.png"));
@@ -1305,7 +1309,9 @@ fn run_capture(
     // A capture has no keyboard, so messages dismiss immediately. Choice prompts are
     // HELD by default: the title's first prompt is its menu, and answering it teleports
     // into the game (docs/M1_CLOSURE.md §5), so a held run is what photographs the title.
-    game.auto_advance = true;
+    // --hold-message parks the run on the first 101 message instead, which is how a
+    // capture photographs the message window (the story scripts talk before they branch).
+    game.auto_advance = !hold_message;
     if let Some(index) = answer {
         game.set_choice_cursor(index);
         game.auto_choice = true;
@@ -1436,10 +1442,46 @@ fn run_capture(
         .map(tint_instance)
         .collect();
     renderer.draw(&instances);
-    let items: Vec<TextItem> = texts
+    let mut items: Vec<TextItem> = texts
         .iter()
         .map(|text| TextItem::new(text.text.clone(), text.rect, choice::TEXT_PX).with_alpha(text.alpha))
         .collect();
+    // The engine draws 101 message text itself: the frame comes from common event 63 as
+    // ordinary pictures, the glyphs come from here. Only the newest message is visible,
+    // which is the order the interpreter produces.
+    if let Some(message) = game.messages.last() {
+        let vars = game.message_vars();
+        let layout = wolf_game::message::layout(&message.text, &vars, message.frames);
+        let preview: String = message.text.chars().take(60).collect();
+        let typing = if layout.typing { ", typing" } else { "" };
+        let cursor = layout
+            .cursor
+            .map_or(String::new(), |at| format!(", cursor at [{:.0},{:.0}]", at[0], at[1]));
+        println!(
+            "  message   : {} row(s), {}/{} char(s), font {:.0} at [{:.0},{:.0}], wrap {:.0}{}{}",
+            layout.rows.len(),
+            layout.typed,
+            layout.total,
+            layout.font_px,
+            vars.x,
+            vars.y,
+            vars.wrap_width(),
+            typing,
+            cursor
+        );
+        println!("    text    : {preview:?}");
+        for row in &layout.rows {
+            items.push(TextItem::new(row.text.clone(), row.rect, layout.font_px));
+        }
+        if let Some(at) = layout.cursor {
+            let box_w = layout.font_px * 2.0;
+            items.push(TextItem::new(
+                "▼",
+                [at[0], at[1], box_w, layout.line_height],
+                layout.font_px,
+            ));
+        }
+    }
     renderer.draw_text(&items);
 
     renderer.present();

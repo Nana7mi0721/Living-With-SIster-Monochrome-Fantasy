@@ -76,18 +76,28 @@ fn is_wide(ch: char) -> bool {
 }
 
 /// Advance width of one character at [`TEXT_PX`], in pixels.
-fn advance(ch: char) -> f32 {
+/// Advance of one character at a given font size, in pixels.
+///
+/// Full-width glyphs (CJK, kana, hangul, full-width forms) take one em; everything
+/// else takes half an em. The message window draws at Sys8 rather than [`TEXT_PX`],
+/// so the advance has to be a function of the font size, not a constant.
+pub fn advance_at(ch: char, font_px: f32) -> f32 {
     if is_wide(ch) {
-        TEXT_PX
+        font_px
     } else {
-        TEXT_PX * 0.5
+        font_px * 0.5
     }
 }
 
 /// Width the text pass will need to draw `text` on one line, in pixels.
 #[must_use]
 pub fn text_width(text: &str) -> f32 {
-    text.chars().map(advance).sum()
+    text_width_at(text, TEXT_PX)
+}
+
+/// Width `text` needs when the text pass draws it at `font_px`, in pixels.
+pub fn text_width_at(text: &str, font_px: f32) -> f32 {
+    text.chars().map(|ch| advance_at(ch, font_px)).sum()
 }
 
 /// Panel size in logical pixels, rounded so every row lands on a whole pixel.

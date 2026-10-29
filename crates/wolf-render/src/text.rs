@@ -564,11 +564,6 @@ impl TextRenderer {
         );
     }
 
-    /// Shape and upload every item, and remember them for `Self::render`.
-    ///
-    /// Call before opening the render pass (it only writes to the queue and the
-    /// glyph atlas), then `Self::render` inside the pass. Splitting the two is
-    /// what lets sprites and text share one pass.
     /// Shape `text` into a fresh buffer and return its index in `Self::buffers`.
     ///
     /// The layout metrics, box, wrap and alignment are the caller's, so an
@@ -599,6 +594,11 @@ impl TextRenderer {
         self.buffers.len() - 1
     }
 
+    /// Shape and upload every item, and remember them for `Self::render`.
+    ///
+    /// Call before opening the render pass (it only writes to the queue and the
+    /// glyph atlas), then `Self::render` inside the pass. Splitting the two is
+    /// what lets sprites and text share one pass.
     pub fn prepare(
         &mut self,
         device: &Device,
@@ -644,9 +644,11 @@ impl TextRenderer {
             // always wins. `Attrs` is therefore the only place a body colour can
             // come from -- and for the same reason the only place an outline
             // colour can come from.
-            let attrs = Attrs::new()
-                .family(Family::Name(&family))
-                .color(Color::rgb(item.colour[0], item.colour[1], item.colour[2]));
+            let attrs = Attrs::new().family(Family::Name(&family)).color(Color::rgb(
+                item.colour[0],
+                item.colour[1],
+                item.colour[2],
+            ));
             buffer.set_text(
                 &item.text,
                 &attrs,
@@ -878,5 +880,209 @@ mod tests {
         assert_eq!(MIN_SIZE_PX.clamp(MIN_SIZE_PX, MAX_SIZE_PX), MIN_SIZE_PX);
         assert_eq!(0.0_f32.clamp(MIN_SIZE_PX, MAX_SIZE_PX), MIN_SIZE_PX);
         assert_eq!(1.0e9_f32.clamp(MIN_SIZE_PX, MAX_SIZE_PX), MAX_SIZE_PX);
+    }
+
+    // -- colour (`\c[n]`) and outline (`\E`) -------------------------------
+
+    /// Every existing call site builds items through `new`, so the defaults are
+    /// what keep the pre-colour captures bit-identical: white body, no ring.
+    #[test]
+    fn an_unstyled_item_is_white_without_an_outline() {
+        let item = TextItem::new("めにゅー", [0.0, 0.0, 100.0, 20.0], 16.0);
+        assert_eq!(item.colour, [255, 255, 255]);
+        assert_eq!(item.outline, None);
+    }
+
+    /// WOLF's `\E` width is a plain number that can legitimately be 0, so the
+    /// builder normalises it instead of every call site branching.
+    #[test]
+    fn a_zero_width_outline_means_no_outline() {
+        let plain = TextItem::new("x", [0.0, 0.0, 100.0, 20.0], 16.0).with_outline(0, [1, 2, 3]);
+        assert_eq!(plain.outline, None);
+        let ringed = TextItem::new("x", [0.0, 0.0, 100.0, 20.0], 16.0).with_outline(2, [1, 2, 3]);
+        assert_eq!(
+            ringed.outline,
+            Some(Outline {
+                width_px: 2,
+                colour: [1, 2, 3]
+            })
+        );
+    }
+
+    /// The ring has to be allowed to spill outside the body's box, but glyphon
+    /// validates the integer scissor against the viewport, so an unclamped grow
+    /// would abort the frame instead of merely being clipped.
+    #[test]
+    fn outline_clip_grows_but_stays_inside_the_canvas() {
+        assert_eq!(
+            expand_clip([10, 10, 20, 20], 3, [1024, 576]),
+            [7, 7, 23, 23]
+        );
+        assert_eq!(expand_clip([0, 0, 5, 5], 3, [1024, 576]), [0, 0, 8, 8]);
+        assert_eq!(
+            expand_clip([1020, 570, 1024, 576], 3, [1024, 576]),
+            [1017, 567, 1024, 576]
+        );
+        assert_eq!(
+            expand_clip([10, 10, 20, 20], 0, [1024, 576]),
+            [10, 10, 20, 20]
+        );
+    }
+
+    /// The game's own font, if this checkout sits next to the data root.
+    fn test_font() -> Option<Vec<u8>> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..");
+        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+        if let Some(dir) = std::env::var_os("WOLF_GAME_DIR") {
+            candidates.push(std::path::PathBuf::from(dir).join("Lolita.ttf"));
+        }
+        for base in ["work/full", "work/alldata", "work/full/Data"] {
+            candidates.push(root.join(base).join("Fonts").join("Lolita.ttf"));
+        }
+        candidates.push(std::path::PathBuf::from(
+            "E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy/Lolita.ttf",
+        ));
+        for path in candidates {
+            match std::fs::read(&path) {
+                Ok(bytes) if !bytes.is_empty() => return Some(bytes),
+                _ => {}
+            }
+        }
+        eprintln!("skipping GPU text test: no Lolita.ttf found");
+        None
+    }
+
+    /// Offscreen renderer with the game font, or `None` when the machine has
+    /// neither a GPU adapter nor the font -- a missing GPU must not fail the
+    /// suite (same posture as `crates/wolf-render/tests/offscreen.rs`).
+    fn offscreen() -> Option<crate::Renderer> {
+        let font = test_font()?;
+        let mut renderer = match crate::Renderer::new_offscreen() {
+            Ok(renderer) => renderer,
+            Err(err) => {
+                eprintln!("skipping GPU text test: {err}");
+                return None;
+            }
+        };
+        if let Err(err) = renderer.set_font(&font) {
+            eprintln!("skipping GPU text test: font rejected: {err}");
+            return None;
+        }
+        Some(renderer)
+    }
+
+    fn count_pixels(pixels: &[u8], want: impl Fn([u8; 4]) -> bool) -> usize {
+        pixels
+            .chunks_exact(4)
+            .filter(|c| want([c[0], c[1], c[2], c[3]]))
+            .count()
+    }
+
+    /// Lit = anything the frame did not leave black, which is the clear colour.
+    fn lit(pixels: &[u8]) -> usize {
+        count_pixels(pixels, |p| p[0] | p[1] | p[2] != 0)
+    }
+
+    const BODY_RECT: [f32; 4] = [40.0, 40.0, 400.0, 200.0];
+
+    /// The whole point of the field: two items that differ only in `colour` must
+    /// land on different pixels, and the coloured one must actually be red where
+    /// the white one is white. ("M" has vertical stems, so it has glyph pixels at
+    /// full coverage no matter how the hinting rounds.)
+    #[test]
+    fn body_colour_reaches_the_framebuffer() {
+        let Some(mut renderer) = offscreen() else {
+            return;
+        };
+        renderer.draw_text(&[TextItem::new("M", BODY_RECT, 96.0)]);
+        renderer.present();
+        let white = renderer.capture_rgba().expect("offscreen capture");
+        renderer.draw_text(&[TextItem::new("M", BODY_RECT, 96.0).with_colour([255, 0, 0])]);
+        renderer.present();
+        let red = renderer.capture_rgba().expect("offscreen capture");
+
+        let differing = white
+            .chunks_exact(4)
+            .zip(red.chunks_exact(4))
+            .filter(|(a, b)| a != b)
+            .count();
+        let solid_red = count_pixels(&red, |p| p == [255, 0, 0, 255]);
+        let solid_white = count_pixels(&white, |p| p == [255, 255, 255, 255]);
+        assert!(
+            differing > 100,
+            "colour never reached the framebuffer: {differing} pixels differ"
+        );
+        assert_eq!(
+            solid_red, solid_white,
+            "red body should cover the same area"
+        );
+        assert!(solid_red > 10, "no fully covered glyph pixels: {solid_red}");
+    }
+
+    /// `\E` must add coverage outside the glyphs and must not disturb the body
+    /// counters. Four offsets, one extra shaped buffer, same atlas entries.
+    #[test]
+    fn an_outline_adds_a_ring_the_body_does_not_cover() {
+        let Some(mut renderer) = offscreen() else {
+            return;
+        };
+        let plain = TextItem::new("M", BODY_RECT, 96.0);
+        renderer.draw_text(std::slice::from_ref(&plain));
+        renderer.present();
+        let bare = renderer.capture_rgba().expect("offscreen capture");
+        let bare_stats = renderer.text_stats().clone();
+
+        renderer.draw_text(&[plain.with_outline(3, [0, 255, 0])]);
+        renderer.present();
+        let ringed = renderer.capture_rgba().expect("offscreen capture");
+        let ringed_stats = renderer.text_stats().clone();
+
+        let (bare_lit, ringed_lit) = (lit(&bare), lit(&ringed));
+        // Pure green can only come from the outline: the body is white, so every
+        // pixel the two share is mixed, and every outline-only pixel is (0, g, 0).
+        let ring_only = count_pixels(&ringed, |p| p[0] == 0 && p[2] == 0 && p[1] > 0);
+        let bare_green = count_pixels(&bare, |p| p[0] == 0 && p[2] == 0 && p[1] > 0);
+
+        assert_eq!(bare_stats.outlines, 0);
+        assert_eq!(ringed_stats.outlines, 4, "four ring offsets per item");
+        assert_eq!(ringed_stats.items, bare_stats.items);
+        assert_eq!(
+            ringed_stats.glyphs, bare_stats.glyphs,
+            "outline quads are shaped separately and must not inflate body counts"
+        );
+        assert_eq!(bare_green, 0);
+        assert!(
+            ring_only > 100,
+            "the ring never reached the frame: {ring_only}"
+        );
+        assert!(
+            ringed_lit > bare_lit,
+            "outline must add coverage: {ringed_lit} vs {bare_lit}"
+        );
+    }
+
+    /// A half-transparent item plus an outline is the nastiest combination the
+    /// data layer can produce; the outline must still be visible and the body
+    /// counters must stay body-only.
+    #[test]
+    fn an_outlined_item_keeps_its_alpha_path() {
+        let Some(mut renderer) = offscreen() else {
+            return;
+        };
+        renderer.draw_text(&[TextItem::new("M", BODY_RECT, 96.0)
+            .with_alpha(0.5)
+            .with_colour([200, 200, 200])
+            .with_outline(2, [255, 0, 0])]);
+        renderer.present();
+        let frame = renderer.capture_rgba().expect("offscreen capture");
+        let stats = renderer.text_stats().clone();
+        assert_eq!(stats.items, 1);
+        assert_eq!(stats.outlines, 4);
+        assert!(
+            count_pixels(&frame, |p| p[0] > 0 && p[1] == 0 && p[2] == 0) > 10,
+            "red outline missing from the alpha path"
+        );
     }
 }

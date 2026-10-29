@@ -118,14 +118,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_alpha(0.5)
             .with_align(wolf_render::TextAlign::Right),
     );
+    // WOLF `\c[n]` + `\E`: gold body with a dark ring, which is how the game
+    // draws its highlighted menu labels. Both travel through the same shaped
+    // buffer and atlas entries as the white text above, so this PNG is the visual
+    // proof that the two extra `TextItem` fields reach the GPU in order (ring
+    // first, body on top).
+    items.push(
+        TextItem::new("COLOUR + OUTLINE", [700.0, 436.0, 300.0, 40.0], 24.0)
+            .with_colour([255, 214, 102])
+            .with_outline(2, [64, 120, 255])
+            .with_align(wolf_render::TextAlign::Right),
+    );
     renderer.draw_text(&items);
 
     renderer.present();
 
     let stats = renderer.text_stats().clone();
     println!(
-        "laid out {} item(s), {} line(s), {} glyph(s); substituted {} char(s) with U+FFFD",
-        stats.items, stats.lines, stats.glyphs, stats.substituted
+        "laid out {} item(s), {} line(s), {} glyph(s), {} outline copy(ies); substituted {} char(s) with U+FFFD",
+        stats.items, stats.lines, stats.glyphs, stats.outlines, stats.substituted
     );
     report_missing(&stats.missing);
     if let Some(err) = renderer.text_error() {
