@@ -25,13 +25,12 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
-use wolf_game::atlas::{self, Atlas, TextQuad};
+use wolf_game::atlas::{Atlas, TextQuad};
 use wolf_game::{choice, key, Game};
 use wolf_render::{Renderer, Scaler, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 
 /// One frame at 60 Hz.
 const FRAME_TIME: Duration = Duration::from_micros(16_667);
-
 
 /// Runs the title screen in a window until the user closes it (or `frames` pass).
 ///
@@ -148,7 +147,7 @@ impl App {
     fn rebuild(&mut self) {
         let quads = self.atlas.sprites(&self.game.screen, &mut self.game.assets);
         let mut sprites: Vec<SpriteInstance> = quads.iter().map(Self::tint_instance).collect();
-        let mut texts = atlas::texts(&self.game.screen);
+        let mut texts = self.game.text_quads();
         if let Some(choices) = &self.game.choices {
             let options = choices.options.clone();
             let cursor = self.game.choice_cursor();
@@ -170,7 +169,11 @@ impl App {
         }
         // The engine draws the 101 pause cursor itself (SystemFile/Text_Pause.png, six 17x15
         // frames), so it joins the sprite list rather than the glyph list.
-        let newest = self.game.messages.last().map(|m| (m.text.clone(), m.frames));
+        let newest = self
+            .game
+            .messages
+            .last()
+            .map(|m| (m.text.clone(), m.frames));
         if let Some((text, frames)) = newest {
             let vars = self.game.message_vars();
             let layout = wolf_game::message::layout(&text, &vars, frames);
@@ -220,8 +223,18 @@ impl App {
             .texts
             .iter()
             .map(|text| {
-                TextItem::new(text.text.clone(), text.rect, self.game.font_px())
+                let size = if text.font_px > 0.0 {
+                    text.font_px
+                } else {
+                    self.game.font_px()
+                };
+                let mut item = TextItem::new(text.text.clone(), text.rect, size)
                     .with_alpha(text.alpha)
+                    .with_colour(text.colour);
+                if text.outline {
+                    item = item.with_outline(2, [0, 0, 0]);
+                }
+                item
             })
             .collect();
         // A 101 message is engine text, not a picture: the frame comes from common event 63
@@ -244,7 +257,10 @@ impl App {
         let [width, height] = self.atlas.size();
         // The atlas is sent to the GPU only when the packed image set changes, so a steady
         // screen costs one instance-buffer write per frame and zero texture uploads.
-        if renderer.set_atlas(self.atlas.pixels(), width, height).is_ok() {
+        if renderer
+            .set_atlas(self.atlas.pixels(), width, height)
+            .is_ok()
+        {
             self.uploaded_images = self.atlas.len();
         }
     }
@@ -254,7 +270,7 @@ impl App {
             return;
         };
         let scaler = renderer.scaler();
-        let text_count = atlas::texts(&self.game.screen).len();
+        let text_count = self.game.text_quads().len();
         window.set_title(&format!(
             "imoto-life | {}x{} -> x{} | frame {} | {} quad(s){} | {} fps",
             LOGICAL_W,
@@ -393,8 +409,14 @@ impl ApplicationHandler for App {
                 self.next_frame = now + FRAME_TIME;
             }
             self.step();
-            if self.frame_limit.is_some_and(|limit| self.game.stats.frames >= limit) {
-                println!("reached the frame limit after {} frame(s)", self.game.stats.frames);
+            if self
+                .frame_limit
+                .is_some_and(|limit| self.game.stats.frames >= limit)
+            {
+                println!(
+                    "reached the frame limit after {} frame(s)",
+                    self.game.stats.frames
+                );
                 event_loop.exit();
                 return;
             }

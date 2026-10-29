@@ -13,8 +13,8 @@
 //! item H-MENU-1 in docs/UNVERIFIED.md), so every number here is a named constant a
 //! future measurement can replace in one place.
 
-use crate::atlas::{Atlas, SpriteQuad, TextQuad};
 use crate::assets::Assets;
+use crate::atlas::{Atlas, SpriteQuad, TextQuad};
 use crate::picture::{SCREEN_H, SCREEN_W};
 use crate::window::{self, WindowPiece};
 
@@ -233,6 +233,11 @@ fn draw(
             text: format!("{marker}{option}"),
             rect: layout.lines[index],
             alpha: 1.0,
+            // The panel is drawn at one size (the caller passes Sys8 in), so each row
+            // is a single run with the default style.
+            font_px: 0.0,
+            colour: [255, 255, 255],
+            outline: false,
         });
     }
     (sprites, texts)

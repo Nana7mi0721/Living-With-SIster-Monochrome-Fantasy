@@ -17,13 +17,13 @@ use wolf_format as wf;
 use wolf_format::command::SlotStats;
 use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
-use wolf_game::atlas::{self, Atlas};
+use wolf_game::atlas::Atlas;
 use wolf_game::tilemap::TileMap;
 use wolf_game::{choice, Game};
 use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 use wolf_vm::{
-    ChoiceReply, DbOp, DbValue, Host, LogLevel, PictureCmd, PrecompileStats, Program, ProgramSet, SoundCmd,
-    StepReport, Vm,
+    ChoiceReply, DbOp, DbValue, Host, LogLevel, PictureCmd, PrecompileStats, Program, ProgramSet,
+    SoundCmd, StepReport, Vm,
 };
 
 /// One asserted number.
@@ -120,7 +120,10 @@ fn main() -> ExitCode {
             // whole frame budget in one frame; 1 emulates a player confirming once a
             // frame, so a capture marches through character creation instead of spinning.
             "--answer-delay" => {
-                answer_delay = args.next().and_then(|value| value.parse().ok()).unwrap_or(0);
+                answer_delay = args
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(0);
             }
             // A pointer for headless captures. The game is mouse-driven - its own title
             // hint line reads 通过鼠标进行选择，点击进行确定和取消 - so a capture that never
@@ -141,7 +144,10 @@ fn main() -> ExitCode {
             }
             "--hold-message" => hold_message = true,
             "--page" => {
-                page = args.next().and_then(|value| value.parse().ok()).unwrap_or(0);
+                page = args
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(0);
             }
             // Which parallel-process-always events the engine starts, replacing
             // ENGINE_ALWAYS. An empty value starts none of them, which is the A/B
@@ -194,7 +200,15 @@ fn main() -> ExitCode {
                     pointer,
                     press_frame,
                 };
-                run_capture(&root, out, frames, answers, hold_message, engine_events, entry)
+                run_capture(
+                    &root,
+                    out,
+                    frames,
+                    answers,
+                    hold_message,
+                    engine_events,
+                    entry,
+                )
             }
         },
         Some("list") => run_list(&root, filter.as_deref()),
@@ -241,7 +255,9 @@ fn print_help() {
     println!("    precompile  Compile all 550 common events into jump tables; print the stats.");
     println!("    run         Execute one common event headlessly and report what it did.");
     println!("    capture     Run the boot sequence for N frames and render it to a PNG.");
-    println!("                Starts on the boot map (splashes + title art), then holds on the menu.");
+    println!(
+        "                Starts on the boot map (splashes + title art), then holds on the menu."
+    );
     println!("                Choice prompts STAY OPEN unless --answer is given.");
     println!("                because answering it branches away from the title screen.");
     println!("    play        Run the title screen in a window (arrows move, Enter/Z confirm).");
@@ -252,13 +268,17 @@ fn print_help() {
     println!("    -f, --frames <N>  Frame budget for 'run' (default 600, one frame = 1/60 s).");
     println!("    -t, --trace       Print every host callback in 'run', not just the summary.");
     println!("    -o, --out <FILE>  PNG path for 'capture' (default work/out/title.png).");
-    println!("    -a, --answer <N>  Answer choice prompts with option N instead of holding the menu.");
+    println!(
+        "    -a, --answer <N>  Answer choice prompts with option N instead of holding the menu."
+    );
     println!("    --answer-delay <N>  Frames a prompt stays up before --answer clicks it (default");
     println!("                      0 = answer the instant the script asks). 1 emulates a player");
     println!("                      confirming once a frame, which is what walks a menu loop");
     println!("                      forward instead of spinning inside one frame.");
     println!("    -F, --filter <T>  Only list events whose title contains T (with 'list').");
-    println!("    --until <N>       Quit 'play' after N frames (smoke test; default: until closed).");
+    println!(
+        "    --until <N>       Quit 'play' after N frames (smoke test; default: until closed)."
+    );
     println!("    --menu-only       Start common event 42 directly instead of the boot map.");
     println!("    --hold-message    Park on the first 101 message instead of dismissing it.");
     println!("    --pointer <x,y>   Put the mouse pointer at a game pixel for the whole capture.");
@@ -266,7 +286,9 @@ fn print_help() {
     println!("    --engine-events <ids>  Comma separated ids that replace ENGINE_ALWAYS");
     println!("                      (the parallel-process-always events the engine owns).");
     println!("                      Pass an empty value to start none of them.");
-    println!("    -m, --map <NAME>  Capture a map instead of the boot sequence (e.g. SampleMapA.mps).");
+    println!(
+        "    -m, --map <NAME>  Capture a map instead of the boot sequence (e.g. SampleMapA.mps)."
+    );
     println!("    --boot            Start on the boot map (default for capture and play).");
     println!("    -r, --root <DIR>  Unpacked data root containing BasicData/ and MapData/.");
     println!("                      Defaults to ./work/full, then $WOLF_DATA_ROOT.");
@@ -479,10 +501,18 @@ fn run_verify(root: &Path) -> ExitCode {
                 .get(4)
                 .map(|set| set.base_image.as_str())
                 .unwrap_or("<missing>");
-            checks.push(Check::text("tileset.base.4", "MapChip/kiri_project.png", base));
+            checks.push(Check::text(
+                "tileset.base.4",
+                "MapChip/kiri_project.png",
+                base,
+            ));
         }
         Some(Err(err)) => {
-            checks.push(Check::text("tileset.parse", "ok", &format!("FAILED: {err}")));
+            checks.push(Check::text(
+                "tileset.parse",
+                "ok",
+                &format!("FAILED: {err}"),
+            ));
         }
         None => checks.push(Check::text("tileset.parse", "ok", "FILE MISSING")),
     }
@@ -511,7 +541,11 @@ fn run_verify(root: &Path) -> ExitCode {
                 ));
                 if label == "sysdata.types" {
                     let settings = db.map_settings();
-                    checks.push(Check::num("database.map_settings", 6, settings.len() as u64));
+                    checks.push(Check::num(
+                        "database.map_settings",
+                        6,
+                        settings.len() as u64,
+                    ));
                     let first = settings
                         .first()
                         .map(|s| s.path.as_str())
@@ -524,7 +558,11 @@ fn run_verify(root: &Path) -> ExitCode {
                 }
             }
             Some(Err(err)) => {
-                checks.push(Check::text("database.parse", "ok", &format!("FAILED: {err}")));
+                checks.push(Check::text(
+                    "database.parse",
+                    "ok",
+                    &format!("FAILED: {err}"),
+                ));
             }
             None => checks.push(Check::text("database.parse", "ok", "FILE MISSING")),
         }
@@ -563,7 +601,11 @@ fn run_verify(root: &Path) -> ExitCode {
             }
         }
         checks.push(Check::num("save.files", saves.len() as u64, parsed));
-        checks.push(Check::num("save.checksum_ok", saves.len() as u64, checksum_ok));
+        checks.push(Check::num(
+            "save.checksum_ok",
+            saves.len() as u64,
+            checksum_ok,
+        ));
         checks.push(Check::num("save.versions", 1, versions.len() as u64));
         let version = versions.iter().next().copied().unwrap_or(0);
         checks.push(Check::text(
@@ -573,7 +615,11 @@ fn run_verify(root: &Path) -> ExitCode {
         ));
         checks.push(Check::num("save.end_bytes", 1, endings.len() as u64));
         let end = endings.iter().next().copied().unwrap_or(0);
-        checks.push(Check::text("save.end_byte", "0x19", &format!("0x{end:02X}")));
+        checks.push(Check::text(
+            "save.end_byte",
+            "0x19",
+            &format!("0x{end:02X}"),
+        ));
         checks.push(Check::text(
             "save.name",
             "妹相随～黑白世界的缤纷冒险～",
@@ -620,7 +666,9 @@ fn run_verify(root: &Path) -> ExitCode {
                 .and_then(|entry| archive.read(entry).ok());
             let verdict = match extracted {
                 Some(bytes) => match GameDat::parse(&bytes) {
-                    Ok(game) if game.title() == "妹相随～黑白世界的缤纷冒险～" => "ok",
+                    Ok(game) if game.title() == "妹相随～黑白世界的缤纷冒险～" => {
+                        "ok"
+                    }
                     Ok(_) => "wrong title",
                     Err(_) => "parse failed",
                 },
@@ -1199,8 +1247,8 @@ fn run_condition_label(condition: u8) -> &'static str {
 /// `System` is the settings file, and sorting by path keeps the report
 /// reproducible across runs.
 fn save_file_list() -> Vec<PathBuf> {
-    let dir = std::env::var_os("WOLF_SAVE_DIR")
-        .map_or_else(|| game_dir().join("Save"), PathBuf::from);
+    let dir =
+        std::env::var_os("WOLF_SAVE_DIR").map_or_else(|| game_dir().join("Save"), PathBuf::from);
     let Ok(entries) = std::fs::read_dir(&dir) else {
         return Vec::new();
     };
@@ -1294,7 +1342,6 @@ fn report(checks: &[Check]) -> ExitCode {
     }
 }
 
-
 /// Install directory of the original game.
 ///
 /// `$WOLF_GAME_DIR` wins; the literal default is this machine's Steam library and is
@@ -1333,7 +1380,6 @@ fn find_font(root: &Path) -> Option<(PathBuf, Vec<u8>)> {
     None
 }
 
-
 /// Builds a render instance from an atlas quad, carrying its alpha and its picture tone.
 ///
 /// The tone is per picture, not per frame: a `290` flash changes what one picture
@@ -1343,7 +1389,8 @@ fn tint_instance(quad: &wolf_game::atlas::SpriteQuad) -> SpriteInstance {
     SpriteInstance::new(quad.rect, quad.uv)
         .with_alpha(quad.alpha)
         .with_tint_rgb(quad.tint[0], quad.tint[1], quad.tint[2])
-}/// Where a capture starts.
+}
+/// Where a capture starts.
 ///
 /// The retail entry point is the boot map, but two other entries are useful: the
 /// bare title menu (to photograph the runtime choice panel without the splash
@@ -1435,7 +1482,7 @@ fn run_capture(
 
     let mut atlas = Atlas::new();
     let mut sprites = atlas.sprites(&game.screen, &mut game.assets);
-    let mut texts = atlas::texts(&game.screen);
+    let mut texts = game.text_quads();
     // A WOLF script never draws its own choice frame: the engine paints a window skin and
     // moves a cursor over it, at the coordinates system variables 3 (x) and 4 (y) name.
     // There is no centred default (docs/OPCODE_102.md section 4.2), and when the finished
@@ -1562,7 +1609,10 @@ fn run_capture(
     }
     // Sys8 is the font size shared by messages, choices and text pictures, so print it
     // next to the layout it produced: a capture that looks wrong is usually a stale Sys8.
-    println!("  sys8 font : {:.0} px (Sys8, used by every text path)", game.font_px());
+    println!(
+        "  sys8 font : {:.0} px (Sys8, used by every text path)",
+        game.font_px()
+    );
     println!(
         "  sys pads  : Sys20 {} Sys22 {} Sys26 {} Sys27 {}",
         game.sys(20),
@@ -1578,8 +1628,15 @@ fn run_capture(
     for quad in &sprites {
         println!(
             "    quad pic {:>6} at [{:.0},{:.0},{:.0},{:.0}] uv [{:.3},{:.3},{:.3},{:.3}]",
-            quad.number, quad.rect[0], quad.rect[1], quad.rect[2], quad.rect[3],
-            quad.uv[0], quad.uv[1], quad.uv[2], quad.uv[3]
+            quad.number,
+            quad.rect[0],
+            quad.rect[1],
+            quad.rect[2],
+            quad.rect[3],
+            quad.uv[0],
+            quad.uv[1],
+            quad.uv[2],
+            quad.uv[3]
         );
     }
     for text in &texts {
@@ -1611,14 +1668,26 @@ fn run_capture(
         None => println!("  font      : none found; text pictures will not draw"),
     }
 
-    let instances: Vec<SpriteInstance> = sprites
-        .iter()
-        .map(tint_instance)
-        .collect();
+    let instances: Vec<SpriteInstance> = sprites.iter().map(tint_instance).collect();
     renderer.draw(&instances);
     let mut items: Vec<TextItem> = texts
         .iter()
-        .map(|text| TextItem::new(text.text.clone(), text.rect, game.font_px()).with_alpha(text.alpha))
+        .map(|text| {
+            // A text picture may mix sizes, colours and outlines inside one string;
+            // the layout already turned each style change into its own quad.
+            let size = if text.font_px > 0.0 {
+                text.font_px
+            } else {
+                game.font_px()
+            };
+            let mut item = TextItem::new(text.text.clone(), text.rect, size)
+                .with_alpha(text.alpha)
+                .with_colour(text.colour);
+            if text.outline {
+                item = item.with_outline(2, [0, 0, 0]);
+            }
+            item
+        })
         .collect();
     // The engine draws 101 message text itself: the frame comes from common event 63 as
     // ordinary pictures, the glyphs come from here. Only the newest message is visible,
@@ -1628,9 +1697,9 @@ fn run_capture(
         let layout = wolf_game::message::layout(&message.text, &vars, message.frames);
         let preview: String = message.text.chars().take(60).collect();
         let typing = if layout.typing { ", typing" } else { "" };
-        let cursor = layout
-            .cursor
-            .map_or(String::new(), |at| format!(", cursor at [{:.0},{:.0}]", at[0], at[1]));
+        let cursor = layout.cursor.map_or(String::new(), |at| {
+            format!(", cursor at [{:.0},{:.0}]", at[0], at[1])
+        });
         println!(
             "  message   : {} row(s), {}/{} char(s), font {:.0} at [{:.0},{:.0}], wrap {:.0}{}{}",
             layout.rows.len(),
@@ -1677,7 +1746,8 @@ fn run_capture(
             }
         }
     }
-    if let Err(err) = image::save_buffer(&out, &pixels, LOGICAL_W, LOGICAL_H, image::ColorType::Rgba8)
+    if let Err(err) =
+        image::save_buffer(&out, &pixels, LOGICAL_W, LOGICAL_H, image::ColorType::Rgba8)
     {
         eprintln!("cannot write {}: {err}", out.display());
         return ExitCode::FAILURE;
@@ -1762,7 +1832,11 @@ fn run_capture_map(root: &Path, out: Option<PathBuf>, name: &str) -> ExitCode {
         }
     };
     let Some(tileset) = tilesets.get(map.tileset_index) else {
-        eprintln!("map points at tileset {} but only {} exist", map.tileset_index, tilesets.tilesets.len());
+        eprintln!(
+            "map points at tileset {} but only {} exist",
+            map.tileset_index,
+            tilesets.tilesets.len()
+        );
         return ExitCode::FAILURE;
     };
 
@@ -1819,7 +1893,11 @@ fn run_capture_map(root: &Path, out: Option<PathBuf>, name: &str) -> ExitCode {
     );
     println!("  camera    : [{}, {}]", camera[0], camera[1]);
     println!("  quads     : {} tile(s)", sprites.len());
-    println!("  atlas     : {} image(s), {:.1}% of {atlas_w}x{atlas_h}", atlas.len(), atlas.fill_ratio() * 100.0);
+    println!(
+        "  atlas     : {} image(s), {:.1}% of {atlas_w}x{atlas_h}",
+        atlas.len(),
+        atlas.fill_ratio() * 100.0
+    );
 
     let mut renderer = match Renderer::new_offscreen() {
         Ok(renderer) => renderer,
@@ -1832,10 +1910,7 @@ fn run_capture_map(root: &Path, out: Option<PathBuf>, name: &str) -> ExitCode {
         eprintln!("atlas upload failed: {err}");
         return ExitCode::FAILURE;
     }
-    let instances: Vec<SpriteInstance> = sprites
-        .iter()
-        .map(tint_instance)
-        .collect();
+    let instances: Vec<SpriteInstance> = sprites.iter().map(tint_instance).collect();
     renderer.draw(&instances);
     renderer.draw_text(&[]);
     renderer.present();
@@ -1854,7 +1929,9 @@ fn run_capture_map(root: &Path, out: Option<PathBuf>, name: &str) -> ExitCode {
             }
         }
     }
-    if let Err(err) = image::save_buffer(&out, &pixels, LOGICAL_W, LOGICAL_H, image::ColorType::Rgba8) {
+    if let Err(err) =
+        image::save_buffer(&out, &pixels, LOGICAL_W, LOGICAL_H, image::ColorType::Rgba8)
+    {
         eprintln!("cannot write {}: {err}", out.display());
         return ExitCode::FAILURE;
     }
@@ -1907,7 +1984,11 @@ fn run_blocks(root: &Path, map_name: Option<&str>, event: Option<u32>, page: usi
             };
             let wanted = event_id_of(event);
             let Some(found) = map.events.iter().find(|found| found.id == wanted) else {
-                eprintln!("  ! {} has no event {}", relative.display(), event_id_of(event));
+                eprintln!(
+                    "  ! {} has no event {}",
+                    relative.display(),
+                    event_id_of(event)
+                );
                 return ExitCode::FAILURE;
             };
             let Some(found_page) = found.pages.get(page) else {
@@ -1941,15 +2022,31 @@ fn run_blocks(root: &Path, map_name: Option<&str>, event: Option<u32>, page: usi
             Program::compile(found)
         }
     };
-    println!("  program   {} slots, {} block(s), {} label(s)", program.len(), program.blocks.len(), program.labels.len());
+    println!(
+        "  program   {} slots, {} block(s), {} label(s)",
+        program.len(),
+        program.blocks.len(),
+        program.labels.len()
+    );
     for (index, block) in program.blocks.iter().enumerate() {
         let head = program.slots.get(block.head).and_then(|slot| match slot {
             wolf_format::command::Slot::Command(cmd) => Some((cmd.opcode, ints_of(cmd))),
             wolf_format::command::Slot::Blank => None,
         });
-        println!("  block {index:>3} {:?} head {:>4} {:?} cases {:?} else {:?} cancel {:?} end {:?}",
-            block.kind, block.head, head.map(|(opcode, ints)| (opcode, ints)), block.cases, block.else_pc, block.cancel_pc,
-            if block.end_pc == usize::MAX { None } else { Some(block.end_pc) });
+        println!(
+            "  block {index:>3} {:?} head {:>4} {:?} cases {:?} else {:?} cancel {:?} end {:?}",
+            block.kind,
+            block.head,
+            head.map(|(opcode, ints)| (opcode, ints)),
+            block.cases,
+            block.else_pc,
+            block.cancel_pc,
+            if block.end_pc == usize::MAX {
+                None
+            } else {
+                Some(block.end_pc)
+            }
+        );
     }
     ExitCode::SUCCESS
 }

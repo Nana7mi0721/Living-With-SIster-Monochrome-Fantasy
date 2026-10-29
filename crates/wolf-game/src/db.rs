@@ -213,6 +213,16 @@ impl Databases {
     }
 
     /// Numeric read: engine cells win, then the addressed container.
+    /// The SystemDB `12:文字色` palette entry that `\c[n]` names.
+    ///
+    /// The palette lives in SysDatabase type 12 (30 rows, 3 numeric fields) and is the
+    /// only place the game defines text colours; a text picture that writes `\c[1]`
+    /// means row 1 of this table, not an RGB literal.
+    pub fn colour(&self, index: i32) -> Option<[u8; 3]> {
+        let row = usize::try_from(index).ok()?;
+        self.sys.as_ref()?.colour(row)
+    }
+
     pub fn num(&self, container: Container, db_type: i32, row: i32, column: i32) -> Option<i32> {
         if let Some(value) = self.cells.get(&(container, db_type, row, column)) {
             return Some(*value);
@@ -394,7 +404,7 @@ mod tests {
     #[test]
     fn the_coordinate_scale_divides_the_screen_by_32_and_24() {
         assert_eq!(coordinate_scale((1024, 576)), (32, 24));
-        assert_eq!(coordinate_scale((1280, 720, )), (40, 30));
+        assert_eq!(coordinate_scale((1280, 720,)), (40, 30));
         assert_eq!(coordinate_scale((8, 8)), (1, 1));
     }
 
@@ -492,7 +502,11 @@ mod tests {
             Some("システム設定"),
             Some("装備可能欄数"),
         );
-        assert_eq!((ty, column), (17, 22), "labels must land on DataBase type 17");
+        assert_eq!(
+            (ty, column),
+            (17, 22),
+            "labels must land on DataBase type 17"
+        );
         assert_eq!(databases.num(Container::Data, ty, 0, column), Some(5));
         // A raw read of the numeric pair the script carries answers nothing, which is why
         // the labels are not optional here.
@@ -508,11 +522,20 @@ mod tests {
             (16, 2)
         );
         assert_eq!(
-            databases.resolve_labels(Container::Data, 16, 2, Some("存在しない型"), Some("存在しない列")),
+            databases.resolve_labels(
+                Container::Data,
+                16,
+                2,
+                Some("存在しない型"),
+                Some("存在しない列")
+            ),
             (16, 2)
         );
         // Sys is answered by SysDatabase's own name table, but resolve_labels is a
         // .dat-container operation; it must leave a Sys call alone rather than guess.
-        assert_eq!(databases.resolve_labels(Container::Sys, 6, 0, None, None), (6, 0));
+        assert_eq!(
+            databases.resolve_labels(Container::Sys, 6, 0, None, None),
+            (6, 0)
+        );
     }
 }

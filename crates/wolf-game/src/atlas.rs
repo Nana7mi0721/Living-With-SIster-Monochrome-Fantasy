@@ -65,7 +65,12 @@ impl AtlasRect {
         let y0 = self.y + sub[1].min(self.h);
         let x1 = self.x + (sub[0] + sub[2]).min(self.w);
         let y1 = self.y + (sub[1] + sub[3]).min(self.h);
-        [x0 as f32 / aw, y0 as f32 / ah, x1 as f32 / aw, y1 as f32 / ah]
+        [
+            x0 as f32 / aw,
+            y0 as f32 / ah,
+            x1 as f32 / aw,
+            y1 as f32 / ah,
+        ]
     }
 }
 
@@ -113,6 +118,15 @@ pub struct TextQuad {
     pub rect: [f32; 4],
     /// Opacity.
     pub alpha: f32,
+    /// Font size in pixels for this run; 0.0 means "use the caller's default (Sys8)".
+    ///
+    /// A text picture may mix sizes through \f[n], so the size lives on the quad and
+    /// not on the picture: one picture becomes one quad per style run.
+    pub font_px: f32,
+    /// RGB from the SystemDB palette, already resolved; white when the run names none.
+    pub colour: [u8; 3],
+    /// True when the run asked for the \E outline.
+    pub outline: bool,
 }
 
 /// A half-open horizontal strip of the atlas.
@@ -231,7 +245,10 @@ impl Atlas {
                 (x, y)
             }
             None => {
-                let y = self.shelves.last().map_or(0, |shelf| shelf.y + shelf.height);
+                let y = self
+                    .shelves
+                    .last()
+                    .map_or(0, |shelf| shelf.y + shelf.height);
                 if y + h > self.height {
                     return None;
                 }
@@ -270,7 +287,12 @@ impl Atlas {
     /// The pixels are pure white with a per-pixel alpha mask; the caller multiplies the
     /// picture's own tone and opacity into the quad, so colouring a shape costs nothing and
     /// never has to be re-rasterised.
-    pub fn add_sysgraphic(&mut self, shape: sysgraphic::Shape, w: u32, h: u32) -> Option<AtlasRect> {
+    pub fn add_sysgraphic(
+        &mut self,
+        shape: sysgraphic::Shape,
+        w: u32,
+        h: u32,
+    ) -> Option<AtlasRect> {
         let key = sysgraphic::atlas_key(shape, w, h);
         if let Some(rect) = self.entries.get(&key) {
             return Some(*rect);
@@ -432,6 +454,11 @@ pub fn texts(screen: &Screen) -> Vec<TextQuad> {
             text: wolf_format::messagetext::strip(&quad.text),
             rect: quad.dst,
             alpha: quad.alpha,
+            // One quad per picture: no style split here. `Game::text_quads` is the
+            // markup-aware path and fills the three fields below.
+            font_px: 0.0,
+            colour: [255, 255, 255],
+            outline: false,
         })
         .collect()
 }
@@ -470,11 +497,35 @@ mod tests {
         let mut atlas = Atlas::with_size(16, 16);
         let a = atlas.add("a", &image(8, 4, 0x11)).expect("a");
         let b = atlas.add("b", &image(8, 4, 0x22)).expect("b");
-        assert_eq!(a, AtlasRect { x: 0, y: 0, w: 8, h: 4 });
-        assert_eq!(b, AtlasRect { x: 8, y: 0, w: 8, h: 4 });
+        assert_eq!(
+            a,
+            AtlasRect {
+                x: 0,
+                y: 0,
+                w: 8,
+                h: 4
+            }
+        );
+        assert_eq!(
+            b,
+            AtlasRect {
+                x: 8,
+                y: 0,
+                w: 8,
+                h: 4
+            }
+        );
         // Third 8x4 does not fit next to b, so it opens a shelf below the first one.
         let c = atlas.add("c", &image(8, 4, 0x33)).expect("c");
-        assert_eq!(c, AtlasRect { x: 0, y: 4, w: 8, h: 4 });
+        assert_eq!(
+            c,
+            AtlasRect {
+                x: 0,
+                y: 4,
+                w: 8,
+                h: 4
+            }
+        );
         assert_eq!(atlas.len(), 3);
     }
 
@@ -482,7 +533,15 @@ mod tests {
     fn pixels_land_where_the_rectangle_says() {
         let mut atlas = Atlas::with_size(4, 4);
         let rect = atlas.add("px", &image(2, 1, 0xAB)).expect("px");
-        assert_eq!(rect, AtlasRect { x: 0, y: 0, w: 2, h: 1 });
+        assert_eq!(
+            rect,
+            AtlasRect {
+                x: 0,
+                y: 0,
+                w: 2,
+                h: 1
+            }
+        );
         // Two RGBA pixels of 0xAB at the start of the buffer.
         assert_eq!(&atlas.pixels()[..8], &[0xAB; 8]);
         // The rest of the atlas is still untouched.
@@ -575,9 +634,7 @@ mod tests {
         let mut atlas = Atlas::with_size(64, 64);
         // Pre-pack the skin so the atlas never touches the filesystem: add_asset
         // returns the existing rectangle and the panel geometry is what is tested.
-        let skin = atlas
-            .add(window::SKIN, &image(18, 18, 0x7F))
-            .expect("skin");
+        let skin = atlas.add(window::SKIN, &image(18, 18, 0x7F)).expect("skin");
         let mut assets = Assets::new("no-such-root");
         let quads = atlas.sprites(&screen, &mut assets);
         assert_eq!(quads.len(), 9, "nine-slice of the 18x18 skin");
@@ -594,7 +651,12 @@ mod tests {
     }
 
     /// A `150` command for a built-in drawing, in the shape the interpreter emits it.
-    fn shape_picture(number: i32, file: &str, box_size: (i32, i32), at: (i32, i32)) -> wolf_vm::PictureCmd {
+    fn shape_picture(
+        number: i32,
+        file: &str,
+        box_size: (i32, i32),
+        at: (i32, i32),
+    ) -> wolf_vm::PictureCmd {
         wolf_vm::PictureCmd {
             number,
             // Every built-in graphic in this game is a type-3 (window/file) command.
@@ -602,17 +664,7 @@ mod tests {
             action: wolf_vm::exec::PictureAction::Draw,
             file: file.to_owned(),
             text: String::new(),
-            args: vec![
-                0,
-                box_size.0,
-                box_size.1,
-                1,
-                255,
-                at.0,
-                at.1,
-                100,
-                0,
-            ],
+            args: vec![0, box_size.0, box_size.1, 1, 255, at.0, at.1, 100, 0],
             animate: Vec::new(),
             anchor: 0,
         }
@@ -626,7 +678,11 @@ mod tests {
         let mut atlas = Atlas::with_size(256, 256);
         let mut assets = Assets::new("no-such-root");
         let quads = atlas.sprites(&screen, &mut assets);
-        assert_eq!(quads.len(), 1, "the drawing, and no nine-slice skin under it");
+        assert_eq!(
+            quads.len(),
+            1,
+            "the drawing, and no nine-slice skin under it"
+        );
         let key = sysgraphic::atlas_key(sysgraphic::Shape::SquareFrame, 120, 5);
         assert!(
             key.starts_with("<sysgraphic:") && key.contains("120x5"),
@@ -703,4 +759,3 @@ mod tests {
         assert_eq!(atlas.len(), 1);
     }
 }
-

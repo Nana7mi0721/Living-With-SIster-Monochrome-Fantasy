@@ -735,10 +735,10 @@
    "coroutines": 6,
    "live_pictures": 69,
    "quads": 12,
-   "text_pictures": 31,
+   "text_pictures": 33,
    "atlas_images": 12,
    "atlas_fill": "30.3% of 2048x2048",
-   "non_black": 548241
+   "non_black": 546640
   }
  },
  "database_layer": {
@@ -938,5 +938,28 @@
    "reverse: CE48 pc172 self20 = self20 % 10000 and CE86 pc44/48/52 self15 = self27 % 10000/20000/30000"
   ],
   "doc": "docs/OPCODE_SPEC.md 3.2"
+ },
+ "text_pictures": {
+  "doc": "docs/TEXT_SPEC.md 9 / docs/M2_SLICE.md 3.9",
+  "law": "150 text pictures carry their own markup: \\f[n] sets the font size of the following run, anchor bits 12..14 are 0 top-left / 1 centre / 2 bottom-left / 3 top-right / 4 bottom-right, <R> right-aligns a line to the block right edge, \\c[n] indexes SysDatabase type 12, \\E adds the outline",
+  "commands_with_f": 1206,
+  "f_size_values": {
+   "6": 18,
+   "8": 1,
+   "12": 253,
+   "14": 55,
+   "16": 640,
+   "18": 62,
+   "20": 58,
+   "24": 66,
+   "32": 73,
+   "48": 39,
+   "64": 2
+  },
+  "module": "crates/wolf-game/src/textpic.rs (988 lines, 25 unit tests)",
+  "wiring": "Game::text_quads -> one atlas::TextQuad per style run; TextQuad.font_px 0.0 means the caller default Sys8",
+  "anchor_precision": "measure() uses the half-em rule; real Lolita.ttf advances differ by up to 6%, measure_with/layout_with take a shaped-advance callback",
+  "retail_reference": "Save/save1.jpg top bar: pic 6200 anchor 3 x=140 ink 85..138 matches the 56.31 px real advance",
+  "fixed": "pic 6200/6210 overlap and pic 6251 right-edge overflow"
  }
 }

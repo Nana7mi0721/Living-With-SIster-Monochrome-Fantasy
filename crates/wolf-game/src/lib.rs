@@ -30,6 +30,7 @@ pub mod map_runtime;
 pub mod message;
 pub mod picture;
 pub mod sysgraphic;
+pub mod textpic;
 pub mod tilemap;
 pub mod window;
 

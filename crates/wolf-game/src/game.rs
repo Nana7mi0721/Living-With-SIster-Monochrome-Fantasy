@@ -24,8 +24,8 @@ use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
 use wolf_format::mps::Map;
 use wolf_vm::{
-    ChoiceReply, DbOp, DbValue, Host, LogLevel, PictureCmd, Program, ProgramSet, SoundCmd, StepReport,
-    Vm,
+    ChoiceReply, DbOp, DbValue, Host, LogLevel, PictureCmd, Program, ProgramSet, SoundCmd,
+    StepReport, Vm,
 };
 
 use crate::assets::Assets;
@@ -545,6 +545,75 @@ impl Game {
     ///
     /// Headless captures use this together with [`Self::auto_choice`] to take a
     /// specific branch without a keyboard.
+    /// Every text picture, laid out into one quad per style run.
+    ///
+    /// A `150` text picture carries its own display markup and the HUD depends on all
+    /// of it: the top bar writes `18:30` at 24 px beside `周一` at 18 px, the money
+    /// counter right-aligns against x = 1015, and 877 pictures ask for the `\E` outline.
+    /// [`crate::atlas::texts`] paints one default-sized quad per picture and cannot
+    /// reproduce any of that; this is the markup-aware path the renderer uses.
+    #[must_use]
+    pub fn text_quads(&self) -> Vec<crate::atlas::TextQuad> {
+        let vars = PictureVars {
+            vars: &self.vm.vars,
+        };
+        let cells = PictureCells {
+            databases: &self.databases,
+        };
+        let colours = PictureColours {
+            databases: &self.databases,
+        };
+        let ctx = crate::textpic::Ctx {
+            vars: &vars,
+            cells: &cells,
+            colours: &colours,
+            default_font_px: self.font_px(),
+        };
+        let mut quads = Vec::new();
+        for picture in self.screen.iter() {
+            if !picture.kind.is_text() || picture.hidden || picture.text.is_empty() {
+                continue;
+            }
+            let runs = crate::textpic::layout(
+                &picture.text,
+                picture.x as f32,
+                picture.y as f32,
+                picture.anchor,
+                &ctx,
+            );
+            let alpha = picture.alpha();
+            for run in runs {
+                if run.text.is_empty() {
+                    continue;
+                }
+                // The balloon library keeps its controls parked far off screen;
+                // shaping and drawing them costs time and cannot reach a pixel.
+                if !crate::picture::on_screen([run.x, run.y, run.font_px, run.font_px * 2.0]) {
+                    continue;
+                }
+                // The box only has to be wide enough that the glyph pass never
+                // re-wraps what the layout already broke; one extra em of slack
+                // covers the shaped advance being a few percent off the half-em rule.
+                let width = crate::textpic::measure(&run.text, run.font_px) + run.font_px;
+                quads.push(crate::atlas::TextQuad {
+                    number: picture.number,
+                    text: run.text,
+                    rect: [
+                        run.x,
+                        run.y,
+                        width.max(1.0),
+                        run.font_px * crate::textpic::DEFAULT_LINE_PITCH_RATIO,
+                    ],
+                    alpha,
+                    font_px: run.font_px,
+                    colour: crate::textpic::rgb(&ctx, run.colour).unwrap_or([255, 255, 255]),
+                    outline: run.outline,
+                });
+            }
+        }
+        quads
+    }
+
     pub fn set_choice_cursor(&mut self, index: usize) {
         self.choice_cursor = index;
     }
@@ -654,10 +723,7 @@ impl Game {
         report.notes.clear();
         // Keep the interpreter note list empty: everything worth keeping went through
         // Host::log, which deduplicates. A per-frame Vec would otherwise grow forever.
-        FrameOutcome {
-            report,
-            ..outcome
-        }
+        FrameOutcome { report, ..outcome }
     }
 }
 
@@ -735,6 +801,60 @@ fn resolve_cell(
     resolved
 }
 
+/// [`crate::textpic::Vars`] over the global variable banks.
+///
+/// `\v[n]` and `\s[n]` in a picture string were already expanded by the interpreter
+/// (it owns the running instance, so `\cself` needs no help here); this is the
+/// fallback for a string the expander could not resolve.
+struct PictureVars<'a> {
+    vars: &'a wolf_vm::Variables,
+}
+
+impl crate::textpic::Vars for PictureVars<'_> {
+    fn num(&self, index: usize) -> i32 {
+        self.vars.get(wolf_vm::magic::VAR_BASE as usize + index)
+    }
+
+    fn text(&self, index: usize) -> String {
+        let raw = self.vars.get_str(wolf_vm::magic::STR_BASE as usize + index);
+        if raw.is_empty() {
+            self.num(index).to_string()
+        } else {
+            raw.to_owned()
+        }
+    }
+}
+
+/// [`crate::textpic::Cells`] over the loaded databases.
+struct PictureCells<'a> {
+    databases: &'a crate::db::Databases,
+}
+
+impl crate::textpic::Cells for PictureCells<'_> {
+    fn cdb(&self, ty: i32, row: i32, column: i32) -> Option<String> {
+        self.databases
+            .text(crate::db::Container::CData, ty, row, column)
+            .map(str::to_owned)
+    }
+
+    fn udb(&self, ty: i32, row: i32, column: i32) -> Option<String> {
+        self.databases
+            .text(crate::db::Container::Data, ty, row, column)
+            .map(str::to_owned)
+    }
+}
+
+/// [`crate::textpic::Colours`] over the SystemDB palette.
+struct PictureColours<'a> {
+    databases: &'a crate::db::Databases,
+}
+
+impl crate::textpic::Colours for PictureColours<'_> {
+    fn colour(&self, index: i32) -> Option<[u8; 3]> {
+        self.databases.colour(index)
+    }
+}
+
 /// Per-frame borrow shim: the VM lives inside Game, so the host cannot borrow Game.
 struct GameHost<'a> {
     screen: &'a mut Screen,
@@ -773,7 +893,9 @@ impl GameHost<'_> {
         };
         let scale = f32::from(picture.scale.max(1) as i16) / 100.0;
         let size = match picture.window {
-            Some((width, height)) if width > crate::window::MIN_BOX && height > crate::window::MIN_BOX => {
+            Some((width, height))
+                if width > crate::window::MIN_BOX && height > crate::window::MIN_BOX =>
+            {
                 (width as f32 * scale, height as f32 * scale)
             }
             _ if picture.is_screen_layer() => (SCREEN_W as f32, SCREEN_H as f32),
@@ -795,11 +917,8 @@ impl GameHost<'_> {
             && self.mouse[1] >= 0
             && px < SCREEN_W as f32
             && py < SCREEN_H as f32;
-        let over = inside_screen
-            && px >= left
-            && px < left + size.0
-            && py >= top
-            && py < top + size.1;
+        let over =
+            inside_screen && px >= left && px < left + size.0 && py >= top && py < top + size.1;
         i32::from(over)
     }
 }
@@ -899,7 +1018,8 @@ impl Host for GameHost<'_> {
                         .num(container, db_type, row, column)
                         .unwrap_or(0);
                     let value = combine_cell(op.op, current, *operand);
-                    self.databases.set_num(container, db_type, row, column, value);
+                    self.databases
+                        .set_num(container, db_type, row, column, value);
                     self.stats.database_writes += 1;
                 }
                 Some(DbValue::Str(text)) => {
@@ -952,15 +1072,23 @@ impl Host for GameHost<'_> {
     }
 
     fn transition(&mut self, kind: i32, flags: i32) {
-        self.note(format!("160/162 Transition: kind {kind} flags {flags} not drawn yet"));
+        self.note(format!(
+            "160/162 Transition: kind {kind} flags {flags} not drawn yet"
+        ));
     }
 
     fn party(&mut self, args: &[i32]) {
-        self.note(format!("270 Party: {} argument(s) recorded only", args.len()));
+        self.note(format!(
+            "270 Party: {} argument(s) recorded only",
+            args.len()
+        ));
     }
 
     fn scroll(&mut self, args: &[i32]) {
-        self.note(format!("281 Scroll: {} argument(s) recorded only", args.len()));
+        self.note(format!(
+            "281 Scroll: {} argument(s) recorded only",
+            args.len()
+        ));
     }
 
     fn effect(&mut self, kind: i32, duration: i32, args: &[i32]) {
@@ -976,7 +1104,9 @@ impl Host for GameHost<'_> {
     }
 
     fn save_load(&mut self, args: &[i32]) {
-        self.note(format!("220/221/222 SaveLoad: args {args:?} not modelled yet"));
+        self.note(format!(
+            "220/221/222 SaveLoad: args {args:?} not modelled yet"
+        ));
     }
 
     fn reserve(&mut self, event: wolf_vm::exec::EventId) {
@@ -1001,7 +1131,9 @@ impl Host for GameHost<'_> {
     }
 
     fn pro_feature(&mut self, kind: i32, ms: i32) {
-        self.note(format!("1000 ProFeature: type {kind} ({ms} ms) not modelled"));
+        self.note(format!(
+            "1000 ProFeature: type {kind} ({ms} ms) not modelled"
+        ));
     }
 
     fn log(&mut self, level: LogLevel, text: &str) {
@@ -1141,7 +1273,10 @@ mod tests {
         assert!(last.idle, "a parked title does no work");
         let pictures: Vec<_> = game.screen.iter().collect();
         assert_eq!(pictures.len(), 1);
-        assert_eq!(pictures[0].number, -2, "the title layer is the whole screen");
+        assert_eq!(
+            pictures[0].number, -2,
+            "the title layer is the whole screen"
+        );
         assert!(pictures[0].is_screen_layer());
         assert!(pictures[0].file.contains("TitleGraphic"));
         assert_eq!(
@@ -1247,8 +1382,16 @@ mod tests {
         assert_eq!(combine_cell(5, 11, 5), 1, "op 5 takes the remainder");
         assert_eq!(combine_cell(6, -3, 0), 0, "op 6 raises to the operand");
         assert_eq!(combine_cell(7, 40, 99), 40, "op 7 caps at the operand");
-        assert_eq!(combine_cell(4, 10, 0), 10, "dividing by zero keeps the cell");
-        assert_eq!(combine_cell(5, 10, 0), 10, "remainder by zero keeps the cell");
+        assert_eq!(
+            combine_cell(4, 10, 0),
+            10,
+            "dividing by zero keeps the cell"
+        );
+        assert_eq!(
+            combine_cell(5, 10, 0),
+            10,
+            "remainder by zero keeps the cell"
+        );
     }
 
     #[test]
