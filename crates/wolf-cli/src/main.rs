@@ -89,6 +89,12 @@ fn main() -> ExitCode {
     let mut load_save: Option<PathBuf> = None;
     let mut page: usize = 0;
     let mut boot = true;
+    // `boot` defaults to true, so on its own it cannot tell "the user asked for the
+    // boot map" from "the user gave nothing". capture needs that distinction:
+    // `capture --event 239` must start event 239, not silently fall back to the boot
+    // map and photograph the vendor logo (docs/BATTLE.md section 6.2).
+    let mut boot_explicit = false;
+    let mut menu_only = false;
     let mut map: Option<String> = None;
     let mut map_run: Option<String> = None;
 
@@ -174,8 +180,14 @@ fn main() -> ExitCode {
             "--load-save" => {
                 load_save = args.next().map(PathBuf::from);
             }
-            "--boot" => boot = true,
-            "--menu-only" => boot = false,
+            "--boot" => {
+                boot = true;
+                boot_explicit = true;
+            }
+            "--menu-only" => {
+                boot = false;
+                menu_only = true;
+            }
             "--filter" | "-F" => {
                 filter = args.next();
             }
@@ -200,14 +212,24 @@ fn main() -> ExitCode {
         Some("capture") => match map.as_deref() {
             Some(name) => run_capture_map(&root, out, name),
             None => {
-                let entry = match (load_save.as_deref(), map_run.as_deref()) {
-                    (Some(path), _) => Entry::Save(path),
-                    (None, Some(name)) => Entry::Script {
-                        map: name,
-                        event: event.unwrap_or(0),
+                // Resolved into an owning value first: Entry borrows its map name and
+                // its save path, so the temporary must outlive the match below.
+                let resolved = resolve_capture_entry(
+                    load_save.as_deref(),
+                    map_run.as_deref(),
+                    event,
+                    boot_explicit,
+                    menu_only,
+                );
+                let entry = match &resolved {
+                    CaptureEntry::Save(path) => Entry::Save(path.as_path()),
+                    CaptureEntry::Script { map, event } => Entry::Script {
+                        map: map.as_str(),
+                        event: *event,
                     },
-                    (None, None) if boot => Entry::Boot,
-                    (None, None) => Entry::Menu,
+                    CaptureEntry::CommonEvent(id) => Entry::CommonEvent(*id),
+                    CaptureEntry::Boot => Entry::Boot,
+                    CaptureEntry::Menu => Entry::Menu,
                 };
                 let answers = Answers {
                     index: answer,
@@ -260,7 +282,10 @@ fn print_help() {
     println!("    wolf-cli [--root <DIR>] verify");
     println!("    wolf-cli [--root <DIR>] precompile");
     println!("    wolf-cli [--root <DIR>] run --event <ID> [--frames <N>] [--trace]");
-    println!("    wolf-cli [--root <DIR>] capture [--frames <N>] [--out <FILE.png>] [--menu-only]");
+    println!(
+        "    wolf-cli [--root <DIR>] capture [--frames <N>] [--out <FILE.png>] [--event <ID>]"
+    );
+    println!("                                   [--boot | --menu-only]");
     println!("    wolf-cli [--root <DIR>] play");
     println!("    wolf-cli [--root <DIR>] list [--filter <TEXT>]");
     println!();
@@ -270,17 +295,18 @@ fn print_help() {
     );
     println!("    precompile  Compile all 550 common events into jump tables; print the stats.");
     println!("    run         Execute one common event headlessly and report what it did.");
-    println!("    capture     Run the boot sequence for N frames and render it to a PNG.");
-    println!(
-        "                Starts on the boot map (splashes + title art), then holds on the menu."
-    );
-    println!("                Choice prompts STAY OPEN unless --answer is given.");
-    println!("                because answering it branches away from the title screen.");
+    println!("    capture     Run an entry point for N frames and render it to a PNG.");
+    println!("                Default entry is the boot map (splashes + title art), then holds on");
+    println!("                the menu. Choice prompts STAY OPEN unless --answer is given,");
+    println!("                because answering the title prompt branches into the game.");
+    println!("                --event <ID> starts that common event instead (after the engine");
+    println!("                events), so a battle or menu screen can be photographed alone.");
     println!("    play        Run the title screen in a window (arrows move, Enter/Z confirm).");
     println!("    list        Print every common event: id, slots, real instructions, title.");
     println!();
     println!("OPTIONS:");
-    println!("    -e, --event <ID>  Common event id to run with 'run'.");
+    println!("    -e, --event <ID>  Common event id to run with 'run', or to start with 'capture'");
+    println!("                      (capture only when neither --boot nor --menu-only is given).");
     println!("    -f, --frames <N>  Frame budget for 'run' (default 600, one frame = 1/60 s).");
     println!("    -t, --trace       Print every host callback in 'run', not just the summary.");
     println!("    -o, --out <FILE>  PNG path for 'capture' (default work/out/title.png).");
@@ -296,6 +322,7 @@ fn print_help() {
         "    --until <N>       Quit 'play' after N frames (smoke test; default: until closed)."
     );
     println!("    --menu-only       Start common event 42 directly instead of the boot map.");
+    println!("                      Wins over --event (it names an entry point of its own).");
     println!("    --hold-message    Park on the first 101 message instead of dismissing it.");
     println!("    --pointer <x,y>   Put the mouse pointer at a game pixel for the whole capture.");
     println!("    --press-frame <N> Frame at which --pointer clicks the left button once.");
@@ -308,6 +335,7 @@ fn print_help() {
         "    -m, --map <NAME>  Capture a map instead of the boot sequence (e.g. SampleMapA.mps)."
     );
     println!("    --boot            Start on the boot map (default for capture and play).");
+    println!("                      Stated explicitly it wins over capture --event.");
     println!("    -r, --root <DIR>  Unpacked data root containing BasicData/ and MapData/.");
     println!("                      Defaults to ./work/full, then $WOLF_DATA_ROOT.");
     println!("    -h, --help        Print this help.");
@@ -1434,8 +1462,68 @@ struct Answers {
 enum Entry<'a> {
     Boot,
     Menu,
-    Script { map: &'a str, event: u32 },
+    Script {
+        map: &'a str,
+        event: u32,
+    },
     Save(&'a Path),
+    /// A single common event, started after the engine events. `capture --event <ID>`
+    /// without an explicit `--boot`/`--menu-only` lands here; before this variant existed
+    /// the id was silently dropped and the run photographed the boot map instead
+    /// (docs/BATTLE.md section 6.2).
+    CommonEvent(u32),
+}
+
+/// The capture entry point, resolved from the command line alone.
+///
+/// This is a plain owning value rather than `Entry` so the resolution rules can be unit
+/// tested without borrowing command-line strings (or loading the game data at all).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CaptureEntry {
+    Boot,
+    Menu,
+    Script { map: String, event: u32 },
+    Save(PathBuf),
+    CommonEvent(u32),
+}
+
+/// Pick the capture entry point from the flags that were actually given.
+///
+/// Precedence, highest first: `--load-save` > `--map-run` > `--event` > `--boot` >
+/// default boot. `--event` only wins when neither `--boot` nor `--menu-only` was given
+/// explicitly, because those two name an entry point of their own. `--map` never reaches
+/// here: `capture --map <NAME>` takes the separate map-rendering path.
+///
+/// `boot` defaults to true, which is why the explicit flags are tracked separately: a
+/// default that cannot say "the user did not ask for this" used to make
+/// `capture --event 239` fall back to the boot map and photograph the vendor logo.
+fn resolve_capture_entry(
+    load_save: Option<&Path>,
+    map_run: Option<&str>,
+    event: Option<u32>,
+    boot_explicit: bool,
+    menu_only: bool,
+) -> CaptureEntry {
+    if let Some(path) = load_save {
+        return CaptureEntry::Save(path.to_path_buf());
+    }
+    if let Some(map) = map_run {
+        return CaptureEntry::Script {
+            map: map.to_owned(),
+            event: event.unwrap_or(0),
+        };
+    }
+    if menu_only {
+        return CaptureEntry::Menu;
+    }
+    if let Some(id) = event {
+        if !boot_explicit {
+            return CaptureEntry::CommonEvent(id);
+        }
+    }
+    // `boot` itself defaults to true; --menu-only already returned above, so anything
+    // left here is the boot path (explicit --boot included).
+    CaptureEntry::Boot
 }
 
 fn run_capture(
@@ -1485,6 +1573,19 @@ fn run_capture(
                 .map_err(|err| err.to_string()),
             format!("map script {map} event {event}"),
         ),
+        // A bare common event. The engine events go first: every script in this game
+        // talks to them (they own the window/input system), so starting an event without
+        // them leaves it waiting on a subsystem that never runs. start_engine_events is
+        // idempotent, so an event that later calls one of them is unaffected.
+        Entry::CommonEvent(id) => {
+            game.start_engine_events();
+            let started = if game.start_event(id) {
+                Ok(())
+            } else {
+                Err(format!("no common event with id {id}"))
+            };
+            (started, format!("common event {id}"))
+        }
         Entry::Save(path) => {
             let label = format!("save file {}", path.display());
             match game.load_save(path) {
@@ -2310,4 +2411,81 @@ fn run_map_event(
     }
 
     ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{resolve_capture_entry, CaptureEntry};
+    use std::path::{Path, PathBuf};
+
+    /// `capture --event 239` used to fall through to `Entry::Boot` because `boot`
+    /// defaults to true and nothing recorded whether the user asked for it. This is the
+    /// regression guard for docs/BATTLE.md section 6.2: the id must survive on its own.
+    #[test]
+    fn event_alone_selects_the_common_event() {
+        assert_eq!(
+            resolve_capture_entry(None, None, Some(239), false, false),
+            CaptureEntry::CommonEvent(239)
+        );
+    }
+
+    #[test]
+    fn no_flags_still_selects_the_boot_map() {
+        assert_eq!(
+            resolve_capture_entry(None, None, None, false, false),
+            CaptureEntry::Boot
+        );
+    }
+
+    /// An explicit `--boot` names an entry point, so it outranks `--event`. This is the
+    /// one case where the old capture behaviour must be preserved exactly.
+    #[test]
+    fn explicit_boot_outranks_event() {
+        assert_eq!(
+            resolve_capture_entry(None, None, Some(239), true, false),
+            CaptureEntry::Boot
+        );
+    }
+
+    #[test]
+    fn menu_only_outranks_event() {
+        assert_eq!(
+            resolve_capture_entry(None, None, Some(239), false, true),
+            CaptureEntry::Menu
+        );
+    }
+
+    #[test]
+    fn map_run_outranks_event_and_keeps_the_event_as_the_map_event_id() {
+        assert_eq!(
+            resolve_capture_entry(None, Some("SampleMapA.mps"), Some(1), false, false),
+            CaptureEntry::Script {
+                map: "SampleMapA.mps".to_owned(),
+                event: 1,
+            }
+        );
+        // Without --event a map capture keeps the old default of page 0.
+        assert_eq!(
+            resolve_capture_entry(None, Some("TitleMap.mps"), None, false, false),
+            CaptureEntry::Script {
+                map: "TitleMap.mps".to_owned(),
+                event: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn load_save_outranks_everything() {
+        let path = PathBuf::from("save.sav");
+        assert_eq!(
+            resolve_capture_entry(
+                Some(Path::new("save.sav")),
+                Some("SampleMapA.mps"),
+                Some(239),
+                true,
+                true
+            ),
+            CaptureEntry::Save(path)
+        );
+    }
 }
