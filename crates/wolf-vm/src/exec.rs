@@ -1919,9 +1919,14 @@ fn execute(
                 None
             }
             290 => {
-                let kind = arg(cmd, 0) >> 4;
-                let duration = arg(cmd, 1);
-                let args: Vec<i32> = (0..argc(cmd)).map(|i| arg(cmd, i)).collect();
+                // Every operand is a magic number, not a constant: the balloon library and
+                // the HUD both pass self variables as picture ids. Evaluating only the
+                // type/duration left those ids pointing at unrelated slots.
+                let args: Vec<i32> = (0..argc(cmd))
+                    .map(|i| eval_num(arg(cmd, i), inst, vars))
+                    .collect();
+                let kind = args.first().copied().unwrap_or(0) >> 4;
+                let duration = args.get(1).copied().unwrap_or(0);
                 host.effect(kind, duration, &args);
                 inst.pc += 1;
                 None
@@ -2376,6 +2381,8 @@ mod tests {
         saves: Vec<SaveOp>,
         // The answer served back for a 221 read.
         save_answer: Option<i32>,
+        // Every 290 effect the interpreter decoded: (type, duration, evaluated args).
+        effects: Vec<(i32, i32, Vec<i32>)>,
     }
 
     impl Host for Recorder {
@@ -2424,6 +2431,9 @@ mod tests {
         fn save_load(&mut self, op: &SaveOp) -> Option<i32> {
             self.saves.push(op.clone());
             self.save_answer
+        }
+        fn effect(&mut self, kind: i32, duration: i32, args: &[i32]) {
+            self.effects.push((kind, duration, args.to_vec()));
         }
         fn close_message(&mut self) {
             self.closed += 1;
@@ -3319,6 +3329,30 @@ mod tests {
 
         assert_eq!(vm.vars.get(1), 7, "the 221 answer reached its destination");
         assert!(host.logs.is_empty(), "unexpected logs");
+    }
+
+    #[test]
+    fn effect_operands_are_evaluated_before_the_host_sees_them() {
+        // The balloon library and the HUD pass self variables as picture ids. The effect
+        // command itself carries magic numbers, so the host must see 250 and 12 rather
+        // than the raw 1_600_021 / 1_600_022 addresses.
+        let ev = event(
+            9,
+            "effect",
+            vec![
+                cmd(121, &[1_600_021, 250, 0, 0], &[]),
+                cmd(121, &[1_600_022, 12, 0, 0], &[]),
+                cmd(290, &[0x50, 30, 1_600_021, 1_600_022, 0, 0, 0], &[]),
+            ],
+        );
+        let mut vm = vm_with(vec![ev]);
+        vm.start_event(9).unwrap();
+        let mut host = Recorder::default();
+        vm.step_frame(&mut host);
+        assert_eq!(host.effects.len(), 1);
+        let (kind, duration, args) = &host.effects[0];
+        assert_eq!((*kind, *duration), (5, 30));
+        assert_eq!(&args[..4], &[0x50, 30, 250, 12]);
     }
 
     #[test]
