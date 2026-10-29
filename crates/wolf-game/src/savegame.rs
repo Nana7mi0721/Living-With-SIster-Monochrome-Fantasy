@@ -84,6 +84,11 @@ pub fn apply(game: &mut Game, save: &SaveFile) -> LoadedSave {
     }
     loaded.normal_vars = normal.len();
 
+    // The variable database travels inside the save. Character creation writes the
+    // player name into CDataBase type 0 row 12, and the HUD reads it back through
+    // opcode 250, so a load must overlay it before the first frame is drawn.
+    game.databases.apply_saved_database(&save.vardb);
+
     // Choice-window anchor. Sys3/Sys4 are absolute screen pixels (docs/OPCODE_102.md §4.2).
     let sys3 = save.part2.vars3_21.get(9).copied().unwrap_or(512) as i32;
     let sys4 = save.part2.vars3_21.get(10).copied().unwrap_or(240) as i32;

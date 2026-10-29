@@ -255,6 +255,35 @@ impl Databases {
         }
     }
 
+    /// Copies every row of a save file variable database over the .dat tables.
+    ///
+    /// The variable database is part of the save, not of the installation:
+    /// character creation writes the player name into CDataBase type 0 row 12,
+    /// and every later script reads it back through opcode 250. Without this copy a
+    /// loaded save would show the names the .dat file happens to contain (empty)
+    /// instead of the player own. The values go into the engine cell layer, so an
+    /// ordinary 250 write and a later save both see the same data.
+    pub fn apply_saved_database(&mut self, database: &wolf_save::VariableDatabase) {
+        for (type_index, table) in database.types.iter().enumerate() {
+            let db_type = i32::try_from(type_index).unwrap_or(i32::MAX);
+            for row in &table.rows {
+                let row_index = i32::try_from(row.index).unwrap_or(i32::MAX);
+                for (column, definition) in table.config.iter().enumerate() {
+                    let column = i32::try_from(column).unwrap_or(i32::MAX);
+                    if *definition >= 2000 {
+                        if let Some(bytes) = row.string(column as u32) {
+                            let text = String::from_utf8_lossy(bytes);
+                            let text = text.trim_end_matches(char::from(0));
+                            self.set_text(Container::CData, db_type, row_index, column, text);
+                        }
+                    } else if let Some(value) = row.number(column as u32) {
+                        self.set_num(Container::CData, db_type, row_index, column, value);
+                    }
+                }
+            }
+        }
+    }
+
     /// Overwrites a numeric cell in the engine layer.
     pub fn set_num(
         &mut self,
@@ -376,6 +405,33 @@ mod tests {
             eprintln!("skipping: no game data at {}", root.display());
             None
         }
+    }
+
+    #[test]
+    fn a_saved_variable_database_supplies_the_player_name() {
+        // SaveData01 type 0 row 12 holds the two halves the HUD concatenates.
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.pop();
+        path.pop();
+        path.push("work");
+        path.push("retail_backup");
+        path.push("Save");
+        path.push("SaveData01.sav");
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!("skipping: no retail save at {}", path.display());
+            return;
+        };
+        let save = wolf_save::SaveFile::parse(&bytes).expect("SaveData01 parses");
+        let mut databases = Databases::with_engine_defaults(DEFAULT_SCREEN);
+        databases.apply_saved_database(&save.vardb);
+        assert_eq!(
+            databases.text(Container::CData, 0, 12, 0),
+            Some("温柔的")
+        );
+        assert_eq!(
+            databases.text(Container::CData, 0, 12, 1),
+            Some("尖叫的")
+        );
     }
 
     #[test]
