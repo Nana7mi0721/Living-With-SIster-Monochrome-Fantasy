@@ -1311,6 +1311,14 @@ impl Host for GameHost<'_> {
         crate::key::code(self.key_bits)
     }
 
+    fn key_code_auto(&mut self, mask: u32, auto: u32) -> i32 {
+        // Opcode 125 exists exactly for script-driven input: the key bits it names
+        // are pressed even when the player is not touching the keyboard. The mask is
+        // still irrelevant for the code mapping, as above.
+        let _ = mask;
+        crate::key::code(self.key_bits | auto)
+    }
+
     fn picture_state(&mut self, number: i32, field: i32) -> Option<i32> {
         // Fields 8 and 9 answer for a picture that does not exist either (-1 vs 0),
         // so they run before the existence check below.

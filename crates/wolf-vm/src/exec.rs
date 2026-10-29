@@ -622,6 +622,17 @@ pub trait Host {
         0
     }
 
+    /// Like [`Host::key_code`], with the key bits opcode 125 asked the engine to
+    /// press even when the player is not touching the keyboard.
+    ///
+    /// The interpreter passes its current `InputState::auto_keys` here on every
+    /// 123 poll. A host that owns a real keyboard can OR the bits into its held-key
+    /// state; the default ignores them, which keeps every headless host unchanged.
+    fn key_code_auto(&mut self, mask: u32, auto: u32) -> i32 {
+        let _ = auto;
+        self.key_code(mask)
+    }
+
     /// `106 DebugMessage`.
     fn debug_message(&mut self, text: &str) {
         let _ = text;
@@ -700,10 +711,11 @@ pub struct HotSpot {
 ///
 /// Banning is applied by the interpreter itself: the banned bits are cleared out
 /// of the mask handed to the host, so a banned key reads as not pressed. Auto
-/// input is only stored - forcing a key press needs the host, which owns the
-/// real keyboard, so a host that wants the feature reads this field. No M1/M2
-/// acceptance path calls 125; 126 does appear in the opening script (it bans
-/// every key for the cutscene).
+/// input is passed to the host on every 123 poll through `Host::key_code_auto`;
+/// a host that owns a real keyboard ORs it into the held-key state, while a
+/// headless host keeps its default "nobody is touching the keyboard". 126 appears
+/// in the opening script (it bans every key for the cutscene); 125 is polled by the
+/// UI cursor events in the real game.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct InputState {
     /// Key bits the script wants pressed even when the player is not pressing them.
@@ -1569,9 +1581,10 @@ fn execute(
                 // old "key_bits & mask" model could never take a branch. A headless
                 // host reports 0, exactly like an untouched keyboard.
                 let target = arg(cmd, 0);
-                // A key the script banned with 126 must read as not pressed.
+                // A key the script banned with 126 must read as not pressed; a key
+                // it asked for with 125 is handed to the host, which owns the keyboard.
                 let mask = arg(cmd, 1) as u32 & !input.ban_keys;
-                store_num(inst, vars, target, host.key_code(mask));
+                store_num(inst, vars, target, host.key_code_auto(mask, input.auto_keys));
                 inst.pc += 1;
                 None
             }
@@ -2383,6 +2396,8 @@ mod tests {
         save_answer: Option<i32>,
         // Every 290 effect the interpreter decoded: (type, duration, evaluated args).
         effects: Vec<(i32, i32, Vec<i32>)>,
+        // Every 123 poll the host answered: (mask, auto-input bits).
+        key_polls: Vec<(u32, u32)>,
     }
 
     impl Host for Recorder {
@@ -2435,9 +2450,34 @@ mod tests {
         fn effect(&mut self, kind: i32, duration: i32, args: &[i32]) {
             self.effects.push((kind, duration, args.to_vec()));
         }
+        fn key_code_auto(&mut self, mask: u32, auto: u32) -> i32 {
+            self.key_polls.push((mask, auto));
+            0
+        }
         fn close_message(&mut self) {
             self.closed += 1;
         }
+    }
+
+    #[test]
+    fn auto_input_reaches_the_host_with_the_poll_mask() {
+        // 125 remembers the key bits the script wants pressed; the next 123 must
+        // carry them to the host, not just leave them in the interpreter.
+        let ev = event(
+            5,
+            "auto input",
+            vec![
+                cmd(125, &[16], &[]),
+                cmd(123, &[2_000_000, 247], &[]),
+                cmd(125, &[0], &[]),
+                cmd(123, &[2_000_001, 247], &[]),
+            ],
+        );
+        let mut vm = vm_with(vec![ev]);
+        vm.start_event(5).unwrap();
+        let mut host = Recorder::default();
+        vm.step_frame(&mut host);
+        assert_eq!(host.key_polls, vec![(247, 16), (247, 0)]);
     }
 
     #[test]
