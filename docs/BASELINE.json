@@ -857,5 +857,37 @@
   "symptom_fixed": "SampleMapA 事件 0 的继承菜单 102 块 end 提前 150 槽，答完跳进 case 体中间，绕回 213 重置 形成死循环：900 帧烧掉 163,206,432 条指令且全黑",
   "after_fix": "同一命令 51,297 条指令、39 条消息、5 次选择、0 警告、92.9% 非黑",
   "doc": "docs/OPCODE_112.md"
+ },
+ "text_picture_escapes": {
+  "law": "图内文字（150 的 kind 2/4 字符串）里的 f[n] 是字号，不是脸图编号",
+  "f_size_values": {
+   "6": 18,
+   "8": 1,
+   "12": 253,
+   "14": 55,
+   "16": 640,
+   "18": 62,
+   "20": 58,
+   "24": 66,
+   "32": 73,
+   "48": 39,
+   "64": 2
+  },
+  "commands_with_f": 1206,
+  "kind2_with_f": 1147,
+  "kind4_with_f": 59,
+  "why_size_not_face": "本作 SysDB 24 只有 12 行脸图，48/64 无法是脸图编号",
+  "implemented": false,
+  "consequence": "HUD 顶栏 18:30(24px, x=140) 与 周一(18px, x=150) 压叠、所持金 2409(24px, x=1015) 越过 1024 右沿，都可能是忽略了字号",
+  "picture_only_escapes": [
+   "ax",
+   "ay",
+   "udb",
+   "cdb",
+   "space",
+   "<R>",
+   "-"
+  ],
+  "doc": "docs/TEXT_SPEC.md §9"
  }
 }
