@@ -127,9 +127,11 @@ pub fn picture_from_record(record: &SavePart5_1) -> Option<Picture> {
         picture.kind = PictureKind::Text;
         picture.text = decode_picture_text(&record.md1);
     } else {
-        if name.is_empty() {
-            return None;
-        }
+        // A FileString / WindowString picture takes its name from a string variable;
+        // when that variable is empty the record carries an empty name. Keep the
+        // record anyway: it is an invisible slot, but dropping it would change the
+        // live picture count on a save/load round trip. The renderer skips an empty
+        // file, and a window with an empty name falls back to the engine skin.
         picture.kind = if record.var6 == 1 {
             PictureKind::WindowFile
         } else {
@@ -150,7 +152,10 @@ pub fn picture_from_record(record: &SavePart5_1) -> Option<Picture> {
     // [9]/[10] are the horizontal/vertical scale in percent. A Picture has one uniform
     // scale, so the horizontal value wins - the only non-uniform case in this game is the
     // action-bar fill, whose width is the percentage the player must see.
-    picture.scale = if v[9] == 0 { 100 } else { v[9] as i32 };
+    // A zero scale is a real hidden picture (the HUD action-bar fill is stored as
+    // 0 when empty), not a missing field. Retail SaveData01 records picture 6233
+    // with [9] = 62 and [10] = 100; a freshly written save must preserve 0 as 0.
+    picture.scale = v[9] as i32;
     let w = v[2] as i32;
     let h = v[3] as i32;
     if record.var6 == 1 {

@@ -259,3 +259,94 @@ fn the_title_menu_starts_a_new_game() {
     );
     assert_eq!(game.stats.warnings, 0, "the title path produced warnings");
 }
+
+
+/// The M2 everyday chain: start a new game, answer the opening prompts, reach the
+/// story HUD, write a save and load it back into a fresh Game. Everything the
+/// player sees (the picture layer) and the state that changes during play (normal
+/// variables, play time, choice anchor) must survive the round trip.
+#[test]
+fn a_new_game_can_be_saved_and_reloaded_after_the_opening() {
+    let root = data_root();
+    let mut game = match Game::new(&root) {
+        Ok(game) => game,
+        Err(err) => {
+            eprintln!("skipping: {err}");
+            return;
+        }
+    };
+    let template = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("work/retail_backup/Save/System.sav");
+    let Ok(bytes) = std::fs::read(&template) else {
+        eprintln!("skipping: no retail System.sav at {}", template.display());
+        return;
+    };
+    game.base_save = Some(wolf_save::SaveFile::parse(&bytes).expect("template parses"));
+
+    game.auto_advance = true;
+    game.auto_choice = true;
+    game.auto_choice_delay = 1;
+    game.set_choice_cursor(0);
+    if let Err(err) = game.start_map_event_by_name("Map003", 1) {
+        eprintln!("skipping: cannot start new-game processing: {err}");
+        return;
+    }
+    for _ in 0..1200 {
+        let _ = game.frame();
+    }
+    assert!(
+        game.screen.len() > 40,
+        "the new game did not reach the story scene: {} pictures",
+        game.screen.len()
+    );
+    assert_eq!(game.stats.warnings, 0, "the new-game run produced warnings");
+
+    fn visible_pictures(screen: &wolf_game::picture::Screen) -> Vec<(i32, String, i32, i32, u8, i32, (u32, u32), u32)> {
+        screen
+            .iter()
+            .filter(|p| p.x < 1024 && p.y < 576 && p.x + 1 > 0 && p.y + 1 > 0)
+            .filter(|p| !p.file.is_empty() || !p.text.is_empty())
+            .map(|p| {
+                let content = if p.kind.is_text() { format!("text:{}", p.text) } else { p.file.clone() };
+                (p.number, content, p.x, p.y, p.anchor, p.scale, p.split, p.pattern_index)
+            })
+            .collect()
+    }
+    let before_screen = visible_pictures(&game.screen);
+    let before_vars: Vec<i32> = (0..800).map(|index| game.vm.vars.get(index)).collect();
+    let before_playtime = game.playtime_frames();
+    assert!(before_playtime > 0, "play time did not advance");
+
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("target")
+        .join("test-scratch");
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    let path = dir.join("m2-newgame-roundtrip.sav");
+    let written = game.save_to(&path).expect("save the new game");
+    assert!(written > 300_000, "{written} bytes");
+
+    let mut reloaded = Game::new(&root).expect("fresh game");
+    reloaded.load_save(&path).expect("load the new game");
+    let after_screen = visible_pictures(&reloaded.screen);
+    assert_eq!(before_screen, after_screen, "the visible picture layer changed");
+    assert_eq!(reloaded.playtime_frames(), before_playtime, "play time changed");
+    for index in 0..800 {
+        assert_eq!(
+            reloaded.vm.vars.get(index),
+            before_vars[index],
+            "normal variable {index} changed"
+        );
+    }
+    assert_eq!(
+        reloaded.vm.vars.get_sys(3),
+        game.vm.vars.get_sys(3),
+        "Sys3 changed"
+    );
+    assert_eq!(
+        reloaded.vm.vars.get_sys(4),
+        game.vm.vars.get_sys(4),
+        "Sys4 changed"
+    );
+}
