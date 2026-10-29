@@ -281,9 +281,21 @@ ev63 的几何**全部来自数据库**：`250 [18, 97, 0, 69632, self88]`（座
 其中 `destination` 只在读且 argc >= 5 时存在；游戏侧 `combine_cell(op, current, operand)` 是唯一的合成点
 （`a_database_write_operator_is_the_flags_nibble` / `a_script_write_lands_in_the_cell_the_next_read_sees` 两个测试）。
 
-**未实现**：`250` 的 `stringArgs[1]/[3]` 标签解析。`.project` 名字加载已在 wolf-format 落地
-（`Database::type_name/field_name/row_name`，三个文件都精确走到 EOF），但 `crates/wolf-game/src/db.rs`
-还没接上，所以运行时仍按 arg0/arg2 的数值 id 取格。
+**已验证**：`250` 的标签落库。`.project` 名字在 wolf-format 里（`Database::type_name/field_name/row_name`，
+三个文件都精确走到 EOF），`Databases::load` 现在顺带读 `DataBase.project` / `CDataBase.project` /
+`SysDatabase.project`；`resolve_labels(container, db_type, column, type_label, field_label)` 先按类型名定位表、
+再在表内按列名定位列，解析不出来就退回数值对，`Sys` 容器不参与（它没有 `Database` 表）。
+起因是 8 个站点（ev48 pc158、ev85 pc29、ev93 pc38、ev102 pc38、ev109 pc14、ev123 pc15、ev147 pc21、ev185 pc49）
+发 `250 [18, 0, 22, ...]`、标签写 `システム設定 / 装備可能欄数`，而它们真正要的是 `DataBase` 的
+**type 17, col 22 = 5**——编辑器编号把空分隔 type 14 算进去、文件不算，所以数值 id 漂了。
+实测（开口 capture）：`128 db access(es) (15 write, 10 label)`，`(18, 0, 22) ... unanswered` 消失，
+标题帧与零售仍一致（mean abs 0.012 / psnr 67.20 dB）。读路径先试数值对再试标签（99% 的站点数值对就是对的），
+写路径直接用标签，免得在错的 type 里落下一个野格子。
+
+**仍未回答（不是标签问题，是行不存在）**：`CData (0, 100, 0/1/4/21/48/49)` 与 `(0, -1, 33)`。
+`CDataBase` type 0 是 51 列 / 17 行 / `data_id_method 1`（行 id 由运行时自动分配），行 100 是存档里运行期
+建出来的角色行，新开局没有它；行不存在的读该回 0 还是不动目标变量，**原作未验证**，所以这里是留空并计数，
+不做猜测。诊断行现在会把标签一起打出来（`labels "..."/"..."`），下一轮定位不必再翻字节码。
 
 ---
 
@@ -338,7 +350,7 @@ ev63 的几何**全部来自数据库**：`250 [18, 97, 0, 69632, self88]`（座
 | `125 AutoInput` | 只保存掩码，不真的注入按键（需要宿主） |
 | `126 BanInput` | 已在 `123` 的掩码里过滤（本作 1,115 处 123 指令按位生效） |
 | 常时协程 | 已启动 12 个（§4.2）；343 / 43 仍未启动 |
-| `250` 的标签解析 | `stringArgs[1]/[3]` 尚未参与取格，仍按 arg0/arg2 数值 id（§4.4） |
+| `250` 的标签解析 | **已接上**（`resolve_labels`，开口实测 10 次命中，§4.4）；剩的是**行不存在**的读（CData 行 100 / 行 -1），原作语义未验证 |
 | `290` 效果**全部 11 个 type** | 语义已在 docs/OPCODE_290.md 逐类型定死（枚举从 Editor.exe 读出，不再是推断），但 renderer 仍只实现 `1/5` 的色调；`3` シェイク(250 条)、`2` 描画座標シフト(146 条)、`4` ズーム(49)、`7` 自動拡大縮小(25)、`0` フラッシュ(9)、`8/9/10` パターン切替(176) 仍是 no-op |
 | `290` 的图片号是**区间** | `args[2..3]` 是闭区间 [lo, hi]（官方「□～□ の欄に…」）；若按单张实现，type 4 的 7 对按钮、type 5 的整幕压暗、CE85 的「全カーソル」都会只作用一半（docs/OPCODE_290.md §0.4） |
 | 字符串实参 | `210/300` 的字符串参数尚未投递给被调事件 |

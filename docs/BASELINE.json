@@ -708,11 +708,10 @@
    "18/0/24": "message window skin name"
   },
   "still_unanswered": [
-   "(0, -1, 33) flags 0x11000",
-   "(18, 0, 22) flags 0x51200",
-   "(20, 69, 0) flags 0x10000"
+   "(0, -1, 33) flags 0x11000 - row -1 sentinel",
+   "(0, 100, 0/1/4/21/48/49) flags 0x51000 - CDataBase type 0 has 17 rows and data_id_method 1, row 100 is a runtime-created character row"
   ],
-  "note": "(18, 0, 22) is asked by ev48 pc158 and 7 more sites, not by ev63; ev63 asks (18, 0, 24) which the engine layer answers",
+  "note": "(18, 0, 22) was asked by ev48 pc158 and 7 more sites and is now answered through its editor labels; ev63 asks (18, 0, 24) which the engine layer answers",
   "engine_defaults": "apply_engine_defaults writes the coordinate scale into CData (18, 97) / (18, 98) and the message-window skin name into Data (18, 0, 24)",
   "write_ops": {
    "0": "assign",
@@ -724,7 +723,16 @@
    "6": "max",
    "7": "min"
   },
-  "write_law": "flags & 0x1000 == 0 means WRITE; the operand comes from int arg 4 (argc >= 5) or from the string argument (argc == 4); a write never stores anything back into the source variable"
+  "write_law": "flags & 0x1000 == 0 means WRITE; the operand comes from int arg 4 (argc >= 5) or from the string argument (argc == 4); a write never stores anything back into the source variable",
+  "label_route": {
+   "wired": true,
+   "api": "wolf_game::db::Databases::resolve_labels(container, db_type, column, type_label, field_label)",
+   "companions": "DataBase.project 174721 B / CDataBase.project 170977 B / SysDatabase.project 35972 B, each walked exactly to EOF",
+   "law": "type name first, then field name inside that type; a label that does not resolve keeps the numeric pair; reads try the numeric pair first and the labels only on a miss, writes resolve labels first so a stray cell is never created",
+   "cause": "the editor numbering counts the empty separator type 14, the file does not, so a script type id drifts from the table index",
+   "site": "250 [18, 0, 22] labelled システム設定 / 装備可能欄数 means DataBase type 17 column 22 (value 5); 8 sites, ev48 pc158, ev85 pc29, ev93 pc38, ev102 pc38, ev109 pc14, ev123 pc15, ev147 pc21, ev185 pc49",
+   "measured": "opening slice 600 frames: 128 db access(es), 15 write, 10 label; the (18, 0, 22) unanswered note is gone"
+  }
  },
  "effect_290": {
   "doc": "docs/OPCODE_290.md v2",

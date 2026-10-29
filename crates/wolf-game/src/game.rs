@@ -120,6 +120,9 @@ pub struct GameStats {
     pub databases: u64,
     /// Of those, the ones that wrote a cell (`250` with bit 12 clear).
     pub database_writes: u64,
+    /// Of those, the ones whose editor labels moved the script's numeric type id onto a
+    /// different table row (see [`crate::db::Databases::resolve_labels`]).
+    pub database_labels: u64,
     /// Messages shown.
     pub messages: u64,
     /// Choice prompts shown.
@@ -645,6 +648,52 @@ fn combine_cell(op: u8, current: i32, operand: i32) -> i32 {
     }
 }
 
+/// One `250` cell read: numeric columns answer as numbers, string columns as text.
+///
+/// `None` means the cell does not exist in the addressed table, which is the signal
+/// that the numeric type id the script carried drifted and the labels must decide.
+fn lookup_cell(
+    databases: &crate::db::Databases,
+    container: crate::db::Container,
+    db_type: i32,
+    row: i32,
+    column: i32,
+) -> Option<DbValue> {
+    databases
+        .num(container, db_type, row, column)
+        .map(DbValue::Num)
+        .or_else(|| {
+            databases
+                .text(container, db_type, row, column)
+                .map(|text| DbValue::Str(text.to_owned()))
+        })
+}
+
+/// Resolves a `250` cell through its editor labels and counts the saves.
+///
+/// The eight `システム設定` / `装備可能欄数` reads pass type 18 column 22 and mean
+/// `DataBase` type 17 column 22 (value 5); without this fallback they answer nothing and
+/// the scripts behave as if the player had zero equipment slots.
+fn resolve_cell(
+    databases: &crate::db::Databases,
+    stats: &mut GameStats,
+    op: &DbOp,
+    container: crate::db::Container,
+) -> (i32, i32) {
+    let numeric = (op.db_type, op.item_id);
+    let resolved = databases.resolve_labels(
+        container,
+        op.db_type,
+        op.item_id,
+        op.type_label.as_deref(),
+        op.field_label.as_deref(),
+    );
+    if resolved != numeric {
+        stats.database_labels += 1;
+    }
+    resolved
+}
+
 /// Per-frame borrow shim: the VM lives inside Game, so the host cannot borrow Game.
 struct GameHost<'a> {
     screen: &'a mut Screen,
@@ -787,10 +836,13 @@ impl Host for GameHost<'_> {
         // 2,195 labelled sites with no exceptions (docs/OPCODE_250.md section 3.2). The
         // interpreter decodes it, so no flags work is left here.
         let container = crate::db::Container::from(op.container);
-        let (db_type, row, column) = (op.db_type, op.data_id, op.item_id);
+        let row = op.data_id;
         // Bit 12 clear means the cell is written, and the operator is (flags >> 4) & 7.
         // A write never hands a value back: the source of truth is the table.
         if op.direction == wolf_vm::DbDirection::Write {
+            // A write must land on the labelled cell straight away: writing the numeric
+            // pair would create a stray row in the wrong type instead of failing loudly.
+            let (db_type, column) = resolve_cell(self.databases, self.stats, op, container);
             match op.source.as_ref() {
                 Some(DbValue::Num(operand)) => {
                     let current = self
@@ -812,15 +864,26 @@ impl Host for GameHost<'_> {
             }
             return None;
         }
-        if let Some(value) = self.databases.num(container, db_type, row, column) {
-            return Some(DbValue::Num(value));
+        // The numeric pair is right for 99% of the sites, so it is tried first; the labels
+        // only get a turn when it answers nothing, because the editor numbering drifts from
+        // the file's (the separator type 14 counts in one and not the other).
+        if let Some(value) = lookup_cell(self.databases, container, op.db_type, row, op.item_id) {
+            return Some(value);
         }
-        if let Some(text) = self.databases.text(container, db_type, row, column) {
-            return Some(DbValue::Str(text.to_owned()));
+        let (db_type, column) = resolve_cell(self.databases, self.stats, op, container);
+        if (db_type, column) != (op.db_type, op.item_id) {
+            if let Some(value) = lookup_cell(self.databases, container, db_type, row, column) {
+                return Some(value);
+            }
         }
+        // The labels ride along, because they are the only clue that a drifted type id is
+        // the reason the read missed (an unresolvable label means the .project walk lost
+        // the record, not that the script is wrong).
         self.note(format!(
-            "250 DatabaseAccess: {container:?} ({db_type}, {row}, {column}) flags {:#x} unanswered",
-            op.flags
+            "250 DatabaseAccess: {container:?} ({db_type}, {row}, {column}) flags {:#x} labels {:?}/{:?} unanswered",
+            op.flags,
+            op.type_label.as_deref().unwrap_or(""),
+            op.field_label.as_deref().unwrap_or("")
         ));
         None
     }

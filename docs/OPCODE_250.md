@@ -883,4 +883,32 @@ WolfTL 是**纯数据层**（只读写 .dat，没有运行时语义），所以�
 
 ---
 
+## 附录 C · 落地记录：标签落库（Lead 追加，已验证）
+
+§6 给出的"标签解析"在 `crates/wolf-game/src/db.rs` 落地为：
+
+```rust
+pub fn resolve_labels(&self, container: Container, db_type: i32, column: i32,
+                      type_label: Option<&str>, field_label: Option<&str>) -> (i32, i32)
+```
+
+* `Databases::load` 顺带读 `DataBase.project` / `CDataBase.project` / `SysDatabase.project`（走法精确到 EOF：174721 / 170977 / 35972 B）。
+* 解析顺序：先按**类型名**在表里定位（`Database::type_name`），再在该类型里按**列名**定位（`Database::field_name`）；
+  任一步解析不出来就把那一半退回数值 id。`Sys` 容器不参与（它没有 `Database` 表）。
+* 读路径先试数值对（99% 的站点数值对就是对的），只在**未命中**时才试标签；写路径直接用标签解析后的格子，
+  避免在错的 type 里落下一个野格子。
+* 计数：`GameStats::database_labels`（开口 600 帧实测 10 次）。
+
+**为什么必须靠标签**：8 个站点发 `250 [18, 0, 22, ...]`、标签 `システム設定` / `装備可能欄数`，
+而实际要取的是 `DataBase` **type 17, col 22 = 5**。编辑器编号把空分隔 type 14 算进去、文件不算，
+所以 arg0 会整体漂移；`dbdump --names` 可以直接看到 `type 18` 在文件里是空表（0 列）。
+这 8 处是 ev48 pc158、ev85 pc29、ev93 pc38、ev102 pc38、ev109 pc14、ev123 pc15、ev147 pc21、ev185 pc49。
+
+**仍未回答的是行、不是标签**：`CData (0, 100, 0/1/4/21/48/49)` 与 `(0, -1, 33)`。
+`CDataBase` type 0 是 51 列 / 17 行 / `data_id_method 1`（行 id 由运行时自动分配），行 100 属于存档里
+运行期建出来的角色行；新开局读它，原作该回 0 还是不动目标变量，**未验证**，所以工程侧留空并计数，不做猜测。
+诊断行现在会把 `labels "类型名"/"列名"` 一起打出来。
+
+---
+
 *本文所有计数均可用附录 A 的脚本复现。若有冲突，以脚本输出为准。*

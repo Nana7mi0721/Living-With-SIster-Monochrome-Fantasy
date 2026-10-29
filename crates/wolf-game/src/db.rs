@@ -140,6 +140,18 @@ impl Databases {
             sys: read("SysDatabase.dat").and_then(|bytes| SysDatabase::parse(&bytes).ok()),
             ..Databases::default()
         };
+        // The .project companions hold the editor labels, and `250` puts those labels in
+        // its string arguments. They are what `resolve_labels` needs to map a script's
+        // type id onto the right table row; without them only the numeric id is usable.
+        if let (Some(table), Some(bytes)) = (databases.data.as_mut(), read("DataBase.project")) {
+            table.apply_project_names(&bytes);
+        }
+        if let (Some(table), Some(bytes)) = (databases.cdata.as_mut(), read("CDataBase.project")) {
+            table.apply_project_names(&bytes);
+        }
+        if let (Some(table), Some(bytes)) = (databases.sys.as_mut(), read("SysDatabase.project")) {
+            table.apply_project_names(&bytes);
+        }
         databases.apply_engine_defaults(screen);
         databases
     }
@@ -256,6 +268,45 @@ impl Databases {
     ) {
         self.texts
             .insert((container, db_type, row, column), value.to_owned());
+    }
+
+    /// Resolves the editor labels a `250` command carries onto real table indices.
+    ///
+    /// The runtime type id is **not** always the table index. The eight `システム設定` /
+    /// `装備可能欄数` reads in this game pass type 18 / column 22 (ev48 pc158, ev85 pc29,
+    /// ev93 pc38, ev102 pc38, ev109 pc14, ev123 pc15, ev147 pc21, ev185 pc49) while the
+    /// cell the author means is `DataBase` type 17 column 22, value 5: the editor counts
+    /// the empty separator type 14 in its own numbering, so the ids drift. When a table
+    /// has labels the names are therefore authoritative; a table without a `.project`
+    /// (or a site whose labels do not resolve) keeps the numeric pair unchanged.
+    pub fn resolve_labels(
+        &self,
+        container: Container,
+        db_type: i32,
+        column: i32,
+        type_label: Option<&str>,
+        field_label: Option<&str>,
+    ) -> (i32, i32) {
+        let Some(table) = self.table(container) else {
+            return (db_type, column);
+        };
+        let named_type = type_label
+            .filter(|label| !label.is_empty())
+            .and_then(|label| {
+                (0..table.types.len()).find(|index| table.type_name(*index) == Some(label))
+            })
+            .map(|index| index as i32)
+            .unwrap_or(db_type);
+        let named_column = field_label
+            .filter(|label| !label.is_empty())
+            .and_then(|label| {
+                let index = usize::try_from(named_type).ok()?;
+                let fields = table.types.get(index)?.fields.len();
+                (0..fields).find(|column| table.field_name(index, *column) == Some(label))
+            })
+            .map(|index| index as i32)
+            .unwrap_or(column);
+        (named_type, named_column)
     }
 
     /// The .dat table behind one container; SysDatabase has its own type.
@@ -424,5 +475,44 @@ mod tests {
         );
         assert_eq!(Container::from(wolf_vm::DbContainer::Sys), Container::Sys);
         assert_eq!(Container::from(wolf_vm::DbContainer::Data), Container::Data);
+    }
+
+    #[test]
+    fn the_equipment_slot_label_resolves_onto_the_admin_type() {
+        // This is the site the label route exists for: eight reads pass type 18 / column
+        // 22 and mean DataBase type 17 column 22, because the editor numbering counts the
+        // separator type 14 differently from the file. Without labels the read returns
+        // nothing and the scripts believe there are zero equipment slots.
+        let Some(root) = have_data() else { return };
+        let databases = Databases::load(&root.join("BasicData"), DEFAULT_SCREEN);
+        let (ty, column) = databases.resolve_labels(
+            Container::Data,
+            18,
+            22,
+            Some("システム設定"),
+            Some("装備可能欄数"),
+        );
+        assert_eq!((ty, column), (17, 22), "labels must land on DataBase type 17");
+        assert_eq!(databases.num(Container::Data, ty, 0, column), Some(5));
+        // A raw read of the numeric pair the script carries answers nothing, which is why
+        // the labels are not optional here.
+        assert_eq!(databases.num(Container::Data, 18, 0, 22), None);
+    }
+
+    #[test]
+    fn an_unresolvable_label_keeps_the_numeric_pair() {
+        let Some(root) = have_data() else { return };
+        let databases = Databases::load(&root.join("BasicData"), DEFAULT_SCREEN);
+        assert_eq!(
+            databases.resolve_labels(Container::Data, 16, 2, None, None),
+            (16, 2)
+        );
+        assert_eq!(
+            databases.resolve_labels(Container::Data, 16, 2, Some("存在しない型"), Some("存在しない列")),
+            (16, 2)
+        );
+        // Sys is answered by SysDatabase's own name table, but resolve_labels is a
+        // .dat-container operation; it must leave a Sys call alone rather than guess.
+        assert_eq!(databases.resolve_labels(Container::Sys, 6, 0, None, None), (6, 0));
     }
 }

@@ -1601,12 +1601,13 @@ fn run_capture(
 
     let warnings = game.stats.warnings;
     println!(
-        "  stats     : {} instruction(s), {} picture op(s), {} sound(s), {} db access(es) ({} write), {} message(s), {} choice(s), {warnings} warning(s)",
+        "  stats     : {} instruction(s), {} picture op(s), {} sound(s), {} db access(es) ({} write, {} label), {} message(s), {} choice(s), {warnings} warning(s)",
         game.stats.instructions,
         game.stats.pictures,
         game.stats.sounds,
         game.stats.databases,
         game.stats.database_writes,
+        game.stats.database_labels,
         game.stats.messages,
         game.stats.choices
     );
