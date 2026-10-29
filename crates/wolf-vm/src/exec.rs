@@ -128,6 +128,14 @@ pub struct Instance {
     pub loops: Vec<LoopCtx>,
     /// Where to write this coroutine's return value when it ends.
     pub return_to: Option<i32>,
+    /// True when the owning event, not the coroutine, owns [SelfVars].
+    ///
+    /// A map page keeps its self variables in the map event, so they survive a
+    /// page switch and a parallel restart. Such an instance is left in place by
+    /// [Vm::reap_finished] after its program ends; the map runtime reads the
+    /// bank and retires the instance itself. Common events keep the default
+    /// false and are reaped exactly as before.
+    pub retain_after_finish: bool,
 }
 
 impl Instance {
@@ -145,6 +153,7 @@ impl Instance {
             wait: WaitState::None,
             loops: Vec::new(),
             return_to: None,
+            retain_after_finish: false,
         }
     }
 
@@ -816,12 +825,41 @@ impl Vm {
     /// hands them over here. Everything downstream (blocks, waits, return
     /// values) behaves exactly as for a common event.
     pub fn start_program(&mut self, program: Arc<Program>) -> Option<InstanceId> {
+        self.start_program_inner(program, None)
+    }
+
+    /// Start a map-event page with the self-variable bank its event carries.
+    ///
+    /// WOLF stores an event's self variables in the event, not in the coroutine
+    /// that happens to be running its current page: they survive a page switch
+    /// and a parallel page restarting at the end of its stream. The caller owns
+    /// the bank and hands in the latest copy at every start; this instance is
+    /// marked [Instance::retain_after_finish], so when the program ends the
+    /// runtime can still read the final bank out before retiring it.
+    pub fn start_program_with_self(
+        &mut self,
+        program: Arc<Program>,
+        self_vars: SelfVars,
+    ) -> Option<InstanceId> {
+        self.start_program_inner(program, Some(self_vars))
+    }
+
+    fn start_program_inner(
+        &mut self,
+        program: Arc<Program>,
+        self_vars: Option<SelfVars>,
+    ) -> Option<InstanceId> {
         if self.instances.len() >= MAX_INSTANCES {
             return None;
         }
         let id = self.next_id;
         self.next_id += 1;
-        self.instances.push(Instance::new(id, None, program));
+        let mut instance = Instance::new(id, None, program);
+        if let Some(self_vars) = self_vars {
+            instance.self_vars = self_vars;
+            instance.retain_after_finish = true;
+        }
+        self.instances.push(instance);
         Some(id)
     }
 
@@ -1112,7 +1150,11 @@ impl Vm {
         let finished: Vec<InstanceId> = self
             .instances
             .iter()
-            .filter(|i| i.pc >= i.program.len() && !matches!(i.wait, WaitState::Child(_)))
+            .filter(|i| {
+                i.pc >= i.program.len()
+                    && !matches!(i.wait, WaitState::Child(_))
+                    && !i.retain_after_finish
+            })
             .map(|i| i.id)
             .collect();
         if finished.is_empty() {

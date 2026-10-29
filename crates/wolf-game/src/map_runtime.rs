@@ -18,10 +18,11 @@
 //!   interpreter drops the instance and the page is started again next frame,
 //!   which is how the click-detection events in SampleMapA stay alive.
 //!
-//! Known gap (M3): WOLF keeps an event's self variables across page changes,
-//! while this runtime starts every page with a fresh self bank. Only one shipped
-//! page condition reads a self variable (SampleMapA event 0 page 0, self[0] must
-//! equal 0) and the default 0 makes it hold, so the gap is invisible today.
+//! Self variables belong to the EVENT, not to the coroutine running one of its
+//! pages: they survive a page switch, and a parallel page that ends and starts
+//! again resumes with the bank it left behind. Each [EventState] therefore owns
+//! one [SelfVars], copied into the fresh instance at every start and read back
+//! when an instance finishes or a page changes.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -111,6 +112,8 @@ struct EventState {
     starts: u64,
     /// Starts of the CURRENT page; an autorun page runs once per activation.
     starts_on_page: u64,
+    /// The event-owned self-variable bank, WOLF style. None until a page runs.
+    self_vars: Option<SelfVars>,
 }
 
 /// The public view of one running map event.
@@ -196,6 +199,7 @@ impl MapRuntime {
                 instance: None,
                 starts: 0,
                 starts_on_page: 0,
+                self_vars: None,
             });
         }
         Self {
@@ -277,8 +281,8 @@ impl MapRuntime {
     /// The page each tracked event would run with the current variables.
     ///
     /// Read-only, so a test or a trace can ask the question without starting
-    /// anything. Self variables are taken from the running instance, which is
-    /// the closest thing to WOLF's persistent per-event self bank we have.
+    /// anything. Self variables come from the running instance when there is
+    /// one, otherwise from the event's stored bank.
     #[must_use]
     pub fn active_pages(&self, vm: &Vm) -> Vec<(u32, Option<usize>)> {
         self.events
@@ -295,6 +299,23 @@ impl MapRuntime {
     /// VM, every frame, because a page can switch itself by writing a variable
     /// that its own page selection then reads.
     pub fn start_pending(&mut self, vm: &mut Vm) -> usize {
+        // A retained instance whose program has ended still owns the bank the
+        // event must keep; take it and retire the instance before selection.
+        for state in &mut self.events {
+            let Some(id) = state.instance else {
+                continue;
+            };
+            let Some(instance) = vm.instance(id) else {
+                state.instance = None;
+                continue;
+            };
+            if instance.pc >= instance.program.len() {
+                state.self_vars = Some(instance.self_vars.clone());
+                vm.stop_instance(id);
+                state.instance = None;
+            }
+        }
+
         // Phase 1 reads the VM (variables and self banks); phase 2 mutates it.
         // Splitting them keeps the borrow checker happy without cloning the VM.
         let mut wanted: Vec<Option<usize>> = Vec::with_capacity(self.events.len());
@@ -306,6 +327,9 @@ impl MapRuntime {
         for (state, want) in self.events.iter_mut().zip(wanted) {
             if state.active != want {
                 if let Some(id) = state.instance.take() {
+                    if let Some(instance) = vm.instance(id) {
+                        state.self_vars = Some(instance.self_vars.clone());
+                    }
                     vm.stop_instance(id);
                 }
                 if state.active.is_some() {
@@ -339,7 +363,8 @@ impl MapRuntime {
             if state.starts_on_page > 0 && !trigger.is_looping() {
                 continue;
             }
-            if let Some(id) = vm.start_program(program) {
+            let self_vars = state.self_vars.clone().unwrap_or_default();
+            if let Some(id) = vm.start_program_with_self(program, self_vars) {
                 state.instance = Some(id);
                 state.starts += 1;
                 state.starts_on_page += 1;
@@ -353,13 +378,14 @@ impl MapRuntime {
 
 /// The page WOLF would display for this event right now.
 fn select_page(state: &EventState, vm: &Vm) -> Option<usize> {
-    let self_vars = state
+    let live = state
         .instance
         .and_then(|id| vm.instance(id))
-        .map(|instance| instance.self_vars.clone());
+        .map(|instance| &instance.self_vars);
+    let self_vars = live.or(state.self_vars.as_ref());
     (0..state.pages.len())
         .rev()
-        .find(|index| conditions_met(&state.pages[*index].conditions, self_vars.as_ref(), &vm.vars))
+        .find(|index| conditions_met(&state.pages[*index].conditions, self_vars, &vm.vars))
 }
 
 /// True when every enabled condition holds.
@@ -396,7 +422,7 @@ fn condition_value(magic: u32, self_vars: Option<&SelfVars>, vars: &Variables) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wolf_format::command::Slot;
+    use wolf_format::command::{Command, Slot, Tail};
     use wolf_format::mps::{MapEvent, MapEventPage};
     use wolf_vm::{Host, ProgramSet};
 
@@ -430,6 +456,21 @@ mod tests {
             collision_height: 0,
             footer: 0x7A,
         }
+    }
+
+    fn command(opcode: u32, params: &[i32]) -> Slot {
+        let mut bytes = Vec::with_capacity(params.len() * 4);
+        for param in params {
+            bytes.extend_from_slice(&param.to_le_bytes());
+        }
+        Slot::Command(Box::new(Command {
+            param_count: params.len() as u8 + 1,
+            opcode,
+            params: bytes,
+            branch_depth: 0,
+            strings: Vec::new(),
+            tail: Tail::None,
+        }))
     }
 
     fn map_with(events: Vec<MapEvent>) -> Map {
@@ -610,6 +651,73 @@ mod tests {
         );
         let second = runtime.slots()[0].instance().expect("page 1 started");
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn self_variables_survive_a_page_switch() {
+        // Page 0 writes self[0] = 1; page 1 only exists while that value is 1.
+        let map = map_with(vec![MapEvent {
+            id: 7,
+            name: "bank".to_owned(),
+            x: 0,
+            y: 0,
+            pages: vec![
+                page(1, vec![command(121, &[1_100_000, 1, 0, 0])]),
+                page_with(
+                    2,
+                    [0x21, 0, 0, 0],
+                    [1_100_000, 0, 0, 0],
+                    [1, 0, 0, 0],
+                    vec![Slot::Blank],
+                ),
+            ],
+        }]);
+        let mut runtime = MapRuntime::collect(&map);
+        let mut vm = Vm::new(ProgramSet::default());
+        let mut host = Quiet;
+
+        runtime.start_pending(&mut vm);
+        assert_eq!(runtime.slots()[0].page, 0, "page 0 starts with the bank at 0");
+        let first = runtime.slots()[0].instance().expect("page 0 started");
+        let _ = vm.step_frame(&mut host);
+        assert!(vm.instance(first).is_some(), "a finished page is retained");
+        assert_eq!(vm.instance(first).unwrap().self_vars.get(100), 1);
+
+        runtime.start_pending(&mut vm);
+        assert_eq!(
+            runtime.slots()[0].page,
+            1,
+            "the page condition must read the bank the finished page left behind"
+        );
+    }
+
+    #[test]
+    fn a_parallel_page_keeps_its_self_bank_across_restarts() {
+        let map = map_with(vec![MapEvent {
+            id: 8,
+            name: "counter".to_owned(),
+            x: 0,
+            y: 0,
+            pages: vec![page(2, vec![command(121, &[1_100_000, 1, 0, 0x100])])],
+        }]);
+        let mut runtime = MapRuntime::collect(&map);
+        let mut vm = Vm::new(ProgramSet::default());
+        let mut host = Quiet;
+
+        runtime.start_pending(&mut vm);
+        let first = runtime.slots()[0].instance().expect("page started");
+        let _ = vm.step_frame(&mut host);
+        assert_eq!(vm.instance(first).unwrap().self_vars.get(100), 1);
+
+        runtime.start_pending(&mut vm);
+        let second = runtime.slots()[0].instance().expect("page restarted");
+        assert_ne!(first, second);
+        let _ = vm.step_frame(&mut host);
+        assert_eq!(
+            vm.instance(second).unwrap().self_vars.get(100),
+            2,
+            "a restarted parallel page must resume with the event's bank"
+        );
     }
 }
 
