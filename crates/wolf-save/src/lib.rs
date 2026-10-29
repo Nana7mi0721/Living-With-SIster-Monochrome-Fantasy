@@ -611,6 +611,219 @@ impl SaveFile {
     }
 }
 
+/// Synthetic chunk ids for the segments that have their own writer.
+pub const PART1_ID: u32 = 0;
+/// Synthetic chunk id of [SavePart4].
+pub const PART4_ID: u32 = 3;
+/// Synthetic chunk id of [SavePart5].
+pub const PART5_ID: u32 = 4;
+/// Synthetic chunk id of [VariableDatabase] (no writer yet; copied verbatim).
+pub const VARDB_ID: u32 = 5;
+/// Synthetic chunk id of [SavePart7] (no writer yet; copied verbatim).
+pub const PART7_ID: u32 = 6;
+
+// ---- little-endian writers shared by the segment encoders ---------------
+
+pub(crate) fn push_u8(out: &mut Vec<u8>, value: u8) {
+    out.push(value);
+}
+
+pub(crate) fn push_u16(out: &mut Vec<u8>, value: u16) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+pub(crate) fn push_u32(out: &mut Vec<u8>, value: u32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+pub(crate) fn push_u64(out: &mut Vec<u8>, value: u64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+/// Append a count the way the C++ writes one: a little-endian u32.
+pub(crate) fn push_count(out: &mut Vec<u8>, count: usize) -> Result<()> {
+    match u32::try_from(count) {
+        Ok(value) => {
+            push_u32(out, value);
+            Ok(())
+        }
+        Err(_) => Err(Error::field(
+            "count",
+            out.len(),
+            format!("{count} item(s) do not fit in a u32 count"),
+        )),
+    }
+}
+
+/// Append one MemData body: a byte length of size bytes, then the bytes.
+pub(crate) fn push_mem_data(out: &mut Vec<u8>, body: &[u8], size: u8) -> Result<()> {
+    let too_big = || {
+        Error::field(
+            "MemData length",
+            out.len(),
+            format!("{} byte(s) do not fit in a {size}-byte length", body.len()),
+        )
+    };
+    match size {
+        1 => match u8::try_from(body.len()) {
+            Ok(len) => out.push(len),
+            Err(_) => return Err(too_big()),
+        },
+        2 => match u16::try_from(body.len()) {
+            Ok(len) => push_u16(out, len),
+            Err(_) => return Err(too_big()),
+        },
+        4 => match u32::try_from(body.len()) {
+            Ok(len) => push_u32(out, len),
+            Err(_) => return Err(too_big()),
+        },
+        other => {
+            return Err(Error::field(
+                "MemData element size",
+                out.len(),
+                format!("{other} is not 1, 2 or 4"),
+            ))
+        }
+    }
+    out.extend_from_slice(body);
+    Ok(())
+}
+
+impl SaveFile {
+    /// Rebuild the decrypted file from the **typed views**, not from the raw
+    /// bytes captured at parse time.
+    ///
+    /// This is the writer-side counterpart of [SaveFile::serialize], which copies
+    /// each segment's original bytes verbatim:
+    ///
+    /// * SavePart1 -> [SavePart1::to_bytes]
+    /// * SavePart2 -> [SavePart2::to_bytes]
+    /// * SavePart3 -> [SavePart3::to_bytes_with_version]
+    /// * SavePart4 -> [SavePart4::to_bytes]
+    /// * SavePart5 -> [SavePart5::to_bytes]
+    /// * VariableDatabase -> copied verbatim (no writer yet)
+    /// * SavePart7 -> copied verbatim (no writer yet)
+    ///
+    /// So an edit to any typed part1/2/3/4/5 field reaches the output, while
+    /// vardb and part7 still travel as their parsed bytes.
+    ///
+    /// The header is written from [SaveFile::header] with the checksum byte at
+    /// offset 2 recomputed over the new body; the name is re-encoded as a
+    /// length-prefixed MemData (byte length including the NUL) and the version
+    /// as a little-endian u16. The result is **not** encrypted -- feed it to
+    /// [SaveFile::to_bytes_rebuilt] to get something the game can load.
+    pub fn rebuild(&self) -> Result<Vec<u8>> {
+        let mut name_bytes = self.name.as_bytes().to_vec();
+        name_bytes.push(0);
+        let name_len = match u16::try_from(name_bytes.len()) {
+            Ok(len) => len,
+            Err(_) => {
+                return Err(Error::field(
+                    "save name",
+                    0,
+                    format!(
+                        "{} byte(s) including the terminator; a MemData<WORD> holds at most 65535",
+                        name_bytes.len()
+                    ),
+                ));
+            }
+        };
+
+        let part1 = self.part1.to_bytes(self.file_version)?;
+        let part2 = self.part2.to_bytes(self.file_version)?;
+        let part3 = self.part3.to_bytes_with_version(self.file_version)?;
+        let part4 = self.part4.to_bytes(self.file_version)?;
+        let part5 = self.part5.to_bytes(self.file_version)?;
+        let vardb = match self.chunk_bytes(VARDB_ID) {
+            Some(bytes) => bytes.to_vec(),
+            None => {
+                return Err(Error::field(
+                    "VariableDatabase",
+                    0,
+                    "this file has no sixth segment".to_string(),
+                ))
+            }
+        };
+        let part7 = match self.chunk_bytes(PART7_ID) {
+            Some(bytes) => bytes.to_vec(),
+            None => {
+                return Err(Error::field(
+                    "SavePart7",
+                    0,
+                    "this file has no seventh segment".to_string(),
+                ))
+            }
+        };
+
+        let body_len = part1.len()
+            + part2.len()
+            + part3.len()
+            + part4.len()
+            + part5.len()
+            + vardb.len()
+            + part7.len();
+        let mut out = Vec::with_capacity(CRYPT_START + 1 + 2 + name_bytes.len() + 2 + body_len + 1);
+        out.extend_from_slice(&self.header.raw);
+        out.push(self.header.start_byte);
+        out.extend_from_slice(&name_len.to_le_bytes());
+        out.extend_from_slice(&name_bytes);
+        out.extend_from_slice(&self.file_version.to_le_bytes());
+        out.extend_from_slice(&part1);
+        out.extend_from_slice(&part2);
+        out.extend_from_slice(&part3);
+        out.extend_from_slice(&part4);
+        out.extend_from_slice(&part5);
+        out.extend_from_slice(&vardb);
+        out.extend_from_slice(&part7);
+        out.push(self.end_byte);
+
+        let checksum = out[CRYPT_START..]
+            .iter()
+            .fold(0u8, |acc, byte| acc.wrapping_add(*byte));
+        out[2] = checksum;
+        Ok(out)
+    }
+
+    /// Encrypt [SaveFile::rebuild]: the exact bytes to write to disk.
+    pub fn to_bytes_rebuilt(&self) -> Result<Vec<u8>> {
+        encrypt(&self.rebuild()?)
+    }
+
+    /// Replace the map snapshot (SavePart1) and refresh the typed view.
+    pub fn set_part1(&mut self, part: &SavePart1) -> Result<()> {
+        let bytes = part.to_bytes(self.file_version)?;
+        self.replace_part(PART1_ID, &bytes)?;
+        self.part1 = part.clone();
+        Ok(())
+    }
+
+    /// Replace the global settings (SavePart2) and refresh the typed view.
+    ///
+    /// This also refreshes the play-time view, which lives in this segment.
+    pub fn set_part2(&mut self, part: &SavePart2) -> Result<()> {
+        let bytes = part.to_bytes(self.file_version)?;
+        self.replace_part(PART2_ID, &bytes)?;
+        self.part2 = part.clone();
+        Ok(())
+    }
+
+    /// Replace the object-table continuation (SavePart4) and refresh the view.
+    pub fn set_part4(&mut self, part: &SavePart4) -> Result<()> {
+        let bytes = part.to_bytes(self.file_version)?;
+        self.replace_part(PART4_ID, &bytes)?;
+        self.part4 = part.clone();
+        Ok(())
+    }
+
+    /// Replace the per-event runtime state (SavePart5) and refresh the view.
+    pub fn set_part5(&mut self, part: &SavePart5) -> Result<()> {
+        let bytes = part.to_bytes(self.file_version)?;
+        self.replace_part(PART5_ID, &bytes)?;
+        self.part5 = part.clone();
+        Ok(())
+    }
+}
+
 /// Read one `MemData<T>` body: a length whose width is `size`, then the bytes.
 ///
 /// `MemData` stores a **byte** count, not an element count, and a count of zero

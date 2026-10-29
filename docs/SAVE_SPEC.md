@@ -724,6 +724,42 @@ playtime 与セルフ值不变、checksum_ok() 为真；改セルフ数値与セ
 
 ---
 
+### 11.2 全文件 rebuild 与逐段编码器（`tests/rebuild.rs`，4 个）
+
+⚠️ 本仓库现在有**两个**写出入口，语义不同，别混用：
+
+| 段 | `serialize()`（旧） | `rebuild()`（新，task-28） |
+|---|---|---|
+| SavePart1 | 复制解析时的原始字节 | `SavePart1::to_bytes(file_version)` |
+| SavePart2 | 复制 | `SavePart2::to_bytes(file_version)` |
+| SavePart3 | 复制 | `SavePart3::to_bytes_with_version(file_version)` |
+| SavePart4 | 复制 | `SavePart4::to_bytes(file_version)` |
+| SavePart5 | 复制 | `SavePart5::to_bytes(file_version)` |
+| VariableDatabase | 复制 | **复制**（尚无编码器） |
+| SavePart7 | 复制 | **复制**（1 字节，尚无编码器） |
+
+也就是说：改 `part1..part5` 任一 typed 字段只能通过 `rebuild()` / `to_bytes_rebuilt()` 生效；
+改 vardb / part7 仍然只能走 `replace_part`（或先自己编码再 `replace_part`）。
+
+| 测试名 | 断言的关键数字 |
+| --- | --- |
+| `every_retail_save_rebuilds_to_the_same_bytes` | 9 个零售存档：`parse -> rebuild -> encrypt` 与原始文件**逐字节相同**（长度与内容，首个不同偏移会被打印） |
+| `rebuild_matches_serialize_and_to_bytes` | 同一份内存状态的两条写出路径必须一致：`serialize() == rebuild()`，且两者长度都等于原文件、`to_bytes() == 原文件` |
+| `each_segment_encoder_reproduces_its_parsed_bytes` | 逐段比对：9 档 × 5 段，每个 `to_bytes()` 都等于 `chunk_bytes(id)`（part1 34318 / part2 595 或 617 / part3 217708..240000 / part4 1194 或 1213 / part5 25910..37497） |
+| `mutations_in_part2_and_part5_survive_a_rebuild` | 改 part2 `vars3_21[0]`（playtime）+1234、改 part5 某个事件的 `vars7_18[0] = 0x5A5A5A5A`：写出再解析都能读回，`checksum_ok()` 为真，事件 id 与名字不变；把同一个字段改回原值后输出与原文件逐字节相同 |
+
+**为什么「逐字节相同」能证明编码器完整**：`parse()` 对 9 个文件都恰好停在 `EOF-1`（§1.1 的收尾断言），
+所以 9 个文件里没有任何「解析器跳过的字节」。于是 `encode(parse(x)) == x` 意味着每个字段的
+**顺序、宽度、有无（版本闸门）** 都写对了 —— 少写一个字段会让后面所有字节错位，多写一个字段同理。
+本作的 `file_version = 0x8C` 打开了 SavePart1/2/4/5 的**全部**版本闸门，所以这条断言覆盖了所有
+`>= 0x8A` 的分支；`<= 0x89` 的老版本分支仍然只有「照抄参考实现」这一条证据（§13）。
+
+```bash
+cargo test -p wolf-save --test rebuild -- --nocapture   # 4 passed
+```
+
+---
+
 ## 12. 实现坑点汇总（都是实际踩过的）
 
 1. **`m_md1..m_md9` 是 u16 长度，只有 `m_md10` 是 u32 长度**（§5）。全按 u32 读会在
@@ -742,8 +778,10 @@ playtime 与セルフ值不变、checksum_ok() 为真；改セルフ数値与セ
    不要假设组大小恒定（本作 list_counts 恒 100、slot_counts 恒 5，但编码器与存取器仍按累加算）。
 9. **SavePart3 写回时 `MemData` 的长度宽度随 `file_version` 变**（`< 0x6F` 是 u16），所以
    `to_bytes()` 只对 `>= 0x6F` 有效（本作 0x8C）；别的版本走 `to_bytes_with_version(fv)`。
-10. **改 playtime 不要走「改 typed 值再序列化 part2」**——part2 目前没有编码器；直接 patch 段内
-    偏移 2 的 4 个字节再 `replace_part(PART2_ID)`（`set_playtime_frames` 就是这么做的，实测只改 2 个字节）。
+10. **改 playtime 有两条等价路径**：①直接 patch part2 段内偏移 2 的 4 个字节再 `replace_part(PART2_ID)`
+    （`set_playtime_frames` 就是这么做的，实测只改 2 个字节）；②改 `part2.vars3_21[0]` 再 `set_part2(&part2)`，
+    它会用 §14 的 `SavePart2::to_bytes` 重编码整段 —— 两条路径产出的字节完全相同（`tests/rebuild.rs` 的
+    `mutations_in_part2_and_part5_survive_a_rebuild` 就是拿这两条互证）。
 
 ---
 
@@ -763,3 +801,79 @@ playtime 与セルフ值不变、checksum_ok() 为真；改セルフ数値与セ
 | SavePart3 的 row 1..9（4/7/4/1/1/1/6/1/10 词）分别是什么 | **未确认**。row 7 = [512,288,512,288,24,19] 形似 UI 缓存，但找不到写者 |
 | システム変数（9000000 段）的落盘位置 | **未确认**。逐段排查无候选区；222 写过的 2000546 在磁盘上有值（8），2000626 却是 0 |
 | 222 的源操作数是在 RAM 还是文件里求值 | **未验证**。磁盘 531 与 626 不符，怀疑 222 用 RAM 值写入 |
+
+---
+
+## 14. 逐段编码器（write side，**已验证** 9/9 逐字节）
+
+### 14.1 现有编码器清单
+
+| 类型 | 入口 | 版本闸门处理 |
+|---|---|---|
+| `SavePart1` | `to_bytes(file_version)` | 全部（`>=0x69` 地图、`>=0x72` 尾 11 词、`>=0x8A` 31 个自动图块） |
+| `SavePart1_1` | `to_bytes(file_version)` | 全部（`>=0x70` / `0x73` / `0x78` / `0x85` / `0x8A` / `0x8B` / `0x8C`） |
+| `SavePart1_1_1` | `to_bytes()` | 无闸门 |
+| `SavePart1_1_1_1` | `to_bytes()` | 无闸门 |
+| `SavePart2` | `to_bytes(file_version)` | 全部（20 处） |
+| `SavePart3` | `to_bytes()` / `to_bytes_with_version(fv)` | `MemData` 长度宽度随 `fv < 0x6F` 变 |
+| `SavePart4` | `to_bytes(file_version)` | `>=0x8A` 的 `m_vars3`（u64 表） |
+| `SavePart5` / `SavePart5_1` | `to_bytes(file_version)` | 全部（20 处） |
+| `VariableDatabase` + `SavePart7` | **无编码器** | `rebuild()` 直接复制原始字节 |
+
+`SaveFile` 层新增：
+
+```rust
+impl SaveFile {
+    pub fn rebuild(&self) -> Result<Vec<u8>>;            // 明文、typed 重编码
+    pub fn to_bytes_rebuilt(&self) -> Result<Vec<u8>>;   // rebuild + encrypt
+    pub fn set_part1(&mut self, part: &SavePart1) -> Result<()>;
+    pub fn set_part2(&mut self, part: &SavePart2) -> Result<()>;
+    pub fn set_part4(&mut self, part: &SavePart4) -> Result<()>;
+    pub fn set_part5(&mut self, part: &SavePart5) -> Result<()>;
+}
+pub const PART1_ID: u32 = 0;   // 已有 PART2_ID = 1 / PART3_ID = 2
+pub const PART4_ID: u32 = 3;
+pub const PART5_ID: u32 = 4;
+pub const VARDB_ID: u32 = 5;
+pub const PART7_ID: u32 = 6;
+```
+
+四个 `set_partX` 与 `set_part3` 同构：编码 → `replace_part` → 覆盖 typed 视图。
+所以一次编辑只重写一段，其余段只是偏移平移。
+
+### 14.2 编码器里三个必须照抄的反向细节
+
+1. **SavePart1 的 `m_var6` 哨兵要写回，不是写 0**（§4.1）。`map_tiles` 为空时输出的是单个
+   `0xFFFFFFFF`，后面直接跟 `m_md1`。若写成 `0`，解析器会把 0 当成第一格贴图，整段错位。
+2. **SavePart1_1 的 `m_mds1` 计数是 int16 判正**（§12 第 2 条）。编码器把上限卡在 `i16::MAX`，
+   因为 `0x8000..=0xFFFF` 在解析侧会被读成「没有」—— 允许写出这种值等于制造一个读不回来的存档。
+3. **SavePart5 的 `m_var1` 既是计数又是「没有表」的标志**（bit 15）。`0x8000` 置位时后面必须
+   一个事件都不写；未置位时 `var1` 必须等于 `events.len()`。编码器对两个方向都报错而不是静默修正。
+   同理 `SavePart5_1::m_var90`（子表个数）本身就是计数，**不是**「先写 var90、再写一遍个数」。
+
+### 14.3 9 档逐字节证明
+
+`tests/rebuild.rs` 对 `work/retail_backup/Save`（或 `WOLF_GAME_DIR/Save`）下的
+`SaveData01..08.sav` + `System.sav` 逐个做 `parse -> rebuild -> encrypt`，与磁盘文件比较：
+
+| 文件 | 大小 | rebuild 结果 |
+|---|---:|---|
+| SaveData01.sav | 366146 | 逐字节相同 |
+| SaveData02.sav | 361637 | 逐字节相同 |
+| SaveData03.sav | 364263 | 逐字节相同 |
+| SaveData04.sav | 365071 | 逐字节相同 |
+| SaveData05.sav | 385978 | 逐字节相同 |
+| SaveData06.sav | 364257 | 逐字节相同 |
+| SaveData07.sav | 364399 | 逐字节相同 |
+| SaveData08.sav | 395566 | 逐字节相同 |
+| System.sav | 374216 | 逐字节相同 |
+
+### 14.4 与「opcode 220 mode 0（运行中整档保存）」的关系
+
+现在这条链已经通了：VM 侧持有 `SavePart1..5` 的 typed 值 → `set_partX` 或直接改字段 →
+`to_bytes_rebuilt()` → 写到 `Save/SaveData%02d.sav`。仍然缺的两块：
+
+- **VariableDatabase 没有编码器**：可変DB 的写入（opcode 250 写 CDataBase）目前只能靠
+  `replace_part(VARDB_ID, 新字节)`，而「按 type/row/field 改一格」还没有 API。
+- **SavePart1 的地图快照**：`map_tiles` 是 64×36×3 的 u32 快照，谁在什么时候填它仍未确认
+  （§13）；写出侧只保证「原样搬运改过的别的字段时不动它」。

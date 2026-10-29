@@ -10,7 +10,9 @@ use wolf_format::bytes::Reader;
 
 use wolf_format::error::Result;
 
-use crate::{ensure_fits, mem_data, signed_count};
+use crate::{
+    ensure_fits, mem_data, push_count, push_mem_data, push_u16, push_u32, push_u8, signed_count,
+};
 
 /// The `file_version >= 100` block.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -410,4 +412,234 @@ pub(crate) fn parse(r: &mut Reader<'_>, file_version: u16) -> Result<SavePart2> 
         block137,
         block8a,
     })
+}
+
+// ---- writing ---------------------------------------------------------
+
+impl SavePart2 {
+    /// Re-encode this segment exactly as this module's parse() reads it.
+    pub fn to_bytes(&self, file_version: u16) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        push_u8(&mut out, self.var1);
+        push_u8(&mut out, self.var2);
+        for word in &self.vars3_21 {
+            push_u32(&mut out, *word);
+        }
+        for word in &self.vars22_24 {
+            push_u16(&mut out, *word);
+        }
+        push_u32(&mut out, self.var25);
+        for word in &self.vars26_28 {
+            push_u16(&mut out, *word);
+        }
+        for word in &self.vars29_37 {
+            push_u32(&mut out, *word);
+        }
+        push_u8(&mut out, self.var38);
+        push_u16(&mut out, self.var39);
+        for word in &self.vars40_41 {
+            push_u32(&mut out, *word);
+        }
+        for word in &self.vars42_45 {
+            push_u16(&mut out, *word);
+        }
+        for word in &self.vars46_48 {
+            push_u32(&mut out, *word);
+        }
+        push_u8(&mut out, self.var49);
+
+        if file_version <= 96 {
+            push_u32(&mut out, self.var50);
+        }
+
+        push_u32(&mut out, self.var51);
+
+        if file_version >= 98 {
+            for word in &self.vars52_53 {
+                push_u32(&mut out, *word);
+            }
+        }
+
+        if file_version >= 100 {
+            let (var54, var55, var56, vars1, vars2, vars59_63) = match &self.block100 {
+                Some(block) => (
+                    block.var54,
+                    block.var55,
+                    block.var56,
+                    block.vars1.as_slice(),
+                    block.vars2.as_slice(),
+                    block.vars59_63,
+                ),
+                None => (0, 0, 0, &[][..], &[][..], [0u32; 5]),
+            };
+            push_u32(&mut out, var54);
+            push_u32(&mut out, var55);
+            push_u8(&mut out, var56);
+            push_count(&mut out, vars1.len())?;
+            for body in vars1 {
+                push_mem_data(&mut out, body, 4)?;
+            }
+            push_count(&mut out, vars2.len())?;
+            for word in vars2 {
+                push_u32(&mut out, *word);
+            }
+            for word in &vars59_63 {
+                push_u32(&mut out, *word);
+            }
+        }
+
+        if file_version >= 101 {
+            for word in &self.vars64_69 {
+                push_u32(&mut out, *word);
+            }
+        }
+
+        if file_version >= 102 {
+            push_u16(&mut out, self.var70);
+        }
+
+        if file_version >= 103 {
+            let (md1, md2) = match &self.md1_md2 {
+                Some((first, second)) => (first.as_slice(), second.as_slice()),
+                None => (&[][..], &[][..]),
+            };
+            push_mem_data(&mut out, md1, 2)?;
+            push_mem_data(&mut out, md2, 2)?;
+        }
+
+        if file_version >= 104 {
+            push_u32(&mut out, self.var71);
+        }
+
+        if file_version >= 106 {
+            for word in &self.vars72_74 {
+                push_u32(&mut out, *word);
+            }
+        }
+
+        if file_version >= 108 {
+            let (path1, vars75_77, path2, vars78_80) = match &self.bgm {
+                Some(bgm) => (
+                    bgm.path1.as_slice(),
+                    bgm.vars75_77,
+                    bgm.path2.as_slice(),
+                    bgm.vars78_80,
+                ),
+                None => (&[][..], [0u32; 3], &[][..], [0u32; 3]),
+            };
+            push_mem_data(&mut out, path1, 2)?;
+            for word in &vars75_77 {
+                push_u32(&mut out, *word);
+            }
+            push_mem_data(&mut out, path2, 2)?;
+            for word in &vars78_80 {
+                push_u32(&mut out, *word);
+            }
+        }
+
+        if file_version >= 109 {
+            let (background, md6, var81) = match &self.block109 {
+                Some(block) => (
+                    block.background.as_slice(),
+                    block.md6.as_slice(),
+                    block.var81,
+                ),
+                None => (&[][..], &[][..], 0),
+            };
+            push_mem_data(&mut out, background, 2)?;
+            push_mem_data(&mut out, md6, 2)?;
+            push_u8(&mut out, var81);
+        }
+
+        if file_version >= 110 {
+            push_u8(&mut out, self.var82);
+        }
+
+        if file_version >= 119 {
+            match &self.mds7_9 {
+                Some(bodies) => {
+                    for body in bodies {
+                        push_mem_data(&mut out, body, 2)?;
+                    }
+                }
+                None => {
+                    for _ in 0..3 {
+                        push_mem_data(&mut out, &[], 2)?;
+                    }
+                }
+            }
+        }
+
+        if file_version >= 121 {
+            push_u32(&mut out, self.var83);
+        }
+        if file_version >= 122 {
+            push_u32(&mut out, self.var84);
+        }
+        if file_version >= 124 {
+            push_u32(&mut out, self.var85);
+        }
+        if file_version >= 126 {
+            push_u32(&mut out, self.var86);
+        }
+        if file_version >= 128 {
+            push_u32(&mut out, self.var87);
+        }
+        if file_version >= 129 {
+            for word in &self.vars88_89 {
+                push_u32(&mut out, *word);
+            }
+        }
+        if file_version >= 130 {
+            push_u32(&mut out, self.var90);
+        }
+        if file_version >= 131 {
+            push_u32(&mut out, self.var91);
+        }
+        if file_version >= 132 {
+            for word in &self.vars92_95 {
+                push_u32(&mut out, *word);
+            }
+        }
+        if file_version >= 134 {
+            push_u8(&mut out, self.var96);
+        }
+        if file_version >= 136 {
+            push_u8(&mut out, self.var97);
+        }
+
+        if file_version >= 137 {
+            let (vars98_101, vars2) = match &self.block137 {
+                Some(block) => (block.vars98_101, block.vars2),
+                None => ([0u32; 4], [0u32; 24]),
+            };
+            for word in &vars98_101 {
+                push_u32(&mut out, *word);
+            }
+            for word in &vars2 {
+                push_u32(&mut out, *word);
+            }
+        }
+
+        if file_version >= 0x8A {
+            let (vars102_105, md10, mds2) = match &self.block8a {
+                Some(block) => (
+                    block.vars102_105,
+                    block.md10.as_slice(),
+                    block.mds2.as_slice(),
+                ),
+                None => ([0u32; 4], &[][..], &[][..]),
+            };
+            for word in &vars102_105 {
+                push_u32(&mut out, *word);
+            }
+            push_mem_data(&mut out, md10, 4)?;
+            push_count(&mut out, mds2.len())?;
+            for body in mds2 {
+                push_mem_data(&mut out, body, 4)?;
+            }
+        }
+
+        Ok(out)
+    }
 }

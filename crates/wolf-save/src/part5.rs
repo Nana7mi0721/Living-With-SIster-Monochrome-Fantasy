@@ -6,9 +6,11 @@
 //! transcription rather than something clever. See `docs/SAVE_SPEC.md` §7.
 
 use wolf_format::bytes::Reader;
-use wolf_format::error::Result;
+use wolf_format::error::{Error, Result};
 
-use crate::{ensure_fits, mem_data, signed_count};
+use crate::{
+    ensure_fits, mem_data, push_count, push_mem_data, push_u16, push_u32, push_u8, signed_count,
+};
 
 /// The runtime state of one common event.
 ///
@@ -167,5 +169,147 @@ impl SavePart5_1 {
         }
 
         Ok(item)
+    }
+}
+
+// ---- writing ---------------------------------------------------------
+
+impl SavePart5 {
+    /// Re-encode this segment exactly as this module's parse() reads it.
+    ///
+    /// var1 is both the event count and the "there is no table" flag (bit 15),
+    /// so nothing else introduces the table. A count that disagrees with the
+    /// vector is an error instead of a silently truncated segment.
+    pub fn to_bytes(&self, file_version: u16) -> Result<Vec<u8>> {
+        if self.var1 & 0x8000 != 0 {
+            if !self.events.is_empty() {
+                return Err(Error::field(
+                    "SavePart5 events",
+                    self.events.len(),
+                    format!(
+                        "var1 = {:#06X} says there is no table but {} event(s) were stored",
+                        self.var1,
+                        self.events.len()
+                    ),
+                ));
+            }
+        } else if usize::from(self.var1) != self.events.len() {
+            return Err(Error::field(
+                "SavePart5 events",
+                self.events.len(),
+                format!(
+                    "var1 says {} event(s) but {} were stored",
+                    self.var1,
+                    self.events.len()
+                ),
+            ));
+        }
+
+        let mut out = Vec::new();
+        push_u16(&mut out, self.var1);
+        for event in &self.events {
+            out.extend_from_slice(&event.to_bytes(file_version)?);
+        }
+        Ok(out)
+    }
+}
+
+impl SavePart5_1 {
+    /// Re-encode one event's runtime state.
+    pub fn to_bytes(&self, file_version: u16) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        push_u32(&mut out, self.var1);
+        push_u8(&mut out, self.var2);
+        push_u8(&mut out, self.var3);
+        push_u16(&mut out, self.var4);
+        push_u8(&mut out, self.var5);
+        push_u8(&mut out, self.var6);
+        push_mem_data(&mut out, &self.md1, 2)?;
+        for word in &self.vars7_18 {
+            push_u32(&mut out, *word);
+        }
+        for word in &self.vals1 {
+            push_u32(&mut out, *word);
+        }
+
+        if file_version >= 0x69 {
+            for word in &self.vars19_36 {
+                push_u32(&mut out, *word);
+            }
+        }
+        if file_version >= 0x6B {
+            push_u8(&mut out, self.var37);
+        }
+        if file_version >= 0x72 {
+            push_u8(&mut out, self.var38);
+            push_u8(&mut out, self.var39);
+            for word in &self.vals2 {
+                push_u32(&mut out, *word);
+            }
+            for word in &self.vals3 {
+                push_u32(&mut out, *word);
+            }
+        }
+        if file_version >= 0x73 {
+            for word in &self.vars40_43 {
+                push_u32(&mut out, *word);
+            }
+            if file_version >= 0x74 {
+                for word in &self.vars44_48 {
+                    push_u32(&mut out, *word);
+                }
+            }
+            if file_version >= 0x75 {
+                for word in &self.vars49_54 {
+                    push_u32(&mut out, *word);
+                }
+            }
+            for word in &self.vars55_60 {
+                push_u32(&mut out, *word);
+            }
+        }
+        if file_version >= 0x76 {
+            for word in &self.vars61_63 {
+                push_u32(&mut out, *word);
+            }
+        }
+        if file_version < 0x81 {
+            return Ok(out);
+        }
+
+        for word in &self.vars64_84 {
+            push_u32(&mut out, *word);
+        }
+        if file_version >= 0x87 {
+            for word in &self.vars85_89 {
+                push_u32(&mut out, *word);
+            }
+        }
+        if file_version >= 0x89 {
+            // var90 is the sub-table count itself, not a separate length.
+            if signed_count(self.var90) != self.sub_tables.len() {
+                return Err(Error::field(
+                    "SavePart5_1 sub tables",
+                    out.len(),
+                    format!(
+                        "var90 says {} table(s) but {} were stored",
+                        signed_count(self.var90),
+                        self.sub_tables.len()
+                    ),
+                ));
+            }
+            push_u32(&mut out, self.var90);
+            for words in &self.sub_tables {
+                push_count(&mut out, words.len())?;
+                for word in words {
+                    push_u32(&mut out, *word);
+                }
+            }
+            for word in &self.vars91_97 {
+                push_u32(&mut out, *word);
+            }
+        }
+
+        Ok(out)
     }
 }

@@ -323,6 +323,15 @@ impl SaveFile {
     /// 整段替换（id 0..=6），后续段偏移自动平移，校验和重算。
     pub fn replace_part(&mut self, id: u32, bytes: &[u8]) -> Result<()>;    /// 用 SavePart3 的 typed 值重新编码整段并替换（视图同步刷新）。
     pub fn set_part3(&mut self, part: &SavePart3) -> Result<()>;
+    /// 用 typed 值重新编码**全档**（part1..part5；vardb/part7 仍复制原始字节）。
+    pub fn rebuild(&self) -> Result<Vec<u8>>;
+    /// rebuild 之后再混淆：opcode 220 mode 0 可直接写盘的字节。
+    pub fn to_bytes_rebuilt(&self) -> Result<Vec<u8>>;
+    /// 其余四个段的 typed 重编码 + 替换（与 set_part3 同构）。
+    pub fn set_part1(&mut self, part: &SavePart1) -> Result<()>;
+    pub fn set_part2(&mut self, part: &SavePart2) -> Result<()>;
+    pub fn set_part4(&mut self, part: &SavePart4) -> Result<()>;
+    pub fn set_part5(&mut self, part: &SavePart5) -> Result<()>;
     /// part2 的 vars3_21[0]，段内偏移 2；单位是帧，60fps。
     pub fn playtime_frames(&self) -> Option<u32>;
     pub fn set_playtime_frames(&mut self, frames: u32) -> Result<()>;
@@ -370,6 +379,19 @@ impl SaveFile {
 | `editing_self_state_survives_a_write` | ev48 CSelf25 12 → 99、ev131 CSelf5 → `Save/Other.sav`，写出再解析读回，相邻槽（CSelf26 = 24、串 1 = 空、CSelf12 = 5）不动 |
 | `playtime_round_trips_through_the_header` | 16705 → 4321 只改 part2 的偏移 **2、3** 两个字节（4321 = 0x10E1），part3 一字节不动，文件总长不变 |
 | `out_of_range_indexes_are_refused` | 2000799 有值、2000800 为 `None`；CSelf99 有值、CSelf100 为 `None`；组号越界为 `None`；串槽 5 为 `None`；setter 返回 `false` 且不改字节 |
+### 7.6 全文件 rebuild 的测试（`crates/wolf-save/tests/rebuild.rs`，4 个，task-28）
+
+`serialize()` / `to_bytes()` 复制原始段字节，只重建头部；`rebuild()` / `to_bytes_rebuilt()`
+用逐段编码器（SavePart1/2/3/4/5）重新编码整档，vardb 与 part7 仍复制。
+两者的详细分工与编码器清单见 `docs/SAVE_SPEC.md` §11.2 与 §14。
+
+| 测试名 | 断言 |
+| --- | --- |
+| `every_retail_save_rebuilds_to_the_same_bytes` | 9 个零售存档 `parse -> rebuild -> encrypt` 与原始文件**逐字节相同** |
+| `rebuild_matches_serialize_and_to_bytes` | `serialize() == rebuild()`，且 `to_bytes()` 等于原文件 |
+| `each_segment_encoder_reproduces_its_parsed_bytes` | 9 档 × 5 段，每个 `to_bytes()` 等于对应 `chunk_bytes(id)` |
+| `mutations_in_part2_and_part5_survive_a_rebuild` | 改 part2 playtime 与 part5 的 `vars7_18[0]` 后写出再解析可读回，改回原值则输出与原文件逐字节相同 |
+
 ---
 
 ## §8 未验证清单
@@ -382,7 +404,7 @@ impl SaveFile {
 | U4 | 槽号 → `Save/SaveData%02d.sav` 的映射 | 8 槽 8 文件，推断一致 | 引擎行为观察 |
 | U5 | セルフ文字列：`122 [1600005]` 写到的是槽 5，落盘却在组内索引 0 | §6.1 证据 1 就是这个现象 | 再找一个「写 self 字符串 0..4」的事件核对索引 |
 | U6 | part3 `var5` 为何 500/550 两种 | 550 = 公共事件总数（旁证） | 老版本 CommonEvent.dat 事件数 |
-| U7 | `serialize` 对「非本作」存档是否也逐字节可逆 | 只验证了本作 9 个档 | 其它 WOLF 游戏的存档 |
+| U7 | `serialize` / `rebuild` 对「非本作」存档是否也逐字节可逆 | 只验证了本作 9 个档（`rebuild` 的逐段编码器现已 9/9 逐字节相同，见 SAVE_SPEC §14） | 其它 WOLF 游戏的存档 |
 | U8 | 存档界面 77 条 150 的完整槽位布局（像素坐标） | 只解到「a0=0x1020 家族 + \cself 文本」 | 逐条解 150 参数（属 OPCODE 150 文档范围） |
 
 ---

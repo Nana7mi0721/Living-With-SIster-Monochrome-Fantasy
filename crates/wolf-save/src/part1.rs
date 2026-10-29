@@ -7,7 +7,9 @@
 use wolf_format::bytes::Reader;
 use wolf_format::error::{Error, Result};
 
-use crate::{ensure_fits, mem_data, signed_count};
+use crate::{
+    ensure_fits, mem_data, push_count, push_mem_data, push_u16, push_u32, push_u8, signed_count,
+};
 
 /// The map snapshot: tile layers, the chip image, the automatic tile names and
 /// the per-map object table.
@@ -451,5 +453,270 @@ impl SavePart1_1_1_1 {
         ensure_fits(r, count, 1, "SavePart1_1_1_1 vars2")?;
         let vars2 = r.take(count)?.to_vec();
         Ok(SavePart1_1_1_1 { var1, vars1, vars2 })
+    }
+}
+
+// ---- writing ---------------------------------------------------------
+
+impl SavePart1 {
+    /// Re-encode this segment exactly as this module's parse() reads it.
+    ///
+    /// The version gates are the same ones parse uses, so a part parsed at 0x8C
+    /// and re-encoded at 0x8C is byte-identical. A field list whose length
+    /// disagrees with what the version expects is an error rather than silently
+    /// truncated data.
+    pub fn to_bytes(&self, file_version: u16) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        push_u32(&mut out, self.var1);
+        push_u32(&mut out, self.var2);
+        push_u32(&mut out, self.var3);
+
+        if file_version >= 0x69 {
+            push_u32(&mut out, self.map_width);
+            push_u32(&mut out, self.map_height);
+            if self.map_tiles.is_empty() {
+                // No map snapshot: parse reads this word only as the sentinel.
+                push_u32(&mut out, u32::MAX);
+            } else {
+                let want = (self.map_width as usize)
+                    .checked_mul(self.map_height as usize)
+                    .and_then(|per_layer| per_layer.checked_mul(3))
+                    .ok_or_else(|| {
+                        Error::field(
+                            "SavePart1 map size",
+                            out.len(),
+                            format!(
+                                "{} x {} tiles does not fit in memory",
+                                self.map_width, self.map_height
+                            ),
+                        )
+                    })?;
+                if self.map_tiles.len() != want {
+                    return Err(Error::field(
+                        "SavePart1 map tiles",
+                        out.len(),
+                        format!(
+                            "{} tile(s) stored but {} x {} x 3 = {want} expected",
+                            self.map_tiles.len(),
+                            self.map_width,
+                            self.map_height
+                        ),
+                    ));
+                }
+                for tile in &self.map_tiles {
+                    push_u32(&mut out, *tile);
+                }
+            }
+        }
+
+        push_mem_data(&mut out, &self.chip_image, 4)?;
+
+        let auto_count = if file_version >= 0x8A {
+            31
+        } else if file_version >= 0x73 {
+            15
+        } else {
+            7
+        };
+        if self.auto_tiles.len() != auto_count {
+            return Err(Error::field(
+                "SavePart1 automatic tiles",
+                out.len(),
+                format!(
+                    "{} name(s) stored but {auto_count} expected at file_version {file_version:#06X}",
+                    self.auto_tiles.len()
+                ),
+            ));
+        }
+        for name in &self.auto_tiles {
+            push_mem_data(&mut out, name, 4)?;
+        }
+
+        if file_version >= 0x64 {
+            push_count(&mut out, self.vars2_new.len())?;
+            for word in &self.vars2_new {
+                push_u32(&mut out, *word);
+            }
+        } else {
+            push_count(&mut out, self.vars2_old.len())?;
+            out.extend_from_slice(&self.vars2_old);
+        }
+
+        push_count(&mut out, self.objects.len())?;
+        for object in &self.objects {
+            out.extend_from_slice(&object.to_bytes(file_version)?);
+        }
+
+        if file_version >= 0x72 {
+            if self.tail_vars.len() != 11 {
+                return Err(Error::field(
+                    "SavePart1 tail vars",
+                    out.len(),
+                    format!(
+                        "{} word(s) stored but 11 expected at file_version {file_version:#06X}",
+                        self.tail_vars.len()
+                    ),
+                ));
+            }
+            for word in &self.tail_vars {
+                push_u32(&mut out, *word);
+            }
+        }
+
+        push_count(&mut out, self.vars3.len())?;
+        for word in &self.vars3 {
+            push_u32(&mut out, *word);
+        }
+
+        Ok(out)
+    }
+}
+
+impl SavePart1_1 {
+    /// Re-encode one object; mirrors SavePart1_1::parse gate for gate.
+    pub fn to_bytes(&self, file_version: u16) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        push_u32(&mut out, self.var1);
+        push_u32(&mut out, self.var2);
+        push_u32(&mut out, self.var3);
+        push_u32(&mut out, self.var4);
+        push_u8(&mut out, self.var5);
+        push_u32(&mut out, self.var6);
+        push_mem_data(&mut out, &self.md1, 2)?;
+        push_u16(&mut out, self.var7);
+        push_u16(&mut out, self.var8);
+        push_u16(&mut out, self.var9);
+        push_u16(&mut out, self.var10);
+        push_u8(&mut out, self.var11);
+        push_u8(&mut out, self.var12);
+        out.extend_from_slice(&self.sp1.to_bytes()?);
+        out.extend_from_slice(&self.sp2.to_bytes()?);
+        push_u16(&mut out, self.var13);
+        push_u16(&mut out, self.var14);
+        push_u16(&mut out, self.var15);
+        push_u16(&mut out, self.var16);
+        push_u16(&mut out, self.var17);
+        push_u16(&mut out, self.var18);
+        push_u8(&mut out, self.var19);
+        push_u8(&mut out, self.var20);
+        push_u8(&mut out, self.var21);
+
+        push_count(&mut out, self.vars1.len())?;
+        for word in &self.vars1 {
+            push_u32(&mut out, *word);
+        }
+
+        if file_version >= 0x70 {
+            push_u8(&mut out, self.var23);
+            push_u8(&mut out, self.var24);
+        }
+        if file_version >= 0x73 {
+            push_u32(&mut out, self.var25);
+            push_u32(&mut out, self.var26);
+            push_u32(&mut out, self.var27);
+            push_u32(&mut out, self.var28);
+        }
+        if file_version >= 0x78 {
+            push_u32(&mut out, self.var29);
+        }
+        if file_version >= 0x85 {
+            push_u32(&mut out, self.var30);
+            push_u32(&mut out, self.var31);
+            push_u32(&mut out, self.var32);
+        }
+
+        if file_version >= 0x8A {
+            // The count is read as a signed 16-bit test, so only 0..=0x7FFF
+            // can be expressed; a bigger table would read back as "none".
+            if self.mds1.len() > i16::MAX as usize {
+                return Err(Error::field(
+                    "SavePart1_1 mds1",
+                    out.len(),
+                    format!(
+                        "{} entry(s) do not fit in the signed 16-bit count",
+                        self.mds1.len()
+                    ),
+                ));
+            }
+            push_u16(&mut out, self.mds1.len() as u16);
+            for body in &self.mds1 {
+                push_mem_data(&mut out, body, 2)?;
+            }
+            push_u32(&mut out, self.var34);
+            push_u8(&mut out, self.var35);
+            push_u32(&mut out, self.var36);
+            push_u32(&mut out, self.var37);
+        }
+        if file_version >= 0x8B {
+            push_u32(&mut out, self.var38);
+        }
+        if file_version >= 0x8C {
+            push_u32(&mut out, self.var39);
+        }
+
+        Ok(out)
+    }
+}
+
+impl SavePart1_1_1 {
+    /// Re-encode one page table. The stored count always equals items.len().
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&self.head);
+        if usize::try_from(self.count) != Ok(self.items.len()) {
+            return Err(Error::field(
+                "SavePart1_1_1 count",
+                out.len(),
+                format!(
+                    "m_var7 says {} entr(ies) but {} were stored",
+                    self.count,
+                    self.items.len()
+                ),
+            ));
+        }
+        if self.items.len() > 0x1_0000 {
+            return Err(Error::field(
+                "SavePart1_1_1 count",
+                out.len(),
+                format!(
+                    "{} entries; parse rejects anything above 0x10000",
+                    self.items.len()
+                ),
+            ));
+        }
+        push_count(&mut out, self.items.len())?;
+        for item in &self.items {
+            out.extend_from_slice(&item.to_bytes()?);
+        }
+        Ok(out)
+    }
+}
+
+impl SavePart1_1_1_1 {
+    /// Re-encode one page-table entry: two u8-length sub tables.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        push_u8(&mut out, self.var1);
+        let count = u8::try_from(self.vars1.len()).map_err(|_| {
+            Error::field(
+                "SavePart1_1_1_1 vars1",
+                out.len(),
+                format!("{} word(s) do not fit in a u8 count", self.vars1.len()),
+            )
+        })?;
+        push_u8(&mut out, count);
+        for word in &self.vars1 {
+            push_u32(&mut out, *word);
+        }
+        let count = u8::try_from(self.vars2.len()).map_err(|_| {
+            Error::field(
+                "SavePart1_1_1_1 vars2",
+                out.len(),
+                format!("{} byte(s) do not fit in a u8 count", self.vars2.len()),
+            )
+        })?;
+        push_u8(&mut out, count);
+        out.extend_from_slice(&self.vars2);
+        Ok(out)
     }
 }

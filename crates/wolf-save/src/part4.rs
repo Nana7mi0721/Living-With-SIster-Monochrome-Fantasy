@@ -8,7 +8,7 @@ use wolf_format::bytes::Reader;
 use wolf_format::error::Result;
 
 use crate::part1::SavePart1_1;
-use crate::{ensure_fits, signed_count};
+use crate::{ensure_fits, push_count, push_u32, push_u64, push_u8, signed_count};
 
 /// The object-table continuation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,4 +65,36 @@ pub(crate) fn parse(r: &mut Reader<'_>, file_version: u16) -> Result<SavePart4> 
         vars2,
         vars3,
     })
+}
+
+// ---- writing ---------------------------------------------------------
+
+impl SavePart4 {
+    /// Re-encode this segment exactly as this module's parse() reads it.
+    pub fn to_bytes(&self, file_version: u16) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&self.lead.to_bytes(file_version)?);
+
+        push_count(&mut out, self.objects.len())?;
+        for object in &self.objects {
+            out.extend_from_slice(&object.to_bytes(file_version)?);
+        }
+
+        push_u8(&mut out, self.var2);
+        push_u8(&mut out, self.var3);
+
+        push_count(&mut out, self.vars2.len())?;
+        for word in &self.vars2 {
+            push_u32(&mut out, *word);
+        }
+
+        if file_version >= 0x8A {
+            push_count(&mut out, self.vars3.len())?;
+            for word in &self.vars3 {
+                push_u64(&mut out, *word);
+            }
+        }
+
+        Ok(out)
+    }
 }
