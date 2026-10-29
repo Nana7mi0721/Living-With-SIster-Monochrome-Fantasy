@@ -40,6 +40,20 @@ pub const BOOT_MAP: &str = "MapData/TitleMap.mps";
 /// The autorun event on [`BOOT_MAP`] that plays the splashes and reaches the title.
 pub const BOOT_EVENT: u32 = 2;
 
+/// Common events the WOLF runtime itself keeps alive, whatever the map is.
+///
+/// These are not started by any script: the engine runs them.
+///
+/// * `48` X[共]基本システム自動初期化 - run_condition 3 (parallel, always). It is the
+///   boot initialiser for the system variables, so without it Sys8/Sys9 carry the
+///   defaults we invented instead of the ones the game ships with.
+/// * `63` X[共]メッセージウィンドウ - run_condition 0 (call only), and the *engine* is
+///   its only caller: work/yado.txt says 【文章の表示】が実行されると、コモンイベント
+///   [063:X[共]メッセージウィンドウ]にて表示位置の初期化が行われます. A scan of all 550
+///   events finds zero 210/300/211 sites targeting 500063, so if the runtime does not
+///   start it, the message-window frame never appears.
+pub const ENGINE_EVENTS: &[u32] = &[48, 63];
+
 /// One visible message window.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Message {
@@ -172,6 +186,9 @@ pub struct Game {
     previous_keys: u32,
     /// Mouse buttons held on the previous frame, so a press can be told from a hold.
     previous_mouse_buttons: u32,
+    /// True once [`ENGINE_EVENTS`] have been started, so a map switch cannot start a
+    /// second copy of a coroutine that is meant to live for the whole session.
+    engine_events_started: bool,
     root: PathBuf,
 }
 
@@ -210,6 +227,7 @@ impl Game {
             choice_cursor: 0,
             previous_keys: 0,
             previous_mouse_buttons: 0,
+            engine_events_started: false,
             root,
         })
     }
@@ -225,6 +243,22 @@ impl Game {
         self.vm.start_event(id).is_some()
     }
 
+    /// Starts the coroutines the runtime owns rather than the script.
+    ///
+    /// Idempotent: a map change re-enters it and must not spawn a second copy of a
+    /// coroutine that is supposed to last the whole session. Returns the number of
+    /// instances started this call.
+    pub fn start_engine_events(&mut self) -> usize {
+        if self.engine_events_started {
+            return 0;
+        }
+        self.engine_events_started = true;
+        ENGINE_EVENTS
+            .iter()
+            .filter(|id| self.start_event(**id))
+            .count()
+    }
+
     /// Boots the game the way the original does: the autorun event on the title map.
     ///
     /// Common event 42 is *not* the entry point. The measured boot chain is
@@ -236,6 +270,7 @@ impl Game {
     ///
     /// Fails when the map file is missing or malformed, or when it has no event 2.
     pub fn boot(&mut self) -> Result<(), GameError> {
+        self.start_engine_events();
         let bytes = self.read(BOOT_MAP)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, Some(BOOT_EVENT));
@@ -277,6 +312,7 @@ impl Game {
         map_name: &str,
         event_id: u32,
     ) -> Result<(), GameError> {
+        self.start_engine_events();
         let name = if map_name.contains('.') {
             map_name.to_owned()
         } else {
@@ -416,6 +452,14 @@ impl Game {
             choices.frames = choices.frames.saturating_add(1);
         }
         self.screen.tick();
+        // Sys12 (文章の表示 実行中？) is the engine's flag, not a script variable: a
+        // scan of all 550 common events finds 7 reads and zero writes, and common
+        // event 63 polls it every frame to decide whether to paint or erase the
+        // message-window frame. Publishing it one frame late is invisible at 60 Hz and
+        // keeps the borrow of the VM out of the host shim.
+        self.vm
+            .vars
+            .set_sys(12, i32::from(!self.messages.is_empty()));
         self.previous_keys = self.key_bits;
         // Automatic pages are restarted here, i.e. at the end of a frame, so a
         // parallel page that just ended comes back on the next tick.

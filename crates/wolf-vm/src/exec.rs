@@ -143,17 +143,23 @@ impl Instance {
     }
 }
 
+/// `\cself[n]` names slot `n` of the running event, which is NOT bank `n`:
+/// a common event keeps its own variables in group 6, a map page in group 1
+/// (see [`crate::program::COMMON_SELF_BASE`]). The file spells the same slots
+/// absolutely as magic `1_600_000 + n`, so only the escape needs this offset.
 impl VarLookup for Instance {
     fn lookup_num(&self, bank: EscapeBank, index: usize) -> i32 {
         match bank {
-            EscapeBank::SelfVar => self.self_vars.get(index),
+            EscapeBank::SelfVar => self.self_vars.get(self.program.self_base + index),
             _ => 0,
         }
     }
 
     fn lookup_str(&self, bank: EscapeBank, index: usize) -> String {
         match bank {
-            EscapeBank::SelfVar => self.self_vars.get_str(index).to_owned(),
+            EscapeBank::SelfVar => {
+                self.self_vars.get_str(self.program.self_base + index).to_owned()
+            }
             _ => String::new(),
         }
     }
@@ -168,7 +174,7 @@ struct Lookup<'a> {
 impl VarLookup for Lookup<'_> {
     fn lookup_num(&self, bank: EscapeBank, index: usize) -> i32 {
         match bank {
-            EscapeBank::SelfVar => self.inst.self_vars.get(index),
+            EscapeBank::SelfVar => self.inst.self_vars.get(self.inst.program.self_base + index),
             EscapeBank::Var => self.vars.get(index),
             EscapeBank::SysVar => self.vars.get_sys(index),
             // A numeric read of a string bank is a data error; WOLF yields 0.
@@ -178,7 +184,11 @@ impl VarLookup for Lookup<'_> {
 
     fn lookup_str(&self, bank: EscapeBank, index: usize) -> String {
         match bank {
-            EscapeBank::SelfVar => self.inst.self_vars.get_str(index).to_owned(),
+            EscapeBank::SelfVar => self
+                .inst
+                .self_vars
+                .get_str(self.inst.program.self_base + index)
+                .to_owned(),
             EscapeBank::Var => String::new(),
             EscapeBank::StrVar => self.vars.get_str(index).to_owned(),
             EscapeBank::SysVar => self.vars.get_sys_str(index).to_owned(),
@@ -2080,6 +2090,30 @@ mod tests {
         assert_eq!(vm.vars.get(1), 20);
     }
 
+    #[test]
+    fn cself_reads_the_self_bank_of_the_running_event() {
+        // ev63 returns to its caller with a 213 whose label ends in cself[40]
+        // after storing 2 in slot 40. Slot 40 of a common event is magic
+        // 1_600_040, so the escape must read bank 640; reading bank 40 expanded
+        // to a label nobody defines and killed the message-window coroutine.
+        let commands = vec![
+            cmd(121, &[1_600_040, 2, 0, 0], &[]),
+            cmd(213, &[], &[r"m\cself[40]"]),
+            // Wrong path: bank 40 reads 0, so the name would be m0.
+            cmd(121, &[2_000_000, 99, 0, 0], &[]),
+            cmd(212, &[], &["m1"]),
+            cmd(121, &[2_000_001, 1, 0, 0], &[]),
+            cmd(212, &[], &["m2"]),
+            cmd(121, &[2_000_002, 3, 0, 0], &[]),
+        ];
+        let mut vm = vm_with(vec![event(1, "jump", commands)]);
+        vm.start_event(1);
+        let mut host = Recorder::default();
+        vm.step_frame(&mut host);
+        assert_eq!(vm.vars.get(0), 0, "the wrong label must not be reached");
+        assert_eq!(vm.vars.get(1), 0, "landed past the m2 body");
+        assert_eq!(vm.vars.get(2), 3, "landed after the second label");
+    }
     #[test]
     fn operator_0x6000_is_a_random_range() {
         // 1,101 real instructions use it; before this was understood, every one

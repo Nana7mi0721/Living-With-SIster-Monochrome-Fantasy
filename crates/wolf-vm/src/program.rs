@@ -181,6 +181,23 @@ impl PrecompileStats {
 /// caller's destination variable untouched (docs/OPCODE_210_RETURN.md §3.2).
 pub const NO_RETURN_VALUE: u32 = u32::MAX;
 
+/// Self bank a common event keeps its own variables in.
+///
+/// All 550 events address their own state through magic `1_600_000 + slot`
+/// (32,391 reads and 9,642 writes land in group 6, and not one write lands in
+/// group 0), so group 6 is where a common event lives - including the call
+/// arguments the engine writes at [`crate::magic::SELF_ARG_BASE`].
+pub const COMMON_SELF_BASE: usize = 600;
+
+/// Self bank a map page keeps its own variables in.
+///
+/// The editor spells a map event own state as `1_100_000 + slot`: the YADOT-WOLF
+/// docs show an event writing `1100005` and the debug window reporting it as
+/// `1000025`, i.e. group 1 slot 5. No map page in this game expands a
+/// `\cself[n]` escape, so this value is inferred from the documented magic
+/// rather than measured against a capture.
+pub const MAP_SELF_BASE: usize = 100;
+
 /// One event, ready to execute.
 #[derive(Clone, Debug)]
 pub struct Program {
@@ -196,6 +213,13 @@ pub struct Program {
     /// (docs/OPCODE_210_RETURN.md §3). [`NO_RETURN_VALUE`] means the event
     /// declares no return value, and the caller's destination keeps its old value.
     pub return_value_id: u32,
+    /// Self bank this program own variables live in.
+    ///
+    /// `\cself[n]` means slot `n` of the running event, so the escape resolves to
+    /// `self_base + n`. The magic operands stored in the file already carry the
+    /// same base explicitly, which is why this field is only consulted by the
+    /// text expander. See [`COMMON_SELF_BASE`] and [`MAP_SELF_BASE`].
+    pub self_base: usize,
     /// The instruction stream, unchanged from the file.
     pub slots: Vec<Slot>,
     /// Jump table, parallel to [Program::slots].
@@ -216,6 +240,7 @@ impl Program {
     pub fn compile(event: &wolf_format::commonevent::CommonEvent) -> Self {
         let mut program = Self::from_slots(event.id, &event.title, event.commands.clone());
         program.return_value_id = event.return_value_id;
+        program.self_base = COMMON_SELF_BASE;
         program
     }
 
@@ -380,6 +405,7 @@ impl Program {
             // A bare slot stream carries no declaration; map event pages are not
             // callable through 210 with a return value in this game.
             return_value_id: NO_RETURN_VALUE,
+            self_base: MAP_SELF_BASE,
             slots,
             control,
             blocks,

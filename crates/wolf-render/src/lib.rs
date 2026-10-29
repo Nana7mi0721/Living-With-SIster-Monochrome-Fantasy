@@ -43,7 +43,7 @@ pub use renderer::{Renderer, FRAME_FORMAT};
 pub use scaler::{integer_scale, Scaler, LOGICAL_H, LOGICAL_W};
 pub use sprite::SpriteInstance;
 pub use text::{
-    layout_box, missing_glyphs, substitute_missing, LayoutBox, TextAlign, TextError, TextItem,
-    TextRenderer, TextStats, AUTO_BOX_THRESHOLD, LINE_HEIGHT_FACTOR, MAX_SIZE_PX, MIN_SIZE_PX,
-    REPLACEMENT_CHAR,
+    layout_box, missing_glyphs, substitute_missing, LayoutBox, Outline, TextAlign, TextError,
+    TextItem, TextRenderer, TextStats, AUTO_BOX_THRESHOLD, LINE_HEIGHT_FACTOR, MAX_SIZE_PX,
+    MIN_SIZE_PX, REPLACEMENT_CHAR,
 };

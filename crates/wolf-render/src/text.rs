@@ -24,6 +24,8 @@
 //! carry a 1x1 rectangle because WOLF itself sizes them from the text, which is
 //! why `layout_box` derives the width when the rectangle is degenerate.
 
+use std::borrow::Cow;
+
 use glyphon::cosmic_text::Align;
 use glyphon::{
     fontdb, Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping,
@@ -121,6 +123,22 @@ impl TextAlign {
     }
 }
 
+/// Outline (WOLF `\E`) parameters for one text picture.
+///
+/// WOLF draws an outline by stamping the glyphs in a solid colour at a ring of
+/// offsets *before* the body. `TextRenderer::prepare` does exactly that: one
+/// extra shaped buffer (which shares the glyph-atlas entries with the body, so
+/// nothing is rasterised twice) plus four offset copies of the same layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Outline {
+    /// Ring radius in logical pixels. Zero is normalised to "no outline" by
+    /// `TextItem::with_outline`, so an escape width can be passed straight
+    /// through.
+    pub width_px: u8,
+    /// Outline colour, RGB. Opaque by construction -- see `TextItem::colour`.
+    pub colour: [u8; 3],
+}
+
 /// One text picture to draw this frame.
 ///
 /// This is to text what `crate::SpriteInstance` is to sprites: a flat
@@ -139,6 +157,18 @@ pub struct TextItem {
     pub size_px: f32,
     /// Horizontal alignment inside `rect`.
     pub align: TextAlign,
+    /// Body colour (WOLF `\c[n]`), RGB. Defaults to opaque white, which is what
+    /// every text picture without a colour escape uses.
+    ///
+    /// WHY RGB and not RGBA: glyphon resolves a glyph's colour as
+    /// `glyph.color_opt.unwrap_or(area.default_color)`, and cosmic-text copies
+    /// `Attrs::color` into every glyph, so a body colour always wins over the
+    /// area colour -- alpha included. Picture opacity therefore stays on the
+    /// area's default colour (see `TextRenderer::prepare`) and must not be folded
+    /// into this field.
+    pub colour: [u8; 3],
+    /// Optional `\E` outline, drawn behind the body.
+    pub outline: Option<Outline>,
 }
 
 impl TextItem {
@@ -151,6 +181,8 @@ impl TextItem {
             alpha: 1.0,
             size_px,
             align: TextAlign::Left,
+            colour: [255, 255, 255],
+            outline: None,
         }
     }
 
@@ -165,6 +197,27 @@ impl TextItem {
     #[must_use]
     pub fn with_align(mut self, align: TextAlign) -> Self {
         self.align = align;
+        self
+    }
+
+    /// Set the body colour (WOLF `\c[n]`).
+    #[must_use]
+    pub fn with_colour(mut self, colour: [u8; 3]) -> Self {
+        self.colour = colour;
+        self
+    }
+
+    /// Draw an outline behind the body (WOLF `\E`).
+    ///
+    /// A zero width is normalised to "no outline" rather than drawing four
+    /// copies at offset zero, which would merely overdraw the body.
+    #[must_use]
+    pub fn with_outline(mut self, width_px: u8, colour: [u8; 3]) -> Self {
+        self.outline = if width_px == 0 {
+            None
+        } else {
+            Some(Outline { width_px, colour })
+        };
         self
     }
 }
@@ -245,6 +298,25 @@ pub fn layout_box(rect: [f32; 4], screen: [u32; 2]) -> Option<LayoutBox> {
     })
 }
 
+/// Grow a scissor rectangle by `pad` pixels, clamped to the canvas.
+///
+/// WHY grow at all: an outline sits *outside* the body's box by design, so
+/// clipping it to the body box would erase exactly the ring it exists to draw.
+/// Why clamp afterwards: glyphon clamps `TextArea::bounds` to the viewport
+/// anyway, and an out-of-range integer scissor is a validation error rather than
+/// a no-op.
+fn expand_clip(clip: [i32; 4], pad: i32, screen: [u32; 2]) -> [i32; 4] {
+    let pad = pad.max(0);
+    let width = screen[0] as i32;
+    let height = screen[1] as i32;
+    [
+        (clip[0] - pad).clamp(0, width),
+        (clip[1] - pad).clamp(0, height),
+        (clip[2] + pad).clamp(0, width),
+        (clip[3] + pad).clamp(0, height),
+    ]
+}
+
 /// Replace every character listed in `missing` with `REPLACEMENT_CHAR`.
 ///
 /// Returns the rewritten string and how many characters were replaced. Pure, so
@@ -280,6 +352,10 @@ pub struct TextStats {
     pub missing: Vec<char>,
     /// Total characters substituted with U+FFFD.
     pub substituted: usize,
+    /// Outline copies submitted this frame (four per outlined item). The body
+    /// counters above stay body-only, so a log line does not change merely
+    /// because one picture gained an outline.
+    pub outlines: usize,
 }
 
 /// Turn a freshly loaded font blob into a `FontSystem` holding only that font.
@@ -354,6 +430,27 @@ pub fn missing_glyphs(font: &[u8], text: &str, size_px: f32) -> Vec<char> {
     missing_chars(&buffer, font_id)
 }
 
+/// One shaped buffer placed on the canvas for this frame.
+///
+/// WHY a struct instead of the previous `(buffer index, layout box, alpha)`
+/// tuple: an outlined item contributes five areas (four outline copies plus the
+/// body) that share one layout box but differ in origin and scissor, so the
+/// offset has to travel with the entry.
+#[derive(Clone, Copy, Debug)]
+struct Placed {
+    /// Index into `TextRenderer::buffers`.
+    buffer: usize,
+    /// Area origin in logical pixels, from the top-left of the 1024x576 canvas.
+    left: f32,
+    /// Area origin in logical pixels, from the top-left of the 1024x576 canvas.
+    top: f32,
+    /// Integer scissor `[left, top, right, bottom]`, already intersected with the
+    /// canvas.
+    clip: [i32; 4],
+    /// Opacity byte for `TextArea::default_color`.
+    alpha: u8,
+}
+
 /// Owns the glyphon atlas + font system and draws `TextItem`s into a render pass.
 ///
 /// One instance per `super::Renderer`. The atlas and the shaped buffers live
@@ -374,8 +471,8 @@ pub struct TextRenderer {
     screen: [u32; 2],
     /// Shaped buffers for the current frame, indexed by `placed`.
     buffers: Vec<Buffer>,
-    /// (buffer index, layout box, alpha byte) for the current frame.
-    placed: Vec<(usize, LayoutBox, u8)>,
+    /// Every area to draw this frame, in the order glyphon must emit it.
+    placed: Vec<Placed>,
     /// Statistics from the last successful `prepare`.
     stats: TextStats,
 }
@@ -472,6 +569,36 @@ impl TextRenderer {
     /// Call before opening the render pass (it only writes to the queue and the
     /// glyph atlas), then `Self::render` inside the pass. Splitting the two is
     /// what lets sprites and text share one pass.
+    /// Shape `text` into a fresh buffer and return its index in `Self::buffers`.
+    ///
+    /// The layout metrics, box, wrap and alignment are the caller's, so an
+    /// outline buffer is shaped exactly like the body it decorates and therefore
+    /// breaks lines identically. `colour` lands on `Attrs` for the reason given
+    /// in `prepare`.
+    fn shape_buffer(
+        &mut self,
+        text: &str,
+        size: f32,
+        bx: &LayoutBox,
+        align: TextAlign,
+        colour: [u8; 3],
+    ) -> usize {
+        let family = self.font_family.clone();
+        let mut buffer = Buffer::new(
+            &mut self.font_system,
+            Metrics::new(size, size * LINE_HEIGHT_FACTOR),
+        );
+        buffer.set_size(Some(bx.width), Some(bx.height));
+        buffer.set_wrap(Wrap::WordOrGlyph);
+        let attrs = Attrs::new()
+            .family(Family::Name(&family))
+            .color(Color::rgb(colour[0], colour[1], colour[2]));
+        buffer.set_text(text, &attrs, Shaping::Advanced, Some(align.to_cosmic()));
+        buffer.shape_until_scroll(&mut self.font_system, false);
+        self.buffers.push(buffer);
+        self.buffers.len() - 1
+    }
+
     pub fn prepare(
         &mut self,
         device: &Device,
@@ -510,9 +637,16 @@ impl TextRenderer {
             // CJK has no spaces, so word wrapping alone would overflow the box;
             // WordOrGlyph breaks inside a word only when it has to.
             buffer.set_wrap(Wrap::WordOrGlyph);
+            // WHY the colour rides on `Attrs` and not on `TextArea::default_color`:
+            // glyphon resolves a glyph's colour as
+            // `glyph.color_opt.unwrap_or(area.default_color)`, and cosmic-text
+            // copies `Attrs::color` into every `LayoutGlyph`, so a per-glyph value
+            // always wins. `Attrs` is therefore the only place a body colour can
+            // come from -- and for the same reason the only place an outline
+            // colour can come from.
             let attrs = Attrs::new()
                 .family(Family::Name(&family))
-                .color(Color::rgb(255, 255, 255));
+                .color(Color::rgb(item.colour[0], item.colour[1], item.colour[2]));
             buffer.set_text(
                 &item.text,
                 &attrs,
@@ -521,6 +655,9 @@ impl TextRenderer {
             );
             buffer.shape_until_scroll(&mut self.font_system, false);
 
+            // The text that actually ended up shaped. The outline buffer has to
+            // reuse it, otherwise the two passes would break lines differently.
+            let mut shaped: Cow<'_, str> = Cow::Borrowed(item.text.as_str());
             let mut missing = missing_chars(&buffer, font_id);
             if !missing.is_empty() {
                 let (rewritten, replaced) = substitute_missing(&item.text, &missing);
@@ -534,6 +671,7 @@ impl TextRenderer {
                 missing.retain(|ch| !self.stats.missing.contains(ch));
                 self.stats.missing.append(&mut missing);
                 self.stats.substituted += replaced;
+                shaped = Cow::Owned(rewritten);
             }
 
             for run in buffer.layout_runs() {
@@ -542,30 +680,66 @@ impl TextRenderer {
             }
             self.stats.items += 1;
             self.buffers.push(buffer);
-            self.placed.push((self.buffers.len() - 1, bx, alpha));
+            let body = self.buffers.len() - 1;
+
+            // Outline: four copies of the *same* shaped text at ring offsets,
+            // queued before the body. Reusing one buffer is what keeps this
+            // cheap: glyphon's glyph cache key is (glyph id, subpixel bins, size)
+            // and deliberately excludes colour, so the copies hit the very same
+            // atlas entries and cost one extra shaping pass, not four extra
+            // rasterisations.
+            if let Some(outline) = item.outline {
+                let index = self.shape_buffer(&shaped, size, &bx, item.align, outline.colour);
+                let pad = i32::from(outline.width_px);
+                let clip = expand_clip(bx.clip, pad, self.screen);
+                let w = f32::from(outline.width_px);
+                for (dx, dy) in [(w, 0.0), (-w, 0.0), (0.0, w), (0.0, -w)] {
+                    self.placed.push(Placed {
+                        buffer: index,
+                        left: bx.left + dx,
+                        top: bx.top + dy,
+                        clip,
+                        alpha,
+                    });
+                }
+                self.stats.outlines += 4;
+            }
+            self.placed.push(Placed {
+                buffer: body,
+                left: bx.left,
+                top: bx.top,
+                clip: bx.clip,
+                alpha,
+            });
         }
 
         if self.placed.is_empty() {
             return Ok(self.stats.clone());
         }
 
+        // One area per placed entry, in push order. glyphon emits its glyph quads
+        // in exactly this order and draws them all in a single call, so "the
+        // outline entries were pushed first" is precisely what puts the outline
+        // underneath the body instead of on top of it.
         let areas: Vec<TextArea<'_>> = self
             .placed
             .iter()
-            .map(|&(index, bx, alpha)| TextArea {
-                buffer: &self.buffers[index],
-                left: bx.left,
-                top: bx.top,
+            .map(|placed| TextArea {
+                buffer: &self.buffers[placed.buffer],
+                left: placed.left,
+                top: placed.top,
                 scale: 1.0,
                 bounds: TextBounds {
-                    left: bx.clip[0],
-                    top: bx.clip[1],
-                    right: bx.clip[2],
-                    bottom: bx.clip[3],
+                    left: placed.clip[0],
+                    top: placed.clip[1],
+                    right: placed.clip[2],
+                    bottom: placed.clip[3],
                 },
                 // TextArea has no alpha of its own in glyphon 0.12, so picture
-                // opacity has to ride on the default colour.
-                default_color: Color::rgba(255, 255, 255, alpha),
+                // opacity has to ride on the default colour -- which glyphon
+                // ignores whenever the glyph carries its own colour (always, see
+                // the `Attrs` note above).
+                default_color: Color::rgba(255, 255, 255, placed.alpha),
                 custom_glyphs: &[],
             })
             .collect();

@@ -20,6 +20,7 @@ pub mod error;
 pub mod gamedat;
 pub mod messagetext;
 pub mod mps;
+pub mod sysdatabase;
 pub mod tileset;
 
 pub use bytes::Reader;
