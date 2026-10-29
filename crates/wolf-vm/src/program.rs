@@ -270,13 +270,20 @@ impl Program {
                 continue;
             };
             match cmd.opcode {
-                111 | 102 | 170 | 176 | 179 => {
+                // 112 is the STRING form of the 111 branch: N string variables
+                // compared against inline strings, then the identical 401/420/499
+                // skeleton. It has to open a block of its own, because otherwise its
+                // 401 case markers attach to whatever branch encloses it and its 499
+                // closes that branch early - which is exactly how the inheritance menu
+                // of SampleMapA event 0 ended up with a case table full of its nested
+                // string comparisons and an end 150 slots too early.
+                111 | 112 | 102 | 170 | 176 | 179 => {
                     let kind = match cmd.opcode {
                         102 => BlockKind::Choices,
-                        111 => BlockKind::Condition,
+                        111 | 112 => BlockKind::Condition,
                         _ => BlockKind::Loop,
                     };
-                    if kind == BlockKind::Condition && !condition_layout_ok(cmd) {
+                    if cmd.opcode == 111 && !condition_layout_ok(cmd) {
                         stats.malformed_conditions += 1;
                     }
                     blocks.push(Block {

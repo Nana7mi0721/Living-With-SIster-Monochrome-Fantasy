@@ -200,17 +200,17 @@
   "slots": 163828,
   "programs": 550,
   "titles_indexed": 505,
-  "blocks": 13310,
-  "conditions": 10743,
+  "blocks": 13433,
+  "conditions": 10866,
   "choices": 495,
   "loops": 2072,
-  "cases": 18460,
-  "else_cases": 3246,
-  "cancel_cases": 150,
-  "orphan_cases": 131,
-  "orphan_ends": 138,
-  "implicit_closes": 66,
-  "unclosed_blocks": 3,
+  "cases": 18555,
+  "else_cases": 3279,
+  "cancel_cases": 153,
+  "orphan_cases": 0,
+  "orphan_ends": 0,
+  "implicit_closes": 54,
+  "unclosed_blocks": 0,
   "max_depth": 91,
   "labels": 606,
   "label_jumps": 1543,
@@ -693,7 +693,28 @@
    "database_writes": 13,
    "text_pictures": 0
   },
-  "note": "both states are produced by wolf-cli capture --map-run SampleMapA --event 0; --hold-message stops auto-advancing so the 101 message stays on screen"
+  "note": "both states are produced by wolf-cli capture --map-run SampleMapA --event 0; --hold-message stops auto-advancing so the 101 message stays on screen",
+  "story_state": {
+   "command": "capture --map-run SampleMapA --event 0 --frames 900 --answer 3 --answer-delay 1",
+   "note": "打开『继承点分配』菜单后答第 4 选项，剧情推进到床边场景（含 HUD）",
+   "frames": 900,
+   "instructions": 51297,
+   "picture_ops": 1881,
+   "sounds": 8,
+   "db_accesses": 436,
+   "database_writes": 38,
+   "db_labels": 31,
+   "messages": 39,
+   "choices": 5,
+   "warnings": 0,
+   "coroutines": 6,
+   "live_pictures": 69,
+   "quads": 12,
+   "text_pictures": 31,
+   "atlas_images": 12,
+   "atlas_fill": "30.3% of 2048x2048",
+   "non_black": 548241
+  }
  },
  "database_layer": {
   "files": {
@@ -803,5 +824,38 @@
   "title_parity": "each of the nine ENGINE_ALWAYS candidates alone is pixel-identical to starting none; all together mean abs 0.012 / psnr 67.20 dB at frame 716",
   "excluded": "343 has 44 by-id calls but its condition variable has no writer; 43 has zero call sites",
   "cli_switch": "wolf-cli capture --engine-events <id,id,...> (an empty value starts none)"
+ },
+ "condition_112": {
+  "law": "112 与 111 共用一套块栈（BlockKind::Condition），只是比较方式不同；它同样以 401/420/499 收尾",
+  "sites_common_events": 123,
+  "sites_map_pages": 21,
+  "argc": "1 + (head & 0x0F) 个条件，每个条件一个字符串变量",
+  "strc": 4,
+  "before": {
+   "blocks": 13310,
+   "conditions": 10743,
+   "cases": 18460,
+   "else_cases": 3246,
+   "cancel_cases": 150,
+   "orphan_cases": 131,
+   "orphan_ends": 138,
+   "implicit_closes": 66,
+   "unclosed_blocks": 3
+  },
+  "after": {
+   "blocks": 13433,
+   "conditions": 10866,
+   "cases": 18555,
+   "else_cases": 3279,
+   "cancel_cases": 153,
+   "orphan_cases": 0,
+   "orphan_ends": 0,
+   "implicit_closes": 54,
+   "unclosed_blocks": 0
+  },
+  "proof": "条件数 = 111(10743) + 112(123)，case 数 = 401 语音统计(18555)，else = 420(3279)，cancel = 421(153)，且孤儿计数全部归零",
+  "symptom_fixed": "SampleMapA 事件 0 的继承菜单 102 块 end 提前 150 槽，答完跳进 case 体中间，绕回 213 重置 形成死循环：900 帧烧掉 163,206,432 条指令且全黑",
+  "after_fix": "同一命令 51,297 条指令、39 条消息、5 次选择、0 警告、92.9% 非黑",
+  "doc": "docs/OPCODE_112.md"
  }
 }

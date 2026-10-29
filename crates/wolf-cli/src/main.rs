@@ -78,10 +78,12 @@ fn main() -> ExitCode {
     let mut hot = false;
     let mut out: Option<PathBuf> = None;
     let mut answer: Option<usize> = None;
+    let mut answer_delay: u32 = 0;
     let mut filter: Option<String> = None;
     let mut frame_limit: Option<u64> = None;
     let mut hold_message = false;
     let mut engine_events: Option<Vec<u32>> = None;
+    let mut page: usize = 0;
     let mut boot = true;
     let mut map: Option<String> = None;
     let mut map_run: Option<String> = None;
@@ -111,6 +113,13 @@ fn main() -> ExitCode {
             "--answer" | "-a" => {
                 answer = args.next().and_then(|value| value.parse().ok());
             }
+            // Frames a prompt must stay on screen before --answer's automatic click
+            // lands. 0 clicks the instant the script asks, which lets a menu loop burn a
+            // whole frame budget in one frame; 1 emulates a player confirming once a
+            // frame, so a capture marches through character creation instead of spinning.
+            "--answer-delay" => {
+                answer_delay = args.next().and_then(|value| value.parse().ok()).unwrap_or(0);
+            }
             "--map" | "-m" => {
                 map = args.next();
             }
@@ -119,6 +128,9 @@ fn main() -> ExitCode {
                 map_run = args.next();
             }
             "--hold-message" => hold_message = true,
+            "--page" => {
+                page = args.next().and_then(|value| value.parse().ok()).unwrap_or(0);
+            }
             // Which parallel-process-always events the engine starts, replacing
             // ENGINE_ALWAYS. An empty value starts none of them, which is the A/B
             // baseline (docs/ENGINE_EVENTS.md section 8.3).
@@ -152,6 +164,7 @@ fn main() -> ExitCode {
     match command.as_deref() {
         Some("verify") => run_verify(&root),
         Some("precompile") => run_precompile(&root),
+        Some("blocks") => run_blocks(&root, map.as_deref(), event, page),
         Some("capture") => match map.as_deref() {
             Some(name) => run_capture_map(&root, out, name),
             None => {
@@ -163,7 +176,11 @@ fn main() -> ExitCode {
                     None if boot => Entry::Boot,
                     None => Entry::Menu,
                 };
-                run_capture(&root, out, frames, answer, hold_message, engine_events, entry)
+                let answers = Answers {
+                    index: answer,
+                    delay: answer_delay,
+                };
+                run_capture(&root, out, frames, answers, hold_message, engine_events, entry)
             }
         },
         Some("list") => run_list(&root, filter.as_deref()),
@@ -222,6 +239,10 @@ fn print_help() {
     println!("    -t, --trace       Print every host callback in 'run', not just the summary.");
     println!("    -o, --out <FILE>  PNG path for 'capture' (default work/out/title.png).");
     println!("    -a, --answer <N>  Answer choice prompts with option N instead of holding the menu.");
+    println!("    --answer-delay <N>  Frames a prompt stays up before --answer clicks it (default");
+    println!("                      0 = answer the instant the script asks). 1 emulates a player");
+    println!("                      confirming once a frame, which is what walks a menu loop");
+    println!("                      forward instead of spinning inside one frame.");
     println!("    -F, --filter <T>  Only list events whose title contains T (with 'list').");
     println!("    --until <N>       Quit 'play' after N frames (smoke test; default: until closed).");
     println!("    --menu-only       Start common event 42 directly instead of the boot map.");
@@ -659,10 +680,15 @@ fn run_precompile(root: &Path) -> ExitCode {
 
     let checks = vec![
         Check::num("slots", 163_828, stats.slots as u64),
-        Check::num("blocks", 13_310, stats.blocks as u64),
-        // 111 / 102 / 170+179+176 marker counts from docs/BASELINE.json: the
+        // 112 belongs in this set: it opens a Condition block exactly like 111, and
+        // leaving it out put 131 case markers on the wrong block (docs/OPCODE_112.md).
+        // The counters below are now exactly the opcode census: conditions =
+        // 111 (10,743) + 112 (123), cases = 401 (18,555), else = 420 (3,279),
+        // cancel = 421 (153), and every tolerance counter is back to zero.
+        Check::num("blocks", 13_433, stats.blocks as u64),
+        // 111 / 112 / 102 / 170+179+176 marker counts from docs/BASELINE.json: the
         // precompiler must see each marker command exactly once.
-        Check::num("conditions", 10_743, stats.conditions as u64),
+        Check::num("conditions", 10_866, stats.conditions as u64),
         Check::num("choices", 495, stats.choices as u64),
         Check::num("loops", 2_072, stats.loops as u64),
         Check::num("labels", 606, stats.labels as u64),
@@ -671,15 +697,16 @@ fn run_precompile(root: &Path) -> ExitCode {
         // (docs/OPCODE_SPEC.md §4.7 corrected by measuring the data again).
         Check::num("dynamic_labels", 3, stats.dynamic_labels as u64),
         Check::num("malformed_conditions", 0, stats.malformed_conditions as u64),
-        Check::num("cases", 18_460, stats.cases as u64),
-        Check::num("else_cases", 3_246, stats.else_cases as u64),
-        Check::num("cancel_cases", 150, stats.cancel_cases as u64),
-        // Tolerance counters: this game really does contain markers with an
-        // empty block stack, and the precompiler must survive them unchanged.
-        Check::num("orphan_cases", 131, stats.orphan_cases as u64),
-        Check::num("orphan_ends", 138, stats.orphan_ends as u64),
-        Check::num("implicit_closes", 66, stats.implicit_closes as u64),
-        Check::num("unclosed_blocks", 3, stats.unclosed_blocks as u64),
+        Check::num("cases", 18_555, stats.cases as u64),
+        Check::num("else_cases", 3_279, stats.else_cases as u64),
+        Check::num("cancel_cases", 153, stats.cancel_cases as u64),
+        // Tolerance counters: markers are still counted when the stack is empty,
+        // but a correct stack discipline reaches zero for all of them (the 112
+        // fix removed the last orphans).
+        Check::num("orphan_cases", 0, stats.orphan_cases as u64),
+        Check::num("orphan_ends", 0, stats.orphan_ends as u64),
+        Check::num("implicit_closes", 54, stats.implicit_closes as u64),
+        Check::num("unclosed_blocks", 0, stats.unclosed_blocks as u64),
         Check::num("max_depth", 91, stats.max_depth as u64),
         Check::num("programs", 550, programs.len() as u64),
         // Every non-empty title must be findable again (300 CallByName and the
@@ -1300,6 +1327,15 @@ fn tint_instance(quad: &wolf_game::atlas::SpriteQuad) -> SpriteInstance {
 /// bare title menu (to photograph the runtime choice panel without the splash
 /// chain) and an arbitrary map event (the M2 story scripts, which never call the
 /// title at all).
+/// How a headless capture answers choice prompts.
+#[derive(Clone, Copy, Debug, Default)]
+struct Answers {
+    /// Option to preselect and confirm; `None` holds every prompt open (the title).
+    index: Option<usize>,
+    /// Frames a prompt must stay on screen before that click lands.
+    delay: u32,
+}
+
 enum Entry<'a> {
     Boot,
     Menu,
@@ -1310,7 +1346,7 @@ fn run_capture(
     root: &Path,
     out: Option<PathBuf>,
     frames: usize,
-    answer: Option<usize>,
+    answers: Answers,
     hold_message: bool,
     engine_events: Option<Vec<u32>>,
     entry: Entry<'_>,
@@ -1330,9 +1366,10 @@ fn run_capture(
     // capture photographs the message window (the story scripts talk before they branch).
     game.auto_advance = !hold_message;
     game.engine_always = engine_events;
-    if let Some(index) = answer {
+    if let Some(index) = answers.index {
         game.set_choice_cursor(index);
         game.auto_choice = true;
+        game.auto_choice_delay = answers.delay;
     }
     // Two entry points: the real boot path (map autorun event -> splashes -> title art
     // -> menu) and the bare menu event 42, kept for regression captures of the menu
@@ -1783,6 +1820,92 @@ fn run_capture_map(root: &Path, out: Option<PathBuf>, name: &str) -> ExitCode {
 /// need the same treatment common events already get: compile the page with
 /// `Program::from_slots` (it builds the identical jump tables) and step it.
 /// Common events stay loaded because map scripts reach them through opcode 210.
+/// `blocks`: print the control flow the VM compiled for one event, so a jump that
+/// disagrees with the file can be read off instead of guessed at.
+fn run_blocks(root: &Path, map_name: Option<&str>, event: Option<u32>, page: usize) -> ExitCode {
+    let basic = if root.join("BasicData").is_dir() {
+        root.join("BasicData")
+    } else {
+        root.to_path_buf()
+    };
+    let program = match map_name {
+        Some(name) => {
+            let cleaned = name.replace(std::path::MAIN_SEPARATOR, "/");
+            let relative: PathBuf = if cleaned.contains('/') || cleaned.ends_with(".mps") {
+                PathBuf::from(cleaned)
+            } else {
+                PathBuf::from(format!("MapData/{cleaned}.mps"))
+            };
+            let Some(bytes) = read(&root.join(&relative)) else {
+                eprintln!("  ! cannot read {}", root.join(&relative).display());
+                return ExitCode::FAILURE;
+            };
+            let map = match wf::mps::Map::parse(&bytes) {
+                Ok(value) => value,
+                Err(err) => {
+                    eprintln!("  ! {}: {err}", relative.display());
+                    return ExitCode::FAILURE;
+                }
+            };
+            let wanted = event_id_of(event);
+            let Some(found) = map.events.iter().find(|found| found.id == wanted) else {
+                eprintln!("  ! {} has no event {}", relative.display(), event_id_of(event));
+                return ExitCode::FAILURE;
+            };
+            let Some(found_page) = found.pages.get(page) else {
+                eprintln!("  ! event {} has no page {page}", found.id);
+                return ExitCode::FAILURE;
+            };
+            Program::from_slots(found.id, &found.name, found_page.commands.clone())
+        }
+        None => {
+            let Some(id) = event else {
+                eprintln!("blocks needs --event <ID> or --map <NAME> --event <ID>");
+                return ExitCode::from(2);
+            };
+            let events = match read(&basic.join("CommonEvent.dat"))
+                .map(|bytes| CommonEventData::parse(&bytes))
+            {
+                Some(Ok(events)) => events,
+                Some(Err(err)) => {
+                    eprintln!("  ! CommonEvent.dat: {err}");
+                    return ExitCode::FAILURE;
+                }
+                None => {
+                    eprintln!("  ! CommonEvent.dat not found under {}", basic.display());
+                    return ExitCode::FAILURE;
+                }
+            };
+            let Some(found) = events.events.iter().find(|event| event.id == id) else {
+                eprintln!("  ! no common event {id}");
+                return ExitCode::FAILURE;
+            };
+            Program::compile(found)
+        }
+    };
+    println!("  program   {} slots, {} block(s), {} label(s)", program.len(), program.blocks.len(), program.labels.len());
+    for (index, block) in program.blocks.iter().enumerate() {
+        let head = program.slots.get(block.head).and_then(|slot| match slot {
+            wolf_format::command::Slot::Command(cmd) => Some((cmd.opcode, ints_of(cmd))),
+            wolf_format::command::Slot::Blank => None,
+        });
+        println!("  block {index:>3} {:?} head {:>4} {:?} cases {:?} else {:?} cancel {:?} end {:?}",
+            block.kind, block.head, head.map(|(opcode, ints)| (opcode, ints)), block.cases, block.else_pc, block.cancel_pc,
+            if block.end_pc == usize::MAX { None } else { Some(block.end_pc) });
+    }
+    ExitCode::SUCCESS
+}
+
+fn event_id_of(event: Option<u32>) -> u32 {
+    event.unwrap_or(0)
+}
+
+fn ints_of(cmd: &wolf_format::command::Command) -> Vec<i32> {
+    cmd.params
+        .chunks_exact(4)
+        .map(|word| i32::from_le_bytes([word[0], word[1], word[2], word[3]]))
+        .collect()
+}
 fn run_map_event(
     root: &Path,
     map_name: &str,

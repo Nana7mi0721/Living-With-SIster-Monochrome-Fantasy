@@ -227,10 +227,40 @@ pub const TONE_NEUTRAL: Tone = [SCALE_ONE, SCALE_ONE, SCALE_ONE];
 
 /// Effect kind 0 (head nibble): single flash, the colour jumps to the target and decays back.
 pub const EFFECT_FLASH: u8 = 0;
-/// Effect kind 1: cancel the running flash and return to the base tone.
-pub const EFFECT_OFF: u8 = 1;
+/// Effect kind 1: colour correction, an offset added to the base tone and kept until replaced.
+///
+/// This used to be read as "cancel the running flash". docs/OPCODE_290.md section 5.2 shows
+/// the other reading is the right one: common event 8 highlights a menu row with
+/// `290 [16, 1, 3200, 3200, 25, 25, 25]` and immediately clears the previous row with
+/// `290 [16, 1, 3201, 3201, 0, 0, 0]`. An accumulating correction could never be cleared by
+/// adding zero, and the game has no "clear all effects" instruction anywhere, so the
+/// three args have to ASSIGN the offset.
+pub const EFFECT_COLOR_CORRECT: u8 = 1;
+/// Effect kind 2: drawing-coordinate shift, final value, kept until another shift replaces it.
+pub const EFFECT_SHIFT: u8 = 2;
+/// Effect kind 3: shake, a square wave alternating between +offset and -offset.
+pub const EFFECT_SHAKE: u8 = 3;
+/// Effect kind 4: zoom about a fixed point of the logical screen.
+pub const EFFECT_ZOOM: u8 = 4;
 /// Effect kind 5: automatic flash, the same ramp repeated for as long as the picture lives.
 pub const EFFECT_BLINK: u8 = 5;
+/// Effect kind 7: automatic expand and contract in percent, one excursion then a rest.
+pub const EFFECT_BREATH: u8 = 7;
+/// Effect kind 8: pattern switching, one pass then back to the command's own pattern.
+pub const EFFECT_PATTERN_ONCE: u8 = 8;
+/// Effect kind 9: pattern switching, looping back to the first pattern.
+pub const EFFECT_PATTERN_LOOP: u8 = 9;
+/// Effect kind 10: pattern switching, walking back and forth between the two ends.
+pub const EFFECT_PATTERN_PINGPONG: u8 = 10;
+
+/// A shake asking for at least this many repetitions is the author's way of writing
+/// "until something else stops it", and never ages out.
+///
+/// docs/OPCODE_290.md section 5.3 measures the real counts: 99999 appears 124 times, 999
+/// 52 times, 3 36 times, and 999999 twice. Nothing in the data sits near 100000 without
+/// carrying that meaning, which is why the threshold is where the editor's own summary
+/// text puts it.
+pub const SHAKE_ENDLESS: u32 = 100_000;
 
 /// One running `290` colour effect on a picture.
 ///
@@ -300,6 +330,287 @@ impl PictureEffect {
         from * (span - phase) + i64::from(SCALE_ONE) * phase
     }
 }
+/// A `290` type 4 zoom: the picture grows about a fixed point of the logical screen.
+///
+/// docs/OPCODE_290.md section 5.4 records the field order the editor writes. args 4 and 5
+/// are the centre in logical pixels and args 6 is the percentage, not a duration. All 49
+/// zoom instructions in this game keep args 4 at 512 (half of 1024) and args 6 at 100 or
+/// 105 - the "zoom in a little, later zoom back out" pair - which only makes sense as a
+/// centre plus a scale. The action time ramps the percentage so the move does not pop.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Zoom {
+    /// Point the picture scales about, in logical pixels.
+    pub centre: (i32, i32),
+    /// Percentage the ramp started from.
+    pub from: i32,
+    /// Percentage the ramp heads for, and stays at until another zoom replaces it.
+    pub to: i32,
+    /// Ramp length in frames; zero jumps straight to `to`.
+    pub duration: u32,
+    /// Frames elapsed in the ramp.
+    pub elapsed: u32,
+}
+
+impl Zoom {
+    /// Starts a ramp from the percentage already on screen.
+    #[must_use]
+    pub fn new(centre: (i32, i32), from: i32, to: i32, duration: i32) -> Self {
+        Self {
+            centre,
+            from,
+            to,
+            duration: duration.max(0) as u32,
+            elapsed: 0,
+        }
+    }
+
+    /// The percentage to scale by on the current frame.
+    #[must_use]
+    pub fn percent(&self) -> i32 {
+        if self.duration == 0 || self.elapsed >= self.duration {
+            return self.to;
+        }
+        let step = f64::from(self.elapsed) / f64::from(self.duration);
+        let value = f64::from(self.from) + f64::from(self.to - self.from) * step;
+        value.round() as i32
+    }
+
+    /// Advances the ramp by one frame, stopping at its end.
+    fn advance(&mut self) {
+        if self.elapsed < self.duration {
+            self.elapsed = self.elapsed.saturating_add(1);
+        }
+    }
+}
+
+/// A `290` type 3 shake: the picture is drawn at +offset for one period, then at -offset
+/// for the next, for `count` periods.
+///
+/// docs/OPCODE_290.md section 5.3 derives the field order: args 4 and 5 are the X and Y
+/// displacement in pixels, args 6 is the REPEAT count, and the action time is one period.
+/// The waveform is the square wave that section recommends. Alternating signs are what make
+/// a shake read as a shake instead of a drift, and a random waveform would need a seed the
+/// instruction does not carry, so it cannot be what the engine does. The staircase in
+/// common event 241 - (6,0,3) then (8,0,3) then (7,0,3) - is three separate instructions,
+/// each bringing its own amplitude, which fits a stateless square wave exactly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shake {
+    /// Displacement applied on the positive half of the wave, logical pixels.
+    pub offset: (i32, i32),
+    /// Frames in one half of the wave; the sign flips exactly here.
+    pub period: u32,
+    /// Number of repetitions; [`SHAKE_ENDLESS`] or more never stops.
+    pub count: u32,
+    /// Frames elapsed since the shake started.
+    pub elapsed: u32,
+}
+
+impl Shake {
+    /// Starts a shake at phase zero.
+    #[must_use]
+    pub fn new(offset: (i32, i32), count: i32, period: i32) -> Self {
+        Self {
+            offset,
+            period: period.max(1) as u32,
+            count: count.max(0) as u32,
+            elapsed: 0,
+        }
+    }
+
+    /// The displacement to add to the destination on the current frame.
+    #[must_use]
+    pub fn displacement(&self) -> (i32, i32) {
+        if self.period == 0 || self.is_over() {
+            return (0, 0);
+        }
+        // Integer division is the whole waveform: the sign flips at every period boundary.
+        if (self.elapsed / self.period) % 2 == 0 {
+            self.offset
+        } else {
+            (-self.offset.0, -self.offset.1)
+        }
+    }
+
+    /// True once a finite shake has used up its repetitions.
+    #[must_use]
+    pub fn is_over(&self) -> bool {
+        self.period == 0 || (self.count < SHAKE_ENDLESS && self.elapsed / self.period >= self.count)
+    }
+
+    /// Advances the shake by one frame.
+    fn advance(&mut self) {
+        self.elapsed = self.elapsed.saturating_add(1);
+    }
+}
+
+/// A `290` type 7 automatic expansion: the picture grows by `amp` percent over one
+/// excursion, snaps back, and rests for `rest` frames before repeating.
+///
+/// docs/OPCODE_290.md section 5.7 measures args 4 and 5 as the horizontal and vertical
+/// amplitude in percent (equal in all 25 instructions of this game), args 6 as the rest
+/// frames, and the action time as the length of one excursion. That section lists the
+/// waveform as unconfirmed and recommends the single excursion used here. A triangle would
+/// need the data to carry a full period, and the author's own rest frames only make sense
+/// if the return to size is instant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Breath {
+    /// Amplitude in percent of the picture size, horizontal then vertical.
+    pub amp: (i32, i32),
+    /// Frames one excursion takes.
+    pub period: u32,
+    /// Frames the picture rests at its natural size before the next excursion.
+    pub rest: u32,
+    /// Frames elapsed since the effect started.
+    pub elapsed: u32,
+}
+
+impl Breath {
+    /// Starts an expansion cycle at rest.
+    #[must_use]
+    pub fn new(amp: (i32, i32), period: i32, rest: i32) -> Self {
+        Self {
+            amp,
+            period: period.max(1) as u32,
+            rest: rest.max(0) as u32,
+            elapsed: 0,
+        }
+    }
+
+    /// Growth in percent on the current frame: zero at rest, `amp` at the top.
+    #[must_use]
+    pub fn growth(&self) -> (i32, i32) {
+        let cycle = self.period.saturating_add(self.rest);
+        if cycle == 0 {
+            return (0, 0);
+        }
+        let phase = self.elapsed % cycle;
+        if phase >= self.period {
+            return (0, 0);
+        }
+        let step = f64::from(phase) / f64::from(self.period);
+        (
+            (f64::from(self.amp.0) * step).round() as i32,
+            (f64::from(self.amp.1) * step).round() as i32,
+        )
+    }
+
+    /// Advances the expansion cycle by one frame.
+    fn advance(&mut self) {
+        self.elapsed = self.elapsed.saturating_add(1);
+    }
+}
+
+/// A `290` types 8, 9 and 10 pattern animation: which animation pattern the picture shows.
+///
+/// docs/OPCODE_290.md section 5.8 measures the field order. args 4 and 5 are the first and
+/// last pattern, the action time is the hold per pattern, and args 6 is unused - the
+/// editor's own summary string for these types carries two placeholders, not three. The
+/// three types differ only in what happens at the far end: 8 stops and hands the picture
+/// back to the pattern its `150` command asked for, 9 wraps to the first pattern, and 10
+/// turns around and walks back.
+///
+/// The picture layer has no pattern field yet: a `150` picture's animation frame is still
+/// carried verbatim in [`Picture::extras`] and the atlas draws the whole texture. This
+/// state machine is the switch the draw path will read once patterns are sliced, and it is
+/// kept here - next to the other effects - so the whole `290` surface stays in one place.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PatternFx {
+    /// One of [`EFFECT_PATTERN_ONCE`], [`EFFECT_PATTERN_LOOP`], [`EFFECT_PATTERN_PINGPONG`].
+    pub kind: u8,
+    /// First pattern of the sequence.
+    pub from: i32,
+    /// Last pattern of the sequence.
+    pub to: i32,
+    /// Frames each pattern is held, never zero.
+    pub interval: u32,
+    /// The pattern shown right now.
+    pub current: i32,
+    /// +1 while walking towards `to`, -1 while walking back towards `from`.
+    pub direction: i32,
+    /// Frames the current pattern has been held.
+    pub elapsed: u32,
+    /// Pattern the `150` command asked for, restored when a one-shot finishes.
+    pub base: i32,
+    /// True once a one-shot has handed the picture back to `base`.
+    pub done: bool,
+}
+
+impl PatternFx {
+    /// Starts a sequence at its first pattern.
+    #[must_use]
+    pub fn new(kind: u8, from: i32, to: i32, interval: i32, base: i32) -> Self {
+        Self {
+            kind,
+            from,
+            to,
+            interval: interval.max(1) as u32,
+            current: from,
+            direction: 1,
+            elapsed: 0,
+            base,
+            done: false,
+        }
+    }
+
+    /// True while the animation still owns the pattern field.
+    #[must_use]
+    pub fn is_running(&self) -> bool {
+        !self.done
+    }
+
+    /// Advances the hold timer, stepping the pattern when it expires.
+    fn advance(&mut self) {
+        if self.done {
+            return;
+        }
+        self.elapsed = self.elapsed.saturating_add(1);
+        if self.elapsed < self.interval {
+            return;
+        }
+        self.elapsed = 0;
+        if self.from == self.to {
+            // A one-pattern range has nothing to walk, but the editor emits it anyway.
+            if self.kind == EFFECT_PATTERN_ONCE {
+                self.current = self.base;
+                self.done = true;
+            }
+            return;
+        }
+        // The sequence runs from `from` to `to` in whichever direction, so `order` is the
+        // step in pattern space and `direction` says whether the animation walks forward.
+        let order = if self.to > self.from { 1 } else { -1 };
+        let mut next = self.current + self.direction * order;
+        let past_far = if order > 0 {
+            next > self.to
+        } else {
+            next < self.to
+        };
+        let past_near = if order > 0 {
+            next < self.from
+        } else {
+            next > self.from
+        };
+        if past_far || past_near {
+            match self.kind {
+                EFFECT_PATTERN_ONCE => {
+                    self.current = self.base;
+                    self.done = true;
+                    return;
+                }
+                EFFECT_PATTERN_LOOP => next = self.from,
+                // Ping-pong turns around and steps back the way it came. That is the reading
+                // the doc's "往復" name demands, and the only one that gives the direction
+                // field something to mean.
+                _ => {
+                    self.direction = -self.direction;
+                    next = self.current + self.direction * order;
+                }
+            }
+        }
+        self.current = next;
+    }
+}
+
 /// The four picture fields a `150` slide moves, as the whole numbers the layer stores.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pose {
@@ -408,6 +719,25 @@ pub struct Picture {
     pub tone: Tone,
     /// Running 290 colour effects, applied on top of tone.
     pub effects: Vec<PictureEffect>,
+    /// Colour offset from a `290` type 1, in percent, ASSIGNED by each instruction.
+    ///
+    /// Kept apart from `effects` because the two do not share a clock: a correction is a
+    /// persistent state that later instructions overwrite, while a flash ramps and expires.
+    pub color_corr: Tone,
+    /// Drawing-coordinate shift from a `290` type 2, in logical pixels.
+    ///
+    /// The type is named "final value": WOLF stores the offset the picture should end up
+    /// with, so a later instruction replaces it instead of adding to it, and (0, 0) is how
+    /// the game puts a picture back.
+    pub shift: (i32, i32),
+    /// Running `290` type 3 shake, if any.
+    pub shake: Option<Shake>,
+    /// Running `290` type 4 zoom, if any.
+    pub zoom: Option<Zoom>,
+    /// Running `290` type 7 automatic expansion, if any.
+    pub breath: Option<Breath>,
+    /// Running `290` types 8, 9 or 10 pattern animation, if any.
+    pub pattern: Option<PatternFx>,
     /// True while a `150` hide command keeps the slot alive but unpainted.
     ///
     /// Common event 63 hides its message window between messages ("hide the window when the
@@ -444,6 +774,12 @@ impl Picture {
             age: 0,
             tone: TONE_NEUTRAL,
             effects: Vec::new(),
+            color_corr: [0, 0, 0],
+            shift: (0, 0),
+            shake: None,
+            zoom: None,
+            breath: None,
+            pattern: None,
             hidden: false,
             transition: None,
         }
@@ -543,15 +879,21 @@ impl Picture {
     }
     /// The per-channel draw brightness this picture currently asks for, 0..=255.
     ///
-    /// Two layers, in this order: the base tone from the 150 colour slots, then every
-    /// live 290 effect multiplying it. DxLib expresses the result as SetDrawBright, which
+    /// Three layers, in this order: the base tone from the 150 colour slots, the type 1
+    /// colour correction added to it and clamped to 0..200, then every live colour effect
+    /// multiplying the result (docs/OPCODE_290.md section 5.2 pins that order). DxLib expresses the result as SetDrawBright, which
     /// scales the colour channels of whatever is drawn and never the alpha, so alpha()
     /// stays independent of this and the banner still blends at its own opacity.
     #[must_use]
     pub fn tone_byte(&self) -> [u8; 3] {
         let mut out = [0u8; 3];
         for (channel, slot) in out.iter_mut().enumerate() {
-            let mut value = i64::from(percent_to_byte(self.tone[channel]));
+            // The correction is an offset on the base tone, and the clamp to 0..200 has to
+            // happen BEFORE the percentage is turned into a byte: 100 is neutral and the
+            // official documentation clamps the final colour to that same range. With a zero
+            // correction this is bit for bit the expression the retail banner pinned.
+            let base = (self.tone[channel] + self.color_corr[channel]).clamp(0, 200);
+            let mut value = i64::from(percent_to_byte(base));
             for effect in &self.effects {
                 let numerator = effect.percent_times_duration(channel);
                 let denominator = i64::from(SCALE_ONE) * i64::from(effect.duration);
@@ -666,6 +1008,9 @@ impl Screen {
             }
             // One-shot effects narrate themselves out of existence; type 5 repeats.
             picture.effects.retain(|effect| !effect.is_finished());
+            // The positional effects run on the same frame clock as the fade ramp, so a host
+            // that ticks once per frame gets the rate the data asked for.
+            picture.tick_fx();
         }
     }
 
@@ -776,34 +1121,102 @@ impl Screen {
         }
     }
 
-    /// Applies one 290 effect command, returning false when the type is not implemented.
+    /// Applies one 290 effect command, returning false when the type or the range is unusable.
     ///
-    /// args is the interpreter raw argument list, so args 2 and 3 are the two picture
-    /// numbers and args 4..6 the per-channel targets. Only the colour family is handled -
-    /// types 0 (flash), 1 (cancel) and 5 (automatic flash) - because docs/OPCODE_290.md
-    /// sections 2.1, 2.2 and 2.5 show those are the only types whose three trailing args
-    /// are colour percentages. The coordinate and scale families need picture fields this
-    /// module does not own yet, so they are reported as unhandled instead of guessed at.
+    /// args is the interpreter raw argument list: args 0 is the head word (its high nibble is
+    /// already decoded into `kind` by the caller), args 1 the action time, args 2 and 3 the
+    /// ends of ONE CLOSED picture range, and args 4..6 three values whose meaning depends on
+    /// the type. docs/OPCODE_290.md section 2 lists all eleven types the editor offers; ten
+    /// of them occur in this game and all ten are handled here, which is the whole reason the
+    /// picture store - not the interpreter - owns the effect state.
+    ///
+    /// Type 6 (the second blink variant) stays unhandled on purpose: this game contains zero
+    /// of them, and guessing at a waveform nobody runs is worse than reporting it.
     pub fn effect(&mut self, kind: i32, duration: i32, args: &[i32]) -> bool {
         let Ok(kind) = u8::try_from(kind) else {
             return false;
         };
-        if !matches!(kind, EFFECT_FLASH | EFFECT_OFF | EFFECT_BLINK) {
+        let known = matches!(
+            kind,
+            EFFECT_FLASH
+                | EFFECT_COLOR_CORRECT
+                | EFFECT_SHIFT
+                | EFFECT_SHAKE
+                | EFFECT_ZOOM
+                | EFFECT_BLINK
+                | EFFECT_BREATH
+                | EFFECT_PATTERN_ONCE
+                | EFFECT_PATTERN_LOOP
+                | EFFECT_PATTERN_PINGPONG
+        );
+        if !known {
             return false;
         }
-        let effect = PictureEffect::from_args(kind, duration, args);
-        let targets = [args.get(2).copied(), args.get(3).copied()];
-        for number in targets.into_iter().flatten() {
+        let Some((lo, hi)) = effect_range(args) else {
+            return false;
+        };
+        let targets: Vec<i32> = self
+            .pictures
+            .range(lo..=hi)
+            .map(|(number, _)| *number)
+            .collect();
+        if targets.is_empty() {
+            return false;
+        }
+        let value = |index: usize| args.get(index).copied().unwrap_or(0);
+        let (v1, v2, v3) = (value(4), value(5), value(6));
+        let flash = PictureEffect::from_args(kind, duration, args);
+        for number in targets {
             let Some(picture) = self.pictures.get_mut(&number) else {
                 continue;
             };
-            // Every stopping spelling in the data means the same thing: back to the base
-            // tone the picture command set. A cancel, a zero length and an all-zero target
-            // are the three ways WOLF writes that.
-            if kind == EFFECT_OFF || duration <= 0 || effect.is_neutral() {
-                picture.stop_effects();
-            } else {
-                picture.start_effect(effect);
+            match kind {
+                EFFECT_FLASH | EFFECT_BLINK => {
+                    // Every stopping spelling in the data means the same thing: back to the
+                    // base tone the picture command set. A zero action time and an all-zero
+                    // target are the two ways WOLF writes that for these types.
+                    if duration <= 0 || flash.is_neutral() {
+                        picture.stop_effects();
+                    } else {
+                        picture.start_effect(flash);
+                    }
+                }
+                // Assignment, not accumulation: see EFFECT_COLOR_CORRECT for the menu-row
+                // highlight that only works this way.
+                EFFECT_COLOR_CORRECT => {
+                    picture.color_corr = [v1, v2, v3].map(|c| c.clamp(-200, 200))
+                }
+                EFFECT_SHIFT => picture.shift = (v1, v2),
+                EFFECT_SHAKE => {
+                    // A zero amplitude is how the author stops a shake, and the repetition
+                    // count is the third value, not a duration.
+                    picture.shake = if v1 == 0 && v2 == 0 {
+                        None
+                    } else {
+                        Some(Shake::new((v1, v2), v3, duration))
+                    };
+                }
+                EFFECT_ZOOM => {
+                    // args 6 is the percentage (all 49 instructions in this game send 100 or
+                    // 105), so 0 is a malformed request rather than a request for an
+                    // invisible picture; 100 - the neutral zoom - is the only sane reading.
+                    let target = if v3 <= 0 { SCALE_ONE } else { v3 };
+                    let from = picture.zoom.map_or(SCALE_ONE, |zoom| zoom.percent());
+                    picture.zoom = Some(Zoom::new((v1, v2), from, target, duration));
+                }
+                EFFECT_BREATH => {
+                    picture.breath = if v1 == 0 && v2 == 0 {
+                        None
+                    } else {
+                        Some(Breath::new((v1, v2), duration, v3))
+                    };
+                }
+                _ => {
+                    // 8, 9 and 10: the third value is not part of the instruction at all
+                    // (docs/OPCODE_290.md section 5.8), and the action time is the hold.
+                    let base = picture.pattern.map_or(0, |fx| fx.base);
+                    picture.pattern = Some(PatternFx::new(kind, v1, v2, duration, base));
+                }
             }
         }
         true
@@ -846,17 +1259,25 @@ impl Screen {
                 ));
                 continue;
             }
-            let (src, w, h) = if picture.kind.is_text() {
+            let (src, dst) = if picture.kind.is_text() {
+                // Text boxes carry their own metrics and have never been scaled by the 150
+                // percent slot, so they keep the plain placement law and only gain the
+                // positional effects - a message window has to shake with its picture.
                 let (w, h) = picture.window.unwrap_or((0, 0));
-                ([0, 0, 0, 0], w.max(0) as f32, h.max(0) as f32)
+                let placed = place(
+                    picture.anchor,
+                    picture.x,
+                    picture.y,
+                    w.max(0) as f32,
+                    h.max(0) as f32,
+                );
+                ([0, 0, 0, 0], picture.transform(placed))
             } else {
                 let Some((w, h)) = picture_size(picture, &mut tex_size) else {
                     continue;
                 };
-                let scale = picture.scale.max(0) as f32 / SCALE_ONE as f32;
-                ([0, 0, w, h], w as f32 * scale, h as f32 * scale)
+                ([0, 0, w, h], picture.destination(w as f32, h as f32))
             };
-            let dst = place(picture.anchor, picture.x, picture.y, w, h);
             if !on_screen(dst) {
                 continue;
             }
@@ -883,15 +1304,107 @@ pub fn on_screen(dst: [f32; 4]) -> bool {
 }
 
 impl Picture {
-    /// Where this picture lands when it draws w*h pixels, anchor and scale applied.
+    /// Where this picture lands when it draws w*h pixels, anchor, scale and effects applied.
     ///
     /// The message-window metrics need the frame rectangle without the texture lookup
     /// that `Screen::quads` does, so the placement law lives here once and both callers
-    /// share it.
+    /// share it. Both draw paths reach the effects through this method, so a shaken panel
+    /// and a shaken sprite cannot drift apart.
     #[must_use]
     pub fn destination(&self, w: f32, h: f32) -> [f32; 4] {
         let scale = self.scale.max(0) as f32 / SCALE_ONE as f32;
-        place(self.anchor, self.x, self.y, w * scale, h * scale)
+        let (sx, sy) = self.effect_scale();
+        let placed = place(self.anchor, self.x, self.y, w * scale * sx, h * scale * sy);
+        self.transform(placed)
+    }
+
+    /// The animation pattern the picture shows right now, if a type 8/9/10 owns it.
+    #[must_use]
+    pub fn pattern_now(&self) -> Option<i32> {
+        self.pattern.map(|fx| fx.current)
+    }
+
+    /// The width and height scale the running effects ask for, on top of the 150 scale.
+    ///
+    /// Only the type 7 expansion changes the size, and it changes it about the picture's
+    /// own anchor: `place` puts the anchor at x/y, so scaling the extent while keeping the
+    /// anchor fixed is exactly "grow around the anchored point". A centred picture therefore
+    /// grows in all four directions and a corner-anchored one grows to the right and down,
+    /// which is what the authors see in the editor.
+    fn effect_scale(&self) -> (f32, f32) {
+        let Some(breath) = &self.breath else {
+            return (1.0, 1.0);
+        };
+        let (gx, gy) = breath.growth();
+        (
+            1.0 + gx as f32 / SCALE_ONE as f32,
+            1.0 + gy as f32 / SCALE_ONE as f32,
+        )
+    }
+
+    /// The logical-pixel displacement the running effects ask for.
+    fn effect_offset(&self) -> (f32, f32) {
+        let mut x = self.shift.0 as f32;
+        let mut y = self.shift.1 as f32;
+        if let Some(shake) = &self.shake {
+            let (dx, dy) = shake.displacement();
+            x += dx as f32;
+            y += dy as f32;
+        }
+        (x, y)
+    }
+
+    /// Applies the effects that move an already placed rectangle: zoom, then shift and shake.
+    ///
+    /// The order matters and is the one docs/OPCODE_290.md section 5.4 implies: zoom is
+    /// defined about a point of the SCREEN, so it has to work on the placed rectangle, while
+    /// shift and shake are pixel displacements that must not be scaled by it. A neutral
+    /// picture takes neither branch and keeps the exact floats it had before effects
+    /// existed, which is what keeps the title frame byte-identical.
+    fn transform(&self, dst: [f32; 4]) -> [f32; 4] {
+        let mut out = dst;
+        if let Some(zoom) = &self.zoom {
+            let k = zoom.percent().max(0) as f32 / SCALE_ONE as f32;
+            if (k - 1.0).abs() > f32::EPSILON {
+                let (cx, cy) = (zoom.centre.0 as f32, zoom.centre.1 as f32);
+                out = [
+                    cx + (out[0] - cx) * k,
+                    cy + (out[1] - cy) * k,
+                    out[2] * k,
+                    out[3] * k,
+                ];
+            }
+        }
+        let (ox, oy) = self.effect_offset();
+        if ox != 0.0 || oy != 0.0 {
+            out[0] += ox;
+            out[1] += oy;
+        }
+        out
+    }
+
+    /// Advances the effect clocks that are not colour ramps.
+    ///
+    /// Called from `Screen::tick` with the same one-frame step as the fade ramp, so a host
+    /// that calls tick once per frame gets the animation rate the data asked for. The colour
+    /// effects keep their own clock in `PictureEffect::age`; these four carry theirs because
+    /// they are not ramps towards a target.
+    fn tick_fx(&mut self) {
+        if let Some(zoom) = &mut self.zoom {
+            zoom.advance();
+        }
+        if let Some(breath) = &mut self.breath {
+            breath.advance();
+        }
+        if let Some(pattern) = &mut self.pattern {
+            pattern.advance();
+        }
+        if let Some(shake) = &mut self.shake {
+            shake.advance();
+            if shake.is_over() {
+                self.shake = None;
+            }
+        }
     }
 }
 
@@ -954,6 +1467,20 @@ fn blend(from: i32, to: i32, age: u32, duration: u32) -> i32 {
     let step = f64::from(age) / f64::from(duration);
     let value = f64::from(from) + (f64::from(to) - f64::from(from)) * step;
     value.round() as i32
+}
+
+/// Reads the picture range out of a `290` argument list, normalising a reversed one.
+///
+/// docs/OPCODE_290.md section 1.2 shows args 2 and 3 are the two ends of ONE CLOSED range,
+/// not two independent pictures: the flashing-cursor instruction in common event 85 names
+/// [1600021, 1600026] and expects six pictures to blink, and a type 5 dimmer names
+/// [390, 500] for 72 pictures. Exactly one instruction in this game writes its ends in
+/// descending order (common event 94, slot 616); the engine cannot have drawn that as "no
+/// pictures at all", so it is a typing mistake in the data and the ends are swapped.
+fn effect_range(args: &[i32]) -> Option<(i32, i32)> {
+    let lo = args.get(2).copied()?;
+    let hi = args.get(3).copied()?;
+    Some(if lo <= hi { (lo, hi) } else { (hi, lo) })
 }
 
 /// Merges a command's field words into a picture, honouring the UNCHANGED sentinel.
@@ -1103,7 +1630,6 @@ mod tests {
         assert_eq!(quads[0].dst, [209.0, 502.5, 606.0, 35.0]);
     }
 
-
     #[test]
     fn a_picture_parked_outside_the_screen_is_not_queued() {
         // The balloon library that event 98 sets up parks its controls at (-2784, 2880)
@@ -1119,7 +1645,10 @@ mod tests {
             &[0, 368, 1872, 1, 255, -2784, 2880, 100, 0],
         ));
         assert_eq!(screen.len(), 1, "the picture is still alive");
-        assert!(screen.quads(|_| Some((18, 18))).is_empty(), "parked picture drawn");
+        assert!(
+            screen.quads(|_| Some((18, 18))).is_empty(),
+            "parked picture drawn"
+        );
         // A picture that only clips at an edge still draws: (1000, 500) overlaps.
         screen.apply(&cmd(
             7,
@@ -1814,5 +2343,245 @@ mod tone_tests {
         screen.tick();
         assert!(screen.get(7).unwrap().effects.is_empty());
         assert_eq!(screen.get(7).unwrap().tone_byte(), [128, 128, 128]);
+    }
+}
+
+#[cfg(test)]
+mod effect_tests {
+    use super::*;
+
+    /// One `290` argument list the way the interpreter hands it over.
+    ///
+    /// Slot 0 is the head word, which the interpreter has already split into the type it
+    /// passes as `kind`, so the tests only have to make the slot exist.
+    fn args(duration: i32, lo: i32, hi: i32, values: [i32; 3]) -> Vec<i32> {
+        vec![0, duration, lo, hi, values[0], values[1], values[2]]
+    }
+
+    /// A screen holding one freshly drawn picture per number, in the given slots.
+    fn screen_with(numbers: &[i32]) -> Screen {
+        let mut screen = Screen::new();
+        for number in numbers {
+            screen.pictures.insert(*number, Picture::new(*number));
+        }
+        screen
+    }
+
+    /// The picture range is the closed interval the manual describes, not two loose slots.
+    ///
+    /// Common event 85 blinks six cursors with one instruction and a type 5 dimmer darkens
+    /// 72 pictures at once, so reading args 2 and 3 as two independent numbers would leave
+    /// 70 of those 72 untouched.
+    #[test]
+    fn the_picture_range_is_closed_and_inclusive() {
+        let mut screen = screen_with(&[1, 2, 3, 4, 5]);
+        assert!(screen.effect(
+            i32::from(EFFECT_COLOR_CORRECT),
+            0,
+            &args(0, 2, 4, [10, 0, 0])
+        ));
+        for number in 2..=4 {
+            assert_eq!(
+                screen.get(number).expect("picture").color_corr[0],
+                10,
+                "slot {number} is inside [2, 4]"
+            );
+        }
+        assert_eq!(screen.get(1).expect("picture").color_corr[0], 0);
+        assert_eq!(screen.get(5).expect("picture").color_corr[0], 0);
+    }
+
+    /// A range written high-to-low is swapped instead of matching nothing.
+    ///
+    /// Common event 94 slot 616 is the only instruction in the game that writes its ends in
+    /// descending order. The engine cannot have drawn that as "no pictures at all", so the
+    /// data is a typo and the ends get ordered.
+    #[test]
+    fn a_reversed_range_is_swapped_instead_of_touching_nothing() {
+        let mut screen = screen_with(&[10, 11, 12]);
+        assert!(screen.effect(i32::from(EFFECT_SHIFT), 0, &args(0, 12, 10, [4, -4, 0])));
+        for number in [10, 11, 12] {
+            assert_eq!(screen.get(number).expect("picture").shift, (4, -4));
+        }
+    }
+
+    /// Type 1 assigns the colour offset; it does not accumulate and cannot be cancelled.
+    ///
+    /// This is the SampleMapA event 8 menu highlight: `+25` on the newly selected row and
+    /// `(0, 0, 0)` on the row that was selected before. An accumulating correction could
+    /// never be cleared by adding zero, and the game has no "clear all effects" instruction.
+    #[test]
+    fn colour_correction_assigns_instead_of_accumulating() {
+        let mut screen = screen_with(&[3200, 3201]);
+        screen.pictures.get_mut(&3200).expect("picture").tone = [50, 50, 50];
+
+        let brightness = |screen: &Screen| screen.get(3200).expect("picture").tone_byte()[0];
+        assert_eq!(brightness(&screen), 128, "50 percent of a channel");
+
+        let highlight = args(1, 3200, 3201, [25, 25, 25]);
+        assert!(screen.effect(i32::from(EFFECT_COLOR_CORRECT), 1, &highlight));
+        assert_eq!(brightness(&screen), 191, "50 + 25 percent");
+        // The very same instruction again must not reach 100 percent.
+        assert!(screen.effect(i32::from(EFFECT_COLOR_CORRECT), 1, &highlight));
+        assert_eq!(brightness(&screen), 191);
+
+        let reset = args(1, 3200, 3201, [0, 0, 0]);
+        assert!(screen.effect(i32::from(EFFECT_COLOR_CORRECT), 1, &reset));
+        assert_eq!(brightness(&screen), 128, "back to the 150 base tone");
+    }
+
+    /// A finite shake alternates every period and then disappears instead of resting.
+    #[test]
+    fn a_shake_alternates_every_period_and_stops_after_its_count() {
+        let mut screen = screen_with(&[900]);
+        assert!(screen.effect(i32::from(EFFECT_SHAKE), 3, &args(3, 900, 900, [6, 0, 2])));
+        let left = |screen: &Screen| screen.get(900).expect("picture").destination(10.0, 10.0)[0];
+
+        assert_eq!(left(&screen), 6.0, "first half of the wave");
+        for _ in 0..3 {
+            screen.tick();
+        }
+        assert_eq!(left(&screen), -6.0, "second half of the wave");
+        for _ in 0..3 {
+            screen.tick();
+        }
+        assert!(screen.get(900).expect("picture").shake.is_none());
+        assert_eq!(left(&screen), 0.0);
+    }
+
+    /// A shake asking for 100000 repetitions or more never ages out.
+    ///
+    /// The game writes 99999 in 124 instructions and 999999 in two more, which only means
+    /// anything as "until something else stops it".
+    #[test]
+    fn an_endless_shake_survives_far_past_its_count() {
+        let mut screen = screen_with(&[901]);
+        assert!(screen.effect(
+            i32::from(EFFECT_SHAKE),
+            2,
+            &args(2, 901, 901, [3, 3, 99_999])
+        ));
+        for _ in 0..1_000 {
+            screen.tick();
+        }
+        assert!(screen.get(901).expect("picture").shake.is_some());
+    }
+
+    /// The type 7 expansion grows to its amplitude and then sits at the natural size.
+    ///
+    /// The shape is the one docs/OPCODE_290.md section 5.7 recommends: one excursion over
+    /// the action time, then the rest frames back at 100 percent.
+    #[test]
+    fn the_expansion_grows_to_its_amplitude_then_rests() {
+        let mut screen = screen_with(&[6100]);
+        assert!(screen.effect(
+            i32::from(EFFECT_BREATH),
+            10,
+            &args(10, 6100, 6100, [10, 20, 5])
+        ));
+        let size = |screen: &Screen| {
+            let dst = screen.get(6100).expect("picture").destination(100.0, 50.0);
+            (dst[2].round(), dst[3].round())
+        };
+
+        assert_eq!(
+            size(&screen),
+            (100.0, 50.0),
+            "the cycle starts at 100 percent"
+        );
+        for _ in 0..5 {
+            screen.tick();
+        }
+        assert_eq!(
+            size(&screen),
+            (105.0, 55.0),
+            "half way into a 10 frame excursion"
+        );
+        for _ in 0..5 {
+            screen.tick();
+        }
+        assert_eq!(
+            size(&screen),
+            (100.0, 50.0),
+            "the rest frames sit at 100 percent"
+        );
+    }
+
+    /// Types 8, 9 and 10 differ only in what they do at the far end of the sequence.
+    #[test]
+    fn pattern_animations_walk_and_terminate_differently_per_type() {
+        let walk = |kind: u8, steps: usize| {
+            let mut screen = screen_with(&[700]);
+            assert!(screen.effect(i32::from(kind), 1, &args(1, 700, 700, [1, 3, 0])));
+            let mut seen = vec![screen.get(700).expect("picture").pattern_now().expect("fx")];
+            for _ in 0..steps {
+                screen.tick();
+                seen.push(screen.get(700).expect("picture").pattern_now().expect("fx"));
+            }
+            seen
+        };
+
+        // 8 stops and hands the picture back to the 150 pattern, which the model does not
+        // carry yet and therefore reports as 0.
+        assert_eq!(walk(EFFECT_PATTERN_ONCE, 3), vec![1, 2, 3, 0]);
+        // 9 loops back to the first pattern.
+        assert_eq!(walk(EFFECT_PATTERN_LOOP, 3), vec![1, 2, 3, 1]);
+        // 10 turns around at the far end and walks back.
+        assert_eq!(walk(EFFECT_PATTERN_PINGPONG, 3), vec![1, 2, 3, 2]);
+    }
+
+    /// A shift displaces the finished rectangle until another shift replaces it.
+    #[test]
+    fn a_shift_displaces_the_destination_until_it_is_set_back() {
+        let mut screen = screen_with(&[512]);
+        {
+            let picture = screen.pictures.get_mut(&512).expect("picture");
+            picture.x = 100;
+            picture.y = 100;
+        }
+        assert!(screen.effect(i32::from(EFFECT_SHIFT), 0, &args(0, 512, 512, [7, -3, 0])));
+        let dst = screen.get(512).expect("picture").destination(10.0, 10.0);
+        assert_eq!((dst[0], dst[1]), (107.0, 97.0));
+
+        // The type is named "final value": re-issuing zero puts the picture back and no
+        // cancellation instruction is needed.
+        assert!(screen.effect(i32::from(EFFECT_SHIFT), 0, &args(0, 512, 512, [0, 0, 0])));
+        let dst = screen.get(512).expect("picture").destination(10.0, 10.0);
+        assert_eq!((dst[0], dst[1]), (100.0, 100.0));
+    }
+
+    /// A zoom scales the placed rectangle about a SCREEN point, not about the picture.
+    #[test]
+    fn a_zoom_scales_the_placed_rectangle_about_its_centre() {
+        let mut screen = screen_with(&[1200]);
+        {
+            let picture = screen.pictures.get_mut(&1200).expect("picture");
+            picture.x = 512;
+            picture.y = 288;
+            picture.anchor = ANCHOR_CENTRE;
+        }
+        // args 4 and 5 are the centre in logical pixels and args 6 the percentage; all 49
+        // zoom instructions in this game send 512 for x and 100 or 105 for the percentage.
+        assert!(screen.effect(
+            i32::from(EFFECT_ZOOM),
+            0,
+            &args(0, 1200, 1200, [512, 288, 200])
+        ));
+        let dst = screen.get(1200).expect("picture").destination(100.0, 100.0);
+        assert_eq!(dst, [412.0, 188.0, 200.0, 200.0]);
+    }
+
+    /// The zoom percentage ramps over the action time instead of popping.
+    #[test]
+    fn a_zoom_ramps_over_its_action_time() {
+        let mut zoom = Zoom::new((512, 288), 100, 200, 4);
+        assert_eq!(zoom.percent(), 100);
+        zoom.advance();
+        zoom.advance();
+        assert_eq!(zoom.percent(), 150);
+        for _ in 0..4 {
+            zoom.advance();
+        }
+        assert_eq!(zoom.percent(), 200, "the ramp parks at its target");
     }
 }

@@ -1886,6 +1886,13 @@ fn enter_block(
             None
         }
         BlockKind::Condition => {
+            if cmd.opcode == 112 {
+                // The string flavour branches through the very same case table;
+                // only the comparison differs, so it reuses the block stack instead of
+                // duplicating the enter/close discipline.
+                inst.pc = eval_string_condition(inst, vars, cmd);
+                return None;
+            }
             let head = arg(cmd, 0);
             let count = (head & 0x0F) as usize;
             let mut matched = None;
@@ -1955,9 +1962,12 @@ fn close_loop(inst: &mut Instance, block_index: usize) {
     }
 }
 
-/// `112`: string condition. Layout and operator encoding are the least
-/// documented part of the format (docs/OPCODE_SPEC.md §5.27) and this game's
-/// data contains no `112` at all, so we implement equality only and log.
+/// `112`: string conditional branch (文字列条件分岐). Layout per
+/// docs/OPCODE_SPEC.md §5.10: one string variable and one compared string per
+/// condition (`argc == 1 + (head & 0x0F)`, `strc == 4`), the same 401/420/499
+/// skeleton as `111`, and equality is the only comparison the opcode offers.
+/// The game really does use it: 123 sites in the common events and 21 in the map
+/// pages, which is why it has to share the block stack (see `from_slots`).
 fn eval_string_condition(inst: &mut Instance, vars: &mut Variables, cmd: &Command) -> usize {
     let head = arg(cmd, 0);
     let count = (head & 0x0F) as usize;

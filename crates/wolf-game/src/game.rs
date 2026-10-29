@@ -211,6 +211,11 @@ pub struct Game {
     pub auto_advance: bool,
     /// When true, a choice prompt answers itself with the highlighted option.
     pub auto_choice: bool,
+    /// Frames a choice prompt must stay on screen before [`Self::auto_choice`] may answer
+    /// it. 0 answers the moment the script asks, which lets a menu loop run to the
+    /// instruction budget inside ONE frame; 1 emulates a player confirming once a frame,
+    /// which is what a scripted playthrough needs to march through a menu.
+    pub auto_choice_delay: u32,
     /// The automatic pages of the map the game booted into.
     pub runtime: MapRuntime,
     /// Mouse position in logical pixels, [-1, -1] when the pointer is outside.
@@ -275,6 +280,7 @@ impl Game {
             replies: std::collections::VecDeque::new(),
             auto_advance: false,
             auto_choice: false,
+            auto_choice_delay: 0,
             runtime: MapRuntime::new(),
             mouse: [-1, -1],
             mouse_buttons: 0,
@@ -570,6 +576,7 @@ impl Game {
             key_bits: self.key_bits,
             auto_advance: self.auto_advance,
             auto_choice: self.auto_choice,
+            auto_choice_delay: self.auto_choice_delay,
             cursor: self.choice_cursor,
             mouse: self.mouse,
             mouse_buttons: self.mouse_buttons,
@@ -708,6 +715,7 @@ struct GameHost<'a> {
     key_bits: u32,
     auto_advance: bool,
     auto_choice: bool,
+    auto_choice_delay: u32,
     cursor: usize,
     mouse: [i32; 2],
     mouse_buttons: u32,
@@ -806,7 +814,14 @@ impl Host for GameHost<'_> {
             *self.choices = None;
             return Some(reply);
         }
-        if self.auto_choice {
+        // A delay of 0 clicks the instant the script asks. Any larger value lets the
+        // prompt live for that many frames first, which turns a menu loop into one
+        // step per frame instead of a spin that burns the whole frame budget.
+        let settled = self
+            .choices
+            .as_ref()
+            .map_or(true, |choices| choices.frames >= self.auto_choice_delay);
+        if self.auto_choice && settled {
             *self.choices = None;
             let index = self.cursor;
             return Some(ChoiceReply::Index(index));

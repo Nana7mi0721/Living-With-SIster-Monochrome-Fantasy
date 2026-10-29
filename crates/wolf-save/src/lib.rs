@@ -92,6 +92,20 @@ pub fn decrypt(data: &[u8]) -> Result<Vec<u8>> {
     Ok(buf)
 }
 
+/// Encrypt a decrypted save file, returning a fresh buffer.
+///
+/// This is the same three-pass XOR as [`decrypt`]: every byte below
+/// [`CRYPT_START`] is copied through untouched (the seeds live there), and each
+/// body byte is XORed once per pass with a keystream that depends only on its
+/// own address, never on the data. The cipher is therefore an involution --
+/// `encrypt(decrypt(x)) == x` and `decrypt(encrypt(x)) == x` -- which is why
+/// this is a thin wrapper rather than a second implementation.
+///
+/// `docs/SAVE_SPEC.md` §2 records the byte-level evidence.
+pub fn encrypt(data: &[u8]) -> Result<Vec<u8>> {
+    decrypt(data)
+}
+
 /// The 0x14-byte plaintext header.
 ///
 /// Offsets 1, 4, 5, 7, 8 and 0x0A..=0x13 are unexplained; they are all zero in
@@ -366,6 +380,119 @@ impl SaveFile {
     #[must_use]
     pub fn checksum_ok(&self) -> bool {
         self.stored_checksum == self.computed_checksum
+    }
+
+    /// Rebuild the **decrypted** file from the header and the current segments.
+    ///
+    /// The plaintext header is copied from [`SaveFile::header`] except for the
+    /// checksum byte at offset 2, which is recomputed from the new body. The name
+    /// is re-encoded as `MemData<WORD>` (byte length including the terminator) and
+    /// the version as a little-endian `u16`, so a caller can edit
+    /// [`SaveFile::name`], [`SaveFile::file_version`], [`SaveFile::header`] or any
+    /// segment and still get a self-consistent file.
+    ///
+    /// Unlike a parsed segment, the result is *not* encrypted — feed it to
+    /// [`SaveFile::to_bytes`] to write a file the game can load.
+    ///
+    /// The typed views are not refreshed; they still describe the bytes that were
+    /// parsed. Re-run [`SaveFile::parse`] on the output to get matching views.
+    pub fn serialize(&self) -> Result<Vec<u8>> {
+        let mut name_bytes = self.name.as_bytes().to_vec();
+        name_bytes.push(0);
+        let name_len = match u16::try_from(name_bytes.len()) {
+            Ok(len) => len,
+            Err(_) => {
+                return Err(Error::field(
+                    "save name",
+                    0,
+                    format!(
+                        "{} byte(s) including the terminator; a MemData<WORD> holds at most 65535",
+                        name_bytes.len()
+                    ),
+                ));
+            }
+        };
+
+        let body_len: usize = self.chunks.iter().map(|chunk| chunk.len).sum();
+        let mut out = Vec::with_capacity(CRYPT_START + 1 + 2 + name_bytes.len() + 2 + body_len + 1);
+        out.extend_from_slice(&self.header.raw);
+        out.push(self.header.start_byte);
+        out.extend_from_slice(&name_len.to_le_bytes());
+        out.extend_from_slice(&name_bytes);
+        out.extend_from_slice(&self.file_version.to_le_bytes());
+        for chunk in &self.chunks {
+            let end = chunk.offset + chunk.len;
+            if end > self.data.len() {
+                return Err(Error::field(
+                    chunk.name,
+                    chunk.offset,
+                    format!(
+                        "segment ends at {end} but only {} byte(s) are buffered",
+                        self.data.len()
+                    ),
+                ));
+            }
+            out.extend_from_slice(&self.data[chunk.offset..end]);
+        }
+        out.push(self.end_byte);
+
+        let checksum = out[CRYPT_START..]
+            .iter()
+            .fold(0u8, |acc, byte| acc.wrapping_add(*byte));
+        out[2] = checksum;
+        Ok(out)
+    }
+
+    /// Encrypt [`SaveFile::serialize`]: the exact bytes to write to disk.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        encrypt(&self.serialize()?)
+    }
+
+    /// Replace one segment's bytes, keeping every later offset consistent.
+    ///
+    /// The ids are the ones [`SaveFile::chunks`] hands out (`0..=6`). The new segment
+    /// may have a different length; segments after it are shifted and the checksum
+    /// is recomputed. Nothing is written to disk — call [`SaveFile::to_bytes`].
+    ///
+    /// The typed views are **not** re-parsed, so they keep describing the previous
+    /// bytes. Round-trip to refresh them:
+    ///
+    /// ```text
+    /// let mut edited = save.clone();
+    /// edited.replace_part(6, &[1, 1, 0, 0, 0, 0x05, 0x2A])?;  // one SavePart7 entry
+    /// let fresh = SaveFile::parse(&edited.to_bytes()?)?;
+    /// assert_eq!(fresh.part7.entries.len(), 1);
+    /// ```
+    pub fn replace_part(&mut self, id: u32, bytes: &[u8]) -> Result<()> {
+        let index = match self.chunks.iter().position(|chunk| chunk.id == id) {
+            Some(index) => index,
+            None => {
+                return Err(Error::field(
+                    "segment id",
+                    0,
+                    format!(
+                        "no segment with id {id}; this file has ids 0..={}",
+                        self.chunks.len().saturating_sub(1)
+                    ),
+                ));
+            }
+        };
+
+        let offset = self.chunks[index].offset;
+        let old_len = self.chunks[index].len;
+        self.data
+            .splice(offset..offset + old_len, bytes.iter().copied());
+        self.chunks[index].len = bytes.len();
+
+        let delta = bytes.len() as i64 - old_len as i64;
+        for later in &mut self.chunks[index + 1..] {
+            later.offset = (later.offset as i64 + delta).max(0) as usize;
+        }
+
+        self.computed_checksum = self.data[CRYPT_START..]
+            .iter()
+            .fold(0u8, |acc, byte| acc.wrapping_add(*byte));
+        Ok(())
     }
 }
 
