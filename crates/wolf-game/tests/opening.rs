@@ -266,7 +266,7 @@ fn the_title_menu_starts_a_new_game() {
 /// player sees (the picture layer) and the state that changes during play (normal
 /// variables, play time, choice anchor) must survive the round trip.
 #[test]
-fn a_new_game_can_be_saved_and_reloaded_after_the_opening() {
+fn a_title_new_game_can_be_saved_and_reloaded_after_the_opening() {
     let root = data_root();
     let mut game = match Game::new(&root) {
         Ok(game) => game,
@@ -284,14 +284,37 @@ fn a_new_game_can_be_saved_and_reloaded_after_the_opening() {
     };
     game.base_save = Some(wolf_save::SaveFile::parse(&bytes).expect("template parses"));
 
-    game.auto_advance = true;
-    game.auto_choice = true;
-    game.auto_choice_delay = 1;
-    game.set_choice_cursor(0);
-    if let Err(err) = game.start_map_event_by_name("Map003", 1) {
-        eprintln!("skipping: cannot start new-game processing: {err}");
+    // The full PLAN.md chain starts at the title screen: boot, confirm, title menu,
+    // first option (new game), then let the opening dialogue and prompts run.
+    if let Err(err) = game.boot() {
+        eprintln!("skipping: cannot boot: {err}");
         return;
     }
+    for _ in 0..800 {
+        game.frame();
+    }
+    assert!(
+        game.screen.iter().any(|picture| picture.file.contains("title01")),
+        "the boot chain did not reach the title art"
+    );
+    game.key_bits = key::OK;
+    game.frame();
+    game.key_bits = 0;
+    for _ in 0..240 {
+        game.frame();
+    }
+    let menu = game.choices.as_ref().expect("the title menu is open");
+    assert_eq!(menu.options, ["1", "2", "3"], "the title menu changed");
+    game.set_choice_cursor(0);
+    game.auto_choice = true;
+    game.auto_choice_delay = 1;
+    for _ in 0..120 {
+        game.frame();
+        if game.choices.is_none() {
+            break;
+        }
+    }
+    game.auto_advance = true;
     for _ in 0..1200 {
         let _ = game.frame();
     }
