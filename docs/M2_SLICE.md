@@ -16,7 +16,7 @@ mean abs 0.012）。M2 的验收对象是**玩家真正开始游戏后的第一�
 
 | 项 | 值 |
 |---|---|
-| git HEAD | `5e26bec` + **本批**（styled 101 message `layout_styled` / SavePart5 图片表写回 / vardb `write_into` 接线 / 220 mode 0 整档保存） |
+| git HEAD | `dc85636`（styled 101 message `layout_styled` / SavePart5 图片表写回 / vardb `write_into` 接线 / 220 mode 0 整档保存） |
 | 数据根 | `work/full`（23 个 .wolf 全解，4,085 文件） |
 | 屏幕 | 1024x576，60 fps，tile 16 px |
 | 工具链 | Rust 1.99.1 msvc；`cargo test -q --workspace` 全绿；`wolf-cli verify` 63/63 |
