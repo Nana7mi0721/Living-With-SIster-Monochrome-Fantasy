@@ -559,6 +559,16 @@ pub trait Host {
         let _ = (kind, flags);
     }
 
+    /// `151 ChangeColor`: whole-screen colour multiplier.
+    ///
+    /// `colour` packs R/G/B in its low three bytes (100 = neutral) and the flash
+    /// flag in the top byte; `frames` is the ramp length. Pictures 0 and above are
+    /// not affected, pictures -1 and below are - the host applies the multiplier
+    /// to the screen layers it owns.
+    fn change_color(&mut self, colour: i32, frames: i32) {
+        let _ = (colour, frames);
+    }
+
     /// `270 Party` (add/remove/reorder party members).
     fn party(&mut self, args: &[i32]) {
         let _ = args;
@@ -733,6 +743,32 @@ pub struct InputState {
     pub ban_keys: u32,
 }
 
+/// Transition setting installed by opcode 160 and consumed by 161/162.
+///
+/// `kind` is the transition type (`-1` = simple cut, the shipped default).
+/// `flags` packs the duration in its low byte and the "wait for the transition"
+/// bit at 0x1_0000 (the CE48 default is 0x0001_000A = wait, 10 frames). WOLF
+/// keeps one setting for the whole game: 160 replaces it, 161 prepares the screen
+/// freeze and 162 executes and blocks for the configured number of frames.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TransitionState {
+    /// Transition type from opcode 160, `-1` for a simple cut.
+    pub kind: i32,
+    /// Duration (low byte) and wait flag (bit 16).
+    pub flags: i32,
+    /// True between 161 PrepareTransition and 162 ExecuteTransition.
+    pub prepared: bool,
+}
+
+impl TransitionState {
+    /// Frames 162 blocks for. The engine treats a zero duration as one frame.
+    #[must_use]
+    pub const fn frames(&self) -> u32 {
+        let frames = (self.flags & 0xFF) as u32;
+        if frames == 0 { 1 } else { frames }
+    }
+}
+
 /// The interpreter.
 pub struct Vm {
     /// Every precompiled common event.
@@ -750,6 +786,8 @@ pub struct Vm {
     pub hot_trace: bool,
     /// Input policy set by opcodes 125 and 126.
     pub input: InputState,
+    /// Transition setting shared by 160/161/162.
+    pub transition: TransitionState,
 }
 
 impl Vm {
@@ -766,6 +804,7 @@ impl Vm {
             rng: WolfRng::new(),
             hot_trace: false,
             input: InputState::default(),
+            transition: TransitionState::default(),
         }
     }
 
@@ -1019,6 +1058,7 @@ impl Vm {
                     budget,
                     &mut self.rng,
                     &mut self.input,
+                    &mut self.transition,
                     self.hot_trace,
                     &mut hist,
                 )
@@ -1152,7 +1192,7 @@ impl Vm {
             .iter()
             .filter(|i| {
                 i.pc >= i.program.len()
-                    && !matches!(i.wait, WaitState::Child(_))
+                    && i.wait == WaitState::None
                     && !i.retain_after_finish
             })
             .map(|i| i.id)
@@ -1443,6 +1483,7 @@ fn execute(
     budget: &mut usize,
     rng: &mut WolfRng,
     input: &mut InputState,
+    transition: &mut TransitionState,
     hot: bool,
     hist: &mut Vec<(usize, u64)>,
 ) -> BlockResult {
@@ -1746,22 +1787,38 @@ fn execute(
                 inst.pc += 1;
                 None
             }
-            151 | 161 => {
-                host.log(
-                    LogLevel::Warn,
-                    &format!("{opcode}: transition variant with undocumented layout; ignored"),
-                );
+            151 => {
+                host.change_color(arg(cmd, 0), arg(cmd, 1));
                 inst.pc += 1;
                 None
             }
             160 => {
-                host.transition(arg(cmd, 0), arg(cmd, 1));
+                // 160 installs the setting; it does not block and draws nothing.
+                // CE48 starts every game with [-1, 0x0001_000A]: simple cut, wait,
+                // 10 frames (docs/OPCODE_SPEC.md section 5.20).
+                transition.kind = arg(cmd, 0);
+                transition.flags = arg(cmd, 1);
+                host.transition(transition.kind, transition.flags);
+                inst.pc += 1;
+                None
+            }
+            161 => {
+                // PrepareTransition freezes the drawn screen while event
+                // processing continues. The host owns the actual freeze.
+                transition.prepared = true;
+                host.transition(transition.kind, transition.flags);
                 inst.pc += 1;
                 None
             }
             162 => {
-                host.transition(arg(cmd, 0), arg(cmd, 1));
-                inst.wait = WaitState::Frames(1);
+                // ExecuteTransition resumes drawing and blocks until the
+                // configured animation has run. The old one-frame wait ignored
+                // the 10-frame default, which would cut every SampleMapB
+                // transition ten times too short.
+                transition.prepared = false;
+                let frames = transition.frames();
+                host.transition(transition.kind, transition.flags);
+                inst.wait = WaitState::Frames(frames);
                 inst.pc += 1;
                 Some(Signal::Blocked)
             }
@@ -2446,6 +2503,8 @@ mod tests {
         effects: Vec<(i32, i32, Vec<i32>)>,
         // Every 123 poll the host answered: (mask, auto-input bits).
         key_polls: Vec<(u32, u32)>,
+        // Every 151 ChangeColor: (packed colour, frames).
+        colours: Vec<(i32, i32)>,
     }
 
     impl Host for Recorder {
@@ -2470,6 +2529,9 @@ mod tests {
         }
         fn teleport(&mut self, map: i32, x: i32, y: i32, direction: i32) {
             self.teleports.push((map, x, y, direction));
+        }
+        fn change_color(&mut self, colour: i32, frames: i32) {
+            self.colours.push((colour, frames));
         }
         fn log(&mut self, level: LogLevel, message: &str) {
             self.logs.push((level, message.to_owned()));
@@ -3714,6 +3776,47 @@ mod tests {
         let report = vm.step_frame(&mut host);
         assert_eq!(report.steps, 50);
         assert_eq!(vm.instances().len(), 1, "still running, not wedged");
+    }
+
+    #[test]
+    fn transition_setting_is_installed_by_160_and_blocks_162_for_its_duration() {
+        // CE48's default: simple cut, wait flag, 10 frames.
+        let e = event(
+            1,
+            "transition",
+            vec![
+                cmd(160, &[-1, 0x0001_000A], &[]),
+                cmd(161, &[], &[]),
+                cmd(162, &[], &[]),
+            ],
+        );
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder::default();
+        let id = vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+        assert_eq!(vm.transition.kind, -1);
+        assert_eq!(vm.transition.flags, 0x0001_000A);
+        assert!(!vm.transition.prepared, "162 clears the prepared flag");
+        assert_eq!(vm.instance(id).unwrap().wait, WaitState::Frames(10));
+        // Nine more frames tick 10 -> 1, the tenth resolves the wait and the
+        // event ends (a common event is reaped once its pc runs past the end).
+        for _ in 0..9 {
+            vm.step_frame(&mut host);
+        }
+        assert_eq!(vm.instance(id).unwrap().wait, WaitState::Frames(1));
+        vm.step_frame(&mut host);
+        assert!(vm.instance(id).is_none());
+    }
+
+    #[test]
+    fn change_color_reaches_the_host_with_its_packed_colour() {
+        // Dungeon event 1: flash, R150 G200 B150, 20 frames.
+        let e = event(1, "tint", vec![cmd(151, &[0x0196_C896, 20], &[])]);
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+        assert_eq!(host.colours, vec![(0x0196_C896, 20)]);
     }
 
     #[test]
