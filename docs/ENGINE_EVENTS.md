@@ -921,3 +921,68 @@ cargo run -q -p wolf-render --example imgdiff -- work/out/ab_none.png work/out/a
 ```
 
 教训：像素 A/B 是可信的回归网，但它的「无差异」必须能被解释。271 当时有差异不代表 271 不该启动，只代表它依赖的两条数据通路还没打通。
+
+---
+
+## 11. run_condition == 2 事件调度器（M3 第一步，已验证）
+
+§2.2 说 `run_condition == 2` 是「条件满足时常驻」。在此之前只有 §8 的 12 个常量/隐式事件会被启动，97 个 `run=2` 事件全部不跑。`crates/wolf-game/src/auto_events.rs` 补上这个调度器。
+
+### 11.1 规则
+
+- 过滤：`run_condition() == 2` 且不在 `SKIPPED`（当前只有事件 43；它没有任何调用点，条件变量也没有写入者，属死代码）。最终跟踪 **96 个**。
+- 边沿触发：`false -> true` 才调用 `Vm::start_event`；`true -> false` 才调用 `Vm::stop_instance`。条件一直为 true 时，协程自然结束后不会被调度器重启（常驻事件自己负责循环）。
+- 条件比较：operator 1 = `>=`、2 = `==`、3 = `<=`；变量地址只接受 `VAR_BASE + 0..800`（通常变量 0..799）。
+- 开关：`Game.auto_events.set_enabled(false)` 或 `wolf-cli capture --auto-events off` 可整体停用，用于 A/B。
+
+### 11.2 启动时机（已验证）
+
+`Game::new` 构建调度器；`Game::start_engine_events` 末尾同步一次（开局条件已成立的立即启动）；`Game::frame` 每帧最先同步一次，然后才处理输入和 `vm.step_frame`。
+
+实测运行集合：
+
+| 场景 | 运行中的 run=2 事件 | 说明 |
+|---|---|---|
+| 标题 716 帧 | `[38]` | 事件 38 条件 `2000160 <= 2`，开局只执行约 2 条指令就自然结束 |
+| 开场选择 600 帧 | `[38]` | 同上 |
+| 开场剧情 900 帧 | `[38, 216, 217]` | 216 是 HUD 表示、217 是時計表示；地图传送把 `2000003` 置为 >= 1 后启动 |
+| 零售存档载入 1 帧 | `[216, 217, 337, 506]` | 216/217 画 HUD/时钟；337 `深夜自動低下` 是时间循环；506 `妹トイレ前まばたき` 画 DLC 眼睛层 |
+
+### 11.3 像素 A/B（调度器关 vs 开）
+
+| 场景 | 指令（关 -> 开） | picture op | 像素差 |
+|---|---|---|---|
+| 标题 716 帧 | 13,728 -> 13,730 | 38 -> 38 | `identical: true`（mean abs 0.000） |
+| 开场选择 600 帧 | 29,367 -> 29,369 | 750 -> 750 | `identical: true` |
+| 开场消息 400 帧 | 30,619 -> 30,621 | 2,394 -> 2,394 | `identical: true` |
+| 开场剧情 900 帧 | 51,297 -> 51,426（+129） | 1,881 -> 1,898（+17） | `identical: true` |
+
+剧情态的 +17 次图操作全部来自 216/217 常驻重绘 HUD；画面与关闭调度器时逐像素相同，说明它们画的正是原本就由剧情脚本画好的 HUD。标题对零售仍是 mean abs 0.012 / max 1 / psnr 67.20 dB。
+
+### 11.4 载入零售存档时的 HUD 重绘（已解释，不是回归）
+
+`capture --load-save work/retail_backup/Save/SaveData01.sav --frames 1`：
+
+| 调度器 | 活图片 | 非黑 | run=2 运行集 | 指令 | picture op |
+|---|---|---|---|---|---|
+| off | 66 | 548,416（93.0%） | `[]` | 106 | 16 |
+| on | 67 | 548,260（93.0%） | `[216, 217, 337, 506]` | 106 | 16 |
+
+`imgdiff off on`：mean abs 0.153 / max 255 / rmse 5.037 / psnr 34.05 dB，`<=2` 99.85%，`>32` 0.12%。差异**只在 HUD 顶栏 y<32**（3x3 区域 [0,0] 0.857/0.720/0.242、[2,0] 0.773，最差像素集中在 x=54..64 与 x=865..914、y=15..20），世界/立绘/面板区域全部为 0.000。原因是 216/217 载入后被启动，用脚本字符串重画了顶栏（脚本写 `所持金`、`周六` 用蓝色；存档图片表里存的是 `持有金钱`、白色 `周六`）。零售 `Save/save1.jpg` 是存档缩略图，显示 `持有金钱` / 蓝色 `周六`；它不能证明载入后的实时 HUD 一定长哪样，只能证明两张来源不同。像素总量上 on 对零售 5.195 略好于 off 的 5.226，但这点差异不足以定案，**保留调度器开启**，因为真实引擎载入存档后同样会让这些常驻事件继续跑。
+
+506 会让活图片从 66 变 67（新增 `DLC_data/dlc_imouto01_eye.png` 的 -6 层），但第 1 帧画面无可见差异，说明它要么被场景遮住、要么与存档里已有的眼睛状态相同；后续多帧行为留给 M3 的时间系统验证。
+
+### 11.5 复现命令
+
+```bash
+./target/debug/wolf-cli.exe capture --frames 716 --auto-events off --out work/out/sched_off_title716.png
+./target/debug/wolf-cli.exe capture --frames 716 --auto-events on  --out work/out/sched_on_title716.png
+cargo run -q -p wolf-render --example imgdiff -- work/out/sched_off_title716.png work/out/sched_on_title716.png | grep overall
+
+./target/debug/wolf-cli.exe capture --load-save work/retail_backup/Save/SaveData01.sav --frames 1 --auto-events off --out work/out/sched_off_save1.png
+./target/debug/wolf-cli.exe capture --load-save work/retail_backup/Save/SaveData01.sav --frames 1 --auto-events on  --out work/out/sched_on_save1.png
+```
+
+### 11.6 验收
+
+`cargo test -q --workspace` 全绿（wolf-game 190 lib + 3 + 4 integration）；`wolf-cli verify` PASS 63/63；`precompile` PASS 19/19。调度器测试三条：`the_scheduler_tracks_96_conditional_events_and_skips_the_dead_one`、`the_three_measured_operators_compare_like_wolf`、`a_true_condition_starts_event_38_and_false_stops_it`。

@@ -866,11 +866,26 @@
    63
   ],
   "unique_total": 12,
-  "doc": "docs/ENGINE_EVENTS.md (section 10 is the Lead appendix with the measured A/B)",
+  "doc": "docs/ENGINE_EVENTS.md (section 10 = constant coroutines A/B, section 11 = run_condition==2 scheduler)",
   "order_matters": "48 fills the system variables; 261 precedes 270 (270 reads 2700000..2700005); 269 precedes 270 (270 tests 1600099); 225 publishes Sys71/72 that 224 and 213 consume",
   "title_parity": "each of the nine ENGINE_ALWAYS candidates alone is pixel-identical to starting none; all together mean abs 0.012 / psnr 67.20 dB at frame 716",
   "excluded": "343 has 44 by-id calls but its condition variable has no writer; 43 has zero call sites",
-  "cli_switch": "wolf-cli capture --engine-events <id,id,...> (an empty value starts none)"
+  "cli_switch": "wolf-cli capture --engine-events <id,id,...> (an empty value starts none)",
+  "run_condition_2": {
+   "tracked": 96,
+   "skipped": [
+    43
+   ],
+   "histogram": {
+    "0": 442,
+    "1": 1,
+    "2": 97,
+    "3": 10
+   },
+   "scheduler": "crates/wolf-game/src/auto_events.rs",
+   "rule": "edge-triggered: false->true starts, true->false stops; a coroutine that ends while the condition stays true is not restarted",
+   "cli": "--auto-events <on|off>"
+  }
  },
  "condition_112": {
   "law": "112 与 111 共用一套块栈（BlockKind::Condition），只是比较方式不同；它同样以 401/420/499 收尾",
@@ -1064,5 +1079,40 @@
    "map003_entry": "capture --map-run Map003 --event 1 --frames 600: 26415 instructions / 654 picture ops / 1 choice / 0 warnings, opening prompt reached",
    "title_entry": "boot -> title -> confirm -> title menu option 0 -> 900 frames: 130 Teleport: MapData/SampleMapA.mps at (60, 34) direction 3, opening prompt reached"
   }
+ },
+ "auto_events": {
+  "module": "crates/wolf-game/src/auto_events.rs",
+  "tracked": 96,
+  "skipped": [
+   43
+  ],
+  "skipped_reason": "event 43 has zero call sites and its condition variable has no writer",
+  "operators": {
+   "1": ">=",
+   "2": "==",
+   "3": "<="
+  },
+  "running": {
+   "title_716": [
+    38
+   ],
+   "opening_choice_600": [
+    38
+   ],
+   "opening_story_900": [
+    38,
+    216,
+    217
+   ],
+   "retail_save1_1": [
+    216,
+    217,
+    337,
+    506
+   ]
+  },
+  "ab": "scheduler off vs on is pixel-identical at title 716, choice 600 and message 400; story 900 adds 129 instructions and 17 picture ops (events 216/217 repaint the HUD) with identical pixels",
+  "save_load_delta": "retail SaveData01 frame 1: 66->67 live pictures, 548416->548260 non-black, mean abs 0.153, max 255, differences confined to the HUD strip y<32; live HUD uses script strings (所持金, blue 周六) while the saved picture table stores 持有金钱, white 周六",
+  "doc": "docs/ENGINE_EVENTS.md section 11"
  }
 }

@@ -22,6 +22,7 @@
 
 pub mod assets;
 pub mod atlas;
+pub mod auto_events;
 pub mod choice;
 pub mod db;
 pub mod game;

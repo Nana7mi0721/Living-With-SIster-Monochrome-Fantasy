@@ -84,6 +84,7 @@ fn main() -> ExitCode {
     let mut filter: Option<String> = None;
     let mut frame_limit: Option<u64> = None;
     let mut hold_message = false;
+    let mut auto_events = true;
     let mut engine_events: Option<Vec<u32>> = None;
     let mut load_save: Option<PathBuf> = None;
     let mut page: usize = 0;
@@ -144,6 +145,13 @@ fn main() -> ExitCode {
                 map_run = args.next();
             }
             "--hold-message" => hold_message = true,
+            // A/B switch for the run_condition == 2 scheduler (docs/ENGINE_EVENTS.md
+            // section 2.2). `off` reproduces the pre-scheduler behaviour byte for byte;
+            // the default is on.
+            "--auto-events" => {
+                let value = args.next().unwrap_or_default();
+                auto_events = !matches!(value.trim(), "off" | "0" | "false");
+            }
             "--page" => {
                 page = args
                     .next()
@@ -206,6 +214,7 @@ fn main() -> ExitCode {
                     delay: answer_delay,
                     pointer,
                     press_frame,
+                    auto_events,
                 };
                 run_capture(
                     &root,
@@ -292,6 +301,7 @@ fn print_help() {
     println!("    --press-frame <N> Frame at which --pointer clicks the left button once.");
     println!("    --load-save <FILE>  Photograph a retail .sav instead of a script entry.");
     println!("    --engine-events <ids>  Comma separated ids that replace ENGINE_ALWAYS");
+    println!("    --auto-events <on|off> Run the run_condition == 2 scheduler (default on)");
     println!("                      (the parallel-process-always events the engine owns).");
     println!("                      Pass an empty value to start none of them.");
     println!(
@@ -1416,6 +1426,9 @@ struct Answers {
     pointer: Option<(i32, i32)>,
     /// 0-based frame at which the left mouse button goes down for one frame.
     press_frame: Option<usize>,
+    /// Whether the `run_condition == 2` scheduler runs (default true; see
+    /// `--auto-events off`).
+    auto_events: bool,
 }
 
 enum Entry<'a> {
@@ -1448,6 +1461,7 @@ fn run_capture(
     // --hold-message parks the run on the first 101 message instead, which is how a
     // capture photographs the message window (the story scripts talk before they branch).
     game.auto_advance = !hold_message;
+    game.auto_events.set_enabled(answers.auto_events);
     game.engine_always = engine_events;
     if let Some(index) = answers.index {
         game.set_choice_cursor(index);
@@ -1797,6 +1811,12 @@ fn run_capture(
     );
     println!("  wrote     : {}", out.display());
 
+    println!(
+        "  auto      : {} tracked run_condition==2 event(s), {} running {:?}",
+        game.auto_events.len(),
+        game.auto_events.running_count(),
+        game.auto_events.running_ids()
+    );
     let warnings = game.stats.warnings;
     println!(
         "  stats     : {} instruction(s), {} picture op(s), {} sound(s), {} db access(es) ({} write, {} label), {} message(s), {} choice(s), {warnings} warning(s)",

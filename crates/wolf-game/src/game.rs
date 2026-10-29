@@ -29,6 +29,7 @@ use wolf_vm::{
 };
 
 use crate::assets::Assets;
+use crate::auto_events::AutoEvents;
 use crate::db::Databases;
 use crate::map_runtime::MapRuntime;
 use crate::picture::{PictureKind, Screen, ANCHOR_CENTRE, SCREEN_H, SCREEN_W};
@@ -228,6 +229,9 @@ pub struct Game {
     pub auto_choice_delay: u32,
     /// The automatic pages of the map the game booted into.
     pub runtime: MapRuntime,
+    /// Common events whose header says `run_condition == 2`: one coroutine each,
+    /// created while the condition holds and destroyed when it fails.
+    pub auto_events: AutoEvents,
     /// Frames of play time; the save stores this in SavePart2.vars3_21[0].
     pub playtime_frames: u32,
     /// Mouse position in logical pixels, [-1, -1] when the pointer is outside.
@@ -291,6 +295,7 @@ impl Game {
         // System.sav is a complete save file in this game: use it as the template so a
         // brand-new game can write its first save without inventing part1/part4.
         let base_save = crate::savegame::read_save(&root.join("Save").join("System.sav")).ok();
+        let auto_events = AutoEvents::from_common_events(&events);
         Ok(Self {
             vm: Vm::new(programs),
             screen: Screen::new(),
@@ -307,6 +312,7 @@ impl Game {
             auto_choice: false,
             auto_choice_delay: 0,
             runtime: MapRuntime::new(),
+            auto_events,
             playtime_frames: 0,
             mouse: [-1, -1],
             mouse_buttons: 0,
@@ -446,6 +452,10 @@ impl Game {
                 started += 1;
             }
         }
+        // The run_condition == 2 group has no fixed id list: whether each one runs
+        // depends on a variable. One pass here starts the ones already true at boot
+        // (only event 38 in this game); `Game::frame` keeps them in sync afterwards.
+        self.auto_events.sync(&mut self.vm);
         started
     }
 
@@ -823,6 +833,11 @@ impl Game {
     /// Advances one frame at 1/60 s.
     pub fn frame(&mut self) -> FrameOutcome {
         self.sounds.clear();
+        // Start or stop the conditional background events before anything runs, so a
+        // condition that became true last frame is running now (docs/ENGINE_EVENTS.md
+        // section 2.2). This is edge-triggered: a condition that stays true does not
+        // restart a coroutine that already ended on its own.
+        self.auto_events.sync(&mut self.vm);
         self.handle_choice_input();
         let mut report = self.vm.step_frame(&mut GameHost {
             screen: &mut self.screen,
