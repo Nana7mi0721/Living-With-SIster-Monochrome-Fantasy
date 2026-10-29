@@ -134,6 +134,12 @@ pub struct GameStats {
     /// Of those, the ones whose editor labels moved the script's numeric type id onto a
     /// different table row (see [`crate::db::Databases::resolve_labels`]).
     pub database_labels: u64,
+    /// Of those, the ones that set a table's row count (`250` write to row -2).
+    pub database_row_counts: u64,
+    /// Of those, reads that landed on a runtime slot past the last row (`100 + n`);
+    /// no file holds those rows, so the answer is the empty value
+    /// (docs/BATTLE.md section 2.6).
+    pub database_slots: u64,
     /// Messages shown.
     pub messages: u64,
     /// Choice prompts shown.
@@ -413,8 +419,9 @@ impl Game {
             .to_bytes_rebuilt()
             .map_err(|err| format!("220 SaveLoad: cannot rebuild save: {err}"))?;
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|err| format!("220 SaveLoad: cannot create {}: {err}", parent.display()))?;
+            std::fs::create_dir_all(parent).map_err(|err| {
+                format!("220 SaveLoad: cannot create {}: {err}", parent.display())
+            })?;
         }
         std::fs::write(path, &bytes)
             .map_err(|err| format!("220 SaveLoad: cannot write {}: {err}", path.display()))?;
@@ -904,10 +911,7 @@ impl Game {
                 -2 => 0,
                 id => id,
             };
-            let path = self
-                .databases
-                .map_path(map_id)
-                .map(str::to_owned);
+            let path = self.databases.map_path(map_id).map(str::to_owned);
             let Some(path) = path else {
                 self.diagnostics.insert(
                     format!("130 Teleport: no map registered for id {}", request.map),
@@ -926,8 +930,7 @@ impl Game {
                     );
                 }
                 Err(err) => {
-                    self.diagnostics
-                        .insert(format!("130 Teleport: {err}"), 1);
+                    self.diagnostics.insert(format!("130 Teleport: {err}"), 1);
                 }
             }
         }
@@ -1201,7 +1204,10 @@ impl GameHost<'_> {
     /// `Save/SaveDataNN.sav`; an explicit path is relative to the game root.
     fn save_path(&self, file: &SaveTarget) -> std::path::PathBuf {
         match file {
-            SaveTarget::Slot(slot) => self.root.join("Save").join(format!("SaveData{slot:02}.sav")),
+            SaveTarget::Slot(slot) => self
+                .root
+                .join("Save")
+                .join(format!("SaveData{slot:02}.sav")),
             SaveTarget::Path(path) => {
                 let path = std::path::PathBuf::from(path);
                 if path.is_absolute() {
@@ -1345,11 +1351,38 @@ impl Host for GameHost<'_> {
             // A write must land on the labelled cell straight away: writing the numeric
             // pair would create a stray row in the wrong type instead of failing loudly.
             let (db_type, column) = resolve_cell(self.databases, self.stats, op, container);
+            // Row -2 is not a row: the operand is the table's new row count and the
+            // column is a leftover the editor never clears (docs/OPCODE_250.md
+            // section 3.5). CE191 pc30 sets 万能ウィンドウ to 2 and then writes rows 0
+            // and 1 by hand; CE157 pc28 sets a table to 0 under the comment 全部消去;
+            // every 一覧算出 event empties its scratch table this way before refilling it.
+            // Nothing is handed back: the interpreter drops a write's answer.
+            if row == crate::db::ROW_COUNT_SET {
+                if let Some(DbValue::Num(count)) = op.source.as_ref() {
+                    self.databases.set_row_count(container, db_type, *count);
+                    self.stats.database_row_counts += 1;
+                } else {
+                    self.note(format!(
+                        "250 RowCount: {container:?} ({db_type}, -2, {column}) carries no count"
+                    ));
+                }
+                return None;
+            }
             match op.source.as_ref() {
                 Some(DbValue::Num(operand)) => {
+                    // A row the table holds is the base of the arithmetic. A row past the
+                    // end -- the 100+n runtime slots, or a row a script grew into -- must
+                    // start from zero: reading it through `num` would clamp onto the last
+                    // row of the file and, say, add this character's HP to the last one's.
                     let current = self
                         .databases
-                        .num(container, db_type, row, column)
+                        .engine_num(container, db_type, row, column)
+                        .or_else(|| {
+                            self.databases
+                                .row_exists(container, db_type, row)
+                                .then(|| self.databases.num(container, db_type, row, column))
+                                .flatten()
+                        })
                         .unwrap_or(0);
                     let value = combine_cell(op.op, current, *operand);
                     self.databases
@@ -1376,14 +1409,40 @@ impl Host for GameHost<'_> {
         // character id. Resolve the labels first; a table without labels simply
         // returns the original pair.
         let (db_type, column) = resolve_cell(self.databases, self.stats, op, container);
-        if row == -1 {
+        if row == crate::db::ROW_COUNT_QUERY {
             // CE48 pc153 reads (0, -1, 33) as the loop bound over every row of
-            // 主人公ステータス; the engine answers with the row count.
+            // 主人公ステータス; the engine answers with the row count. CE75 pc42 uses the
+            // same read on 状態設定 to raise 「状態IDが大きすぎます」.
             let count = self.databases.row_count(container, db_type).unwrap_or(0);
             return Some(DbValue::Num(i32::try_from(count).unwrap_or(i32::MAX)));
         }
-        if let Some(value) = lookup_cell(self.databases, container, db_type, row, column) {
-            return Some(value);
+        // The engine cell layer first: it holds what a script wrote and what the save
+        // carried, and it is the only place a runtime row (`100 + n`, or a row past a
+        // shrunk count) can live.
+        if let Some(value) = self.databases.engine_num(container, db_type, row, column) {
+            return Some(DbValue::Num(value));
+        }
+        if let Some(text) = self.databases.engine_text(container, db_type, row, column) {
+            return Some(DbValue::Str(text.to_owned()));
+        }
+        if self.databases.row_exists(container, db_type, row) {
+            if let Some(value) = lookup_cell(self.databases, container, db_type, row, column) {
+                return Some(value);
+            }
+        } else if row >= crate::db::EXTENSION_ROW_BASE {
+            // `100 + n` battle slots: CE239 reads (0, 100, 0) as a character name while
+            // CDataBase type 0 has 17 rows, so no file can answer. An untouched slot is
+            // empty rather than missing. The destination decides which empty: a read into
+            // a string variable wants "", a numeric one wants 0.
+            self.stats.database_slots += 1;
+            let wants_text = op.destination.is_some_and(|target| {
+                (wolf_vm::magic::STR_BASE..wolf_vm::magic::STR_BASE + 1_000_000).contains(&target)
+            });
+            return Some(if wants_text {
+                DbValue::Str(String::new())
+            } else {
+                DbValue::Num(0)
+            });
         }
         // The labels ride along, because they are the only clue that a drifted type id is
         // the reason the read missed (an unresolvable label means the .project walk lost
@@ -1678,7 +1737,9 @@ mod tests {
         template.push("retail_backup");
         template.push("Save");
         template.push("SaveData01.sav");
-        let Ok(bytes) = std::fs::read(&template) else { return };
+        let Ok(bytes) = std::fs::read(&template) else {
+            return;
+        };
         let mut game = Game::new(&root).expect("game");
         game.base_save = Some(wolf_save::SaveFile::parse(&bytes).expect("template parses"));
         let loaded = game.load_save(&template).expect("load");
@@ -1686,7 +1747,19 @@ mod tests {
         let before: Vec<_> = game
             .screen
             .iter()
-            .map(|p| (p.number, p.kind, p.file.clone(), p.x, p.y, p.anchor, p.scale, p.split, p.pattern_index))
+            .map(|p| {
+                (
+                    p.number,
+                    p.kind,
+                    p.file.clone(),
+                    p.x,
+                    p.y,
+                    p.anchor,
+                    p.scale,
+                    p.split,
+                    p.pattern_index,
+                )
+            })
             .collect();
         let mut out = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         out.push("..");
@@ -1702,7 +1775,19 @@ mod tests {
         let after: Vec<_> = refreshed
             .screen
             .iter()
-            .map(|p| (p.number, p.kind, p.file.clone(), p.x, p.y, p.anchor, p.scale, p.split, p.pattern_index))
+            .map(|p| {
+                (
+                    p.number,
+                    p.kind,
+                    p.file.clone(),
+                    p.x,
+                    p.y,
+                    p.anchor,
+                    p.scale,
+                    p.split,
+                    p.pattern_index,
+                )
+            })
             .collect();
         assert_eq!(before, after);
     }
@@ -1717,11 +1802,14 @@ mod tests {
         template.push("retail_backup");
         template.push("Save");
         template.push("SaveData01.sav");
-        let Ok(bytes) = std::fs::read(&template) else { return };
+        let Ok(bytes) = std::fs::read(&template) else {
+            return;
+        };
         let mut game = Game::new(&root).expect("game");
         game.base_save = Some(wolf_save::SaveFile::parse(&bytes).expect("template parses"));
         game.load_save(&template).expect("load");
-        game.databases.set_num(crate::db::Container::CData, 0, 12, 5, 4242);
+        game.databases
+            .set_num(crate::db::Container::CData, 0, 12, 5, 4242);
 
         let mut out = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         out.push("..");
@@ -1735,7 +1823,9 @@ mod tests {
         let mut refreshed = Game::new(&root).expect("game");
         refreshed.load_save(&out).expect("reload");
         assert_eq!(
-            refreshed.databases.num(crate::db::Container::CData, 0, 12, 5),
+            refreshed
+                .databases
+                .num(crate::db::Container::CData, 0, 12, 5),
             Some(4242)
         );
     }
@@ -1963,7 +2053,9 @@ mod tests {
 
     #[test]
     fn a_save_write_reaches_the_next_read() {
-        let Some(mut save) = retail_save(1) else { return };
+        let Some(mut save) = retail_save(1) else {
+            return;
+        };
         let mut op = save_op(222, 2_000_007, 0);
         op.value = 1234;
         assert!(write_save_address(&mut save, &op));
@@ -1988,5 +2080,180 @@ mod tests {
         let again = crate::savegame::read_save(&path).expect("read");
         assert_eq!(again.to_bytes(), save.to_bytes());
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// The borrow shim [`Game::frame`] builds, so a test can drive one `250` op.
+    fn host<'a>(game: &'a mut Game) -> GameHost<'a> {
+        GameHost {
+            screen: &mut game.screen,
+            assets: &mut game.assets,
+            databases: &mut game.databases,
+            sounds: &mut game.sounds,
+            messages: &mut game.messages,
+            choices: &mut game.choices,
+            replies: &mut game.replies,
+            diagnostics: &mut game.diagnostics,
+            stats: &mut game.stats,
+            key_bits: game.key_bits,
+            auto_advance: game.auto_advance,
+            auto_choice: game.auto_choice,
+            auto_choice_delay: game.auto_choice_delay,
+            cursor: game.choice_cursor,
+            mouse: game.mouse,
+            mouse_buttons: game.mouse_buttons,
+            previous_mouse_buttons: game.previous_mouse_buttons,
+            root: &game.root,
+            save_requests: &mut game.save_requests,
+            map_requests: &mut game.map_requests,
+        }
+    }
+
+    /// One `250` access, through the same host the interpreter uses.
+    fn cell(game: &mut Game, op: &DbOp) -> Option<DbValue> {
+        Host::database(&mut host(game), op)
+    }
+
+    /// A `250` op with no editor labels: the numeric pair is used as written.
+    fn op(
+        direction: wolf_vm::DbDirection,
+        db_type: i32,
+        row: i32,
+        column: i32,
+        flags: i32,
+        source: Option<DbValue>,
+        destination: Option<i32>,
+    ) -> DbOp {
+        DbOp {
+            container: wolf_vm::DbContainer::CData,
+            direction,
+            op: 0,
+            db_type,
+            data_id: row,
+            item_id: column,
+            flags,
+            destination,
+            source,
+            type_label: None,
+            field_label: None,
+        }
+    }
+
+    #[test]
+    fn a_row_count_write_resizes_the_table_and_a_resized_row_reads_back() {
+        // Row -2 is the row count, not a row (docs/OPCODE_250.md section 3.5): CE191
+        // pc30 sets 万能ウィンドウ (CDataBase type 22) to 2 and then writes rows 0 and 1
+        // by hand, and CE157 pc28 sets a table to 0 under the comment 全部消去.
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        let before = game.databases.row_count(crate::db::Container::CData, 22);
+        let write = wolf_vm::DbDirection::Write;
+        let read = wolf_vm::DbDirection::Read;
+        let set = |row, value| op(write, 22, row, 0, 0x10000, Some(DbValue::Num(value)), None);
+
+        cell(&mut game, &set(-2, 2));
+        assert_eq!(game.stats.database_row_counts, 1);
+        assert_eq!(
+            game.databases.row_count(crate::db::Container::CData, 22),
+            Some(2),
+            "row -2 sets the height (was {before:?})"
+        );
+
+        cell(&mut game, &set(0, 5));
+        cell(&mut game, &set(1, 6));
+        // A compound write on an existing row starts from the stored value. The
+        // interpreter carries the operator in DbOp::op, taken out of flags ((flags >> 4)
+        // & 7 in the bytecode), so 1 here is "add".
+        let add = DbOp {
+            op: 1,
+            ..op(write, 22, 0, 0, 0x11010, Some(DbValue::Num(7)), None)
+        };
+        cell(&mut game, &add);
+        assert_eq!(
+            cell(
+                &mut game,
+                &op(read, 22, 0, 0, 0x11000, None, Some(1_600_001))
+            ),
+            Some(DbValue::Num(12)),
+            "5 + 7"
+        );
+        // ... and row -1 still answers the count, which is what CE48 pc153 loops over.
+        assert_eq!(
+            cell(
+                &mut game,
+                &op(read, 22, -1, 0, 0x11000, None, Some(1_600_001))
+            ),
+            Some(DbValue::Num(2))
+        );
+        // Clearing to zero drops the rows: a read of row 0 must not answer with the
+        // stale 12. Whether the engine answers 0 here or nothing at all is not
+        // established (docs/BATTLE.md section 2.5 only shows the clear itself), so the
+        // reader records the address as unanswered instead of inventing a value.
+        cell(&mut game, &set(-2, 0));
+        assert_eq!(
+            cell(
+                &mut game,
+                &op(read, 22, 0, 0, 0x11000, None, Some(1_600_001))
+            ),
+            None,
+            "a cleared row reads as unanswered, never as the stale value"
+        );
+    }
+
+    #[test]
+    fn a_runtime_row_past_the_last_row_answers_the_empty_slot() {
+        // CE239 is seen to read CData (0, 100, 0) as a character name while 主人公ステータス
+        // has 17 rows (docs/BATTLE.md section 2.6). No file holds rows 100 and up: the
+        // engine keeps them at run time and they start empty, as a string when the
+        // destination is a string variable and as zero when it is numeric.
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        let read = wolf_vm::DbDirection::Read;
+        let write = wolf_vm::DbDirection::Write;
+        assert_eq!(
+            cell(
+                &mut game,
+                &op(read, 0, 100, 0, 0x51000, None, Some(3_000_005))
+            ),
+            Some(DbValue::Str(String::new())),
+            "a 100+n slot read into a string variable is empty"
+        );
+        assert_eq!(
+            cell(
+                &mut game,
+                &op(read, 0, 100, 0, 0x51000, None, Some(1_600_005))
+            ),
+            Some(DbValue::Num(0)),
+            "and numeric into a number"
+        );
+        assert_eq!(game.stats.database_slots, 2);
+        // Once a script writes the slot it reads back, so a battle can keep its own rows.
+        cell(
+            &mut game,
+            &op(
+                write,
+                0,
+                100,
+                0,
+                0x50004,
+                Some(DbValue::Str("slot".into())),
+                None,
+            ),
+        );
+        assert_eq!(
+            cell(
+                &mut game,
+                &op(read, 0, 100, 0, 0x51000, None, Some(3_000_005))
+            ),
+            Some(DbValue::Str("slot".into()))
+        );
+        // A row that is inside the table but not one of the 100+n slots stays unanswered
+        // rather than pretending to be empty: that is a drifted address, not a slot.
+        assert_eq!(
+            cell(
+                &mut game,
+                &op(read, 0, 40, 0, 0x51000, None, Some(3_000_005))
+            ),
+            None
+        );
     }
 }

@@ -63,6 +63,30 @@ pub const DEFAULT_SCREEN: (u32, u32) = (1024, 576);
 /// The engine's virtual screen, in units of one coordinate step.
 pub const SCREEN_STEPS: (u32, u32) = (32, 24);
 
+/// Row id a `250` **read** uses to ask for the current row count of a table.
+///
+/// CE48 pc153 reads `(0, -1, 33)` into self[10] and CE48 pc156 then loops
+/// `179 [self[10]]` times over rows 0..count, i.e. the engine answers with the number
+/// of rows, not with any cell (docs/OPCODE_250.md section 3.5). CE75 pc42 does the same
+/// for 状態設定 and compares the count against the loop counter to raise
+/// "【エラー】状態IDが大きすぎます" when a script walks past the last row.
+pub const ROW_COUNT_QUERY: i32 = -1;
+
+/// Row id a `250` **write** uses to set the current row count of a table.
+///
+/// CE191 pc30 writes `(22, -2, 0, write, 2)` and then writes rows 0 and 1 by hand;
+/// CE157 pc28 writes `(14, -2, 6, write, 0)` under the comment 全部消去. The column
+/// plays no part, and no new row id comes back to the caller -- see
+/// [`Databases::set_row_count`].
+pub const ROW_COUNT_SET: i32 = -2;
+
+/// First row of the runtime extension area, i.e. the `100 + n` battle slots.
+///
+/// `CDataBase` type 0 holds 17 rows in this game, yet a capture of CE239 is seen to
+/// read `CData (0, 100, 0)` as a character name (docs/BATTLE.md section 2.6). Rows from
+/// 100 up are not in any file: the engine keeps them at run time and they start empty.
+pub const EXTENSION_ROW_BASE: i32 = 100;
+
 /// Which of the three database files a `250` instruction addresses.
 ///
 /// The value comes from `(flags >> 8) & 3` and is verified on 2,195 labelled sites
@@ -124,6 +148,13 @@ pub struct Databases {
     cells: BTreeMap<(Container, i32, i32, i32), i32>,
     /// Engine-owned string cells, same key.
     texts: BTreeMap<(Container, i32, i32, i32), String>,
+    /// Row counts a script set at run time, keyed (container, type).
+    ///
+    /// A `250` write to row [`ROW_COUNT_SET`] replaces the row count the `.dat` file
+    /// carries; the entries here shadow it. The editor ships tables of fixed height, but
+    /// every 一覧算出 event in this game empties a scratch table and refills it, so the
+    /// count has to move at run time.
+    row_counts: BTreeMap<(Container, i32), i32>,
 }
 
 impl Databases {
@@ -200,6 +231,11 @@ impl Databases {
     /// SysDatabase answers through its own API; the two .dat containers share the type
     /// numbering but not the type meanings, so a caller must say which one it means.
     pub fn row_count(&self, container: Container, db_type: i32) -> Option<usize> {
+        // A run-time count wins: a script emptied or refilled this table (see
+        // [`Databases::set_row_count`]) and the .dat height is stale.
+        if let Some(count) = self.row_counts.get(&(container, db_type)) {
+            return usize::try_from(*count).ok();
+        }
         match container {
             Container::Sys => self
                 .sys
@@ -210,6 +246,40 @@ impl Databases {
                 .and_then(|table| table.types.get(usize::try_from(db_type).ok()?))
                 .map(|table| table.rows.len()),
         }
+    }
+
+    /// True when `row` addresses a row the table currently holds.
+    ///
+    /// A negative row is a sentinel ([ROW_COUNT_QUERY] / [ROW_COUNT_SET]), not a row, and
+    /// a row past the current count does not exist at all -- reading one used to clamp
+    /// onto the last row, which answered the wrong character.
+    #[must_use]
+    pub fn row_exists(&self, container: Container, db_type: i32, row: i32) -> bool {
+        usize::try_from(row).is_ok_and(|row| {
+            self.row_count(container, db_type)
+                .is_some_and(|count| row < count)
+        })
+    }
+
+    /// Sets the row count of one table -- the `250` write to row [ROW_COUNT_SET].
+    ///
+    /// CE191 pc30 sets 万能ウィンドウ to 2 and then writes rows 0 and 1 by hand; CE157
+    /// pc28 sets a table to 0 under the comment 全部消去; every 一覧算出 event clears its
+    /// scratch table to 0 before appending its entries. So the operand is the **new row
+    /// count**, the column is ignored, and nothing is handed back to the caller (the
+    /// interpreter drops a write's answer).
+    ///
+    /// Cells the table no longer has are dropped: a row that ceased to exist must not
+    /// answer a later read. Negative rows are kept -- they are cell-layer scratch that
+    /// [`Databases::write_into`] reports as a miss rather than addressing.
+    pub fn set_row_count(&mut self, container: Container, db_type: i32, count: i32) {
+        let count = count.max(0);
+        self.row_counts.insert((container, db_type), count);
+        let gone = |key: &(Container, i32, i32, i32)| {
+            key.0 == container && key.1 == db_type && key.2 >= count && key.2 >= 0
+        };
+        self.cells.retain(|key, _| !gone(key));
+        self.texts.retain(|key, _| !gone(key));
     }
 
     /// The `.mps` path registered for a map id (SysDatabase type 0, column 0).
@@ -232,6 +302,36 @@ impl Databases {
     pub fn colour(&self, index: i32) -> Option<[u8; 3]> {
         let row = usize::try_from(index).ok()?;
         self.sys.as_ref()?.colour(row)
+    }
+
+    /// The engine cell layer alone: the value a script or the save put here.
+    ///
+    /// [`Databases::num`] falls back to the `.dat` row, which is right for a normal read
+    /// but useless for a runtime extension row (`100 + n`) or for deciding whether a
+    /// write starts from zero instead of from the last row of the file.
+    #[must_use]
+    pub fn engine_num(
+        &self,
+        container: Container,
+        db_type: i32,
+        row: i32,
+        column: i32,
+    ) -> Option<i32> {
+        self.cells.get(&(container, db_type, row, column)).copied()
+    }
+
+    /// The engine cell layer alone, string side.
+    #[must_use]
+    pub fn engine_text(
+        &self,
+        container: Container,
+        db_type: i32,
+        row: i32,
+        column: i32,
+    ) -> Option<&str> {
+        self.texts
+            .get(&(container, db_type, row, column))
+            .map(String::as_str)
     }
 
     pub fn num(&self, container: Container, db_type: i32, row: i32, column: i32) -> Option<i32> {
@@ -310,6 +410,10 @@ impl Databases {
     /// row or column is not addressable and
     /// also counts as a miss rather than a panic: scripts do address row -1.
     pub fn write_into(&self, database: &mut wolf_save::VariableDatabase) -> (usize, usize) {
+        // A table a script resized at run time ([`Databases::set_row_count`]) must be
+        // resized in the save as well, or the rows it appended are not storable and the
+        // rows it dropped come back on load. The .dat height is only a starting point.
+        self.reconcile_row_counts(database);
         let (mut written, mut missed) = (0, 0);
         for ((container, db_type, row, column), value) in &self.cells {
             if *container != Container::CData {
@@ -337,6 +441,50 @@ impl Databases {
             }
         }
         (written, missed)
+    }
+
+    /// Applies every run-time row count to a save file variable database.
+    ///
+    /// The variable database stores rows positionally (`m_idx == position`, measured
+    /// across 9 retail saves and 6,507 rows with no exception), so a type can only hold
+    /// rows `0..count`. Growing therefore appends default rows -- every numeric field 0,
+    /// every textual field the empty string -- and shrinking truncates the tail. Types
+    /// the game never resized are left exactly as loaded.
+    fn reconcile_row_counts(&self, database: &mut wolf_save::VariableDatabase) {
+        for ((container, db_type), count) in &self.row_counts {
+            if *container != Container::CData {
+                continue;
+            }
+            let (Ok(type_index), Ok(count)) = (usize::try_from(*db_type), usize::try_from(*count))
+            else {
+                continue;
+            };
+            let Some(kind) = database.types.get_mut(type_index) else {
+                continue;
+            };
+            if kind.rows.len() > count {
+                kind.rows.truncate(count);
+            }
+            while kind.rows.len() < count {
+                let index = kind.rows.len() as u32;
+                let fields = kind
+                    .config
+                    .iter()
+                    .enumerate()
+                    .map(|(id, definition)| wolf_save::vardb::VariableField {
+                        id: id as u32,
+                        value: if *definition >= 2000 {
+                            wolf_save::vardb::VariableValue::String(vec![0])
+                        } else {
+                            wolf_save::vardb::VariableValue::Number(0)
+                        },
+                    })
+                    .collect();
+                kind.rows
+                    .push(wolf_save::vardb::VariableRow { index, fields });
+            }
+            kind.row_count = kind.rows.len() as u32;
+        }
     }
 
     /// Overwrites a numeric cell in the engine layer.
@@ -384,21 +532,21 @@ impl Databases {
         let Some(table) = self.table(container) else {
             return (db_type, column);
         };
-        let type_wanted = type_label.map(normalise_label).filter(|label| !label.is_empty());
+        let type_wanted = type_label
+            .map(normalise_label)
+            .filter(|label| !label.is_empty());
         let named_type = type_wanted
             .as_deref()
             .and_then(|want| {
                 (0..table.types.len()).find(|index| {
-                    table
-                        .type_name(*index)
-                        .map(normalise_label)
-                        .as_deref()
-                        == Some(want)
+                    table.type_name(*index).map(normalise_label).as_deref() == Some(want)
                 })
             })
             .map(|index| index as i32)
             .unwrap_or(db_type);
-        let field_wanted = field_label.map(normalise_label).filter(|label| !label.is_empty());
+        let field_wanted = field_label
+            .map(normalise_label)
+            .filter(|label| !label.is_empty());
         let named_column = field_wanted
             .as_deref()
             .and_then(|want| {
@@ -703,7 +851,10 @@ mod tests {
             Some("メンバー1"),
         );
         assert_eq!((db_type, column), (6, 1));
-        assert_eq!(databases.num(Container::CData, db_type, 0, column), Some(12));
+        assert_eq!(
+            databases.num(Container::CData, db_type, 0, column),
+            Some(12)
+        );
     }
 
     fn retail_save() -> Option<wolf_save::SaveFile> {
@@ -752,6 +903,85 @@ mod tests {
         let reparsed = wolf_save::vardb::parse_bytes(&bytes).expect("and parses back");
         assert_eq!(reparsed.number(18, 97, 0), Some(32));
         assert_eq!(reparsed.number(18, 98, 0), Some(24));
+    }
+
+    #[test]
+    fn a_row_count_write_changes_the_table_height() {
+        // CE191 pc30 sets 万能ウィンドウ to 2 rows and then writes rows 0 and 1 by hand;
+        // CE157 pc28 sets a table to 0 under the comment 全部消去. Row -2 is the height,
+        // never a row, so the write of the count must not create a row at index -2.
+        let mut databases = Databases::with_engine_defaults(DEFAULT_SCREEN);
+        assert_eq!(databases.row_count(Container::CData, 22), None);
+        databases.set_row_count(Container::CData, 22, 2);
+        assert_eq!(databases.row_count(Container::CData, 22), Some(2));
+        assert!(databases.row_exists(Container::CData, 22, 0));
+        assert!(databases.row_exists(Container::CData, 22, 1));
+        assert!(!databases.row_exists(Container::CData, 22, 2));
+        // A negative row is a sentinel, not a row of the table.
+        assert!(!databases.row_exists(Container::CData, 22, ROW_COUNT_SET));
+        // Clearing drops the rows the table lost; a read of one must not answer.
+        databases.set_num(Container::CData, 22, 0, 0, 5);
+        databases.set_num(Container::CData, 22, 1, 0, 6);
+        databases.set_row_count(Container::CData, 22, 1);
+        assert_eq!(databases.engine_num(Container::CData, 22, 0, 0), Some(5));
+        assert_eq!(databases.engine_num(Container::CData, 22, 1, 0), None);
+        databases.set_row_count(Container::CData, 22, 0);
+        assert_eq!(databases.row_count(Container::CData, 22), Some(0));
+        assert_eq!(databases.engine_num(Container::CData, 22, 0, 0), None);
+    }
+
+    #[test]
+    fn a_row_count_the_script_set_reaches_the_save_as_appended_rows() {
+        // A table a script grew has to be grown in the save too, or the rows the game
+        // appended would be dropped on save and the list would come back stale on load.
+        let Some(save) = retail_save() else { return };
+        let mut database = save.vardb.clone();
+        // Pick a type the save really holds with a real field, so the appended row has
+        // somewhere to put its value: type 22 turns out to carry no fields at all.
+        let (db_type, before, column) = (0..database.types.len())
+            .find_map(|index| {
+                let kind = database.types.get(index)?;
+                let column = kind
+                    .config
+                    .iter()
+                    .position(|definition| *definition < 2000)?;
+                (!kind.rows.is_empty()).then_some((index as i32, kind.rows.len(), column as i32))
+            })
+            .expect("the retail save holds a type with a row and a numeric field");
+        let mut databases = Databases::with_engine_defaults(DEFAULT_SCREEN);
+        databases.set_row_count(Container::CData, db_type, before as i32 + 1);
+        databases.set_num(Container::CData, db_type, before as i32, column, 77);
+        let (written, missed) = databases.write_into(&mut database);
+        assert_eq!(missed, 0, "the appended row must be storable");
+        // The two coordinate-scale cells the engine always owns, plus the appended one.
+        assert_eq!(written, 3);
+        let kind = database
+            .type_of(usize::try_from(db_type).expect("index"))
+            .expect("the type survives");
+        assert_eq!(
+            kind.rows.len(),
+            before + 1,
+            "the save must carry the appended row"
+        );
+        assert_eq!(
+            kind.row_count as usize,
+            before + 1,
+            "and the stored row count must agree with the rows"
+        );
+        assert_eq!(
+            database.number(
+                usize::try_from(db_type).expect("index"),
+                before,
+                usize::try_from(column).expect("column")
+            ),
+            Some(77)
+        );
+        // The whole variable database must still serialize: a row count that disagrees
+        // with the row list is rejected by the writer.
+        assert!(
+            database.to_bytes().is_ok(),
+            "the reconciled variable database must serialize"
+        );
     }
 
     #[test]
