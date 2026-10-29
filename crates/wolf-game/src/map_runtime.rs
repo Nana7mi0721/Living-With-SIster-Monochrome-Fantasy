@@ -254,6 +254,16 @@ impl MapRuntime {
             .collect()
     }
 
+    /// Stops every coroutine this runtime owns, e.g. before switching maps.
+    pub fn stop_all(&mut self, vm: &mut Vm) {
+        for state in &mut self.events {
+            if let Some(id) = state.instance.take() {
+                vm.stop_instance(id);
+            }
+            state.active = None;
+        }
+    }
+
     /// Which triggers the active pages carry, for diagnostics.
     #[must_use]
     pub fn trigger_counts(&self) -> BTreeMap<u8, usize> {

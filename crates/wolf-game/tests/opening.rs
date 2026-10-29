@@ -150,3 +150,41 @@ fn the_opening_script_runs_and_draws_its_pictures() {
     );
     assert!(game.stats.messages > 0, "the opening narration never arrived");
 }
+
+/// The new-game processing map (Map003 event 1) is the path the title menu takes:
+/// it draws its pre-game screen and then runs opcode 130 with map id -1. The
+/// measured meaning of -1 is MapData row 1, SampleMapA, and -2 is row 0, TitleMap
+/// (docs/ASSET_AUDIT.md section 3.6); the new game must land on the opening story.
+#[test]
+fn the_new_game_processing_map_teleports_into_the_opening() {
+    let root = data_root();
+    let mut game = match Game::new(&root) {
+        Ok(game) => game,
+        Err(err) => {
+            eprintln!("skipping: {err}");
+            return;
+        }
+    };
+    game.auto_advance = true;
+    if let Err(err) = game.start_map_event_by_name("Map003", 1) {
+        eprintln!("skipping: cannot start new-game processing: {err}");
+        return;
+    }
+    for _ in 0..600 {
+        let _ = game.frame();
+    }
+    assert!(
+        game.diagnostics
+            .keys()
+            .any(|line| line.contains("130 Teleport: MapData/SampleMapA.mps")),
+        "the new-game map never teleported: {:?}",
+        game.diagnostics.keys().collect::<Vec<_>>()
+    );
+    let prompt = game.choices.as_ref().expect("the opening prompt is open");
+    assert_eq!(
+        prompt.options,
+        ["广阔的战场", "广袤的森林", "微风吹拂而过的麦田", "有人在等我的家"],
+        "the teleport did not reach the opening prompt"
+    );
+    assert_eq!(game.stats.warnings, 0, "the new-game path produced warnings");
+}

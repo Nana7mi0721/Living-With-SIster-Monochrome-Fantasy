@@ -103,6 +103,16 @@ pub struct Choices {
     pub frames: u32,
 }
 
+/// A queued `130 Teleport` request. The map change runs after the VM step
+/// because the host cannot borrow `Game`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct MapRequest {
+    map: i32,
+    x: i32,
+    y: i32,
+    direction: i32,
+}
+
 /// Counters that make a headless run comparable to an interactive one.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GameStats {
@@ -238,6 +248,8 @@ pub struct Game {
     engine_events_started: bool,
     /// `220` loads queued by the interpreter; applied after the VM step that asked.
     save_requests: Vec<crate::savegame::SaveRequest>,
+    /// `130` teleports queued by the interpreter; applied after the VM step that asked.
+    map_requests: Vec<MapRequest>,
     /// The last save this game loaded or was born from, used as the template for
     /// 220 mode 0. A full save needs the map snapshot and object tables, which the
     /// running game does not otherwise keep; the template supplies them and the
@@ -304,6 +316,7 @@ impl Game {
             engine_always: None,
             engine_events_started: false,
             save_requests: Vec::new(),
+            map_requests: Vec::new(),
             base_save,
             root,
         })
@@ -472,6 +485,19 @@ impl Game {
     pub fn start_pages(&mut self, map: &Map, skip: Option<u32>) -> usize {
         self.runtime = MapRuntime::collect_except(map, skip);
         self.runtime.start_pending(&mut self.vm)
+    }
+
+    /// Switches to the map at `path` and starts its automatic pages.
+    ///
+    /// `130 Teleport` runs on the same VM, so the current map coroutines are stopped
+    /// first: leaving them alive would keep a previous map parallel events
+    /// drawing into the new map. Engine events are session-wide and keep running.
+    fn switch_map(&mut self, path: &str) -> Result<(), GameError> {
+        self.runtime.stop_all(&mut self.vm);
+        let bytes = self.read(path)?;
+        let map = Map::parse(&bytes).map_err(GameError::Format)?;
+        self.start_pages(&map, None);
+        Ok(())
     }
 
     /// Start one event of a named map, collecting that map's other pages too.
@@ -818,6 +844,7 @@ impl Game {
             previous_mouse_buttons: self.previous_mouse_buttons,
             root: &self.root,
             save_requests: &mut self.save_requests,
+            map_requests: &mut self.map_requests,
         });
         // A `220` load replaces the picture layer and the normal variables, so it runs
         // as soon as the VM step that requested it has released its borrow of `Game`.
@@ -851,6 +878,42 @@ impl Game {
                         self.diagnostics.entry(err).or_insert(0);
                     }
                 },
+            }
+        }
+        // A `130` teleport queues a map switch for the same reason a `220` load does:
+        // the host cannot borrow Game while the VM is inside `step_frame`.
+        let map_requests = std::mem::take(&mut self.map_requests);
+        for request in map_requests {
+            let map_id = match request.map {
+                -1 => 1,
+                -2 => 0,
+                id => id,
+            };
+            let path = self
+                .databases
+                .map_path(map_id)
+                .map(str::to_owned);
+            let Some(path) = path else {
+                self.diagnostics.insert(
+                    format!("130 Teleport: no map registered for id {}", request.map),
+                    1,
+                );
+                continue;
+            };
+            match self.switch_map(&path) {
+                Ok(()) => {
+                    self.diagnostics.insert(
+                        format!(
+                            "130 Teleport: {} at ({}, {}) direction {}",
+                            path, request.x, request.y, request.direction
+                        ),
+                        1,
+                    );
+                }
+                Err(err) => {
+                    self.diagnostics
+                        .insert(format!("130 Teleport: {err}"), 1);
+                }
             }
         }
         // One more frame of play time; the save stores this in SavePart2.vars3_21[0].
@@ -1110,6 +1173,7 @@ struct GameHost<'a> {
     previous_mouse_buttons: u32,
     root: &'a Path,
     save_requests: &'a mut Vec<crate::savegame::SaveRequest>,
+    map_requests: &'a mut Vec<MapRequest>,
 }
 
 impl GameHost<'_> {
@@ -1321,9 +1385,12 @@ impl Host for GameHost<'_> {
     }
 
     fn teleport(&mut self, map: i32, x: i32, y: i32, direction: i32) {
-        self.note(format!(
-            "130 Teleport: map {map} at ({x},{y}) direction {direction} - map layer arrives in M2"
-        ));
+        self.map_requests.push(MapRequest {
+            map,
+            x,
+            y,
+            direction,
+        });
     }
 
     fn transition(&mut self, kind: i32, flags: i32) {

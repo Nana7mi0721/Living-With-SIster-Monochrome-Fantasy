@@ -212,6 +212,17 @@ impl Databases {
         }
     }
 
+    /// The `.mps` path registered for a map id (SysDatabase type 0, column 0).
+    ///
+    /// Opcode 130 stores map ids in a signed form: `-1` is map 1 and `-2` is
+    /// map 0. Both new-game paths use `-1` to reach SampleMapA (MapData row 1),
+    /// and Map002 has four `-2` sites that return to TitleMap (row 0); no other
+    /// values appear in the game (docs/ASSET_AUDIT.md section 3.6).
+    pub fn map_path(&self, id: i32) -> Option<&str> {
+        let row = usize::try_from(id).ok()?;
+        self.sys.as_ref()?.text(0, row, 0)
+    }
+
     /// Numeric read: engine cells win, then the addressed container.
     /// The SystemDB `12:文字色` palette entry that `\c[n]` names.
     ///
