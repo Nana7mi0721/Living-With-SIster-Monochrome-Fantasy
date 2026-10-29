@@ -16,7 +16,7 @@ mean abs 0.012）。M2 的验收对象是**玩家真正开始游戏后的第一�
 
 | 项 | 值 |
 |---|---|
-| git HEAD | `51bd7a3` + **第二批 M2 提交**（250 写路径 / 移动插值 / 离屏裁剪 / 引擎事件 12 个 / `.project` 名字）+ **第三批**（`112` 开块 / `290` 十一种效果 / `blocks` 诊断命令 / `--answer-delay`）+ **第四批**（`69d7b9c`：暂停光标贴图 / 鼠标选项命中 / `210` 字符串实参 / **`121` 运算符表纠错** / 消息原点 410）+ **第五批**（`8825723` 存档 220/221/222 与精灵表 pattern；`ea96c1f` 290 效果实参求值） |
+| git HEAD | `5e26bec` + **本批**（styled 101 message `layout_styled` / SavePart5 图片表写回 / vardb `write_into` 接线 / 220 mode 0 整档保存） |
 | 数据根 | `work/full`（23 个 .wolf 全解，4,085 文件） |
 | 屏幕 | 1024x576，60 fps，tile 16 px |
 | 工具链 | Rust 1.99.1 msvc；`cargo test -q --workspace` 全绿；`wolf-cli verify` 63/63 |
@@ -40,6 +40,7 @@ mean abs 0.012）。M2 的验收对象是**玩家真正开始游戏后的第一�
 | C13 | `wolf-cli blocks --map SampleMapA --event 0` | 块表诊断（§3.7） |
 | C14 | `wolf-cli precompile` | 块栈计数器（§3.7） |
 | C15 | `wolf-cli capture --load-save work/retail_backup/Save/SaveData01.sav --frames 1 --out work/out/save1_load3.png` | 存档载入态（§2.4） |
+| C16 | `cargo test -q -p wolf-game a_saved_game_reloads_its_live_picture_layer` 与 `a_saved_game_keeps_the_database_cells` | 整档回写（§2.5） |
 
 ---
 
@@ -106,10 +107,12 @@ pictures  : 22 live -> 10 textured quad(s), 0 text picture(s)
     pic 999    WindowFile at (0, 0) alpha 0.00 window Some((100, 50)) file "<SQUARE>"
     pic 19500  WindowString at (512, 480) alpha 1.00 window Some((960, 168)) file "SystemFile/WindowBase.png"
 message   : 7 row(s), 73/73 char(s), font 20 at [64,410], wrap 928, cursor at [576,554]
-text      : 7 item(s), 68 glyph(s), 7 line(s), 0 substituted
-rendered  : 1024x576, 161282/589824 non-black pixel(s) = 27.3%
+text      : 6 item(s), 67 glyph(s), 6 line(s), 0 substituted
+rendered  : 1024x576, 157014/589824 non-black pixel(s) = 26.6%
 stats     : 30619 instruction(s), 2394 picture op(s), 0 sound(s), 98 db access(es) (13 write, 9 label), 1 message(s), 0 choice(s), 0 warning(s)
 ```
+
+> 这是 `message::layout_styled` 的输出（`[n]` 改字号、`\c[n]` 调色、`\E` 描边、`<C>` 居中）。旧版纯文本 `layout` 给 7 item / 68 glyph / 161282 px（27.3%），现在由带样式的路径取代；行首 `<C>` 让第一行居中，其余行左对齐。
 
 > 这里的 `22 live` 与 §2.1 同源：19 个气泡库控件停在 `(-2784, 2880)`，被裁剪掉，真正绘制的是 10 个 quad（九宫格 9 + 暂停光标 1）。
 
@@ -133,6 +136,7 @@ quad pic  19500 at [32,561,3,3]     quad pic 19500 at [35,561,954,3]    quad pic
 | 暂停光标贴图 | `SystemFile/Text_Pause.png` 17x90 = 6 帧 x 17x15 | 每帧一个 16x10 下三角，帧内顶边 y = 3,2,1,0,1,3 上下弹跳；`message::cursor_frame` 选帧 + `atlas::sprite_from` 贴图 | 已验证（图）/ 未验证（每帧 8 个渲染帧的节奏）|
 | 打字机 | Sys9 = 500 字/秒，Sys10 = 9 帧预等待 | ev48 pc117 / ev63 pc36 | 已验证（速率）/ 未验证（积累方式为浮点累加） |
 | 文本来源 | `101` argc 恒 0 / strc 恒 1，全文 12,027 条 | docs/OPCODE_101.md | 已验证 |
+| 排版 | `layout_styled`: `[n]` 改字号，`\c[n]` 从 SysDB 12 调色，`\E` 描边，`<C>` 居中；一个 run 一个 TextQuad | `crates/wolf-game/src/message.rs`（task-29） | 已验证（同一套 `PictureColours` 同时服务 textpic 与 101） |
 
 **★已实测纠正（三处，均与本项目早先的实现或文档冲突）**
 
@@ -187,6 +191,14 @@ rendered  : 1024x576, 548416/589824 non-black pixel(s) = 93.0%
 差值集中在顶栏文字的抗锯齿与 JPEG 压缩（顶行 18.56），结构、数值、字号、锚点全部对齐：
 `90日 21:40 周六 温柔的尖叫的哥哥` / `行动力 75/120` / `性欲 56％` / `精力 4/6` / `持有金钱 7586 G`。
 立绘 picture 90 `Picture/stand_imouto_paja2.png` 按 6x2 精灵表取第 2 格，画在 `[600,80,400,650]`。
+
+### 2.5 整档回写（220 mode 0，本批新增）
+
+`Game::save_to` 以本局载入的存档（或新游戏的 `Save/System.sav`）为模板，写回：Part2 的 playtime / Sys3 / Sys4，
+Part3 的 800 个通常变量与活着的公共事件 self 数值 + `CSelf5..9` 字符串，Part5 的当前图片表（`part5_from_screen`），
+以及 `Databases::write_into` 收集的 CDataBase 运行时单元格。测试：`a_saved_game_reloads_its_live_picture_layer`
+（66 张图逐字段相同）与 `a_saved_game_keeps_the_database_cells`（(0,12,5)=4242 保存后重新载入仍是 4242）。
+唯一非字节等价的写回是 retail 文本图 escape 04（带字距字体）：语义上仍是 `[n]`，写回成 05。
 
 ## 3. `150` 图片指令的四个语义修正（M2 的核心发现）
 
@@ -444,8 +456,13 @@ ev63 的几何**全部来自数据库**：`250 [18, 97, 0, 69632, self88]`（座
 `wolf-game a_save_address_finds_normal_self_and_system_variables` / `a_save_write_reaches_the_next_read` /
 `a_save_file_round_trips_through_the_writer`。
 
-**仍未实现**：220 mode 0（从 Game 状态构造完整 `SaveFile` 的 part1/part2/part4/part5）只有一条诊断记录；
-221 的 `flag=1` 三个站点（ev94 pc335/345/348，地址 `1600062`/`1600064`）语义未验证。
+**220 mode 0 已实现（本批）**：`Game::save_to` 以「本局载入的存档」或新游戏的 `Save/System.sav` 为模板，写入
+playtime、Sys3/Sys4、800 个通常変数、全部活着的公共事件 self 数值变量与 `CSelf5..9` 字符串；
+`savegame::part5_from_screen` 把当前图片层反向编码成 SavePart5（文本图转义流 02/05/06），
+`Databases::write_into(&mut save.vardb)` 把运行时 CDataBase 改动写进变量库，最后 `to_bytes_rebuilt()`。
+测试 `a_saved_game_reloads_its_live_picture_layer`（66 张图逐字段相同）与 `a_saved_game_keeps_the_database_cells`
+（(0,12,5)=4242 保存→载入后仍是 4242）已验证。仍只剩 221 的 `flag=1` 三个站点（ev94 pc335/345/348，
+地址 `1600062`/`1600064`）和 retail 04 字体记录的字节级写回未验证。
 
 ---
 
@@ -512,7 +529,7 @@ ev63 的几何**全部来自数据库**：`250 [18, 97, 0, 69632, self88]`（座
 | HUD 文本排版 | **已修**：`Game::text_quads()` 按 `\f[n]` / anchor / `<R>` / `\c[n]` / `\E` 切片出图（crates/wolf-game/src/textpic.rs，25 个单测），见 §3.9；半角 advance 仍按 0.5 em 估算，anchor 1/3/4 有 ≤6% 偏差（`measure_with` 未接 cosmic-text） |
 | `290` 的图片号是**区间** | `args[2..3]` 是闭区间 [lo, hi]（官方「□～□ の欄に…」）；若按单张实现，type 4 的 7 对按钮、type 5 的整幕压暗、CE85 的「全カーソル」都会只作用一半（docs/OPCODE_290.md §0.4） |
 | 字符串实参 | **已实现**：8,260 个带字符串实参的 210/300 调用点写入 CSelf5..8（docs/OPCODE_210_RETURN.md §8），零反例 |
-| 存档/读档（220/221/222） | **读侧与 221/222 已落地**：`--load-save` 重建画面（Part3 通常变量 / セルフ変数 / 指文字列、Part2 时间与 Sys3/4、Part5 图片表）；221/222 经 `SaveOp` 读写并落盘，9 档 9/9 逐字节可逆。**220 mode 0 的整档保存仍未实现**（见 §4.5） |
+| 存档/读档（220/221/222） | **读侧、221/222 与 220 mode 0 均已落地**：`--load-save` 重建画面（Part3 通常变量 / セルフ変数 / 指文字列、Part2 时间与 Sys3/4、Part5 图片表）；221/222 经 `SaveOp` 读写并落盘，9 档 9/9 逐字节可逆；`Game::save_to` 从模板 + 运行时状态重建 Part2/3/5 与 vardb（见 §4.5）。剩 221 flag=1 站点与 retail 04 字体记录的字节级写回未验证 |
 | `270 Party`、`160/162 Transition` | 仍是记录型 no-op |
 
 ---

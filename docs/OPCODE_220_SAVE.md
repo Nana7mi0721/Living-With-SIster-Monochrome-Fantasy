@@ -467,7 +467,16 @@ pub struct SaveOp {
 
 - Slot → `root/Save/SaveData{slot:02}.sav`; path → relative to the game root unless absolute.
 - 220 `mode=1` queues `SaveRequest::Load(path)`; `Game::frame` applies it after `vm.step_frame` with `savegame::load_into`, which clears the picture screen and rebuilds it from part5, restores 800 normal variables, playtime and Sys3/Sys4.
-- 220 `mode=0` queues `SaveRequest::Save(path)`; `Game::frame` calls `Game::save_to`, which clones the save the game was loaded from (or `Save/System.sav` for a new game) as the map template, copies play time, Sys3/Sys4, the 800 normal variables and every live common-event self variable / self string into `SavePart2`/`SavePart3`, then writes `to_bytes_rebuilt()`. The template supplies `SavePart1`（含 map_tiles）and the raw `vardb`/`part7` bytes; variable-database writes made through opcode 250 are not yet persisted into the save. See SAVE_SPEC §14.4.
+- 220 `mode=0` queues `SaveRequest::Save(path)`; `Game::frame` calls `Game::save_to`, which clones the save the game was loaded from (or `Save/System.sav` for a new game) as the map template, copies play time, Sys3/Sys4, the 800 normal variables and every live common-event self variable / self string into `SavePart2`/`SavePart3`, then writes `to_bytes_rebuilt()`.
+- **变量库已经可以写了（task-30 + 已接线）**：`SaveFile::set_vardb(&VariableDatabase)` 会调用 `VariableDatabase::to_bytes()` 重编码第六段，
+  按格写有 `set_vardb_num` / `set_vardb_string` / `set_vardb_text`（越界或字段类型不符时返回 `Ok(false)` 且不动任何字节）。
+  `SaveFile::rebuild()` 现在编码 vardb 而不是复制模板字节；`Game::save_to` 在 `set_part5` 之后调用
+  `let (written, missed) = self.databases.write_into(&mut save.vardb);`，`missed > 0` 时写一条 `220 SaveLoad` 诊断（不静默丢格）。
+  因此 opcode 250 对 CDataBase 的运行时写入会随整档保存落盘。详见 SAVE_SPEC §14.4 / §14.5。
+- **画面图片表也会重建（已接线）**：`savegame::part5_from_screen(&self.screen)` 把当前活着的每张 `150` 图片
+  反向编码成 `SavePart5_1`（`picture_to_record`），文本图用 `encode_picture_text` 把 `\E`/`[n]`/`\c[n]` 写回转义流。
+  读入侧 `picture_from_record` 是它的逆过程；`a_saved_game_reloads_its_live_picture_layer` 逐字段比较 66 张图。
+  唯一语义等价但非字节等价的是 retail 的 04（带字距字体）记录：读成 `[n]`，写回成 05。
 - 221 reads the file, maps `address` through `save_address` (`2_000_000+n` normal, `1_600_000+n` self, `9_000_000+n` system) and returns `Some(0)` when the file does not exist (the script uses that as "slot empty").
 - 222 reads, applies `write_save_address` (`set_normal_var`, `set_self_var`, `set_playtime_frames`, `vars3_21[n+6]`) and writes the file back.
 - `flag=1` remains treated as 0 (U2 unchanged).
@@ -481,5 +490,9 @@ pub struct SaveOp {
 | wolf-game | `a_save_write_reaches_the_next_read` | 222 写 2000007=1234 后 221 读回 1234；写 playtime=277 后 `playtime_frames()==16620`；越界地址返回 false |
 | wolf-game | `a_save_file_round_trips_through_the_writer` | `write_save` 后 `read_save` 的 `to_bytes()` 与原件逐字节相等 |
 | wolf-game | `a_save_written_from_a_retail_template_round_trips` | 用 SaveData01 当模板写盘，normal var 7 / playtime / Sys3 / Sys4 都能读回 |
+| wolf-game | `a_saved_game_reloads_its_live_picture_layer` | 载入 SaveData01 → `Game::save_to` → 重新载入，66 张图的 number/kind/file/x/y/anchor/scale/split/pattern 全部相同 |
+| wolf-game | `a_saved_game_keeps_the_database_cells` | CData (0,12,5)=4242 → 保存 → 重新载入仍读回 4242（`write_into` 接线） |
+| wolf-save | `a_mutated_vardb_number_survives_a_full_rebuild` / `a_mutated_vardb_text_survives_a_full_rebuild` | 改变量库任一格后 `to_bytes_rebuilt()` 再解析读回新值、`checksum_ok()`；改回原值后与原文件逐字节相同（task-30） |
+| wolf-save | `each_segment_encoder_reproduces_its_parsed_bytes` | 9 档 × 6 段（含 VariableDatabase 81842 / 81851 字节）逐段与 `chunk_bytes(id)` 相同 |
 
-复现：`cargo test -q -p wolf-vm`（79）、`cargo test -q -p wolf-game`（162 + 3 + 1）。
+复现：`cargo test -q -p wolf-vm`（81）、`cargo test -q -p wolf-game`（187 + 3 + 1）、`cargo test -q -p wolf-save`（21）。

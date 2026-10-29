@@ -636,7 +636,11 @@
   "command_shape": "101 argc 0 / strc 1 in all 12,027 real commands; 3,915 bare LF line breaks",
   "measured": {
    "rows": 7,
-   "chars": 73
+   "chars": 73,
+   "items": 6,
+   "glyphs": 67,
+   "lines": 6,
+   "non_black": 157014
   },
   "law": "the engine runs common event 63 as an always-on coroutine: ev63 reads the coordinate scale from the database, writes Sys1..Sys6 and paints its own frame with 150; the engine only draws the text at (Sys1, Sys2) with Sys8 font size, Sys9 chars/second and the pause cursor at (Sys1+Sys5, Sys2+Sys6)",
   "coordinate_scale": {
@@ -660,7 +664,21 @@
    "step_frames_verified": false,
    "doc": "docs/OPCODE_101.md"
   },
-  "overflow": "a 7-row message at 26 px pitch needs 182 px but the ev63 frame is 168 px tall; the last row and the cursor sit on the bottom border. Whether retail paginates, shrinks the font or wraps wider is unverified: there is no retail PrintScreen of a 101 window yet"
+  "overflow": "a 7-row message at 26 px pitch needs 182 px but the ev63 frame is 168 px tall; the last row and the cursor sit on the bottom border. Whether retail paginates, shrinks the font or wraps wider is unverified: there is no retail PrintScreen of a 101 window yet",
+  "styled_layout": {
+   "api": "message::layout_styled(text, &Vars, frames, &dyn Colours) -> Layout",
+   "runs": "Layout.runs: Vec<Run { text, rect: [f32;4], font_px, colour: Option<[u8;3]>, outline }>",
+   "laws": [
+    "\\f[n] changes the font size",
+    "\\c[n] resolves through SysDatabase type 12; an unknown index keeps the previous colour",
+    "\\E enables the outline ring",
+    "<C> centres the current row; <R> right-aligns it",
+    "typewriter counts plain glyphs; a cut inside a run keeps that run style",
+    "cursor sits at the end of the last visible row plus CURSOR_GAP"
+   ],
+   "cli_slack": "the CLI adds one em of width to each run: the layout measures with the half-em rule while cosmic-text shapes with the real advance, so an exact box wraps the last glyph",
+   "note": "plain layout() still exists for tests and emits one white run per row; the capture/play paths use layout_styled"
+  }
  },
  "opening_slice": {
   "entry": "SampleMapA event 0 (autorun page 0)",
@@ -702,7 +720,7 @@
    "db_accesses": 98,
    "warnings": 0,
    "quads": 10,
-   "non_black": 161282,
+   "non_black": 157014,
    "live_pictures": 22,
    "rows": 7,
    "chars": 73,
@@ -716,7 +734,11 @@
    "text_origin": [
     64,
     410
-   ]
+   ],
+   "text_items": 6,
+   "glyphs": 67,
+   "lines": 6,
+   "styled": true
   },
   "note": "both states are produced by wolf-cli capture --map-run SampleMapA --event 0; --hold-message stops auto-advancing so the 101 message stays on screen",
   "story_state": {
@@ -999,8 +1021,26 @@
    "wolf-vm save_ops_decode_slot_paths_and_store_the_221_answer",
    "wolf-game a_save_address_finds_normal_self_and_system_variables",
    "wolf-game a_save_write_reaches_the_next_read",
-   "wolf-game a_save_file_round_trips_through_the_writer"
+   "wolf-game a_save_file_round_trips_through_the_writer",
+   "wolf-game a_saved_game_reloads_its_live_picture_layer",
+   "wolf-game a_saved_game_keeps_the_database_cells"
   ],
-  "partial": "220 mode 0 (full save constructed from Game state) is still a diagnostic note; flag=1 sites ev94 pc335/345/348 are unverified"
+  "partial": "220 mode 0 (full save constructed from Game state) is implemented (see live_writer); 221 flag=1 sites ev94 pc335/345/348 remain unverified; retail escape 04 in SavePart5 text records is semantically but not byte-identically re-encoded",
+  "live_writer": {
+   "entry": "Game::save_to(path)",
+   "template": "base_save (the save the game was loaded from), or Save/System.sav for a new game",
+   "writes": [
+    "SavePart2: playtime_frames and Sys3/Sys4",
+    "SavePart3: 800 normal variables, live common-event self numeric variables and CSelf5..9 strings",
+    "SavePart5: the current picture table (savegame::part5_from_screen / picture_to_record)",
+    "VariableDatabase: engine CDataBase cells via Databases::write_into"
+   ],
+   "part5_encoding": "text pictures become the 02/05/06 escape stream (encode_picture_text); retail escape 04 decodes to \\f[n] but re-encodes as 05, semantic-only equality",
+   "vardb": "Databases::write_into(&mut save.vardb) runs after set_part5 and before to_bytes_rebuilt(); a missed cell increments stats.unmodelled and records a 220 SaveLoad diagnostic",
+   "tests": [
+    "wolf-game a_saved_game_reloads_its_live_picture_layer",
+    "wolf-game a_saved_game_keeps_the_database_cells"
+   ]
+  }
  }
 }

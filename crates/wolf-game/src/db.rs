@@ -284,6 +284,50 @@ impl Databases {
         }
     }
 
+    /// Copies the engine-owned `CData` cells into a save file variable database.
+    ///
+    /// Only the 可変DB belongs in a save: `CDataBase` is the game's variable table,
+    /// while `SysDatabase` is the engine's own configuration and `DataBase` is the
+    /// editor's fixed table — neither is stored per player, so both are skipped here
+    /// even though the engine layer may hold cells for them.
+    ///
+    /// Returns `(written, missed)`. `written` counts the cells the destination
+    /// variable database accepted; `missed` counts the cells it refused because the
+    /// type, row or field is not in the save at all (a fresh save has fewer rows than
+    /// the .dat, and a field whose config says the other kind is refused by
+    /// [VariableDatabase::set_num](wolf_save::vardb::VariableDatabase::set_num)). A negative
+    /// row or column is not addressable and
+    /// also counts as a miss rather than a panic: scripts do address row -1.
+    pub fn write_into(&self, database: &mut wolf_save::VariableDatabase) -> (usize, usize) {
+        let (mut written, mut missed) = (0, 0);
+        for ((container, db_type, row, column), value) in &self.cells {
+            if *container != Container::CData {
+                continue;
+            }
+            let stored = cell_address(*db_type, *row, *column)
+                .is_some_and(|(ty, row, column)| database.set_num(ty, row, column, *value));
+            if stored {
+                written += 1;
+            } else {
+                missed += 1;
+            }
+        }
+        for ((container, db_type, row, column), text) in &self.texts {
+            if *container != Container::CData {
+                continue;
+            }
+            let body = text.trim_end_matches(char::from(0));
+            let stored = cell_address(*db_type, *row, *column)
+                .is_some_and(|(ty, row, column)| database.set_text(ty, row, column, body));
+            if stored {
+                written += 1;
+            } else {
+                missed += 1;
+            }
+        }
+        (written, missed)
+    }
+
     /// Overwrites a numeric cell in the engine layer.
     pub fn set_num(
         &mut self,
@@ -358,6 +402,17 @@ impl Databases {
     }
 }
 
+/// A `250` address as indices into a save file variable database.
+///
+/// Scripts address row -1 (and a table with no fields can address column -1), which
+/// is a real read of "nothing" rather than an index; a save file has no such cell.
+fn cell_address(db_type: i32, row: i32, column: i32) -> Option<(usize, usize, usize)> {
+    let db_type = usize::try_from(db_type).ok()?;
+    let row = usize::try_from(row).ok()?;
+    let column = usize::try_from(column).ok()?;
+    Some((db_type, row, column))
+}
+
 fn numeric_cell(table: &Database, db_type: i32, row: usize, column: usize) -> Option<i32> {
     let index = usize::try_from(db_type).ok()?;
     let table = table.types.get(index)?;
@@ -424,14 +479,8 @@ mod tests {
         let save = wolf_save::SaveFile::parse(&bytes).expect("SaveData01 parses");
         let mut databases = Databases::with_engine_defaults(DEFAULT_SCREEN);
         databases.apply_saved_database(&save.vardb);
-        assert_eq!(
-            databases.text(Container::CData, 0, 12, 0),
-            Some("温柔的")
-        );
-        assert_eq!(
-            databases.text(Container::CData, 0, 12, 1),
-            Some("尖叫的")
-        );
+        assert_eq!(databases.text(Container::CData, 0, 12, 0), Some("温柔的"));
+        assert_eq!(databases.text(Container::CData, 0, 12, 1), Some("尖叫的"));
     }
 
     #[test]
@@ -593,5 +642,70 @@ mod tests {
             databases.resolve_labels(Container::Sys, 6, 0, None, None),
             (6, 0)
         );
+    }
+
+    fn retail_save() -> Option<wolf_save::SaveFile> {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.pop();
+        path.pop();
+        path.push("work");
+        path.push("retail_backup");
+        path.push("Save");
+        path.push("SaveData01.sav");
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!("skipping: no retail save at {}", path.display());
+            return None;
+        };
+        Some(wolf_save::SaveFile::parse(&bytes).expect("SaveData01 parses"))
+    }
+
+    #[test]
+    fn the_engine_cells_land_in_the_save_variable_database() {
+        let Some(save) = retail_save() else { return };
+        let mut database = save.vardb.clone();
+        // The engine cells the boot sequence owns: the coordinate scale pair. The
+        // save carries its own values for these rows, so a successful write is
+        // visible against a non-zero previous state.
+        let databases = Databases::with_engine_defaults(DEFAULT_SCREEN);
+        let (written, missed) = databases.write_into(&mut database);
+        assert_eq!(written, 2, "the scale pair, and nothing else");
+        assert_eq!(missed, 0, "both rows exist in the retail save");
+        assert_eq!(
+            database.number(18, 97, 0),
+            Some(32),
+            "rateX must be 1024/32"
+        );
+        assert_eq!(database.number(18, 98, 0), Some(24), "rateY must be 576/24");
+        // `250 [18, 0, 24]` reads the message-window skin through the **Data**
+        // container; DataBase is not part of a save, so the skin must not be written
+        // into the variable database even though the engine layer holds it.
+        let skin = database.string(18, 0, 24);
+        assert!(
+            skin.is_none(),
+            "DataBase cells must stay out of the save, got {skin:?}"
+        );
+
+        // A round-trip proves the write survives the encoder, not just the struct.
+        let bytes = database.to_bytes().expect("the vardb re-encodes");
+        let reparsed = wolf_save::vardb::parse_bytes(&bytes).expect("and parses back");
+        assert_eq!(reparsed.number(18, 97, 0), Some(32));
+        assert_eq!(reparsed.number(18, 98, 0), Some(24));
+    }
+
+    #[test]
+    fn a_cell_the_save_does_not_have_is_counted_as_a_miss() {
+        let Some(save) = retail_save() else { return };
+        let mut database = save.vardb.clone();
+        let mut databases = Databases::with_engine_defaults(DEFAULT_SCREEN);
+        // Row -1 is what a script means by "no row"; a save file cannot address it.
+        databases.set_num(Container::CData, 18, -1, 0, 7);
+        databases.set_num(Container::CData, 99, 0, 0, 7);
+        databases.set_num(Container::CData, 18, 97, 9, 7);
+        // A textual field refuses a numeric write, and vice versa.
+        databases.set_text(Container::CData, 18, 97, 0, "not a number");
+        let (written, missed) = databases.write_into(&mut database);
+        assert_eq!(written, 2, "the two real scale cells still land");
+        assert_eq!(missed, 4, "row -1, type 99, column 9, and the wrong kind");
+        assert_eq!(database.number(18, 97, 0), Some(32));
     }
 }

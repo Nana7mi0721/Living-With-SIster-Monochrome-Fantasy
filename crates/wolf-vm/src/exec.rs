@@ -1494,6 +1494,12 @@ fn execute(
                 let raw = cmd.strings.first().map_or("", String::as_str);
                 let expanded = expand(raw, inst, vars);
                 let (face, text) = split_face(&expanded);
+                // `@n` is the per-message face override; the message-window coroutine
+                // (common event 63) reads Sys0 to pick the face picture, so publish it
+                // before the host sees the text (docs/OPCODE_101.md section 4.2).
+                if let Some(face) = face {
+                    vars.set_sys(0, face);
+                }
                 host.show_message(text, face);
                 inst.wait = WaitState::Message;
                 inst.pc += 1;
@@ -2805,6 +2811,7 @@ mod tests {
         vm.step_frame(&mut host);
         assert_eq!(host.messages, vec!["hello".to_owned()]);
         assert_eq!(host.faces, vec![Some(2)]);
+        assert_eq!(vm.vars.get_sys(0), 2, "`@2` must reach Sys0 for the frame painter");
         assert_eq!(vm.vars.get(0), 0);
         host.dismiss = true;
         vm.step_frame(&mut host);

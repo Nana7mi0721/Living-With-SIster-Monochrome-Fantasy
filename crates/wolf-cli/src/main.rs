@@ -1715,9 +1715,9 @@ fn run_capture(
     // The engine draws 101 message text itself: the frame comes from common event 63 as
     // ordinary pictures, the glyphs come from here. Only the newest message is visible,
     // which is the order the interpreter produces.
-    if let Some(message) = game.messages.last() {
+    if let Some(layout) = game.message_layout() {
+        let message = game.messages.last().expect("layout implies a message");
         let vars = game.message_vars();
-        let layout = wolf_game::message::layout(&message.text, &vars, message.frames);
         let preview: String = message.text.chars().take(60).collect();
         let typing = if layout.typing { ", typing" } else { "" };
         let cursor = layout.cursor.map_or(String::new(), |at| {
@@ -1736,8 +1736,18 @@ fn run_capture(
             cursor
         );
         println!("    text    : {preview:?}");
-        for row in &layout.rows {
-            items.push(TextItem::new(row.text.clone(), row.rect, layout.font_px));
+        for run in &layout.runs {
+            // Give each run one em of slack: the layout measures with the half-em rule,
+            // while cosmic-text shapes with the real font advance, and a box that is a
+            // fraction too narrow makes the renderer wrap the last glyph onto a new line.
+            let mut rect = run.rect;
+            rect[2] += run.font_px;
+            let mut item = TextItem::new(run.text.clone(), rect, run.font_px)
+                .with_colour(run.colour.unwrap_or(wolf_game::message::DEFAULT_COLOUR));
+            if run.outline {
+                item = item.with_outline(2, [0, 0, 0]);
+            }
+            items.push(item);
         }
     }
     renderer.draw_text(&items);

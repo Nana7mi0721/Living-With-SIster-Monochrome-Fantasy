@@ -16,11 +16,11 @@
 
 use std::path::Path;
 
-use wolf_save::part5::SavePart5_1;
+use wolf_save::part5::{SavePart5, SavePart5_1};
 use wolf_save::SaveFile;
 
 use crate::game::Game;
-use crate::picture::{Picture, PictureKind};
+use crate::picture::{Picture, PictureKind, Screen};
 
 /// What a load restored, for the CLI to print and tests to assert.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -172,6 +172,114 @@ pub fn picture_from_record(record: &SavePart5_1) -> Option<Picture> {
     Some(picture)
 }
 
+/// Builds the save record for one live picture.
+///
+/// This is the inverse of [`picture_from_record`]. It only has to cover the fields the
+/// save format actually stores: the picture number, kind flags, name/text, position,
+/// sprite-sheet grid, scale, opacity, blend, anchor and the last fade length.
+#[must_use]
+pub fn picture_to_record(picture: &Picture) -> SavePart5_1 {
+    let mut record = SavePart5_1::default();
+    record.var1 = picture.number as u32;
+    record.var4 = u16::from(picture.anchor);
+    record.var5 = u8::from(picture.kind.is_text());
+    record.var6 = u8::from(picture.kind.is_window());
+    record.md1 = if picture.kind.is_text() {
+        encode_picture_text(&picture.text)
+    } else {
+        let mut bytes = picture.file.as_bytes().to_vec();
+        bytes.push(0);
+        bytes
+    };
+
+    let v = &mut record.vars7_18;
+    v[0] = picture.x as u32;
+    v[1] = picture.y as u32;
+    let (columns, rows) = match picture.window {
+        Some((width, height)) => (width, height),
+        None => (
+            i32::try_from(picture.split.0).unwrap_or(1),
+            i32::try_from(picture.split.1).unwrap_or(1),
+        ),
+    };
+    v[2] = columns.max(0) as u32;
+    v[3] = rows.max(0) as u32;
+    v[4] = picture.pattern_index;
+    v[5] = picture.opacity as u32;
+    v[6] = picture.blend as u32;
+    v[7] = u32::MAX;
+    v[8] = picture.fade;
+    v[9] = picture.scale.max(0) as u32;
+    v[10] = v[9];
+    v[11] = 0;
+    record
+}
+
+/// Builds a whole `SavePart5` from the live picture layer, in draw order.
+#[must_use]
+pub fn part5_from_screen(screen: &Screen) -> SavePart5 {
+    let events: Vec<SavePart5_1> = screen.iter().map(picture_to_record).collect();
+    SavePart5 {
+        var1: u16::try_from(events.len()).unwrap_or(0x7fff),
+        events,
+    }
+}
+
+/// Encodes a text picture back into the `md1` style stream.
+///
+/// The inverse of [`decode_picture_text`] for the escapes the retail saves use:
+/// `\E` (outline), `\f[n]` (font size) and `\c[n]` (palette index). Other escapes are
+/// left literal, which is harmless: the save is a snapshot of already-expanded text.
+#[must_use]
+pub fn encode_picture_text(text: &str) -> Vec<u8> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = Vec::new();
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] == '\\' {
+            if let Some((consumed, bytes)) = encode_escape(&chars[index..]) {
+                out.extend_from_slice(&bytes);
+                index += consumed;
+                continue;
+            }
+        }
+        let mut buffer = [0u8; 4];
+        out.extend_from_slice(chars[index].encode_utf8(&mut buffer).as_bytes());
+        index += 1;
+    }
+    out.push(0);
+    out
+}
+
+fn encode_escape(chars: &[char]) -> Option<(usize, Vec<u8>)> {
+    if chars.get(1) == Some(&'E') {
+        return Some((2, vec![1, 2, 5]));
+    }
+    let kind = *chars.get(1)?;
+    if (kind == 'f' || kind == 'c') && chars.get(2) == Some(&'[') {
+        let mut end = 3;
+        let mut value: i32 = 0;
+        while let Some(digit) = chars.get(end).and_then(|ch| ch.to_digit(10)) {
+            value = value.saturating_mul(10).saturating_add(digit as i32);
+            end += 1;
+        }
+        if end == 3 || chars.get(end) != Some(&']') {
+            return None;
+        }
+        let code = if kind == 'c' && value == 0 { 0x0f } else { value + 14 };
+        if !(1..=255).contains(&code) {
+            return None;
+        }
+        let bytes = if kind == 'f' {
+            vec![1, 5, 3, 0x0e, code as u8, 1]
+        } else {
+            vec![1, 6, 2, 0x0e, 0x0e, code as u8, 1]
+        };
+        return Some((end + 1, bytes));
+    }
+    None
+}
+
 /// Decodes the picture-string byte stream stored in \`SavePart5_1::md1\`.
 ///
 /// The stream is UTF-8 text interleaved with \`0x01 <total_len> <payload>\` escapes.
@@ -266,6 +374,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_text_picture_round_trips_through_its_save_record() {
+        let mut picture = Picture::new(6200);
+        picture.kind = PictureKind::Text;
+        picture.text = "\\E\\f[24]\\c[9]21:40".to_owned();
+        picture.x = 140;
+        picture.y = 7;
+        picture.anchor = 3;
+        picture.opacity = 255;
+        let record = picture_to_record(&picture);
+        assert_eq!(decode_picture_text(&record.md1), picture.text);
+        assert_eq!(record.var5, 1);
+        assert_eq!(record.var4, 3);
+        let restored = picture_from_record(&record).expect("text record");
+        assert_eq!(restored.text, picture.text);
+        assert_eq!(restored.x, 140);
+        assert_eq!(restored.y, 7);
+        assert_eq!(restored.anchor, 3);
+    }
+
+    #[test]
+    fn a_file_picture_keeps_its_sprite_grid_in_the_record() {
+        let mut picture = Picture::new(90);
+        picture.file = "Picture/stand_imouto_paja2.png".to_owned();
+        picture.split = (6, 2);
+        picture.pattern_index = 2;
+        picture.window = None;
+        let record = picture_to_record(&picture);
+        assert_eq!(record.vars7_18[2], 6);
+        assert_eq!(record.vars7_18[3], 2);
+        assert_eq!(record.vars7_18[4], 2);
+        let restored = picture_from_record(&record).expect("file record");
+        assert_eq!(restored.file, picture.file);
+        assert_eq!(restored.split, (6, 2));
+        assert_eq!(restored.pattern_index, 2);
+    }
+
+    #[test]
     fn a_saved_text_picture_decodes_its_font_sizes() {
         // The exact bytes SaveData01 stores for picture 6200, whose live text is \f[24]21:40.
         let bytes = [
@@ -282,6 +427,31 @@ mod tests {
             0x91, 0xa8, 0xe5, 0x85, 0xad, 0x00,
         ];
         assert_eq!(decode_picture_text(&bytes), "\\c[0]\\f[18]周六");
+    }
+
+    #[test]
+    fn every_retail_text_picture_survives_re_encoding() {
+        let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.pop();
+        path.pop();
+        path.push("work");
+        path.push("retail_backup");
+        path.push("Save");
+        path.push("SaveData01.sav");
+        let Ok(save) = read_save(&path) else { return };
+        let mut checked = 0;
+        for record in &save.part5.events {
+            if record.var5 != 1 {
+                continue;
+            }
+            let text = decode_picture_text(&record.md1);
+            let reencoded = encode_picture_text(&text);
+            // Escape 04 is a font-plus-letter-spacing variant; it decodes to the same
+            // [n] text and re-encodes as the plain 05 font, so compare decoded text.
+            assert_eq!(decode_picture_text(&reencoded), text, "picture {}", record.var1);
+            checked += 1;
+        }
+        assert!(checked > 20, "checked {checked} text records");
     }
 
     #[test]

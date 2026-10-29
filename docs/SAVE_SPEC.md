@@ -491,7 +491,11 @@ if fileVersion >= 0x8A:
 
 ---
 
-## 8. SavePart5 — 公共事件运行时状态（**已验证**）
+## 8. SavePart5 — 当前画面图片表（**已验证**）
+
+> **修正（已验证）**：本节旧标题「公共事件运行时状态」是错的。SavePart5 记录的是**存档瞬间仍然活着的 `150` 图片**，
+> 不是事件协程状态；公共事件的 self 变量/字符串在 SavePart3 里。实测 SaveData01 的 66 条记录对应 66 张活图片。
+> 字段语义见下表与 §8.1。
 
 `docs/vendor/WolfSave/SavePart5.h:661`（外层）与 `:44`（`SavePart5_1`）。
 
@@ -504,18 +508,18 @@ if (m_var1 & 0x8000) == 0:
 ```
 
 实测 `m_var1` = 58..84（各文件不同），bit 15 从未置位，所以总能读到 `m_var1` 个条目。
-**这就是「哪些公共事件当前有运行时状态」的列表** —— 与公共事件总数 550 无关。
+**这就是「存档瞬间哪些图片还活着」的列表** —— 与公共事件总数 550 无关。
 
 `SavePart5_1` 的字段（20 个版本闸门，本游戏全部打开）：
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `m_var1` | u32 | 事件 id。实测第一条是 `0xFFFFFFF6`（= -10） |
-| `m_var2` / `m_var3` | u8 ×2 | |
-| `m_var4` | u16 | |
-| `m_var5` / `m_var6` | u8 ×2 | |
-| `m_md1` | MemData<u16> | 实测第一条是 22 字节 ASCII：`cg/bg_14_sunset_a.jpg` |
-| `m_vars7_18` | u32 ×12 | |
+| `m_var1` | u32 | 图片编号（按 i32 解释；负数是整屏层/引擎层） |
+| `m_var2` / `m_var3` | u8 ×2 | 未用（实测全 0） |
+| `m_var4` | u16 | anchor：0 左上 / 1 中心 / 2 左下 / 3 右上 / 4 右下 |
+| `m_var5` / `m_var6` | u8 ×2 | 类型：m_var5=1 → Text；m_var6=1 → WindowFile；两者 0 → 普通文件图（无 var5=2） |
+| `m_md1` | MemData<u16> | 文件名（含结尾 NUL）或文本图片的转义流 |
+| `m_vars7_18` | u32 ×12 | `[x, y, 分割列/窗口宽, 分割行/窗口高, pattern(1 基), opacity, blend, -1, fade, scaleX%, scaleY%, 0]` |
 | `m_vals1` | u32 ×6 | 源码里是 `m_vals1[0..3]`，实际 6 个 |
 | `m_vars19_36` | u32 ×18 | >=0x69 |
 | `m_var37` | u8 | >=0x6B |
@@ -533,6 +537,20 @@ if (m_var1 & 0x8000) == 0:
 | `m_vars91_97` | u32 ×7 | >=0x89 |
 
 `m_var90` 的子表在参考实现里是「先读一个 u32，再读那么多个 u32」，与 §6 的 `m_var5` 同构。
+
+### 8.1 记录语义（实测，220 mode 0 / `--load-save` 共用）
+
+- **普通文件图**（m_var5=0、m_var6=0）：m_md1 是文件名，`m_vars7_18[2]/[3]` 是**精灵表分割列/行**（1x1 = 整图），
+  `[4]` 是 **1 基** pattern 单元号；picture 90 `Picture/stand_imouto_paja2.png` = `[600,80,6,2,2,255,0,-1,1,100,100,0]` 就是 6x2 表第 2 格。
+- **窗口图**（m_var6=1）：`[2]/[3]` 是窗口宽高；picture 19500 = 960x168。
+- **文本图**（m_var5=1）：m_md1 是 `01 <总长> <payload>` 的转义流，实测只出现 02→`\E`、04→带字距字体、
+  05→字体（payload[2] = 字号+14）、06→颜色（payload[3] = 颜色号+14，0x0f 特判 `\c[0]`）；
+  例如 pic 6200 = `01 05 03 0e 26 01 "21:40" 00` → `[24]21:40`。
+- **fade 字段 [8] 在载入时必须置 0**：它是历史上一次淡入的时长，不是「还要再淡入」；零售 save1 的面板记录 fade=10 却已经 100% 显示。
+- 写回侧：`crate::savegame::part5_from_screen` / `picture_to_record` 是读入的逆过程；`encode_picture_text` 把 `\E`/`[n]`/`\c[n]`
+  重新编码成 02/05/06 字节流。唯一语义等价但非字节等价的是 retail 的 04（带字距字体）记录：读成 `[n]`，写回成 05。
+- 测试：`a_saved_game_reloads_its_live_picture_layer`、`every_retail_text_picture_survives_re_encoding`、
+  `a_text_picture_round_trips_through_its_save_record`、`a_file_picture_keeps_its_sprite_grid_in_the_record`。
 
 ---
 
@@ -644,6 +662,9 @@ Rust 视图：`VariableDatabase { unknown, type_count, types }`、
 便捷访问器：`number(id)` / `string(id)` 按**字段 id**取值（不是按 cfg 下标）；
 `number_field_count()` / `string_field_count()` 返回该类型的数字/字符串字段数。
 
+写回：`VariableDatabase::to_bytes()` 见 §14.1，按格写（`set_num` / `set_text`）与
+编码器必须照抄的字段顺序见 §14.5。
+
 ---
 
 ## 10. SavePart7 — 尾部小表（**已验证**）
@@ -724,38 +745,43 @@ playtime 与セルフ值不变、checksum_ok() 为真；改セルフ数値与セ
 
 ---
 
-### 11.2 全文件 rebuild 与逐段编码器（`tests/rebuild.rs`，4 个）
+### 11.2 全文件 rebuild 与逐段编码器（`tests/rebuild.rs`，8 个）
 
 ⚠️ 本仓库现在有**两个**写出入口，语义不同，别混用：
 
-| 段 | `serialize()`（旧） | `rebuild()`（新，task-28） |
+| 段 | `serialize()`（旧） | `rebuild()`（新，task-28 / task-30） |
 |---|---|---|
 | SavePart1 | 复制解析时的原始字节 | `SavePart1::to_bytes(file_version)` |
 | SavePart2 | 复制 | `SavePart2::to_bytes(file_version)` |
 | SavePart3 | 复制 | `SavePart3::to_bytes_with_version(file_version)` |
 | SavePart4 | 复制 | `SavePart4::to_bytes(file_version)` |
 | SavePart5 | 复制 | `SavePart5::to_bytes(file_version)` |
-| VariableDatabase | 复制 | **复制**（尚无编码器） |
+| VariableDatabase | 复制 | `VariableDatabase::to_bytes()`（task-30） |
 | SavePart7 | 复制 | **复制**（1 字节，尚无编码器） |
 
-也就是说：改 `part1..part5` 任一 typed 字段只能通过 `rebuild()` / `to_bytes_rebuilt()` 生效；
-改 vardb / part7 仍然只能走 `replace_part`（或先自己编码再 `replace_part`）。
+也就是说：改 `part1..part5` 或变量库（vardb）里任一 typed 字段，`rebuild()` / `to_bytes_rebuilt()` 会写进文件；
+只有 SavePart7 仍然只能走 `replace_part`。
 
 | 测试名 | 断言的关键数字 |
 | --- | --- |
 | `every_retail_save_rebuilds_to_the_same_bytes` | 9 个零售存档：`parse -> rebuild -> encrypt` 与原始文件**逐字节相同**（长度与内容，首个不同偏移会被打印） |
 | `rebuild_matches_serialize_and_to_bytes` | 同一份内存状态的两条写出路径必须一致：`serialize() == rebuild()`，且两者长度都等于原文件、`to_bytes() == 原文件` |
-| `each_segment_encoder_reproduces_its_parsed_bytes` | 逐段比对：9 档 × 5 段，每个 `to_bytes()` 都等于 `chunk_bytes(id)`（part1 34318 / part2 595 或 617 / part3 217708..240000 / part4 1194 或 1213 / part5 25910..37497） |
+| `each_segment_encoder_reproduces_its_parsed_bytes` | 逐段比对：9 档 × **6 段**，每个 `to_bytes()` 都等于 `chunk_bytes(id)`（part1 34318 / part2 595 或 617 / part3 217708..240000 / part4 1194 或 1213 / part5 25910..37497 / **vardb 81842 或 81851**） |
 | `mutations_in_part2_and_part5_survive_a_rebuild` | 改 part2 `vars3_21[0]`（playtime）+1234、改 part5 某个事件的 `vars7_18[0] = 0x5A5A5A5A`：写出再解析都能读回，`checksum_ok()` 为真，事件 id 与名字不变；把同一个字段改回原值后输出与原文件逐字节相同 |
+| `a_synthetic_variable_database_round_trips_through_to_bytes` | 手搓一个变量库，四种 `m_unknown` 形状（正数 / -1 / -2 / -3）每种都写一遍：`to_bytes() -> parse_bytes()` 与原值相等，再编码一次字节不变 |
+| `a_mutated_vardb_number_survives_a_full_rebuild` | 零售 SaveData01 第一个数值单元格 +1：`set_vardb_num` 后 `to_bytes_rebuilt()` 再解析读回新值、类型数不变、`checksum_ok()`；改回原值后与原始文件逐字节相同 |
+| `a_mutated_vardb_text_survives_a_full_rebuild` | 第一个文本单元格写成 `書き込みテスト`（自动补 NUL）：写出再解析 `text()` 读回同一串；再写回原字节，读回原值 |
+| `vardb_setters_refuse_what_they_cannot_encode` | 四种非法写（数值写到文本字段、文本写到数值字段、类型/行/字段下标越界）全部返回 false 且**不改变**数据库；合法写能落到 `to_bytes()` 里 |
 
 **为什么「逐字节相同」能证明编码器完整**：`parse()` 对 9 个文件都恰好停在 `EOF-1`（§1.1 的收尾断言），
 所以 9 个文件里没有任何「解析器跳过的字节」。于是 `encode(parse(x)) == x` 意味着每个字段的
 **顺序、宽度、有无（版本闸门）** 都写对了 —— 少写一个字段会让后面所有字节错位，多写一个字段同理。
 本作的 `file_version = 0x8C` 打开了 SavePart1/2/4/5 的**全部**版本闸门，所以这条断言覆盖了所有
 `>= 0x8A` 的分支；`<= 0x89` 的老版本分支仍然只有「照抄参考实现」这一条证据（§13）。
+变量库的 9/9 逐字节另有单段证据（`each_segment_encoder_reproduces_its_parsed_bytes` 现在覆盖 6 段）。
 
 ```bash
-cargo test -p wolf-save --test rebuild -- --nocapture   # 4 passed
+cargo test -p wolf-save --test rebuild -- --nocapture   # 8 passed
 ```
 
 ---
@@ -818,7 +844,8 @@ cargo test -p wolf-save --test rebuild -- --nocapture   # 4 passed
 | `SavePart3` | `to_bytes()` / `to_bytes_with_version(fv)` | `MemData` 长度宽度随 `fv < 0x6F` 变 |
 | `SavePart4` | `to_bytes(file_version)` | `>=0x8A` 的 `m_vars3`（u64 表） |
 | `SavePart5` / `SavePart5_1` | `to_bytes(file_version)` | 全部（20 处） |
-| `VariableDatabase` + `SavePart7` | **无编码器** | `rebuild()` 直接复制原始字节 |
+| `VariableDatabase` | `to_bytes()` | 无版本闸门（字段顺序见 §14.5） |
+| `SavePart7` | **无编码器** | `rebuild()` 直接复制原始字节（1 字节） |
 
 `SaveFile` 层新增：
 
@@ -830,6 +857,9 @@ impl SaveFile {
     pub fn set_part2(&mut self, part: &SavePart2) -> Result<()>;
     pub fn set_part4(&mut self, part: &SavePart4) -> Result<()>;
     pub fn set_part5(&mut self, part: &SavePart5) -> Result<()>;
+    pub fn set_vardb(&mut self, vardb: &VariableDatabase) -> Result<()>;          // task-30
+    pub fn set_vardb_num(&mut self, t: usize, r: usize, f: usize, v: i32) -> Result<bool>;
+    pub fn set_vardb_text(&mut self, t: usize, r: usize, f: usize, s: &str) -> Result<bool>;
 }
 pub const PART1_ID: u32 = 0;   // 已有 PART2_ID = 1 / PART3_ID = 2
 pub const PART4_ID: u32 = 3;
@@ -838,8 +868,8 @@ pub const VARDB_ID: u32 = 5;
 pub const PART7_ID: u32 = 6;
 ```
 
-四个 `set_partX` 与 `set_part3` 同构：编码 → `replace_part` → 覆盖 typed 视图。
-所以一次编辑只重写一段，其余段只是偏移平移。
+五个 `set_partX` 与 `set_part3` 同构：编码 → `replace_part` → 覆盖 typed 视图。
+所以一次编辑只重写一段，其余段只是偏移平移。变量库的单格写入细节见 §14.5。
 
 ### 14.2 编码器里三个必须照抄的反向细节
 
@@ -870,14 +900,54 @@ pub const PART7_ID: u32 = 6;
 
 ### 14.4 与「opcode 220 mode 0（运行中整档保存）」的关系
 
-现在这条链已经通了：VM 侧持有 `SavePart1..5` 的 typed 值 → `set_partX` 或直接改字段 →
-`to_bytes_rebuilt()` → 写到 `Save/SaveData%02d.sav`。`crates/wolf-game/src/game.rs` 的
-`Game::save_to` 已经把运行中的 `Game` 接上这条链：以「本局载入的存档」或新游戏的
-`Save/System.sav` 为模板，写入 playtime、Sys3/Sys4、800 个通常変数、全部活着的公共事件
-`self` 数值变量（0..99）与 `CSelf5..9` 字符串。仍然缺的两块：
+这条链已经完全打通：VM 侧持有 `SavePart1..5` 与 [VariableDatabase] 的 typed 值 → `set_partX` /
+`set_vardb`（或按格写入的 `set_vardb_num` / `set_vardb_text`）→ `to_bytes_rebuilt()` →
+写到 `Save/SaveData%02d.sav`。`crates/wolf-game/src/game.rs` 的 `Game::save_to` 已经把运行中的
+`Game` 接上这条链：以「本局载入的存档」或新游戏的 `Save/System.sav` 为模板，写入 playtime、
+Sys3/Sys4、800 个通常変数、全部活着的公共事件 `self` 数值变量（0..99）与 `CSelf5..9` 字符串。
 
-- **VariableDatabase 没有编码器/单元格写入 API**：`SaveFile::rebuild()` 原样复制模板的
-  `vardb` 字节，所以 opcode 250 对 CDataBase 的写入不会进入 220 mode 0 写出的存档。
-  可用 `replace_part(VARDB_ID, 新字节)` 整体替换，但没有「按 type/row/field 改一格」的接口。
-- **SavePart1 的地图快照**：`map_tiles` 是 64×36×3 的 u32 快照，由模板原样搬运；谁在什么
-  时候填它仍未确认（§13）。
+task-30 + 引擎侧接线之后，这条链已完整：`Game::save_to` 在 `set_part5` 之后调用
+`Databases::write_into(&mut save.vardb)`，把运行时的 CData 单元格写进变量库再 `to_bytes_rebuilt()`；
+`missed > 0` 时会写一条 `220 SaveLoad` 诊断而不是静默丢弃。测试 `a_saved_game_keeps_the_database_cells`
+（CData (0,12,5)=4242 → 保存 → 载入后仍为 4242）覆盖了这条接线。存档库这一侧的接口见 §14.5。
+
+### 14.5 VariableDatabase 编码器与按格写入（task-30，**已验证** 9/9 逐字节）
+
+```rust
+impl VariableDatabase {
+    /// 整段编码，镜像 vardb::parse 的读取顺序。
+    pub fn to_bytes(&self) -> Result<Vec<u8>>;
+    /// 单独解析一段 vardb 字节（测试与工具用）。
+    pub fn parse_bytes(bytes: &[u8]) -> Result<VariableDatabase>;
+
+    pub fn type_of(&self, type_index: usize) -> Option<&VariableType>;
+    pub fn row(&self, type_index: usize, row_index: usize) -> Option<&VariableRow>;
+    pub fn number(&self, type_index: usize, row_index: usize, field_index: usize) -> Option<i32>;
+    pub fn string(&self, type_index: usize, row_index: usize, field_index: usize) -> Option<&[u8]>;
+    pub fn text(&self, type_index: usize, row_index: usize, field_index: usize) -> Option<String>;
+    pub fn is_number_field(&self, type_index: usize, field_index: usize) -> Option<bool>;
+
+    /// 写一个数值/文本单元格；字段类型不符或下标越界时返回 false 且不改任何东西。
+    pub fn set_num(&mut self, type_index: usize, row_index: usize, field_index: usize, value: i32) -> bool;
+    pub fn set_string(&mut self, type_index: usize, row_index: usize, field_index: usize, body: &[u8]) -> bool;
+    /// 同上，但自动补上游戏存储用的尾部 NUL。
+    pub fn set_text(&mut self, type_index: usize, row_index: usize, field_index: usize, text: &str) -> bool;
+}
+
+impl SaveFile {
+    pub fn set_vardb(&mut self, vardb: &VariableDatabase) -> Result<()>;
+    pub fn set_vardb_num(&mut self, type: usize, row: usize, field: usize, value: i32) -> Result<bool>;
+    pub fn set_vardb_string(&mut self, type: usize, row: usize, field: usize, body: &[u8]) -> Result<bool>;
+    pub fn set_vardb_text(&mut self, type: usize, row: usize, field: usize, text: &str) -> Result<bool>;
+}
+```
+
+写盘时必须照抄的三个反向细节：
+
+1. **一行的写入顺序是「先全部数值字段，再全部文本字段」，都按 config 顺序**（§9）。内存里 `fields`
+   是按 id 排序的，所以编码器走 `config` 而不是 `fields`——按 `fields` 顺序写会得到错误的字节序。
+2. **`m_unknown` 有三种形状**：正数时它自己就是字段数（不写 `m_dis`、不写 `m_fieldCount`）；
+   `-1` 时写 `m_fieldCount`；`<= -2` 时先写 `m_dis` 再写 `m_fieldCount`。本作 30 个类型全是 `-2`，
+   另外两种只有合成测试覆盖。
+3. **写不进去的字段必须报错而不是丢掉**：`VariableRow::to_bytes` 会检查每个字段 id 都在 config 里，
+   否则 `Error::field`——静默丢字段会写出一份「解析回来比原来少几列」的档。

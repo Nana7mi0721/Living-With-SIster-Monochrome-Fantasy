@@ -617,7 +617,7 @@ pub const PART1_ID: u32 = 0;
 pub const PART4_ID: u32 = 3;
 /// Synthetic chunk id of [SavePart5].
 pub const PART5_ID: u32 = 4;
-/// Synthetic chunk id of [VariableDatabase] (no writer yet; copied verbatim).
+/// Synthetic chunk id of [VariableDatabase].
 pub const VARDB_ID: u32 = 5;
 /// Synthetic chunk id of [SavePart7] (no writer yet; copied verbatim).
 pub const PART7_ID: u32 = 6;
@@ -633,6 +633,12 @@ pub(crate) fn push_u16(out: &mut Vec<u8>, value: u16) {
 }
 
 pub(crate) fn push_u32(out: &mut Vec<u8>, value: u32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+/// Append a signed word. The C++ writes `int32_t` and `uint32_t` with the same
+/// `Write`, so the two helpers differ only in what the caller can hand them.
+pub(crate) fn push_i32(out: &mut Vec<u8>, value: i32) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
@@ -701,11 +707,12 @@ impl SaveFile {
     /// * SavePart3 -> [SavePart3::to_bytes_with_version]
     /// * SavePart4 -> [SavePart4::to_bytes]
     /// * SavePart5 -> [SavePart5::to_bytes]
-    /// * VariableDatabase -> copied verbatim (no writer yet)
+    /// * VariableDatabase -> [VariableDatabase::to_bytes]
     /// * SavePart7 -> copied verbatim (no writer yet)
     ///
-    /// So an edit to any typed part1/2/3/4/5 field reaches the output, while
-    /// vardb and part7 still travel as their parsed bytes.
+    /// So an edit to any typed field -- including one cell of the variable
+    /// database -- reaches the output; only SavePart7 still travels as its
+    /// parsed bytes.
     ///
     /// The header is written from [SaveFile::header] with the checksum byte at
     /// offset 2 recomputed over the new body; the name is re-encoded as a
@@ -734,16 +741,7 @@ impl SaveFile {
         let part3 = self.part3.to_bytes_with_version(self.file_version)?;
         let part4 = self.part4.to_bytes(self.file_version)?;
         let part5 = self.part5.to_bytes(self.file_version)?;
-        let vardb = match self.chunk_bytes(VARDB_ID) {
-            Some(bytes) => bytes.to_vec(),
-            None => {
-                return Err(Error::field(
-                    "VariableDatabase",
-                    0,
-                    "this file has no sixth segment".to_string(),
-                ))
-            }
-        };
+        let vardb = self.vardb.to_bytes()?;
         let part7 = match self.chunk_bytes(PART7_ID) {
             Some(bytes) => bytes.to_vec(),
             None => {
@@ -821,6 +819,72 @@ impl SaveFile {
         self.replace_part(PART5_ID, &bytes)?;
         self.part5 = part.clone();
         Ok(())
+    }
+
+    /// Replace the variable database and refresh the view.
+    ///
+    /// This is the writer the running game needs: opcode 250 edits
+    /// [VariableDatabase] through the setters below, and one call here turns
+    /// those cell edits into the sixth segment.
+    pub fn set_vardb(&mut self, vardb: &VariableDatabase) -> Result<()> {
+        let bytes = vardb.to_bytes()?;
+        self.replace_part(VARDB_ID, &bytes)?;
+        self.vardb = vardb.clone();
+        Ok(())
+    }
+
+    /// Write one numeric cell of the variable database and re-encode the segment.
+    ///
+    /// Returns false when the type/row/field does not exist or the field is
+    /// textual; nothing is written in that case.
+    pub fn set_vardb_num(
+        &mut self,
+        type_index: usize,
+        row_index: usize,
+        field_index: usize,
+        value: i32,
+    ) -> Result<bool> {
+        let mut vardb = self.vardb.clone();
+        if !vardb.set_num(type_index, row_index, field_index, value) {
+            return Ok(false);
+        }
+        self.set_vardb(&vardb)?;
+        Ok(true)
+    }
+
+    /// Write one textual cell of the variable database and re-encode the segment.
+    ///
+    /// The body is stored verbatim, NUL included -- use [SaveFile::set_vardb_text]
+    /// when the caller has a &str.
+    pub fn set_vardb_string(
+        &mut self,
+        type_index: usize,
+        row_index: usize,
+        field_index: usize,
+        body: &[u8],
+    ) -> Result<bool> {
+        let mut vardb = self.vardb.clone();
+        if !vardb.set_string(type_index, row_index, field_index, body) {
+            return Ok(false);
+        }
+        self.set_vardb(&vardb)?;
+        Ok(true)
+    }
+
+    /// Write one textual cell from a &str, appending the NUL the game stores.
+    pub fn set_vardb_text(
+        &mut self,
+        type_index: usize,
+        row_index: usize,
+        field_index: usize,
+        text: &str,
+    ) -> Result<bool> {
+        let mut vardb = self.vardb.clone();
+        if !vardb.set_text(type_index, row_index, field_index, text) {
+            return Ok(false);
+        }
+        self.set_vardb(&vardb)?;
+        Ok(true)
     }
 }
 

@@ -372,6 +372,24 @@ impl Game {
         save.set_part3(&part3)
             .map_err(|err| format!("220 SaveLoad: cannot encode part3: {err}"))?;
 
+        // The picture table is the frame the player saved on. Rebuilding it from the live
+        // Screen (rather than keeping the template Part5) is what makes a saved game look
+        // like the scene the player was in when they pressed save.
+        let part5 = crate::savegame::part5_from_screen(&self.screen);
+        save.set_part5(&part5)
+            .map_err(|err| format!("220 SaveLoad: cannot encode part5: {err}"))?;
+
+        // Runtime 250 writes live in the database layer, not in the interpreter banks, so
+        // they have to be folded into the save variable database before the file is built.
+        let (written, missed) = self.databases.write_into(&mut save.vardb);
+        if missed > 0 {
+            let text = format!(
+                "220 SaveLoad: {written} database cell(s) written, {missed} cell(s) could not be encoded"
+            );
+            *self.diagnostics.entry(text).or_insert(0) += 1;
+            self.stats.unmodelled += 1;
+        }
+
         let bytes = save
             .to_bytes_rebuilt()
             .map_err(|err| format!("220 SaveLoad: cannot rebuild save: {err}"))?;
@@ -625,6 +643,26 @@ impl Game {
             cursor_offset,
             screen_w: crate::picture::SCREEN_W as f32,
         }
+    }
+
+    /// The newest 101 message, laid out with its inline styling.
+    ///
+    /// Colour escapes resolve through the SysDatabase palette the same way text
+    /// pictures do; the plain [crate::message::layout] would drop the colour and
+    /// outline escapes and fold every glyph into one Sys8-sized run.
+    #[must_use]
+    pub fn message_layout(&self) -> Option<crate::message::Layout> {
+        let message = self.messages.last()?;
+        let vars = self.message_vars();
+        let colours = PictureColours {
+            databases: &self.databases,
+        };
+        Some(crate::message::layout_styled(
+            &message.text,
+            &vars,
+            message.frames,
+            &colours,
+        ))
     }
 
     /// Preselects an option of the current choice prompt.
@@ -1045,6 +1083,12 @@ impl crate::textpic::Colours for PictureColours<'_> {
     }
 }
 
+impl crate::message::Colours for PictureColours<'_> {
+    fn colour(&self, index: u32) -> Option<[u8; 3]> {
+        self.databases.colour(index as i32)
+    }
+}
+
 /// Per-frame borrow shim: the VM lives inside Game, so the host cannot borrow Game.
 struct GameHost<'a> {
     screen: &'a mut Screen,
@@ -1144,6 +1188,9 @@ fn mouse_state(held: bool, held_before: bool) -> i32 {
 
 impl Host for GameHost<'_> {
     fn show_message(&mut self, text: &str, face: Option<i32>) {
+        // The engine keeps at most one message window: a new 101 replaces the old
+        // text rather than stacking behind it.
+        self.messages.clear();
         self.messages.push(Message {
             text: text.to_owned(),
             face,
@@ -1531,6 +1578,78 @@ mod tests {
         assert_eq!(save.part2.vars3_21[0], 1234);
         assert_eq!(save.part2.vars3_21[9], 111);
         assert_eq!(save.part2.vars3_21[10], 222);
+    }
+
+    #[test]
+    fn a_saved_game_reloads_its_live_picture_layer() {
+        let Some(root) = have_data() else { return };
+        let mut template = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        template.pop();
+        template.pop();
+        template.push("work");
+        template.push("retail_backup");
+        template.push("Save");
+        template.push("SaveData01.sav");
+        let Ok(bytes) = std::fs::read(&template) else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.base_save = Some(wolf_save::SaveFile::parse(&bytes).expect("template parses"));
+        let loaded = game.load_save(&template).expect("load");
+        assert!(loaded.pictures > 10, "{} pictures", loaded.pictures);
+        let before: Vec<_> = game
+            .screen
+            .iter()
+            .map(|p| (p.number, p.kind, p.file.clone(), p.x, p.y, p.anchor, p.scale, p.split, p.pattern_index))
+            .collect();
+        let mut out = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        out.push("..");
+        out.push("..");
+        out.push("target");
+        out.push("test-scratch");
+        std::fs::create_dir_all(&out).expect("scratch dir");
+        out.push("savegame-pictures.sav");
+        game.save_to(&out).expect("save");
+
+        let mut refreshed = Game::new(&root).expect("game");
+        refreshed.load_save(&out).expect("reload");
+        let after: Vec<_> = refreshed
+            .screen
+            .iter()
+            .map(|p| (p.number, p.kind, p.file.clone(), p.x, p.y, p.anchor, p.scale, p.split, p.pattern_index))
+            .collect();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn a_saved_game_keeps_the_database_cells() {
+        let Some(root) = have_data() else { return };
+        let mut template = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        template.pop();
+        template.pop();
+        template.push("work");
+        template.push("retail_backup");
+        template.push("Save");
+        template.push("SaveData01.sav");
+        let Ok(bytes) = std::fs::read(&template) else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.base_save = Some(wolf_save::SaveFile::parse(&bytes).expect("template parses"));
+        game.load_save(&template).expect("load");
+        game.databases.set_num(crate::db::Container::CData, 0, 12, 5, 4242);
+
+        let mut out = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        out.push("..");
+        out.push("..");
+        out.push("target");
+        out.push("test-scratch");
+        std::fs::create_dir_all(&out).expect("scratch dir");
+        out.push("savegame-database.sav");
+        game.save_to(&out).expect("save");
+
+        let mut refreshed = Game::new(&root).expect("game");
+        refreshed.load_save(&out).expect("reload");
+        assert_eq!(
+            refreshed.databases.num(crate::db::Container::CData, 0, 12, 5),
+            Some(4242)
+        );
     }
 
     #[test]

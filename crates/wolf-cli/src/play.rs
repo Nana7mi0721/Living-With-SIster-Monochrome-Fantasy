@@ -169,14 +169,11 @@ impl App {
         }
         // The engine draws the 101 pause cursor itself (SystemFile/Text_Pause.png, six 17x15
         // frames), so it joins the sprite list rather than the glyph list.
-        let newest = self
-            .game
-            .messages
-            .last()
-            .map(|m| (m.text.clone(), m.frames));
-        if let Some((text, frames)) = newest {
-            let vars = self.game.message_vars();
-            let layout = wolf_game::message::layout(&text, &vars, frames);
+        let newest = self.game.messages.last().map(|m| m.frames);
+        if let Some(frames) = newest {
+            let Some(layout) = self.game.message_layout() else {
+                unreachable!("the newest message has a layout");
+            };
             if let Some(at) = layout.cursor {
                 let frame = wolf_game::message::cursor_frame(frames);
                 let src = [
@@ -240,11 +237,18 @@ impl App {
         // A 101 message is engine text, not a picture: the frame comes from common event 63
         // as ordinary pictures, the glyphs come from the message layout. Only the newest
         // message is on screen, which is the order the interpreter produces.
-        if let Some(message) = self.game.messages.last() {
-            let vars = self.game.message_vars();
-            let layout = wolf_game::message::layout(&message.text, &vars, message.frames);
-            for row in &layout.rows {
-                items.push(TextItem::new(row.text.clone(), row.rect, layout.font_px));
+        if let Some(layout) = self.game.message_layout() {
+            for run in &layout.runs {
+                // One em of slack keeps cosmic-text from wrapping the last glyph: the
+                // layout measures with the half-em rule, the shaper uses the real advance.
+                let mut rect = run.rect;
+                rect[2] += run.font_px;
+                let mut item = TextItem::new(run.text.clone(), rect, run.font_px)
+                    .with_colour(run.colour.unwrap_or(wolf_game::message::DEFAULT_COLOUR));
+                if run.outline {
+                    item = item.with_outline(2, [0, 0, 0]);
+                }
+                items.push(item);
             }
         }
         items
