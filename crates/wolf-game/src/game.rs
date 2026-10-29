@@ -21,13 +21,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use wolf_format::commonevent::CommonEventData;
+use wolf_format::gamedat::GameDat;
 use wolf_format::mps::Map;
 use wolf_vm::{
-    ChoiceReply, DbOp, Host, LogLevel, PictureCmd, Program, ProgramSet, SoundCmd, StepReport,
+    ChoiceReply, DbOp, DbValue, Host, LogLevel, PictureCmd, Program, ProgramSet, SoundCmd, StepReport,
     Vm,
 };
 
 use crate::assets::Assets;
+use crate::db::Databases;
 use crate::map_runtime::MapRuntime;
 use crate::picture::{PictureKind, Screen, ANCHOR_CENTRE, SCREEN_H, SCREEN_W};
 
@@ -156,6 +158,9 @@ pub struct Game {
     pub screen: Screen,
     /// Decoded assets, cached by WOLF asset name.
     pub assets: Assets,
+    /// The three .dat databases plus the cells the engine fills in itself
+    /// (see [`crate::db`]). Opcode 250 answers every read from here.
+    pub databases: Databases,
     /// Keys held this frame (see crate::key).
     pub key_bits: u32,
     /// Sounds requested during the current frame.
@@ -208,10 +213,24 @@ impl Game {
         };
         let events = read_events(&basic.join("CommonEvent.dat"))?;
         let programs = ProgramSet::from_common_events(&events);
+        // Common event 63 multiplies every message-window measurement by the
+        // coordinate scale, which is one 32nd of the screen width and one 24th of
+        // its height (docs/OPCODE_101.md section 3.1); Game.dat owns the screen
+        // size, so that value is what the database layer needs.
+        let screen = std::fs::read(root.join("Game.dat"))
+            .or_else(|_| std::fs::read(basic.join("Game.dat")))
+            .ok()
+            .and_then(|bytes| GameDat::parse(&bytes).ok())
+            .map_or(crate::db::DEFAULT_SCREEN, |dat| {
+                let (width, height) = dat.screen_size();
+                (u32::from(width), u32::from(height))
+            });
+        let databases = Databases::load(&basic, screen);
         Ok(Self {
             vm: Vm::new(programs),
             screen: Screen::new(),
             assets: Assets::new(&root),
+            databases,
             key_bits: 0,
             sounds: Vec::new(),
             messages: Vec::new(),
@@ -396,11 +415,20 @@ impl Game {
         } else {
             None
         };
-        let width = self.screen.get(crate::message::FRAME_PICTURE).map(|frame| {
-            let painted = frame.window.map_or(0, |(w, _)| w);
-            let painted = if painted > 0 { painted } else { frame.x };
-            (painted as f32 - sys(1) as f32).max(0.0)
-        });
+        // The frame is an ordinary window-type draw (common event 63, picture slot
+        // 19500), so when it is live its own right edge is the wrap box; the fallback
+        // in `Vars::wrap_width` is the screen edge, the documented hard cap.
+        let width = self
+            .screen
+            .get(crate::message::FRAME_PICTURE)
+            .and_then(|frame| {
+                let (window_w, window_h) = frame.window?;
+                if window_w <= 0 {
+                    return None;
+                }
+                let rect = frame.destination(window_w as f32, window_h.max(0) as f32);
+                Some((rect[0] + rect[2] - sys(1) as f32).max(0.0))
+            });
         crate::message::Vars {
             x: sys(1) as f32,
             y: sys(2) as f32,
@@ -463,6 +491,7 @@ impl Game {
         let mut report = self.vm.step_frame(&mut GameHost {
             screen: &mut self.screen,
             assets: &mut self.assets,
+            databases: &mut self.databases,
             sounds: &mut self.sounds,
             messages: &mut self.messages,
             choices: &mut self.choices,
@@ -531,6 +560,7 @@ fn read_events(path: &Path) -> Result<CommonEventData, GameError> {
 struct GameHost<'a> {
     screen: &'a mut Screen,
     assets: &'a mut Assets,
+    databases: &'a mut crate::db::Databases,
     sounds: &'a mut Vec<SoundCmd>,
     messages: &'a mut Vec<Message>,
     choices: &'a mut Option<Choices>,
@@ -662,9 +692,20 @@ impl Host for GameHost<'_> {
         self.stats.sounds += 1;
     }
 
-    fn database(&mut self, op: &DbOp) {
-        let _ = op;
+    fn database(&mut self, op: &DbOp) -> Option<DbValue> {
         self.stats.databases += 1;
+        let (db_type, row, column) = (op.db_type, op.data_id, op.item_id);
+        if let Some(value) = self.databases.num(db_type, row, column) {
+            return Some(DbValue::Num(value));
+        }
+        if let Some(text) = self.databases.text(db_type, row, column) {
+            return Some(DbValue::Str(text.to_owned()));
+        }
+        self.note(format!(
+            "250 DatabaseAccess: ({db_type}, {row}, {column}) flags {:#x} unanswered",
+            op.flags
+        ));
+        None
     }
 
     fn move_route(&mut self, target: i32, route: &[wolf_format::command::RouteCommand]) {

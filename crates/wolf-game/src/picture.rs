@@ -143,9 +143,13 @@ pub enum PictureKind {
     FileString,
     /// 2: text drawn straight into the picture.
     Text,
-    /// 3: a window (frame graphic) around a file.
+    /// 3: a window/frame graphic named literally.
     WindowFile,
-    /// 4: a window around text.
+    /// 4: a window/frame graphic whose name comes from a string variable.
+    ///
+    /// The editor calls it "window text", but all 53 type-4 commands in this game name a
+    /// FILE through that variable - common event 63 the window skin, common event 64 the face
+    /// graphic - so it is drawn as a panel, never as text.
     WindowString,
 }
 
@@ -167,9 +171,18 @@ impl PictureKind {
     }
 
     /// True when the picture draws text rather than a texture.
+    ///
+    /// Only type 2: type 4 carries a string-variable FILE name (see [Self::WindowString]),
+    /// and counting it as text emptied the picture the moment common event 63 created it.
     #[must_use]
     pub fn is_text(self) -> bool {
-        matches!(self, Self::Text | Self::WindowString)
+        matches!(self, Self::Text)
+    }
+
+    /// True for the two window/frame kinds, which are painted as panels, not as sprites.
+    #[must_use]
+    pub fn is_window(self) -> bool {
+        matches!(self, Self::WindowFile | Self::WindowString)
     }
 }
 
@@ -293,6 +306,12 @@ pub struct Picture {
     pub tone: Tone,
     /// Running 290 colour effects, applied on top of tone.
     pub effects: Vec<PictureEffect>,
+    /// True while a `150` hide command keeps the slot alive but unpainted.
+    ///
+    /// Common event 63 hides its message window between messages ("hide the window when the
+    /// fade is not 1") and expects the next draw to bring it back, so the slot - and every
+    /// field in it - has to survive being hidden.
+    pub hidden: bool,
 }
 
 impl Picture {
@@ -316,6 +335,26 @@ impl Picture {
             age: 0,
             tone: TONE_NEUTRAL,
             effects: Vec::new(),
+            hidden: false,
+        }
+    }
+
+    /// Which skin a window picture is drawn with.
+    ///
+    /// A `150` window command may name its own skin - common event 63 passes
+    /// SystemFile/WindowBase.png, the grey panel - while the engine default is
+    /// SystemGraphic/WindowBase.png, the blue panel the choice window uses. Anything that is
+    /// not a plausible asset path (an empty name, or a `<SQUARE>`-style built-in drawing)
+    /// falls back to the default.
+    #[must_use]
+    pub fn window_skin(&self) -> &str {
+        let names_an_asset = !self.file.is_empty()
+            && !self.file.starts_with('<')
+            && crate::sysgraphic::parse(&self.file).is_none();
+        if names_an_asset {
+            self.file.as_str()
+        } else {
+            crate::window::SKIN
         }
     }
 
@@ -498,7 +537,16 @@ impl Screen {
                     }
                 }
             }
+            PictureAction::Hide => {
+                // Hide is not erase and not a redraw: the slot keeps its skin name, box and
+                // position so the next draw restores exactly the same window.
+                if let Some(picture) = self.pictures.get_mut(&cmd.number) {
+                    picture.hidden = true;
+                }
+            }
             PictureAction::Draw | PictureAction::Set => {
+                // A draw replaces the slot, which is also how a hidden window comes back:
+                // Picture::new starts visible and nothing else in the data unhides.
                 let mut picture = Picture::new(cmd.number);
                 picture.kind = PictureKind::from_code(cmd.kind);
                 picture.file = cmd.file.clone();
@@ -520,9 +568,15 @@ impl Screen {
                 if !cmd.text.is_empty() {
                     picture.text.clone_from(&cmd.text);
                 }
-                // The anchor rides on every command, Move included: 56 of the 3,364 Move
-                // instructions in this game carry the centre flag.
-                picture.anchor = cmd.anchor;
+                // An anchor of 0 on a Move means UNCHANGED, not top-left. Common event 63
+                // proves it: it draws its message window centred at (512, 672) - parked
+                // below the screen - then slides it to (512, 480) and back, and the retail
+                // frame is visible, which only works if the moves keep the centre anchor.
+                // Reads taken literally put the 960x168 window at x = 512..1472. The 56
+                // moves that really do re-anchor carry the 0x1000 flag explicitly.
+                if cmd.anchor != ANCHOR_TOP_LEFT {
+                    picture.anchor = cmd.anchor;
+                }
                 merge_args(picture, &cmd.args);
             }
         }
@@ -575,7 +629,15 @@ impl Screen {
     {
         let mut out = Vec::with_capacity(self.pictures.len());
         for picture in self.pictures.values() {
-            if picture.opacity <= 0 {
+            if picture.hidden || picture.opacity <= 0 {
+                continue;
+            }
+            // Window kinds are painted by the atlas as a nine-slice panel (from
+            // Picture::window_skin) rather than as a sprite; letting them through here would
+            // draw the 18x18 skin at its natural size instead of the window box. The
+            // built-in system-graphic spelling is the exception: those are real drawings
+            // sized by the picture itself, and Atlas::sprites skips them as panels.
+            if picture.kind.is_window() && crate::sysgraphic::parse(&picture.file).is_none() {
                 continue;
             }
             // Whole-screen layers ignore x/y/scale entirely: whichever way a negative-number
@@ -604,6 +666,19 @@ impl Screen {
             out.push(ScreenQuad::from(picture, src, dst));
         }
         out
+    }
+}
+
+impl Picture {
+    /// Where this picture lands when it draws w*h pixels, anchor and scale applied.
+    ///
+    /// The message-window metrics need the frame rectangle without the texture lookup
+    /// that `Screen::quads` does, so the placement law lives here once and both callers
+    /// share it.
+    #[must_use]
+    pub fn destination(&self, w: f32, h: f32) -> [f32; 4] {
+        let scale = self.scale.max(0) as f32 / SCALE_ONE as f32;
+        place(self.anchor, self.x, self.y, w * scale, h * scale)
     }
 }
 
@@ -944,6 +1019,50 @@ mod tests {
         screen.apply(&cmd(11, 0, PictureAction::Erase, "", "", &[0]));
         assert_eq!(screen.len(), 2);
         assert!(screen.get(10).is_some() && screen.get(12).is_some());
+    }
+
+    #[test]
+    fn a_hidden_picture_keeps_its_place_but_is_not_drawn() {
+        // 150 action 3 is "hide" (ev63 uses it when the window fades below 1), not a
+        // redraw: the slot keeps its file, box and position and simply stops painting.
+        let mut screen = Screen::new();
+        screen.apply(&cmd(
+            12000,
+            0,
+            PictureAction::Draw,
+            "Kagura/bg.png",
+            "",
+            &short_draw_args(),
+        ));
+        assert_eq!(screen.quads(|_| Some((1024, 576))).len(), 1);
+
+        screen.apply(&cmd(12000, 0, PictureAction::Hide, "", "", &[]));
+        let picture = screen.get(12000).expect("hide must not erase the slot");
+        assert!(picture.hidden);
+        assert_eq!(picture.file, "Kagura/bg.png");
+        assert!(screen.quads(|_| Some((1024, 576))).is_empty());
+    }
+
+    #[test]
+    fn a_hidden_window_keeps_its_skin_and_box() {
+        let mut screen = Screen::new();
+        let mut draw = cmd(
+            19500,
+            4,
+            PictureAction::Draw,
+            "SystemFile/WindowBase.png",
+            "",
+            &[5, 960, 168, 1, 255, 512, 480, 100, 0],
+        );
+        draw.anchor = ANCHOR_CENTRE;
+        screen.apply(&draw);
+        screen.apply(&cmd(19500, 4, PictureAction::Hide, "", "", &[]));
+
+        let picture = screen.get(19500).expect("the window slot survives a hide");
+        assert!(picture.hidden);
+        assert_eq!(picture.file, "SystemFile/WindowBase.png");
+        assert_eq!(picture.window, Some((960, 168)));
+        assert_eq!(picture.destination(960.0, 168.0), [32.0, 396.0, 960.0, 168.0]);
     }
 
     #[test]

@@ -23,6 +23,7 @@
 pub mod assets;
 pub mod atlas;
 pub mod choice;
+pub mod db;
 pub mod game;
 pub mod key;
 pub mod map_runtime;

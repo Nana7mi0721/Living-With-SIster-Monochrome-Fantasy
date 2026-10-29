@@ -227,7 +227,14 @@ pub enum PictureAction {
     Move,
     /// `cmd 2` — erase.
     Erase,
-    /// `cmd 3` — short form action.
+    /// `cmd 3` — hide the slot without disturbing its fields.
+    ///
+    /// Common event 63 writes `150 [3, 19500]` under the comment フェードが1以外ならウィンドウを非表示
+    /// (hide the window when the fade is not 1) every time it parks its message window.
+    /// Decoding that as a redraw threw the window's skin name and box size away, which is
+    /// why the 101 message frame never appeared in a capture.
+    Hide,
+    /// `cmd 4..` — never emitted by the editor; kept so decoding stays total.
     Set,
 }
 
@@ -275,8 +282,21 @@ pub struct DbOp {
     pub item_id: i32,
     /// Raw addressing bitfield (bit 16 marks a write, docs/OPCODE_SPEC.md §5.44).
     pub flags: i32,
-    /// Value to write, for the 5-argument form.
-    pub value: Option<i32>,
+    /// Destination variable address, for the 5-argument form.
+    ///
+    /// All 2,592 `250` instructions in this game are reads and nothing ever
+    /// writes a database (there is no 251/252/253 anywhere), so the fifth operand
+    /// is where the answer goes rather than a value to store.
+    pub destination: Option<i32>,
+}
+
+/// The answer to a [`DbOp`] read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DbValue {
+    /// A numeric cell.
+    Num(i32),
+    /// A string cell.
+    Str(String),
 }
 
 /// What stopped (or did not stop) a coroutine.
@@ -365,10 +385,12 @@ pub trait Host {
         let _ = cmd;
     }
 
-    /// `250 DatabaseAccess`. Reads are unimplemented until wolf-game owns a
-    /// database; until then the host just records the access.
-    fn database(&mut self, op: &DbOp) {
+    /// `250 DatabaseAccess`. Answers the cell the script asked for; `None` leaves
+    /// the destination variable untouched, exactly like a cell that is empty in
+    /// the editor.
+    fn database(&mut self, op: &DbOp) -> Option<DbValue> {
         let _ = op;
+        None
     }
 
     /// `201 SetMoveRoute`.
@@ -1582,18 +1604,27 @@ fn execute(
                 } else {
                     db_type
                 };
-                let value = if argc(cmd) >= 5 {
-                    Some(eval_num(arg(cmd, 4), inst, vars))
+                // argc 5 is [type, row, column, flags, destination]; the 16
+                // argc-4 sites carry no destination (docs/OPCODE_250.md).
+                let destination = if argc(cmd) >= 5 {
+                    Some(arg(cmd, 4))
                 } else {
                     None
                 };
-                host.database(&DbOp {
+                if let Some(answer) = host.database(&DbOp {
                     db_type,
                     data_id: arg(cmd, 1),
                     item_id: arg(cmd, 2),
                     flags: arg(cmd, 3),
-                    value,
-                });
+                    destination,
+                }) {
+                    if let Some(target) = destination {
+                        match answer {
+                            DbValue::Num(value) => store_num(inst, vars, target, value),
+                            DbValue::Str(text) => store_str(inst, vars, target, &text),
+                        }
+                    }
+                }
                 inst.pc += 1;
                 None
             }
@@ -1840,6 +1871,31 @@ fn picture_arg(raw: i32, inst: &Instance, vars: &Variables) -> i32 {
     }
 }
 
+/// Raw argument index of the string-variable reference picture types 1 and 4 carry.
+///
+/// The argument list is [head, number, ..fields], and the reference is the last of the
+/// nineteen field words, so it lands on raw index 11 (decoded index 9, `field::EXTRAS`).
+const PICTURE_STRING_SLOT: usize = 11;
+
+/// Resolves the file name a type-1 or type-4 picture command names.
+///
+/// The operand is an ordinary magic reference but it has to be read out of the STRING bank
+/// even though it looks numeric: `1_600_009` means "event self string 9" in this position,
+/// and the same encoding addresses the numeric self slots everywhere else. Anything this
+/// engine cannot dereference yields an empty name, which the picture layer treats as
+/// "nothing to draw yet" rather than inventing a path.
+fn picture_string_ref(cmd: &Command, inst: &Instance, vars: &Variables) -> String {
+    let magic = Magic::decode(arg(cmd, PICTURE_STRING_SLOT));
+    // Magic::index is already the flat bank index (1_600_009 is group 6, slot 9, i.e. 609),
+    // which is why program.self_base must NOT be added here: that offset belongs to the
+    // cself[n] escape, whose n counts inside the event instead of naming the bank.
+    match magic.kind() {
+        MagicKind::SelfVar => inst.self_vars.get_str(magic.index() as usize).to_owned(),
+        MagicKind::StrVar => vars.get_str(magic.index() as usize).to_owned(),
+        _ => String::new(),
+    }
+}
+
 fn decode_picture(inst: &Instance, vars: &Variables, cmd: &Command) -> PictureCmd {
     let head = arg(cmd, 0);
     let kind = ((head >> 4) & 0x07) as u8;
@@ -1852,6 +1908,7 @@ fn decode_picture(inst: &Instance, vars: &Variables, cmd: &Command) -> PictureCm
         0 => PictureAction::Draw,
         1 => PictureAction::Move,
         2 => PictureAction::Erase,
+        3 => PictureAction::Hide,
         _ => PictureAction::Set,
     };
     let number = eval_num(arg(cmd, 1), inst, vars);
@@ -1860,11 +1917,13 @@ fn decode_picture(inst: &Instance, vars: &Variables, cmd: &Command) -> PictureCm
     let (file, text) = match kind {
         0 | 3 => (expanded, String::new()),
         2 => (String::new(), expanded),
-        // Types 1 and 4 name a string variable whose contents are the value.
-        1 | 4 => {
-            let index: usize = expanded.trim().parse().unwrap_or(0);
-            (vars.get_str(index).to_owned(), String::new())
-        }
+        // Types 1 and 4 name a string VARIABLE, and the reference rides in the last integer
+        // slot (decoded index 9), not in the command's string table: all 54 type-1 and all
+        // 53 type-4 draws in this game carry zero string arguments. Common event 63 draws the
+        // message window with `150 [0x1040, 19500, 5, .., 100, 0, 1600009]` - "whatever file
+        // event self string 9 holds" - and fills that slot from the database with
+        // SystemFile/WindowBase.png.
+        1 | 4 => (picture_string_ref(cmd, inst, vars), String::new()),
         _ => (String::new(), String::new()),
     };
     // Every argument past the head is a value: the measured title script passes its menu
@@ -2605,6 +2664,55 @@ mod tests {
         assert_eq!(picture.args[0], 100);
         assert_eq!(picture.args[1], 200);
         assert_eq!(picture.anchor, 0, "0x0000 anchors the top-left corner");
+    }
+
+    #[test]
+    fn picture_type_4_names_a_string_variable_not_a_string_argument() {
+        // ev63 draws the message window as 150 [0x1040, 19500, 5, 960, 168, 1, 255, ...]
+        // with NO string argument: the skin rides in int slot 11 as 1_600_009, i.e. self
+        // string slot 9, which the event filled from the database a few commands earlier.
+        let e = event(
+            1,
+            "window",
+            vec![
+                cmd(122, &[1_600_009], &["SystemFile/WindowBase.png"]),
+                cmd(
+                    150,
+                    &[
+                        0x1040, 19500, 5, 960, 168, 1, 255, 512, 480, 100, 0, 1_600_009,
+                    ],
+                    &[],
+                ),
+            ],
+        );
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+        let picture = &host.pictures[0];
+        assert_eq!(picture.kind, 4);
+        assert_eq!(picture.action, PictureAction::Draw);
+        assert_eq!(picture.file, "SystemFile/WindowBase.png");
+        assert_eq!(picture.text, "");
+        // args start at raw arg[2], so [0] is the fade and [1]/[2] the window box.
+        assert_eq!(picture.args[1], 960, "the window width follows the head");
+        assert_eq!(picture.args[2], 168);
+    }
+
+    #[test]
+    fn the_short_picture_form_with_head_three_is_a_hide() {
+        // ev63: 150 [3, 19500] under the comment フェードが1以外ならウィンドウを非表示.
+        let e = event(
+            1,
+            "hide",
+            vec![cmd(150, &[3, 19500], &[])],
+        );
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+        assert_eq!(host.pictures[0].number, 19500);
+        assert_eq!(host.pictures[0].action, PictureAction::Hide);
     }
 
     #[test]

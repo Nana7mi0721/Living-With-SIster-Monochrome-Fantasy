@@ -17,9 +17,12 @@
 use std::collections::HashMap;
 
 use crate::assets::{Assets, ImageData};
-use crate::picture::{Picture, PictureKind, Screen, SCALE_ONE, SCREEN_H, SCREEN_W};
+use crate::picture::{Picture, Screen, SCREEN_H, SCREEN_W};
 use crate::sysgraphic;
 use crate::window;
+
+/// One queued window panel: picture number, destination rect, alpha, tint, skin name.
+type Panel<'a> = (i32, [f32; 4], f32, [f32; 3], &'a str);
 
 /// Edge length of the atlas texture. 2048 is inside every adapter's limit (the smallest
 /// guaranteed by wgpu is 8192) while still holding four full-screen backgrounds.
@@ -296,13 +299,10 @@ impl Atlas {
         // their content painted on top. Panels are queued before the content loop and the
         // whole list is stably sorted by picture number afterwards, so a panel sits
         // directly under its own content and in script order relative to other pictures.
-        let panels: Vec<(i32, [f32; 4], f32, [f32; 3])> = screen
+        let panels: Vec<Panel> = screen
             .iter()
             .filter_map(|picture| {
-                if !matches!(
-                    picture.kind,
-                    PictureKind::WindowFile | PictureKind::WindowString
-                ) {
+                if !picture.kind.is_window() {
                     return None;
                 }
                 // A window picture whose "file" is a built-in drawing command is not a
@@ -318,34 +318,31 @@ impl Atlas {
                 if w <= window::MIN_BOX || h <= window::MIN_BOX {
                     return None;
                 }
-                let scale = picture.scale.max(0) as f32 / SCALE_ONE as f32;
+                // The anchor and the scale live in Picture::destination, the same law the
+                // sprite pass and the message metrics use, so a centred panel lands centred.
+                let dst = picture.destination(w as f32, h as f32);
                 Some((
                     picture.number,
-                    [
-                        picture.x as f32,
-                        picture.y as f32,
-                        w as f32 * scale,
-                        h as f32 * scale,
-                    ],
+                    dst,
                     picture.alpha(),
                     tone_tint(picture),
+                    picture.window_skin(),
                 ))
             })
             .collect();
-        if !panels.is_empty() {
-            if let Some(skin) = self.add_asset(assets, window::SKIN) {
-                let tex = self.source_size(window::SKIN).unwrap_or([0, 0]);
-                for (number, dst, alpha, tint) in panels {
-                    for piece in window::nine_slice(dst, tex[0], tex[1]) {
-                        out.push(SpriteQuad {
-                            number,
-                            rect: snap(piece.rect),
-                            uv: skin.sub_uv(self.width, self.height, piece.src),
-                            alpha,
-                            tint,
-                        });
-                    }
-                }
+        for (number, dst, alpha, tint, skin_name) in panels {
+            let Some(skin) = self.add_asset(assets, skin_name) else {
+                continue;
+            };
+            let tex = self.source_size(skin_name).unwrap_or([0, 0]);
+            for piece in window::nine_slice(dst, tex[0], tex[1]) {
+                out.push(SpriteQuad {
+                    number,
+                    rect: snap(piece.rect),
+                    uv: skin.sub_uv(self.width, self.height, piece.src),
+                    alpha,
+                    tint,
+                });
             }
         }
         for quad in screen.quads(|name| assets.texture_size(name)) {
@@ -562,8 +559,9 @@ mod tests {
         assert!(quads.iter().all(|quad| quad.number == 12500));
         assert!(quads.iter().all(|quad| (quad.alpha - 1.0).abs() < 1e-6));
         assert_eq!(atlas.entry(window::SKIN), Some(skin));
-        // The text itself still belongs to the glyph pass, on top of the panel.
-        assert_eq!(texts(&screen).len(), 1);
+        // Type 4 is not text: it names a FILE through a string variable, so an empty name
+        // falls back to the default skin and nothing goes to the glyph pass.
+        assert_eq!(texts(&screen).len(), 0);
     }
 
     /// A `150` command for a built-in drawing, in the shape the interpreter emits it.
@@ -649,8 +647,9 @@ mod tests {
         assert!(atlas.sprites(&screen, &mut assets).is_empty());
         assert!(atlas.is_empty());
 
-        // A window picture that names a real file still gets the nine-slice skin it always
-        // got: the system-graphic tests above must not have stolen that path.
+        // A window picture that names a real file is drawn with THAT file as its skin: the
+        // system-graphic tests above must not have stolen the nine-slice path, and the skin
+        // is no longer hard-wired to window::SKIN (common event 63 passes its own).
         let mut screen = Screen::new();
         screen.apply(&wolf_vm::PictureCmd {
             number: 7,
@@ -664,13 +663,13 @@ mod tests {
         });
         let mut atlas = Atlas::with_size(64, 64);
         let skin = atlas
-            .add(crate::window::SKIN, &image(18, 18, 0x7F))
+            .add("SystemFile/panel.png", &image(18, 18, 0x7F))
             .expect("skin");
         let quads = atlas.sprites(&screen, &mut assets);
-        assert_eq!(quads.len(), 9, "nine-slice of the 18x18 skin");
+        assert_eq!(quads.len(), 9, "nine-slice of the named 18x18 skin");
         assert_eq!(quads[0].rect, [855.0, 200.0, 3.0, 3.0]);
         assert_eq!(quads[4].rect, [858.0, 203.0, 294.0, 194.0]);
-        assert_eq!(atlas.entry(crate::window::SKIN), Some(skin));
+        assert_eq!(atlas.entry("SystemFile/panel.png"), Some(skin));
         // The skin is the only thing in the atlas: no drawing was synthesised for it.
         assert_eq!(atlas.len(), 1);
     }

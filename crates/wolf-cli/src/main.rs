@@ -22,7 +22,7 @@ use wolf_game::tilemap::TileMap;
 use wolf_game::{choice, Game};
 use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 use wolf_vm::{
-    ChoiceReply, DbOp, Host, LogLevel, PictureCmd, PrecompileStats, Program, ProgramSet, SoundCmd,
+    ChoiceReply, DbOp, DbValue, Host, LogLevel, PictureCmd, PrecompileStats, Program, ProgramSet, SoundCmd,
     StepReport, Vm,
 };
 
@@ -810,12 +810,13 @@ impl Host for TraceHost {
         ));
     }
 
-    fn database(&mut self, op: &DbOp) {
+    fn database(&mut self, op: &DbOp) -> Option<DbValue> {
         self.databases += 1;
         self.note(format!(
-            "  250 database type {} data {} item {} flags {:#x} value {:?}",
-            op.db_type, op.data_id, op.item_id, op.flags, op.value
+            "  250 database type {} data {} item {} flags {:#x} destination {:?}",
+            op.db_type, op.data_id, op.item_id, op.flags, op.destination
         ));
+        None
     }
 
     fn move_route(&mut self, target: i32, route: &[wf::command::RouteCommand]) {
@@ -1376,6 +1377,23 @@ fn run_capture(
         sprites.len(),
         texts.len()
     );
+    for picture in game.screen.iter() {
+        println!(
+            "    pic {:<6} {:?} at ({}, {}) alpha {:.2} scale {} window {:?} {}",
+            picture.number,
+            picture.kind,
+            picture.x,
+            picture.y,
+            picture.alpha(),
+            picture.scale,
+            picture.window,
+            if picture.file.is_empty() {
+                format!("text {:?}", picture.text)
+            } else {
+                format!("file {:?}", picture.file)
+            }
+        );
+    }
     match &game.choices {
         Some(choices) => {
             let (x, y) = game.choice_anchor();
@@ -1863,7 +1881,7 @@ fn run_map_event(
         );
     }
     if !spots.is_empty() {
-        spots.sort_by(|a, b| b.2.cmp(&a.2));
+        spots.sort_by_key(|spot| std::cmp::Reverse(spot.2));
         println!();
         println!("  hot spots        (instruction address -> hits)");
         for (event, pc, hits) in spots.iter().take(10) {

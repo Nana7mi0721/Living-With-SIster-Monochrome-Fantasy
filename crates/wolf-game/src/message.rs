@@ -4,61 +4,94 @@
 //! second half:
 //!
 //! * the FRAME (the nine-slice skin, the face chip) is drawn by common event 63, which
-//!   the engine starts for the whole run and which paints ordinary 150 pictures
-//!   (picture 19500 plus the face slots) whenever Sys12 says a message is up. Nothing
-//!   here draws a frame, and nothing should: the author owns that geometry.
+//!   the engine starts for the whole run and which paints ordinary 150 pictures into
+//!   picture slots 19500 and up whenever Sys12 says a message is up. Nothing here draws
+//!   a frame, and nothing should: the author owns that geometry.
 //! * the TEXT is drawn by the engine itself, and its geometry comes from the system
 //!   variables that the same event initialises before jumping back to its caller.
 //!
-//! Sources: docs/OPCODE_102.md section 4.2 (the Sys1/Sys2 anchoring law),
-//! work/full/BasicData/SysDatabase.dat type 6 (the 150 system variable names this
-//! module reads), and work/yado.txt (the official YADOT-WOLF manual) for the typewriter
-//! and cursor variables.
+//! Every law below is measured; docs/OPCODE_101.md carries the bytecode evidence.
 //!
-//! The laws, with their evidence status:
-//!
-//! * VERIFIED text origin = (Sys1, Sys2) in absolute screen pixels; common event 63
-//!   writes 2/50 of the screen width and 27/32 of the screen height into them.
-//! * VERIFIED font size = Sys8 (basic font size), the same variable the choice window
-//!   and picture text use.
-//! * VERIFIED typewriter speed = Sys9 (message speed), in characters per second.
-//! * UNVERIFIED Sys10 (message display weight) as frames of pre-roll before typing
-//!   starts: the manual calls it a display weight in frames, and only 7 writes of it
-//!   exist in the whole game, so the exact rounding is a retail-capture question.
-//! * UNVERIFIED the pause-cursor offsets (Sys5/Sys6): the manual documents them as
-//!   positions added to Sys1/Sys2 with -1 meaning "let the engine place it", and the
-//!   game writes them only 3 and 2 times.
-//! * UNVERIFIED the wrap width: this module wraps at the live message-window picture
-//!   (19500) when common event 63 has painted it, and at the screen edge otherwise.
-//! * UNVERIFIED the line advance: one font size times 30/22, borrowed from the choice
-//!   panel, which is the only line pitch this project has measured so far.
+//! * [已实测] The coordinate scale is the screen divided by the engine virtual screen:
+//!   rateX = width / 32, rateY = height / 24 (common event 48 divides Sys116/Sys117 by
+//!   exactly those numbers; common event 63 multiplies back and stores 1024 and 576).
+//! * [已实测] Text origin = Sys1/Sys2 = (2*rateX, 17*rateY + rateY/5) = (64, 412) on a
+//!   1024x576 screen. The nudge is rateY/5 (a Ver3.00 correction YADOT-WOLF publishes in
+//!   full); docs/OPCODE_101.md read it as /10 and predicted 410, which the running game
+//!   contradicts - our capture prints Sys2 = 412 from the event's own bytecode.
+//! * [已实测] Font size = Sys8, and this game sets 20.
+//! * [已实测] Line pitch = Sys8 + Game.dat text_line_spacing (6) = 26.
+//! * [已实测] Typewriter speed = Sys9 characters per second: 500 at boot (common event
+//!   48), 120 after common event 269 slows it down. Sys10 holds 9 idle, 1 while showing.
+//! * [未实测] The per-frame reveal uses a fractional accumulator of Sys9/60 per frame;
+//!   the manual only says X characters per second, and no frame-exact sample exists.
+//! * [已实测] The pause cursor is drawn by the ENGINE at (Sys1 + Sys5, Sys2 + Sys6) =
+//!   (576, 554), which is inside the frame, bottom right of the text origin.
+//! * [未实测] The right padding of the wrap box: wrapping uses the frame right edge
+//!   (the screen edge, 1024) minus the text origin, which is the documented hard cap.
+//! * [已实测] A bare LF byte is the line break; 3,915 of them exist in real messages.
 
 use crate::choice;
 
 /// Frames per second the engine counts the typewriter speed in.
 pub const FPS: f32 = 60.0;
 
-/// Font size used when Sys8 holds nothing usable.
-///
-/// Sys8 is written by common event 48 (the boot initialiser) and read by the message
-/// window, the choice window and picture text alike; a zero or negative value means the
-/// initialiser did not run, so the choice panel size is the honest fallback.
-pub const DEFAULT_FONT_PX: f32 = choice::TEXT_PX;
+/// Sys8 as common event 48 leaves it in this game.
+pub const DEFAULT_FONT_PX: f32 = 20.0;
 
-/// Line advance as a multiple of the font size.
-///
-/// choice::LINE_HEIGHT / choice::TEXT_PX = 30/22. Sharing the ratio keeps a message and
-/// a choice panel drawn at the same font size on the same baseline grid.
-pub const LINE_SPACING: f32 = choice::LINE_HEIGHT / choice::TEXT_PX;
+/// Game.dat text_line_spacing, added to Sys8 to get the line pitch.
+pub const LINE_GAP: f32 = 6.0;
+
+/// Sys9 as common event 48 leaves it: characters per second.
+pub const DEFAULT_CHARS_PER_SECOND: i32 = 500;
+
+/// Sys10 as common event 63 leaves it while a message is up.
+pub const DEFAULT_PREROLL: i32 = 9;
+
+/// The virtual screen the coordinate scale divides by: 32 steps across, 24 down.
+pub const SCREEN_STEPS: (f32, f32) = (32.0, 24.0);
 
 /// Picture slot common event 63 keeps the message-window frame in (its self[20]).
 ///
-/// The event draws the nine-slice skin there and erases it when Sys12 drops, so when the
-/// slot is live its width is the box the text must wrap inside.
+/// This is a SLOT NUMBER, not a file name: Picture/19500 does not exist, and the frame
+/// is an ordinary 150 window-type draw with the skin SysDatabase answers for the
+/// [250, 18, 0, 24] read. When the slot is live its rectangle is the box the text must
+/// wrap inside, which is why this module still reads it.
 pub const FRAME_PICTURE: i32 = 19500;
 
 /// Gap between the last glyph of the text and an auto-placed pause cursor, in pixels.
 pub const CURSOR_GAP: f32 = 6.0;
+
+/// The coordinate scale (rateX, rateY) for a screen size.
+#[must_use]
+pub fn coordinate_scale(screen_w: f32, screen_h: f32) -> (f32, f32) {
+    (
+        (screen_w / SCREEN_STEPS.0).max(1.0),
+        (screen_h / SCREEN_STEPS.1).max(1.0),
+    )
+}
+
+/// The text origin a boot-time initialiser leaves in Sys1/Sys2.
+///
+/// Sys1 = 2*rateX, then Sys2 = 17*rateY followed by a Ver3.00 nudge of the same rate. The
+/// nudge is rateY/5, not rateY/10: with rateY = 24 it is 4 px, and the retail capture reads
+/// Sys2 = 412 (the YADOT-WOLF transcript of common event 63 publishes the identical
+/// `Sys2 += CSelf89 / 5` line). Both terms are rounded, so the 1024x576 origin is (64, 412).
+#[must_use]
+pub fn default_origin(screen_w: f32, screen_h: f32) -> (f32, f32) {
+    let (rate_x, rate_y) = coordinate_scale(screen_w, screen_h);
+    (
+        (2.0 * rate_x).round(),
+        // Integer division, like the bytecode's operator: 24 / 5 is 4, not 4.8 rounded up.
+        (17.0 * rate_y + (rate_y / 5.0).trunc()).round(),
+    )
+}
+
+/// Line advance in pixels for a font size: Sys8 + Game.dat text_line_spacing.
+#[must_use]
+pub fn line_height(font_px: f32) -> f32 {
+    font_px + LINE_GAP
+}
 
 /// The system variables the message window reads.
 ///
@@ -76,7 +109,7 @@ pub struct Vars {
     pub chars_per_second: i32,
     /// Sys10 - frames of pre-roll before typing starts.
     pub preroll: i32,
-    /// Wrap width in pixels, or None to wrap at the screen edge.
+    /// Wrap width in pixels, or None to wrap at the frame right edge.
     pub width: Option<f32>,
     /// (Sys5, Sys6) - the pause cursor position relative to the origin, when both >= 0.
     pub cursor_offset: Option<(f32, f32)>,
@@ -85,18 +118,16 @@ pub struct Vars {
 }
 
 impl Vars {
-    /// The message-window variables a fresh engine has before any script runs.
-    ///
-    /// Sys1/Sys2 at the documented defaults (2/50 and 27/32 of the screen), Sys8 at the
-    /// choice panel size, an instant typewriter and no cursor offset.
+    /// The message-window variables a boot-time initialiser leaves behind.
     #[must_use]
     pub fn defaults(screen_w: f32, screen_h: f32) -> Self {
+        let (x, y) = default_origin(screen_w, screen_h);
         Self {
-            x: (screen_w * 2.0 / 50.0).round(),
-            y: (screen_h * 27.0 / 32.0).round(),
+            x,
+            y,
             font_px: DEFAULT_FONT_PX,
-            chars_per_second: 0,
-            preroll: 0,
+            chars_per_second: DEFAULT_CHARS_PER_SECOND,
+            preroll: DEFAULT_PREROLL,
             width: None,
             cursor_offset: None,
             screen_w,
@@ -150,9 +181,9 @@ pub struct Layout {
 
 /// How many characters of a message are visible at a given frame.
 ///
-/// None means "all of them": a typewriter speed of zero or less shows the message at
-/// once, which is the state the engine ships in until common event 48 or a script sets
-/// Sys9.
+/// The engine accumulates Sys9/60 characters per frame and draws the integer part, so
+/// the count after N frames is floor(N * Sys9 / 60). None means "all of them": a speed of
+/// zero or less shows the message at once.
 #[must_use]
 pub fn revealed(frames: u32, chars_per_second: i32, preroll: i32) -> Option<usize> {
     if chars_per_second <= 0 {
@@ -162,9 +193,9 @@ pub fn revealed(frames: u32, chars_per_second: i32, preroll: i32) -> Option<usiz
     if frames < preroll {
         return Some(0);
     }
-    let elapsed = u64::from(frames - preroll);
-    let whole = elapsed * chars_per_second as u64 / FPS as u64;
-    usize::try_from(whole).ok()
+    let elapsed = f64::from(frames - preroll);
+    let whole = (elapsed * f64::from(chars_per_second) / f64::from(FPS)).floor();
+    usize::try_from(whole as u64).ok()
 }
 
 /// Wrap text to width pixels at font_px, honouring explicit line breaks.
@@ -204,7 +235,7 @@ pub fn wrap(text: &str, width: f32, font_px: f32) -> Vec<String> {
 #[must_use]
 pub fn layout(text: &str, vars: &Vars, frames: u32) -> Layout {
     let font_px = vars.font_px();
-    let line_height = (font_px * LINE_SPACING).round();
+    let line_height = line_height(font_px);
     let stripped = wolf_format::messagetext::strip(text);
     let rows = wrap(&stripped, vars.wrap_width(), font_px);
     let total: usize = rows.iter().map(|row| row.chars().count()).sum::<usize>() + rows.len() - 1;
@@ -266,37 +297,61 @@ mod tests {
 
     fn vars() -> Vars {
         Vars {
-            x: 32.0,
-            y: 432.0,
-            font_px: 22.0,
+            x: 64.0,
+            y: 412.0,
+            font_px: DEFAULT_FONT_PX,
             chars_per_second: 0,
             preroll: 0,
-            width: Some(220.0),
+            width: Some(200.0),
             cursor_offset: None,
             screen_w: 1024.0,
         }
     }
 
     #[test]
+    fn the_coordinate_scale_is_the_screen_divided_by_32_and_24() {
+        assert_eq!(coordinate_scale(1024.0, 576.0), (32.0, 24.0));
+        assert_eq!(coordinate_scale(1280.0, 720.0), (40.0, 30.0));
+    }
+
+    #[test]
+    fn the_text_origin_is_two_steps_in_and_seventeen_down() {
+        assert_eq!(default_origin(1024.0, 576.0), (64.0, 412.0));
+        // 1280x720: 2*40 = 80, 17*30 + 30/5 = 516.
+        assert_eq!(default_origin(1280.0, 720.0), (80.0, 516.0));
+        let vars = Vars::defaults(1024.0, 576.0);
+        assert_eq!((vars.x, vars.y), (64.0, 412.0));
+        assert_eq!(vars.font_px(), 20.0);
+        assert_eq!(vars.chars_per_second, 500);
+        assert_eq!(vars.wrap_width(), 960.0);
+    }
+
+    #[test]
+    fn the_line_pitch_is_the_font_size_plus_the_game_dat_spacing() {
+        assert_eq!(line_height(20.0), 26.0);
+        assert_eq!(line_height(14.0), 20.0);
+    }
+
+    #[test]
     fn a_full_width_message_wraps_at_the_font_size() {
-        let rows = wrap("一二三四五六七八九十一二三", 220.0, 22.0);
+        let rows = wrap("一二三四五六七八九十一二三", 200.0, 20.0);
         assert_eq!(rows, vec!["一二三四五六七八九十".to_owned(), "一二三".to_owned()]);
     }
 
     #[test]
     fn an_explicit_line_break_starts_a_new_row() {
-        let rows = wrap("上\n下", 220.0, 22.0);
+        let rows = wrap("上\n下", 200.0, 20.0);
         assert_eq!(rows, vec!["上".to_owned(), "下".to_owned()]);
     }
 
     #[test]
     fn rows_advance_by_one_line_pitch() {
         let mut vars = vars();
-        vars.width = Some(22.0);
+        vars.width = Some(20.0);
         let layout = layout("甲乙", &vars, 0);
         assert_eq!(layout.rows.len(), 2);
-        assert_eq!(layout.rows[0].rect, [32.0, 432.0, 22.0, 30.0]);
-        assert_eq!(layout.rows[1].rect[1], 462.0);
+        assert_eq!(layout.rows[0].rect, [64.0, 412.0, 20.0, 26.0]);
+        assert_eq!(layout.rows[1].rect[1], 438.0);
     }
 
     #[test]
@@ -314,6 +369,9 @@ mod tests {
         assert_eq!(revealed(60, 30, 0), Some(30));
         assert_eq!(revealed(1, 30, 0), Some(0));
         assert_eq!(revealed(59, 30, 0), Some(29));
+        // The retail speed of 500 characters per second emits 8 per frame.
+        assert_eq!(revealed(1, 500, 0), Some(8));
+        assert_eq!(revealed(3, 500, 0), Some(25));
     }
 
     #[test]
@@ -327,7 +385,7 @@ mod tests {
     fn a_typing_message_reveals_one_row_at_a_time_and_has_no_cursor() {
         let mut vars = vars();
         vars.chars_per_second = 60;
-        vars.width = Some(22.0);
+        vars.width = Some(20.0);
         let layout = layout("甲乙丙", &vars, 1);
         assert_eq!(layout.typed, 1);
         assert!(layout.typing);
@@ -339,7 +397,7 @@ mod tests {
     #[test]
     fn the_pause_cursor_sits_after_the_last_glyph_when_the_engine_places_it() {
         let layout = layout("甲乙", &vars(), 0);
-        assert_eq!(layout.cursor, Some([32.0 + 44.0 + CURSOR_GAP, 432.0]));
+        assert_eq!(layout.cursor, Some([64.0 + 40.0 + CURSOR_GAP, 412.0]));
     }
 
     #[test]
@@ -347,7 +405,16 @@ mod tests {
         let mut vars = vars();
         vars.cursor_offset = Some((16.0, 6.0));
         let layout = layout("甲", &vars, 0);
-        assert_eq!(layout.cursor, Some([48.0, 438.0]));
+        assert_eq!(layout.cursor, Some([80.0, 418.0]));
+    }
+
+    #[test]
+    fn the_retail_cursor_offset_lands_inside_the_frame() {
+        // Sys5 = 512, Sys6 = 144 is what this game writes: 64+512, 412+144.
+        let mut vars = vars();
+        vars.cursor_offset = Some((512.0, 144.0));
+        let layout = layout("甲", &vars, 0);
+        assert_eq!(layout.cursor, Some([576.0, 556.0]));
     }
 
     #[test]
@@ -358,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_font_size_falls_back_to_the_choice_panel_size() {
+    fn a_missing_font_size_falls_back_to_the_measured_font_size() {
         let mut vars = vars();
         vars.font_px = 0.0;
         let layout = layout("甲", &vars, 0);
