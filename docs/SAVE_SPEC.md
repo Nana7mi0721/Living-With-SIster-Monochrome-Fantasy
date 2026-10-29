@@ -871,9 +871,13 @@ pub const PART7_ID: u32 = 6;
 ### 14.4 与「opcode 220 mode 0（运行中整档保存）」的关系
 
 现在这条链已经通了：VM 侧持有 `SavePart1..5` 的 typed 值 → `set_partX` 或直接改字段 →
-`to_bytes_rebuilt()` → 写到 `Save/SaveData%02d.sav`。仍然缺的两块：
+`to_bytes_rebuilt()` → 写到 `Save/SaveData%02d.sav`。`crates/wolf-game/src/game.rs` 的
+`Game::save_to` 已经把运行中的 `Game` 接上这条链：以「本局载入的存档」或新游戏的
+`Save/System.sav` 为模板，写入 playtime、Sys3/Sys4、800 个通常変数、全部活着的公共事件
+`self` 数值变量（0..99）与 `CSelf5..9` 字符串。仍然缺的两块：
 
-- **VariableDatabase 没有编码器**：可変DB 的写入（opcode 250 写 CDataBase）目前只能靠
-  `replace_part(VARDB_ID, 新字节)`，而「按 type/row/field 改一格」还没有 API。
-- **SavePart1 的地图快照**：`map_tiles` 是 64×36×3 的 u32 快照，谁在什么时候填它仍未确认
-  （§13）；写出侧只保证「原样搬运改过的别的字段时不动它」。
+- **VariableDatabase 没有编码器/单元格写入 API**：`SaveFile::rebuild()` 原样复制模板的
+  `vardb` 字节，所以 opcode 250 对 CDataBase 的写入不会进入 220 mode 0 写出的存档。
+  可用 `replace_part(VARDB_ID, 新字节)` 整体替换，但没有「按 type/row/field 改一格」的接口。
+- **SavePart1 的地图快照**：`map_tiles` 是 64×36×3 的 u32 快照，由模板原样搬运；谁在什么
+  时候填它仍未确认（§13）。

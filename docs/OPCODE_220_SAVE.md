@@ -467,7 +467,7 @@ pub struct SaveOp {
 
 - Slot → `root/Save/SaveData{slot:02}.sav`; path → relative to the game root unless absolute.
 - 220 `mode=1` queues `SaveRequest::Load(path)`; `Game::frame` applies it after `vm.step_frame` with `savegame::load_into`, which clears the picture screen and rebuilds it from part5, restores 800 normal variables, playtime and Sys3/Sys4.
-- 220 `mode=0` is **still a diagnostic note** (`full save ... not modelled yet`): building a complete part1 map snapshot, event runtime state and variable database from our live `Game` is not implemented yet. This is the one remaining piece of the 220 story.
+- 220 `mode=0` queues `SaveRequest::Save(path)`; `Game::frame` calls `Game::save_to`, which clones the save the game was loaded from (or `Save/System.sav` for a new game) as the map template, copies play time, Sys3/Sys4, the 800 normal variables and every live common-event self variable / self string into `SavePart2`/`SavePart3`, then writes `to_bytes_rebuilt()`. The template supplies `SavePart1`（含 map_tiles）and the raw `vardb`/`part7` bytes; variable-database writes made through opcode 250 are not yet persisted into the save. See SAVE_SPEC §14.4.
 - 221 reads the file, maps `address` through `save_address` (`2_000_000+n` normal, `1_600_000+n` self, `9_000_000+n` system) and returns `Some(0)` when the file does not exist (the script uses that as "slot empty").
 - 222 reads, applies `write_save_address` (`set_normal_var`, `set_self_var`, `set_playtime_frames`, `vars3_21[n+6]`) and writes the file back.
 - `flag=1` remains treated as 0 (U2 unchanged).
@@ -480,5 +480,6 @@ pub struct SaveOp {
 | wolf-game | `a_save_address_finds_normal_self_and_system_variables` | 零售 SaveData01：2000007=7586、2000008=25、ev131 self12=8、9000003=512、90000029=playtime/60 |
 | wolf-game | `a_save_write_reaches_the_next_read` | 222 写 2000007=1234 后 221 读回 1234；写 playtime=277 后 `playtime_frames()==16620`；越界地址返回 false |
 | wolf-game | `a_save_file_round_trips_through_the_writer` | `write_save` 后 `read_save` 的 `to_bytes()` 与原件逐字节相等 |
+| wolf-game | `a_save_written_from_a_retail_template_round_trips` | 用 SaveData01 当模板写盘，normal var 7 / playtime / Sys3 / Sys4 都能读回 |
 
 复现：`cargo test -q -p wolf-vm`（79）、`cargo test -q -p wolf-game`（162 + 3 + 1）。
