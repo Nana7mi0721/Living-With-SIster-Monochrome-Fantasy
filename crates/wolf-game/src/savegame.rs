@@ -62,6 +62,8 @@ pub fn write_save(path: &Path, save: &SaveFile) -> Result<(), String> {
 pub enum SaveRequest {
     /// Load the given file into the live game.
     Load(std::path::PathBuf),
+    /// Write the live game state to the given file.
+    Save(std::path::PathBuf),
 }
 
 /// Parses \`path\` and applies it to \`game\`.
@@ -98,6 +100,7 @@ pub fn apply(game: &mut Game, save: &SaveFile) -> LoadedSave {
 
     // Playtime is the first word of SavePart2's variable tail.
     loaded.playtime_frames = save.part2.vars3_21.first().copied().unwrap_or(0);
+    game.set_playtime_frames(loaded.playtime_frames);
 
     // Rebuild the picture layer. The save stores every live slot, including hidden ones
     // and whole-screen layers with negative numbers, so a wholesale replacement is right.

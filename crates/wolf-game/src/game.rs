@@ -218,6 +218,8 @@ pub struct Game {
     pub auto_choice_delay: u32,
     /// The automatic pages of the map the game booted into.
     pub runtime: MapRuntime,
+    /// Frames of play time; the save stores this in SavePart2.vars3_21[0].
+    pub playtime_frames: u32,
     /// Mouse position in logical pixels, [-1, -1] when the pointer is outside.
     pub mouse: [i32; 2],
     /// Mouse buttons held this frame: bit 0 left, bit 1 right, bit 2 middle.
@@ -236,6 +238,12 @@ pub struct Game {
     engine_events_started: bool,
     /// `220` loads queued by the interpreter; applied after the VM step that asked.
     save_requests: Vec<crate::savegame::SaveRequest>,
+    /// The last save this game loaded or was born from, used as the template for
+    /// 220 mode 0. A full save needs the map snapshot and object tables, which the
+    /// running game does not otherwise keep; the template supplies them and the
+    /// dynamic parts (play time, system anchor, normal variables, self variables)
+    /// are copied from the live VM before writing.
+    pub base_save: Option<wolf_save::SaveFile>,
     root: PathBuf,
 }
 
@@ -268,6 +276,9 @@ impl Game {
                 (u32::from(width), u32::from(height))
             });
         let databases = Databases::load(&basic, screen);
+        // System.sav is a complete save file in this game: use it as the template so a
+        // brand-new game can write its first save without inventing part1/part4.
+        let base_save = crate::savegame::read_save(&root.join("Save").join("System.sav")).ok();
         Ok(Self {
             vm: Vm::new(programs),
             screen: Screen::new(),
@@ -284,6 +295,7 @@ impl Game {
             auto_choice: false,
             auto_choice_delay: 0,
             runtime: MapRuntime::new(),
+            playtime_frames: 0,
             mouse: [-1, -1],
             mouse_buttons: 0,
             choice_cursor: 0,
@@ -292,6 +304,7 @@ impl Game {
             engine_always: None,
             engine_events_started: false,
             save_requests: Vec::new(),
+            base_save,
             root,
         })
     }
@@ -300,6 +313,76 @@ impl Game {
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Frames of play time, as a save file stores them.
+    #[must_use]
+    pub fn playtime_frames(&self) -> u32 {
+        self.playtime_frames
+    }
+
+    /// Replaces the play-time clock, used when a save is loaded.
+    pub fn set_playtime_frames(&mut self, frames: u32) {
+        self.playtime_frames = frames;
+    }
+
+    /// Writes the live game state to a save file.
+    ///
+    /// The map snapshot and object tables come from the base_save field (the save this
+    /// game was loaded from, or System.sav for a new game); the pieces that change while
+    /// playing are copied from the VM: play time, the Sys3/Sys4 choice anchor, the 800
+    /// normal variables, and the self variables / self strings of every live common-event
+    /// coroutine. Returns the number of encrypted bytes written.
+    ///
+    /// # Errors
+    ///
+    /// Fails when no template save is available or when a part cannot be encoded.
+    pub fn save_to(&mut self, path: &Path) -> Result<usize, String> {
+        let Some(mut save) = self.base_save.clone() else {
+            return Err("220 SaveLoad: no template save (Save/System.sav is missing)".to_string());
+        };
+
+        let mut part2 = save.part2.clone();
+        part2.vars3_21[0] = self.playtime_frames;
+        part2.vars3_21[9] = self.vm.vars.get_sys(3) as u32;
+        part2.vars3_21[10] = self.vm.vars.get_sys(4) as u32;
+        save.set_part2(&part2)
+            .map_err(|err| format!("220 SaveLoad: cannot encode part2: {err}"))?;
+
+        let mut part3 = save.part3.clone();
+        for index in 0..800 {
+            let _ = part3.set_normal_var(index, self.vm.vars.get(index));
+        }
+        for instance in self.vm.instances() {
+            if instance.program.self_base != wolf_vm::program::COMMON_SELF_BASE {
+                continue;
+            }
+            let event = instance.event;
+            for slot in 0..100 {
+                let value = instance.self_vars.get(instance.program.self_base + slot);
+                let _ = part3.set_self_var(event, slot, value);
+            }
+            for slot in 0..5 {
+                let text = instance
+                    .self_vars
+                    .get_str(instance.program.self_base + 5 + slot);
+                let _ = part3.set_self_string(event, slot, text);
+            }
+        }
+        save.set_part3(&part3)
+            .map_err(|err| format!("220 SaveLoad: cannot encode part3: {err}"))?;
+
+        let bytes = save
+            .to_bytes_rebuilt()
+            .map_err(|err| format!("220 SaveLoad: cannot rebuild save: {err}"))?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| format!("220 SaveLoad: cannot create {}: {err}", parent.display()))?;
+        }
+        std::fs::write(path, &bytes)
+            .map_err(|err| format!("220 SaveLoad: cannot write {}: {err}", path.display()))?;
+        self.base_save = Some(save);
+        Ok(bytes.len())
     }
 
     /// Starts one common event as a coroutine. Returns false when the id is unknown.
@@ -721,8 +804,19 @@ impl Game {
                         }
                     }
                 }
+                crate::savegame::SaveRequest::Save(path) => match self.save_to(&path) {
+                    Ok(bytes) => {
+                        self.diagnostics
+                            .insert(format!("220 SaveLoad: wrote {bytes} byte(s)"), 1);
+                    }
+                    Err(err) => {
+                        self.diagnostics.entry(err).or_insert(0);
+                    }
+                },
             }
         }
+        // One more frame of play time; the save stores this in SavePart2.vars3_21[0].
+        self.playtime_frames = self.playtime_frames.saturating_add(1);
         // Age the UI state after the VM ran, so a message shown this frame is 0 frames old.
         for message in &mut self.messages {
             message.frames = message.frames.saturating_add(1);
@@ -1228,13 +1322,10 @@ impl Host for GameHost<'_> {
                     self.save_requests
                         .push(crate::savegame::SaveRequest::Load(path));
                 } else {
-                    // Writing a full save needs the map snapshot and runtime tables
-                    // that the port does not model yet; report rather than write a
-                    // half-empty file that the retail engine would refuse.
-                    self.note(format!(
-                        "220 SaveLoad: full save to {} not modelled yet",
-                        path.display()
-                    ));
+                    // A full save needs the map template and every live VM bank, so it
+                    // is queued for the same post-step slot as a load.
+                    self.save_requests
+                        .push(crate::savegame::SaveRequest::Save(path));
                 }
                 None
             }
@@ -1402,6 +1493,44 @@ mod tests {
             eprintln!("skipping: no game data at {}", root.display());
             None
         }
+    }
+
+    #[test]
+    fn a_save_written_from_a_retail_template_round_trips() {
+        let Some(root) = have_data() else { return };
+        let mut template = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        template.pop();
+        template.pop();
+        template.push("work");
+        template.push("retail_backup");
+        template.push("Save");
+        template.push("SaveData01.sav");
+        let Ok(bytes) = std::fs::read(&template) else {
+            eprintln!("skipping: no retail save at {}", template.display());
+            return;
+        };
+        let mut game = Game::new(&root).expect("game");
+        game.base_save = Some(wolf_save::SaveFile::parse(&bytes).expect("template parses"));
+        game.vm.vars.set(7, 4321);
+        game.vm.vars.set_sys(3, 111);
+        game.vm.vars.set_sys(4, 222);
+        game.set_playtime_frames(1234);
+
+        let mut out = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        out.push("..");
+        out.push("..");
+        out.push("target");
+        out.push("test-scratch");
+        std::fs::create_dir_all(&out).expect("scratch dir");
+        out.push("savegame-roundtrip.sav");
+        let written = game.save_to(&out).expect("save");
+        assert!(written > 300_000, "{written} bytes");
+
+        let save = crate::savegame::read_save(&out).expect("re-read");
+        assert_eq!(save.part3.normal_var(7), Some(4321));
+        assert_eq!(save.part2.vars3_21[0], 1234);
+        assert_eq!(save.part2.vars3_21[9], 111);
+        assert_eq!(save.part2.vars3_21[10], 222);
     }
 
     #[test]
