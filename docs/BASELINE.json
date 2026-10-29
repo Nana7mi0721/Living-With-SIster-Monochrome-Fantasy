@@ -567,5 +567,146 @@
   "unreachable": "222 is not exactly reachable with a 30 frame period (step ~4.23); 221 is the nearest phase and leaves a 1-byte residual",
   "baseline_frame": 716,
   "note": "pixel comparisons against the retail PrintScreen must be taken at frame % 30 == 26 while the title menu is parked, or the phase, not the renderer, decides the score"
+ },
+ "picture_erase": {
+  "total_sites": 2835,
+  "short_form": 1798,
+  "long_range_form": 952,
+  "stray_short_tail": 85,
+  "second_number_index": 3,
+  "rule": "150 [head, number, fade] erases one slot; 150 [head, number, fade, _, _, other] erases the inclusive range min(number, other)..max(number, other) - the interpreter hands the layer the arguments after the head, so the second picture number is PictureCmd.args[3]",
+  "proof": "ce221 pc36 150 [16777218, 50000, 5, 5, 0, 50003] clears the whole loading screen 50000..50003 in one command, which is why 50001/50002 are never erased individually",
+  "unordered_pairs": "only 4 sites carry A > B (Map003 ev1 pc24 (-1,-2); SampleMapA ev15 pc102/388/656 (20007,20003)), hence min/max",
+  "argc_histogram": {
+   "3": 1798,
+   "4": 85,
+   "6": 952
+  },
+  "earlier_note": "an earlier note quoted 1,115 / 751 / 329 / 35: that scan only counted erases whose endpoints bracket a picture that is actually drawn somewhere, which is a narrower filter than \"every erase in the 550 common events\""
+ },
+ "picture_actions": {
+  "values": {
+   "0": "draw",
+   "1": "move",
+   "2": "erase",
+   "3": "hide"
+  },
+  "hide": "keeps the slot, its file, box and position and only stops painting (ev63 uses 150 [3, 19500] when the fade is below 1)",
+  "move_anchor": "a Move keeps the picture anchor unless the command carries 0x1000; reading anchor 0 literally puts the 960x168 message window at x=512..1472",
+  "type_1_and_4_names": "types 1 and 4 name a string VARIABLE carried in int slot 11 (e.g. 1600009 = event self string 9); all 54 type-1 and 53 type-4 draws in the game carry zero string arguments",
+  "kind_counts": {
+   "0_file": 14106,
+   "1_file_from_string_var": 82,
+   "2_text": 2179,
+   "3_window_file": 258,
+   "4_window_string": 91
+  },
+  "action_counts": {
+   "0_draw": 10272,
+   "1_move": 3365,
+   "2_erase": 2835,
+   "3_hide": 244
+  },
+  "commands_total": 16716
+ },
+ "message_window": {
+  "skin": "SystemFile/WindowBase.png (grey 18x18 nine-slice, 3 px border, fill 0x1f2425 at alpha 0xdf)",
+  "frame_picture": 19500,
+  "frame_rect": [
+   32,
+   396,
+   960,
+   168
+  ],
+  "text_origin": [
+   64,
+   412
+  ],
+  "font_px": 20,
+  "line_pitch": 26,
+  "wrap_width": 928,
+  "pause_cursor": [
+   576,
+   556
+  ],
+  "chars_per_second": 500,
+  "preroll_frames": 9,
+  "commands_total": 12027,
+  "command_shape": "101 argc 0 / strc 1 in all 12,027 real commands; 3,915 bare LF line breaks",
+  "measured": {
+   "rows": 7,
+   "chars": 73
+  },
+  "law": "the engine runs common event 63 as an always-on coroutine: ev63 reads the coordinate scale from the database, writes Sys1..Sys6 and paints its own frame with 150; the engine only draws the text at (Sys1, Sys2) with Sys8 font size, Sys9 chars/second and the pause cursor at (Sys1+Sys5, Sys2+Sys6)",
+  "coordinate_scale": {
+   "formula": "rateX = screen_w / 32, rateY = screen_h / 24",
+   "value": [
+    32,
+    24
+   ],
+   "origin": "Sys1 = 2*rateX = 64, Sys2 = 17*rateY + trunc(rateY/5) = 412"
+  }
+ },
+ "opening_slice": {
+  "entry": "SampleMapA event 0 (autorun page 0)",
+  "choice_state": {
+   "frames": 600,
+   "instructions": 46370,
+   "picture_ops": 3662,
+   "db_accesses": 81,
+   "warnings": 0,
+   "quads": 19,
+   "text_pictures": 4,
+   "non_black": 200260,
+   "live_pictures": 3,
+   "choice_anchor": [
+    512,
+    240
+   ],
+   "choice_rect": [
+    512,
+    240,
+    263,
+    148
+   ],
+   "choice_options": [
+    "广阔的战场",
+    "广袤的森林",
+    "微风吹拂而过的麦田",
+    "有人在等我的家"
+   ]
+  },
+  "message_state": {
+   "frames": 400,
+   "instructions": 30577,
+   "picture_ops": 2366,
+   "db_accesses": 51,
+   "warnings": 0,
+   "quads": 9,
+   "non_black": 161336,
+   "live_pictures": 2,
+   "rows": 7,
+   "chars": 73
+  },
+  "note": "both states are produced by wolf-cli capture --map-run SampleMapA --event 0; --hold-message stops auto-advancing so the 101 message stays on screen"
+ },
+ "database_layer": {
+  "files": {
+   "DataBase.dat": "40 types",
+   "CDataBase.dat": "30 types",
+   "SysDatabase.dat": "28 types"
+  },
+  "opcode_250_sites": 2592,
+  "engine_cells": {
+   "18/97/0": "coordinate scale X (32)",
+   "18/98/0": "coordinate scale Y (24)",
+   "18/0/24": "message window skin name"
+  },
+  "still_unanswered": [
+   "(0, -1, 33) flags 0x11000",
+   "(18, 0, 22) flags 0x51200",
+   "(20, 69, 0) flags 0x10000"
+  ],
+  "note": "(18, 0, 22) is asked by ev48 pc158 and 7 more sites, not by ev63; ev63 asks (18, 0, 24) which the engine layer answers"
  }
 }
