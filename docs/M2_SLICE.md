@@ -16,7 +16,7 @@ mean abs 0.012）。M2 的验收对象是**玩家真正开始游戏后的第一�
 
 | 项 | 值 |
 |---|---|
-| git HEAD | `dc85636`（styled 101 message `layout_styled` / SavePart5 图片表写回 / vardb `write_into` 接线 / 220 mode 0 整档保存） |
+| git HEAD | `ba761be`（`130` 地图传送与标题→新游戏链；此前 `dc85636` 为 styled 101 message / SavePart5 图片表写回 / vardb `write_into` / 220 mode 0） |
 | 数据根 | `work/full`（23 个 .wolf 全解，4,085 文件） |
 | 屏幕 | 1024x576，60 fps，tile 16 px |
 | 工具链 | Rust 1.99.1 msvc；`cargo test -q --workspace` 全绿；`wolf-cli verify` 63/63 |
@@ -464,6 +464,33 @@ playtime、Sys3/Sys4、800 个通常変数、全部活着的公共事件 self �
 （(0,12,5)=4242 保存→载入后仍是 4242）已验证。仍只剩 221 的 `flag=1` 三个站点（ev94 pc335/345/348，
 地址 `1600062`/`1600064`）和 retail 04 字体记录的字节级写回未验证。
 
+### 4.6 地图传送 `130` 与会话内切图（★已实现）
+
+`130` 全作只有少量站点，arg0 只出现 `-1` 与 `-2`。`-1` / `-2` 不是地图文件名，而是
+**SysDatabase 类型 0（マップ設定）行号的有符号编码**：`-1` = 行 1 = `MapData/SampleMapA.mps`，
+`-2` = 行 0 = `MapData/TitleMap.mps`；正数按行号直取。证据（三条独立）：
+
+- `SysDatabase` 类型 0 的 50 行里 row 0 = `MapData/TitleMap.mps`、row 1 = `MapData/SampleMapA.mps`、
+  row 3 = `MapData/Map003.mps`（标题 `ニューゲーム処理`）。
+- `Map003.mps` event 1（新游戏处理图）注释 `ここでサンプルマップに移動`，pc28 = `130 [-1, 62, 38, 1, 1]`。
+- `TitleMap.mps` event 2 的 `210 [500042]` 菜单分支里 `130 [-1, 60, 34, 3, 1]`；TitleMap 只有 53x30，
+  `(60,34)` 不可能是它自己的格坐标。
+
+实现：`GameHost::teleport` 只排一个 `MapRequest { map, x, y, direction }`（host 不能借 `&mut Game`），
+`Game::frame` 在 VM 返回后处理：`runtime.stop_all(&mut vm)` 停掉旧图所有页面协程（含子协程），
+`Databases::map_path(id)` 查 SysDatabase，解析 `.mps` 后 `start_pages` 启动新图自动页；
+每次切图记一条 `130 Teleport: MapData/SampleMapA.mps at (62, 38) direction 1` 诊断。
+
+**实测两条入口**：
+
+| 入口 | 结果 |
+|---|---|
+| `capture --map-run Map003 --event 1 --frames 600` | 新游戏处理 → `130` → SampleMapA，停在开场四选一；26,415 指令 / 654 图操作 / 0 警告 |
+| `boot` → 标题 → 回车 → 标题菜单第一项 → 900 帧 | `130 Teleport: MapData/SampleMapA.mps at (60, 34) direction 3`，同样停在开场四选一 |
+
+测试：`the_new_game_processing_map_teleports_into_the_opening` 与 `the_title_menu_starts_a_new_game`
+（crates/wolf-game/tests/opening.rs，后者走完整 boot → 标题 → 菜单 → 新游戏链）。
+
 ---
 
 ## 5. 与 PLAN.md 的偏差（M2 项的作废与替换）
@@ -493,6 +520,7 @@ playtime、Sys3/Sys4、800 个通常変数、全部活着的公共事件 self �
 13. **诊断命令**：`wolf-cli blocks`（块表）与 `--answer-delay`（按帧作答，避免把菜单循环烧进一帧）。
 14. **存档载入**：`--load-save` 按 SavePart5 重建当前画面（66 图 / 800 个通常变量 / 17 quad / 34 文本图），HUD 与零售 save1.jpg 对齐；普通文件图按 6x2 精灵表取格。
 15. **存档操作码**：220 读档排队、221 读档内变量、222 写档内变量并落盘；地址映射与存档写回测试见 §4.5。
+16. **地图传送与标题新游戏链**：`130` 的 `-1/-2` 解码为 SysDatabase 行号，切图时停旧图协程、启新图自动页；`boot → 标题 → 菜单 → 新游戏 → 开场四选一` 已有集成测试（§4.6）。
 
 ### 5.3 地图渲染不再是 M2 验收项
 

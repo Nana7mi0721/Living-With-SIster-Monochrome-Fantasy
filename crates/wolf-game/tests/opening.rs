@@ -8,6 +8,7 @@
 use std::path::PathBuf;
 
 use wolf_game::atlas::{self, Atlas};
+use wolf_game::key;
 use wolf_game::Game;
 
 fn data_root() -> PathBuf {
@@ -187,4 +188,74 @@ fn the_new_game_processing_map_teleports_into_the_opening() {
         "the teleport did not reach the opening prompt"
     );
     assert_eq!(game.stats.warnings, 0, "the new-game path produced warnings");
+}
+
+/// The retail entry chain: boot to the title art, confirm opens the title menu,
+/// and its first option starts a new game through opcode 130 map id -1. This is
+/// the chain PLAN.md calls title -> new game; the map-run test above starts one
+/// step later, at Map003 event 1.
+#[test]
+fn the_title_menu_starts_a_new_game() {
+    let root = data_root();
+    let mut game = match Game::new(&root) {
+        Ok(game) => game,
+        Err(err) => {
+            eprintln!("skipping: {err}");
+            return;
+        }
+    };
+    if let Err(err) = game.boot() {
+        eprintln!("skipping: cannot boot: {err}");
+        return;
+    }
+    for _ in 0..800 {
+        game.frame();
+    }
+    assert!(
+        game.screen
+            .iter()
+            .any(|picture| picture.file.contains("title01")),
+        "the boot chain did not reach the title art"
+    );
+    game.key_bits = key::OK;
+    game.frame();
+    game.key_bits = 0;
+    for _ in 0..240 {
+        game.frame();
+    }
+    let menu = game.choices.as_ref().expect("the title menu is open");
+    assert_eq!(menu.options, ["1", "2", "3"], "the title menu changed");
+    game.set_choice_cursor(0);
+    game.auto_choice = true;
+    game.auto_choice_delay = 1;
+    // Answer ONLY the title menu: leave auto_choice on until the menu closes, then
+    // turn it off so the opening prompt downstream is held like the retail player
+    // sees it (and like the other two tests).
+    for _ in 0..120 {
+        game.frame();
+        if game.choices.is_none() {
+            break;
+        }
+    }
+    game.auto_choice = false;
+    // The opening narration is a 101 message; with auto_advance off it would hold
+    // the script before the prompt (the other tests set this from the start).
+    game.auto_advance = true;
+    for _ in 0..900 {
+        game.frame();
+    }
+    assert!(
+        game.diagnostics
+            .keys()
+            .any(|line| line.contains("130 Teleport: MapData/SampleMapA.mps")),
+        "the title menu never started a new game: {:?}",
+        game.diagnostics.keys().collect::<Vec<_>>()
+    );
+    let prompt = game.choices.as_ref().expect("the opening prompt is open");
+    assert_eq!(
+        prompt.options,
+        ["广阔的战场", "广袤的森林", "微风吹拂而过的麦田", "有人在等我的家"],
+        "the title menu did not reach the opening prompt"
+    );
+    assert_eq!(game.stats.warnings, 0, "the title path produced warnings");
 }

@@ -1042,5 +1042,23 @@
     "wolf-game a_saved_game_keeps_the_database_cells"
    ]
   }
+ },
+ "map_teleport": {
+  "opcode": 130,
+  "map_id_law": "-1 = SysDatabase type 0 row 1 (MapData/SampleMapA.mps); -2 = row 0 (MapData/TitleMap.mps); positive ids are row numbers",
+  "evidence": [
+   "SysDatabase type 0 row 0 TitleMap / row 1 SampleMapA / row 3 Map003 (new game processing)",
+   "Map003.mps event 1 pc28 130 [-1, 62, 38, 1, 1] with the comment here is the sample map transition",
+   "TitleMap.mps event 2 menu branch 130 [-1, 60, 34, 3, 1]; TitleMap is 53x30 so 60,34 cannot be its own grid"
+  ],
+  "implementation": "GameHost::teleport queues MapRequest; Game::frame calls MapRuntime::stop_all, Databases::map_path, parses the .mps and start_pages; diagnostics record the path and target",
+  "tests": [
+   "the_new_game_processing_map_teleports_into_the_opening",
+   "the_title_menu_starts_a_new_game"
+  ],
+  "measured": {
+   "map003_entry": "capture --map-run Map003 --event 1 --frames 600: 26415 instructions / 654 picture ops / 1 choice / 0 warnings, opening prompt reached",
+   "title_entry": "boot -> title -> confirm -> title menu option 0 -> 900 frames: 130 Teleport: MapData/SampleMapA.mps at (60, 34) direction 3, opening prompt reached"
+  }
  }
 }
