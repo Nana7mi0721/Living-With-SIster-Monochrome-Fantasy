@@ -2,19 +2,26 @@
 //!
 //! WOLF draws pictures, chips, cursors and window frames from hundreds of separate files.
 //! The renderer has exactly one texture and one draw call (see crates/wolf-render), so the
-//! job here is to pack whatever the current frame needs into one 2048x2048 RGBA image and
+//! job here is to pack whatever the current frame needs into one 4096x4096 RGBA image and
 //! hand back normalised UV rectangles.
 //!
 //! A shelf packer is deliberate rather than a general rectangle packer: WOLF's asset mix is
 //! a few huge backgrounds (1024x576) plus many tiny UI pieces, which is exactly the shape a
 //! shelf packer handles well with a fraction of the code. Images are inserted at native
-//! size and never scaled, so a 1024x576 title graphic costs 2.25 MiB of the 16 MiB atlas -
+//! size and never scaled, so a 1024x576 title graphic costs 2.25 MiB of the 64 MiB atlas -
 //! the whole title screen fits with the atlas almost empty.
+//!
+//! 4096 is the largest page that is safe everywhere (the spec floor for
+//! `max_texture_dimension_2d` is 8192) and it is not a luxury: a retail save that restores
+//! three stacked character layers needs 129% of a 2048 page (docs/HSCENE.md 4.1), and one
+//! cell of a 2400x1300 sprite sheet is only reachable once the page is big enough. What
+//! still cannot be packed is recorded in [`Atlas::misses`] instead of vanishing, because a
+//! silently dropped picture is indistinguishable from a script that never drew it.
 //!
 //! Text pictures are NOT atlas content: they carry no texture at all (see
 //! [`crate::picture::ScreenQuad`]), so they are returned separately for the glyph pass.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::assets::{Assets, ImageData};
 use crate::picture::{Picture, Screen, SCREEN_H, SCREEN_W};
@@ -24,9 +31,15 @@ use crate::window;
 /// One queued window panel: picture number, destination rect, alpha, tint, skin name.
 type Panel<'a> = (i32, [f32; 4], f32, [f32; 3], &'a str);
 
-/// Edge length of the atlas texture. 2048 is inside every adapter's limit (the smallest
-/// guaranteed by wgpu is 8192) while still holding four full-screen backgrounds.
-pub const ATLAS_SIZE: u32 = 2048;
+/// Edge length of the atlas texture, in pixels.
+///
+/// 4096 costs 64 MiB of VRAM and of host memory (the page is built in RAM and uploaded as
+/// one buffer), which is affordable on any GPU that can run this game, and it is the size
+/// the retail content actually needs: a restored save stacks three character layers and the
+/// resulting picture set wants 129% of a 2048 page. The alternative - several pages and a
+/// draw call per page - buys nothing here, because the renderer's whole design is one
+/// texture and one instanced draw.
+pub const ATLAS_SIZE: u32 = 4096;
 
 /// A rectangle inside the atlas, in pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -129,6 +142,52 @@ pub struct TextQuad {
     pub outline: bool,
 }
 
+/// Why a picture never made it into the atlas.
+///
+/// Dropping a picture silently is indistinguishable from a script that never drew it, and
+/// a missing character layer looks like a bug in the save loader rather than a capacity
+/// problem. Every refusal therefore carries one of these, and `Game` turns them into
+/// diagnostics (see `crates/wolf-game/src/game.rs`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtlasMissReason {
+    /// The image (or the requested cell) has a zero width or height.
+    Empty,
+    /// The image is wider or taller than the atlas page itself, so no packing order helps.
+    TooLarge,
+    /// The page is full: no shelf has room for it and no new shelf fits below.
+    Full,
+    /// The named asset could not be loaded from the data root.
+    LoadFailed,
+    /// The requested sub-rectangle does not lie inside the loaded image.
+    CropFailed,
+}
+
+impl AtlasMissReason {
+    /// Stable lowercase tag, used as the prefix of a diagnostic line.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Empty => "empty",
+            Self::TooLarge => "too-large",
+            Self::Full => "full",
+            Self::LoadFailed => "load-failed",
+            Self::CropFailed => "crop-failed",
+        }
+    }
+}
+
+/// One picture that could not be packed, kept so the caller can report it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AtlasMiss {
+    /// Cache key of the picture: a WOLF asset name, `name#x,y,w,h` for a cell, or a
+    /// `<sysgraphic:...>` key for a built-in drawing.
+    pub key: String,
+    /// Size that was asked for, in pixels; `[0, 0]` when the asset never loaded.
+    pub size: [u32; 2],
+    /// Why it was refused.
+    pub reason: AtlasMissReason,
+}
+
 /// A half-open horizontal strip of the atlas.
 #[derive(Clone, Copy, Debug)]
 struct Shelf {
@@ -146,6 +205,11 @@ pub struct Atlas {
     entries: HashMap<String, AtlasRect>,
     sources: HashMap<String, [u32; 2]>,
     used_area: u64,
+    /// Pictures that were refused, in the order they were first seen.
+    misses: Vec<AtlasMiss>,
+    /// Keys already in `misses`, so a picture re-drawn every frame is reported once
+    /// instead of flooding the diagnostics map.
+    missed: HashSet<String>,
 }
 
 impl Default for Atlas {
@@ -155,7 +219,7 @@ impl Default for Atlas {
 }
 
 impl Atlas {
-    /// An empty 2048x2048 atlas.
+    /// An empty `ATLAS_SIZE` x `ATLAS_SIZE` atlas.
     #[must_use]
     pub fn new() -> Self {
         Self::with_size(ATLAS_SIZE, ATLAS_SIZE)
@@ -172,6 +236,8 @@ impl Atlas {
             entries: HashMap::new(),
             sources: HashMap::new(),
             used_area: 0,
+            misses: Vec::new(),
+            missed: HashSet::new(),
         }
     }
 
@@ -222,12 +288,21 @@ impl Atlas {
     ///
     /// Names are the caller's key: packing the same name twice returns the first slot, so
     /// a picture re-drawn every frame costs nothing.
+    ///
+    /// A `None` is never silent: the reason lands in [`Atlas::misses`]. The signature stays
+    /// `Option` on purpose - the packer is called from the tile, choice and CLI paths as
+    /// well, and every one of them wants the same "pack it if you can" behaviour.
     pub fn add(&mut self, name: &str, image: &ImageData) -> Option<AtlasRect> {
         if let Some(rect) = self.entries.get(name) {
             return Some(*rect);
         }
         let (w, h) = (image.width, image.height);
-        if w == 0 || h == 0 || w > self.width || h > self.height {
+        if w == 0 || h == 0 {
+            self.miss(name, [w, h], AtlasMissReason::Empty);
+            return None;
+        }
+        if w > self.width || h > self.height {
+            self.miss(name, [w, h], AtlasMissReason::TooLarge);
             return None;
         }
         // First shelf that still fits, else open a new one. Real WOLF frames re-use the
@@ -250,6 +325,7 @@ impl Atlas {
                     .last()
                     .map_or(0, |shelf| shelf.y + shelf.height);
                 if y + h > self.height {
+                    self.miss(name, [w, h], AtlasMissReason::Full);
                     return None;
                 }
                 self.shelves.push(Shelf {
@@ -273,7 +349,13 @@ impl Atlas {
         if let Some(rect) = self.entries.get(name) {
             return Some(*rect);
         }
-        let image = assets.load(name).ok()?;
+        let image = match assets.load(name) {
+            Ok(image) => image,
+            Err(_) => {
+                self.miss(name, [0, 0], AtlasMissReason::LoadFailed);
+                return None;
+            }
+        };
         self.add(name, &image)
     }
 
@@ -294,8 +376,20 @@ impl Atlas {
         if let Some(rect) = self.entries.get(&key) {
             return Some(*rect);
         }
-        let image = assets.load(name).ok()?;
-        let cell = image.crop(src)?;
+        let image = match assets.load(name) {
+            Ok(image) => image,
+            Err(_) => {
+                self.miss(&key, [0, 0], AtlasMissReason::LoadFailed);
+                return None;
+            }
+        };
+        let cell = match image.crop(src) {
+            Some(cell) => cell,
+            None => {
+                self.miss(&key, [src[2], src[3]], AtlasMissReason::CropFailed);
+                return None;
+            }
+        };
         self.add(&key, &cell)
     }
 
@@ -319,8 +413,54 @@ impl Atlas {
         if let Some(rect) = self.entries.get(&key) {
             return Some(*rect);
         }
-        let image = sysgraphic::render(shape, w, h)?;
+        let image = match sysgraphic::render(shape, w, h) {
+            Some(image) => image,
+            None => {
+                self.miss(&key, [w, h], AtlasMissReason::Empty);
+                return None;
+            }
+        };
         self.add(&key, &image)
+    }
+
+    /// Records that `key` could not be packed, once per key.
+    fn miss(&mut self, key: &str, size: [u32; 2], reason: AtlasMissReason) {
+        if !self.missed.insert(key.to_owned()) {
+            return;
+        }
+        self.misses.push(AtlasMiss {
+            key: key.to_owned(),
+            size,
+            reason,
+        });
+    }
+
+    /// Every picture that was refused, in first-seen order.
+    #[must_use]
+    pub fn misses(&self) -> &[AtlasMiss] {
+        &self.misses
+    }
+
+    /// Takes the refused list, leaving the atlas ready to report the next frame's misses.
+    ///
+    /// The caller drains this once per frame and turns each entry into a diagnostic, so
+    /// the "atlas full" condition is visible in `--trace` output instead of looking like
+    /// art that the script forgot to draw.
+    pub fn take_misses(&mut self) -> Vec<AtlasMiss> {
+        self.missed.clear();
+        std::mem::take(&mut self.misses)
+    }
+
+    /// Same as [`Atlas::take_misses`], pre-formatted as `atlas <reason>: <key>`.
+    ///
+    /// This is the string `Game` folds into its diagnostics map: `atlas full:
+    /// Picture/stand_imouto.png` reads as one fact, and the map already collapses
+    /// repeats, so a picture refused every frame costs one line, not sixty.
+    pub fn take_warnings(&mut self) -> Vec<String> {
+        self.take_misses()
+            .into_iter()
+            .map(|miss| format!("atlas {}: {}", miss.reason.as_str(), miss.key))
+            .collect()
     }
 
     fn blit(&mut self, image: &ImageData, x: u32, y: u32) {
@@ -594,6 +734,117 @@ mod tests {
         assert!(atlas.add("ok", &image(8, 8, 1)).is_some());
         assert!(atlas.add("more", &image(4, 4, 2)).is_none());
         assert!(atlas.entry("ok").is_some());
+        // Nothing was refused silently: every `None` above is on the record.
+        let misses: Vec<(&str, AtlasMissReason)> = atlas
+            .misses()
+            .iter()
+            .map(|miss| (miss.key.as_str(), miss.reason))
+            .collect();
+        assert_eq!(
+            misses,
+            [
+                ("wide", AtlasMissReason::TooLarge),
+                ("tall", AtlasMissReason::TooLarge),
+                ("empty", AtlasMissReason::Empty),
+                ("more", AtlasMissReason::Full),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_default_page_is_4096_which_is_what_the_retail_saves_need() {
+        // A restored save stacks three character layers and needs 129% of a 2048 page
+        // (docs/HSCENE.md 4.1), so the shipped page size is part of the contract.
+        assert_eq!(ATLAS_SIZE, 4096);
+        let atlas = Atlas::new();
+        assert_eq!(atlas.size(), [4096, 4096]);
+        assert_eq!(atlas.pixels().len(), 4096 * 4096 * 4);
+    }
+
+    #[test]
+    fn an_image_too_big_for_a_2048_page_fits_on_the_shipped_page() {
+        // `Picture/stand_imouto_paja2.png` is 2400x1300. One 400x650 cell of it fits either
+        // page, but the sheet itself - and any full-bleed background of that size - only
+        // fits once the page grows, which is exactly what the retail saves ran into.
+        let sheet = image(2400, 1300, 0x5A);
+        let mut small = Atlas::with_size(2048, 2048);
+        assert!(small.add("sheet", &sheet).is_none());
+        assert_eq!(small.misses()[0].reason, AtlasMissReason::TooLarge);
+        assert_eq!(small.misses()[0].size, [2400, 1300]);
+
+        let mut shipped = Atlas::with_size(ATLAS_SIZE, ATLAS_SIZE);
+        let rect = shipped.add("sheet", &sheet).expect("fits on 4096");
+        assert_eq!((rect.w, rect.h), (2400, 1300));
+        assert!(shipped.misses().is_empty());
+    }
+
+    #[test]
+    fn a_page_that_runs_out_of_rows_reports_the_names_that_were_dropped() {
+        // Four 8x2 rows fill an 8x8 page exactly; the fifth has nowhere to go.
+        let mut atlas = Atlas::with_size(8, 8);
+        for index in 0..4 {
+            atlas
+                .add(&format!("row{index}"), &image(8, 2, index as u8))
+                .expect("row");
+        }
+        assert!(atlas.add("late", &image(8, 2, 9)).is_none());
+        let warnings = atlas.take_warnings();
+        assert_eq!(warnings, ["atlas full: late"]);
+        // Draining clears the record so the next frame starts empty.
+        assert!(atlas.take_warnings().is_empty());
+        assert!(atlas.misses().is_empty());
+    }
+
+    #[test]
+    fn a_picture_refused_every_frame_is_reported_once() {
+        let mut atlas = Atlas::with_size(8, 8);
+        for _ in 0..60 {
+            assert!(atlas.add("huge", &image(64, 64, 1)).is_none());
+        }
+        assert_eq!(atlas.misses().len(), 1, "one line, not sixty");
+        assert_eq!(atlas.misses()[0].key, "huge");
+        // Once the caller drains, the same key may be reported again next frame.
+        atlas.take_warnings();
+        assert!(atlas.add("huge", &image(64, 64, 1)).is_none());
+        assert_eq!(atlas.misses().len(), 1);
+    }
+
+    #[test]
+    fn a_failed_asset_load_is_a_miss_not_a_quiet_continue() {
+        let mut atlas = Atlas::with_size(64, 64);
+        let mut assets = Assets::new("no-such-root");
+        assert!(atlas
+            .add_asset(&mut assets, "Picture/missing.png")
+            .is_none());
+        assert_eq!(
+            atlas.misses(),
+            [AtlasMiss {
+                key: "Picture/missing.png".to_owned(),
+                size: [0, 0],
+                reason: AtlasMissReason::LoadFailed,
+            }]
+        );
+        // A cell request on a missing file is the same class of failure.
+        assert!(atlas
+            .add_asset_region(&mut assets, "Picture/missing.png", [0, 0, 8, 8])
+            .is_none());
+        assert_eq!(atlas.misses().len(), 2);
+    }
+
+    #[test]
+    fn a_system_graphic_that_the_shape_refuses_is_a_miss_too() {
+        let mut atlas = Atlas::with_size(64, 64);
+        // A zero-width `<LINE>` has no pixels to draw (sysgraphic::render returns None).
+        assert!(atlas
+            .add_sysgraphic(sysgraphic::Shape::Line, 0, 1)
+            .is_none());
+        assert_eq!(atlas.misses()[0].reason, AtlasMissReason::Empty);
+        assert!(atlas.misses()[0].key.starts_with("<sysgraphic:"));
+        // The same shape at a usable size packs and clears nothing.
+        assert!(atlas
+            .add_sysgraphic(sysgraphic::Shape::Line, 32, 1)
+            .is_some());
+        assert_eq!(atlas.misses().len(), 1);
     }
 
     #[test]
