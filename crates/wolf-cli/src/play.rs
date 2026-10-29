@@ -177,7 +177,8 @@ impl App {
     /// The panel is appended last so it composites over every script layer, which is
     /// what the engine does: a choice prompt is an engine overlay, not a picture slot.
     fn rebuild(&mut self) {
-        let quads = self.atlas.sprites(&self.game.screen, &mut self.game.assets);
+        let mut quads = self.game.tile_quads(&mut self.atlas);
+        quads.extend(self.atlas.sprites(&self.game.screen, &mut self.game.assets));
         let mut sprites: Vec<SpriteInstance> = quads.iter().map(Self::tint_instance).collect();
         let mut texts = self.game.text_quads();
         if let Some(choices) = &self.game.choices {
@@ -234,6 +235,9 @@ impl App {
         }
         self.sprites = sprites;
         self.texts = texts;
+        for warning in self.atlas.take_warnings() {
+            *self.game.diagnostics.entry(warning).or_insert(0) += 1;
+        }
     }
 
     /// Builds a render instance from an atlas quad, carrying its alpha and its picture tone.

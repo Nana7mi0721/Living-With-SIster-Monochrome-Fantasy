@@ -81,6 +81,7 @@ fn main() -> ExitCode {
     let mut answer_delay: u32 = 0;
     let mut pointer: Option<(i32, i32)> = None;
     let mut press_frame: Option<usize> = None;
+    let mut key_frames: Vec<(usize, u32)> = Vec::new();
     let mut filter: Option<String> = None;
     let mut frame_limit: Option<u64> = None;
     let mut hold_message = false;
@@ -141,6 +142,14 @@ fn main() -> ExitCode {
             // Frame (0-based) at which that pointer presses the left button once.
             "--press-frame" => {
                 press_frame = args.next().and_then(|value| value.parse().ok());
+            }
+            // Frame (0-based) at which a WOLF key code is held for exactly one frame.
+            // Repeat the flag to inject more than one press; H-scene polls wait on
+            // opcode 123, which the mouse path cannot satisfy.
+            "--key-frame" => {
+                if let Some((frame, code)) = args.next().as_deref().and_then(parse_key_frame) {
+                    key_frames.push((frame, code));
+                }
             }
             "--map" | "-m" => {
                 map = args.next();
@@ -233,6 +242,7 @@ fn main() -> ExitCode {
                     delay: answer_delay,
                     pointer,
                     press_frame,
+                    key_frames,
                     auto_events,
                 };
                 run_capture(
@@ -349,6 +359,10 @@ fn print_help() {
     println!("    --hold-message    Park on the first 101 message instead of dismissing it.");
     println!("    --pointer <x,y>   Put the mouse pointer at a game pixel for the whole capture.");
     println!("    --press-frame <N> Frame at which --pointer clicks the left button once.");
+    println!(
+        "    --key-frame N:CODE Frame at which a WOLF key code is held for one frame (repeatable);"
+    );
+    println!("                     10=decide 11=cancel 12=sub 2/4/6/8=directions.");
     println!("    --load-save <FILE>  Photograph a retail .sav instead of a script entry.");
     println!("    --engine-events <ids>  Comma separated ids that replace ENGINE_ALWAYS");
     println!("    --auto-events <on|off> Run the run_condition == 2 scheduler (default on)");
@@ -362,6 +376,12 @@ fn print_help() {
     println!("    -r, --root <DIR>  Unpacked data root containing BasicData/ and MapData/.");
     println!("                      Defaults to ./work/full, then $WOLF_DATA_ROOT.");
     println!("    -h, --help        Print this help.");
+}
+
+/// Parses a `frame:code` key injection argument.
+fn parse_key_frame(value: &str) -> Option<(usize, u32)> {
+    let (frame, code) = value.split_once(':')?;
+    Some((frame.trim().parse().ok()?, code.trim().parse().ok()?))
 }
 
 /// Parses a `x,y` pointer argument.
@@ -1467,7 +1487,7 @@ fn tint_instance(quad: &wolf_game::atlas::SpriteQuad) -> SpriteInstance {
 /// chain) and an arbitrary map event (the M2 story scripts, which never call the
 /// title at all).
 /// How a headless capture answers choice prompts.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 struct Answers {
     /// Option to preselect and confirm; `None` holds every prompt open (the title).
     index: Option<usize>,
@@ -1477,6 +1497,8 @@ struct Answers {
     pointer: Option<(i32, i32)>,
     /// 0-based frame at which the left mouse button goes down for one frame.
     press_frame: Option<usize>,
+    /// (frame, WOLF key code) pairs injected for exactly one frame each.
+    key_frames: Vec<(usize, u32)>,
     /// Whether the `run_condition == 2` scheduler runs (default true; see
     /// `--auto-events off`).
     auto_events: bool,
@@ -1637,12 +1659,18 @@ fn run_capture(
         // One frame of a held button is a click: the host compares against the previous
         // frame, so the press edge survives exactly one step.
         game.mouse_buttons = u32::from(answers.press_frame == Some(frame));
+        game.key_bits = answers
+            .key_frames
+            .iter()
+            .find(|(at, _)| *at == frame)
+            .map_or(0, |(_, code)| wolf_game::key::bits_for_code(*code as i32));
         let outcome = game.frame();
         peak = peak.max(outcome.report.running);
     }
 
     let mut atlas = Atlas::new();
-    let mut sprites = atlas.sprites(&game.screen, &mut game.assets);
+    let mut sprites = game.tile_quads(&mut atlas);
+    sprites.extend(atlas.sprites(&game.screen, &mut game.assets));
     let mut texts = game.text_quads();
     // A WOLF script never draws its own choice frame: the engine paints a window skin and
     // moves a cursor over it, at the coordinates system variables 3 (x) and 4 (y) name.
@@ -1702,6 +1730,9 @@ fn run_capture(
         }
     }
     let [atlas_w, atlas_h] = atlas.size();
+    for warning in atlas.take_warnings() {
+        *game.diagnostics.entry(warning).or_insert(0) += 1;
+    }
 
     println!("capture");
     println!("  data root : {}", root.display());
@@ -2438,7 +2469,7 @@ fn run_map_event(
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_capture_entry, CaptureEntry};
+    use super::{parse_key_frame, resolve_capture_entry, CaptureEntry};
     use std::path::{Path, PathBuf};
 
     /// `capture --event 239` used to fall through to `Entry::Boot` because `boot`
@@ -2495,6 +2526,15 @@ mod tests {
                 event: 0,
             }
         );
+    }
+
+    #[test]
+    fn key_frames_parse_frame_and_wolf_code() {
+        assert_eq!(parse_key_frame("12:10"), Some((12, 10)));
+        assert_eq!(parse_key_frame(" 3 : 11 "), Some((3, 11)));
+        assert_eq!(parse_key_frame("12"), None);
+        assert_eq!(parse_key_frame("x:10"), None);
+        assert_eq!(parse_key_frame("12:y"), None);
     }
 
     #[test]

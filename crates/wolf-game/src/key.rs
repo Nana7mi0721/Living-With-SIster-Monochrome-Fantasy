@@ -85,6 +85,31 @@ pub const CODE_UP_LEFT: i32 = 7;
 /// Diagonal, numpad 9 - inferred, never compared.
 pub const CODE_UP_RIGHT: i32 = 9;
 
+/// The host bit a script key code corresponds to.
+///
+/// `--key-frame` names a WOLF key code (10 decide, 11 cancel, ...), because those are
+/// the numbers the scripts compare against; the host needs the port bit instead.
+#[must_use]
+pub fn bits_for_code(code: i32) -> u32 {
+    match code {
+        CODE_OK => OK,
+        CODE_CANCEL => CANCEL,
+        CODE_SUB => SUB,
+        CODE_DOWN => DOWN,
+        CODE_LEFT => LEFT,
+        CODE_RIGHT => RIGHT,
+        CODE_UP => UP,
+        CODE_DOWN_LEFT => DOWN | LEFT,
+        CODE_DOWN_RIGHT => DOWN | RIGHT,
+        CODE_UP_LEFT => UP | LEFT,
+        CODE_UP_RIGHT => UP | RIGHT,
+        // 13 is the pause code above; no script compares it, but a caller may still
+        // name it and the mapping is the only one that makes the poll see 13.
+        13 => PAUSE,
+        _ => 0,
+    }
+}
+
 /// The key code a script reads for the currently held keys.
 ///
 /// Action keys win over directions because that is the order every menu in this
@@ -154,6 +179,28 @@ mod tests {
         assert_eq!(code(UP | RIGHT), CODE_UP_RIGHT);
         assert_eq!(code(DOWN | LEFT), CODE_DOWN_LEFT);
         assert_eq!(code(DOWN | RIGHT), CODE_DOWN_RIGHT);
+    }
+
+    #[test]
+    fn injected_codes_round_trip_through_the_host_bits() {
+        for code in [
+            CODE_OK,
+            CODE_CANCEL,
+            CODE_SUB,
+            CODE_DOWN,
+            CODE_LEFT,
+            CODE_RIGHT,
+            CODE_UP,
+            CODE_DOWN_LEFT,
+            CODE_DOWN_RIGHT,
+            CODE_UP_LEFT,
+            CODE_UP_RIGHT,
+            13,
+        ] {
+            assert_eq!(super::code(bits_for_code(code)), code, "code {code}");
+        }
+        assert_eq!(bits_for_code(-1), 0);
+        assert_eq!(bits_for_code(99), 0);
     }
 
     #[test]

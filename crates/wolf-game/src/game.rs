@@ -23,16 +23,19 @@ use std::sync::Arc;
 use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
 use wolf_format::mps::Map;
+use wolf_format::tileset::TileSetData;
 use wolf_vm::{
     ChoiceReply, DbOp, DbValue, Host, LogLevel, PictureCmd, Program, ProgramSet, SaveOp,
     SaveTarget, SoundCmd, StepReport, Vm,
 };
 
 use crate::assets::Assets;
+use crate::atlas::{Atlas, SpriteQuad};
 use crate::auto_events::AutoEvents;
 use crate::db::Databases;
 use crate::map_runtime::MapRuntime;
 use crate::picture::{PictureKind, Screen, ANCHOR_CENTRE, SCREEN_H, SCREEN_W};
+use crate::tilemap::TileMap;
 
 /// The event the game opens with in this build (the "original title screen A").
 pub const TITLE_EVENT: u32 = 42;
@@ -205,6 +208,13 @@ pub struct Game {
     pub vm: Vm,
     /// Live pictures, in WOLF draw order.
     pub screen: Screen,
+    /// The current map's tile layers, drawn underneath every picture. WOLF draws the
+    /// tile grid first and the picture layer over it; keeping the two separate here
+    /// preserves that order and lets a map switch replace only the tile half.
+    pub tilemap: Option<TileMap>,
+    /// The six decoded tilesets. Retained so a teleport can rebuild [`Self::tilemap`]
+    /// without re-reading TileSetData.dat.
+    tilesets: Option<TileSetData>,
     /// Decoded assets, cached by WOLF asset name.
     pub assets: Assets,
     /// The three .dat databases plus the cells the engine fills in itself
@@ -298,6 +308,9 @@ impl Game {
                 (u32::from(width), u32::from(height))
             });
         let databases = Databases::load(&basic, screen);
+        let tilesets = std::fs::read(basic.join("TileSetData.dat"))
+            .ok()
+            .and_then(|bytes| TileSetData::parse(&bytes).ok());
         // System.sav is a complete save file in this game: use it as the template so a
         // brand-new game can write its first save without inventing part1/part4.
         let base_save = crate::savegame::read_save(&root.join("Save").join("System.sav")).ok();
@@ -305,6 +318,8 @@ impl Game {
         Ok(Self {
             vm: Vm::new(programs),
             screen: Screen::new(),
+            tilemap: None,
+            tilesets,
             assets: Assets::new(&root),
             databases,
             key_bits: 0,
@@ -500,8 +515,34 @@ impl Game {
     /// (an autorun page would be started by `MapRuntime` too, and starting it
     /// twice is a behaviour change nobody asked for).
     pub fn start_pages(&mut self, map: &Map, skip: Option<u32>) -> usize {
+        self.tilemap = match &self.tilesets {
+            Some(sets) => sets
+                .get(map.tileset_index)
+                .map(|tileset| TileMap::new(map, tileset, sets.version)),
+            None => None,
+        };
         self.runtime = MapRuntime::collect_except(map, skip);
         self.runtime.start_pending(&mut self.vm)
+    }
+
+    /// Builds the tile-layer quads for the current map.
+    ///
+    /// This is the layer WOLF draws before every picture. It is empty for a map with no
+    /// tile data and for a game whose TileSetData.dat is absent, which keeps headless
+    /// event-only runs working exactly as before.
+    pub fn tile_quads(&mut self, atlas: &mut Atlas) -> Vec<SpriteQuad> {
+        let Some(tilemap) = self.tilemap.as_ref() else {
+            return Vec::new();
+        };
+        // The camera is fixed at the map origin until the map runtime grows scrolling;
+        // all playable maps in this game fit the 1024x576 viewport at their origin.
+        tilemap.quads(
+            atlas,
+            &mut self.assets,
+            [0, 0],
+            [crate::picture::SCREEN_W, crate::picture::SCREEN_H],
+            self.playtime_frames,
+        )
     }
 
     /// Switches to the map at `path` and starts its automatic pages.
