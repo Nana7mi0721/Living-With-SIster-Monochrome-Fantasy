@@ -398,6 +398,45 @@ pub enum DbValue {
     Str(String),
 }
 
+/// Where a `220`/`221`/`222` instruction points.
+///
+/// WOLF chooses between a slot and an explicit path by the *type* of the magic
+/// operand, not by its value: a string variable holds `Save/System.sav`, a
+/// numeric variable holds a slot number (docs/OPCODE_220_SAVE.md section 2.1).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SaveTarget {
+    /// A numeric slot, one-based; the engine maps it to `Save/SaveDataNN.sav`.
+    Slot(i32),
+    /// An explicit path from a string variable.
+    Path(String),
+}
+
+/// A decoded `220 SaveLoad` / `221 LoadGame` / `222 SaveGame` instruction.
+///
+/// The three opcodes share a magic-evaluated file operand but differ in what the
+/// other two operands mean, so one struct with an explicit [`SaveOp::opcode`] is
+/// simpler than three nearly identical host calls.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SaveOp {
+    /// 220, 221 or 222.
+    pub opcode: u8,
+    /// 220 only: 0 = save, 1 = load.
+    pub mode: i32,
+    /// The file to read or write.
+    pub file: SaveTarget,
+    /// 221 only: the running variable that receives the loaded value.
+    pub destination: i32,
+    /// 221/222: the variable address inside the save file, raw magic.
+    pub address: i32,
+    /// 222 only: the source value, already evaluated.
+    pub value: i32,
+    /// The trailing flag; 0 in 34 of 37 `221` sites and all 5 `222` sites.
+    pub flag: i32,
+    /// The common event that issued the instruction, so a `1_600_000+`
+    /// address can be resolved against that event's self-variable group.
+    pub owner: EventId,
+}
+
 /// What stopped (or did not stop) a coroutine.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Signal {
@@ -526,9 +565,13 @@ pub trait Host {
         let _ = (kind, duration, args);
     }
 
-    /// `220 SaveLoad`, `221`, `222`.
-    fn save_load(&mut self, args: &[i32]) {
-        let _ = args;
+    /// `220 SaveLoad`, `221 LoadGame`, `222 SaveGame`.
+    ///
+    /// A `221` read returns the value the interpreter must store in
+    /// [`SaveOp::destination`]; the other two return `None`.
+    fn save_load(&mut self, op: &SaveOp) -> Option<i32> {
+        let _ = op;
+        None
     }
 
     /// `211 CommonEventReserve`: schedule an event to start after this one ends.
@@ -1758,8 +1801,44 @@ fn execute(
                 None
             }
             220..=222 => {
-                let args: Vec<i32> = (0..argc(cmd)).map(|i| arg(cmd, i)).collect();
-                host.save_load(&args);
+                // The file operand is the one place where the magic *type*
+                // matters: a string variable holds an explicit path while a
+                // numeric variable holds a slot number (docs/OPCODE_220_SAVE.md
+                // section 2.1). All other operands stay raw where they are
+                // addresses (221 arg0, 221/222 arg2) and are evaluated where they
+                // are values (220 mode, 222 source, the trailing flag).
+                let file_raw = arg(cmd, 1);
+                let file = if matches!(Magic::decode(file_raw).kind(), MagicKind::StrVar) {
+                    SaveTarget::Path(eval_str(file_raw, inst, vars))
+                } else {
+                    SaveTarget::Slot(eval_num(file_raw, inst, vars))
+                };
+                let opcode = cmd.opcode;
+                let op = SaveOp {
+                    opcode: opcode as u8,
+                    mode: if opcode == 220 {
+                        eval_num(arg(cmd, 0), inst, vars)
+                    } else {
+                        0
+                    },
+                    file,
+                    destination: if opcode == 221 { arg(cmd, 0) } else { 0 },
+                    address: if opcode == 220 { 0 } else { arg(cmd, 2) },
+                    value: if opcode == 222 {
+                        eval_num(arg(cmd, 0), inst, vars)
+                    } else {
+                        0
+                    },
+                    flag: if argc(cmd) >= 4 {
+                        eval_num(arg(cmd, 3), inst, vars)
+                    } else {
+                        0
+                    },
+                    owner: inst.program.id,
+                };
+                if let Some(value) = host.save_load(&op) {
+                    store_num(inst, vars, op.destination, value);
+                }
                 inst.pc += 1;
                 None
             }
@@ -2293,6 +2372,10 @@ mod tests {
         // The answer served back for a 250 read, if any. Served for writes too, so a
         // test can prove the interpreter drops it.
         db_answer: Option<DbValue>,
+        // Every 220/221/222 the interpreter decoded, in order.
+        saves: Vec<SaveOp>,
+        // The answer served back for a 221 read.
+        save_answer: Option<i32>,
     }
 
     impl Host for Recorder {
@@ -2337,6 +2420,10 @@ mod tests {
         fn database(&mut self, op: &DbOp) -> Option<DbValue> {
             self.databases.push(op.clone());
             self.db_answer.clone()
+        }
+        fn save_load(&mut self, op: &SaveOp) -> Option<i32> {
+            self.saves.push(op.clone());
+            self.save_answer
         }
         fn close_message(&mut self) {
             self.closed += 1;
@@ -3179,6 +3266,58 @@ mod tests {
             Some(DbValue::Str("習得した".to_owned()))
         );
         assert!(string_write.string_write());
+        assert!(host.logs.is_empty(), "unexpected logs");
+    }
+
+    #[test]
+    fn save_ops_decode_slot_paths_and_store_the_221_answer() {
+        // ev48 pc209 is the canonical 221: `[self20, "Save/System.sav", 2000000, 0]`.
+        // The file operand is a *string* variable, so it must arrive as a path rather
+        // than a slot; the destination and the in-save address stay raw magic.
+        let ev = event(
+            7,
+            "save ops",
+            vec![
+                cmd(122, &[3_000_009], &["Save/System.sav"]),
+                cmd(121, &[1_600_012, 2, 0, 0], &[]),
+                cmd(221, &[1_600_020, 3_000_009, 2_000_546, 0], &[]),
+                cmd(221, &[2_000_001, 2_000_000, 2_000_002, 0], &[]),
+                cmd(222, &[1_600_012, 3_000_009, 2_000_302, 0], &[]),
+                cmd(220, &[1, 3_000_009], &[]),
+                // Copy self[20] into a normal variable so the test can see the answer.
+                cmd(121, &[2_000_001, 1_600_020, 0, 0], &[]),
+            ],
+        );
+        let mut vm = vm_with(vec![ev]);
+        vm.start_event(7).unwrap();
+        let mut host = Recorder {
+            save_answer: Some(7),
+            ..Recorder::default()
+        };
+        vm.step_frame(&mut host);
+        assert_eq!(host.saves.len(), 4);
+
+        let read = &host.saves[0];
+        assert_eq!(read.opcode, 221);
+        assert_eq!(read.file, SaveTarget::Path("Save/System.sav".to_owned()));
+        assert_eq!(read.destination, 1_600_020);
+        assert_eq!(read.address, 2_000_546);
+        assert_eq!(read.owner, 7);
+
+        let slot_read = &host.saves[1];
+        assert_eq!(slot_read.file, SaveTarget::Slot(0), "a numeric operand is a slot");
+
+        let write = &host.saves[2];
+        assert_eq!(write.opcode, 222);
+        assert_eq!(write.value, 2, "the source operand is evaluated");
+        assert_eq!(write.address, 2_000_302);
+
+        let load = &host.saves[3];
+        assert_eq!(load.opcode, 220);
+        assert_eq!(load.mode, 1);
+        assert_eq!(load.file, SaveTarget::Path("Save/System.sav".to_owned()));
+
+        assert_eq!(vm.vars.get(1), 7, "the 221 answer reached its destination");
         assert!(host.logs.is_empty(), "unexpected logs");
     }
 

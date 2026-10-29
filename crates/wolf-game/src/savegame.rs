@@ -35,6 +35,35 @@ pub struct LoadedSave {
     pub choice_anchor: (i32, i32),
 }
 
+/// Reads and decrypts one save file.
+pub fn read_save(path: &Path) -> Result<SaveFile, String> {
+    let bytes = std::fs::read(path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+    SaveFile::parse(&bytes).map_err(|err| format!("cannot parse {}: {err}", path.display()))
+}
+
+/// Encrypts and writes one save file, creating `Save/` when needed.
+pub fn write_save(path: &Path, save: &SaveFile) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|err| format!("cannot create {}: {err}", parent.display()))?;
+    }
+    let bytes = save
+        .to_bytes()
+        .map_err(|err| format!("cannot encode {}: {err}", path.display()))?;
+    std::fs::write(path, bytes).map_err(|err| format!("cannot write {}: {err}", path.display()))
+}
+
+/// A `220` request that needs the whole `Game`, not just its picture layer.
+///
+/// The interpreter borrows `Game` field by field while it runs, so a full save
+/// load is queued here and applied by [`crate::game::Game::frame`] immediately
+/// after the VM step that asked for it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SaveRequest {
+    /// Load the given file into the live game.
+    Load(std::path::PathBuf),
+}
+
 /// Parses \`path\` and applies it to \`game\`.
 pub fn load_into(game: &mut Game, path: &Path) -> Result<LoadedSave, String> {
     let bytes = std::fs::read(path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;

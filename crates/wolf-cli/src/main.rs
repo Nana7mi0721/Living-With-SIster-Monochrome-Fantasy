@@ -976,9 +976,10 @@ impl Host for TraceHost {
         ));
     }
 
-    fn save_load(&mut self, args: &[i32]) {
+    fn save_load(&mut self, op: &wolf_vm::SaveOp) -> Option<i32> {
         self.saves += 1;
-        self.note(format!("  22x saveload {args:?}"));
+        self.note(format!("  22x saveload op {} {:?}", op.opcode, op.file));
+        None
     }
 
     fn reserve(&mut self, event: wolf_vm::exec::EventId) {

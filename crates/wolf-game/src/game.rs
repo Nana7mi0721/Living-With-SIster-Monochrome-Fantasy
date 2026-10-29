@@ -24,8 +24,8 @@ use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
 use wolf_format::mps::Map;
 use wolf_vm::{
-    ChoiceReply, DbOp, DbValue, Host, LogLevel, PictureCmd, Program, ProgramSet, SoundCmd,
-    StepReport, Vm,
+    ChoiceReply, DbOp, DbValue, Host, LogLevel, PictureCmd, Program, ProgramSet, SaveOp,
+    SaveTarget, SoundCmd, StepReport, Vm,
 };
 
 use crate::assets::Assets;
@@ -234,6 +234,8 @@ pub struct Game {
     /// True once the engine events have been started, so a map switch cannot start a
     /// second copy of a coroutine that is meant to live for the whole session.
     engine_events_started: bool,
+    /// `220` loads queued by the interpreter; applied after the VM step that asked.
+    save_requests: Vec<crate::savegame::SaveRequest>,
     root: PathBuf,
 }
 
@@ -289,6 +291,7 @@ impl Game {
             previous_mouse_buttons: 0,
             engine_always: None,
             engine_events_started: false,
+            save_requests: Vec::new(),
             root,
         })
     }
@@ -692,7 +695,34 @@ impl Game {
             mouse: self.mouse,
             mouse_buttons: self.mouse_buttons,
             previous_mouse_buttons: self.previous_mouse_buttons,
+            root: &self.root,
+            save_requests: &mut self.save_requests,
         });
+        // A `220` load replaces the picture layer and the normal variables, so it runs
+        // as soon as the VM step that requested it has released its borrow of `Game`.
+        let requests = std::mem::take(&mut self.save_requests);
+        for request in requests {
+            match request {
+                crate::savegame::SaveRequest::Load(path) => {
+                    match crate::savegame::load_into(self, &path) {
+                        Ok(loaded) => {
+                            self.diagnostics.insert(
+                                format!(
+                                    "220 SaveLoad: loaded {} picture(s), {} variable(s)",
+                                    loaded.pictures, loaded.normal_vars
+                                ),
+                                1,
+                            );
+                        }
+                        Err(err) => {
+                            self.diagnostics
+                                .entry(format!("220 SaveLoad: {err}"))
+                                .or_insert(0);
+                        }
+                    }
+                }
+            }
+        }
         // Age the UI state after the VM ran, so a message shown this frame is 0 frames old.
         for message in &mut self.messages {
             message.frames = message.frames.saturating_add(1);
@@ -760,6 +790,64 @@ fn combine_cell(op: u8, current: i32, operand: i32) -> i32 {
         6 => current.max(operand),
         7 => current.min(operand),
         _ => operand,
+    }
+}
+
+/// Read one `221` address out of a parsed save file.
+///
+/// Addresses use the same magic banks as the running VM: `2_000_000+n` is normal
+/// variable `n`, `1_600_000+n` is self variable `n` of the *calling* event, and
+/// `9_000_000+n` is system variable `n`. `Sys24` is the save-existence flag the
+/// menu probes before it offers a slot; `Sys29` is the play time in seconds.
+fn save_address(save: &wolf_save::SaveFile, op: &SaveOp) -> Option<i32> {
+    match op.address {
+        2_000_000..=2_999_999 => save.normal_var((op.address - 2_000_000) as usize),
+        1_600_000..=1_699_999 => save.self_var(op.owner, (op.address - 1_600_000) as usize),
+        9_000_000..=9_099_999 => {
+            let index = (op.address - 9_000_000) as usize;
+            match index {
+                24 => Some(1),
+                29 => save.playtime_frames().map(|frames| (frames / 60) as i32),
+                0..=12 => save
+                    .part2
+                    .vars3_21
+                    .get(index + 6)
+                    .map(|value| *value as i32),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Write one `222` value into a parsed save file, returning false for an address
+/// outside every bank.
+fn write_save_address(save: &mut wolf_save::SaveFile, op: &SaveOp) -> bool {
+    match op.address {
+        2_000_000..=2_999_999 => save
+            .set_normal_var((op.address - 2_000_000) as usize, op.value)
+            .unwrap_or(false),
+        1_600_000..=1_699_999 => save
+            .set_self_var(op.owner, (op.address - 1_600_000) as usize, op.value)
+            .unwrap_or(false),
+        9_000_000..=9_099_999 => {
+            let index = (op.address - 9_000_000) as usize;
+            match index {
+                29 => save
+                    .set_playtime_frames(op.value.max(0) as u32 * 60)
+                    .is_ok(),
+                0..=12 => {
+                    if let Some(cell) = save.part2.vars3_21.get_mut(index + 6) {
+                        *cell = op.value.max(0) as u32;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            }
+        }
+        _ => false,
     }
 }
 
@@ -882,12 +970,30 @@ struct GameHost<'a> {
     mouse: [i32; 2],
     mouse_buttons: u32,
     previous_mouse_buttons: u32,
+    root: &'a Path,
+    save_requests: &'a mut Vec<crate::savegame::SaveRequest>,
 }
 
 impl GameHost<'_> {
     fn note(&mut self, text: String) {
         *self.diagnostics.entry(text).or_insert(0) += 1;
         self.stats.unmodelled += 1;
+    }
+
+    /// Resolve a `220`/`221`/`222` file operand. A slot is one-based and maps to
+    /// `Save/SaveDataNN.sav`; an explicit path is relative to the game root.
+    fn save_path(&self, file: &SaveTarget) -> std::path::PathBuf {
+        match file {
+            SaveTarget::Slot(slot) => self.root.join("Save").join(format!("SaveData{slot:02}.sav")),
+            SaveTarget::Path(path) => {
+                let path = std::path::PathBuf::from(path);
+                if path.is_absolute() {
+                    path
+                } else {
+                    self.root.join(path)
+                }
+            }
+        }
     }
 
     /// 1 when the pointer is over the picture, 0 when not, -1 when there is no such
@@ -1111,10 +1217,53 @@ impl Host for GameHost<'_> {
         }
     }
 
-    fn save_load(&mut self, args: &[i32]) {
-        self.note(format!(
-            "220/221/222 SaveLoad: args {args:?} not modelled yet"
-        ));
+    fn save_load(&mut self, op: &SaveOp) -> Option<i32> {
+        let path = self.save_path(&op.file);
+        match op.opcode {
+            220 => {
+                if op.mode == 1 {
+                    // A full load replaces the screen and every normal variable, so it
+                    // cannot run while `Game` is borrowed field-by-field by the VM.
+                    // Queue it; `Game::frame` applies it right after the VM step.
+                    self.save_requests
+                        .push(crate::savegame::SaveRequest::Load(path));
+                } else {
+                    // Writing a full save needs the map snapshot and runtime tables
+                    // that the port does not model yet; report rather than write a
+                    // half-empty file that the retail engine would refuse.
+                    self.note(format!(
+                        "220 SaveLoad: full save to {} not modelled yet",
+                        path.display()
+                    ));
+                }
+                None
+            }
+            221 => match crate::savegame::read_save(&path) {
+                Ok(save) => Some(save_address(&save, op).unwrap_or(0)),
+                // A missing slot is the normal "no save here" answer: 221 is used for
+                // existence probes (docs/OPCODE_220_SAVE.md section 3.3).
+                Err(_) => Some(0),
+            },
+            222 => {
+                match crate::savegame::read_save(&path) {
+                    Ok(mut save) => {
+                        if write_save_address(&mut save, op) {
+                            if let Err(err) = crate::savegame::write_save(&path, &save) {
+                                self.note(format!("222 SaveGame: {err}"));
+                            }
+                        } else {
+                            self.note(format!(
+                                "222 SaveGame: address {} is outside every bank",
+                                op.address
+                            ));
+                        }
+                    }
+                    Err(err) => self.note(format!("222 SaveGame: {err}")),
+                }
+                None
+            }
+            _ => None,
+        }
     }
 
     fn reserve(&mut self, event: wolf_vm::exec::EventId) {
@@ -1412,5 +1561,88 @@ mod tests {
         let before = game.databases.num(container, 0, 0, 0).unwrap_or(0);
         game.databases.set_num(container, 0, 0, 0, before + 1);
         assert_eq!(game.databases.num(container, 0, 0, 0), Some(before + 1));
+    }
+
+    fn retail_save(number: u32) -> Option<wolf_save::SaveFile> {
+        // The retail saves are not part of the unpacked data root, so the test only
+        // runs on this machine. work/retail_backup is the byte copy taken before any
+        // capture touched the install.
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.pop();
+        path.pop();
+        path.push("work");
+        path.push("retail_backup");
+        path.push("Save");
+        path.push(format!("SaveData{number:02}.sav"));
+        if !path.is_file() {
+            eprintln!("skipping: no retail save at {}", path.display());
+            return None;
+        }
+        Some(crate::savegame::read_save(&path).expect("retail save must parse"))
+    }
+
+    fn save_op(opcode: u8, address: i32, owner: u32) -> SaveOp {
+        SaveOp {
+            opcode,
+            mode: 0,
+            file: SaveTarget::Slot(0),
+            destination: 0,
+            address,
+            value: 0,
+            flag: 0,
+            owner,
+        }
+    }
+
+    #[test]
+    fn a_save_address_finds_normal_self_and_system_variables() {
+        let Some(save) = retail_save(1) else { return };
+        // SaveData01 row 0 of the normal-variable table: slot 7 is the money the HUD
+        // shows as 7586 G, and slot 8 is the action points the same HUD shows as 25.
+        assert_eq!(save_address(&save, &save_op(221, 2_000_007, 0)), Some(7586));
+        assert_eq!(save_address(&save, &save_op(221, 2_000_008, 0)), Some(25));
+        // Event 131 keeps the save-slot number in its self variable 12.
+        assert_eq!(
+            save_address(&save, &save_op(221, 1_600_012, 131)),
+            Some(8),
+            "self variables are addressed by the calling event id"
+        );
+        // 9_000_003 is the choice-window X the saved screen was using, and 9_000_029 is
+        // the play time in whole seconds (the save stores frames).
+        assert_eq!(save_address(&save, &save_op(221, 9_000_003, 0)), Some(512));
+        assert_eq!(
+            save_address(&save, &save_op(221, 9_000_029, 0)),
+            Some((save.playtime_frames().expect("play time") / 60) as i32)
+        );
+        assert_eq!(save_address(&save, &save_op(221, 2_000_999, 0)), None);
+    }
+
+    #[test]
+    fn a_save_write_reaches_the_next_read() {
+        let Some(mut save) = retail_save(1) else { return };
+        let mut op = save_op(222, 2_000_007, 0);
+        op.value = 1234;
+        assert!(write_save_address(&mut save, &op));
+        assert_eq!(save_address(&save, &save_op(221, 2_000_007, 0)), Some(1234));
+        let mut playtime = save_op(222, 9_000_029, 0);
+        playtime.value = 277;
+        assert!(write_save_address(&mut save, &playtime));
+        assert_eq!(save.playtime_frames(), Some(277 * 60));
+        assert!(!write_save_address(&mut save, &save_op(222, 9_000_050, 0)));
+    }
+
+    #[test]
+    fn a_save_file_round_trips_through_the_writer() {
+        let Some(save) = retail_save(1) else { return };
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("target")
+            .join("test-scratch");
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let path = dir.join("save-roundtrip.sav");
+        crate::savegame::write_save(&path, &save).expect("write");
+        let again = crate::savegame::read_save(&path).expect("read");
+        assert_eq!(again.to_bytes(), save.to_bytes());
+        let _ = std::fs::remove_file(&path);
     }
 }

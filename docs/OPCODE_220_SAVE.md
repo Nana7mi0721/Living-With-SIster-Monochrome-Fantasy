@@ -416,3 +416,47 @@ impl SaveFile {
 1. SAVE_SPEC §5 把 SavePart3 描述成「地图与事件运行时表」，现在可以补上 §6.1 的定位：`list_words` = 500（或 550）组 ×100 个セルフ数値、`slot_strings` = 同一批组 ×5 个セルフ文字列。
 2. ~~SAVE_SPEC 未记录「通常変数 / システム変数 找不到落盘区」~~ —— **已写并已改正**：SAVE_SPEC §6.1 记录「通常変数 = row 0」的三条证据与逐档表值，§13 只保留「システム変数没有落盘区」这一条真缺口。
 3. `docs/FORMAT_SPEC.md` §9.3 的「chunk 序列」措辞仍与实现不符（SAVE_SPEC §1.3 已纠正），建议 Lead 统一。
+
+---
+
+## §11 引擎侧落地记录（Lead 追加，2026-xx）
+
+### 11.1 解释器：`SaveOp` 通道（已实现）
+
+`crates/wolf-vm/src/exec.rs` 新增：
+
+```rust
+pub enum SaveTarget { Slot(i32), Path(String) }
+pub struct SaveOp {
+    pub opcode: u8,        // 220 / 221 / 222
+    pub mode: i32,         // 220: 0 = save, 1 = load; unused by 221/222
+    pub file: SaveTarget,  // numeric operand = slot, string variable = path
+    pub destination: i32,  // 221: raw arg0, receives the answer
+    pub address: i32,      // 221/222: raw arg2, address inside the save
+    pub value: i32,        // 222: evaluated arg0
+    pub flag: i32,         // evaluated arg3 (0 when argc < 4)
+    pub owner: u32,        // the calling event id, for self-variable addressing
+}
+```
+
+`Host::save_load(&SaveOp) -> Option<i32>` is the only host hook; `221` stores the returned `i32` into `destination`, `220`/`222` ignore it. File operands are resolved by magic kind: `MagicKind::StrVar` evaluates to `SaveTarget::Path`, every other kind evaluates to `SaveTarget::Slot`. `address` and `destination` stay raw opcodes on purpose - they are addresses, not values.
+
+### 11.2 游戏层：`GameHost::save_load`（已实现）
+
+- Slot → `root/Save/SaveData{slot:02}.sav`; path → relative to the game root unless absolute.
+- 220 `mode=1` queues `SaveRequest::Load(path)`; `Game::frame` applies it after `vm.step_frame` with `savegame::load_into`, which clears the picture screen and rebuilds it from part5, restores 800 normal variables, playtime and Sys3/Sys4.
+- 220 `mode=0` is **still a diagnostic note** (`full save ... not modelled yet`): building a complete part1 map snapshot, event runtime state and variable database from our live `Game` is not implemented yet. This is the one remaining piece of the 220 story.
+- 221 reads the file, maps `address` through `save_address` (`2_000_000+n` normal, `1_600_000+n` self, `9_000_000+n` system) and returns `Some(0)` when the file does not exist (the script uses that as "slot empty").
+- 222 reads, applies `write_save_address` (`set_normal_var`, `set_self_var`, `set_playtime_frames`, `vars3_21[n+6]`) and writes the file back.
+- `flag=1` remains treated as 0 (U2 unchanged).
+
+### 11.3 测试
+
+| 层 | 测试 | 断言 |
+| --- | --- | --- |
+| wolf-vm | `save_ops_decode_slot_paths_and_store_the_221_answer` | 221 的字符串变量 → Path、数值 → Slot(0)、destination/address/owner、222 value 已求值、220 mode=1、221 返回值写回目标变量 |
+| wolf-game | `a_save_address_finds_normal_self_and_system_variables` | 零售 SaveData01：2000007=7586、2000008=25、ev131 self12=8、9000003=512、90000029=playtime/60 |
+| wolf-game | `a_save_write_reaches_the_next_read` | 222 写 2000007=1234 后 221 读回 1234；写 playtime=277 后 `playtime_frames()==16620`；越界地址返回 false |
+| wolf-game | `a_save_file_round_trips_through_the_writer` | `write_save` 后 `read_save` 的 `to_bytes()` 与原件逐字节相等 |
+
+复现：`cargo test -q -p wolf-vm`（79）、`cargo test -q -p wolf-game`（162 + 3 + 1）。

@@ -137,7 +137,10 @@ pub mod field {
     pub const WINDOW_W: usize = 1;
     /// Window height, for the window picture kinds.
     pub const WINDOW_H: usize = 2;
-    /// Constant 1 in every sample.
+    /// Sprite-sheet cell number for file pictures, one-based; constant 1 in every
+    /// plain draw. A `150` draw and a save record agree: retail save 90's 6 x 2
+    /// `stand_imouto_paja2.png` carries pattern 2 here, and save 92's 7 x 1 eye strip
+    /// carries pattern 7, which only fits a one-based count.
     pub const RESERVED: usize = 3;
     /// Opacity, 0..=255.
     pub const OPACITY: usize = 4;
@@ -509,10 +512,9 @@ impl Breath {
 /// back to the pattern its `150` command asked for, 9 wraps to the first pattern, and 10
 /// turns around and walks back.
 ///
-/// The picture layer has no pattern field yet: a `150` picture's animation frame is still
-/// carried verbatim in [`Picture::extras`] and the atlas draws the whole texture. This
-/// state machine is the switch the draw path will read once patterns are sliced, and it is
-/// kept here - next to the other effects - so the whole `290` surface stays in one place.
+/// [`Picture::pattern_now`] is what the draw path reads: `picture_frame` treats the
+/// returned value as a one-based cell of the picture's [`Picture::split`] grid, so the
+/// state machine drives real animation frames instead of only bookkeeping.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PatternFx {
     /// One of [`EFFECT_PATTERN_ONCE`], [`EFFECT_PATTERN_LOOP`], [`EFFECT_PATTERN_PINGPONG`].
@@ -1238,7 +1240,9 @@ impl Screen {
                 _ => {
                     // 8, 9 and 10: the third value is not part of the instruction at all
                     // (docs/OPCODE_290.md section 5.8), and the action time is the hold.
-                    let base = picture.pattern.map_or(0, |fx| fx.base);
+                    let base = picture
+                        .pattern
+                        .map_or(picture.pattern_index as i32, |fx| fx.base);
                     picture.pattern = Some(PatternFx::new(kind, v1, v2, duration, base));
                 }
             }
@@ -1484,7 +1488,11 @@ where
         if cell_w == 0 || cell_h == 0 {
             return Some(([0, 0, full_w, full_h], (full_w, full_h)));
         }
-        let index = picture.pattern_index.max(1) - 1;
+        let pattern = picture
+            .pattern_now()
+            .unwrap_or(picture.pattern_index as i32)
+            .max(1);
+        let index = (pattern - 1) as u32;
         let column = index % columns;
         let row = index / columns;
         if row >= rows {
@@ -1542,16 +1550,34 @@ fn merge_args(picture: &mut Picture, args: &[i32]) {
     if let Some(value) = take(args, field::BLEND) {
         picture.blend = value;
     }
-    // Window dimensions only mean something for the window kinds, and the short forms do
+    // For file pictures the same two slots are the sprite-sheet grid and slot 3 is the
+    // one-based cell, so a standing character can be one PNG holding six outfits.
+    if matches!(picture.kind, PictureKind::File | PictureKind::FileString) {
+        if let (Some(columns), Some(rows)) =
+            (take(args, field::WINDOW_W), take(args, field::WINDOW_H))
+        {
+            if columns > 0 && rows > 0 {
+                picture.split = (columns as u32, rows as u32);
+            }
+        }
+        if let Some(pattern) = take(args, field::RESERVED) {
+            if pattern > 0 {
+                picture.pattern_index = pattern as u32;
+            }
+        }
+    }
+    // Window dimensions only mean something for the non-file kinds, and the short forms do
     // not carry them at all; a 0x0 window would make the text invisible, so require > 0 -
     // with one measured exception. All 7 `<LINE>` instructions in this game pass a zero
     // height and still draw a hairline, and refusing the pair here would throw the width
     // away with it (see crates/wolf-game/src/sysgraphic.rs). The exception is tied to the
     // built-in spelling so a degenerate text window is still refused.
-    if let (Some(w), Some(h)) = (take(args, field::WINDOW_W), take(args, field::WINDOW_H)) {
-        let zero_height_ok = h == 0 && crate::sysgraphic::parse(&picture.file).is_some();
-        if w > 0 && (h > 0 || zero_height_ok) {
-            picture.window = Some((w, h));
+    if !matches!(picture.kind, PictureKind::File | PictureKind::FileString) {
+        if let (Some(w), Some(h)) = (take(args, field::WINDOW_W), take(args, field::WINDOW_H)) {
+            let zero_height_ok = h == 0 && crate::sysgraphic::parse(&picture.file).is_some();
+            if w > 0 && (h > 0 || zero_height_ok) {
+                picture.window = Some((w, h));
+            }
         }
     }
     if let Some(value) = take(args, field::FADE_IN) {
@@ -2563,9 +2589,9 @@ mod effect_tests {
             seen
         };
 
-        // 8 stops and hands the picture back to the 150 pattern, which the model does not
-        // carry yet and therefore reports as 0.
-        assert_eq!(walk(EFFECT_PATTERN_ONCE, 3), vec![1, 2, 3, 0]);
+        // 8 stops and hands the picture back to the pattern its 150 command asked for -
+        // the save-sheet default is 1, so the sequence ends at 1 instead of on a stale 3.
+        assert_eq!(walk(EFFECT_PATTERN_ONCE, 3), vec![1, 2, 3, 1]);
         // 9 loops back to the first pattern.
         assert_eq!(walk(EFFECT_PATTERN_LOOP, 3), vec![1, 2, 3, 1]);
         // 10 turns around at the far end and walks back.
@@ -2645,6 +2671,53 @@ mod effect_tests {
         });
         let cell = quads.iter().find(|quad| quad.number == 91).expect("picture 91");
         assert_eq!(cell.src, [0, 0, 400, 650]);
+    }
+
+    /// A `150` draw carries the same grid in its slots 1..3.
+    #[test]
+    fn a_draw_command_carries_the_sprite_grid() {
+        let mut screen = Screen::new();
+        screen.apply(&PictureCmd {
+            number: 90,
+            kind: 0,
+            action: PictureAction::Draw,
+            file: "Picture/stand_imouto_paja2.png".to_owned(),
+            text: String::new(),
+            args: vec![0, 6, 2, 2, 255, 600, 80, 100, 0],
+            animate: Vec::new(),
+            anchor: ANCHOR_TOP_LEFT,
+        });
+        let picture = screen.get(90).expect("picture");
+        assert_eq!(picture.split, (6, 2));
+        assert_eq!(picture.pattern_index, 2);
+        assert_eq!(picture.window, None, "a file picture has no window box");
+        let quads = screen.quads(|name| {
+            (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300))
+        });
+        assert_eq!(quads[0].src, [400, 0, 400, 650]);
+    }
+
+    /// A `290` pattern animation overrides the `150` pattern while it runs.
+    #[test]
+    fn a_pattern_effect_selects_the_sheet_cell() {
+        let mut screen = Screen::new();
+        let mut picture = Picture::new(90);
+        picture.file = "Picture/stand_imouto_paja2.png".to_owned();
+        picture.split = (6, 2);
+        picture.pattern_index = 1;
+        picture.pattern = Some(PatternFx::new(EFFECT_PATTERN_LOOP, 2, 3, 4, 1));
+        screen.insert(picture);
+        let quads = screen.quads(|name| {
+            (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300))
+        });
+        assert_eq!(quads[0].src, [400, 0, 400, 650], "pattern 2 is the second cell");
+        for _ in 0..4 {
+            screen.tick();
+        }
+        let quads = screen.quads(|name| {
+            (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300))
+        });
+        assert_eq!(quads[0].src, [800, 0, 400, 650], "the loop reaches pattern 3 next");
     }
 
     /// The zoom percentage ramps over the action time instead of popping.
