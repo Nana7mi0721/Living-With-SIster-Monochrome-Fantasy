@@ -1359,9 +1359,17 @@ fn run_capture(
         let options = choices.options.clone();
         let cursor = game.choice_cursor();
         let (x, y) = game.choice_anchor();
-        if let Some((panel, rows)) =
-            choice::overlay_at(&mut atlas, &mut game.assets, &options, cursor, x, y)
-        {
+        // Sys8 sizes the option text, so the panel is measured at the size it is drawn.
+        let font_px = game.font_px();
+        if let Some((panel, rows)) = choice::overlay_at_sized(
+            &mut atlas,
+            &mut game.assets,
+            &options,
+            cursor,
+            x,
+            y,
+            font_px,
+        ) {
             sprites.extend(panel);
             texts.extend(rows);
         }
@@ -1397,7 +1405,13 @@ fn run_capture(
     match &game.choices {
         Some(choices) => {
             let (x, y) = game.choice_anchor();
-            let anchored = choice::layout_at(&choices.options, game.choice_cursor(), x, y);
+            let anchored = choice::layout_at_sized(
+                &choices.options,
+                game.choice_cursor(),
+                x,
+                y,
+                game.font_px(),
+            );
             println!(
                 "  choice    : HELD on prompt with {} option(s) {:?}, cursor {} at anchor ({x}, {y})",
                 choices.options.len(),
@@ -1415,6 +1429,16 @@ fn run_capture(
         }
         None => println!("  choice    : none open"),
     }
+    // Sys8 is the font size shared by messages, choices and text pictures, so print it
+    // next to the layout it produced: a capture that looks wrong is usually a stale Sys8.
+    println!("  sys8 font : {:.0} px (Sys8, used by every text path)", game.font_px());
+    println!(
+        "  sys pads  : Sys20 {} Sys22 {} Sys26 {} Sys27 {}",
+        game.sys(20),
+        game.sys(22),
+        game.sys(26),
+        game.sys(27)
+    );
     println!(
         "  atlas     : {} image(s), {:.1}% of {atlas_w}x{atlas_h}",
         atlas.len(),
@@ -1462,7 +1486,7 @@ fn run_capture(
     renderer.draw(&instances);
     let mut items: Vec<TextItem> = texts
         .iter()
-        .map(|text| TextItem::new(text.text.clone(), text.rect, choice::TEXT_PX).with_alpha(text.alpha))
+        .map(|text| TextItem::new(text.text.clone(), text.rect, game.font_px()).with_alpha(text.alpha))
         .collect();
     // The engine draws 101 message text itself: the frame comes from common event 63 as
     // ordinary pictures, the glyphs come from here. Only the newest message is visible,

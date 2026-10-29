@@ -407,6 +407,27 @@ impl Game {
     /// (message::FRAME_PICTURE), so the text laid out here and the frame drawn by the
     /// script agree on the box; when the frame is not up yet the screen edge is the bound.
     #[must_use]
+    /// The engine's font size, from Sys8.
+    ///
+    /// WOLF shares one font size between 文章の表示, 選択肢 and ピクチャ text (work/yado.txt
+    /// lines 56-79), and common event 48 writes Sys8 = 20 during its system-initialisation
+    /// branch, so every text path must read it from the VM instead of hard-coding a size.
+    /// A value outside 8..=64 falls back to crate::message::DEFAULT_FONT_PX: Sys8 is 0
+    /// before event 48 runs, and a negative or absurd size would shred the layout.
+    /// One system variable by index, for diagnostics and for the layout laws that read
+    /// engine state directly (the choice window's margins, the cursor mode).
+    pub fn sys(&self, index: usize) -> i32 {
+        self.vm.vars.get_sys(index)
+    }
+
+    pub fn font_px(&self) -> f32 {
+        let size = self.vm.vars.get_sys(8);
+        if (8..=64).contains(&size) {
+            size as f32
+        } else {
+            crate::message::DEFAULT_FONT_PX
+        }
+    }
     pub fn message_vars(&self) -> crate::message::Vars {
         let sys = |index: usize| self.vm.vars.get_sys(index);
         let (cursor_x, cursor_y) = (sys(5), sys(6));

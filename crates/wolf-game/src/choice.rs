@@ -22,15 +22,18 @@ use crate::window::{self, WindowPiece};
 pub const LINE_HEIGHT: f32 = 30.0;
 /// Padding between the option text and the window frame.
 pub const PADDING: f32 = 14.0;
-/// Pixel size the option text is drawn at.
+/// Fallback pixel size for option text, used by tools and tests that have no VM.
 ///
-/// This is the single source of truth for both sizing and drawing: the frame is
-/// measured here and the glyphs are painted by wolf-cli at this same size, so the two
-/// can never drift again. They used to: the panel budgeted 16 px per character while
-/// the text pass drew 22 px glyphs, so the nine-character opening option
-/// 微风吹拂而过的麦田 needed 198 px inside a 144 px content box and wrapped, and its
-/// second line was overdrawn by the row below.
-pub const TEXT_PX: f32 = 22.0;
+/// The live size is Sys8, which common event 48 writes as 20 and which WOLF shares
+/// between messages, choices and text pictures (work/yado.txt lines 56-79); the game
+/// passes it in through [layout_at_sized] via [crate::game::Game::font_px]. This
+/// constant must stay equal to that default, and it is the single source of truth for
+/// sizing when no VM exists: the frame is measured with the same advance the glyphs are
+/// painted with, so the two can never drift again. They used to: the panel budgeted
+/// 16 px per character while the text pass drew 22 px glyphs, so the nine-character
+/// opening option 微风吹拂而过的麦田 needed 198 px inside a 144 px content box and
+/// wrapped, and its second line was overdrawn by the row below.
+pub const TEXT_PX: f32 = 20.0;
 /// Width reserved for the cursor marker and its trailing gap, in pixels.
 ///
 /// Every row reserves the same column whether or not it is selected, which is what
@@ -105,19 +108,20 @@ pub fn text_width_at(text: &str, font_px: f32) -> f32 {
 /// The width is the widest option measured at the size the text pass actually draws,
 /// plus the cursor column and the frame padding. A flat per-character estimate is what
 /// broke CJK: a full-width glyph is one em, not half of one.
-fn size(options: &[String]) -> (f32, f32) {
+fn size(options: &[String], font_px: f32) -> (f32, f32) {
     let widest = options
         .iter()
-        .map(|option| text_width(option))
+        .map(|option| text_width_at(option, font_px))
         .fold(0.0_f32, f32::max);
-    let width = (widest + MARKER_PX + PADDING * 2.0 + WIDTH_SLACK).max(MIN_WIDTH);
+    let marker = font_px * 1.5;
+    let width = (widest + marker + PADDING * 2.0 + WIDTH_SLACK).max(MIN_WIDTH);
     let rows = options.len().max(1) as f32;
     (width.round(), (rows * LINE_HEIGHT + PADDING * 2.0).round())
 }
 
 /// Builds rows and cursor rectangle for a panel whose top-left corner is `(x, y)`.
-fn build(options: &[String], cursor: usize, x: f32, y: f32) -> ChoiceLayout {
-    let (width, height) = size(options);
+fn build(options: &[String], cursor: usize, x: f32, y: f32, font_px: f32) -> ChoiceLayout {
+    let (width, height) = size(options, font_px);
     let rect = [x, y, width, height];
     let mut lines = Vec::with_capacity(options.len());
     for (index, _) in options.iter().enumerate() {
@@ -148,10 +152,10 @@ fn build(options: &[String], cursor: usize, x: f32, y: f32) -> ChoiceLayout {
 /// because the original engine never centres a choice window on its own.
 #[must_use]
 pub fn layout(options: &[String], cursor: usize) -> ChoiceLayout {
-    let (width, height) = size(options);
+    let (width, height) = size(options, TEXT_PX);
     let x = ((SCREEN_W as f32) - width) / 2.0;
     let y = ((SCREEN_H as f32) - height) / 2.0;
-    build(options, cursor, x.round(), y.round())
+    build(options, cursor, x.round(), y.round(), TEXT_PX)
 }
 
 /// Lays out the panel at the engine's own choice-window anchor, `None` when it would
@@ -164,10 +168,22 @@ pub fn layout(options: &[String], cursor: usize) -> ChoiceLayout {
 /// the top-left corner, exactly like the manual describes.
 #[must_use]
 pub fn layout_at(options: &[String], cursor: usize, x: i32, y: i32) -> Option<ChoiceLayout> {
+    layout_at_sized(options, cursor, x, y, TEXT_PX)
+}
+
+/// layout_at with the engine's live font size (Sys8) instead of the fallback.
+#[must_use]
+pub fn layout_at_sized(
+    options: &[String],
+    cursor: usize,
+    x: i32,
+    y: i32,
+    font_px: f32,
+) -> Option<ChoiceLayout> {
     if options.is_empty() {
         return None;
     }
-    let panel = build(options, cursor, x as f32, y as f32);
+    let panel = build(options, cursor, x as f32, y as f32, font_px);
     let on_screen = panel.rect[0] < SCREEN_W as f32
         && panel.rect[1] < SCREEN_H as f32
         && panel.rect[0] + panel.rect[2] > 0.0
@@ -249,6 +265,20 @@ pub fn overlay_at(
     y: i32,
 ) -> Option<(Vec<SpriteQuad>, Vec<TextQuad>)> {
     let panel = layout_at(options, cursor, x, y)?;
+    Some(draw(atlas, assets, options, cursor, &panel))
+}
+
+/// overlay_at with the engine's live font size (Sys8).
+pub fn overlay_at_sized(
+    atlas: &mut Atlas,
+    assets: &mut Assets,
+    options: &[String],
+    cursor: usize,
+    x: i32,
+    y: i32,
+    font_px: f32,
+) -> Option<(Vec<SpriteQuad>, Vec<TextQuad>)> {
+    let panel = layout_at_sized(options, cursor, x, y, font_px)?;
     Some(draw(atlas, assets, options, cursor, &panel))
 }
 

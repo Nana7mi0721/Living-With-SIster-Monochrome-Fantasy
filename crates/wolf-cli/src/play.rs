@@ -145,13 +145,16 @@ impl App {
             let options = choices.options.clone();
             let cursor = self.game.choice_cursor();
             let (x, y) = self.game.choice_anchor();
-            if let Some((panel, rows)) = choice::overlay_at(
+            // Sys8 sizes the option text, so the panel is measured at the size it is drawn.
+            let font_px = self.game.font_px();
+            if let Some((panel, rows)) = choice::overlay_at_sized(
                 &mut self.atlas,
                 &mut self.game.assets,
                 &options,
                 cursor,
                 x,
                 y,
+                font_px,
             ) {
                 sprites.extend(panel.iter().map(Self::tint_instance));
                 texts.extend(rows);
@@ -175,7 +178,7 @@ impl App {
     fn build_text_items(&self) -> Vec<TextItem> {
         self.texts
             .iter()
-            .map(|text| TextItem::new(text.text.clone(), text.rect, choice::TEXT_PX).with_alpha(text.alpha))
+            .map(|text| TextItem::new(text.text.clone(), text.rect, self.game.font_px()).with_alpha(text.alpha))
             .collect()
     }
 
