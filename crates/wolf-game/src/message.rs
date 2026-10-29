@@ -15,10 +15,9 @@
 //! * [已实测] The coordinate scale is the screen divided by the engine virtual screen:
 //!   rateX = width / 32, rateY = height / 24 (common event 48 divides Sys116/Sys117 by
 //!   exactly those numbers; common event 63 multiplies back and stores 1024 and 576).
-//! * [已实测] Text origin = Sys1/Sys2 = (2*rateX, 17*rateY + rateY/5) = (64, 412) on a
-//!   1024x576 screen. The nudge is rateY/5 (a Ver3.00 correction YADOT-WOLF publishes in
-//!   full); docs/OPCODE_101.md read it as /10 and predicted 410, which the running game
-//!   contradicts - our capture prints Sys2 = 412 from the event's own bytecode.
+//! * [已实测] Text origin = Sys1/Sys2 = (2*rateX, 17*rateY + rateY/10) = (64, 410) on a
+//!   1024x576 screen. The nudge is rateY/10 (24 / 10 = 2). An earlier note here read 412 and
+//!   blamed a /5 nudge, but that capture predated the 121 operator fix (0x3000 was remainder).
 //! * [已实测] Font size = Sys8, and this game sets 20.
 //! * [已实测] Line pitch = Sys8 + Game.dat text_line_spacing (6) = 26.
 //! * [已实测] Typewriter speed = Sys9 characters per second: 500 at boot (common event
@@ -62,6 +61,30 @@ pub const FRAME_PICTURE: i32 = 19500;
 /// Gap between the last glyph of the text and an auto-placed pause cursor, in pixels.
 pub const CURSOR_GAP: f32 = 6.0;
 
+/// The engine pause cursor: `SystemFile/Text_Pause.png`.
+///
+/// [已实测] The file is 17x90 and its opaque pixels fall into six 17x15 bands, each a
+/// 16x10 downward triangle whose top edge sits at y 3, 2, 1, 0, 1, 3 inside its band: a
+/// six-frame bob, not the three 17x30 frames an earlier note guessed. No script draws
+/// it - common event 63 only draws slots 19500..19503 - so the engine owns it.
+pub const CURSOR_FILE: &str = "SystemFile/Text_Pause.png";
+/// Width of one cursor frame, in pixels.
+pub const CURSOR_FRAME_W: u32 = 17;
+/// Height of one cursor frame, in pixels.
+pub const CURSOR_FRAME_H: u32 = 15;
+/// Frames in the cursor bob animation.
+pub const CURSOR_FRAMES: u32 = 6;
+/// Frames of the message clock per cursor animation step (未验证 rhythm).
+pub const CURSOR_STEP_FRAMES: u32 = 8;
+/// Trace id for the cursor quad; never a picture slot, which are all >= -100.
+pub const CURSOR_SLOT: i32 = -100_000;
+
+/// Which cursor frame a message clock lands on.
+#[must_use]
+pub fn cursor_frame(frames: u32) -> u32 {
+    (frames / CURSOR_STEP_FRAMES) % CURSOR_FRAMES
+}
+
 /// The coordinate scale (rateX, rateY) for a screen size.
 #[must_use]
 pub fn coordinate_scale(screen_w: f32, screen_h: f32) -> (f32, f32) {
@@ -74,16 +97,16 @@ pub fn coordinate_scale(screen_w: f32, screen_h: f32) -> (f32, f32) {
 /// The text origin a boot-time initialiser leaves in Sys1/Sys2.
 ///
 /// Sys1 = 2*rateX, then Sys2 = 17*rateY followed by a Ver3.00 nudge of the same rate. The
-/// nudge is rateY/5, not rateY/10: with rateY = 24 it is 4 px, and the retail capture reads
-/// Sys2 = 412 (the YADOT-WOLF transcript of common event 63 publishes the identical
-/// `Sys2 += CSelf89 / 5` line). Both terms are rounded, so the 1024x576 origin is (64, 412).
+/// nudge is rateY/10: with rateY = 24 it is 2 px, and the running game now reads Sys2 = 410
+/// (the YADOT-WOLF transcript of common event 63 publishes the identical `Sys2 += CSelf89 / 10`
+/// line). Both terms are rounded, so the 1024x576 origin is (64, 410).
 #[must_use]
 pub fn default_origin(screen_w: f32, screen_h: f32) -> (f32, f32) {
     let (rate_x, rate_y) = coordinate_scale(screen_w, screen_h);
     (
         (2.0 * rate_x).round(),
-        // Integer division, like the bytecode's operator: 24 / 5 is 4, not 4.8 rounded up.
-        (17.0 * rate_y + (rate_y / 5.0).trunc()).round(),
+        // Integer division, like the bytecode operator: 24 / 10 is 2, not 2.4 rounded up.
+        (17.0 * rate_y + (rate_y / 10.0).trunc()).round(),
     )
 }
 
@@ -298,7 +321,7 @@ mod tests {
     fn vars() -> Vars {
         Vars {
             x: 64.0,
-            y: 412.0,
+            y: 410.0,
             font_px: DEFAULT_FONT_PX,
             chars_per_second: 0,
             preroll: 0,
@@ -316,11 +339,11 @@ mod tests {
 
     #[test]
     fn the_text_origin_is_two_steps_in_and_seventeen_down() {
-        assert_eq!(default_origin(1024.0, 576.0), (64.0, 412.0));
-        // 1280x720: 2*40 = 80, 17*30 + 30/5 = 516.
-        assert_eq!(default_origin(1280.0, 720.0), (80.0, 516.0));
+        assert_eq!(default_origin(1024.0, 576.0), (64.0, 410.0));
+        // 1280x720: 2*40 = 80, 17*30 + 30/10 = 513.
+        assert_eq!(default_origin(1280.0, 720.0), (80.0, 513.0));
         let vars = Vars::defaults(1024.0, 576.0);
-        assert_eq!((vars.x, vars.y), (64.0, 412.0));
+        assert_eq!((vars.x, vars.y), (64.0, 410.0));
         assert_eq!(vars.font_px(), 20.0);
         assert_eq!(vars.chars_per_second, 500);
         assert_eq!(vars.wrap_width(), 960.0);
@@ -350,8 +373,8 @@ mod tests {
         vars.width = Some(20.0);
         let layout = layout("甲乙", &vars, 0);
         assert_eq!(layout.rows.len(), 2);
-        assert_eq!(layout.rows[0].rect, [64.0, 412.0, 20.0, 26.0]);
-        assert_eq!(layout.rows[1].rect[1], 438.0);
+        assert_eq!(layout.rows[0].rect, [64.0, 410.0, 20.0, 26.0]);
+        assert_eq!(layout.rows[1].rect[1], 436.0);
     }
 
     #[test]
@@ -397,7 +420,7 @@ mod tests {
     #[test]
     fn the_pause_cursor_sits_after_the_last_glyph_when_the_engine_places_it() {
         let layout = layout("甲乙", &vars(), 0);
-        assert_eq!(layout.cursor, Some([64.0 + 40.0 + CURSOR_GAP, 412.0]));
+        assert_eq!(layout.cursor, Some([64.0 + 40.0 + CURSOR_GAP, 410.0]));
     }
 
     #[test]
@@ -405,16 +428,25 @@ mod tests {
         let mut vars = vars();
         vars.cursor_offset = Some((16.0, 6.0));
         let layout = layout("甲", &vars, 0);
-        assert_eq!(layout.cursor, Some([80.0, 418.0]));
+        assert_eq!(layout.cursor, Some([80.0, 416.0]));
+    }
+
+    #[test]
+    fn the_pause_cursor_walks_six_frames_and_loops() {
+        let seen: Vec<u32> = (0..48).map(|f| cursor_frame(f * CURSOR_STEP_FRAMES)).collect();
+        assert_eq!(seen[..7], [0, 1, 2, 3, 4, 5, 0]);
+        assert!(seen.iter().all(|f| *f < CURSOR_FRAMES));
+        // Within one step the frame is steady, so a 60 fps message does not strobe.
+        assert_eq!(cursor_frame(0), cursor_frame(CURSOR_STEP_FRAMES - 1));
     }
 
     #[test]
     fn the_retail_cursor_offset_lands_inside_the_frame() {
-        // Sys5 = 512, Sys6 = 144 is what this game writes: 64+512, 412+144.
+        // Sys5 = 512, Sys6 = 144 is what this game writes: 64+512, 410+144.
         let mut vars = vars();
         vars.cursor_offset = Some((512.0, 144.0));
         let layout = layout("甲", &vars, 0);
-        assert_eq!(layout.cursor, Some([576.0, 556.0]));
+        assert_eq!(layout.cursor, Some([576.0, 554.0]));
     }
 
     #[test]

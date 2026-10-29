@@ -453,14 +453,35 @@ impl Game {
         (self.vm.vars.get_sys(3), self.vm.vars.get_sys(4))
     }
 
-    /// The message-window system variables, as the engine reads them.
+    /// Which option row contains a screen point, when the prompt is open and visible.
     ///
-    /// WOLF keeps message geometry in system variables 1, 2, 5, 6, 8, 9 and 10, and
-    /// common event 63 initialises them on the engine behalf before every message. The
-    /// wrap width comes from the frame picture that same event paints
-    /// (message::FRAME_PICTURE), so the text laid out here and the frame drawn by the
-    /// script agree on the box; when the frame is not up yet the screen edge is the bound.
+    /// The geometry is [`choice::layout_at_sized`], the same one the renderer draws, so a
+    /// click lands on the row the player sees. The original drives every menu with the
+    /// mouse - the title hint line literally reads 通过鼠标进行选择，点击进行确定和取消 -
+    /// and this hit test is what makes a click mean the same thing in the port.
     #[must_use]
+    pub fn choice_row_at(&self, x: i32, y: i32) -> Option<usize> {
+        let choices = self.choices.as_ref()?;
+        let (anchor_x, anchor_y) = self.choice_anchor();
+        let layout = crate::choice::layout_at_sized(
+            &choices.options,
+            self.choice_cursor,
+            anchor_x,
+            anchor_y,
+            self.font_px(),
+        )?;
+        let (px, py) = (x as f32, y as f32);
+        layout.lines.iter().position(|line| {
+            px >= line[0] && px < line[0] + line[2] && py >= line[1] && py < line[1] + line[3]
+        })
+    }
+    /// One system variable by index, for diagnostics and for the layout laws that read
+    /// engine state directly (the choice window's margins, the cursor mode).
+    #[must_use]
+    pub fn sys(&self, index: usize) -> i32 {
+        self.vm.vars.get_sys(index)
+    }
+
     /// The engine's font size, from Sys8.
     ///
     /// WOLF shares one font size between 文章の表示, 選択肢 and ピクチャ text (work/yado.txt
@@ -468,12 +489,7 @@ impl Game {
     /// branch, so every text path must read it from the VM instead of hard-coding a size.
     /// A value outside 8..=64 falls back to crate::message::DEFAULT_FONT_PX: Sys8 is 0
     /// before event 48 runs, and a negative or absurd size would shred the layout.
-    /// One system variable by index, for diagnostics and for the layout laws that read
-    /// engine state directly (the choice window's margins, the cursor mode).
-    pub fn sys(&self, index: usize) -> i32 {
-        self.vm.vars.get_sys(index)
-    }
-
+    #[must_use]
     pub fn font_px(&self) -> f32 {
         let size = self.vm.vars.get_sys(8);
         if (8..=64).contains(&size) {
@@ -482,6 +498,15 @@ impl Game {
             crate::message::DEFAULT_FONT_PX
         }
     }
+
+    /// The message-window system variables, as the engine reads them.
+    ///
+    /// WOLF keeps message geometry in system variables 1, 2, 5, 6, 8, 9 and 10, and
+    /// common event 63 initialises them on the engine behalf before every message. The
+    /// wrap width comes from the frame picture that same event paints
+    /// (message::FRAME_PICTURE), so the text laid out here and the frame drawn by the
+    /// script agree on the box; when the frame is not up yet the screen edge is the bound.
+    #[must_use]
     pub fn message_vars(&self) -> crate::message::Vars {
         let sys = |index: usize| self.vm.vars.get_sys(index);
         let (cursor_x, cursor_y) = (sys(5), sys(6));
@@ -532,13 +557,22 @@ impl Game {
     /// menu simply stops - the measured title screen does exactly that, advancing 45
     /// instructions and then waiting forever.
     fn handle_choice_input(&mut self) {
-        let Some(choices) = &self.choices else {
+        let Some(count) = self.choices.as_ref().map(|choices| choices.options.len()) else {
             self.choice_cursor = 0;
             return;
         };
-        let count = choices.options.len();
         if count == 0 {
             return;
+        }
+        // A left click on a row both highlights and confirms it. WOLF's menu windows are
+        // mouse-first, so without this the port would only answer to the keyboard.
+        let clicked = self.mouse_buttons & 1 != 0 && self.previous_mouse_buttons & 1 == 0;
+        if clicked {
+            if let Some(row) = self.choice_row_at(self.mouse[0], self.mouse[1]) {
+                self.reply(ChoiceReply::Index(row));
+                self.choice_cursor = 0;
+                return;
+            }
         }
         // Only fresh presses count: holding a key must not scroll a menu at 60 steps a
         // second, which is what a level-triggered read would do.

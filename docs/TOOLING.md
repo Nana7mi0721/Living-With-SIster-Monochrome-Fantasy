@@ -172,10 +172,32 @@ OFFSCREEN RENDER OK
 - rustup 走 **USTC 镜像**（1.4 MB/s）：`mirrors.ustc.edu.cn/rust-static/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe`
 - USTC/TUNA 的 github-release 镜像**没有** Kitware/CMake 和 FFmpeg，别在那上面浪费时间。
 
-## 8. 相关文档
+## 8. 零售参考帧截取（`tools/wolfcap.ps1`）
+
+目标：在不打扰用户使用电脑的前提下，从**零售 `Game.exe`** 里拿到 1024x576 原生帧，作为像素对照的参考图。
+硬约束（用户 m02404 明确要求）：**禁止** `SetForegroundWindow` / `ShowWindow` / 全局 `SendKeys` / `CopyFromScreen` 轮询那一套；**禁止**杀用户自己的 Game.exe。
+
+做法（全部实测过）：
+
+1. **隔离运行目录 `work/runcopy`**：复制 `Game.exe` / `Game.ini` / `Script.vdf` / `dlc.dat` / `*.ttf` / `*.dll` / `Save`，`Data` 用 PowerShell **junction** 指向零售 `Data`（只读共享）。游戏写盘只落在 `work/runcopy`，零售目录不受影响。零售侧 `Save/` 与 `Game.ini` 已备份在 `work/retail_backup/`（8 个 `SaveData*.sav` 的 md5 已记录）。
+2. **DPI 感知是前提**：PowerShell 宿主在 150% 缩放下是 DPI-unaware，看到的客户区是 682x384（= 1024x576 的 2/3），`PrintWindow` 拿回的是被虚拟化+裁剪污染的帧——这就是早期所有对齐假设都差 65~91 mean abs 的根因。脚本开头必须 `SetProcessDpiAwarenessContext((IntPtr)(-4))`，之后 `client=1024x576`、`frame=11,45`。
+3. **抓帧**：`PrintWindow(hwnd, hdc, 3)`（`PW_CLIENTONLY|PW_RENDERFULLCONTENT`）只抓客户区；窗口可以放到屏幕外 `(-3200, 80)`。**验收**：`work/out/retail_title_native.png` 与游戏自带 PrintScreen `ScreenShot_2026_1028_21_21_35.png` 用 `imgdiff` 对比是 `mean abs 0.000 / psnr inf`（逐像素相同）。
+4. **焦点守护**：`LockSetForegroundWindow` / `SPI_SETFOREGROUNDLOCKTIMEOUT` 在本机都不可靠（非前台调用返回 False）。真正有效的是给游戏主窗口打 **`WS_EX_NOACTIVATE (0x08000000)`**（看门狗每 60 ms 巡检一次），实测 `stole_any=False steals=0`。代价：窗口永不 active，DxLib 会忽略 `PostMessage` 的按键——所以「不打扰」模式下只能看，不能推进剧情。
+5. **需要驱动时**用 `-NoGuard 1`：不打 NOACTIVATE，游戏会自己抢到前台并保持，按键才生效；plan 末尾用 `A off` 重新打 NOACTIVATE 并 `ReclaimFocus()` 把前台还给用户（`AttachThreadInput` 到当前前台线程再 `SetForegroundWindow(user)` 实测可成功）。
+6. **游戏自带 PrintScreen 不认窗口消息**：`PostMessage(VK_SNAPSHOT=44)` 不会生成 png，只认真实键盘状态——所以参考帧只能靠 `PrintWindow`。
+
+Plan token（`-Plan` 参数）：`w<ms>` 等待 / `c[name]` 整窗抓帧裁客户区 / `k<vk>` 发键（先补 `WM_ACTIVATEAPP`/`WM_ACTIVATE`/`WM_SETFOCUS`）/ `m<x,y>` 移鼠标 / `C<x,y>` 点击 / `P[name]` 客户区直抓 / `S<name>,<scale>` 缩放抓 / `T` 连拍找标题 / `R<w,h>` 改尺寸 / `A on|off` 驱动模式 / `x` 关窗。`-Attach <pid>` 只读窗口、不移动不关闭。
+
+已拿到的参考帧：`work/out/retail_title_native.png`（标题）、`work/out/retail_title_menu_native.png`（标题菜单，三个手绘选项）、`work/out/cap/hunt_00..06.png`（logo → 吉祥物 → 免责声明 → 标题的推进序列）。**注意 `Data/` 里那些 `save1..8.jpg` 是 1024x576 的实机 HUD 截图**，是 HUD 排版最省事的对照源。
+
+已判死的路：**隔离桌面**（`CreateDesktop` + `lpDesktop` 启动）——游戏进程立刻 `exit_code=0xC0000142 (STATUS_DLL_INIT_FAILED)`，记事本/cmd 对照也不成立，`tools/wolfdesk.ps1` 弃用。
+
+## 9. 相关文档
 
 - [PLAN.md](PLAN.md) — 总体重写计划
 - [docs/FORMAT_SPEC.md](FORMAT_SPEC.md) — 二进制格式规格
 - [docs/OPCODE_SPEC.md](OPCODE_SPEC.md) — 50 条 opcode 语义
 - [docs/ARCHITECTURE.md](ARCHITECTURE.md) — crate 架构与依赖表
 - [docs/BASELINE.json](BASELINE.json) — 机器可校验的基线 oracle（`jq` 已实测可读：550 / 73 / 169831）
+- [docs/research/wolf-decompile-feasibility.md](research/wolf-decompile-feasibility.md) — 逆向可行性调研（2026-10）
+- [docs/research/wolf-bytecode-crosscheck.md](research/wolf-bytecode-crosscheck.md) — 事件字节码语义交叉验证（官方手册 > wolfrpg-map-parser > WolfTL / rpg-maker-clone）

@@ -57,6 +57,18 @@ pub const HOT_SPOTS: usize = 5;
 /// Hard cap on concurrently running coroutines; a runaway `210` chain stops here.
 pub const MAX_INSTANCES: usize = 4_096;
 
+/// First self variable a called event sees its string arguments in (CSelf5).
+///
+/// The editor exposes four numeric inputs (CSelf0..3) and four string inputs
+/// (CSelf5..8); the gap at CSelf4 belongs to the editor, not to us
+/// (docs/OPCODE_210_RETURN.md section 8).
+pub const SELF_ARG_STRING_OFFSET: usize = 5;
+/// Flat self variable index of the first string argument: CSelf5
+/// (magic `1_600_005`).
+pub const SELF_ARG_STRING_BASE: usize = crate::magic::SELF_ARG_BASE + SELF_ARG_STRING_OFFSET;
+/// How many string arguments a call can carry (CSelf5..8).
+pub const SELF_ARG_STRING_SLOTS: usize = 4;
+
 /// Severity for [Host::log].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {
@@ -399,8 +411,10 @@ pub enum Signal {
     Call {
         /// Event to call.
         target: EventId,
-        /// Arguments, already evaluated.
+        /// Numeric arguments, already evaluated.
         args: Vec<i32>,
+        /// String arguments, already resolved (literal or variable).
+        strings: Vec<String>,
         /// Where the child's return value goes, if the call asked for one.
         return_to: Option<i32>,
     },
@@ -408,8 +422,10 @@ pub enum Signal {
     CallByName {
         /// Event title.
         name: String,
-        /// Arguments, already evaluated.
+        /// Numeric arguments, already evaluated.
         args: Vec<i32>,
+        /// String arguments, already resolved (literal or variable).
+        strings: Vec<String>,
         /// Where the child's return value goes, if the call asked for one.
         return_to: Option<i32>,
     },
@@ -934,16 +950,20 @@ impl Vm {
                 Signal::Call {
                     target,
                     args,
+                    strings,
                     return_to,
                 } => {
-                    self.spawn_child(i, target, args, return_to, host, report);
+                    self.spawn_child(i, target, args, strings, return_to, host, report);
                 }
                 Signal::CallByName {
                     name,
                     args,
+                    strings,
                     return_to,
                 } => match self.programs.id_by_name(&name) {
-                    Some(target) => self.spawn_child(i, target, args, return_to, host, report),
+                    Some(target) => {
+                        self.spawn_child(i, target, args, strings, return_to, host, report);
+                    }
                     None => {
                         host.log(
                             LogLevel::Error,
@@ -982,6 +1002,7 @@ impl Vm {
         caller: usize,
         target: EventId,
         args: Vec<i32>,
+        strings: Vec<String>,
         return_to: Option<i32>,
         host: &mut dyn Host,
         report: &mut StepReport,
@@ -1011,6 +1032,14 @@ impl Vm {
             child
                 .self_vars
                 .set(crate::magic::SELF_ARG_BASE + slot, *value);
+        }
+        // String arguments go to CSelf5..8 (magic 1_600_005 + k), mirroring the
+        // editor's four numeric and four string input boxes
+        // (docs/OPCODE_210_RETURN.md section 8). 8,229 of the 8,260 call sites
+        // that pass a string have a callee that reads 1_600_005, so dropping
+        // them leaves every message window blank.
+        for (slot, text) in strings.iter().take(SELF_ARG_STRING_SLOTS).enumerate() {
+            child.self_vars.set_str(SELF_ARG_STRING_BASE + slot, text);
         }
         child.return_to = return_to;
         self.instances.push(child);
@@ -1198,6 +1227,20 @@ fn split_face(text: &str) -> (Option<i32>, &str) {
 }
 
 /// Binary operators for `121`, docs/OPCODE_SPEC.md §3.2.
+///
+/// WolfTL's comment table swaps two of these: it lists `0x3000` as modulo and
+/// `0x4000` as bitwise NOT, but WolfTL never decodes the operator itself, so
+/// nothing ever checked the table. The data does:
+///
+/// * `0x3` is division. CE48 pc30 computes `Sys116 / 32` where Sys116 is the
+///   1024 px screen width and the result has to be the coordinate scale 32;
+///   `1024 % 32` would be 0 and every window would collapse to nothing.
+///   CE63 pc46 divides the vertical scale by 10 to get the 2 px nudge that
+///   makes Sys2 = 410 instead of 408. Operators `0x3` occur 438 times here.
+/// * `0x4` is modulo. CE48 pc172 does `self20 %= 10000` and then adds 20000
+///   to re-pack an item id, CE86 pc44 does the same before branching on
+///   `> 19999 / > 29999`. `~` with an operand of 10000 is meaningless.
+///   107 sites.
 fn binary_op(kind: u8, a: i32, b: i32) -> i32 {
     match kind {
         0x0 => a.wrapping_add(b),
@@ -1207,14 +1250,19 @@ fn binary_op(kind: u8, a: i32, b: i32) -> i32 {
             if b == 0 {
                 a
             } else {
+                a.wrapping_div(b)
+            }
+        }
+        0x4 => {
+            if b == 0 {
+                a
+            } else {
                 a.wrapping_rem(b)
             }
         }
-        // 0x4 is "bitwise not of a" in WolfTL; the operand is unused.
-        0x4 => !a,
         0x5 => a & b,
-        // 0x6 is undefined in WolfTL but occurs 1,101x here (docs/OPCODE_SPEC.md
-        // §3.2). It behaves like a right shift, NOT like addition.
+        // 0x6 never reaches here: the 121 arm routes it to rng.range first
+        // (1,101 sites, docs/OPCODE_SPEC.md §3.2). Kept so the table is total.
         0x6 => a.wrapping_shr((b & 31) as u32),
         0x7 => a | b,
         0x8 => a ^ b,
@@ -1678,11 +1726,12 @@ fn execute(
                         steps,
                     };
                 };
-                let (args, return_to) = call_arguments(cmd, inst, vars);
+                let (args, strings, return_to) = call_arguments(cmd, inst, vars);
                 inst.pc += 1;
                 Some(Signal::Call {
                     target,
                     args,
+                    strings,
                     return_to,
                 })
             }
@@ -1800,11 +1849,12 @@ fn execute(
             }
             300 => {
                 let name = expand(cmd.strings.first().map_or("", String::as_str), inst, vars);
-                let (args, return_to) = call_arguments(cmd, inst, vars);
+                let (args, strings, return_to) = call_arguments(cmd, inst, vars);
                 inst.pc += 1;
                 Some(Signal::CallByName {
                     name,
                     args,
+                    strings,
                     return_to,
                 })
             }
@@ -1996,16 +2046,22 @@ fn eval_string_condition(inst: &mut Instance, vars: &mut Variables, cmd: &Comman
     target.unwrap_or_else(|| block.end_target(len))
 }
 
-/// Evaluate the arguments and return target of a `210`/`300`.
-fn call_arguments(cmd: &Command, inst: &Instance, vars: &Variables) -> (Vec<i32>, Option<i32>) {
+/// Evaluate the numeric and string arguments plus the return target of a
+/// `210`/`300`.
+fn call_arguments(
+    cmd: &Command,
+    inst: &Instance,
+    vars: &Variables,
+) -> (Vec<i32>, Vec<String>, Option<i32>) {
     let Some(status) = cmd.param_status() else {
-        return (Vec::new(), None);
+        return (Vec::new(), Vec::new(), None);
     };
     let count = status.number_count();
     let mut args = Vec::with_capacity(count);
     for i in 0..count {
         args.push(eval_num(arg(cmd, 2 + i), inst, vars));
     }
+    let strings = string_arguments(cmd, inst, vars, status);
     // The parameter table is numeric arguments, then string arguments, then the
     // optional destination. Both kinds occupy one 4-byte word, so the destination
     // sits at 2 + total_count, not 2 + number_count: 22 sites in this game pass a
@@ -2017,7 +2073,41 @@ fn call_arguments(cmd: &Command, inst: &Instance, vars: &Variables) -> (Vec<i32>
     } else {
         None
     };
-    (args, return_to)
+    (args, strings, return_to)
+}
+
+/// Resolve the string arguments of a `210`/`300` in the caller's context.
+///
+/// Each string slot is either a literal or a variable reference, and the
+/// editor tells them apart with its own enable bit: `string_enabled(k)` set
+/// means "use `stringArgs[1 + k]`", clear means "the word in the argument
+/// table is a magic address". The two never disagree in this game - all 73
+/// variable slots carry a non-zero word and all 16,110 literal slots carry 0 -
+/// but the word is also checked so a zero can never be read as variable 0
+/// (docs/OPCODE_210_RETURN.md section 8).
+fn string_arguments(
+    cmd: &Command,
+    inst: &Instance,
+    vars: &Variables,
+    status: wolf_format::command::ParamStatus,
+) -> Vec<String> {
+    let count = status.string_count().min(SELF_ARG_STRING_SLOTS);
+    let mut out = Vec::with_capacity(count);
+    for k in 0..count {
+        let word = arg(cmd, 2 + status.number_count() + k);
+        if status.string_enabled(k) || word == 0 {
+            // stringArgs[0] is the event title for 300 and a reserved blank for
+            // 210, so the k-th literal lives at 1 + k.
+            out.push(
+                cmd.strings
+                    .get(1 + k)
+                    .map_or_else(String::new, Clone::clone),
+            );
+        } else {
+            out.push(eval_str(word, inst, vars));
+        }
+    }
+    out
 }
 
 /// Decode a `150 Picture` instruction (docs/OPCODE_SPEC.md §5.31).
@@ -2794,6 +2884,175 @@ mod tests {
         }
         assert_eq!(vm.vars.get(7), 42);
         assert_eq!(vm.vars.get(0), 0);
+    }
+
+    #[test]
+    fn binary_operator_table_matches_the_editor() {
+        // WolfTL's Command.hpp comment lists 0x3000 as % and 0x4000 as ~, but it
+        // never decodes operators, so nothing ever verified the table. The game
+        // does: CE48 pc30 [1600025, 9000116, 32, 0x3000] is 1024 / 32 = 32, the
+        // horizontal coordinate scale, and CE48 pc172 [1600020, 1600020, 10000,
+        // 0x4000] is the % 10000 item-id re-pack.
+        assert_eq!(binary_op(0x3, 1024, 32), 32, "0x3 is division");
+        assert_eq!(binary_op(0x3, 1025, 32), 32);
+        assert_eq!(binary_op(0x4, 1025, 32), 1, "0x4 is modulo");
+        assert_eq!(binary_op(0x4, 20_017, 10_000), 17);
+        // A former ~-site now yields the remainder instead of -20_018.
+        assert_eq!(binary_op(0x4, 20_017, 20_000), 17);
+        // Division and modulo by zero keep the left operand.
+        assert_eq!(binary_op(0x3, 7, 0), 7);
+        assert_eq!(binary_op(0x4, 7, 0), 7);
+        // The untouched neighbours.
+        assert_eq!(binary_op(0x0, 7, 3), 10);
+        assert_eq!(binary_op(0x1, 7, 3), 4);
+        assert_eq!(binary_op(0x2, 7, 3), 21);
+        assert_eq!(binary_op(0x5, 0b1100, 0b1010), 0b1000);
+        assert_eq!(binary_op(0x7, 0b1100, 0b1010), 0b1110);
+        assert_eq!(binary_op(0x8, 0b1100, 0b1010), 0b0110);
+        assert_eq!(binary_op(0x9, 1, 4), 16);
+    }
+
+    #[test]
+    fn set_variable_divides_where_the_old_table_took_a_remainder() {
+        // End to end through 121: [target, arg1, arg2, 0x3000] assigns
+        // arg1 / arg2, which is exactly CE48 pc30.
+        let e = event(
+            1,
+            "ops",
+            vec![
+                cmd(121, &[2_000_000, 1024, 32, 0x3000], &[]),
+                cmd(121, &[2_000_001, 1_025, 32, 0x4000], &[]),
+                cmd(121, &[2_000_002, 9_000_116, 32, 0x3000], &[]),
+                cmd(172, &[], &[]),
+            ],
+        );
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+        assert_eq!(vm.vars.get(0), 32);
+        assert_eq!(vm.vars.get(1), 1);
+        // 9_000_116 is a system variable, not a literal: it is 0 here.
+        assert_eq!(vm.vars.get(2), 0);
+    }
+
+    #[test]
+    fn string_arguments_land_in_cself5_and_cself6() {
+        // docs/OPCODE_210_RETURN.md section 8: the editor's four string inputs
+        // arrive in CSelf5..8, i.e. magic 1_600_005 + k, one slot above the
+        // four numeric inputs at CSelf0..3.
+        // 0x3020 = two string arguments, both literals (enable bits 12 and 13).
+        let callee = event_ret(
+            2,
+            "callee",
+            NO_RETURN_VALUE,
+            vec![
+                cmd(112, &[0x11, 1_600_005], &["alpha"]),
+                cmd(401, &[1], &[]),
+                cmd(121, &[2_000_000, 1, 0, 0], &[]),
+                cmd(112, &[0x11, 1_600_006], &["beta"]),
+                cmd(401, &[1], &[]),
+                cmd(121, &[2_000_001, 1, 0, 0], &[]),
+                cmd(499, &[], &[]),
+                cmd(499, &[], &[]),
+                cmd(172, &[], &[]),
+            ],
+        );
+        let caller = event_ret(
+            1,
+            "caller",
+            NO_RETURN_VALUE,
+            // stringArgs[0] is the reserved blank of a 210, so "alpha" is
+            // stringArgs[1] and "beta" is stringArgs[2].
+            vec![cmd(210, &[500_002, 0x3020, 0, 0], &["", "alpha", "beta"])],
+        );
+        let mut vm = vm_with(vec![callee, caller]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        for _ in 0..3 {
+            vm.step_frame(&mut host);
+        }
+        assert_eq!(vm.vars.get(0), 1, "CSelf5 carried \"alpha\"");
+        assert_eq!(vm.vars.get(1), 1, "CSelf6 carried \"beta\"");
+        assert_eq!(vm.instances().len(), 0);
+    }
+
+    #[test]
+    fn call_by_name_does_not_pass_its_own_title_as_a_string_argument() {
+        // A 300 keeps the callee title in stringArgs[0] and the literals from
+        // stringArgs[1] on. Reading the literal at k instead of 1 + k would hand
+        // the callee its own title and every by-name message would be wrong.
+        // 0x1010 = no numeric argument, one string argument, literal.
+        let callee = event_ret(
+            2,
+            "named",
+            NO_RETURN_VALUE,
+            vec![
+                cmd(112, &[0x11, 1_600_005], &["alpha"]),
+                cmd(401, &[1], &[]),
+                cmd(121, &[2_000_000, 1, 0, 0], &[]),
+                cmd(499, &[], &[]),
+                cmd(172, &[], &[]),
+            ],
+        );
+        let caller = event_ret(
+            1,
+            "caller",
+            NO_RETURN_VALUE,
+            vec![cmd(300, &[0, 0x1010, 0], &["named", "alpha"])],
+        );
+        let mut vm = vm_with(vec![callee, caller]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        for _ in 0..3 {
+            vm.step_frame(&mut host);
+        }
+        assert_eq!(vm.vars.get(0), 1, "CSelf5 carried \"alpha\"");
+        assert_eq!(vm.instances().len(), 0);
+    }
+
+    #[test]
+    fn a_wrapper_forwards_its_cself5_to_the_grandchild() {
+        // 7,787 of the 8,260 string-passing call sites are wrappers that hand
+        // their own CSelf5 straight down by putting 1_600_005 in the argument
+        // word with the enable bit clear (real site: ev264 pc47). That path
+        // needs the variable branch of string_arguments, not the literal one.
+        // 0x0010 = no numeric argument, one string argument, variable.
+        let grandchild = event_ret(
+            3,
+            "grandchild",
+            NO_RETURN_VALUE,
+            vec![
+                cmd(112, &[0x11, 1_600_005], &["alpha"]),
+                cmd(401, &[1], &[]),
+                cmd(121, &[2_000_000, 1, 0, 0], &[]),
+                cmd(499, &[], &[]),
+                cmd(172, &[], &[]),
+            ],
+        );
+        let wrapper = event_ret(
+            2,
+            "wrapper",
+            NO_RETURN_VALUE,
+            vec![
+                cmd(210, &[500_003, 0x0010, 1_600_005], &[]),
+                cmd(172, &[], &[]),
+            ],
+        );
+        let caller = event_ret(
+            1,
+            "caller",
+            NO_RETURN_VALUE,
+            vec![cmd(210, &[500_002, 0x1020, 0], &["", "alpha"])],
+        );
+        let mut vm = vm_with(vec![grandchild, wrapper, caller]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        for _ in 0..6 {
+            vm.step_frame(&mut host);
+        }
+        assert_eq!(vm.vars.get(0), 1, "the literal reached the grandchild");
+        assert_eq!(vm.instances().len(), 0);
     }
 
     #[test]

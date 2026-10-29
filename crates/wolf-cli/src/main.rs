@@ -79,6 +79,8 @@ fn main() -> ExitCode {
     let mut out: Option<PathBuf> = None;
     let mut answer: Option<usize> = None;
     let mut answer_delay: u32 = 0;
+    let mut pointer: Option<(i32, i32)> = None;
+    let mut press_frame: Option<usize> = None;
     let mut filter: Option<String> = None;
     let mut frame_limit: Option<u64> = None;
     let mut hold_message = false;
@@ -119,6 +121,16 @@ fn main() -> ExitCode {
             // frame, so a capture marches through character creation instead of spinning.
             "--answer-delay" => {
                 answer_delay = args.next().and_then(|value| value.parse().ok()).unwrap_or(0);
+            }
+            // A pointer for headless captures. The game is mouse-driven - its own title
+            // hint line reads 通过鼠标进行选择，点击进行确定和取消 - so a capture that never
+            // moves the mouse cannot reach any menu that hit-tests it.
+            "--pointer" => {
+                pointer = args.next().and_then(|value| parse_point(&value));
+            }
+            // Frame (0-based) at which that pointer presses the left button once.
+            "--press-frame" => {
+                press_frame = args.next().and_then(|value| value.parse().ok());
             }
             "--map" | "-m" => {
                 map = args.next();
@@ -179,6 +191,8 @@ fn main() -> ExitCode {
                 let answers = Answers {
                     index: answer,
                     delay: answer_delay,
+                    pointer,
+                    press_frame,
                 };
                 run_capture(&root, out, frames, answers, hold_message, engine_events, entry)
             }
@@ -247,6 +261,8 @@ fn print_help() {
     println!("    --until <N>       Quit 'play' after N frames (smoke test; default: until closed).");
     println!("    --menu-only       Start common event 42 directly instead of the boot map.");
     println!("    --hold-message    Park on the first 101 message instead of dismissing it.");
+    println!("    --pointer <x,y>   Put the mouse pointer at a game pixel for the whole capture.");
+    println!("    --press-frame <N> Frame at which --pointer clicks the left button once.");
     println!("    --engine-events <ids>  Comma separated ids that replace ENGINE_ALWAYS");
     println!("                      (the parallel-process-always events the engine owns).");
     println!("                      Pass an empty value to start none of them.");
@@ -255,6 +271,12 @@ fn print_help() {
     println!("    -r, --root <DIR>  Unpacked data root containing BasicData/ and MapData/.");
     println!("                      Defaults to ./work/full, then $WOLF_DATA_ROOT.");
     println!("    -h, --help        Print this help.");
+}
+
+/// Parses a `x,y` pointer argument.
+fn parse_point(value: &str) -> Option<(i32, i32)> {
+    let (x, y) = value.split_once(',')?;
+    Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
 }
 
 fn default_root() -> PathBuf {
@@ -1334,6 +1356,10 @@ struct Answers {
     index: Option<usize>,
     /// Frames a prompt must stay on screen before that click lands.
     delay: u32,
+    /// Pointer position in game pixels, written to the host every frame.
+    pointer: Option<(i32, i32)>,
+    /// 0-based frame at which the left mouse button goes down for one frame.
+    press_frame: Option<usize>,
 }
 
 enum Entry<'a> {
@@ -1396,7 +1422,13 @@ fn run_capture(
     println!("  entry     : {label}");
 
     let mut peak = 0usize;
-    for _ in 0..frames {
+    for frame in 0..frames {
+        if let Some((x, y)) = answers.pointer {
+            game.mouse = [x, y];
+        }
+        // One frame of a held button is a click: the host compares against the previous
+        // frame, so the press edge survives exactly one step.
+        game.mouse_buttons = u32::from(answers.press_frame == Some(frame));
         let outcome = game.frame();
         peak = peak.max(outcome.report.running);
     }
@@ -1426,6 +1458,39 @@ fn run_capture(
         ) {
             sprites.extend(panel);
             texts.extend(rows);
+        }
+    }
+    // The engine draws the 101 pause cursor itself: SystemFile/Text_Pause.png is a strip of
+    // six 17x15 frames whose triangle bobs down and back up, and no picture command in the
+    // game names it. It is a texture, so it joins the sprite pass, not the glyph pass.
+    let newest = game.messages.last().map(|m| (m.text.clone(), m.frames));
+    if let Some((text, frames)) = newest {
+        let vars = game.message_vars();
+        let layout = wolf_game::message::layout(&text, &vars, frames);
+        if let Some(at) = layout.cursor {
+            let frame = wolf_game::message::cursor_frame(frames);
+            let src = [
+                0,
+                frame * wolf_game::message::CURSOR_FRAME_H,
+                wolf_game::message::CURSOR_FRAME_W,
+                wolf_game::message::CURSOR_FRAME_H,
+            ];
+            let dst = [
+                at[0],
+                at[1],
+                wolf_game::message::CURSOR_FRAME_W as f32,
+                wolf_game::message::CURSOR_FRAME_H as f32,
+            ];
+            if let Some(quad) = atlas.sprite_from(
+                &mut game.assets,
+                wolf_game::message::CURSOR_FILE,
+                wolf_game::message::CURSOR_SLOT,
+                src,
+                dst,
+                1.0,
+            ) {
+                sprites.push(quad);
+            }
         }
     }
     let [atlas_w, atlas_h] = atlas.size();
@@ -1545,6 +1610,7 @@ fn run_capture(
         },
         None => println!("  font      : none found; text pictures will not draw"),
     }
+
     let instances: Vec<SpriteInstance> = sprites
         .iter()
         .map(tint_instance)
@@ -1580,14 +1646,6 @@ fn run_capture(
         println!("    text    : {preview:?}");
         for row in &layout.rows {
             items.push(TextItem::new(row.text.clone(), row.rect, layout.font_px));
-        }
-        if let Some(at) = layout.cursor {
-            let box_w = layout.font_px * 2.0;
-            items.push(TextItem::new(
-                "▼",
-                [at[0], at[1], box_w, layout.line_height],
-                layout.font_px,
-            ));
         }
     }
     renderer.draw_text(&items);

@@ -96,6 +96,30 @@ fn the_opening_script_runs_and_draws_its_pictures() {
         ["广阔的战场", "广袤的森林", "微风吹拂而过的麦田", "有人在等我的家"],
         "the opening prompt changed"
     );
+    // The prompt is mouse-first, so the hit test and the drawn geometry have to agree: a
+    // click on the centre of every row must return exactly that row, and a click outside
+    // the panel must return nothing.
+    let layout = wolf_game::choice::layout_at_sized(
+        &prompt.options,
+        game.choice_cursor(),
+        game.choice_anchor().0,
+        game.choice_anchor().1,
+        game.font_px(),
+    )
+    .expect("the prompt must be visible");
+    for (row, line) in layout.lines.iter().enumerate() {
+        let (cx, cy) = (line[0] + line[2] * 0.5, line[1] + line[3] * 0.5);
+        assert_eq!(
+            game.choice_row_at(cx as i32, cy as i32),
+            Some(row),
+            "a click on row {row} must select it"
+        );
+    }
+    assert_eq!(
+        game.choice_row_at(0, 0),
+        None,
+        "a click outside the panel must select nothing"
+    );
     // The prompt arrives through the choice path, so no text picture is on screen. The
     // only text pictures alive belong to the third-party balloon-message library that
     // event 98 initialises: it parks its 24 controls at (-2784, 2880) until a bubble is

@@ -20,14 +20,14 @@ use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 use wolf_game::atlas::{self, Atlas, TextQuad};
 use wolf_game::{choice, key, Game};
-use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
+use wolf_render::{Renderer, Scaler, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 
 /// One frame at 60 Hz.
 const FRAME_TIME: Duration = Duration::from_micros(16_667);
@@ -72,6 +72,8 @@ pub fn run(root: &std::path::Path, frames: Option<u64>, boot: bool) -> std::proc
         sprites: Vec::new(),
         texts: Vec::new(),
         held: HashSet::new(),
+        mouse: [-1, -1],
+        mouse_buttons: 0,
         window: None,
         renderer: None,
         uploaded_images: usize::MAX,
@@ -106,6 +108,10 @@ struct App {
     sprites: Vec<SpriteInstance>,
     texts: Vec<TextQuad>,
     held: HashSet<u32>,
+    /// Mouse position in game pixels, or (-1, -1) while the cursor is outside the window.
+    mouse: [i32; 2],
+    /// WOLF mouse button bits: 1 left, 2 right, 4 middle.
+    mouse_buttons: u32,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     /// Atlas image count at the last upload; a change means new artwork was packed.
@@ -125,6 +131,8 @@ impl App {
     /// Advances one frame: latch input, run the script, rebuild the draw list.
     fn step(&mut self) {
         self.game.key_bits = self.bits();
+        self.game.mouse = self.mouse;
+        self.game.mouse_buttons = self.mouse_buttons;
         let outcome = self.game.frame();
         if outcome.idle && !self.game.screen.is_empty() {
             // Nothing is running any more: keep presenting the last frame rather than
@@ -160,6 +168,38 @@ impl App {
                 texts.extend(rows);
             }
         }
+        // The engine draws the 101 pause cursor itself (SystemFile/Text_Pause.png, six 17x15
+        // frames), so it joins the sprite list rather than the glyph list.
+        let newest = self.game.messages.last().map(|m| (m.text.clone(), m.frames));
+        if let Some((text, frames)) = newest {
+            let vars = self.game.message_vars();
+            let layout = wolf_game::message::layout(&text, &vars, frames);
+            if let Some(at) = layout.cursor {
+                let frame = wolf_game::message::cursor_frame(frames);
+                let src = [
+                    0,
+                    frame * wolf_game::message::CURSOR_FRAME_H,
+                    wolf_game::message::CURSOR_FRAME_W,
+                    wolf_game::message::CURSOR_FRAME_H,
+                ];
+                let dst = [
+                    at[0],
+                    at[1],
+                    wolf_game::message::CURSOR_FRAME_W as f32,
+                    wolf_game::message::CURSOR_FRAME_H as f32,
+                ];
+                if let Some(quad) = self.atlas.sprite_from(
+                    &mut self.game.assets,
+                    wolf_game::message::CURSOR_FILE,
+                    wolf_game::message::CURSOR_SLOT,
+                    src,
+                    dst,
+                    1.0,
+                ) {
+                    sprites.push(Self::tint_instance(&quad));
+                }
+            }
+        }
         self.sprites = sprites;
         self.texts = texts;
     }
@@ -192,13 +232,6 @@ impl App {
             let layout = wolf_game::message::layout(&message.text, &vars, message.frames);
             for row in &layout.rows {
                 items.push(TextItem::new(row.text.clone(), row.rect, layout.font_px));
-            }
-            if let Some(at) = layout.cursor {
-                items.push(TextItem::new(
-                    "▼",
-                    [at[0], at[1], layout.font_px * 2.0, layout.line_height],
-                    layout.font_px,
-                ));
             }
         }
         items
@@ -299,6 +332,33 @@ impl ApplicationHandler for App {
                     self.held.remove(&bit);
                 }
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                // winit reports physical pixels; the scaler maps them back onto the
+                // 1024x576 grid the game draws in, so the pointer lands where the
+                // player sees it even with letterboxing or an integer upscale.
+                if let Some(window) = &self.window {
+                    self.mouse = game_point(window, position.x, position.y);
+                }
+            }
+            WindowEvent::CursorLeft { .. } => {
+                self.mouse = [-1, -1];
+                self.mouse_buttons = 0;
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                let bit = match button {
+                    MouseButton::Left => 1,
+                    MouseButton::Right => 2,
+                    MouseButton::Middle => 4,
+                    MouseButton::Back | MouseButton::Forward | MouseButton::Other(_) => 0,
+                };
+                if bit != 0 {
+                    if state == ElementState::Pressed {
+                        self.mouse_buttons |= bit;
+                    } else {
+                        self.mouse_buttons &= !bit;
+                    }
+                }
+            }
             WindowEvent::Resized(size) => {
                 // Taking the renderer out of the struct keeps the borrow checker happy while
                 // the title bar needs fields from both sides.
@@ -359,6 +419,21 @@ impl ApplicationHandler for App {
 /// Several physical keys share a bit on purpose: the original game honours Enter/Z/Space
 /// for confirm and Escape/X for cancel, and a port that only accepted one of them would
 /// feel broken to anyone used to the original.
+/// Maps a physical window position onto the 1024x576 game grid.
+///
+/// The renderer blits with the largest whole integer scale and centres the result, so the
+/// inverse is `(pos - offset) / scale`. A position on the black bar maps to a negative
+/// game coordinate, which is also how the engine reports "outside the screen".
+fn game_point(window: &Window, x: f64, y: f64) -> [i32; 2] {
+    let size = window.inner_size();
+    let scaler = Scaler::new(size.width.max(1), size.height.max(1));
+    let scale = f64::from(scaler.scale.max(1));
+    [
+        ((x - f64::from(scaler.offset[0])) / scale).floor() as i32,
+        ((y - f64::from(scaler.offset[1])) / scale).floor() as i32,
+    ]
+}
+
 fn wolf_bit(key: &Key) -> Option<u32> {
     match key {
         Key::Named(NamedKey::ArrowUp) => Some(key::UP),

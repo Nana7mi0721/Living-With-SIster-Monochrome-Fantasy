@@ -293,6 +293,30 @@ impl Atlas {
     ///
     /// Text pictures are skipped here: they have no texture, and returning them is
     /// [`texts`]'s job.
+    /// Packs one named asset and returns a single quad covering a sub-rectangle of it.
+    ///
+    /// The engine pause cursor is the first caller: `SystemFile/Text_Pause.png` is a
+    /// vertical strip of animation frames and the engine picks one per blink phase, which
+    /// no picture command can express. The destination is snapped like every other quad.
+    pub fn sprite_from(
+        &mut self,
+        assets: &mut Assets,
+        name: &str,
+        number: i32,
+        src: [u32; 4],
+        dst: [f32; 4],
+        alpha: f32,
+    ) -> Option<SpriteQuad> {
+        let entry = self.add_asset(assets, name)?;
+        Some(SpriteQuad {
+            number,
+            rect: snap(dst),
+            uv: entry.sub_uv(self.width, self.height, src),
+            alpha,
+            tint: [1.0, 1.0, 1.0],
+        })
+    }
+
     pub fn sprites(&mut self, screen: &Screen, assets: &mut Assets) -> Vec<SpriteQuad> {
         let mut out = Vec::new();
         // Window pictures (types 3 and 4) own a UI panel drawn from the 18x18 skin, with
