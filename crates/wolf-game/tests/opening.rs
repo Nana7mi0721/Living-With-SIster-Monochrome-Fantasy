@@ -27,8 +27,11 @@ fn the_opening_script_runs_and_draws_its_pictures() {
             return;
         }
     };
+    // Messages dismiss themselves, but the opening prompt is HELD: dice the choice and
+    // the script walks on into the character creation loop, which spins without a frame
+    // wait (measured: 103 million instructions over 600 frames). Holding it is what the
+    // retail player sees at the end of the cutscene and what `wolf-cli capture` photographs.
     game.auto_advance = true;
-    game.auto_choice = true;
     if let Err(err) = game.start_map_event_by_name("SampleMapA", 0) {
         eprintln!("skipping: cannot start the opening: {err}");
         return;
@@ -60,11 +63,41 @@ fn the_opening_script_runs_and_draws_its_pictures() {
             picture.file
         );
     }
-    // The measured shape of the first ten seconds: the script draws the black
-    // backdrop, a text box frame and the story text, and parks on a message.
-    assert!(game.stats.instructions > 20_000, "script barely ran: {}", game.stats.instructions);
+    // The measured shape of the first ten seconds, taken from this run rather than
+    // guessed: 19,596 instructions, 696 picture operations, no warnings. The script
+    // draws a black backdrop, runs the loading screen (common event 221), erases it and
+    // parks on the four-option opening prompt.
     assert_eq!(game.stats.warnings, 0, "the opening produced warnings");
-    assert!(game.screen.len() >= 10, "only {} pictures live", game.screen.len());
+    assert!(
+        (15_000..200_000).contains(&game.stats.instructions),
+        "script ran {} instructions",
+        game.stats.instructions
+    );
+    // The backdrop is the whole-screen layer WOLF numbers -1.
+    let backdrop = game.screen.get(-1).expect("black backdrop");
+    assert_eq!(backdrop.file, "cg/blackscreen.jpg");
+    // The regression this test exists for: common event 221 ends the loading screen with
+    // ONE ranged erase, `150 [16777218, 50000, 5, 5, 0, 50003]`. While the picture layer
+    // read that as a single-slot erase, the eyecatch (50001), the NOW LOADING text (50002)
+    // and the progress bar (50003) stayed on screen for the whole game, because nothing
+    // else in the script ever names them.
+    for number in 50000..=50003 {
+        assert!(
+            game.screen.get(number).is_none(),
+            "loading picture {number} survived the ranged erase"
+        );
+    }
+    // The prompt itself: the engine choice window is painted by the caller (see
+    // wolf_game::choice), so the live prompt is what proves the script parked where the
+    // retail player sees the menu.
+    let prompt = game.choices.as_ref().expect("the opening prompt is open");
+    assert_eq!(
+        prompt.options,
+        ["广阔的战场", "广袤的森林", "微风吹拂而过的麦田", "有人在等我的家"],
+        "the opening prompt changed"
+    );
+    // Nothing the script draws is a text picture any more - the prompt came through the
+    // choice path - so only the textured side of the atlas is asserted.
     assert!(!quads.is_empty(), "nothing textured on screen");
-    assert!(!texts.is_empty(), "no text pictures on screen");
+    assert!(texts.is_empty(), "unexpected text pictures: {}", texts.len());
 }

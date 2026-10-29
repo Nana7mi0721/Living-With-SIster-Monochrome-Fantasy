@@ -22,11 +22,22 @@ use crate::window::{self, WindowPiece};
 pub const LINE_HEIGHT: f32 = 30.0;
 /// Padding between the option text and the window frame.
 pub const PADDING: f32 = 14.0;
-/// Nominal advance width of one character, used to size the panel.
+/// Pixel size the option text is drawn at.
 ///
-/// WOLF renders with a fixed-size bitmap font, so a flat estimate is close enough to
-/// lay a frame out; the text pass measures the real glyphs afterwards.
-pub const CHAR_WIDTH: f32 = 16.0;
+/// This is the single source of truth for both sizing and drawing: the frame is
+/// measured here and the glyphs are painted by wolf-cli at this same size, so the two
+/// can never drift again. They used to: the panel budgeted 16 px per character while
+/// the text pass drew 22 px glyphs, so the nine-character opening option
+/// 微风吹拂而过的麦田 needed 198 px inside a 144 px content box and wrapped, and its
+/// second line was overdrawn by the row below.
+pub const TEXT_PX: f32 = 22.0;
+/// Width reserved for the cursor marker and its trailing gap, in pixels.
+///
+/// Every row reserves the same column whether or not it is selected, which is what
+/// keeps the option text aligned: one wide glyph plus one space is about 1.5 em.
+pub const MARKER_PX: f32 = TEXT_PX * 1.5;
+/// Extra width added to the measured line, absorbing glyph side bearings and rounding.
+pub const WIDTH_SLACK: f32 = 4.0;
 /// Smallest panel width, so a one-letter option is not a 16 px sliver.
 pub const MIN_WIDTH: f32 = 120.0;
 
@@ -41,14 +52,55 @@ pub struct ChoiceLayout {
     pub cursor: [f32; 4],
 }
 
+/// Whether a glyph is full width, i.e. one em wide at any size.
+///
+/// These are the CJK, kana, hangul, full-width form and CJK-symbol planes plus the
+/// supplementary ideographic planes. Everything else is treated as half width, which is
+/// right for Latin, digits and the ASCII punctuation WOLF menus use.
+fn is_wide(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x1100..=0x115F
+            | 0x2E80..=0x303E
+            | 0x3041..=0x33FF
+            | 0x3400..=0x4DBF
+            | 0x4E00..=0x9FFF
+            | 0xA000..=0xA4CF
+            | 0xAC00..=0xD7A3
+            | 0xF900..=0xFAFF
+            | 0xFE30..=0xFE4F
+            | 0xFF00..=0xFF60
+            | 0xFFE0..=0xFFE6
+            | 0x20000..=0x3FFFD
+    )
+}
+
+/// Advance width of one character at [`TEXT_PX`], in pixels.
+fn advance(ch: char) -> f32 {
+    if is_wide(ch) {
+        TEXT_PX
+    } else {
+        TEXT_PX * 0.5
+    }
+}
+
+/// Width the text pass will need to draw `text` on one line, in pixels.
+#[must_use]
+pub fn text_width(text: &str) -> f32 {
+    text.chars().map(advance).sum()
+}
+
 /// Panel size in logical pixels, rounded so every row lands on a whole pixel.
+///
+/// The width is the widest option measured at the size the text pass actually draws,
+/// plus the cursor column and the frame padding. A flat per-character estimate is what
+/// broke CJK: a full-width glyph is one em, not half of one.
 fn size(options: &[String]) -> (f32, f32) {
-    let columns = options
+    let widest = options
         .iter()
-        .map(|option| option.chars().count())
-        .max()
-        .unwrap_or(0) as f32;
-    let width = (columns * CHAR_WIDTH + PADDING * 2.0).max(MIN_WIDTH);
+        .map(|option| text_width(option))
+        .fold(0.0_f32, f32::max);
+    let width = (widest + MARKER_PX + PADDING * 2.0 + WIDTH_SLACK).max(MIN_WIDTH);
     let rows = options.len().max(1) as f32;
     (width.round(), (rows * LINE_HEIGHT + PADDING * 2.0).round())
 }
@@ -214,6 +266,23 @@ mod tests {
         assert_eq!(panel.cursor, panel.lines[2]);
         // Out-of-range cursors clamp to a real row instead of panicking.
         assert_eq!(layout(&options(3), 99).cursor, panel.lines[0]);
+    }
+
+    #[test]
+    fn a_cjk_option_is_wide_enough_for_the_text_it_draws() {
+        // Regression for the clipped opening prompt: a nine-character CJK option is 9 em
+        // wide at the size the glyphs are drawn, and the row has to fit the cursor column
+        // plus that text or the renderer wraps it into the row below.
+        let option = "微风吹拂而过的麦田".to_owned();
+        let panel = layout(std::slice::from_ref(&option), 0);
+        let content = panel.lines[0][2];
+        assert_eq!(text_width(&option), 9.0 * TEXT_PX);
+        assert!(
+            content >= text_width(&option) + MARKER_PX,
+            "row {content} must fit the marker plus {} px of text",
+            text_width(&option)
+        );
+        assert!(panel.rect[0] >= 0.0 && panel.rect[0] + panel.rect[2] <= SCREEN_W as f32);
     }
 
     #[test]

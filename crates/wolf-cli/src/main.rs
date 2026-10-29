@@ -75,12 +75,14 @@ fn main() -> ExitCode {
     let mut event: Option<u32> = None;
     let mut frames: usize = 600;
     let mut trace = false;
+    let mut hot = false;
     let mut out: Option<PathBuf> = None;
     let mut answer: Option<usize> = None;
     let mut filter: Option<String> = None;
     let mut frame_limit: Option<u64> = None;
     let mut boot = true;
     let mut map: Option<String> = None;
+    let mut map_run: Option<String> = None;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -97,6 +99,7 @@ fn main() -> ExitCode {
                     .unwrap_or(600);
             }
             "--trace" | "-t" => trace = true,
+            "--hot" => hot = true,
             "--until" => {
                 frame_limit = args.next().and_then(|value| value.parse().ok());
             }
@@ -108,6 +111,10 @@ fn main() -> ExitCode {
             }
             "--map" | "-m" => {
                 map = args.next();
+            }
+            // Render a map EVENT (a story script) rather than the tile layer.
+            "--map-run" => {
+                map_run = args.next();
             }
             "--boot" => boot = true,
             "--menu-only" => boot = false,
@@ -133,12 +140,22 @@ fn main() -> ExitCode {
         Some("precompile") => run_precompile(&root),
         Some("capture") => match map.as_deref() {
             Some(name) => run_capture_map(&root, out, name),
-            None => run_capture(&root, out, frames, answer, boot),
+            None => {
+                let entry = match map_run.as_deref() {
+                    Some(name) => Entry::Script {
+                        map: name,
+                        event: event.unwrap_or(0),
+                    },
+                    None if boot => Entry::Boot,
+                    None => Entry::Menu,
+                };
+                run_capture(&root, out, frames, answer, entry)
+            }
         },
         Some("list") => run_list(&root, filter.as_deref()),
         Some("play") => play::run(&root, frame_limit, boot),
         Some("run") => match (map.as_deref(), event) {
-            (Some(name), Some(id)) => run_map_event(&root, name, id, frames, trace, answer),
+            (Some(name), Some(id)) => run_map_event(&root, name, id, frames, trace, answer, hot),
             (Some(_), None) => {
                 eprintln!("run --map needs --event <ID>");
                 ExitCode::from(2)
@@ -1209,18 +1226,6 @@ fn report(checks: &[Check]) -> ExitCode {
     }
 }
 
-/// Runs the title screen headlessly for N frames and writes the logical framebuffer to PNG.
-///
-/// This is the M1 acceptance artifact: 1024x576 of pixels produced by the real event
-/// script through the real picture stack, comparable side by side with a screenshot of
-/// the original game. The messages the interpreter reports are printed too, because a
-/// capture that looks right but logged forty warnings is not actually right.
-/// Default font size for text pictures, in logical pixels.
-///
-/// WOLF does not store a font size in the picture command; the runtime uses the Game.dat
-/// font (Lolita) at the size set in the editor's text settings. 22 px matches the CN
-/// notice's measured 7 lines in a 300x200 window.
-const TEXT_PX: f32 = 22.0;
 
 /// Install directory of the original game.
 ///
@@ -1270,12 +1275,24 @@ fn tint_instance(quad: &wolf_game::atlas::SpriteQuad) -> SpriteInstance {
     SpriteInstance::new(quad.rect, quad.uv)
         .with_alpha(quad.alpha)
         .with_tint_rgb(quad.tint[0], quad.tint[1], quad.tint[2])
-}fn run_capture(
+}/// Where a capture starts.
+///
+/// The retail entry point is the boot map, but two other entries are useful: the
+/// bare title menu (to photograph the runtime choice panel without the splash
+/// chain) and an arbitrary map event (the M2 story scripts, which never call the
+/// title at all).
+enum Entry<'a> {
+    Boot,
+    Menu,
+    Script { map: &'a str, event: u32 },
+}
+
+fn run_capture(
     root: &Path,
     out: Option<PathBuf>,
     frames: usize,
     answer: Option<usize>,
-    boot: bool,
+    entry: Entry<'_>,
 ) -> ExitCode {
     let out = out.unwrap_or_else(|| PathBuf::from("work/out/title.png"));
     let mut game = match Game::new(root) {
@@ -1296,16 +1313,26 @@ fn tint_instance(quad: &wolf_game::atlas::SpriteQuad) -> SpriteInstance {
     // Two entry points: the real boot path (map autorun event -> splashes -> title art
     // -> menu) and the bare menu event 42, kept for regression captures of the menu
     // overlay on its own.
-    let started = if boot {
-        game.boot().map_err(|err| err.to_string())
-    } else {
-        game.start_title().map_err(|err| err.to_string())
+    let (started, label) = match entry {
+        Entry::Boot => (
+            game.boot().map_err(|err| err.to_string()),
+            "boot map (TitleMap.mps event 2)".to_owned(),
+        ),
+        Entry::Menu => (
+            game.start_title().map_err(|err| err.to_string()),
+            "common event 42".to_owned(),
+        ),
+        Entry::Script { map, event } => (
+            game.start_map_event_by_name(map, event)
+                .map_err(|err| err.to_string()),
+            format!("map script {map} event {event}"),
+        ),
     };
     if let Err(err) = started {
         eprintln!("{err}");
         return ExitCode::FAILURE;
     }
-    println!("  entry     : {}", if boot { "boot map (TitleMap.mps event 2)" } else { "common event 42" });
+    println!("  entry     : {label}");
 
     let mut peak = 0usize;
     for _ in 0..frames {
@@ -1317,15 +1344,20 @@ fn tint_instance(quad: &wolf_game::atlas::SpriteQuad) -> SpriteInstance {
     let mut sprites = atlas.sprites(&game.screen, &mut game.assets);
     let mut texts = atlas::texts(&game.screen);
     // A WOLF script never draws its own choice frame: the engine paints a window skin and
-    // moves a cursor over it. Without this overlay a held capture photographs a title
-    // screen with no visible menu at all, because the three option strings "1"/"2"/"3"
-    // are placeholders the runtime is supposed to replace with the prompt.
+    // moves a cursor over it, at the coordinates system variables 3 (x) and 4 (y) name.
+    // There is no centred default (docs/OPCODE_102.md section 4.2), and when the finished
+    // rectangle falls outside the 1024x576 viewport the engine paints nothing at all -
+    // which is what the title event relies on when it parks the window at y = 1000.
     if let Some(choices) = &game.choices {
         let options = choices.options.clone();
         let cursor = game.choice_cursor();
-        let (panel, rows) = choice::overlay(&mut atlas, &mut game.assets, &options, cursor);
-        sprites.extend(panel);
-        texts.extend(rows);
+        let (x, y) = game.choice_anchor();
+        if let Some((panel, rows)) =
+            choice::overlay_at(&mut atlas, &mut game.assets, &options, cursor, x, y)
+        {
+            sprites.extend(panel);
+            texts.extend(rows);
+        }
     }
     let [atlas_w, atlas_h] = atlas.size();
 
@@ -1339,12 +1371,24 @@ fn tint_instance(quad: &wolf_game::atlas::SpriteQuad) -> SpriteInstance {
         texts.len()
     );
     match &game.choices {
-        Some(choices) => println!(
-            "  choice    : HELD on prompt with {} option(s) {:?}, cursor {}",
-            choices.options.len(),
-            choices.options,
-            game.choice_cursor()
-        ),
+        Some(choices) => {
+            let (x, y) = game.choice_anchor();
+            let anchored = choice::layout_at(&choices.options, game.choice_cursor(), x, y);
+            println!(
+                "  choice    : HELD on prompt with {} option(s) {:?}, cursor {} at anchor ({x}, {y})",
+                choices.options.len(),
+                choices.options,
+                game.choice_cursor()
+            );
+            match anchored {
+                Some(panel) => println!(
+                    "            : engine rect {:?}, {} row(s)",
+                    panel.rect,
+                    panel.lines.len()
+                ),
+                None => println!("            : anchor is off screen, engine draws nothing"),
+            }
+        }
         None => println!("  choice    : none open"),
     }
     println!(
@@ -1394,7 +1438,7 @@ fn tint_instance(quad: &wolf_game::atlas::SpriteQuad) -> SpriteInstance {
     renderer.draw(&instances);
     let items: Vec<TextItem> = texts
         .iter()
-        .map(|text| TextItem::new(text.text.clone(), text.rect, TEXT_PX).with_alpha(text.alpha))
+        .map(|text| TextItem::new(text.text.clone(), text.rect, choice::TEXT_PX).with_alpha(text.alpha))
         .collect();
     renderer.draw_text(&items);
 
@@ -1626,6 +1670,7 @@ fn run_map_event(
     frames: usize,
     trace: bool,
     answer: Option<usize>,
+    hot: bool,
 ) -> ExitCode {
     println!("wolf-cli run --map {map_name} --event {event_id} --frames {frames}");
     let basic = if root.join("BasicData").is_dir() {
@@ -1713,6 +1758,7 @@ fn run_map_event(
     println!();
 
     let mut vm = Vm::new(programs);
+    vm.hot_trace = hot;
     let mut host = TraceHost::new(trace, answer);
     if vm.start_program(Arc::new(program)).is_none() {
         eprintln!("  ! cannot start map event {event_id}");
@@ -1722,11 +1768,21 @@ fn run_map_event(
     let mut total_steps = 0usize;
     let mut peak_instances = 1usize;
     let mut frames_run = 0usize;
+    let mut spots: Vec<(u32, usize, u64)> = Vec::new();
     for _ in 0..frames {
         let report: StepReport = vm.step_frame(&mut host);
         frames_run += 1;
         total_steps += report.steps;
         peak_instances = peak_instances.max(report.running);
+        for spot in &report.hottest {
+            match spots
+                .iter_mut()
+                .find(|entry| entry.0 == spot.event && entry.1 == spot.pc)
+            {
+                Some(entry) => entry.2 += spot.hits,
+                None => spots.push((spot.event, spot.pc, spot.hits)),
+            }
+        }
         if report.running == 0 {
             break;
         }
@@ -1750,6 +1806,28 @@ fn run_map_event(
     println!("  save/load        {}", host.saves);
     println!("  reserves         {}", host.reserves);
     println!("  pro features     {}", host.pro);
+    // The park position is what makes a stuck script debuggable: a story script that
+    // redraws the same two pictures every frame is waiting on one specific slot.
+    for instance in vm.instances() {
+        println!(
+            "  live             id {} event {} pc {}/{} wait {:?} self0 {} self10 {}",
+            instance.id,
+            instance.event,
+            instance.pc,
+            instance.program.len(),
+            instance.wait,
+            instance.self_vars.get(0),
+            instance.self_vars.get(10)
+        );
+    }
+    if !spots.is_empty() {
+        spots.sort_by(|a, b| b.2.cmp(&a.2));
+        println!();
+        println!("  hot spots        (instruction address -> hits)");
+        for (event, pc, hits) in spots.iter().take(10) {
+            println!("    ev {event:<6} pc {pc:<5} {hits} hit(s)");
+        }
+    }
     if !host.infos.is_empty() {
         println!();
         println!(

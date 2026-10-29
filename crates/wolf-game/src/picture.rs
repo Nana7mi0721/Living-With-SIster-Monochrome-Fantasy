@@ -88,6 +88,14 @@ pub const ANCHOR_CENTRE: u8 = 1;
 /// Scale field value that means "no scaling" (percent).
 pub const SCALE_ONE: i32 = 100;
 
+/// Which argument slot of the long erase form carries the other end of the range.
+///
+/// The erase form is `150 [head, number, fade, fade, 0, other]`: after the head word the
+/// interpreter hands the picture layer `[fade, fade, 0, other]`, so slot 3 is the second
+/// picture number. 329 of the 1,115 erase instructions in this game use that form; the
+/// remaining 751 are the short `[fade]` form and 35 carry a stray short tail.
+pub const ERASE_SPAN: usize = 3;
+
 /// Field indices inside PictureCmd::args, from the table in the module docs.
 pub mod field {
     /// Unknown flag word; 0 except for the title background (30).
@@ -471,7 +479,24 @@ impl Screen {
     pub fn apply(&mut self, cmd: &PictureCmd) {
         match cmd.action {
             PictureAction::Erase => {
-                self.pictures.remove(&cmd.number);
+                // The long erase form clears a RANGE of slots. Common event 221 parks the
+                // whole loading screen with `150 [16777218, 50000, 5, 5, 0, 50003]`: one
+                // command removes the black backdrop (50000), the eyecatch (50001), the
+                // NOW LOADING text (50002) and the progress bar (50003). Treating it as a
+                // single-slot erase is what left the eyecatch and the loading text on
+                // screen forever, because no other instruction in the game names them.
+                //
+                // The two endpoints are not ordered - Map003.mps:ev1 pc24 passes -1 then
+                // -2 - so the range is between them, not below and above the first.
+                match cmd.args.get(ERASE_SPAN) {
+                    Some(other) => {
+                        let (lo, hi) = (cmd.number.min(*other), cmd.number.max(*other));
+                        self.pictures.retain(|number, _| *number < lo || *number > hi);
+                    }
+                    None => {
+                        self.pictures.remove(&cmd.number);
+                    }
+                }
             }
             PictureAction::Draw | PictureAction::Set => {
                 let mut picture = Picture::new(cmd.number);
@@ -537,10 +562,12 @@ impl Screen {
     }
     /// Flattens the live pictures into draw requests, in draw order.
     ///
-    /// tex_size resolves an asset path to its pixel size; returning None skips the
-    /// picture, because a quad of unknown size cannot be placed and inventing one would
-    /// draw garbage. Text pictures are emitted with an empty source rectangle so the text
-    /// layer can pick them up in the same pass.
+    /// tex_size resolves an asset path to its pixel size. A `<...>` built-in system
+    /// graphic has no file and takes its size from the picture's own window fields instead
+    /// (see `picture_size`); everything else that resolves to nothing skips the picture,
+    /// because a quad of unknown size cannot be placed and inventing one would draw
+    /// garbage. Text pictures are emitted with an empty source rectangle so the text layer
+    /// can pick them up in the same pass.
     #[must_use]
     pub fn quads<F>(&self, mut tex_size: F) -> Vec<ScreenQuad>
     where
@@ -554,7 +581,7 @@ impl Screen {
             // Whole-screen layers ignore x/y/scale entirely: whichever way a negative-number
             // picture is anchored, it must cover the logical screen.
             if picture.is_screen_layer() {
-                let src = tex_size(&picture.file)
+                let src = picture_size(picture, &mut tex_size)
                     .map_or([0, 0, SCREEN_W, SCREEN_H], |(w, h)| [0, 0, w, h]);
                 out.push(ScreenQuad::from(
                     picture,
@@ -567,7 +594,7 @@ impl Screen {
                 let (w, h) = picture.window.unwrap_or((0, 0));
                 ([0, 0, 0, 0], w.max(0) as f32, h.max(0) as f32)
             } else {
-                let Some((w, h)) = tex_size(&picture.file) else {
+                let Some((w, h)) = picture_size(picture, &mut tex_size) else {
                     continue;
                 };
                 let scale = picture.scale.max(0) as f32 / SCALE_ONE as f32;
@@ -611,6 +638,25 @@ fn place(anchor: u8, x: i32, y: i32, w: f32, h: f32) -> [f32; 4] {
     [left, top, w, h]
 }
 
+/// Resolves the pixel size of whatever one picture draws.
+///
+/// A real file always wins: its own size is what the artist made and what the blit uses.
+/// A `<...>` built-in command has no file at all, so its size is the box the `150`
+/// instruction wrote into the window fields - see `sysgraphic::box_size`, which also
+/// explains why the `-a-b` suffix of a `<GRAD*-a-b>` name is not a size. Both the
+/// whole-screen layers and the ordinary pictures resolve through here, so a built-in shape
+/// is placed, scaled and clipped by exactly the same rules as an image.
+fn picture_size<F>(picture: &Picture, tex_size: &mut F) -> Option<(u32, u32)>
+where
+    F: FnMut(&str) -> Option<(u32, u32)>,
+{
+    if let Some(size) = tex_size(&picture.file) {
+        return Some(size);
+    }
+    let shape = crate::sysgraphic::parse(&picture.file)?;
+    crate::sysgraphic::box_size(shape, picture.window)
+}
+
 /// Merges a command's field words into a picture, honouring the UNCHANGED sentinel.
 fn merge_args(picture: &mut Picture, args: &[i32]) {
     if let Some(value) = take(args, field::OPACITY) {
@@ -629,9 +675,14 @@ fn merge_args(picture: &mut Picture, args: &[i32]) {
         picture.blend = value;
     }
     // Window dimensions only mean something for the window kinds, and the short forms do
-    // not carry them at all; a 0x0 window would make the text invisible, so require > 0.
+    // not carry them at all; a 0x0 window would make the text invisible, so require > 0 -
+    // with one measured exception. All 7 `<LINE>` instructions in this game pass a zero
+    // height and still draw a hairline, and refusing the pair here would throw the width
+    // away with it (see crates/wolf-game/src/sysgraphic.rs). The exception is tied to the
+    // built-in spelling so a degenerate text window is still refused.
     if let (Some(w), Some(h)) = (take(args, field::WINDOW_W), take(args, field::WINDOW_H)) {
-        if w > 0 && h > 0 {
+        let zero_height_ok = h == 0 && crate::sysgraphic::parse(&picture.file).is_some();
+        if w > 0 && (h > 0 || zero_height_ok) {
             picture.window = Some((w, h));
         }
     }
@@ -844,6 +895,11 @@ mod tests {
         assert_eq!(picture.file, "Kagura/bg.png");
     }
 
+    /// The shortest argument list that draws a visible sprite.
+    fn short_draw_args() -> [i32; 9] {
+        [0, 1, 1, 1, 255, 0, 0, 100, 0]
+    }
+
     #[test]
     fn erase_removes_the_slot_and_is_idempotent() {
         let mut screen = Screen::new();
@@ -853,6 +909,41 @@ mod tests {
         assert!(screen.is_empty());
         screen.apply(&cmd(-2, 0, PictureAction::Erase, "", "", &[]));
         assert!(screen.is_empty());
+    }
+
+    #[test]
+    fn the_long_erase_form_clears_every_slot_between_its_endpoints() {
+        let mut screen = Screen::new();
+        for number in 50000..=50003 {
+            screen.apply(&cmd(number, 0, PictureAction::Draw, "a.png", "", &short_draw_args()));
+        }
+        screen.apply(&cmd(50004, 0, PictureAction::Draw, "a.png", "", &short_draw_args()));
+        // ce221 pc36, verbatim: the pair is 50000 and 50003.
+        screen.apply(&cmd(50000, 0, PictureAction::Erase, "", "", &[5, 5, 0, 50003]));
+        assert_eq!(screen.len(), 1, "only the picture outside the pair survives");
+        assert!(screen.get(50004).is_some());
+    }
+
+    #[test]
+    fn the_erase_range_is_read_between_its_endpoints_not_in_argument_order() {
+        let mut screen = Screen::new();
+        for number in [-2, -1] {
+            screen.apply(&cmd(number, 0, PictureAction::Draw, "a.png", "", &short_draw_args()));
+        }
+        // Map003.mps:ev1 pc24 passes the endpoints the wrong way round.
+        screen.apply(&cmd(-1, 0, PictureAction::Erase, "", "", &[0, 0, 0, -2]));
+        assert!(screen.is_empty());
+    }
+
+    #[test]
+    fn the_short_erase_form_removes_only_its_own_slot() {
+        let mut screen = Screen::new();
+        for number in [10, 11, 12] {
+            screen.apply(&cmd(number, 0, PictureAction::Draw, "a.png", "", &short_draw_args()));
+        }
+        screen.apply(&cmd(11, 0, PictureAction::Erase, "", "", &[0]));
+        assert_eq!(screen.len(), 2);
+        assert!(screen.get(10).is_some() && screen.get(12).is_some());
     }
 
     #[test]
@@ -916,6 +1007,51 @@ mod tests {
         let quads = screen.quads(|_| Some((40, 20)));
         assert_eq!(quads.len(), 1);
         assert_eq!(quads[0].dst, [5.0, 6.0, 40.0, 20.0]);
+    }
+
+    #[test]
+    fn a_system_graphic_picture_takes_its_box_from_the_window_fields() {
+        let mut screen = Screen::new();
+        // The retail progress-bar frame, and the spelling WOLF stores it as: kind 3.
+        screen.apply(&cmd(
+            40,
+            3,
+            PictureAction::Draw,
+            "<SQUARE>FRAME",
+            "",
+            &[0, 120, 5, 1, 255, 320, 342, 100, 0],
+        ));
+        // The texture callback knows nothing about the name - that is the point: a built-in
+        // shape must not need a file to have a size.
+        let quads = screen.quads(|_| None);
+        assert_eq!(quads.len(), 1);
+        assert_eq!(quads[0].src, [0, 0, 120, 5]);
+        assert_eq!(quads[0].dst, [320.0, 342.0, 120.0, 5.0]);
+
+        // `<LINE>` really does arrive with h = 0 (all 7 instances); the width must survive
+        // that, and the height becomes the one pixel the rule is.
+        screen.apply(&cmd(
+            41,
+            3,
+            PictureAction::Draw,
+            "<LINE>",
+            "",
+            &[0, 400, 0, 1, 255, 10, 20, 100, 0],
+        ));
+        let quads = screen.quads(|_| None);
+        assert_eq!(quads[1].src, [0, 0, 400, 1]);
+        assert_eq!(quads[1].dst, [10.0, 20.0, 400.0, 1.0]);
+
+        // A shape with no box at all cannot be placed and is dropped, like a missing file.
+        screen.apply(&cmd(
+            42,
+            3,
+            PictureAction::Draw,
+            "<SQUARE>",
+            "",
+            &[0, 0, 0, 1, 255, 0, 0, 100, 0],
+        ));
+        assert_eq!(screen.quads(|_| None).len(), 2);
     }
 
     #[test]

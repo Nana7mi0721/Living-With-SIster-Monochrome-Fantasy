@@ -32,11 +32,6 @@ use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 /// One frame at 60 Hz.
 const FRAME_TIME: Duration = Duration::from_micros(16_667);
 
-/// Glyph size for text pictures and the runtime choice panel, in logical pixels.
-///
-/// WOLF's default font is a 24 px bitmap glyph set and the title screens are laid out
-/// for it, so anything much smaller renders a menu that looks empty at 1x.
-const TEXT_PX: f32 = 22.0;
 
 /// Runs the title screen in a window until the user closes it (or `frames` pass).
 ///
@@ -149,14 +144,18 @@ impl App {
         if let Some(choices) = &self.game.choices {
             let options = choices.options.clone();
             let cursor = self.game.choice_cursor();
-            let (panel, rows) = choice::overlay(
+            let (x, y) = self.game.choice_anchor();
+            if let Some((panel, rows)) = choice::overlay_at(
                 &mut self.atlas,
                 &mut self.game.assets,
                 &options,
                 cursor,
-            );
-            sprites.extend(panel.iter().map(Self::tint_instance));
-            texts.extend(rows);
+                x,
+                y,
+            ) {
+                sprites.extend(panel.iter().map(Self::tint_instance));
+                texts.extend(rows);
+            }
         }
         self.sprites = sprites;
         self.texts = texts;
@@ -176,7 +175,7 @@ impl App {
     fn build_text_items(&self) -> Vec<TextItem> {
         self.texts
             .iter()
-            .map(|text| TextItem::new(text.text.clone(), text.rect, TEXT_PX).with_alpha(text.alpha))
+            .map(|text| TextItem::new(text.text.clone(), text.rect, choice::TEXT_PX).with_alpha(text.alpha))
             .collect()
     }
 

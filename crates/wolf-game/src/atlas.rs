@@ -18,6 +18,7 @@ use std::collections::HashMap;
 
 use crate::assets::{Assets, ImageData};
 use crate::picture::{Picture, PictureKind, Screen, SCALE_ONE, SCREEN_H, SCREEN_W};
+use crate::sysgraphic;
 use crate::window;
 
 /// Edge length of the atlas texture. 2048 is inside every adapter's limit (the smallest
@@ -256,6 +257,25 @@ impl Atlas {
         self.add(name, &image)
     }
 
+    /// Renders a built-in `<...>` shape at w x h and packs it, caching by atlas key.
+    ///
+    /// The key is `sysgraphic::atlas_key`: it carries the shape (gradient endpoints
+    /// included) and the size, so a bar that keeps its box is rendered once and only
+    /// re-rendered when the script resizes it, and a `<SQUARE>` at 120x5 can never share a
+    /// slot with the same command at 800x500.
+    ///
+    /// The pixels are pure white with a per-pixel alpha mask; the caller multiplies the
+    /// picture's own tone and opacity into the quad, so colouring a shape costs nothing and
+    /// never has to be re-rasterised.
+    pub fn add_sysgraphic(&mut self, shape: sysgraphic::Shape, w: u32, h: u32) -> Option<AtlasRect> {
+        let key = sysgraphic::atlas_key(shape, w, h);
+        if let Some(rect) = self.entries.get(&key) {
+            return Some(*rect);
+        }
+        let image = sysgraphic::render(shape, w, h)?;
+        self.add(&key, &image)
+    }
+
     fn blit(&mut self, image: &ImageData, x: u32, y: u32) {
         let stride = self.width as usize * 4;
         for row in 0..image.height as usize {
@@ -283,6 +303,15 @@ impl Atlas {
                     picture.kind,
                     PictureKind::WindowFile | PictureKind::WindowString
                 ) {
+                    return None;
+                }
+                // A window picture whose "file" is a built-in drawing command is not a
+                // window: WOLF stores every system graphic as a type-3 command (all 375 of
+                // them in this game are type 3), so without this test the author's
+                // `<SQUARE>`, `<GRADX-999-274>` or `<TRI-DOWN>` would be painted as a nine-slice
+                // panel from SystemGraphic/WindowBase.png and the drawing itself would never
+                // appear. The skin path is untouched for every other window picture.
+                if sysgraphic::parse(&picture.file).is_some() {
                     return None;
                 }
                 let (w, h) = picture.window?;
@@ -323,12 +352,23 @@ impl Atlas {
             if quad.kind.is_text() || quad.src[2] == 0 || quad.src[3] == 0 {
                 continue;
             }
-            let Some(rect) = self.add_asset(assets, &quad.file) else {
-                continue;
+            // Built-in system graphics are synthesised at exactly the size the quad asks
+            // for and cached under their own key, so this branch never touches Assets -
+            // whose loader rejects every name containing ':' and would treat the drawing
+            // command as a missing file. Everything else keeps the original file path.
+            let (rect, size) = match sysgraphic::parse(&quad.file) {
+                Some(shape) => match self.add_sysgraphic(shape, quad.src[2], quad.src[3]) {
+                    Some(rect) => (rect, [quad.src[2], quad.src[3]]),
+                    None => continue,
+                },
+                None => {
+                    let Some(rect) = self.add_asset(assets, &quad.file) else {
+                        continue;
+                    };
+                    (rect, self.source_size(&quad.file).unwrap_or([0, 0]))
+                }
             };
-            let uv = if quad.src[2] == self.source_size(&quad.file).unwrap_or([0, 0])[0]
-                && quad.src[3] == self.source_size(&quad.file).unwrap_or([0, 0])[1]
-            {
+            let uv = if quad.src[2] == size[0] && quad.src[3] == size[1] {
                 rect.uv(self.width, self.height)
             } else {
                 rect.sub_uv(self.width, self.height, quad.src)
@@ -524,6 +564,115 @@ mod tests {
         assert_eq!(atlas.entry(window::SKIN), Some(skin));
         // The text itself still belongs to the glyph pass, on top of the panel.
         assert_eq!(texts(&screen).len(), 1);
+    }
+
+    /// A `150` command for a built-in drawing, in the shape the interpreter emits it.
+    fn shape_picture(number: i32, file: &str, box_size: (i32, i32), at: (i32, i32)) -> wolf_vm::PictureCmd {
+        wolf_vm::PictureCmd {
+            number,
+            // Every built-in graphic in this game is a type-3 (window/file) command.
+            kind: 3,
+            action: wolf_vm::exec::PictureAction::Draw,
+            file: file.to_owned(),
+            text: String::new(),
+            args: vec![
+                0,
+                box_size.0,
+                box_size.1,
+                1,
+                255,
+                at.0,
+                at.1,
+                100,
+                0,
+            ],
+            animate: Vec::new(),
+            anchor: 0,
+        }
+    }
+
+    #[test]
+    fn a_system_graphic_becomes_a_quad_under_its_own_key_instead_of_a_skin() {
+        let mut screen = Screen::new();
+        // The retail progress bar: `<SQUARE>FRAME` 120x5 at (320, 342).
+        screen.apply(&shape_picture(40, "<SQUARE>FRAME", (120, 5), (320, 342)));
+        let mut atlas = Atlas::with_size(256, 256);
+        let mut assets = Assets::new("no-such-root");
+        let quads = atlas.sprites(&screen, &mut assets);
+        assert_eq!(quads.len(), 1, "the drawing, and no nine-slice skin under it");
+        let key = sysgraphic::atlas_key(sysgraphic::Shape::SquareFrame, 120, 5);
+        assert!(
+            key.starts_with("<sysgraphic:") && key.contains("120x5"),
+            "unexpected key {key}"
+        );
+        let rect = atlas.entry(&key).expect("packed under the sysgraphic key");
+        assert_eq!((rect.w, rect.h), (120, 5));
+        assert_eq!(quads[0].rect, [320.0, 342.0, 120.0, 5.0]);
+        assert_eq!(quads[0].uv, rect.uv(256, 256));
+        // A frame is a hollow white rectangle: the border is opaque, the middle is not.
+        let pixel = |x: u32, y: u32| -> [u8; 4] {
+            let offset = ((rect.y + y) * 256 + rect.x + x) as usize * 4;
+            let slice = &atlas.pixels()[offset..offset + 4];
+            [slice[0], slice[1], slice[2], slice[3]]
+        };
+        assert_eq!(pixel(0, 0), [255, 255, 255, 255]);
+        assert_eq!(pixel(60, 2)[3], 0, "the interior stays transparent");
+        // The window skin was never asked for, so it was never packed.
+        assert_eq!(atlas.len(), 1);
+        assert!(atlas.entry(crate::window::SKIN).is_none());
+    }
+
+    #[test]
+    fn a_zero_height_line_still_reaches_the_atlas_as_one_pixel() {
+        let mut screen = Screen::new();
+        // All 7 `<LINE>` instructions in the game arrive with h = 0.
+        screen.apply(&shape_picture(41, "<LINE>", (400, 0), (10, 20)));
+        let mut atlas = Atlas::with_size(512, 16);
+        let mut assets = Assets::new("no-such-root");
+        let quads = atlas.sprites(&screen, &mut assets);
+        assert_eq!(quads.len(), 1);
+        assert_eq!(quads[0].rect, [10.0, 20.0, 400.0, 1.0]);
+        let key = sysgraphic::atlas_key(sysgraphic::Shape::Line, 400, 1);
+        assert!(atlas.entry(&key).is_some(), "a 400x1 rule is packed");
+    }
+
+    #[test]
+    fn a_name_that_is_not_a_system_graphic_keeps_the_old_path() {
+        // `<C>` is text markup and a real path is a real path: neither may be mistaken for
+        // a drawing, so both fall through to the file lookup, which finds nothing here.
+        assert!(sysgraphic::parse("<C>").is_none());
+        assert!(sysgraphic::parse("Picture/frame.png").is_none());
+        let mut screen = Screen::new();
+        screen.apply(&shape_picture(42, "<C>", (8, 8), (0, 0)));
+        let mut atlas = Atlas::with_size(64, 64);
+        let mut assets = Assets::new("no-such-root");
+        assert!(atlas.sprites(&screen, &mut assets).is_empty());
+        assert!(atlas.is_empty());
+
+        // A window picture that names a real file still gets the nine-slice skin it always
+        // got: the system-graphic tests above must not have stolen that path.
+        let mut screen = Screen::new();
+        screen.apply(&wolf_vm::PictureCmd {
+            number: 7,
+            kind: 3,
+            action: wolf_vm::exec::PictureAction::Draw,
+            file: "SystemFile/panel.png".to_owned(),
+            text: String::new(),
+            args: vec![0, 300, 200, 1, 255, 855, 200, 100, 0],
+            animate: Vec::new(),
+            anchor: 0,
+        });
+        let mut atlas = Atlas::with_size(64, 64);
+        let skin = atlas
+            .add(crate::window::SKIN, &image(18, 18, 0x7F))
+            .expect("skin");
+        let quads = atlas.sprites(&screen, &mut assets);
+        assert_eq!(quads.len(), 9, "nine-slice of the 18x18 skin");
+        assert_eq!(quads[0].rect, [855.0, 200.0, 3.0, 3.0]);
+        assert_eq!(quads[4].rect, [858.0, 203.0, 294.0, 194.0]);
+        assert_eq!(atlas.entry(crate::window::SKIN), Some(skin));
+        // The skin is the only thing in the atlas: no drawing was synthesised for it.
+        assert_eq!(atlas.len(), 1);
     }
 }
 

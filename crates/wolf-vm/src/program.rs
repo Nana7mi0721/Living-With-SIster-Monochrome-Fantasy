@@ -175,6 +175,12 @@ impl PrecompileStats {
     }
 }
 
+/// `return_value_id` of an event that declares no return value (`0xFFFF_FFFF`).
+///
+/// 476 of the 550 common events in this game carry it; calls into them leave the
+/// caller's destination variable untouched (docs/OPCODE_210_RETURN.md §3.2).
+pub const NO_RETURN_VALUE: u32 = u32::MAX;
+
 /// One event, ready to execute.
 #[derive(Clone, Debug)]
 pub struct Program {
@@ -182,6 +188,14 @@ pub struct Program {
     pub id: u32,
     /// Event title, for traces and `300 CallByName`.
     pub title: String,
+    /// `CommonEvent.return_value_id`: which self variable of *this* event holds
+    /// the value a caller receives.
+    ///
+    /// WOLF numbers it inside self group 6 - the same bank the call arguments
+    /// arrive in - so the slot is `1_600_000 + return_value_id`
+    /// (docs/OPCODE_210_RETURN.md §3). [`NO_RETURN_VALUE`] means the event
+    /// declares no return value, and the caller's destination keeps its old value.
+    pub return_value_id: u32,
     /// The instruction stream, unchanged from the file.
     pub slots: Vec<Slot>,
     /// Jump table, parallel to [Program::slots].
@@ -200,7 +214,9 @@ impl Program {
     /// Resolve one event's control flow.
     #[must_use]
     pub fn compile(event: &wolf_format::commonevent::CommonEvent) -> Self {
-        Self::from_slots(event.id, &event.title, event.commands.clone())
+        let mut program = Self::from_slots(event.id, &event.title, event.commands.clone());
+        program.return_value_id = event.return_value_id;
+        program
     }
 
     /// Same, for a bare instruction stream.
@@ -361,6 +377,9 @@ impl Program {
         Self {
             id,
             title: title.to_owned(),
+            // A bare slot stream carries no declaration; map event pages are not
+            // callable through 210 with a return value in this game.
+            return_value_id: NO_RETURN_VALUE,
             slots,
             control,
             blocks,
@@ -717,7 +736,7 @@ mod tests {
             color: 0,
             self_variable_names: Vec::new(),
             return_name: String::new(),
-            return_value_id: 0,
+            return_value_id: NO_RETURN_VALUE,
         }
     }
 

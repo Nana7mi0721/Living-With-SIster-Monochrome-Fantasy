@@ -41,6 +41,19 @@ pub const SELF_SLOTS_PER_GROUP: usize = 100;
 /// Number of self-variable groups (`V0-0 .. V9-99`).
 pub const SELF_GROUPS: usize = 10;
 
+/// First flat self-variable slot used to receive call arguments.
+///
+/// WOLF passes the arguments of `210 CallCommonEvent` / `300 CallByName` into
+/// the child's **self variable group 6**, i.e. magic `1_600_000 + i`. Measured
+/// over 9,938 static calls whose callee touches a self variable within its
+/// first 12 instructions: 42,435 references point into group 6 and only 121
+/// into group 0, and the most frequent first reference is exactly
+/// `1_600_000` (7,953 calls). Common event 221 (the loading bar) is the
+/// clearest case: callers pass [progress_step, mode] as `1_600_000` /
+/// `1_600_001`, and the event uses `1_600_001` as its mode switch and
+/// `1_600_000` as the random step of its progress bar.
+pub const SELF_ARG_BASE: usize = 6 * SELF_SLOTS_PER_GROUP;
+
 /// What a magic number refers to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MagicKind {

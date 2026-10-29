@@ -36,7 +36,7 @@ use std::sync::Arc;
 use wolf_format::command::{Command, RouteCommand, Slot, Tail};
 
 use crate::magic::{Magic, MagicKind};
-use crate::program::{arg, argc, BlockKind, Control, Program, ProgramSet};
+use crate::program::{arg, argc, BlockKind, Control, Program, ProgramSet, NO_RETURN_VALUE};
 use crate::rng::WolfRng;
 use crate::text::{self, EscapeBank, VarLookup};
 use crate::vars::{SelfVars, Variables};
@@ -51,6 +51,9 @@ pub const PICTURE_UNCHANGED: i32 = -1_000_000;
 
 /// Default instructions per frame across all instances.
 pub const DEFAULT_BUDGET: usize = 200_000;
+
+/// How many addresses a hot spot report keeps per coroutine.
+pub const HOT_SPOTS: usize = 5;
 /// Hard cap on concurrently running coroutines; a runaway `210` chain stops here.
 pub const MAX_INSTANCES: usize = 4_096;
 
@@ -488,6 +491,47 @@ pub struct StepReport {
     pub finished: usize,
     /// Diagnostics produced this frame.
     pub notes: Vec<String>,
+    /// The most frequently executed addresses of this frame, filled only when
+    /// `Vm::hot_trace` is on (the histogram costs a linear scan per step).
+    pub hottest: Vec<HotSpot>,
+}
+
+/// One instruction address the interpreter executed many times in one frame.
+///
+/// A script that burns the whole per-frame budget shows up here as a handful of
+/// addresses with tens of thousands of hits each -- that is how an endless loop
+/// and a poll of a flag that never changes are told apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HotSpot {
+    /// Event whose coroutine ran the address.
+    pub event: EventId,
+    /// Program counter inside that event.
+    pub pc: usize,
+    /// How many times it ran during the frame.
+    pub hits: u64,
+}
+
+/// Input policy set by the two input-control opcodes.
+///
+/// 125 (auto input) and 126 (ban input) both take a single int argument that is
+/// a key mask in the same bit space that 123 polls: this game passes 1, 2, 16,
+/// 32, 64, 128, 240, 247, 496, 752 - the OK/cancel/sub bits plus the four
+/// direction bits, sometimes all at once (247 = every key). The value persists
+/// until the script writes it again, so the two masks are state, not one-shot
+/// commands.
+///
+/// Banning is applied by the interpreter itself: the banned bits are cleared out
+/// of the mask handed to the host, so a banned key reads as not pressed. Auto
+/// input is only stored - forcing a key press needs the host, which owns the
+/// real keyboard, so a host that wants the feature reads this field. No M1/M2
+/// acceptance path calls 125; 126 does appear in the opening script (it bans
+/// every key for the cutscene).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InputState {
+    /// Key bits the script wants pressed even when the player is not pressing them.
+    pub auto_keys: u32,
+    /// Key bits the script wants ignored while they are held.
+    pub ban_keys: u32,
 }
 
 /// The interpreter.
@@ -503,6 +547,10 @@ pub struct Vm {
     budget: usize,
     /// Random source for 121's 0x6000 operator (docs/OPCODE_SPEC.md §3.2).
     pub rng: WolfRng,
+    /// Collect a per-frame instruction histogram into StepReport::hottest.
+    pub hot_trace: bool,
+    /// Input policy set by opcodes 125 and 126.
+    pub input: InputState,
 }
 
 impl Vm {
@@ -517,6 +565,8 @@ impl Vm {
             frame: 0,
             budget: DEFAULT_BUDGET,
             rng: WolfRng::new(),
+            hot_trace: false,
+            input: InputState::default(),
         }
     }
 
@@ -634,7 +684,8 @@ impl Vm {
                 }
             }
         }
-        self.instances.retain(|instance| !doomed.contains(&instance.id));
+        self.instances
+            .retain(|instance| !doomed.contains(&instance.id));
         true
     }
 
@@ -724,6 +775,7 @@ impl Vm {
             if *budget == 0 {
                 return;
             }
+            let mut hist: Vec<(usize, u64)> = Vec::new();
             let result = {
                 let inst = &mut self.instances[i];
                 execute(
@@ -733,8 +785,22 @@ impl Vm {
                     host,
                     budget,
                     &mut self.rng,
+                    &mut self.input,
+                    self.hot_trace,
+                    &mut hist,
                 )
             };
+            if self.hot_trace && !hist.is_empty() {
+                let event = self.instances[i].event;
+                hist.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+                for (pc, hits) in hist.iter().take(HOT_SPOTS) {
+                    report.hottest.push(HotSpot {
+                        event,
+                        pc: *pc,
+                        hits: *hits,
+                    });
+                }
+            }
             report.steps += result.steps;
             match result.signal {
                 Signal::Blocked | Signal::Continue => {}
@@ -813,11 +879,14 @@ impl Vm {
         let id = self.next_id;
         self.next_id += 1;
         let mut child = Instance::new(id, Some(self.instances[caller].id), program);
-        // WOLF passes arguments into the child's self variables starting at
-        // V0-0 (docs/OPCODE_SPEC.md §6.1: the argument names are declared by
-        // `arg_names`, and the values land in self slots 0..n).
+        // Arguments land in self variable group 6 (magic 1_600_000 + i), not in
+        // group 0 - see magic::SELF_ARG_BASE for the measurement. Getting this
+        // wrong is invisible on the title screen but wedges every story script
+        // that uses a progress bar or a mode switch.
         for (slot, value) in args.iter().enumerate() {
-            child.self_vars.set(slot, *value);
+            child
+                .self_vars
+                .set(crate::magic::SELF_ARG_BASE + slot, *value);
         }
         child.return_to = return_to;
         self.instances.push(child);
@@ -826,10 +895,16 @@ impl Vm {
 
     /// Drop ended coroutines and hand their return values to the parents.
     fn reap_finished(&mut self, host: &mut dyn Host) {
+        // A coroutine parked on `WaitState::Child` is *not* finished even when its
+        // pc already points past the last slot: a 210 as the final instruction of
+        // an event leaves pc == len while the child still has to deliver the
+        // return value, and reaping the parent first would drop it on the floor
+        // (the child then finds no waiting parent). Children are reaped before
+        // their parents because a blocked parent is skipped here.
         let finished: Vec<InstanceId> = self
             .instances
             .iter()
-            .filter(|i| i.pc >= i.program.len())
+            .filter(|i| i.pc >= i.program.len() && !matches!(i.wait, WaitState::Child(_)))
             .map(|i| i.id)
             .collect();
         if finished.is_empty() {
@@ -839,7 +914,7 @@ impl Vm {
             let Some(pos) = self.instances.iter().position(|i| i.id == *id) else {
                 continue;
             };
-            let inst = self.instances.remove(pos);
+            let mut inst = self.instances.remove(pos);
             let parent = inst.parent.and_then(|pid| {
                 let idx = self.instances.iter().position(|i| i.id == pid)?;
                 if self.instances[idx].wait == WaitState::Child(inst.id) {
@@ -851,10 +926,17 @@ impl Vm {
             match parent {
                 Some(idx) => {
                     // The child's return value lives in the self slot the event
-                    // declared (docs/OPCODE_SPEC.md §2.5: `return_value_id`).
-                    if let Some(target) = self.instances[idx].return_to.take() {
-                        let value = inst.self_vars.get(return_slot(&inst.program) as usize);
-                        store_num(&mut self.instances[idx], &mut self.vars, target, value);
+                    // declared, and the caller named the destination in the
+                    // trailing operand of its 210/300. That operand is stored on
+                    // the *child* (V[child].return_to) because it describes the
+                    // value the child produces; it is written into the parent's
+                    // variable namespace here, once the child has ended
+                    // (docs/OPCODE_210_RETURN.md §2.2).
+                    if let Some(target) = inst.return_to.take() {
+                        if let Some(slot) = return_slot(&inst.program) {
+                            let value = inst.self_vars.get(slot);
+                            store_num(&mut self.instances[idx], &mut self.vars, target, value);
+                        }
                     }
                     self.instances[idx].wait = WaitState::None;
                 }
@@ -872,12 +954,21 @@ impl Vm {
 }
 
 /// The self-variable slot a common event returns its value through.
-fn return_slot(program: &Program) -> i32 {
-    // `CommonEvent.return_value_id` is not carried on Program; events without an
-    // explicit declaration return self slot 0, which is what the caller's
-    // argument list would have overwritten anyway.
-    let _ = program;
-    0
+///
+/// The declaration is a bare slot number inside self group 6, the call-frame
+/// bank the arguments are delivered to, so the address is `1_600_000 + id`
+/// (docs/OPCODE_210_RETURN.md §3).
+///
+/// `None` when the event declares no return value (`0xFFFF_FFFF`): eight call
+/// sites in this game do ask such an event for a value, but the callee never
+/// writes the slot either, so copying it would only push a stale value into the
+/// caller's variable (docs/OPCODE_210_RETURN.md §4).
+fn return_slot(program: &Program) -> Option<usize> {
+    if program.return_value_id == NO_RETURN_VALUE {
+        return None;
+    }
+    let slot = Magic::decode(1_600_000i32.wrapping_add(program.return_value_id as i32));
+    Some(slot.index() as usize)
 }
 
 /// Read one magic operand.
@@ -1057,6 +1148,9 @@ fn execute(
     host: &mut dyn Host,
     budget: &mut usize,
     rng: &mut WolfRng,
+    input: &mut InputState,
+    hot: bool,
+    hist: &mut Vec<(usize, u64)>,
 ) -> BlockResult {
     // Holds the jump table and the instruction stream. Cloning the Arc (not the
     // Program) keeps the `&Command` borrow pointing at this local instead of at
@@ -1078,6 +1172,12 @@ fn execute(
         }
         *budget -= 1;
         steps += 1;
+        if hot {
+            match hist.iter_mut().find(|entry| entry.0 == inst.pc) {
+                Some(entry) => entry.1 += 1,
+                None => hist.push((inst.pc, 1)),
+            }
+        }
 
         let pc = inst.pc;
         let Slot::Command(cmd) = &program.slots[pc] else {
@@ -1229,7 +1329,8 @@ fn execute(
                 // old "key_bits & mask" model could never take a branch. A headless
                 // host reports 0, exactly like an untouched keyboard.
                 let target = arg(cmd, 0);
-                let mask = arg(cmd, 1) as u32;
+                // A key the script banned with 126 must read as not pressed.
+                let mask = arg(cmd, 1) as u32 & !input.ban_keys;
                 store_num(inst, vars, target, host.key_code(mask));
                 inst.pc += 1;
                 None
@@ -1289,6 +1390,19 @@ fn execute(
                 if let Some(value) = value {
                     store_num(inst, vars, target, value);
                 }
+                inst.pc += 1;
+                None
+            }
+            125 => {
+                // Auto input: remember the mask. Only the host can force a press,
+                // because it owns the real keyboard.
+                input.auto_keys = arg(cmd, 0) as u32;
+                inst.pc += 1;
+                None
+            }
+            126 => {
+                // Ban input: every later 123 poll has these bits cleared.
+                input.ban_keys = arg(cmd, 0) as u32;
                 inst.pc += 1;
                 None
             }
@@ -1691,8 +1805,14 @@ fn call_arguments(cmd: &Command, inst: &Instance, vars: &Variables) -> (Vec<i32>
     for i in 0..count {
         args.push(eval_num(arg(cmd, 2 + i), inst, vars));
     }
+    // The parameter table is numeric arguments, then string arguments, then the
+    // optional destination. Both kinds occupy one 4-byte word, so the destination
+    // sits at 2 + total_count, not 2 + number_count: 22 sites in this game pass a
+    // string argument *and* ask for a return value, and the naive index reads the
+    // string reference as if it were a variable address
+    // (docs/OPCODE_210_RETURN.md §2.2).
     let return_to = if status.return_value_enabled() {
-        Some(arg(cmd, 2 + count))
+        Some(arg(cmd, 2 + status.total_count()))
     } else {
         None
     };
@@ -1801,8 +1921,22 @@ mod tests {
             color: 0,
             self_variable_names: Vec::new(),
             return_name: String::new(),
-            return_value_id: 0,
+            // A test event returns nothing unless it says so, matching the 476
+            // of 550 events in the real file that carry 0xFFFF_FFFF.
+            return_value_id: NO_RETURN_VALUE,
         }
+    }
+
+    /// Same, but declaring a return value in self group 6 slot `id`.
+    fn event_ret(
+        id: u32,
+        title: &str,
+        return_value_id: u32,
+        commands: Vec<Slot>,
+    ) -> wolf_format::commonevent::CommonEvent {
+        let mut e = event(id, title, commands);
+        e.return_value_id = return_value_id;
+        e
     }
 
     fn vm_with(events: Vec<wolf_format::commonevent::CommonEvent>) -> Vm {
@@ -2287,6 +2421,92 @@ mod tests {
         // Parent resumed after the child ended.
         assert_eq!(vm.vars.get(1), 1);
         assert_eq!(vm.instances().len(), 0);
+    }
+
+    #[test]
+    fn common_event_return_value_lands_in_the_callers_variable() {
+        // docs/OPCODE_210_RETURN.md: the callee leaves its result in self group 6
+        // at \`return_value_id\` (here slot 10 -> 1_600_010), the caller named the
+        // destination 2_000_000 in the trailing operand of its 210.
+        let callee = event_ret(
+            2,
+            "callee",
+            10,
+            vec![cmd(121, &[1_600_010, 42, 0, 0], &[]), cmd(172, &[], &[])],
+        );
+        let caller = event_ret(
+            1,
+            "caller",
+            NO_RETURN_VALUE,
+            // 0x0100_0000: no arguments, one return destination.
+            vec![cmd(210, &[500_002, 0x0100_0000, 2_000_000], &[])],
+        );
+        let mut vm = vm_with(vec![callee, caller]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        for _ in 0..3 {
+            vm.step_frame(&mut host);
+        }
+        assert_eq!(vm.vars.get(0), 42);
+        assert_eq!(vm.instances().len(), 0);
+    }
+
+    #[test]
+    fn common_event_without_declared_return_leaves_the_caller_alone() {
+        // 8 real call sites ask for a return value from an event that declares
+        // none (0xFFFF_FFFF); the callee never writes the slot either, so the
+        // destination keeps its old value (docs/OPCODE_210_RETURN.md §4).
+        let callee = event_ret(
+            2,
+            "noret",
+            NO_RETURN_VALUE,
+            vec![cmd(121, &[2_000_009, 9, 0, 0], &[]), cmd(172, &[], &[])],
+        );
+        let caller = event_ret(
+            1,
+            "caller",
+            NO_RETURN_VALUE,
+            vec![
+                cmd(121, &[2_000_000, 5, 0, 0], &[]),
+                cmd(210, &[500_002, 0x0100_0000, 2_000_000], &[]),
+            ],
+        );
+        let mut vm = vm_with(vec![callee, caller]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        for _ in 0..3 {
+            vm.step_frame(&mut host);
+        }
+        assert_eq!(vm.vars.get(0), 5);
+        assert_eq!(vm.vars.get(9), 9);
+    }
+
+    #[test]
+    fn return_destination_follows_the_string_parameters() {
+        // 0x0100_0011 = one numeric argument, one string argument, one return
+        // value. The destination is the *fourth* word, after the string
+        // reference; indexing it by number_count alone lands on the string
+        // reference (docs/OPCODE_210_RETURN.md §2.2, 22 sites in the real data).
+        let callee = event_ret(
+            2,
+            "ret9",
+            9,
+            vec![cmd(121, &[1_600_009, 42, 0, 0], &[]), cmd(172, &[], &[])],
+        );
+        let caller = event_ret(
+            1,
+            "caller",
+            NO_RETURN_VALUE,
+            vec![cmd(210, &[500_002, 0x0100_0011, 5, 0, 2_000_007], &[])],
+        );
+        let mut vm = vm_with(vec![callee, caller]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        for _ in 0..3 {
+            vm.step_frame(&mut host);
+        }
+        assert_eq!(vm.vars.get(7), 42);
+        assert_eq!(vm.vars.get(0), 0);
     }
 
     #[test]
