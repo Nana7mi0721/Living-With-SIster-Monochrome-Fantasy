@@ -383,6 +383,92 @@ Rust 视图：为了不让 500×100 的嵌套变成 `Vec<Vec<u32>>` 的开销，
 
 ---
 
+### 6.1 三张变量表的语义（**已验证**：通常変数 = row 0，9/9）
+
+三层「计数 + 扁平数据」里有两层是**真的变量表**，不是运行时脏数据：
+
+| 表 | 维度 | 语义 | 已验证程度 |
+|---|---|---|---|
+| row_words（按 row_counts 切） | 10 行 / 835 词 | **row 0 = 通常変数 2000000+n**，800 词 | **已验证**，9/9 |
+| list_words（按 list_counts 切） | 500 或 550 组 × 100 词 | 组号 = 公共事件 id，词号 = **セルフ数値 CSelf0..99** | **已验证**（§6.1 五条证据） |
+| slot_strings（按 slot_counts 切） | 500 或 550 组 × 5 串 | 组号 = 公共事件 id，**串号 0 = CSelf5**、串号 4 = CSelf9 | **已验证** |
+
+row_counts 在 9 个存档里**恒为** [800, 4, 7, 4, 1, 1, 1, 6, 1, 10]（合计 835 词），
+所以 row 0 的 800 个词与通常変数 2000000..2000799 一一对应，row_words[7] 就是 2000007。
+行 1..9 的含义**未确认**（实测 row 7 = [512, 288, 512, 288, 24, 19]，形似「画面中心 1024/2、576/2
++ 座標倍率 24 + 基本字号 19」的 UI 缓存，但没有任何写者能对上）。
+
+**「通常変数 = row 0」的三条独立证据**：
+
+1. **原作注释**：ev48（X[共]基本システム自動初期化）pc206 的注释原文是
+   「System.savの通常変数0番を最終セーブデータ番号」，而 System.sav 的 row_words[0] 实测
+   **= 8**，正好是最后使用的存档槽号（SaveData08.sav 存在、ev131 的 CSelf12 也是 8）。
+2. **所持金**：row_words[7]（= 通常変数 2000007）在 SaveData01 / SaveData08 / System.sav
+   三个文件里都是 **7586**，与 HUD 所持金的量级和「同一存档线继承」完全吻合；
+   其他槽是 2254 / 8231 / 1293 / 1193 / 1503 / 15453。
+3. **写入者闭环**：ev131 的 222 站点 pc230 [1600012, 1600005, 2000000, 0] 把
+   CSelf12（槽号）写进 Save/System.sav 的通常変数 0 —— 落盘值 8 = CSelf12 = 8，链闭合。
+
+**三张表的逐档实测值**（crates/wolf-save/tests/typed.rs 全部断言）：
+
+| 文件 | 2000007 所持金 | playtime 帧 | playtime | 组数 | ev131 CSelf12 | part3 字节 |
+|---|---:|---:|---:|---:|---:|---:|
+| SaveData01.sav | 7586 | 16642 | 4:37 | 500 | 8 | 218610 |
+| SaveData02.sav | 2254 | 1252 | 0:20 | 500 | 2 | 217708 |
+| SaveData03.sav | 8231 | 13877 | 3:51 | 500 | 3 | 218472 |
+| SaveData04.sav | 1293 | 16536 | 4:35 | 500 | 4 | 218466 |
+| SaveData05.sav | 1193 | 16705 | 4:38 | 550 | 5 | 239821 |
+| SaveData06.sav | 1503 | 7882 | 2:11 | 500 | 6 | 218462 |
+| SaveData07.sav | 15453 | 11143 | 3:05 | 500 | 7 | 218574 |
+| SaveData08.sav | 7586 | 16887 | 4:41 | 550 | 8 | 240000 |
+| System.sav | 7586 | 16887 | 4:41 | 500 | 8 | 218650 |
+
+恒定值（9/9 一致，可直接断言）：self_var(48, 16) == 6、self_var(48, 25) == 12、
+self_var(48, 26) == 24、self_string(131, 0) == 「Save/System.sav」。
+self_var(131, 12) 逐档为 8/2/3/4/5/6/7/8/8 —— SaveData01 是 8 而不是 1，所以它更像「最后一次在存读档界面里选中的槽」，而不是「本档是第几号槽」【未验证】。
+
+**list_counts 恒为 100、slot_counts 恒为 5**（9/9 全部条目），所以切片就是
+list_words[100*g .. 100*g+100] 与 slot_strings[5*g .. 5*g+5]；实现仍按累加偏移算，
+以免将来遇到别的 WOLF 游戏（组大小可变）就崩。
+
+**システム変数（9000000 段）仍然找不到落盘区**：222 写过的 2000000 / 2000546 / 2000626
+里，前两个在磁盘上都有值（8 和 8），但 626 在 System.sav 里是 0，而 222 的 pc231 写的是
+[2000531, 1600005, 2000626, 0]（把 531 抄进 626），磁盘上 531 = 2。这只能解释成「222 的
+源操作数在 RAM 里求值，落盘的 531 是旧值」，属【未验证】推断；システム変数则完全没有候选区
+（§13 保留）。
+
+### 6.2 写回：SavePart3::to_bytes 逐字节可逆（**已验证**，9/9）
+
+parse 的每一层都是「长度 + 数据」，所以编码器就是它的镜像，逐字段写回即可：
+
+- SavePart3::to_bytes() —— 按 file_version >= 0x6F 的 4 字节 MemData 长度编码（本作就是 0x8C）；
+  to_bytes_with_version(fv) 供更老的存档用（< 0x6F 时 MemData 长度是 u16）。
+- 三条早退分支（m_var2 < 0、m_var3 > 0x270F、m_var4 < 0）与 parse 一一对应：参考实现
+  在这里截断整段，编码器也停在同一位置，所以坏档也能原样吐回前缀而不是报错。
+- 正常路径会校验「扁平列必须被计数完全消费」（group_bytes / group_words / row_words /
+  mds1 / list_words / slot_strings 一个都不能剩），不一致时报 Error::field 而不是写出错位数据。
+
+**实测：9 个存档的 part3 全部与 chunk_bytes(2) 逐字节相同**（上表最后一列的长度即原始长度）。
+这是「改一个变量不会碰坏另外 21 万字节」的前提。
+
+写回 API（crates/wolf-save/src/lib.rs）：
+
+| API | 作用 |
+|---|---|
+| SaveFile::set_part3(&SavePart3) | 重新编码 part3 并 replace_part(PART3_ID = 2)，同时刷新 typed 视图 |
+| SaveFile::playtime_frames() -> Option<u32> | 读 SavePart2::vars3_21[0]（段内偏移 **2**，因为 var1/var2 各 1 字节） |
+| SaveFile::set_playtime_frames(u32) | 直接 patch part2 的 4 个字节；实测 16705 -> 4321 只改偏移 2、3 两个字节 |
+| SavePart3::normal_var(n) / set_normal_var(n, v) | 通常変数 2000000 + n（越界返回 None / false） |
+| SavePart3::self_var(ev, slot) / set_self_var | セルフ数値；组号 = 公共事件 id（0 基），slot = 0..99 |
+| SavePart3::self_string(ev, slot) / set_self_string | セルフ文字列；**slot 0 = CSelf5**，slot 4 = CSelf9（越界/非 UTF-8 返回 None） |
+| SaveFile::normal_var / set_normal_var / self_var / self_string | 上面三个的 SaveFile 门面，setter 会连带重新编码 part3 |
+
+测试（crates/wolf-save/tests/typed.rs，6 个，全部用真实存档、目录不存在时跳过）：
+every_part3_re_encodes_byte_for_byte、the_tables_hold_the_numbers_the_game_ships、
+editing_a_normal_variable_survives_a_write、editing_self_state_survives_a_write、
+playtime_round_trips_through_the_header、out_of_range_indexes_are_refused。
+
+---
 ## 7. SavePart4 — 对象表续（**已验证**）
 
 `docs/vendor/WolfSave/SavePart4.h:39`：
@@ -625,6 +711,17 @@ cargo test -p wolf-save -- --nocapture
 
 实测输出 `checked 9 save file(s)`，1 passed。
 
+### 11.1 写出与变量表的断言（tests/write.rs / tests/typed.rs）
+
+tests/write.rs（6 个）：9 档 serialize() / to_bytes() 与**原始文件逐字节相同**、改档名后头部重建
+（SaveData01 366146 -> 366108）、中间段变长（part3 +10 字节）后各段偏移正确平移、替换尾段后可重新解析、
+未知段 id 被拒。
+
+tests/typed.rs（6 个）：9 档 part3 与 chunk_bytes(2) 逐字节相同；逐档断言 §6.1 的表值
+（所持金 / playtime / 组数 / ev131 槽号 / part3 长度）；改通常変数 2000007 后写出再解析能读回且
+playtime 与セルフ值不变、checksum_ok() 为真；改セルフ数値与セルフ文字列后读回；
+改 playtime 只动 part2 的偏移 2、3；越界索引返回 None / false。
+
 ---
 
 ## 12. 实现坑点汇总（都是实际踩过的）
@@ -641,6 +738,12 @@ cargo test -p wolf-save -- --nocapture
 6. **`Save/` 目录里还有 `save1.jpg..save8.jpg`**，glob 必须只取 `*.sav`，否则会在 jpg 上解析失败。
 7. **段边界没有魔数保护**，唯一的收尾校验是「位置 + 1 == 长度」且「末字节 == 0x19」。
    任何一段读错都会在这条断言上暴露 —— 建议照抄这条断言，不要只信任段长。
+8. **SavePart3 的四张表都是「计数 + 扁平数据」两件**，取第 i 组/行/槽必须先把前面所有计数加起来；
+   不要假设组大小恒定（本作 list_counts 恒 100、slot_counts 恒 5，但编码器与存取器仍按累加算）。
+9. **SavePart3 写回时 `MemData` 的长度宽度随 `file_version` 变**（`< 0x6F` 是 u16），所以
+   `to_bytes()` 只对 `>= 0x6F` 有效（本作 0x8C）；别的版本走 `to_bytes_with_version(fv)`。
+10. **改 playtime 不要走「改 typed 值再序列化 part2」**——part2 目前没有编码器；直接 patch 段内
+    偏移 2 的 4 个字节再 `replace_part(PART2_ID)`（`set_playtime_frames` 就是这么做的，实测只改 2 个字节）。
 
 ---
 
@@ -657,3 +760,6 @@ cargo test -p wolf-save -- --nocapture
 | SavePart5_1 各字段的语义 | **未确认**。只知道事件 id 和 `m_md1` 是图片路径 |
 | `m_dis` 取值 20002/20003/20004/30000 的含义 | **未确认**。形似 WOLF 类型引用常量 |
 | `Data/BasicData/CDataBase.project` 的完整容器格式 | **未确认**。只验证了「30 个类型 + 字段名」的头部；第一个类型之后结构不同 |
+| SavePart3 的 row 1..9（4/7/4/1/1/1/6/1/10 词）分别是什么 | **未确认**。row 7 = [512,288,512,288,24,19] 形似 UI 缓存，但找不到写者 |
+| システム変数（9000000 段）的落盘位置 | **未确认**。逐段排查无候选区；222 写过的 2000546 在磁盘上有值（8），2000626 却是 0 |
+| 222 的源操作数是在 RAM 还是文件里求值 | **未验证**。磁盘 531 与 626 不符，怀疑 222 用 RAM 值写入 |

@@ -50,6 +50,18 @@ pub const START_BYTE: u8 = 0x19;
 /// Byte at the very end of a valid save (`m_endByte`).
 pub const END_BYTE: u8 = 0x19;
 
+/// Synthetic chunk id of the global settings snapshot ([SavePart2]).
+pub const PART2_ID: u32 = 1;
+
+/// Synthetic chunk id of the map/event runtime tables ([SavePart3]).
+pub const PART3_ID: u32 = 2;
+
+/// Offset of `SavePart2::vars3_21` inside the SavePart2 segment.
+///
+/// `m_var1` and `m_var2` are single bytes, so the nineteen words start at 2.
+/// Word 0 is the play time in frames.
+pub const PART2_VARS3_OFFSET: usize = 2;
+
 /// Highest `file_version` whose layout this crate implements.
 ///
 /// WolfSave refuses anything above 0x8E. This game writes 0x8C, so the 0x8D and
@@ -493,6 +505,109 @@ impl SaveFile {
             .iter()
             .fold(0u8, |acc, byte| acc.wrapping_add(*byte));
         Ok(())
+    }
+
+    /// Replace the variable tables ([SavePart3]) and refresh the typed view.
+    ///
+    /// The segment is re-encoded with this file's [SaveFile::file_version], so
+    /// a variable edit costs one segment rewrite and nothing else moves
+    /// semantically -- only the offsets of the later segments shift.
+    pub fn set_part3(&mut self, part: &SavePart3) -> Result<()> {
+        let bytes = part.to_bytes_with_version(self.file_version)?;
+        self.replace_part(PART3_ID, &bytes)?;
+        self.part3 = part.clone();
+        Ok(())
+    }
+
+    /// Play time in frames, the value the game shows on the load screen.
+    ///
+    /// This is m_var3 of [SavePart2] (word 0 of its vars3_21 array), which sits
+    /// at offset 2 inside the segment: var1 and var2 are single bytes. The game
+    /// runs at 60 fps, so 16705 frames is 4:38.
+    #[must_use]
+    pub fn playtime_frames(&self) -> Option<u32> {
+        self.part2.vars3_21.first().copied()
+    }
+
+    /// Overwrite the play time in frames; see [SaveFile::playtime_frames].
+    pub fn set_playtime_frames(&mut self, frames: u32) -> Result<()> {
+        let mut bytes = match self.chunk_bytes(PART2_ID) {
+            Some(bytes) => bytes.to_vec(),
+            None => {
+                return Err(Error::field(
+                    "SavePart2",
+                    0,
+                    "this file has no second segment to patch".to_string(),
+                ))
+            }
+        };
+        let at = PART2_VARS3_OFFSET;
+        if bytes.len() < at + 4 {
+            return Err(Error::field(
+                "SavePart2",
+                at,
+                format!(
+                    "only {} byte(s); the play-time word ends at {}",
+                    bytes.len(),
+                    at + 4
+                ),
+            ));
+        }
+        bytes[at..at + 4].copy_from_slice(&frames.to_le_bytes());
+        self.replace_part(PART2_ID, &bytes)?;
+        self.part2.vars3_21[0] = frames;
+        Ok(())
+    }
+
+    /// Normal variable 2000000 + index; see [SavePart3::normal_var].
+    #[must_use]
+    pub fn normal_var(&self, index: usize) -> Option<i32> {
+        self.part3.normal_var(index)
+    }
+
+    /// Overwrite normal variable 2000000 + index and re-encode the tables.
+    ///
+    /// Returns false (and changes nothing) when the index is out of range.
+    pub fn set_normal_var(&mut self, index: usize, value: i32) -> Result<bool> {
+        if !self.part3.set_normal_var(index, value) {
+            return Ok(false);
+        }
+        let part = self.part3.clone();
+        self.set_part3(&part)?;
+        Ok(true)
+    }
+
+    /// Self variable slot of common event event; see [SavePart3::self_var].
+    #[must_use]
+    pub fn self_var(&self, event: u32, slot: usize) -> Option<i32> {
+        self.part3.self_var(event, slot)
+    }
+
+    /// Overwrite one self variable and re-encode the tables.
+    pub fn set_self_var(&mut self, event: u32, slot: usize, value: i32) -> Result<bool> {
+        if !self.part3.set_self_var(event, slot, value) {
+            return Ok(false);
+        }
+        let part = self.part3.clone();
+        self.set_part3(&part)?;
+        Ok(true)
+    }
+
+    /// Self string variable slot of common event event; see
+    /// [SavePart3::self_string]. Note that slot 0 is CSelf5.
+    #[must_use]
+    pub fn self_string(&self, event: u32, slot: usize) -> Option<&str> {
+        self.part3.self_string(event, slot)
+    }
+
+    /// Overwrite one self string variable and re-encode the tables.
+    pub fn set_self_string(&mut self, event: u32, slot: usize, text: &str) -> Result<bool> {
+        if !self.part3.set_self_string(event, slot, text) {
+            return Ok(false);
+        }
+        let part = self.part3.clone();
+        self.set_part3(&part)?;
+        Ok(true)
     }
 }
 

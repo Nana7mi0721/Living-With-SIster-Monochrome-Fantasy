@@ -614,6 +614,14 @@ impl Game {
         quads
     }
 
+    /// Loads a WOLF save file: normal variables, the choice anchor and the whole picture
+    /// layer. The script state is deliberately left alone - `220` load is driven by the
+    /// save-menu coroutine, which keeps running after the load and is what restarts the
+    /// map; a bare capture only needs the screen and the variables.
+    pub fn load_save(&mut self, path: &Path) -> Result<crate::savegame::LoadedSave, String> {
+        crate::savegame::load_into(self, path)
+    }
+
     pub fn set_choice_cursor(&mut self, index: usize) {
         self.choice_cursor = index;
     }

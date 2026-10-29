@@ -699,6 +699,19 @@ pub struct Picture {
     pub x: i32,
     /// Top edge, logical pixels.
     pub y: i32,
+    /// How many sprite-sheet cells the source image is split into, as (columns, rows).
+    ///
+    /// A `150` draw of a standing character names one PNG that holds a whole wardrobe:
+    /// `Picture/stand_imouto_paja2.png` is 2400x1300 and every save record for it carries
+    /// (6, 2), so the file is a 6 x 2 grid of 400x650 cells. (1, 1) means "draw the whole
+    /// image", which is what every ordinary picture and every window uses.
+    pub split: (u32, u32),
+    /// One-based cell number inside [`Picture::split`]; 1 is the top-left cell.
+    ///
+    /// Retail save 92 proves the indexing: `stand_eye_a.png` is a 7 x 1 strip and its
+    /// record says pattern 7, which only fits a one-based count. The default 1 keeps every
+    /// ordinary picture on the whole image.
+    pub pattern_index: u32,
     /// Uniform scale in percent.
     pub scale: i32,
     /// Opacity, 0..=255.
@@ -764,6 +777,8 @@ impl Picture {
             text: String::new(),
             x: 0,
             y: 0,
+            split: (1, 1),
+            pattern_index: 1,
             scale: SCALE_ONE,
             opacity: 255,
             blend: 0,
@@ -992,6 +1007,15 @@ impl Screen {
     /// Iterates live pictures in draw order (ascending number).
     pub fn iter(&self) -> impl Iterator<Item = &Picture> {
         self.pictures.values()
+    }
+
+    /// Inserts a fully built picture, replacing any slot with the same number.
+    ///
+    /// Loading a save rebuilds every picture from the save's Part5 records, and those
+    /// records carry fields (anchor, window box, scale, fade) that no single `150`
+    /// command would reproduce on its own.
+    pub fn insert(&mut self, picture: Picture) {
+        self.pictures.insert(picture.number, picture);
     }
 
     /// Drops every picture. Used when returning to the title or loading a save.
@@ -1250,8 +1274,8 @@ impl Screen {
             // Whole-screen layers ignore x/y/scale entirely: whichever way a negative-number
             // picture is anchored, it must cover the logical screen.
             if picture.is_screen_layer() {
-                let src = picture_size(picture, &mut tex_size)
-                    .map_or([0, 0, SCREEN_W, SCREEN_H], |(w, h)| [0, 0, w, h]);
+                let src = picture_frame(picture, &mut tex_size)
+                    .map_or([0, 0, SCREEN_W, SCREEN_H], |(src, _)| src);
                 out.push(ScreenQuad::from(
                     picture,
                     src,
@@ -1273,10 +1297,10 @@ impl Screen {
                 );
                 ([0, 0, 0, 0], picture.transform(placed))
             } else {
-                let Some((w, h)) = picture_size(picture, &mut tex_size) else {
+                let Some((src, (w, h))) = picture_frame(picture, &mut tex_size) else {
                     continue;
                 };
-                ([0, 0, w, h], picture.destination(w as f32, h as f32))
+                (src, picture.destination(w as f32, h as f32))
             };
             if !on_screen(dst) {
                 continue;
@@ -1447,15 +1471,33 @@ fn place(anchor: u8, x: i32, y: i32, w: f32, h: f32) -> [f32; 4] {
 /// explains why the `-a-b` suffix of a `<GRAD*-a-b>` name is not a size. Both the
 /// whole-screen layers and the ordinary pictures resolve through here, so a built-in shape
 /// is placed, scaled and clipped by exactly the same rules as an image.
-fn picture_size<F>(picture: &Picture, tex_size: &mut F) -> Option<(u32, u32)>
+fn picture_frame<F>(picture: &Picture, tex_size: &mut F) -> Option<([u32; 4], (u32, u32))>
 where
     F: FnMut(&str) -> Option<(u32, u32)>,
 {
-    if let Some(size) = tex_size(&picture.file) {
-        return Some(size);
+    if let Some((full_w, full_h)) = tex_size(&picture.file) {
+        let (columns, rows) = (picture.split.0.max(1), picture.split.1.max(1));
+        if columns == 1 && rows == 1 {
+            return Some(([0, 0, full_w, full_h], (full_w, full_h)));
+        }
+        let (cell_w, cell_h) = (full_w / columns, full_h / rows);
+        if cell_w == 0 || cell_h == 0 {
+            return Some(([0, 0, full_w, full_h], (full_w, full_h)));
+        }
+        let index = picture.pattern_index.max(1) - 1;
+        let column = index % columns;
+        let row = index / columns;
+        if row >= rows {
+            return Some(([0, 0, cell_w, cell_h], (cell_w, cell_h)));
+        }
+        return Some((
+            [column * cell_w, row * cell_h, cell_w, cell_h],
+            (cell_w, cell_h),
+        ));
     }
     let shape = crate::sysgraphic::parse(&picture.file)?;
-    crate::sysgraphic::box_size(shape, picture.window)
+    let (w, h) = crate::sysgraphic::box_size(shape, picture.window)?;
+    Some(([0, 0, w, h], (w, h)))
 }
 
 /// One frame of a linear slide between two whole numbers, rounded half away from zero.
@@ -2569,6 +2611,40 @@ mod effect_tests {
         ));
         let dst = screen.get(1200).expect("picture").destination(100.0, 100.0);
         assert_eq!(dst, [412.0, 188.0, 200.0, 200.0]);
+    }
+
+    /// A sprite-sheet picture draws only its one cell of the sheet.
+    ///
+    /// Retail save 90 is `stand_imouto_paja2.png` - a 2400x1300 wardrobe of six 400x650
+    /// outfits by two poses - with pattern 2. The same file also backs eyes and mouths as
+    /// 7x1 strips whose records say pattern 7, which is why the count is one-based.
+    #[test]
+    fn a_sprite_sheet_picture_draws_one_cell() {
+        let mut screen = Screen::new();
+        let mut picture = Picture::new(90);
+        picture.file = "Picture/stand_imouto_paja2.png".to_owned();
+        picture.split = (6, 2);
+        picture.pattern_index = 2;
+        screen.insert(picture);
+        let quads = screen.quads(|name| {
+            (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300))
+        });
+        assert_eq!(quads.len(), 1);
+        assert_eq!(quads[0].src, [400, 0, 400, 650]);
+        assert_eq!(quads[0].dst, [0.0, 0.0, 400.0, 650.0]);
+
+        // A pattern past the last row falls back to the sheet's first cell instead of
+        // drawing outside the image.
+        let mut picture = Picture::new(91);
+        picture.file = "Picture/stand_imouto_paja2.png".to_owned();
+        picture.split = (6, 2);
+        picture.pattern_index = 99;
+        screen.insert(picture);
+        let quads = screen.quads(|name| {
+            (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300))
+        });
+        let cell = quads.iter().find(|quad| quad.number == 91).expect("picture 91");
+        assert_eq!(cell.src, [0, 0, 400, 650]);
     }
 
     /// The zoom percentage ramps over the action time instead of popping.

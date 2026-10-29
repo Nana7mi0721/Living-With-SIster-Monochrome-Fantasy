@@ -2834,6 +2834,7 @@ version = "0.1.0"
 dependencies = [
  "image",
  "wolf-format",
+ "wolf-save",
  "wolf-vm",
 ]
 

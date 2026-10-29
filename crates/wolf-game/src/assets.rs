@@ -63,6 +63,28 @@ impl ImageData {
         (self.width, self.height)
     }
 
+    /// Copies one `[x, y, w, h]` rectangle out of this image.
+    ///
+    /// Sprite sheets are the caller: a 2400x1300 character sheet is larger than any
+    /// texture page the atlas can hold, but the one 400x650 cell a picture asks for fits.
+    /// Returns None when the rectangle does not lie inside the image.
+    #[must_use]
+    pub fn crop(&self, rect: [u32; 4]) -> Option<Self> {
+        let [x, y, width, height] = rect;
+        let right = x.checked_add(width)?;
+        let bottom = y.checked_add(height)?;
+        if width == 0 || height == 0 || right > self.width || bottom > self.height {
+            return None;
+        }
+        let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+        for row in y..bottom {
+            let start = (row as usize * self.width as usize + x as usize) * 4;
+            let end = start + width as usize * 4;
+            rgba.extend_from_slice(&self.rgba[start..end]);
+        }
+        Self::new(width, height, rgba)
+    }
+
     /// Bytes per row, for `Queue::write_texture`.
     #[must_use]
     pub fn stride(&self) -> u32 {
@@ -375,6 +397,19 @@ mod tests {
         assert_eq!(image.pixel(0, 0), Some([1, 2, 3, 4]));
         assert_eq!(image.pixel(1, 0), Some([5, 6, 7, 8]));
         assert_eq!(image.pixel(2, 0), None);
+    }
+
+    #[test]
+    fn crop_copies_a_rectangle_and_rejects_out_of_bounds() {
+        let image = ImageData::new(3, 2, (0u8..24).collect()).expect("image");
+        let cell = image.crop([1, 0, 2, 2]).expect("2x2 cell");
+        assert_eq!(cell.size(), (2, 2));
+        assert_eq!(cell.pixel(0, 0), Some([4, 5, 6, 7]));
+        assert_eq!(cell.pixel(1, 0), Some([8, 9, 10, 11]));
+        assert_eq!(cell.pixel(0, 1), Some([16, 17, 18, 19]));
+        assert!(image.crop([2, 0, 2, 2]).is_none(), "two columns do not fit after x=2");
+        assert!(image.crop([0, 1, 3, 2]).is_none(), "two rows do not fit after y=1");
+        assert!(image.crop([0, 0, 0, 1]).is_none(), "a zero-width cell is not an image");
     }
 
     #[test]

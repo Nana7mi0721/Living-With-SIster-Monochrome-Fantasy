@@ -242,7 +242,7 @@ pc6  220 [0, 1600012]                    写整档
 
 **结论**：一条 Rust 侧「存档」要做的事 = ①按当前 VM 状态重新生成上面 7 段字节；②按顺序拼接；③重算头部（名字 / 版本 / 种子 / 校验和）；④XOR 混淆写盘。①里只有 SavePart3/5 与 VariableDatabase 有明确的语义映射（セルフ変数 / ピクチャ / DB），Part1/2/4 目前只知道长度和字段切分。
 
-### 6.1 SavePart3 的语义定位（本作数据的强证据，但仍标【未验证】整体结论）
+### 6.1 SavePart3 的语义定位（**已验证**：组号 = 公共事件 id、槽 = セルフ変数号）
 
 `list_words` 的读法是「var5 个组，每组 1 字节计数 + 计数个 u32」，实测 `list_counts` 恒为 100 ⇒ 500×100 = 50,000 个槽；`slot_counts` 恒为 5 ⇒ 2,500 个字符串。把它读成「组号 = 公共事件 id、槽 = セルフ変数号」的五条证据：
 
@@ -254,7 +254,7 @@ pc6  220 [0, 1600012]                    写整档
 
 同时 `var5` 有两种值：`SaveData01..07 / System = 500`，`SaveData08 = 550`（`slot_counts` 同步 500/550）。550 恰好等于本作公共事件总数，是「组数 = 事件数」的旁证；500 的更老档则说明这份表是按「写档时的公共事件数」增长的【未验证】。
 
-### 6.2 找不到的部分：通常変数 / システム変数の落盘位置【未验证 —— 见 §8 U1】
+### 6.2 早先的误判：通常変数「找不到落盘区」【已推翻 —— 见 §6.3】
 
 222/221 的地址明确写着 2000000 段（通常変数）与 9000000 段（システム変数），但**逐段排查后，文件里没有第二块能装下 5000 个通常変数的区域**：
 
@@ -267,8 +267,44 @@ pc6  220 [0, 1600012]                    写整档
 | SavePart2 | 无数组 | 全是设置项 |
 | 段间空隙 | **0 字节**（9 个档的段首尾全部相接） | 不存在隐藏区 |
 
-**反证**：ev131 用 222 往 System.sav 写了 `2000000 / 2000546 / 2000626` 三个地址，可是 9 个样本存档里 `list_words[0] / [531] / [546] / [626]` 全是 0（`work/_p24l.py`、`crates/wolf-save/tests/_tmp_probe.rs` 实测）。两种可能：(i) 地址映射不是「group=n/100、slot=n%100」；(ii) 这份表根本不是通常変数。本作数据无法区分——**写出路径因此不实现「按变量号改存档」**，只实现整段替换（§7）。
+**反证**：ev131 用 222 往 System.sav 写了 `2000000 / 2000546 / 2000626` 三个地址，可是 9 个样本存档里 `list_words[0] / [531] / [546] / [626]` 全是 0（`work/_p24l.py`、`crates/wolf-save/tests/_tmp_probe.rs` 实测）。两种可能：(i) 地址映射不是「group=n/100、slot=n%100」；(ii) 这份表根本不是通常変数。本作数据无法区分——写出一度因此只做整段替换（§7）。**该结论已于 §6.3 推翻**：漏查了 `row_words`，通常変数就在那里。
 
+---
+
+### 6.3 已解决：通常変数就是 SavePart3 的 row 0（**已验证**，9/9）
+
+§6.2 的排查漏了一层表：`m_vars4`/`m_vars5`（`row_counts` / `row_words`）才是通常変数，
+`m_vars5`/`m_vars6`（`list_counts` / `list_words`）是セルフ変数。`row_counts` 在 9 个档里恒为
+`[800, 4, 7, 4, 1, 1, 1, 6, 1, 10]`，**row 0 的 800 个词 = 通常変数 2000000..2000799**。
+
+三条独立证据（逐档数字见 `docs/SAVE_SPEC.md` §6.1）：
+
+1. **原作注释对上落盘值**：ev48（`X[共]基本システム自動初期化`）pc206 注释原文
+   「System.savの通常変数0番を最終セーブデータ番号」，而 `System.sav` 的 `row_words[0]` 实测 = **8**，
+   正好是最后使用的存档槽（`SaveData08.sav` 存在、ev131 的 CSelf12 也是 8）。
+2. **所持金对上 HUD**：`row_words[7]`（= 通常変数 2000007）逐档为
+   7586 / 2254 / 8231 / 1293 / 1193 / 1503 / 15453 / 7586 / 7586，与各档 HUD 所持金量级一致，
+   且 `SaveData01` / `SaveData08` / `System.sav` 三者同为 7586（同一存档线继承）。
+3. **写入者闭环**：ev131 的 222 站点 pc230 `[1600012, 1600005, 2000000, 0]` 把 CSelf12（槽号）
+   写进 `Save/System.sav` 的通常変数 0 —— 落盘 8 = CSelf12 = 8。
+
+**同时解释了 §6.2 的反证**：ev131 pc231 是 `222 [2000531, 1600005, 2000626, 0]`（把 531 抄进 626），
+磁盘上 531 = 2 而 626 = 0。若 222 的源操作数在文件里求值，626 就该是 2；所以在 RAM 里求值、磁盘值是
+旧值 —— 这条推断仍是【未验证】（要实机存档对比才能证实）。
+
+**システム変数（9000000 段）仍然没有落盘区**：row 0 只有 800 词，其余 9 行合计 35 词，9 个档里没有
+任何一块的规模或取值像「150 个系统变量」。合理猜测是**根本不必存**——载入时 ev48 会按
+`Sys115/116/117` 把 Sys1..Sys10、Sys23 等全部重算一遍（ev48 pc26..50 就是这段）【未验证】。
+
+### 6.4 由此得到的写出范围
+
+| 能改 | 落点 | API |
+| --- | --- | --- |
+| 通常変数 2000000+n（n < 800） | SavePart3 row 0 | `SavePart3::set_normal_var` / `SaveFile::set_normal_var` |
+| セルフ数値 CSelf0..99 | SavePart3 list_words（组 = 公共事件 id） | `set_self_var` |
+| セルフ文字列 CSelf5..9 | SavePart3 slot_strings（串号 0 = CSelf5） | `set_self_string` |
+| 游戏时间 | SavePart2 `vars3_21[0]`（段内偏移 2） | `SaveFile::set_playtime_frames` |
+| システム変数 | **无落盘区** | 不支持（载入时会重算） |
 ---
 
 ## §7 wolf-save 的写出路径
@@ -285,7 +321,16 @@ impl SaveFile {
     /// serialize 之后再混淆：可以原样写回磁盘的字节。
     pub fn to_bytes(&self) -> Result<Vec<u8>>;
     /// 整段替换（id 0..=6），后续段偏移自动平移，校验和重算。
-    pub fn replace_part(&mut self, id: u32, bytes: &[u8]) -> Result<()>;
+    pub fn replace_part(&mut self, id: u32, bytes: &[u8]) -> Result<()>;    /// 用 SavePart3 的 typed 值重新编码整段并替换（视图同步刷新）。
+    pub fn set_part3(&mut self, part: &SavePart3) -> Result<()>;
+    /// part2 的 vars3_21[0]，段内偏移 2；单位是帧，60fps。
+    pub fn playtime_frames(&self) -> Option<u32>;
+    pub fn set_playtime_frames(&mut self, frames: u32) -> Result<()>;
+    /// 通常変数 2000000+n（n < 800）与セルフ数値 / セルフ文字列（slot 0 = CSelf5）。
+    pub fn normal_var(&self, index: usize) -> Option<i32>;
+    pub fn set_normal_var(&mut self, index: usize, value: i32) -> Result<bool>;
+    pub fn self_var(&self, event: u32, slot: usize) -> Option<i32>;
+    pub fn self_string(&self, event: u32, slot: usize) -> Option<&str>;
 }
 ```
 
@@ -315,13 +360,23 @@ impl SaveFile {
 3. SavePart5（ピクチャ）语义也基本清楚（图片号 / 路径 / x / y / 透明度 / 颜色），可做第二个。
 4. SavePart1/2/4 与 VariableDatabase 先原样搬运（我们目前不产生这些状态）。
 
+### 7.5 变量表 API 的测试（`crates/wolf-save/tests/typed.rs`，6 个）
+
+| 测试名 | 断言的关键数字 |
+| --- | --- |
+| `every_part3_re_encodes_byte_for_byte` | 9 档 `part3.to_bytes()` 与 `chunk_bytes(2)` **逐字节相同**（218610 / 217708 / 218472 / 218466 / 239821 / 218462 / 218574 / 240000 / 218650） |
+| `the_tables_hold_the_numbers_the_game_ships` | 逐档断言 row_counts、2000007 所持金、playtime、组数 500/550、ev131 CSelf12、part3 长度；恒定值 ev48 CSelf16/25/26 = 6/12/24、ev131 CSelf5 = `Save/System.sav` |
+| `editing_a_normal_variable_survives_a_write` | 2000007 7586 → 123456：写出再解析读回、段长不变、playtime 与セルフ值不变、`checksum_ok()` 为真、part3 仍逐字节可逆 |
+| `editing_self_state_survives_a_write` | ev48 CSelf25 12 → 99、ev131 CSelf5 → `Save/Other.sav`，写出再解析读回，相邻槽（CSelf26 = 24、串 1 = 空、CSelf12 = 5）不动 |
+| `playtime_round_trips_through_the_header` | 16705 → 4321 只改 part2 的偏移 **2、3** 两个字节（4321 = 0x10E1），part3 一字节不动，文件总长不变 |
+| `out_of_range_indexes_are_refused` | 2000799 有值、2000800 为 `None`；CSelf99 有值、CSelf100 为 `None`；组号越界为 `None`；串槽 5 为 `None`；setter 返回 `false` 且不改字节 |
 ---
 
 ## §8 未验证清单
 
 | 编号 | 未验证项 | 现状 | 怎么证 |
 | --- | --- | --- | --- |
-| U1 | 通常変数（2000000 段）/ システム変数（9000000 段）在存档文件里的落盘位置 | 逐段排查后无候选区；222 写过的三个地址在 9 个样本里全为 0 | 在游戏里手动存一次档，比对 `System.sav` 与 `SaveDataNN.sav` 的 part3 差异 |
+| U1 | 通常変数（2000000 段）的落盘位置 | **已解决（§6.3）**：= SavePart3 row 0 的 800 个词，`System.sav` row0[0] = 8 = 最后使用槽；システム変数（9000000 段）仍未找到，疑为载入时重算 | —（システム変数部分仍需实机存一次档对比） |
 | U2 | 221 的 `flag=1` 语义（3 个站点，地址固定 1600062/1600064，dest 固定 1600006/1600007/1600011） | 只知「与记录基址/子字段有关」 | 找到 flag=1 站点的上下文阅读（ev94 pc330..350 的注释已被读空） |
 | U3 | 220 是否阻塞、是否自己写缩略图 | 220 前后有 180 等待，但 1000 已单独截屏 | 引擎行为观察 |
 | U4 | 槽号 → `Save/SaveData%02d.sav` 的映射 | 8 槽 8 文件，推断一致 | 引擎行为观察 |
@@ -356,8 +411,8 @@ impl SaveFile {
 
 ---
 
-## §10 与 `docs/SAVE_SPEC.md` 的出入（需要 Lead 定夺，本文档未改动那份文件）
+## §10 与 `docs/SAVE_SPEC.md` 的出入（§6.1 / §6.2 / §11.1 / §13 已同步写入 SAVE_SPEC）
 
 1. SAVE_SPEC §5 把 SavePart3 描述成「地图与事件运行时表」，现在可以补上 §6.1 的定位：`list_words` = 500（或 550）组 ×100 个セルフ数値、`slot_strings` = 同一批组 ×5 个セルフ文字列。
-2. SAVE_SPEC 未记录「通常変数 / システム変数 找不到落盘区」这个负面结论，建议把它作为一条明确缺口写进去（§6.2、§8 U1）。
+2. ~~SAVE_SPEC 未记录「通常変数 / システム変数 找不到落盘区」~~ —— **已写并已改正**：SAVE_SPEC §6.1 记录「通常変数 = row 0」的三条证据与逐档表值，§13 只保留「システム変数没有落盘区」这一条真缺口。
 3. `docs/FORMAT_SPEC.md` §9.3 的「chunk 序列」措辞仍与实现不符（SAVE_SPEC §1.3 已纠正），建议 Lead 统一。

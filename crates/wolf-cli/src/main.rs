@@ -85,6 +85,7 @@ fn main() -> ExitCode {
     let mut frame_limit: Option<u64> = None;
     let mut hold_message = false;
     let mut engine_events: Option<Vec<u32>> = None;
+    let mut load_save: Option<PathBuf> = None;
     let mut page: usize = 0;
     let mut boot = true;
     let mut map: Option<String> = None;
@@ -160,6 +161,11 @@ fn main() -> ExitCode {
                     .collect();
                 engine_events = Some(ids);
             }
+            // Photograph a retail save instead of a script entry: the picture layer and
+            // the normal variables come out of the file (docs/SAVE_SPEC.md §10).
+            "--load-save" => {
+                load_save = args.next().map(PathBuf::from);
+            }
             "--boot" => boot = true,
             "--menu-only" => boot = false,
             "--filter" | "-F" => {
@@ -186,13 +192,14 @@ fn main() -> ExitCode {
         Some("capture") => match map.as_deref() {
             Some(name) => run_capture_map(&root, out, name),
             None => {
-                let entry = match map_run.as_deref() {
-                    Some(name) => Entry::Script {
+                let entry = match (load_save.as_deref(), map_run.as_deref()) {
+                    (Some(path), _) => Entry::Save(path),
+                    (None, Some(name)) => Entry::Script {
                         map: name,
                         event: event.unwrap_or(0),
                     },
-                    None if boot => Entry::Boot,
-                    None => Entry::Menu,
+                    (None, None) if boot => Entry::Boot,
+                    (None, None) => Entry::Menu,
                 };
                 let answers = Answers {
                     index: answer,
@@ -283,6 +290,7 @@ fn print_help() {
     println!("    --hold-message    Park on the first 101 message instead of dismissing it.");
     println!("    --pointer <x,y>   Put the mouse pointer at a game pixel for the whole capture.");
     println!("    --press-frame <N> Frame at which --pointer clicks the left button once.");
+    println!("    --load-save <FILE>  Photograph a retail .sav instead of a script entry.");
     println!("    --engine-events <ids>  Comma separated ids that replace ENGINE_ALWAYS");
     println!("                      (the parallel-process-always events the engine owns).");
     println!("                      Pass an empty value to start none of them.");
@@ -1413,6 +1421,7 @@ enum Entry<'a> {
     Boot,
     Menu,
     Script { map: &'a str, event: u32 },
+    Save(&'a Path),
 }
 
 fn run_capture(
@@ -1461,6 +1470,19 @@ fn run_capture(
                 .map_err(|err| err.to_string()),
             format!("map script {map} event {event}"),
         ),
+        Entry::Save(path) => {
+            let label = format!("save file {}", path.display());
+            match game.load_save(path) {
+                Ok(loaded) => {
+                    println!(
+                        "  loaded    : {} picture(s), {} normal variable(s), playtime {} frame(s), choice anchor {:?}",
+                        loaded.pictures, loaded.normal_vars, loaded.playtime_frames, loaded.choice_anchor
+                    );
+                    (Ok(()), label)
+                }
+                Err(err) => (Err(err), label),
+            }
+        }
     };
     if let Err(err) = started {
         eprintln!("{err}");

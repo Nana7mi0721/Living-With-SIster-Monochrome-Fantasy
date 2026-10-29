@@ -29,6 +29,7 @@ pub mod key;
 pub mod map_runtime;
 pub mod message;
 pub mod picture;
+pub mod savegame;
 pub mod sysgraphic;
 pub mod textpic;
 pub mod tilemap;

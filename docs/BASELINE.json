@@ -902,7 +902,7 @@
   "kind2_with_f": 1147,
   "kind4_with_f": 59,
   "why_size_not_face": "本作 SysDB 24 只有 12 行脸图，48/64 无法是脸图编号",
-  "implemented": false,
+  "implemented": true,
   "consequence": "HUD 顶栏 18:30(24px, x=140) 与 周一(18px, x=150) 压叠、所持金 2409(24px, x=1015) 越过 1024 右沿，都可能是忽略了字号",
   "picture_only_escapes": [
    "ax",
@@ -961,5 +961,25 @@
   "anchor_precision": "measure() uses the half-em rule; real Lolita.ttf advances differ by up to 6%, measure_with/layout_with take a shaped-advance callback",
   "retail_reference": "Save/save1.jpg top bar: pic 6200 anchor 3 x=140 ink 85..138 matches the 56.31 px real advance",
   "fixed": "pic 6200/6210 overlap and pic 6251 right-edge overflow"
+ },
+ "save_load": {
+  "doc": "docs/SAVE_SPEC.md / docs/M2_SLICE.md 3.10",
+  "part5": "SavePart5 是「当前画面图片表」: var1=图片编号, var4=anchor, var5=1 Text, var6=1 WindowFile, md1=文件名或文本字节流; vars7_18 = [x, y, a, b, pattern, opacity, blend, -1, fade, scaleX%, scaleY%, 0]",
+  "text_record": "文本图片 md1 = 01 <len> <payload>: 02=\\E, 04=带字距字体, 05=字体(字号+14), 06=颜色(颜色号+14); 9 个零售存档只出现 02/04/05/06",
+  "split_law": "普通文件图的 a/b 是分割列/行, pattern 是 1 基图集单元号; Picture.split=(cols,rows), Picture.pattern_index (default 1,1/1)",
+  "split_proof": "stand_imouto_paja2.png 2400x1300 = 6x2 格(每格 400x650), save picture 90 pattern 2; stand_eye_a.png 7x1 strip pattern 7 证明 1 基",
+  "atlas": "ImageData::crop([x,y,w,h]) + Atlas::add_asset_region(name#rect) 只打包一格, 因为 2400x1300 超过 2048 atlas",
+  "save1": {
+   "pictures": 66,
+   "normal_variables": 800,
+   "playtime_frames": 16642,
+   "quads": 17,
+   "text_pictures": 34,
+   "non_black": 548416,
+   "percent": 93.0,
+   "character": "picture 90 画在 [600,80,400,650]",
+   "retail_reference": "Save/save1.jpg",
+   "diff": "mean abs 5.226 / <=2 83.20% / 顶行 18.56 (JPEG 源 + 文本抗锯齿), 其余区域 0.58..1.45"
+  }
  }
 }

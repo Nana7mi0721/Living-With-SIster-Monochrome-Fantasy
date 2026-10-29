@@ -277,6 +277,28 @@ impl Atlas {
         self.add(name, &image)
     }
 
+    /// Packs one `[x, y, w, h]` cell of a named image, caching by `name#rect`.
+    ///
+    /// The sprite-sheet path needs this: `Picture/stand_imouto_paja2.png` is 2400x1300,
+    /// which no 2048-pixel atlas page can hold, but its 6 x 2 grid is six 400x650
+    /// characters and only one cell is ever on screen at a time. Cropping first also keeps
+    /// the cache honest: two pictures asking for different cells of one strip get two
+    /// entries, while two asking for the same cell share one.
+    pub fn add_asset_region(
+        &mut self,
+        assets: &mut Assets,
+        name: &str,
+        src: [u32; 4],
+    ) -> Option<AtlasRect> {
+        let key = format!("{name}#{},{},{},{}", src[0], src[1], src[2], src[3]);
+        if let Some(rect) = self.entries.get(&key) {
+            return Some(*rect);
+        }
+        let image = assets.load(name).ok()?;
+        let cell = image.crop(src)?;
+        self.add(&key, &cell)
+    }
+
     /// Renders a built-in `<...>` shape at w x h and packs it, caching by atlas key.
     ///
     /// The key is `sysgraphic::atlas_key`: it carries the shape (gradient endpoints
@@ -410,13 +432,16 @@ impl Atlas {
                     None => continue,
                 },
                 None => {
-                    let Some(rect) = self.add_asset(assets, &quad.file) else {
+                    // The quad already carries the cell it wants, so pack that cell. For an
+                    // ordinary picture this is the whole image; for a sprite sheet it is one
+                    // 400x650 character out of a 2400x1300 strip no atlas page could hold.
+                    let Some(rect) = self.add_asset_region(assets, &quad.file, quad.src) else {
                         continue;
                     };
-                    (rect, self.source_size(&quad.file).unwrap_or([0, 0]))
+                    (rect, [quad.src[2], quad.src[3]])
                 }
             };
-            let uv = if quad.src[2] == size[0] && quad.src[3] == size[1] {
+            let uv = if rect.w == size[0] && rect.h == size[1] {
                 rect.uv(self.width, self.height)
             } else {
                 rect.sub_uv(self.width, self.height, quad.src)
