@@ -41,7 +41,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use wolf_format::database::{Database, RowValue};
+use wolf_format::database::{Database, FieldKind, RowValue};
 use wolf_format::sysdatabase::SysDatabase;
 
 /// `CDataBase` type the 座標倍率 (coordinate scale) lives in.
@@ -79,6 +79,21 @@ pub const ROW_COUNT_QUERY: i32 = -1;
 /// plays no part, and no new row id comes back to the caller -- see
 /// [`Databases::set_row_count`].
 pub const ROW_COUNT_SET: i32 = -2;
+
+/// Column id a `250` **read** uses to ask for the first empty slot of a row.
+///
+/// CE58 pc10 reads `(1, self0, -1)` under the comment 最初に見つかった空欄箇所を記憶する
+/// 変数 ("remember the first empty place found"). The engine answers with a row index of
+/// the addressed type. Four sites use it; the scan looks at every field of every row and
+/// answers the first all-empty row, or the row count when the table is full.
+pub const FIRST_EMPTY_COLUMN: i32 = -1;
+
+/// Column id a `250` **write** uses to clear every field of one row.
+///
+/// CE75 pc169 writes `(5, self0, -2)` under 強制全回復 ("force full recovery"); the
+/// battle copy events CE79/CE143/CE144/CE171 all write `[10..14, row, -2]` before
+/// copying a combatant into the temporary battle tables. The value operand is ignored.
+pub const ROW_CLEAR_COLUMN: i32 = -2;
 
 /// First row of the runtime extension area, i.e. the `100 + n` battle slots.
 ///
@@ -282,6 +297,83 @@ impl Databases {
         self.texts.retain(|key, _| !gone(key));
     }
 
+    /// Number of logical fields one row of `db_type` carries, or `None` when the
+    /// type does not exist. SysDatabase and the two .dat containers share this API.
+    pub fn field_count(&self, container: Container, db_type: i32) -> Option<usize> {
+        Some(self.field_kinds(container, db_type)?.len())
+    }
+
+    /// First row whose every field is empty, or the row count when none is.
+    ///
+    /// This is the answer to the `250` read of column [FIRST_EMPTY_COLUMN]: CE58 pc10
+    /// remembers 最初に見つかった空欄箇所 before writing a newly learned skill, and
+    /// CE143 pc187 compares the answer with 38 before storing a piece of armour.
+    pub fn first_empty_row(&self, container: Container, db_type: i32) -> Option<i32> {
+        let count = self.row_count(container, db_type)?;
+        let fields = self.field_kinds(container, db_type)?;
+        let row = (0..count).find(|row| {
+            fields.iter().enumerate().all(|(column, field)| {
+                let column = i32::try_from(column).unwrap_or(i32::MAX);
+                match field {
+                    FieldKind::Num(_) => {
+                        self.num(container, db_type, *row as i32, column)
+                            .unwrap_or(0)
+                            == 0
+                    }
+                    FieldKind::Str(_) => self
+                        .text(container, db_type, *row as i32, column)
+                        .is_none_or(str::is_empty),
+                }
+            })
+        });
+        i32::try_from(row.unwrap_or(count)).ok()
+    }
+
+    /// Clears every field of one row -- the `250` write to a negative column.
+    ///
+    /// The engine cells are dropped and then every field is shadowed with its zero
+    /// value, so a column the .dat file carries is cleared too, not just the cells a
+    /// script happened to touch. Returns false when the type does not exist.
+    pub fn clear_row(&mut self, container: Container, db_type: i32, row: i32) -> bool {
+        let Some(fields) = self.field_kinds(container, db_type) else {
+            return false;
+        };
+        let keys_match = |key: &(Container, i32, i32, i32)| {
+            key.0 == container && key.1 == db_type && key.2 == row
+        };
+        self.cells.retain(|key, _| !keys_match(key));
+        self.texts.retain(|key, _| !keys_match(key));
+        for (column, field) in fields.iter().enumerate() {
+            let column = i32::try_from(column).unwrap_or(i32::MAX);
+            match field {
+                FieldKind::Num(_) => self.set_num(container, db_type, row, column, 0),
+                FieldKind::Str(_) => self.set_text(container, db_type, row, column, ""),
+            }
+        }
+        true
+    }
+
+    /// The field kinds of one type, in logical column order.
+    fn field_kinds(&self, container: Container, db_type: i32) -> Option<Vec<FieldKind>> {
+        match container {
+            Container::Sys => Some(
+                self.sys
+                    .as_ref()?
+                    .types()
+                    .get(usize::try_from(db_type).ok()?)?
+                    .fields
+                    .clone(),
+            ),
+            _ => Some(
+                self.table(container)?
+                    .types
+                    .get(usize::try_from(db_type).ok()?)?
+                    .fields
+                    .clone(),
+            ),
+        }
+    }
+
     /// The `.mps` path registered for a map id (SysDatabase type 0, column 0).
     ///
     /// Opcode 130 stores map ids in a signed form: `-1` is map 1 and `-2` is
@@ -342,8 +434,16 @@ impl Databases {
             return None;
         }
         let (row, column) = (row as usize, column as usize);
-        self.table(container)
-            .and_then(|table| numeric_cell(table, db_type, row, column))
+        match container {
+            Container::Sys => self
+                .sys
+                .as_ref()
+                .and_then(|table| table.num(db_type as usize, row, column))
+                .and_then(|value| i32::try_from(value).ok()),
+            _ => self
+                .table(container)
+                .and_then(|table| numeric_cell(table, db_type, row, column)),
+        }
     }
 
     /// String read: engine cells win, then the addressed container.
@@ -982,6 +1082,48 @@ mod tests {
             database.to_bytes().is_ok(),
             "the reconciled variable database must serialize"
         );
+    }
+
+    #[test]
+    fn clearing_a_row_zeroes_every_field_in_the_file_and_the_engine_layer() {
+        let Some(root) = have_data() else { return };
+        let mut databases = Databases::load(&root.join("BasicData"), DEFAULT_SCREEN);
+        let fields = databases
+            .field_count(Container::CData, 0)
+            .expect("主人公ステータス has a field table");
+        assert!(fields >= 46);
+        // Row 0 is 勇者先生 with a name and a full stat block, so it is a hard case:
+        // clearing it has to shadow both the string and the numeric .dat columns.
+        assert_eq!(databases.text(Container::CData, 0, 0, 0), Some("勇者先生"));
+        databases.set_num(Container::CData, 0, 0, 0, 7);
+        assert!(databases.clear_row(Container::CData, 0, 0));
+        for column in 0..fields {
+            let column = i32::try_from(column).expect("small column");
+            if let Some(text) = databases.text(Container::CData, 0, 0, column) {
+                assert!(text.is_empty(), "column {column} still holds {text:?}");
+            }
+            if let Some(value) = databases.num(Container::CData, 0, 0, column) {
+                assert_eq!(value, 0, "column {column} still holds {value}");
+            }
+        }
+        assert!(!databases.clear_row(Container::CData, 999, 0));
+    }
+
+    #[test]
+    fn the_first_empty_row_is_a_row_index_not_a_zero_fallback() {
+        let Some(root) = have_data() else { return };
+        let mut databases = Databases::load(&root.join("BasicData"), DEFAULT_SCREEN);
+        let count = databases
+            .row_count(Container::CData, 0)
+            .expect("主人公ステータス has rows");
+        let first = databases
+            .first_empty_row(Container::CData, 0)
+            .expect("the query answers");
+        assert!(first >= 0 && (first as usize) <= count);
+        // Row 0 is the hero and cannot be the first empty row while it retains its name.
+        assert_ne!(first, 0);
+        assert!(databases.clear_row(Container::CData, 0, 0));
+        assert_eq!(databases.first_empty_row(Container::CData, 0), Some(0));
     }
 
     #[test]

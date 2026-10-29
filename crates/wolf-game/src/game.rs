@@ -1409,6 +1409,19 @@ impl Host for GameHost<'_> {
                 }
                 return None;
             }
+            if column == crate::db::ROW_CLEAR_COLUMN {
+                // Column -2 is not a column: clear every field of the addressed row.
+                // CE75 pc169 does this under 強制全回復, and the battle copy events
+                // CE79/CE143/CE144/CE171 clear each temporary table row before filling it.
+                if self.databases.clear_row(container, db_type, row) {
+                    self.stats.database_writes += 1;
+                } else {
+                    self.note(format!(
+                        "250 RowClear: {container:?} ({db_type}, {row}) has no such type"
+                    ));
+                }
+                return None;
+            }
             match op.source.as_ref() {
                 Some(DbValue::Num(operand)) => {
                     // A row the table holds is the base of the arithmetic. A row past the
@@ -1456,6 +1469,30 @@ impl Host for GameHost<'_> {
             // same read on 状態設定 to raise 「状態IDが大きすぎます」.
             let count = self.databases.row_count(container, db_type).unwrap_or(0);
             return Some(DbValue::Num(i32::try_from(count).unwrap_or(i32::MAX)));
+        }
+        let wants_text = op.destination.is_some_and(|target| {
+            (wolf_vm::magic::STR_BASE..wolf_vm::magic::STR_BASE + 1_000_000).contains(&target)
+        });
+        if column == crate::db::FIRST_EMPTY_COLUMN {
+            // CE58 pc10 looks for the first row with no fields set before learning a
+            // skill; the engine answers with a row index of this table.
+            let row = self
+                .databases
+                .first_empty_row(container, db_type)
+                .unwrap_or(0);
+            return Some(DbValue::Num(row));
+        }
+        if column < 0 {
+            // -3 is unverified (CE265/CE267 appear to use it as a row-name lookup). Do
+            // not clamp a negative column onto a real field; answer empty and say so.
+            self.note(format!(
+                "250 DatabaseAccess: {container:?} ({db_type}, {row}, {column}) negative column not modelled"
+            ));
+            return Some(if wants_text {
+                DbValue::Str(String::new())
+            } else {
+                DbValue::Num(0)
+            });
         }
         // The engine cell layer first: it holds what a script wrote and what the save
         // carried, and it is the only place a runtime row (`100 + n`, or a row past a
