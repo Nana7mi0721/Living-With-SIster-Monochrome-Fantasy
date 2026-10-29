@@ -37,7 +37,11 @@ const FRAME_TIME: Duration = Duration::from_micros(16_667);
 /// A non-zero frame budget makes the window self-closing, which is how the interactive
 /// path gets smoke-tested: the same code that a player drives also has to survive an
 /// unattended run without panicking or wedging the event loop.
-pub fn run(root: &std::path::Path, frames: Option<u64>, boot: bool) -> std::process::ExitCode {
+pub fn run(
+    root: &std::path::Path,
+    frames: Option<u64>,
+    entry: crate::Entry<'_>,
+) -> std::process::ExitCode {
     let mut game = match Game::new(root) {
         Ok(game) => game,
         Err(err) => {
@@ -45,19 +49,47 @@ pub fn run(root: &std::path::Path, frames: Option<u64>, boot: bool) -> std::proc
             return std::process::ExitCode::FAILURE;
         }
     };
-    // The original boots into the TitleMap map, whose autorun event plays the three
-    // publisher/developer splashes, draws the title art and only then calls the menu
-    // event 42 (docs/M1_CLOSURE.md). --menu-only skips straight to the menu.
-    let started = if boot {
-        game.boot().map_err(|err| err.to_string())
-    } else {
-        game.start_title().map_err(|err| err.to_string())
+    // The same entry-point rules `capture` uses: default boot (the TitleMap autorun
+    // event and its three splashes), --menu-only for common event 42, --map-run for a
+    // map script, --event for one common event, --load-save for a save file.
+    let (started, label) = match entry {
+        crate::Entry::Boot => (
+            game.boot().map_err(|err| err.to_string()),
+            "boot map".to_owned(),
+        ),
+        crate::Entry::Menu => (
+            game.start_title().map_err(|err| err.to_string()),
+            "common event 42".to_owned(),
+        ),
+        crate::Entry::Script { map, event } => (
+            game.start_map_event_by_name(map, event)
+                .map_err(|err| err.to_string()),
+            format!("map {map} event {event}"),
+        ),
+        crate::Entry::CommonEvent(id) => {
+            game.start_engine_events();
+            let started = if game.start_event(id) {
+                Ok(())
+            } else {
+                Err(format!("no common event with id {id}"))
+            };
+            (started, format!("common event {id}"))
+        }
+        crate::Entry::Save(path) => {
+            let label = format!("save {}", path.display());
+            let started = game
+                .load_save(path)
+                .map(|_| ())
+                .map_err(|err| err.to_string());
+            (started, label)
+        }
     };
     if let Err(err) = started {
         eprintln!("{err}");
         return std::process::ExitCode::FAILURE;
     }
 
+    println!("play: {label}");
     let event_loop = match EventLoop::new() {
         Ok(event_loop) => event_loop,
         Err(err) => {

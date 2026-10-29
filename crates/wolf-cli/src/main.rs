@@ -88,7 +88,6 @@ fn main() -> ExitCode {
     let mut engine_events: Option<Vec<u32>> = None;
     let mut load_save: Option<PathBuf> = None;
     let mut page: usize = 0;
-    let mut boot = true;
     // `boot` defaults to true, so on its own it cannot tell "the user asked for the
     // boot map" from "the user gave nothing". capture needs that distinction:
     // `capture --event 239` must start event 239, not silently fall back to the boot
@@ -181,11 +180,9 @@ fn main() -> ExitCode {
                 load_save = args.next().map(PathBuf::from);
             }
             "--boot" => {
-                boot = true;
                 boot_explicit = true;
             }
             "--menu-only" => {
-                boot = false;
                 menu_only = true;
             }
             "--filter" | "-F" => {
@@ -250,7 +247,28 @@ fn main() -> ExitCode {
             }
         },
         Some("list") => run_list(&root, filter.as_deref()),
-        Some("play") => play::run(&root, frame_limit, boot),
+        Some("play") => {
+            // `play` shares capture's entry-point resolution so a map script or a single
+            // common event can be driven interactively, not just the boot chain.
+            let resolved = resolve_capture_entry(
+                load_save.as_deref(),
+                map_run.as_deref(),
+                event,
+                boot_explicit,
+                menu_only,
+            );
+            let entry = match &resolved {
+                CaptureEntry::Save(path) => Entry::Save(path.as_path()),
+                CaptureEntry::Script { map, event } => Entry::Script {
+                    map: map.as_str(),
+                    event: *event,
+                },
+                CaptureEntry::CommonEvent(id) => Entry::CommonEvent(*id),
+                CaptureEntry::Boot => Entry::Boot,
+                CaptureEntry::Menu => Entry::Menu,
+            };
+            play::run(&root, frame_limit, entry)
+        }
         Some("run") => match (map.as_deref(), event) {
             (Some(name), Some(id)) => run_map_event(&root, name, id, frames, trace, answer, hot),
             (Some(_), None) => {
@@ -286,7 +304,8 @@ fn print_help() {
         "    wolf-cli [--root <DIR>] capture [--frames <N>] [--out <FILE.png>] [--event <ID>]"
     );
     println!("                                   [--boot | --menu-only]");
-    println!("    wolf-cli [--root <DIR>] play");
+    println!("    wolf-cli [--root <DIR>] play [--until <N>] [--map-run <NAME> --event <ID>]");
+    println!("                                   [--event <ID> | --load-save <FILE>]");
     println!("    wolf-cli [--root <DIR>] list [--filter <TEXT>]");
     println!();
     println!("COMMANDS:");
@@ -301,12 +320,16 @@ fn print_help() {
     println!("                because answering the title prompt branches into the game.");
     println!("                --event <ID> starts that common event instead (after the engine");
     println!("                events), so a battle or menu screen can be photographed alone.");
-    println!("    play        Run the title screen in a window (arrows move, Enter/Z confirm).");
+    println!(
+        "    play        Run a scene in a window (arrows move, Enter/Z or the mouse confirms)."
+    );
+    println!("                Same entry flags as capture: --map-run, --event, --load-save,");
+    println!("                --boot (default) or --menu-only. --until <N> quits after N frames.");
     println!("    list        Print every common event: id, slots, real instructions, title.");
     println!();
     println!("OPTIONS:");
-    println!("    -e, --event <ID>  Common event id to run with 'run', or to start with 'capture'");
-    println!("                      (capture only when neither --boot nor --menu-only is given).");
+    println!("    -e, --event <ID>  Common event id for 'run', or the scene entry for");
+    println!("                      'capture'/'play' (unless --boot or --menu-only is given).");
     println!("    -f, --frames <N>  Frame budget for 'run' (default 600, one frame = 1/60 s).");
     println!("    -t, --trace       Print every host callback in 'run', not just the summary.");
     println!("    -o, --out <FILE>  PNG path for 'capture' (default work/out/title.png).");
