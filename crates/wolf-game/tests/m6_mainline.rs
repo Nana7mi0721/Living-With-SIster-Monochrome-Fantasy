@@ -332,3 +332,37 @@ fn a_live_played_scene_survives_a_save_and_reload() {
     let _ = std::fs::remove_dir_all(&out);
 }
 
+
+#[test]
+fn the_sleep_event_rolls_over_to_the_next_morning() {
+    let Some(mut game) = open_game() else { return };
+    game.auto_advance = true;
+    game.set_choice_cursor(0);
+    game.auto_choice = true;
+    game.auto_choice_delay = 2;
+    game.start_engine_events();
+    game.vm.vars.set(4, 18);
+    game.vm.vars.set(5, 30);
+    game.vm.vars.set(160, 3);
+    game.vm.vars.set(6, 1);
+    let id = game.vm.start_event(329).expect("the sleep event exists");
+    assert!(game.vm.instance(id).is_some());
+    for _ in 0..300 {
+        game.frame();
+    }
+    assert_eq!(game.stats.warnings, 0, "no interpreter warnings");
+    assert_eq!(game.vm.vars.get(4), 8, "the next morning starts at 8");
+    assert_eq!(game.vm.vars.get(5), 30, "and 30 minutes");
+    assert_eq!(game.vm.vars.get(160), 4, "the day counter advanced to day 4");
+    assert_eq!(game.vm.vars.get(6), 2, "and the weekday advanced to Wednesday");
+    assert!(
+        game.screen.len() > 20,
+        "the morning scene is drawn: {} pictures",
+        game.screen.len()
+    );
+    assert!(
+        game.stats.instructions > 10_000,
+        "the sleep script really ran: {} instructions",
+        game.stats.instructions
+    );
+}
