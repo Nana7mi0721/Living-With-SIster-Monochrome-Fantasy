@@ -430,7 +430,7 @@
   }
  },
  "verify": {
-  "checks": 63,
+  "checks": 70,
   "pending": 0,
   "sections": [
    "game",
@@ -440,6 +440,7 @@
    "tileset",
    "databases",
    "dxarchive",
+   "maptree",
    "save"
   ]
  },
@@ -1161,6 +1162,17 @@
   "game_level": "crates/wolf-game/tests/save_roundtrip.rs::every_retail_save_survives_a_game_level_save_reload - load_into -> Game::save_to -> reload_into preserves picture table (all Screen fields) / 800 normal vars / playtime / choice anchor, 8/8 slots",
   "fixed_defect": "savegame::picture_to_record clamped horizontal scale with max(0), rewriting retail SaveData08 window pics 1996/1998 scale=-100 to 0; now keeps the sign (v[9] = picture.scale as u32), renderer still max(0); unit test a_negative_horizontal_scale_survives_a_save_round_trip",
   "skip_policy": "both tests skip when retail saves are absent (copyrighted data)"
+ },
+ "maptree": {
+  "loader": "crates/wolf-format/src/maptree.rs - MapTree (version 0x90, footer 0xBC, 11-byte header + u32 count + count*8 {i32 parent,u32 map_id}) and MapTreeOpenStatus (20-byte header + u32 count + count u8 flags + footer 0x26)",
+  "entries": 50,
+  "roots": 47,
+  "children_of_0": [3, 31, 24],
+  "open_flags": 50,
+  "open_count": 1,
+  "law": "parent == -1 marks a root; the only three non-root entries are map ids 3/31/24 (the no-tile hook maps), parent 0. The order is the tree display order. No x/y field exists anywhere in the file, so the new-game start coordinate is NOT data driven from MapTree.dat.",
+  "proof": "cargo test -p wolf-format --test maptree: 4 tests (synthetic round-trip, truncated error, shipped 416-byte file -> 50 entries / 47 roots / children_of(0)=3,31,24, shipped 75-byte open status -> 50 flags, only map 0 open); wolf-cli verify maptree.* 7 checks",
+  "docs": "docs/FORMAT_SPEC.md section 2.6, docs/MAP_AUDIT.md section 0.3"
  },
  "m4_audio": {
   "backend": "crates/wolf-audio: symphonia 0.6.1 (default-features=false; flac/mp3/pcm/vorbis/ogg/wav) decode + cpal 0.18.2 output + software mixer; builds and tests fully offline",

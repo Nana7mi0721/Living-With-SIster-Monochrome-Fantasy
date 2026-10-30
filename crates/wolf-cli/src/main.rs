@@ -648,6 +648,66 @@ fn run_verify(root: &Path) -> ExitCode {
         None => checks.push(Check::text("game.parse", "ok", "FILE MISSING")),
     }
 
+    // --- MapTree.dat / MapTreeOpenStatus.dat ------------------------------
+    //
+    // The map tree is what the engine walks to order the registered maps; the three
+    // hook maps (3, 31, 24) are its only non-root entries. Decoding it is the first
+    // half of the "new game start map" question (see docs/FORMAT_SPEC.md §2.6).
+    match read(&basic.join("MapTree.dat")).map(|bytes| wf::maptree::MapTree::parse(&bytes)) {
+        Some(Ok(tree)) => {
+            checks.push(Check::num(
+                "maptree.entries",
+                50,
+                tree.entries.len() as u64,
+            ));
+            checks.push(Check::num(
+                "maptree.version",
+                0x90,
+                u64::from(tree.version),
+            ));
+            checks.push(Check::num("maptree.footer", 0xBC, u64::from(tree.footer)));
+            checks.push(Check::num("maptree.roots", 47, tree.roots().len() as u64));
+            checks.push(Check::text(
+                "maptree.children_of_0",
+                "3,31,24",
+                &tree
+                    .children_of(0)
+                    .iter()
+                    .map(u32::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ));
+        }
+        Some(Err(err)) => {
+            checks.push(Check::text("maptree.parse", "ok", &format!("FAILED: {err}")));
+        }
+        None => checks.push(Check::text("maptree.parse", "ok", "FILE MISSING")),
+    }
+    match read(&basic.join("MapTreeOpenStatus.dat"))
+        .map(|bytes| wf::maptree::MapTreeOpenStatus::parse(&bytes))
+    {
+        Some(Ok(status)) => {
+            checks.push(Check::num(
+                "maptree.open.flags",
+                50,
+                status.open.len() as u64,
+            ));
+            checks.push(Check::num(
+                "maptree.open.footer",
+                0x26,
+                u64::from(status.footer),
+            ));
+        }
+        Some(Err(err)) => {
+            checks.push(Check::text(
+                "maptree.open.parse",
+                "ok",
+                &format!("FAILED: {err}"),
+            ));
+        }
+        None => checks.push(Check::text("maptree.open.parse", "ok", "FILE MISSING")),
+    }
+
     // --- CommonEvent.dat --------------------------------------------------
     match read(&basic.join("CommonEvent.dat")).map(|bytes| CommonEventData::parse(&bytes)) {
         Some(Ok(events)) => {

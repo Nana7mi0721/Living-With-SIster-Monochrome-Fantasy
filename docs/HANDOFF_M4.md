@@ -16,7 +16,7 @@ source tools/env.sh >/dev/null 2>&1
 cargo test -q --workspace                 # 全绿（含 wolf-audio 9 项 + audio_wiring）
 cargo test -p wolf-audio --offline        # 纯离线，9 passed
 cargo build -q -p wolf-cli
-./target/debug/wolf-cli.exe verify         # PASS 63
+./target/debug/wolf-cli.exe verify         # PASS 70
 # 带声音跑（有设备就能听到）：
 ./target/debug/wolf-cli.exe --root work/all --audio capture \
   --load-save work/retail_backup/Save/SaveData08.sav --frames 90 \
@@ -45,6 +45,13 @@ cargo build -q -p wolf-cli
 5. **交叉淡入淡出 BGM 切换**：140 的 stop 用帧数淡出，切曲目前是 stop→play；如需交叉淡化再加。
 6. 若改音频行为，刷新 `docs/BASELINE.json` 的 `m4_audio` 段并重跑 `verify`。
 
+### 4.5 M6 起点的第一块拼图：MapTree.dat 已解码（本轮新增）
+
+- `MapTree.dat` / `MapTreeOpenStatus.dat` 已解出并进 loader：`crates/wolf-format/src/maptree.rs`、`crates/wolf-format/tests/maptree.rs`（4 测试）、`verify` 新增 7 项（总 70 项）、`docs/FORMAT_SPEC.md` §2.6。
+- 结构：416 B = 10×0 头 + version 0x90 + u32 **50 条** + 50×`{i32 parent, u32 map_id}` + footer 0xBC；`parent==-1` 为根，全表仅 map **3/31/24** 挂在 map 0 下（正是三张无瓦片钩子图），条目顺序即树显示顺序。
+- **否定结论（重要）**：文件里没有 x/y，也没有起始地图字段 ⇒ “新游戏从哪开始”不是 MapTree 数据驱动。M6 起点仍需从引擎启动流程实测（BOOT=TitleMap ev2 是示例标题教程；真正的新游戏入口候选是 Map003 ev1，见 `docs/MAP_AUDIT.md` §7.5）。
+- 下一步建议：用 `dump`/`capture --map` 跟踪 TitleMap→新游戏的 host 调用（130/174/220/221），确认引擎挑图逻辑；再决定 M6 入口写死为 Map003 还是复刻引擎选择。
+
 ## 5. 环境/协作陷阱
 
 - 音频依赖必须用这套**离线可编译**特性集：`symphonia 0.6.1 { default-features=false, features=["flac","mp3","pcm","vorbis","ogg","wav"] }` + `cpal 0.18.2`。默认/all 会拉未缓存的 mkv/adpcm/aac/rustfft。
@@ -53,4 +60,4 @@ cargo build -q -p wolf-cli
 
 ## 6. 里程碑位置
 
-M0–M3 done、M4 后端+接线 done（差人耳）；**M5 存档层** 已由 `save_roundtrip` 测试覆盖（逐字节 + 引擎级 8/8）；剩余大项是 **M6 主线贯通**（标题→SampleMapA 剧情，108 并行事件无死锁）。
+M0–M3 done、M4 后端+接线 done（差人耳）；**M5 存档层** 已由 `save_roundtrip` 测试覆盖（逐字节 + 引擎级 8/8）；剩余大项是 **M6 主线贯通**（标题→SampleMapA 剧情，108 并行事件无死锁）。M6 的第一块拼图 `MapTree.dat` 已解码（见 §4.5），但起点坐标不在其中。

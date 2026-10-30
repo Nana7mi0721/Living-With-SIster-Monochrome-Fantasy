@@ -266,6 +266,37 @@ Kaitai 的字段表按 len 分档：len > 19 才有 idx19，> 20 才有 idx20，
 - 运行时用途：静态随机数表。重写时可用同样 PRNG 复刻，或改用自家随机源
   （除非要复刻"读档后随机序列一致"的行为，否则无影响）。
 
+### 2.6 MapTree.dat / MapTreeOpenStatus.dat（BasicData，同级文件）
+
+**状态：已验证**（416 B / 75 B，逐字节对齐；loader `crates/wolf-format/src/maptree.rs`，测试 `crates/wolf-format/tests/maptree.rs`）
+
+`MapTree.dat`（本游戏 416 字节）：
+
+| 偏移 | 类型 | 字段 | 实测 |
+|---|---|---|---|
+| 0 | 10 × u1 | header padding | 全 0 |
+| 10 | u1 | version | **0x90** |
+| 11 | u4 | entry_count | **50**（与 SysDatabase type 0 的 50 行一致） |
+| 15 | entry_count × 8 B | entries：`{i32 parent_map_id, u32 map_id}` | 见下 |
+| 415 | u1 | footer | **0xBC** |
+
+11 + 4 + 50×8 + 1 = **416**，正好等于文件长度；记录流在 EOF 前 1 字节结束、footer 落在该字节，故偏移是实测而非猜测。
+
+语义：`parent == -1` 为树根；全表只有 3 条非根记录，分别是 map id **3 / 31 / 24**（parent 均为 0），正是 `Map003` / `Map031` / `Map024` 三张无瓦片"钩子地图"（见 MAP_AUDIT §1.4）。条目顺序即地图树显示顺序，所以新游戏钩子 Map003 紧跟在根 map 0 之后。
+
+**关键否定结论**：文件里**没有任何 x/y 字段**，也没有"起始地图"专用字段。`MapTree.dat` 只描述树与顺序，因此"新游戏从哪张图、哪个坐标开始"不是由它数据驱动的。
+
+`MapTreeOpenStatus.dat`（75 字节）：
+
+| 偏移 | 类型 | 字段 | 实测 |
+|---|---|---|---|
+| 0 | 20 × u1 | header padding | 全 0 |
+| 20 | u4 | count | **50** |
+| 24 | count × u1 | 每张图的 open 标志 | 仅第 0 个 = 1 |
+| 74 | u1 | footer | **0x26** |
+
+20 + 4 + 50 + 1 = **75** ✓。标志按 map id 索引；出货态只有标题图（map 0）"已开放"。
+
 ---
 
 ## 3. CommonEvent.dat
