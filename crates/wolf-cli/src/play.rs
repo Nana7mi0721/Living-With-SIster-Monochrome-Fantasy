@@ -49,6 +49,9 @@ pub fn run(
             return std::process::ExitCode::FAILURE;
         }
     };
+    if crate::AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
+        game.enable_audio();
+    }
     // The same entry-point rules `capture` uses: default boot (the TitleMap autorun
     // event and its three splashes), --menu-only for common event 42, --map-run for a
     // map script, --event for one common event, --load-save for a save file.

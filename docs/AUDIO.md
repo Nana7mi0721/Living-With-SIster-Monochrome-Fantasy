@@ -245,9 +245,11 @@ asset root, then `asset_root/Data/`, with backslashes normalised to `/` — so b
 
 ---
 
-## 6. Wiring into the game (for the milestone lead)
+## 6. Wiring into the game
 
-`Game::sound` lives at `crates/wolf-game/src/game.rs:1464` today and only records the command:
+> **Status: DONE (2026-...).** `crates/wolf-game/src/game.rs` now has `pub audio: Option<wolf_audio::Engine>` (defaults to `None`), `Game::enable_audio()` installs `Engine::with_asset_root(self.root)`, and `GameHost` carries `audio: Option<&mut Engine>` so `Host::sound` forwards each opcode-140 `SoundCmd` to `apply_sound_cmd` after recording it. The CLI gained `--audio` (honoured by `capture`, `capture --map`, `dump`, `play`; off by default so headless runs stay device-free). Pinned by `crates/wolf-game/tests/audio_wiring.rs`. The instructions below are kept as the original design record.
+
+`Game::sound` lives at `crates/wolf-game/src/game.rs` and only records the command:
 
 ```rust
 fn sound(&mut self, cmd: &SoundCmd) {

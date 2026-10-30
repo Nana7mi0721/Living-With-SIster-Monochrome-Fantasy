@@ -245,6 +245,9 @@ pub struct Game {
     pub key_bits: u32,
     /// Sounds requested during the current frame.
     pub sounds: Vec<SoundCmd>,
+    /// M4 audio output. `None` keeps the pure-logic and test paths silent and
+    /// allocation-free; [`Self::enable_audio`] installs a real engine.
+    pub audio: Option<wolf_audio::Engine>,
     /// Message windows on screen.
     pub messages: Vec<Message>,
     /// Pending choice prompt.
@@ -347,6 +350,7 @@ impl Game {
             databases,
             key_bits: 0,
             sounds: Vec::new(),
+            audio: None,
             messages: Vec::new(),
             choices: None,
             stats: GameStats::default(),
@@ -376,6 +380,13 @@ impl Game {
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Turns on real audio output (M4). Safe on a machine with no device -- the engine
+    /// degrades to a silent null backend -- and idempotent. Tests leave audio off because
+    /// [`Self::new`] defaults to `None`.
+    pub fn enable_audio(&mut self) {
+        self.audio = Some(wolf_audio::Engine::with_asset_root(self.root.clone()));
     }
 
     /// Frames of play time, as a save file stores them.
@@ -978,6 +989,7 @@ impl Game {
             assets: &mut self.assets,
             databases: &mut self.databases,
             sounds: &mut self.sounds,
+            audio: self.audio.as_mut(),
             messages: &mut self.messages,
             choices: &mut self.choices,
             replies: &mut self.replies,
@@ -1310,6 +1322,9 @@ struct GameHost<'a> {
     assets: &'a mut Assets,
     databases: &'a mut crate::db::Databases,
     sounds: &'a mut Vec<SoundCmd>,
+    /// M4: the real audio engine, when [`Game::enable_audio`] turned it on. `None` keeps
+    /// `Host::sound` a pure recorder (tests, headless captures).
+    audio: Option<&'a mut wolf_audio::Engine>,
     messages: &'a mut Vec<Message>,
     choices: &'a mut Option<Choices>,
     replies: &'a mut std::collections::VecDeque<ChoiceReply>,
@@ -1470,6 +1485,12 @@ impl Host for GameHost<'_> {
     fn sound(&mut self, cmd: &SoundCmd) {
         self.sounds.push(cmd.clone());
         self.stats.sounds += 1;
+        // M4: the VM already decoded opcode 140 into this SoundCmd; the engine does the
+        // play/stop with the right volume and loop rules. Silently skipped when audio is
+        // off, so headless captures and tests stay deterministic.
+        if let Some(audio) = self.audio.as_mut() {
+            audio.apply_sound_cmd(cmd);
+        }
     }
 
     fn database(&mut self, op: &DbOp) -> Option<DbValue> {
@@ -2319,6 +2340,7 @@ mod tests {
             assets: &mut game.assets,
             databases: &mut game.databases,
             sounds: &mut game.sounds,
+            audio: game.audio.as_mut(),
             messages: &mut game.messages,
             choices: &mut game.choices,
             replies: &mut game.replies,

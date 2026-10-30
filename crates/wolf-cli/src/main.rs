@@ -7,6 +7,13 @@
 
 mod play;
 
+/// `--audio` turns on real audio output for every command that builds a [`Game`] (M4).
+/// It is one process-wide flag rather than a new parameter on every runner, so `capture`,
+/// `capture --map`, `dump` and `play` all honour it without threading an argument through
+/// each signature.
+pub(crate) static AUDIO: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -217,6 +224,9 @@ fn main() -> ExitCode {
                 map_run = args.next();
             }
             "--hold-message" => hold_message = true,
+            // Turn on real audio output (M4). Every runner honours it; the engine degrades
+            // to a silent null backend when the machine has no device, so it is safe on CI.
+            "--audio" => AUDIO.store(true, std::sync::atomic::Ordering::Relaxed),
             // A/B switch for the run_condition == 2 scheduler (docs/ENGINE_EVENTS.md
             // section 2.2). `off` reproduces the pre-scheduler behaviour byte for byte;
             // the default is on.
@@ -477,6 +487,7 @@ fn print_help() {
     println!("    --menu-only       Start common event 42 directly instead of the boot map.");
     println!("                      Wins over --event (it names an entry point of its own).");
     println!("    --hold-message    Park on the first 101 message instead of dismissing it.");
+    println!("    --audio           Play BGM/SE through the real mixer (silent null backend if no device).");
     println!("    --pointer <x,y>   Put the mouse pointer at a game pixel for the whole capture.");
     println!("    --press-frame <N> Frame at which --pointer clicks the left button once.");
     println!(
@@ -1543,6 +1554,9 @@ fn run_dump(
             return ExitCode::FAILURE;
         }
     };
+    if AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
+        game.enable_audio();
+    }
     // A dump has no keyboard: dismiss messages and answer prompts so a turn loop
     // marches to its end instead of parking on the first 101/102.
     game.auto_advance = true;
@@ -2202,6 +2216,9 @@ fn run_capture(
             return ExitCode::FAILURE;
         }
     };
+    if AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
+        game.enable_audio();
+    }
     // A capture has no keyboard, so messages dismiss immediately. Choice prompts are
     // HELD by default: the title's first prompt is its menu, and answering it teleports
     // into the game (docs/M1_CLOSURE.md §5), so a held run is what photographs the title.
@@ -2525,6 +2542,9 @@ fn run_capture_map(
             return ExitCode::FAILURE;
         }
     };
+    if AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
+        game.enable_audio();
+    }
     game.auto_advance = true;
     game.auto_events.set_enabled(answers.auto_events);
     if let Some(index) = answers.index {
