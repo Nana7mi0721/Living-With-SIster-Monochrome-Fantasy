@@ -82,7 +82,10 @@ impl Trigger {
     /// events).
     #[must_use]
     pub fn is_automatic(self) -> bool {
-        matches!(self, Trigger::Autorun | Trigger::Parallel | Trigger::Unknown(_))
+        matches!(
+            self,
+            Trigger::Autorun | Trigger::Parallel | Trigger::Unknown(_)
+        )
     }
 
     /// True when the page is restarted after its stream ends.
@@ -291,7 +294,6 @@ impl MapRuntime {
             .collect()
     }
 
-
     /// Re-select every page, swap the coroutines of the pages that changed, and
     /// start whatever should be running. Returns how many were started.
     ///
@@ -326,6 +328,25 @@ impl MapRuntime {
         let mut started = 0;
         for (state, want) in self.events.iter_mut().zip(wanted) {
             if state.active != want {
+                // Deactivation while the page's coroutine is parked in a blocking
+                // 210/300 CALL must wait: the call is synchronous, so the page is
+                // still running its own command list and has not reached a point
+                // where WOLF would abandon it. (Switching to another live page is
+                // left to the normal path below; only losing the page entirely is
+                // deferred.) Otherwise a variable written inside the called event
+                // that falsifies this page's activation condition tears the page
+                // and its whole descendant CALL stack down mid-script. Without this
+                // guard CE329's own var69 = 0 (pc41) kills its ancestor page and
+                // the chain before the day rollover at pc385.
+                if want.is_none() {
+                    if let Some(id) = state.instance {
+                        if let Some(instance) = vm.instance(id) {
+                            if matches!(instance.wait, wolf_vm::WaitState::Child(_)) {
+                                continue;
+                            }
+                        }
+                    }
+                }
                 if let Some(id) = state.instance.take() {
                     if let Some(instance) = vm.instance(id) {
                         state.self_vars = Some(instance.self_vars.clone());
@@ -417,7 +438,6 @@ fn condition_value(magic: u32, self_vars: Option<&SelfVars>, vars: &Variables) -
         MagicKind::StrVar | MagicKind::Literal | MagicKind::Opaque => magic.raw(),
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -677,7 +697,11 @@ mod tests {
         let mut host = Quiet;
 
         runtime.start_pending(&mut vm);
-        assert_eq!(runtime.slots()[0].page, 0, "page 0 starts with the bank at 0");
+        assert_eq!(
+            runtime.slots()[0].page,
+            0,
+            "page 0 starts with the bank at 0"
+        );
         let first = runtime.slots()[0].instance().expect("page 0 started");
         let _ = vm.step_frame(&mut host);
         assert!(vm.instance(first).is_some(), "a finished page is retained");
@@ -720,4 +744,3 @@ mod tests {
         );
     }
 }
-
