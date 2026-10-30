@@ -151,7 +151,22 @@ fn parse_escape<L: VarLookup + ?Sized>(
     let end = start + 1 + j + close + 1;
 
     let replacement = match bank {
+        // \s[n] is a plain string slot.
         EscapeBank::StrVar => lookup.lookup_str(bank, index),
+        // \cself[n] reads the running event's self slot. Most of the time that
+        // slot is a string (menu labels, filenames), but the same escape is also
+        // used numerically - \f[\cself[19]] picks a font size - so fall back to
+        // the integer slot when no string has been written. Without this, every
+        // CE251 day-command button rendered its numeric slot (0) instead of the
+        // label the event had just stored in the self string bank.
+        EscapeBank::SelfVar => {
+            let text = lookup.lookup_str(bank, index);
+            if text.is_empty() {
+                lookup.lookup_num(bank, index).to_string()
+            } else {
+                text
+            }
+        }
         _ => lookup.lookup_num(bank, index).to_string(),
     };
     Some((end, replacement))
@@ -179,6 +194,7 @@ mod tests {
 
     struct Fixed {
         self_nums: Vec<i32>,
+        self_strs: Vec<String>,
         nums: Vec<i32>,
         strs: Vec<String>,
     }
@@ -192,14 +208,20 @@ mod tests {
             }
         }
 
-        fn lookup_str(&self, _bank: EscapeBank, index: usize) -> String {
-            self.strs.get(index).cloned().unwrap_or_default()
+        fn lookup_str(&self, bank: EscapeBank, index: usize) -> String {
+            match bank {
+                EscapeBank::SelfVar => {
+                    self.self_strs.get(index).cloned().unwrap_or_default()
+                }
+                _ => self.strs.get(index).cloned().unwrap_or_default(),
+            }
         }
     }
 
     fn fixed() -> Fixed {
         Fixed {
             self_nums: vec![7, 8, 9],
+            self_strs: vec![String::new(); 6],
             nums: vec![100, 200],
             strs: vec!["sfx".into()],
         }
@@ -218,6 +240,17 @@ mod tests {
         assert_eq!(expand("front\\cself[0]", &f), "front7");
         assert_eq!(expand("a\\self[1]b", &f), "a8b");
         assert_eq!(expand("\\cself[2]", &f), "9");
+    }
+
+    #[test]
+    fn self_string_takes_precedence_over_the_numeric_slot() {
+        // CE251 stores "学习会" in self string 5 and leaves numeric slot 5 at 0;
+        // \cself[5] must draw the label, not the slot.
+        let mut f = fixed();
+        f.self_strs[5] = "学习会".into();
+        assert_eq!(expand(r"\cself[5]", &f), "学习会");
+        // With no string written, the numeric fallback still drives font sizes.
+        assert_eq!(expand(r"\cself[1]", &f), "8");
     }
 
     #[test]

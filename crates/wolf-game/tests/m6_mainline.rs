@@ -453,4 +453,28 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
     assert_eq!(game.vm.vars.get(5), 30, "and 30 minutes");
     assert!(game.screen.len() > 20, "the morning scene is drawn: {} pictures", game.screen.len());
     assert!(game.stats.instructions > 120_000, "the whole loop really ran: {} instructions", game.stats.instructions);
+
+    // The morning lands in CE251, whose day-command buttons draw `\f[20]\cself[5]`
+    // and friends. The self string bank holds the label, so \cself must prefer it over
+    // the (zero) numeric slot; before that fix every button rendered a bare "0".
+    game.auto_choice = true;
+    let mut first_label: Option<String> = None;
+    for _ in 0..350 {
+        game.frame();
+        if let Some(picture) = game.screen.get(1201) {
+            if !picture.text.is_empty() {
+                first_label = Some(picture.text.clone());
+                break;
+            }
+        }
+    }
+    let first_label = first_label.expect("CE251 draws its first day-command button");
+    assert_ne!(
+        first_label, "\\f[20]0",
+        "the day-command label is a string, not the numeric self slot"
+    );
+    assert!(
+        first_label.contains("学习会") || first_label.contains("秘密特训"),
+        "the label comes from the self string bank: {first_label:?}"
+    );
 }
