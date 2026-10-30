@@ -39,7 +39,7 @@ cargo build -q -p wolf-cli
 
 ## 4. 已知边界 / 下一步（按建议优先级）
 
-1. **人耳验收**：headless 无法确认真的有声音；在一台有声卡的机器上跑 `play --root work/all --audio --load-save …` 听 BGM/SE（自动化只能证明“引擎装上、不 panic、解码与混音单测过”）。
+1. **人耳验收（本轮已做自动部分）**：`cargo run -p wolf-audio --example m4_probe -- work/all` 在本机实测 `is_silent=false`，BGM/SE 均真实播放；离线渲染 `work/out/m4_title_fixed.wav`（6s，peak 0.8701 / rms 0.13534）与 `work/out/m4_bedroom_fixed.wav`（40s，peak 0.6441 / rms 0.03372，8 条声音含一次 SE）供人耳复听。**本轮还修正了 opcode 140 音量字段**：`intArgs[4]` 才是音量、`[1]` 是 BGM 淡入时长 / SE 延迟；旧实现读 `[1]`，导致标题 BGM 只剩 10%、多条 `yuuyake/se_akimusi2` 被当 0 静音。修正后标题从峰值 0.087 提升到 0.870、卧室音量 40/70/200/50/75 均合理。剩余只需人耳确认音色与音量。
 2. **BGM 循环点来源**：当前只用 ogg 注释；mp3 BGM 无标签 ⇒ 单次播放/循环整曲。`sys.txt` 的 `BGMリスト` 循环开始(ms) 是后备，但本作 `BGMリスト` 文件名为空、`BGM番号=-3`，故未接；若遇到无标签曲需要循环，再补 manifest 后备。
 3. **audio 诊断**：`apply_sound_cmd` 对缺失文件静默忽略；可加 `GameStats.audio_missing` + 诊断，便于审计资产缺口。
 4. **play 默认开声**：现在默认静音（测试/CI 友好）；交互式 `play` 可考虑默认 `--audio`。

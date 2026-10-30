@@ -239,9 +239,11 @@ aborts a frame.
 | Se  | Play | `play_se_with_volume(file, volume = volume/100)` |
 | Se  | Stop | `stop_all_se()` |
 
-`SoundCmd.volume` is 0..=100 and is clamped/divided by 100. Paths are resolved relative to the
-asset root, then `asset_root/Data/`, with backslashes normalised to `/` — so both
-`BGM/nekomimi.mp3` and `Data\BGM\nekomimi.mp3` work.
+`SoundCmd.volume` is `intArgs[4]` (0..=100 in retail data; a few loud SE store 200 and the
+mixer clamps at full scale) and is clamped/divided by 100. `SoundCmd.frames` is `intArgs[1]`:
+the BGM fade-in length, the SE start delay, or the stop fade-out length. Paths are resolved
+relative to the asset root, then `asset_root/Data/`, with backslashes normalised to `/` — so
+both `BGM/nekomimi.mp3` and `Data\BGM\nekomimi.mp3` work.
 
 ---
 

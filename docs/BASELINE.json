@@ -1187,7 +1187,9 @@
   "loop_semantics": "BGM loop comes from ogg Vorbis comments LOOPSTART/LOOPLENGTH in frames (26/49 BGM ogg tagged; mp3 untagged); loop_end = min(LOOPSTART+LOOPLENGTH, total_frames); mixer wraps by (end-start) keeping fractional phase",
   "wiring": "Game.audio: Option<wolf_audio::Engine> (None by default), Game::enable_audio() installs Engine::with_asset_root(root), GameHost.audio forwards Host::sound -> apply_sound_cmd; CLI --audio honoured by capture/capture --map/dump/play; crates/wolf-game/tests/audio_wiring.rs pins silent-by-default + recorder intact + no-device safe",
   "proof": "capture --root work/all --audio --load-save SaveData08.sav --frames 90 renders 89.4% non-black with audio engine installed and no panic (work/out/m4_hscene_audio.png)",
-  "commit": "270ab37"
+  "sound_decode": "opcode 140 raw layout (wolfrpg-map-parser 0.4.1 sound_command): intArgs[1] = BGM fade-in / SE delay, [2] = variable, [3] = start time, [4] = VOLUME, [5] = tempo, [6] = loop point (BGM/BGS). Old code read intArgs[1] as volume (silenced fade-time-0 tracks and played 10 as 10%). Fixed in crates/wolf-vm/src/exec.rs with unit tests se_play_is_non_blocking_and_decodes_the_channel + bgm_play_reads_the_volume_from_slot_four.",
+  "acceptance": "Automated device probe: cargo run -p wolf-audio --example m4_probe -- work/all -> is_silent=false, BGM/White_Base.mp3 5s + SE/Cancel.wav played; offline Game render work/out/m4_title_fixed.wav (360 frames/6s, peak 0.8701, rms 0.13534, BGM White_Base volume 100) and work/out/m4_bedroom_fixed.wav (2400 frames/40s, peak 0.6441, rms 0.03372, 8 sound commands: Acoustic_High_Collar 40, sparrows 70, se_basa SE 200, autumncome 70, yuuyake 50, se_akimusi2 75). Human-ear confirmation still pending.",
+  "commit": "270ab37 (wiring); volume-field fix in the M4 acceptance commit"
  },
  "m6_mainline": {
   "entry": "capture --map-run Map003 --event 1 (Map003 ev1 new-game hook -> 130 Teleport SampleMapA at (62,38) target -1 options 0x1 -> SampleMapA ev0 new-game processing)",

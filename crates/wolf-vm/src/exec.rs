@@ -279,9 +279,11 @@ pub struct SoundCmd {
     pub action: SoundAction,
     /// File name, escapes expanded (empty for a stop).
     pub file: String,
-    /// Volume, 0..=100.
+    /// Volume from intArgs[4], 0..=100 in retail data (the editor also stores 200 for a
+    /// few loud SE; the mixer clamps at full scale).
     pub volume: i32,
-    /// Fade length in frames.
+    /// intArgs[1]: fade-in length for BGM, start delay for SE, or fade-out length for a
+    /// stop. The mixer currently consumes it only on stop.
     pub frames: i32,
 }
 
@@ -1797,6 +1799,14 @@ fn execute(
                 Some(Signal::Blocked)
             }
             140 => {
+                // Raw layout (wolfrpg-map-parser 0.4.1 sound_command):
+                //   [0] = options/system-db/type word
+                //   [1] = fade time (BGM/BGS) or delay (SE)
+                //   [2] = variable, [3] = start time
+                //   [4] = volume, [5] = tempo, [6] = loop point (BGM/BGS only)
+                // Old code mistook [1] for the volume, which silenced every track whose
+                // fade time was 0 and rendered 10 as 10%. The retail data's [4] values
+                // are the sane 0..100 (200 for the loud SE), so read [4] here.
                 let bits = arg(cmd, 0);
                 let channel = if bits & 0x20 != 0 {
                     SoundChannel::Se
@@ -1806,8 +1816,12 @@ fn execute(
                 let playing = bits >= 0 && bits & 0x0200_0000 != 0;
                 let (action, file, volume, frames) = if playing {
                     let file = expand(cmd.strings.first().map_or("", String::as_str), inst, vars);
-                    let volume = if argc(cmd) >= 6 { arg(cmd, 1) } else { 100 };
-                    (SoundAction::Play, file, volume, 0)
+                    let volume = if argc(cmd) >= 6 { arg(cmd, 4) } else { 100 };
+                    // For BGM this is the fade-in length; SE treats the same slot as a
+                    // start delay. The mixer currently only uses frames when stopping,
+                    // but keeping it here preserves the field instead of dropping it.
+                    let frames = if argc(cmd) >= 6 { arg(cmd, 1).max(0) } else { 0 };
+                    (SoundAction::Play, file, volume, frames)
                 } else {
                     let frames = if argc(cmd) <= 5 { arg(cmd, 1) } else { 0 };
                     (SoundAction::Stop, String::new(), 0, frames)
@@ -3732,7 +3746,7 @@ mod tests {
             1,
             "se",
             vec![
-                cmd(140, &[0x0200_0020, 80, 0, 0, 100, 100], &["SE/click"]),
+                cmd(140, &[0x0200_0020, 7, 0, 0, 80, 100], &["SE/click"]),
                 cmd(121, &[2_000_000, 1, 0, 0], &[]),
             ],
         );
@@ -3743,8 +3757,30 @@ mod tests {
         assert_eq!(host.sounds[0].channel, SoundChannel::Se);
         assert_eq!(host.sounds[0].action, SoundAction::Play);
         assert_eq!(host.sounds[0].file, "SE/click");
-        assert_eq!(host.sounds[0].volume, 80);
+        assert_eq!(host.sounds[0].volume, 80, "volume is intArgs[4], not [1]");
+        assert_eq!(host.sounds[0].frames, 7, "intArgs[1] is the delay");
         assert_eq!(vm.vars.get(0), 1, "must not block");
+    }
+
+    #[test]
+    fn bgm_play_reads_the_volume_from_slot_four() {
+        let e = event(
+            1,
+            "bgm",
+            vec![cmd(
+                140,
+                &[0x0200_0000, 10, 0, 0, 70, 100, 0],
+                &["BGM/White_Base.mp3"],
+            )],
+        );
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+        assert_eq!(host.sounds[0].channel, SoundChannel::Bgm);
+        assert_eq!(host.sounds[0].action, SoundAction::Play);
+        assert_eq!(host.sounds[0].volume, 70);
+        assert_eq!(host.sounds[0].frames, 10);
     }
 
     #[test]
