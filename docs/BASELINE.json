@@ -1161,5 +1161,13 @@
   "game_level": "crates/wolf-game/tests/save_roundtrip.rs::every_retail_save_survives_a_game_level_save_reload - load_into -> Game::save_to -> reload_into preserves picture table (all Screen fields) / 800 normal vars / playtime / choice anchor, 8/8 slots",
   "fixed_defect": "savegame::picture_to_record clamped horizontal scale with max(0), rewriting retail SaveData08 window pics 1996/1998 scale=-100 to 0; now keeps the sign (v[9] = picture.scale as u32), renderer still max(0); unit test a_negative_horizontal_scale_survives_a_save_round_trip",
   "skip_policy": "both tests skip when retail saves are absent (copyrighted data)"
+ },
+ "m4_audio": {
+  "backend": "crates/wolf-audio: symphonia 0.6.1 (default-features=false; flac/mp3/pcm/vorbis/ogg/wav) decode + cpal 0.18.2 output + software mixer; builds and tests fully offline",
+  "tests": "cargo test -p wolf-audio --offline: 9 passed (decode ogg/mp3/wav, ogg loop tags, render length, two-SE sum clipped, seamless bgm loop, bgm stop fade silent, null-engine commands)",
+  "loop_semantics": "BGM loop comes from ogg Vorbis comments LOOPSTART/LOOPLENGTH in frames (26/49 BGM ogg tagged; mp3 untagged); loop_end = min(LOOPSTART+LOOPLENGTH, total_frames); mixer wraps by (end-start) keeping fractional phase",
+  "wiring": "Game.audio: Option<wolf_audio::Engine> (None by default), Game::enable_audio() installs Engine::with_asset_root(root), GameHost.audio forwards Host::sound -> apply_sound_cmd; CLI --audio honoured by capture/capture --map/dump/play; crates/wolf-game/tests/audio_wiring.rs pins silent-by-default + recorder intact + no-device safe",
+  "proof": "capture --root work/all --audio --load-save SaveData08.sav --frames 90 renders 89.4% non-black with audio engine installed and no panic (work/out/m4_hscene_audio.png)",
+  "commit": "270ab37"
  }
 }
