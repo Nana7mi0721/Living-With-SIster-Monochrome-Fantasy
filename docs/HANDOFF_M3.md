@@ -97,7 +97,7 @@ e4de9d5 docs: battle subsystem audit and vertical-slice plan
 
 ## 6. 已知 M2 残留（不阻塞 M3）
 
-- 官方存档回读（`SaveData01..09`）尚未逐字节校验。
+- ✅ 官方存档回读（`SaveData01..08`）已逐字节 + 引擎级双向校验：`crates/wolf-save/tests/write.rs::every_save_round_trips_byte_for_byte` 证明 9 个文件 `parse -> to_bytes` 逐字节还原（含 `System.sav`）；新增 `crates/wolf-game/tests/save_roundtrip.rs::every_retail_save_survives_a_game_level_save_reload` 证明真实 `Game` 的 `load_into -> save_to -> 重新 load_into` 后图片表 / 800 普通变量 / 读档时间 / 选择锚点完全一致（8/8 槽通过）。过程中修掉一个真实缺陷：`savegame::picture_to_record` 曾把横向 scale `-100`（零售 SaveData08 的窗口图 1996/1998）`max(0)` 钳成 0，导致回读后缩放丢失 —— 现已保留符号（渲染侧仍 `max(0)` 不受影响），并加单测 `a_negative_horizontal_scale_survives_a_save_round_trip`。两份测试在无零售存档数据时自动跳过（数据受版权保护）。
 - 101 消息窗口几何（多行/换行）尚未完全按零售对齐。
 - CData row 100（战斗临时角色槽）仍是运行时策略，未定论。
 - 290 闪烁数学已实现，但 type 3/7/8/9/10 仍未确认。

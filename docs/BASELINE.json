@@ -1152,5 +1152,11 @@
   "p1_capture_map": "capture --map now drives a real Game (load-save + start_pages + shared frame helpers); SampleMapA ev0 is the opening cinematic, --frames 10 shows beige tile layer composited under eyecatch (98.3% non-black, work/out/hscene_room_f10.png)",
   "p2_word_effect": "narrow Picture/word_effect* -> hword/word_effect* alias in assets.rs (30 images incl 7 previously missing resolve), emits \"asset fallback: ...\" diagnostic; 2 unit tests, docs/UNVERIFIED.md H-ASSET-1",
   "commit": "684d711"
+ },
+ "save_roundtrip": {
+  "raw_bytes": "crates/wolf-save/tests/write.rs::every_save_round_trips_byte_for_byte - 9/9 files (SaveData01..08 + System.sav) parse -> to_bytes byte-identical (incl checksum/end byte)",
+  "game_level": "crates/wolf-game/tests/save_roundtrip.rs::every_retail_save_survives_a_game_level_save_reload - load_into -> Game::save_to -> reload_into preserves picture table (all Screen fields) / 800 normal vars / playtime / choice anchor, 8/8 slots",
+  "fixed_defect": "savegame::picture_to_record clamped horizontal scale with max(0), rewriting retail SaveData08 window pics 1996/1998 scale=-100 to 0; now keeps the sign (v[9] = picture.scale as u32), renderer still max(0); unit test a_negative_horizontal_scale_survives_a_save_round_trip",
+  "skip_policy": "both tests skip when retail saves are absent (copyrighted data)"
  }
 }

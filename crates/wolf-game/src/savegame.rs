@@ -214,7 +214,11 @@ pub fn picture_to_record(picture: &Picture) -> SavePart5_1 {
     v[6] = picture.blend as u32;
     v[7] = u32::MAX;
     v[8] = picture.fade;
-    v[9] = picture.scale.max(0) as u32;
+    // Keep the sign: retail SaveData08 stores window pictures 1996/1998 with a
+    // horizontal scale of -100 (a sentinel the renderer clamps, but the save must
+    // reproduce byte-for-byte on a load -> save round trip). Clamping to 0 here used
+    // to silently rewrite -100 as 0.
+    v[9] = picture.scale as u32;
     v[10] = v[9];
     v[11] = 0;
     record
@@ -457,6 +461,25 @@ mod tests {
             checked += 1;
         }
         assert!(checked > 20, "checked {checked} text records");
+    }
+
+    #[test]
+    fn a_negative_horizontal_scale_survives_a_save_round_trip() {
+        // Retail SaveData08 pictures 1996/1998 store scale[0] = -100 as u32. The renderer
+        // clamps it to 0, but the record must be reproduced exactly on save.
+        let record = SavePart5_1 {
+            var1: 1996,
+            var4: 0,
+            var5: 0,
+            var6: 1,
+            vars7_18: [492, 57, 215, 6, 1, 128, 0, u32::MAX, 1, (-100i32) as u32, 100, 0],
+            md1: b"<SQUARE>\0".to_vec(),
+            ..SavePart5_1::default()
+        };
+        let picture = picture_from_record(&record).expect("a window picture");
+        assert_eq!(picture.scale, -100);
+        let written = picture_to_record(&picture);
+        assert_eq!(written.vars7_18[9], (-100i32) as u32, "negative scale must be kept");
     }
 
     #[test]

@@ -450,6 +450,17 @@ parse 的每一层都是「长度 + 数据」，所以编码器就是它的镜�
 
 **实测：9 个存档的 part3 全部与 chunk_bytes(2) 逐字节相同**（上表最后一列的长度即原始长度）。
 这是「改一个变量不会碰坏另外 21 万字节」的前提。
+### 6.3 存档引擎级双向校验（**已验证**）
+
+除了原始字节的 `parse -> to_bytes`（`crates/wolf-save/tests/write.rs::every_save_round_trips_byte_for_byte`，9/9），
+真实引擎的读档⇄存档也是一条闭环，由 `crates/wolf-game/tests/save_roundtrip.rs::every_retail_save_survives_a_game_level_save_reload` 覆盖：
+把 `SaveData01..08` 逐个 `savegame::load_into` 进真实 `Game`，再 `Game::save_to` 写出、重新 `load_into`，
+断言图片表（`Screen` 全部字段）/ 800 普通变量 / 读档时间 / 选择锚点（Sys3/4）完全一致（8/8 槽通过）。
+
+过程中修掉一个真实缺陷：`crates/wolf-game/src/savegame.rs::picture_to_record` 曾对横向 `scale` 做 `max(0)`，
+把零售 `SaveData08` 窗口图 1996/1998 的横向 `scale = -100`（`vars7_18[9]`，渲染侧本就 `max(0)` 钳位）
+钳成 0，导致回读后缩放丢失。现已**保留符号**（`v[9] = picture.scale as u32`），渲染不受影响。
+单测 `a_negative_horizontal_scale_survives_a_save_round_trip` 固定该行为。两份测试在缺少零售存档时自动跳过。
 
 写回 API（crates/wolf-save/src/lib.rs）：
 
