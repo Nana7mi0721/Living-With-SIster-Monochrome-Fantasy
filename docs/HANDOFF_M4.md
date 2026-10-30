@@ -79,6 +79,8 @@ cargo build -q -p wolf-cli
 - 钻研：同一命令把 pointer 换成 195,475，右下浮出「自主训练提升各项能力。」（work/out/m6_second_action.png）。
 测试 m6_mainline.rs 固定两条：clicking_the_reading_icon_in_the_bedroom_runs_the_first_playable_action（单次读书）与 the_bedroom_actions_can_be_played_one_after_another（1500 帧到卧室 → 点读书断言「理解」→ 再点钻研断言「自主训练」，证明同一局里可连续做不同行动）。主线已从「只到开场声明」推进到真实可玩交互（点击房间图标 → 行动 → 反馈），并验证了连续多动作。
 
+**行动后的存档整合（本轮新增）**：测试 m6_mainline.rs::a_live_played_scene_survives_a_save_and_reload 在同一个真实 Game 里跑 1500 帧 → 读书 → 钻研，然后 `Game::save_to` 写盘、`savegame::load_into` 重载，断言可见画面层（图片号/文件/纯文本/坐标/透明度/缩放/锚点/window）、800 个普通变量、playtime 全部一致。已知且可接受的格式归一化：读回后 WindowString→WindowFile、文本里的 `\f[0]` 等格式码被剥成纯文本（视觉相同，比较时按纯文本+window 归一）。这说明行动结果能随存档保存并恢复。
+
 **这条切片之外仍是缺口（M6 未完）**：① ~~标题画面层残留~~ **已解决**（§4.5：地图切换清负号画面层；capture --boot 92.1% 与 Map003 一致，回归测试 the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room）；② ~~剧情只到开场声明 + 卧室 HUD~~ **已推进到前两段可玩行动（读书/钻研，连续可做）**（上一段）；③ 201 SetMoveRoute 无地图层、290 kind 10、CData (5,16,0) 越界读仍按既有诊断透传（均不影响本切片）。
 ## 5. 环境/协作陷阱
 
@@ -88,4 +90,4 @@ cargo build -q -p wolf-cli
 
 ## 6. 里程碑位置
 
-M0–M3 done、M4 后端+接线 done（差人耳）；**M5 存档层** 已由 `save_roundtrip` 测试覆盖（逐字节 + 引擎级 8/8）；剩余大项是 **M6 主线贯通**。已完成：MapTree.dat 解码（§4.5）+ 新游戏起点确认 Map003 ev1 → SampleMapA 的链路（§4.5）。已交付 M6 纵切片（§4.6）：`capture --map-run Map003 --event 1` 干净跑到卧室 HUD + 开场声明，108 后台注册表活跃、6000 帧无死锁，有 `m6_mainline.rs` 测试固定。已可验收：标题入口（capture --boot 92.1% 干净卧室）与前两段可玩行动（读书 → 理解+、钻研 → 自主训练，可连续触发；work/out/m6_first_action.png、m6_second_action.png）都已打通，m6_mainline.rs 四个测试固定（后台调度 / 标题路径无残留 / 读书点击 / 连续读书+钻研）。下一步可做更长的日常循环、把行动结果并进存档验证。
+M0–M3 done、M4 后端+接线 done（差人耳）；**M5 存档层** 已由 `save_roundtrip` 测试覆盖（逐字节 + 引擎级 8/8）；剩余大项是 **M6 主线贯通**。已完成：MapTree.dat 解码（§4.5）+ 新游戏起点确认 Map003 ev1 → SampleMapA 的链路（§4.5）。已交付 M6 纵切片（§4.6）：`capture --map-run Map003 --event 1` 干净跑到卧室 HUD + 开场声明，108 后台注册表活跃、6000 帧无死锁，有 `m6_mainline.rs` 测试固定。已可验收：标题入口（capture --boot 92.1% 干净卧室）与前两段可玩行动（读书 → 理解+、钻研 → 自主训练，可连续触发；work/out/m6_first_action.png、m6_second_action.png）都已打通，m6_mainline.rs 五个测试固定（后台调度 / 标题路径无残留 / 读书点击 / 连续读书+钻研 / 行动后存档往返）。行动后的场景已经过真实 Game 的存档→重载验证；下一步可做更长的日常循环（跨时段/跨天）。

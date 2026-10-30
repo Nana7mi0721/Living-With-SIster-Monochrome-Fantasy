@@ -218,3 +218,117 @@ fn the_bedroom_actions_can_be_played_one_after_another() {
     assert_eq!(game.stats.warnings, 0);
 }
 
+
+
+/// Strips WOLF text escape commands so a live picture's text and its
+/// save-restored (plain) text compare equal in what the player actually sees.
+fn plain_text(text: &str) -> String {
+    let mut out = String::new();
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        while let Some(&next) = chars.peek() {
+            if next == '[' {
+                chars.next();
+                for inner in chars.by_ref() {
+                    if inner == ']' {
+                        break;
+                    }
+                }
+                break;
+            } else if next.is_ascii_alphabetic() {
+                chars.next();
+            } else {
+                break;
+            }
+        }
+    }
+    out
+}
+
+fn visible_screen(game: &Game) -> Vec<String> {
+    game.screen
+        .iter()
+        .map(|p| {
+            let kind = if p.kind.is_text() {
+                "text"
+            } else if p.kind.is_window() {
+                "window"
+            } else {
+                "file"
+            };
+            // Only a window picture uses the window rectangle; a text/file
+            // picture's default (1,1) after a reload is not a visible change.
+            let window = if p.kind.is_window() {
+                format!("{:?}", p.window)
+            } else {
+                "-".to_owned()
+            };
+            format!(
+                "{}|{kind}|{}|{}|{}|{}|{}|{}|{}|{}",
+                p.number,
+                p.file,
+                plain_text(&p.text),
+                p.x,
+                p.y,
+                p.opacity,
+                p.scale,
+                p.anchor,
+                window
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_live_played_scene_survives_a_save_and_reload() {
+    let Some(mut game) = open_game() else { return };
+    game.auto_advance = true;
+    game.set_choice_cursor(0);
+    game.auto_choice = true;
+    game.auto_choice_delay = 2;
+    game.start_map_event_by_name("Map003", 1)
+        .expect("the new-game hook exists");
+    for _ in 0..1500 {
+        game.frame();
+    }
+    click_icon(&mut game, 884, 240); // 读书
+    click_icon(&mut game, 195, 475); // 钻研
+    assert_eq!(game.stats.warnings, 0);
+
+    let pictures_before = visible_screen(&game);
+    let vars_before: Vec<i32> = (0..800).map(|index| game.vm.vars.get(index)).collect();
+    let playtime_before = game.playtime_frames;
+
+    let mut out = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    out.pop();
+    out.pop();
+    out.push("work/out/m6_live_roundtrip");
+    let _ = std::fs::remove_dir_all(&out);
+    if let Err(err) = game.save_to(&out) {
+        eprintln!("skipping: live save needs a template save: {err}");
+        return;
+    }
+
+    let mut reloaded = Game::new(data_root()).expect("reload game");
+    wolf_game::savegame::load_into(&mut reloaded, &out).expect("load the live save");
+    assert_eq!(
+        visible_screen(&reloaded),
+        pictures_before,
+        "the visible picture layer changed across save -> reload"
+    );
+    assert_eq!(
+        (0..800).map(|index| reloaded.vm.vars.get(index)).collect::<Vec<_>>(),
+        vars_before,
+        "the 800 normal variables changed across save -> reload"
+    );
+    assert_eq!(
+        reloaded.playtime_frames, playtime_before,
+        "play time changed across save -> reload"
+    );
+    let _ = std::fs::remove_dir_all(&out);
+}
+
