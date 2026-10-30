@@ -1025,6 +1025,13 @@ impl Screen {
         self.pictures.clear();
     }
 
+    /// Drops only the whole-screen (negative numbered) layers, keeping ordinary
+    /// numbered pictures. Map changes rebuild the screen layers from the new map's
+    /// event scripts, and the old map's overlays must not bleed through.
+    pub fn clear_screen_layers(&mut self) {
+        self.pictures.retain(|number, _| *number >= 0);
+    }
+
     /// Advances the animation clock by one frame.
     pub fn tick(&mut self) {
         for picture in self.pictures.values_mut() {
@@ -2433,6 +2440,19 @@ mod effect_tests {
             screen.pictures.insert(*number, Picture::new(*number));
         }
         screen
+    }
+
+    /// A map change drops the whole-screen (negative) layers but keeps ordinary pictures.
+    ///
+    /// The sample title screen draws its art into slot -2; when its menu answers
+    /// `はじめから` with a `130`, that art belongs to the old map and must not stay on
+    /// top of the new scene, while numbered pictures (and the HUD) survive.
+    #[test]
+    fn a_map_change_clears_only_the_negative_screen_layers() {
+        let mut screen = screen_with(&[-2, -1, 0, 50000, 12001]);
+        screen.clear_screen_layers();
+        let left: Vec<i32> = screen.iter().map(|picture| picture.number).collect();
+        assert_eq!(left, vec![0, 12001, 50000]);
     }
 
     /// The picture range is the closed interval the manual describes, not two loose slots.

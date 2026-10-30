@@ -647,6 +647,10 @@ impl Game {
     /// drawing into the new map. Engine events are session-wide and keep running.
     fn switch_map(&mut self, path: &str) -> Result<(), GameError> {
         self.runtime.stop_all(&mut self.vm);
+        // Whole-screen layers belong to the map that drew them. The new map's
+        // events rebuild whatever overlay it needs; leaving the old map's title
+        // art in the negative slots painted it on top of the new scene.
+        self.screen.clear_screen_layers();
         let bytes = self.read(path)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, None);

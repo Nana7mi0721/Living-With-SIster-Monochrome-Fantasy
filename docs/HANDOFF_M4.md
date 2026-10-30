@@ -51,7 +51,7 @@ cargo build -q -p wolf-cli
 - 结构：416 B = 10×0 头 + version 0x90 + u32 **50 条** + 50×`{i32 parent, u32 map_id}` + footer 0xBC；`parent==-1` 为根，全表仅 map **3/31/24** 挂在 map 0 下（正是三张无瓦片钩子图），条目顺序即树显示顺序。
 - **否定结论（重要）**：文件里没有 x/y，也没有起始地图字段 ⇒ “新游戏从哪开始”不是 MapTree 数据驱动。M6 起点仍需从引擎启动流程实测（BOOT=TitleMap ev2 是示例标题教程；真正的新游戏入口候选是 Map003 ev1，见 `docs/MAP_AUDIT.md` §7.5）。
 - **已确认（2026-10-30，本轮实测）**：真正的新游戏起点就是 **Map003 ev1**——Map003 是 MapTree 里挂在 map 0 下的钩子图（70×170，无瓦片），`[S]` 起始标记在 (62,38)，ev1 名 `ニューゲーム処理`。链路：Map003 ev1 → `121 [2000000,1]` 切游戏态 → `130 [-1,62,38,1,1]` 传送 → **SampleMapA (62,38) 方向 1** → SampleMapA ev0 `ニューゲーム処理` → 卧室 + HUD。`capture --map-run Map003 --event 1` 的诊断里能看到唯一的 `130 Teleport: MapData/SampleMapA.mps at (62, 38) direction 1`。
-- 标题菜单路径（boot → 标题 → 确认 → CE42 选项 0）也会发 `130 [-1,60,34,3,1]` 到 SampleMapA，但 CE42 是 WOLF 自带的示例标题脚本（`オリジナルタイトル画面Ａ`，3 个示例选项 1/2/3），它画的 `SystemGraphic/TitleGraphic*.png` 画面层不会在传送前擦除，导致走这条路径时标题画残留覆盖在卧室上；Map003 起点路径干净。**结论：M6 入口以 Map003 ev1 为准**，标题→游戏的真实引擎入口（用 `[S]` 起始标记）后续再复刻。
+- 标题菜单路径（boot → 标题 → 确认 → CE42 选项 0）也会发 `130 [-1,60,34,3,1]` 到 SampleMapA。CE42 是 WOLF 自带的示例标题脚本（`オリジナルタイトル画面Ａ`，3 个示例选项 1/2/3），它把 `SystemGraphic/TitleGraphic*.png` 画在**负号画面层**（`-2`）。这些画面层属于旧地图，地图切换时必须随旧图一起丢弃；早期版本没清，标题画会残留覆盖在卧室上。**本轮已修复**：`Screen::clear_screen_layers()`（只丢 `number < 0`，保留普通编号图片）在 `Game::switch_map` 里调用，`picture.rs` 有单测。修复后 `capture --boot --frames 3200 --key-frame 800:10 --answer 0 --answer-delay 2` 与 Map003 路径输出一致：92.1% 非黑、49 live pictures、唯一 `130 Teleport ... (60, 34) direction 3`，截图 `work/out/title_clean.png` 是干净卧室+HUD（无标题画残留）。**结论：标题菜单→新游戏这条真实玩家路径现在可用且视觉正确；Map003 ev1 是 `[S]` 钩子图路径，两条入口都干净。**
 
 ### 4.6 M6 主线纵切片：标题→新游戏→SampleMapA 剧情（本轮完成，可验收）
 
@@ -74,7 +74,7 @@ cargo build -q -p wolf-cli
 
 **测试**：`crates/wolf-game/tests/m6_mainline.rs::new_game_story_runs_on_the_background_scheduler_without_deadlock` 固定该切片：900 帧、进度帧 >600、指令 >50k、peak≥9、warnings 0、`screen.len()>30`、所有 `ENGINE_ALWAYS` + 241 + 38 都已启动、`started_events.len()>=13`。
 
-**这条切片之外仍是缺口（M6 未完）**：① 标题菜单仍走 WOLF 示例 CE42，标题画面层在传送后残留（见 §4.5），需要复刻引擎按 `[S]` 进入 Map003 的真实入口；② 剧情只到开场声明 + 卧室 HUD，尚未推进到第一段可选择行动；③ 201 SetMoveRoute 无地图层、290 kind 10、CData (5,16,0) 越界读仍按既有诊断透传（均不影响本切片）。
+**这条切片之外仍是缺口（M6 未完）**：① ~~标题画面层残留~~ **已解决**（§4.5：地图切换清负号画面层；`capture --boot` 92.1% 与 Map003 一致，回归测试 `m6_mainline.rs::the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room`）；② 剧情只到开场声明 + 卧室 HUD，尚未推进到第一段可选择行动；③ 201 SetMoveRoute 无地图层、290 kind 10、CData (5,16,0) 越界读仍按既有诊断透传（均不影响本切片）。
 ## 5. 环境/协作陷阱
 
 - 音频依赖必须用这套**离线可编译**特性集：`symphonia 0.6.1 { default-features=false, features=["flac","mp3","pcm","vorbis","ogg","wav"] }` + `cpal 0.18.2`。默认/all 会拉未缓存的 mkv/adpcm/aac/rustfft。
@@ -83,4 +83,4 @@ cargo build -q -p wolf-cli
 
 ## 6. 里程碑位置
 
-M0–M3 done、M4 后端+接线 done（差人耳）；**M5 存档层** 已由 `save_roundtrip` 测试覆盖（逐字节 + 引擎级 8/8）；剩余大项是 **M6 主线贯通**。已完成：MapTree.dat 解码（§4.5）+ 新游戏起点确认 Map003 ev1 → SampleMapA 的链路（§4.5）。已交付 M6 纵切片（§4.6）：`capture --map-run Map003 --event 1` 干净跑到卧室 HUD + 开场声明，108 后台注册表活跃、6000 帧无死锁，有 `m6_mainline.rs` 测试固定。仍需做：复刻引擎按 `[S]` 起始标记的真实标题→Map003 入口（现在标题菜单走示例 CE42，画面层残留），以及把剧情推进到第一段可玩行动。
+M0–M3 done、M4 后端+接线 done（差人耳）；**M5 存档层** 已由 `save_roundtrip` 测试覆盖（逐字节 + 引擎级 8/8）；剩余大项是 **M6 主线贯通**。已完成：MapTree.dat 解码（§4.5）+ 新游戏起点确认 Map003 ev1 → SampleMapA 的链路（§4.5）。已交付 M6 纵切片（§4.6）：`capture --map-run Map003 --event 1` 干净跑到卧室 HUD + 开场声明，108 后台注册表活跃、6000 帧无死锁，有 `m6_mainline.rs` 测试固定。仍需做：把剧情推进到第一段可玩行动。标题入口已可验收：`capture --boot` 从标题菜单确认进新游戏，92.1% 非黑、卧室+HUD 干净，`m6_mainline.rs` 两个测试固定（后台调度 + 标题路径无残留）。

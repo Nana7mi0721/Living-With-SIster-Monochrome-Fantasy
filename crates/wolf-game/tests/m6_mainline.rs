@@ -91,3 +91,43 @@ fn new_game_story_runs_on_the_background_scheduler_without_deadlock() {
         game.vm.started_events.len()
     );
 }
+
+
+#[test]
+fn the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room() {
+    let Some(mut game) = open_game() else { return };
+    game.auto_advance = true;
+    game.set_choice_cursor(0);
+    game.auto_choice = true;
+    game.auto_choice_delay = 2;
+    game.boot().expect("the boot map has its autorun event");
+
+    // The splash -> key wait -> title menu -> confirm chain needs about 800 frames
+    // before a single decide press walks the example title menu into the game.
+    for frame in 0..3200 {
+        if frame == 800 {
+            game.key_bits = wolf_game::key::OK;
+        }
+        game.frame();
+        game.key_bits = 0;
+    }
+
+    assert_eq!(game.stats.frames, 3200);
+    assert_eq!(game.stats.warnings, 0, "no interpreter warnings on the boot path");
+    assert!(
+        game.stats.instructions > 100_000,
+        "the title path runs the splashes plus the room: {} instructions",
+        game.stats.instructions
+    );
+    assert!(game.screen.len() > 30, "the room and HUD are drawn: {} pictures", game.screen.len());
+    // The sample title art lives in a negative (whole-screen) slot. Once the menu
+    // answers with its 130, that layer belongs to the old map and must be gone.
+    let stale: Vec<String> = game
+        .screen
+        .iter()
+        .filter(|picture| picture.number < 0 && picture.file.contains("TitleGraphic"))
+        .map(|picture| picture.file.clone())
+        .collect();
+    assert!(stale.is_empty(), "title art still on screen: {stale:?}");
+}
+
