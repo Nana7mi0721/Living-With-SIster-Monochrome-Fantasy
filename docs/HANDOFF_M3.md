@@ -92,7 +92,7 @@ e4de9d5 docs: battle subsystem audit and vertical-slice plan
    - **已落地**：`crates/wolf-game/src/auto_events.rs` 新增 `GATED_CALL_ONLY = [242, 243]`，把这两条 `run_condition==0` 但由变量 `2000350` 门控的战斗事件并入边缘触发的条件调度器（开机 2000350=0 恒休眠）；跟踪数 96→98，含单测。
    - **按键注入已打通**：`--key-frame N:CODE` 原本只在 `capture` 里有，现补进 `dump`（并新增 `dump --watch EVENT` 打印某事件每次 PC 变化）。实测 `dump --event 188 --var 2000350=2 --key-frame 80:10 --watch 65` 把 CE65 从 `pc 78`（万能ウィンドウ选择轮询）推进到 `pc 132`，证明按键注入确实能驱动 CE65。
    - **下一步（B/C 收口）**：CE65 推进后还需要连续多次导航/确认完整走完指令菜单（当前会进入 CE188↔CE188/CE194/CE122 的高频循环，260 帧 3300 万指令仍未判胜负），且要先修 `CDataBase.json` 缺失的装备/敌个体列标签，`2000352` 与 `2000350` 循环才会可观测。这已超出"按键注入"本身，属于完整战斗状态机工作量。
-4. **H 场景切片**：docs/HSCENE.md 的 P0 已达成（39 atlas images / 89.4% 非黑）；还需要 `--key-frame N:code` 注入 14 个 `123 [1600030,17]` 按键轮询，然后做主 H 纵切片。
+4. **H 场景切片（P0 已全部达成）**：docs/HSCENE.md 的两个 P0 现在都已在代码里闭环。① 图集容量：`crates/wolf-game/src/atlas.rs:42` `ATLAS_SIZE=4096` + `miss/take_warnings` 把放不下的图记成 `atlas full:` 诊断（不再静默丢）；同一 `SaveData08.sav` 在 `--root work/all` 下现在 **89.4% 非黑**，脸部三层（眼/嘴/眉）与动作层全部进 quad——旧 `work/out/_m3_sd08_all.png` 是没眼没嘴的空白脸，新 `work/out/_m3_sd08_all2.png` 表情完整。② 按键注入：`capture`/`dump` 都支持 `--key-frame N:CODE`（`key.rs::bits_for_code`），能把 `123 [1600030,17]` 轮询推过去。剩下的 H 场景 P1/P2（瓦片+图片层合成、160/162 遮罩、250 数据库项、word_effect 前缀）见 HSCENE.md §4.3–4.6，属 M3 之后。
 5. **BASELINE 刷新 + M3 提交**：M3 收口时更新 `docs/BASELINE.json` 的 map_runtime/opcode 统计，重跑 `verify` 与 `cargo test --workspace`。
 
 ## 6. 已知 M2 残留（不阻塞 M3）

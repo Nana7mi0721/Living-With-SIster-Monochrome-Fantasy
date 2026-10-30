@@ -483,11 +483,15 @@ C1 加载 SaveData08：**86 张 live 图 → 只有 31 张进了 quad**。缺的
 
 **不要做「按图宽自动推断 split」的启发式**——C17 证明存档已经把 split 写对了，那个启发式只会引入误判风险。
 
+**★已解决（M3，已在代码里）**：`crates/wolf-game/src/atlas.rs:42` 现在是 `pub const ATLAS_SIZE: u32 = 4096;`（页码从 2048 提到 4096，单页 64 MiB，仍是一张纹理一次 draw）；`Atlas::add` 失败时不再静默 `continue`，而是经 `Atlas::miss`（atlas.rs:427）记进 `misses`，`take_warnings()`（atlas.rs:459）折叠成 `atlas full: <key>` 诊断，`Game` 每帧排空防止重复。验收（2026-xx，`--root work/all`）：同一 `SaveData08.sav` 现在出 **89.4% 非黑**，`quad pic 2104`（动作层）在列，脸部三层（`1100/1110/1120`，眼/嘴/眉）与效果层全部进 quad，立绘表情完整（旧图 `work/out/_m3_sd08_all.png` 是没眼没嘴的空白脸，新图 `work/out/_m3_sd08_all2.png` 眼/嘴/眉齐全）。⇒ C1 的「31 quad、脸三层丢失」是 2048 容量问题，已被 4096 + 诊断修复。
+
 ### 4.2 P0 — 没有输入注入，14 个轮询点恒失败（**已验证**，`docs/OPCODE_SPEC.md` §5.13 + C12）
 
 §3.5 的 `123 [1600030, 17]` 轮询在 headless 下 `key_bits=0` ⇒ 永远走「没按」分支 ⇒ ev346 / ev371 / ev410 会无限空转。C1 的 SaveData08 恰好没有 coroutine 停在这些点上（9 条协程在 180 等待里），但只要多跑几秒就会撞上。
 
 ⇒ 需要 `--key-frame N:code`（或复用 `--press-frame` 的语义扩到 `123`），把「第 N 帧注入 key code」接进 `Game::frame` 的输入路径。**没有这个，H 场景的「推进」永远只能靠预置状态。**
+
+**★已解决（M3，已在代码里）**：`capture` 早就支持 `--key-frame N:code`（`crates/wolf-cli/src/main.rs:85` / `:159` 解析 / `:429 parse_key_frame` / `:1878-1882` 每帧写 `game.key_bits = wolf_game::key::bits_for_code(code)`）；`crates/wolf-game/src/key.rs::bits_for_code` 把 WOLF key code（10=OK）翻成按键位。本轮又把同一注入接进 `dump`（`--key-frame` + `--watch EVENT` 打印 pc 变化）。验收：`dump --event 188 --frames 400 --watch 65` 看到 CE65 在第 68 帧命中 pc78 的 `123 [1600030,17]` 轮询，`--key-frame 80:10` 后 pc 78→132 越过轮询。⇒ headless 轮询点不再恒失败。（注：完整打一场还要连续菜单导航 + 补 CDataBase 装备/敌列标签，见 BATTLE.md §5。）
 
 ### 4.3 P1 — 地图瓦片层与图片层不合成（**已验证**，C3 / C4 / C15）
 
@@ -525,14 +529,14 @@ CData (0, 100, 0/1/4/7/21/48/49) flags 0x51000 … unanswered
 
 ### 4.7 已知缺陷汇总
 
-| 级别 | 现象 | 位置 | 判据 |
-|---|---|---|---|
-| P0 | 脸部三层/效果层整条丢失 | `atlas.rs:29/230/421` | C1 31 quad vs 86 live |
-| P0 | headless 下 14 个 123 轮询恒失败 | `game.rs:1527 key_code` | §3.5 |
-| P1 | 瓦片层与图片层不合成 | `main.rs:1441 / 1847` | C3 / C15 |
-| P1 | 160/162 转场不画 | `game.rs:1417` | C4 诊断 |
-| P2 | 7 条 `Picture/word_effect*` missing | 资产解析 | C14 |
-| P2 | 250 数据库项未答 | `game.rs:1392` | C2 / C4 |
+| 级别 | 现象 | 位置 | 判据 | 状态 |
+|---|---|---|---|---|
+| ~~P0~~ | ~~脸部三层/效果层整条丢失~~ | `atlas.rs:42`（ATLAS_SIZE=4096）+ miss 诊断 | C1 对照 | **已解决**：`work/out/_m3_sd08_all2.png` 89.4% 非黑，脸三层齐全 |
+| ~~P0~~ | ~~headless 下 14 个 123 轮询恒失败~~ | `main.rs` `--key-frame` + `key.rs::bits_for_code` | §3.5 | **已解决**：dump `--key-frame 80:10` 越过 CE65 pc78 |
+| P1 | 瓦片层与图片层不合成 | `main.rs:1887-1890`（capture）/ `:2225`（capture --map） | C3 / C15 | 未做 |
+| ~~P1~~ | ~~160/162 转场不画（tint）~~ | `game.rs` `screen_tint` | C4 诊断 | **151 tint 已做**；160/162 遮罩仍是硬切（CE48 kind -1） |
+| P2 | 7 条 `Picture/word_effect*` missing | 资产解析 | C14 | 未做 |
+| P2 | 250 数据库项未答 | `game.rs:1392` | C2 / C4 | 未完 |
 | P3 | HUD 文本比真实字体宽 6% | `textpic.rs` | `docs/TEXT_SPEC.md` |
 
 ---
