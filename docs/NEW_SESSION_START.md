@@ -1,8 +1,8 @@
 # 新会话启动提示（复制即可）
 
-> 用途：本文件给“下一次新开会话”的 coding agent 用。新会话没有旧聊天记录，读完本文件 + `docs/HANDOFF_M4.md`（最新交接）+ `docs/HANDOFF_M3.md`（M3 收口）即可接续。
+> 用途：本文件给“下一次新开会话”的 coding agent 用。新会话没有旧聊天记录，读完本文件 + `docs/HANDOFF_M6.md`（最新交接）+ `docs/HANDOFF_M4.md` + `docs/HANDOFF_M3.md` 即可接续。
 > 当前仓库：`E:\Study\github program\imoto life`
-> 当前源码 HEAD：以 `git log` 为准（M4 音频后端+接线 `270ab37`；M3 收口 `12ecfb6`；M6 纵切片见 `docs/HANDOFF_M4.md` §4.6）
+> 当前源码 HEAD：以 `git log` 为准（M6 收口见 `docs/HANDOFF_M6.md`；M4 音频后端+接线 `270ab37`；M3 收口 `12ecfb6`）。
 
 ## 直接复制给新会话的提示词
 
@@ -10,29 +10,29 @@
 你在继续一个“用 Rust 重写 WOLF RPG Editor 游戏”的项目，仓库在 E:\Study\github program\imoto life。
 
 先做三件事，不要凭记忆猜：
-1. 读 docs/HANDOFF_M4.md（最新交接：M4 音频后端+接线，下一步）、docs/HANDOFF_M3.md（M3 收口快照）和 docs/NEW_SESSION_START.md（本文件）。
+1. 读 docs/HANDOFF_M6.md（最新交接：M6 主线贯通与可玩日常循环收口）、docs/HANDOFF_M4.md、docs/HANDOFF_M3.md 和 docs/NEW_SESSION_START.md（本文件）。
 2. 在仓库根目录执行：
    cd '/e/Study/github program/imoto life'
    source tools/env.sh >/dev/null 2>&1
    git status --short
    git log --oneline -5
    cargo test -q --workspace
-3. 确认当前 HEAD 与测试全绿后，按 docs/HANDOFF_M4.md 的“下一步”继续（M4 只差有设备时的人耳验收；M5 存档层已覆盖；M6 纵切片已达成——Map003 ev1 → SampleMapA 卧室 HUD + 开场声明、108 后台事件无死锁，见 §4.6；标题菜单→新游戏入口也已跑通（`capture --boot` 92.1%，地图切换清负号画面层，见 §4.5）；前两段可玩行动也已打通：点击卧室「读书」图标 → 「对各种事的理解加深了。」，点「钻研」→「自主训练提升各项能力。」，可连续触发（work/out/m6_first_action.png、m6_second_action.png），见 HANDOFF_M4 §4.6 末段；M6 剩余可做更长日常循环（引擎跨天 CE329 已跑通；玩家菜单事件链已补通；卧室自然训练菜单 m6_training_menu.rs、夜间菜单输入 m6_night_menu.rs、ev1 page2 自然点击 m6_ev1_page2.rs 已固定；CE328/CE329 的页切换中止已修复并由 m6_night_sleep.rs 证明纯自然 19:30→day3 08:30；多日循环已推进到 day4 08:30（m6_multiday.rs）；第 4 天白天进入 CE239 战斗域，超出本切片）；行动后的存档往返已验证（`a_live_played_scene_survives_a_save_and_reload`））。M0–M3 已完成并收口（151/160/162 渲染、战斗切片 A/B/C、H 场景 P0/P1/P2、行越界读语义、BASELINE 刷新均已提交）。地图滚动仍是低优先级：Sys 104/105 是引擎输出的相机滚动值，不是 opcode，不要建 player/camera 居中模型。
+3. 确认当前 HEAD 与测试全绿后，按 docs/HANDOFF_M6.md 的“下一步”继续（M0–M6 已完成：标题→新游戏→卧室 HUD→读书/钻研→训练菜单→夜间菜单→CE329 就寝→次日 08:30 完整可玩日常循环；多日 day1→day4 08:30 已验证；day4 早上被剧情强制送入 CE253→CE239 战斗，因 CData type0 命令槽缺失导致 day5 经真实 day loop 不可达，已由 m6_week_loop.rs 锁定；M4 音频只差有设备时的人耳验收；M5 存档层已覆盖）。
 
-项目状态：M0（加载器/verify）、M1（标题画面像素级还原）、M2（开场纵切片）、M3（完整运行时）均已完成并收口；M4（音频）后端+接线完成，只差有设备时的人耳验收。剩余大项是 M6 主线贯通。当前不要重做 M0–M3，也不要推倒现有架构。
-工程约束：不要提交 crates/wolf-format/examples/opscan.rs、crates/wolf-format/tests/_scratch_cdata.rs、_scratch_event.rs（其他 agent 的 scratch）；提交信息用 git commit -F work/_commit_*.txt；crates/wolf-vm/src/exec.rs 是 CRLF，打补丁要保留 CRLF；截图/临时产物写 work/out/。
+项目状态：M0（加载器/verify）、M1（标题画面像素级还原）、M2（开场纵切片）、M3（完整运行时）、M4（音频）、M5（存档层）、M6（主线贯通与日常循环）均已完成并收口。当前不要重做已完成部分，也不要推倒现有架构。下一步优先项见 docs/research/M7_BACKLOG.md：战斗命令菜单、H 场景渲染、日程/任务系统、地图滚动/视差。地图滚动按 Sys 104/105 的真实语义接相机参数，不要建 player/camera 居中模型。
+工程约束：不要提交 crates/wolf-format/examples/opscan.rs、crates/wolf-format/tests/_scratch_cdata.rs、_scratch_event.rs（永久 scratch）；不提交 docs/gpt调研/；提交信息用 git commit -F work/_commit_*.txt；crates/wolf-vm/src/exec.rs 实测为 LF，改前核对；截图/临时产物写 work/out/。
 
 先汇报你读到的状态和准备做的第一个具体改动，再动手。
 ```
 
 ## 新会话最需要知道的 6 个事实
 
-1. **权威文档**：`docs/HANDOFF_M3.md` 是交接总览；格式看 `docs/FORMAT_SPEC.md`、`docs/SAVE_SPEC.md`；opcode 看 `docs/OPCODE_*.md`；地图/战斗/H 场景看 `docs/MAP_AUDIT.md`、`docs/BATTLE.md`、`docs/HSCENE.md`。
+1. **权威文档**：`docs/HANDOFF_M6.md` 是最新交接；格式看 `docs/FORMAT_SPEC.md`、`docs/SAVE_SPEC.md`；opcode 看 `docs/OPCODE_*.md`；地图/战斗/H 场景看 `docs/MAP_AUDIT.md`、`docs/BATTLE.md`、`docs/HSCENE.md`；M7 待办看 `docs/research/M7_BACKLOG.md`。
 2. **数据位置**：`work/full` 是测试数据根；`work/all` 是全部 23 个 `.wolf` 的解包结果；游戏安装在 `E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy`（文件夹名确实拼错）。
-3. **构建命令**：`cargo test -q --workspace`；`cargo build -q -p wolf-cli`；CLI 在 `target/debug/wolf-cli.exe`。
-4. **当前未完成重点**：M4 人耳验收（headless 只能证明引擎装上、解码/混音单测过）；M6 主线贯通（纵切片已达成：`capture --map-run Map003 --event 1` 到卧室 HUD，108 并行事件无死锁；标题菜单入口 `capture --boot` 也已 92.1% 干净到卧室；前两段可玩行动已打通（读书→理解+、钻研→自主训练，可连续触发；work/out/m6_first_action.png、m6_second_action.png），剩余可做可玩的长日常循环（引擎跨天 CE329 已跑通、玩家菜单入口已接：训练菜单/夜间菜单/ev1 page2 点击测试已固定；CE328/CE329 页切换中止已修复（map_runtime.rs 延迟失活中的 Child 调用），m6_night_sleep.rs 证明纯自然 19:30→day3 08:30；多日循环 m6_multiday.rs 到 day4 08:30，之后进入 CE239 战斗域），行动后的存档往返已验证）；地图传送状态（低优先级，且不要做相机跟随——见 HANDOFF_M3 §5 开头的 104/105 说明）。
+3. **构建命令**：`cargo test -q --workspace`；`cargo build -q -p wolf-cli`；CLI 在 `target/debug/wolf-cli.exe`；静态验收 `./target/debug/wolf-cli.exe verify`（预期 PASS 70，pending 0）。
+4. **当前未完成重点**：M7 工作流（战斗命令菜单、H 场景渲染、日程/任务、地图滚动）。M6 边界见 HANDOFF_M6 §4：day4 08:30 无训练菜单，直接 CE253→CE239 战斗；CE239 命令槽依赖 CData type0 行 26/25/47..54，而静态数据只有 17 行，CE26 静态调用者 0。
 5. **不要做的事**：不要用 shell 启 Godot；不要杀用户进程；不要把旧聊天当作权威（旧会话可能已压缩/摘要）；以仓库文档和 git 状态为准；不要把 Sys 104/105（引擎滚动输出）和 opcode 104/105 混为一谈，也不要为它们新增 player/camera 模型。
-6. **完成任务后**：更新 `docs/HANDOFF_M4.md`（或新增下一里程碑交接），保证下一次仍能从新会话接续。
+6. **完成任务后**：更新 `docs/HANDOFF_M6.md`（或新增下一里程碑交接），同步 `docs/BASELINE.json`，保证下一次仍能从新会话接续。
 
 ## 恢复后的第一条命令
 
