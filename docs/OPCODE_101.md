@@ -146,7 +146,7 @@ pc45/pc46 的字节码是 `121 [9000002, 1600089, 10, 12544]`（`12544 = 0x3100`
 没有 ▼ 的 `150` 调用 ⇒ ▼ 由引擎内置逻辑画，读 Sys5/Sys6 定位
 【已验证「没有事件画它」；「引擎画它」是排除法推断】。
 
-### 3.5 窗口皮肤 = SystemFile/WindowBase.png（18×18 九宫格，6 px 角）
+### 3.5 窗口皮肤 = SystemFile/WindowBase.png（18×18 九宫格，3 px 角）
 
 `ev63 pc25` 把窗口底图文件名读进 self[9]：
 
@@ -178,14 +178,13 @@ pc45/pc46 的字节码是 `121 [9000002, 1600089, 10, 12544]`（`12544 = 0x3100`
 4 个角各 **3×3**；上下边 3 px 高横向拉伸；左右边 3 px 宽纵向拉伸；中心 12×12 双向拉伸。
 18 = 3 + 12 + 3 ⇒ `crates/wolf-game/src/window.rs CORNER = 3`（**不是 6**）。所谓「18=3×6、每格 6×6」把 3 行底色也算进了角块：平底皮肤无差别，但渐变底会让拉伸边界偏移，逐像素实测见 docs/M2_SLICE.md §2.2。
 
-> ⚠ 现有那张零售截图 `work/out/m2msg600.png` 拍到的是 **102 选择肢窗口**
-> （x 514..772、y 243..390），底色是**深蓝渐变**（顶 (5,6,63) → 底 (17,30,104)）、白 1 px 边框、
-> 外侧 (66,66,66)。那片蓝**不来自**任何皮肤 PNG（`WindowBase*` 是灰的；539 张 `Picture/*.png`
-> 里没有任何一张含这三种蓝）⇒ 选择肢窗口的蓝色是运行时叠加／颜色参数产生的，
-> **不能**据此推断 101 窗口也是蓝的。
-> 101 的窗口按本节证据应为「半透明深灰底 + 亮白线 + 深灰外描边」。
-> **没有任何一张存档截图拍到过 101 消息窗口**【已验证：26 张 1024×576 截图全是标题／开场画面】，
-> 所以 101 的实机外观仍属【未验证】；重写时按 `WindowBase.png` 九宫格绘制是最有依据的选择。
+> ⚠ 此前误把 `work/out/m2msg600.png` 当作零售截图：它其实是我们自己用
+> `SystemGraphic/WindowBase.png` 生成的 102 选择肢窗口，所以是深蓝渐变。该 PNG 是没有任何
+> 脚本／数据库行引用的样例资源；SysDB「ウィンドウ画像 → ×選択肢ウィンドウ画像」指定的是
+> `SystemFile/WindowBase.png`（半透明灰）。`crates/wolf-game/src/window.rs` 默认皮肤已改回该文件，
+> 修复后重拍的 `work/out/choice_gray.png` 选择框为半透明灰色。
+> 101 的窗口按本节证据应为「半透明深灰底 + 亮白线 + 深灰外描边」；
+> 没有零售截图直接拍到 101 消息窗口，重写时按 `WindowBase.png` 九宫格绘制是最有依据的选择。
 
 ---
 
@@ -399,7 +398,7 @@ Game.dat 文本设置【已验证：`docs/FORMAT_SPEC.md:198-200`】：
 
 ## 10. 与现有 crate 的不一致（修正项）
 
-> ⚠ 表内 **C5 / C6 两条已被 docs/M2_SLICE.md §2.2 的逐像素实测推翻**：原建议会把蓝色选择窗改成灰色、并把 3 px 环的角切改成 6。已在行内标注「保持不动」。其余项仍有效。
+> ⚠ **C5 曾被 docs/M2_SLICE.md §2.2 误判为「保持 SystemGraphic」，现已恢复原判**：SysDB「×選択肢ウィンドウ画像」= `SystemFile/WindowBase.png`，且用户实机反馈选择框应为半透明灰色，所以默认皮肤必须是 SystemFile 灰皮。**C6（CORNER=3）仍然正确**，不要改成 6。其余项仍有效。
 
 | # | 位置 | 现状 | 应改为 | 证据 |
 | --- | --- | --- | --- | --- |
@@ -407,7 +406,7 @@ Game.dat 文本设置【已验证：`docs/FORMAT_SPEC.md:198-200`】：
 | C2 | `crates/wolf-game/src/message.rs:95-96` | `x = screen_w * 2.0/50.0`、`y = screen_h * 27.0/32.0` | `x = 2*(W/32)`、`y = 17*(H/24) + (H/24)/10` | §3.2 |
 | C3 | `crates/wolf-game/src/message.rs:33` + `:52` | 行距 = 字号 × 30/22（借自选择肢窗口） | 行距 = `Sys8 + Game.dat.text_line_spacing(6)` = 26 | §5、§8 |
 | C4 | `crates/wolf-game/src/message.rs:56-58` | `FRAME_PICTURE = 19500`，窗口靠「画 19500 号图片」 | 19500 是**图片槽号**不是文件名；窗口是 `150` 的窗口型（type 4），皮肤由脚本自带的 `SystemFile/WindowBase.png`（18×18、3 px 环 + 12×12 底）经 `picture.window_skin()` 传入 | §3.5、docs/M2_SLICE.md §2.2 |
-| C5 | `crates/wolf-game/src/window.rs:20` | `SKIN = "SystemGraphic/WindowBase.png"` | ❌ **本条已被推翻，保持不动**：这是 102 选择窗的默认皮肤（深蓝渐变，零售选择窗就用它，见 docs/M2_SLICE.md §2.2）；101 消息窗的 150 图片自带 `SystemFile/WindowBase.png`，不走默认。改成 SystemFile 会把选择窗由蓝变灰 | §3.5 原判错误 → docs/M2_SLICE.md §2.2 |
+| C5 | `crates/wolf-game/src/window.rs:20` | `SKIN = "SystemFile/WindowBase.png"`（已从 SystemGraphic 改回） | ✅ **正确**：SysDB「×選択肢ウィンドウ画像」就是 SystemFile 灰皮；`SystemGraphic/WindowBase.png` 是无人引用的深蓝样例，用它会把选择框染紫 | §3.5 + SysDB「ウィンドウ画像」+ 用户实机反馈 |
 | C6 | `crates/wolf-game/src/window.rs:23` | `CORNER = 3` | ❌ **本条已被推翻，保持 3**：两张 18×18 皮肤实测都是 3 px 环（行/列 0..2）+ 12×12 底（18=3+12+3），不是 6+6+6；切 6 会让 6×6 角块把 3 行底色也当角保留 | §3.5 原判错误 → docs/M2_SLICE.md §2.2 |
 | C7 | `docs/OPCODE_102.md:250`、`:260-264` | 座標倍率「x10，本作取 10」 | `rateX = 32`、`rateY = 24`（无 x10） | §3.1 |
 | C8 | `docs/OPCODE_102.md:260` | `Sys4 = 7 * CSelf89` | 本作字节码是 **8**×rateY = 192（YADOT 抄的是旧版） | §3.2 |

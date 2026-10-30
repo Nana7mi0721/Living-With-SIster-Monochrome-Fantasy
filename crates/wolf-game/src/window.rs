@@ -1,30 +1,30 @@
 //! Nine-slice geometry for WOLF window pictures.
 //!
 //! Picture types 3 and 4 are "window" variants: the runtime paints a UI panel
-//! behind the content, sized to the picture's box. The panel comes from a single
-//! 18x18 skin, SystemGraphic/WindowBase.png, whose layout was measured pixel by
-//! pixel:
+//! behind the content, sized to the picture's box. The default panel comes from
+//! the 18x18 skin SystemFile/WindowBase.png - the one the game's SysDatabase
+//! "ウィンドウ画像" row names for the choice window ("×選択肢ウィンドウ画像"). Its
+//! layout was measured pixel by pixel:
 //!
-//!   row/col 0      outer dark line   0x424242
-//!   row/col 1      light bevel       0xefefef
-//!   row/col 2      inner dark line   0x424242
-//!   rows/cols 3..14 body, a navy gradient at alpha 0xcc
+//!   row/col 0      outer dark line     0x424242 (outer corner transparent)
+//!   row/col 1      light bevel         0xf2f3f3 (corner 0x888888)
+//!   row/col 2      transition line     0x576062 (corner 0xd9dcdd)
+//!   rows/cols 3..14 body, 0x1f2425 at alpha 0xdf (the translucent grey fill)
 //!   rows 15/16     mirror of 2 and 1
 //!
 //! so the frame is 3 px thick and the skin is a symmetric nine-slice. WOLF does
 //! not tile the edges: it stretches the middle row and column to the target box,
-//! which is why the body gradient looks smooth at any window size. This module
-//! reproduces that stretch and nothing else - no rounded corners, no dithering.
+//! which is why the fill looks smooth at any window size. This module reproduces
+//! that stretch and nothing else - no rounded corners, no dithering.
 //!
-//! The 101 message window ships its own copy of the same 18x18 layout as a GREY
-//! skin, SystemFile/WindowBase.png (common event 63 passes it through self[9]);
-//! only the colours differ, so the identical 3 px cut reproduces both. That is why
-//! CORNER stays 3 and SKIN stays the blue SystemGraphic/ version used by the 102
-//! choice panel - do not "fix" them to 6 / SystemFile. (docs/OPCODE_101.md section
-//! 10 rows C5-C6 were retracted; docs/M2_SLICE.md section 2.2 has the pixel proof.)
+//! The 101 message window ships the same grey SystemFile/WindowBase.png through
+//! its own 150 picture (common event 63 passes it through self[9]), so the same
+//! 3 px cut reproduces both the message and the choice window. SystemGraphic/
+//! WindowBase.png is a different, unused navy-gradient sample asset; the retail
+//! choice panel is grey. Do not switch back to it. CORNER stays 3.
 
-/// Asset name of the window skin.
-pub const SKIN: &str = "SystemGraphic/WindowBase.png";
+/// Asset name of the default window skin.
+pub const SKIN: &str = "SystemFile/WindowBase.png";
 
 /// Thickness of the skin frame, in texels.
 pub const CORNER: u32 = 3;
@@ -119,6 +119,15 @@ fn split(len: u32, corner: u32) -> [u32; 4] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_default_skin_is_the_grey_system_file_panel() {
+        // The game's SysDatabase "ウィンドウ画像" row names this file for the
+        // choice window ("×選択肢ウィンドウ画像"). SystemGraphic/WindowBase.png is a
+        // navy sample asset that no script or database row references; painting the
+        // choice panel with it made every prompt purple.
+        assert_eq!(SKIN, "SystemFile/WindowBase.png");
+    }
 
     #[test]
     fn a_full_skin_uses_every_texel_exactly_once() {

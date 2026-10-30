@@ -612,7 +612,7 @@
   "commands_total": 16716
  },
  "message_window": {
-  "skin": "SystemFile/WindowBase.png (grey 18x18 nine-slice, 3 px border, fill 0x1f2425 at alpha 0xdf)",
+  "skin": "SystemFile/WindowBase.png (grey 18x18 nine-slice, 3 px border, fill 0x1f2425 at alpha 0xdf); this is the SysDatabase choice-window skin, SystemGraphic/WindowBase.png is an unreferenced navy sample",
   "frame_picture": 19500,
   "frame_rect": [
    32,

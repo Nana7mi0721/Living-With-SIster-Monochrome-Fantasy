@@ -8,10 +8,11 @@
 //! without a runtime panel the port shows a title screen with no menu at all.
 //!
 //! Geometry is inferred, not measured: the skin comes from
-//! `SystemGraphic/WindowBase.png` (see [`crate::window`]), and the panel is centred on
-//! the 1024x576 screen. The original game's exact placement is still unknown (open
-//! item H-MENU-1 in docs/UNVERIFIED.md), so every number here is a named constant a
-//! future measurement can replace in one place.
+//! `SystemFile/WindowBase.png`, the grey panel the game's SysDatabase
+//! "ウィンドウ画像 / ×選択肢ウィンドウ画像" row names (see [`crate::window`]), and the panel
+//! is centred on the 1024x576 screen. The original game's exact placement is still
+//! unknown (open item H-MENU-1 in docs/UNVERIFIED.md), so every number here is a named
+//! constant a future measurement can replace in one place.
 
 use crate::assets::Assets;
 use crate::atlas::{Atlas, SpriteQuad, TextQuad};

@@ -517,7 +517,7 @@ impl Atlas {
                 // window: WOLF stores every system graphic as a type-3 command (all 375 of
                 // them in this game are type 3), so without this test the author's
                 // `<SQUARE>`, `<GRADX-999-274>` or `<TRI-DOWN>` would be painted as a nine-slice
-                // panel from SystemGraphic/WindowBase.png and the drawing itself would never
+                // panel from the default WindowBase.png and the drawing itself would never
                 // appear. The skin path is untouched for every other window picture.
                 if sysgraphic::parse(&picture.file).is_some() {
                     return None;

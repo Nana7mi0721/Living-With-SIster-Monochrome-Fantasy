@@ -805,8 +805,9 @@ impl Picture {
     /// Which skin a window picture is drawn with.
     ///
     /// A `150` window command may name its own skin - common event 63 passes
-    /// SystemFile/WindowBase.png, the grey panel - while the engine default is
-    /// SystemGraphic/WindowBase.png, the blue panel the choice window uses. Anything that is
+    /// SystemFile/WindowBase.png, the grey panel - and the engine default is the same
+    /// grey SystemFile/WindowBase.png used by the choice window. SystemGraphic/
+    /// WindowBase.png is an unused navy sample asset, not the default. Anything that is
     /// not a plausible asset path (an empty name, or a `<SQUARE>`-style built-in drawing)
     /// falls back to the default.
     #[must_use]
