@@ -15,6 +15,13 @@
 //! not tile the edges: it stretches the middle row and column to the target box,
 //! which is why the body gradient looks smooth at any window size. This module
 //! reproduces that stretch and nothing else - no rounded corners, no dithering.
+//!
+//! The 101 message window ships its own copy of the same 18x18 layout as a GREY
+//! skin, SystemFile/WindowBase.png (common event 63 passes it through self[9]);
+//! only the colours differ, so the identical 3 px cut reproduces both. That is why
+//! CORNER stays 3 and SKIN stays the blue SystemGraphic/ version used by the 102
+//! choice panel - do not "fix" them to 6 / SystemFile. (docs/OPCODE_101.md section
+//! 10 rows C5-C6 were retracted; docs/M2_SLICE.md section 2.2 has the pixel proof.)
 
 /// Asset name of the window skin.
 pub const SKIN: &str = "SystemGraphic/WindowBase.png";
