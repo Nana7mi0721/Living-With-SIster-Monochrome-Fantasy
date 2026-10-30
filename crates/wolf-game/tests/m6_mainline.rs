@@ -492,4 +492,45 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
         first_label.contains("学习会") || first_label.contains("秘密特训"),
         "the label comes from the self string bank: {first_label:?}"
     );
+
+    // The menu is the game's own picture-button day command (CE251). Hovering first
+    // and then pressing is what a real mouse does; a bare one-frame click only reports
+    // the hover. The first button is 学习会 and its confirmation prompt is answered by
+    // the auto-choice policy above. The action spends the day (08:30 -> 17:00), costs
+    // 20 energy and raises the study stat by 8.
+    let study_before = game.vm.vars.get(171);
+    let energy_before = game.vm.vars.get(14);
+    game.mouse = [512, 230];
+    for _ in 0..10 {
+        game.frame();
+    }
+    game.mouse_buttons = 1;
+    for _ in 0..5 {
+        game.frame();
+    }
+    game.mouse_buttons = 0;
+    for _ in 0..1500 {
+        game.frame();
+        if game.vm.instances().iter().all(|instance| instance.event != 251) {
+            break;
+        }
+    }
+    assert_eq!(game.stats.warnings, 0, "the day command is warning-free");
+    assert_eq!(game.vm.vars.get(4), 17, "the action spends the day until 17:00");
+    assert_eq!(game.vm.vars.get(5), 0);
+    assert_eq!(game.vm.vars.get(48), 2, "the chosen command is 学习会 (2)");
+    assert_eq!(
+        game.vm.vars.get(171),
+        study_before + 8,
+        "学习会 raises the study stat by 8"
+    );
+    assert_eq!(
+        game.vm.vars.get(14),
+        energy_before - 20,
+        "the action costs 20 energy"
+    );
+    assert!(
+        game.vm.instances().iter().all(|instance| instance.event != 251),
+        "the day-command script finishes after the action"
+    );
 }
