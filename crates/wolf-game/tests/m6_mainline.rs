@@ -366,3 +366,91 @@ fn the_sleep_event_rolls_over_to_the_next_morning() {
         game.stats.instructions
     );
 }
+/// The bedroom's night-time sister page (SampleMapA event 1, page 3) writes variable 63
+/// when the player clicks the sleeping sister. That is the real entry to the メニュー処理
+/// event 4 sleep page, which offers 恶作剧 / 轻轻把被子盖好 / 今天还是睡吧. Choosing the
+/// last option calls common event 329 (就寝処理) and rolls the clock to the next morning,
+/// so this test drives the WHOLE player-facing day loop, not just CE329 in isolation.
+#[test]
+fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
+    let Some(mut game) = open_game() else { return };
+    game.auto_advance = true;
+    game.set_choice_cursor(0);
+    game.auto_choice = true;
+    game.auto_choice_delay = 2;
+    // The canonical new-game entry. With auto_choice the character-creation prompts are
+    // answered and the story settles into the 18:30 bedroom.
+    game.start_map_event_by_name("SampleMapA", 0)
+        .expect("the new-game entry point exists");
+    for _ in 0..1500 {
+        game.frame();
+    }
+    assert_eq!(game.stats.warnings, 0, "the opening story is warning-free");
+    assert_eq!(game.vm.vars.get(4), 18, "the bedroom clock is 18:00");
+    assert_eq!(game.vm.vars.get(5), 30, "and 18:30");
+    assert_eq!(game.vm.vars.get(160), 1, "on day 1");
+
+    // Event 1's pointer branch is what writes 63 = 1 in a real click; headless input
+    // cannot reproduce its hit-test reliably, so seed the flag the click leaves behind.
+    game.auto_choice = false;
+    game.vm.vars.set(63, 1);
+
+    let mut sleep_options: Option<Vec<String>> = None;
+    for _ in 0..120 {
+        game.frame();
+        if let Some(choices) = &game.choices {
+            if choices.frames >= 2 {
+                sleep_options = Some(choices.options.clone());
+                break;
+            }
+        }
+    }
+    let sleep_options = sleep_options.expect("the sister sleep prompt should open");
+    assert_eq!(
+        sleep_options,
+        vec!["恶作剧".to_owned(), "轻轻把被子盖好".to_owned(), "今天还是睡吧".to_owned()],
+        "the prompt is the three-way night choice"
+    );
+
+    // Pick 今天还是睡吧 (index 2). The next prompt is 要睡到早上吗？ yes/no.
+    game.set_choice_cursor(2);
+    game.key_bits = wolf_game::key::OK;
+    game.frame();
+    game.key_bits = 0;
+
+    let mut confirm_options: Option<Vec<String>> = None;
+    for _ in 0..120 {
+        game.frame();
+        if let Some(choices) = &game.choices {
+            if choices.frames >= 2 {
+                confirm_options = Some(choices.options.clone());
+                break;
+            }
+        }
+    }
+    assert_eq!(
+        confirm_options.as_deref(),
+        Some(["是的".to_owned(), "再想想".to_owned()].as_slice()),
+        "the sleep confirmation prompt appears"
+    );
+    game.set_choice_cursor(0);
+    game.key_bits = wolf_game::key::OK;
+    game.frame();
+    game.key_bits = 0;
+
+    // CE329 rewinds the clock, advances the day and plays the morning scene. Stop once
+    // the next morning is established; later guild prompts belong to another slice.
+    for _ in 0..400 {
+        game.frame();
+        if game.vm.vars.get(160) == 2 && game.vm.vars.get(4) == 8 && game.vm.vars.get(5) >= 30 {
+            break;
+        }
+    }
+    assert_eq!(game.stats.warnings, 0, "the sleep transition is warning-free");
+    assert_eq!(game.vm.vars.get(160), 2, "the day counter advanced to day 2");
+    assert_eq!(game.vm.vars.get(6), 1, "and the weekday advanced to Tuesday");
+    assert_eq!(game.vm.vars.get(4), 8, "the next morning starts at 8");
+    assert_eq!(game.vm.vars.get(5), 30, "and 30 minutes");
+    assert!(game.screen.len() > 20, "the morning scene is drawn: {} pictures", game.screen.len());
+    assert!(game.stats.instructions > 120_000, "the whole loop really ran: {} instructions", game.stats.instructions);
+}
