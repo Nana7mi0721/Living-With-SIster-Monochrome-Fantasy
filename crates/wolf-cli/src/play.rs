@@ -178,7 +178,7 @@ impl App {
     /// what the engine does: a choice prompt is an engine overlay, not a picture slot.
     fn rebuild(&mut self) {
         let mut quads = self.game.tile_quads(&mut self.atlas);
-        quads.extend(self.atlas.sprites(&self.game.screen, &mut self.game.assets));
+        quads.extend(self.game.picture_quads(&mut self.atlas));
         let mut sprites: Vec<SpriteInstance> = quads.iter().map(Self::tint_instance).collect();
         let mut texts = self.game.text_quads();
         if let Some(choices) = &self.game.choices {

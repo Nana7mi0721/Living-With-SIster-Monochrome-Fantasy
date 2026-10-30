@@ -36,6 +36,7 @@ use crate::db::Databases;
 use crate::map_runtime::MapRuntime;
 use crate::picture::{PictureKind, Screen, ANCHOR_CENTRE, SCREEN_H, SCREEN_W};
 use crate::tilemap::TileMap;
+use crate::tint::ScreenTint;
 
 /// The event the game opens with in this build (the "original title screen A").
 pub const TITLE_EVENT: u32 = 42;
@@ -208,6 +209,9 @@ pub struct Game {
     pub vm: Vm,
     /// Live pictures, in WOLF draw order.
     pub screen: Screen,
+    /// Whole-screen colour multiplier from `151 ChangeColor`. Neutral unless a map event
+    /// is flashing or darkening the map and the screen-layer pictures.
+    pub screen_tint: ScreenTint,
     /// The current map's tile layers, drawn underneath every picture. WOLF draws the
     /// tile grid first and the picture layer over it; keeping the two separate here
     /// preserves that order and lets a map switch replace only the tile half.
@@ -318,6 +322,7 @@ impl Game {
         Ok(Self {
             vm: Vm::new(programs),
             screen: Screen::new(),
+            screen_tint: ScreenTint::new(),
             tilemap: None,
             tilesets,
             assets: Assets::new(&root),
@@ -534,15 +539,52 @@ impl Game {
         let Some(tilemap) = self.tilemap.as_ref() else {
             return Vec::new();
         };
-        // The camera is fixed at the map origin until the map runtime grows scrolling;
-        // all playable maps in this game fit the 1024x576 viewport at their origin.
-        tilemap.quads(
+        // The camera is fixed at the map origin: all playable maps in this game fit the
+        // 1024x576 viewport at their origin, and Sys 104/105 are engine scroll *outputs*
+        // with no script state behind them (docs/HANDOFF_M3.md section 5).
+        let mut quads = tilemap.quads(
             atlas,
             &mut self.assets,
             [0, 0],
             [crate::picture::SCREEN_W, crate::picture::SCREEN_H],
             self.playtime_frames,
-        )
+        );
+        self.apply_screen_tint(&mut quads, false);
+        quads
+    }
+
+    /// Pictures to draw this frame, with the screen colour multiplier baked in.
+    ///
+    /// `151 ChangeColor` tints the map and every negative-numbered (screen-layer) picture,
+    /// not the HUD. Baking the multiplier into each quad's tint is exact because the frame
+    /// is drawn with linear alpha blending, and it is what makes the effect appear in
+    /// `capture` output, which reads the composited frame texture.
+    pub fn picture_quads(&mut self, atlas: &mut Atlas) -> Vec<SpriteQuad> {
+        let mut quads = atlas.sprites(&self.screen, &mut self.assets);
+        self.apply_screen_tint(&mut quads, true);
+        quads
+    }
+
+    /// The `151` colour multiplier as RGB, `[1, 1, 1]` when nothing is tinting the screen.
+    #[must_use]
+    pub fn screen_tint_rgb(&self) -> [f32; 3] {
+        self.screen_tint.rgb()
+    }
+
+    /// Multiplies each quad's tint by the screen tint (only screen layers when
+    /// `screen_layers_only`), skipping the work entirely while the tint is neutral.
+    fn apply_screen_tint(&self, quads: &mut [SpriteQuad], screen_layers_only: bool) {
+        let tint = self.screen_tint.rgb();
+        if tint == [1.0, 1.0, 1.0] {
+            return;
+        }
+        for quad in quads {
+            if !screen_layers_only || quad.number < 0 {
+                quad.tint[0] *= tint[0];
+                quad.tint[1] *= tint[1];
+                quad.tint[2] *= tint[2];
+            }
+        }
     }
 
     /// Switches to the map at `path` and starts its automatic pages.
@@ -889,6 +931,7 @@ impl Game {
         self.handle_choice_input();
         let mut report = self.vm.step_frame(&mut GameHost {
             screen: &mut self.screen,
+            screen_tint: &mut self.screen_tint,
             assets: &mut self.assets,
             databases: &mut self.databases,
             sounds: &mut self.sounds,
@@ -988,6 +1031,9 @@ impl Game {
         // Slides (150 Move with a duration tail) live on the same screen and advance
         // one frame at a time, so they are stepped with the fades rather than the VM.
         self.screen.advance();
+        // A `151 ChangeColor` ramp advances one frame at a time, alongside the picture
+        // slides it shares the screen with.
+        self.screen_tint.tick();
         // Sys12 (文章の表示 実行中？) is the engine's flag, not a script variable: a
         // scan of all 550 common events finds 7 reads and zero writes, and common
         // event 63 polls it every frame to decide whether to paint or erase the
@@ -1214,6 +1260,7 @@ impl crate::message::Colours for PictureColours<'_> {
 /// Per-frame borrow shim: the VM lives inside Game, so the host cannot borrow Game.
 struct GameHost<'a> {
     screen: &'a mut Screen,
+    screen_tint: &'a mut ScreenTint,
     assets: &'a mut Assets,
     databases: &'a mut crate::db::Databases,
     sounds: &'a mut Vec<SoundCmd>,
@@ -1551,9 +1598,17 @@ impl Host for GameHost<'_> {
         });
     }
 
+    fn change_color(&mut self, colour: i32, frames: i32) {
+        // `151` is a whole-screen tint the engine applies to the map and the screen-layer
+        // pictures; the store ramps it over `frames` and the renderer multiplies it in.
+        self.screen_tint.set(colour, frames);
+    }
+
     fn transition(&mut self, kind: i32, flags: i32) {
+        // `160`/`162` name a fade mask, but the only shipped call (CE48 pc145) is
+        // `[-1, 65546]`: kind -1 is a hard cut, so there is nothing to draw.
         self.note(format!(
-            "160/162 Transition: kind {kind} flags {flags} not drawn yet"
+            "160/162 Transition: kind {kind} flags {flags} (mask fades not drawn; kind -1 is a cut)"
         ));
     }
 
@@ -2164,6 +2219,7 @@ mod tests {
     fn host<'a>(game: &'a mut Game) -> GameHost<'a> {
         GameHost {
             screen: &mut game.screen,
+            screen_tint: &mut game.screen_tint,
             assets: &mut game.assets,
             databases: &mut game.databases,
             sounds: &mut game.sounds,

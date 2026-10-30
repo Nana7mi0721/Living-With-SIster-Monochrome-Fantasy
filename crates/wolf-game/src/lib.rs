@@ -34,6 +34,7 @@ pub mod savegame;
 pub mod sysgraphic;
 pub mod textpic;
 pub mod tilemap;
+pub mod tint;
 pub mod window;
 
 pub use assets::{AssetError, Assets, ImageData};
@@ -43,4 +44,5 @@ pub use game::{Choices, FrameOutcome, Game, GameError, GameStats, Message, TITLE
 pub use map_runtime::{MapRuntime, PageSlot, Trigger};
 pub use picture::{Picture, PictureKind, Screen, ScreenQuad, UNCHANGED};
 pub use tilemap::{autotile_src, base_src, cull_range, TileMap, QUADRANT_PX, TILE_NUMBER, TILE_PX};
+pub use tint::ScreenTint;
 pub use window::{nine_slice, WindowPiece, PANEL_PICTURE};

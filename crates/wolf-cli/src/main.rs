@@ -1670,7 +1670,7 @@ fn run_capture(
 
     let mut atlas = Atlas::new();
     let mut sprites = game.tile_quads(&mut atlas);
-    sprites.extend(atlas.sprites(&game.screen, &mut game.assets));
+    sprites.extend(game.picture_quads(&mut atlas));
     let mut texts = game.text_quads();
     // A WOLF script never draws its own choice frame: the engine paints a window skin and
     // moves a cursor over it, at the coordinates system variables 3 (x) and 4 (y) name.
@@ -1737,6 +1737,13 @@ fn run_capture(
     println!("capture");
     println!("  data root : {}", root.display());
     println!("  frames    : {frames} (peak {peak} coroutine(s))");
+    {
+        let rgb = game.screen_tint_rgb();
+        println!(
+            "  tint      : [{:.3}, {:.3}, {:.3}] (151 ChangeColor)",
+            rgb[0], rgb[1], rgb[2]
+        );
+    }
     // Every live coroutine with the state it is parked in. A message or a prompt that
     // outlives the script that showed it is visible here first: the wait state names the
     // opcode that is holding it.

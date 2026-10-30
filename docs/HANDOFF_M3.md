@@ -6,7 +6,7 @@
 
 ## 1. 一句话现状
 
-M0（加载器/校验）与 M1（标题画面像素级还原）已完成，M2（开场可玩纵切片）基本完成，M3（完整运行时）已完成数据库、时间日程、地图审计、战斗/H 场景调研、图集扩容、地图 tile 层与按键注入；**下一步从「地图滚动/传送/视差 + 151/160/162 的画面渲染」接续**。
+M0（加载器/校验）与 M1（标题画面像素级还原）已完成，M2（开场可玩纵切片）基本完成，M3（完整运行时）已完成数据库、时间日程、地图审计、战斗/H 场景调研、图集扩容、地图 tile 层、按键注入与 **151/160/162 画面渲染**；**下一步从第 3 项（CE242/CE243 战斗切片）或第 4 项（H 场景主纵切片）接续**。
 
 ## 2. 怎么跑
 
@@ -84,7 +84,7 @@ e4de9d5 docs: battle subsystem audit and vertical-slice plan
 > **先读这条，避免走错方向：** Sys 变量 104/105 是 **SysDatabase type 6 第 104/105 行**的 `Ｘスクロール値` / `Ｙスクロール値`（magic `9000104` / `9000105`），是**引擎每帧输出的相机滚动值，不是 opcode**。全库没有任何脚本读写它们（扫描 550 个公共事件 + 9 张地图，`9000104`/`9000105` 命中 0 次），这正说明它们是引擎输出，**不能反推“相机必须由主人公位置推导”**。六张已注册地图都没有 page 图形，`SampleMapA` 为 64x36 格 = 1024x576，恰好一屏，因此 `tilemap.quads(camera=[0,0])` 目前是对的。`130` 是 Teleport（map,x,y,direction），不是移动；`281` 全库只有 3 处，都在 CE225，参数 `[3,0,0]` / `[2,0,0]` / `[3,0,0]`，是滚屏锁定/解除风格，没有真实位移。**不要**为了 104/105 新增 player/camera 居中模型；只有将来出现“大于屏幕且需要滚动”的地图时才重新评估。下面的“地图滚动”因此降为低优先级，建议先做第 2 项（151/160/162）或第 3 项（战斗切片）。
 
 1. **地图传送状态（低优先级；不做相机跟随）**（`crates/wolf-game/src/game.rs` / `tilemap.rs`）：130 传送共 9 处（地图页 8 + CE42 pc118），全部用负地图 id。可以只记录 `(map, x, y, direction)` 供后续事件/传送使用，**不要**据此重算 camera；视差（SysDatabase type 13 + 地图行第 4 列）当前也没有真实使用点。
-2. **151/160/162 的画面渲染**（`crates/wolf-game/src/game.rs` 的 `GameHost::change_color` 仍是 no-op，transition 没画）：151 是整屏颜色乘法/闪烁（Dungeon ev1/ev3、SampleMapB ev5 有真实数据）；160/162 的过渡遮罩是 `SystemFile/[Transition]Fade.png`（640x480 8-bit 灰度），160 默认 CE48 `[-1, 65546]` 为无遮罩直切 10 帧。
+2. **151/160/162 的画面渲染（已完成）**（`crates/wolf-game/src/tint.rs` + `crates/wolf-game/src/game.rs`）：新增 `ScreenTint` 表示 `151 ChangeColor` 的整屏乘法（R/G/B 在位 16/8/0，各 /100；bit24 = 闪烁三角形；0 帧 = 立即生效）。`GameHost::change_color` 写入 `Game.screen_tint`，`Game::frame` 每帧 `tick()`；`tile_quads` 与新增的 `picture_quads`（CLI 的 `capture`/`play` 改用它，替代直接调 `atlas.sprites`）把倍率乘进每个 quad 的 `tint`，只作用于 number<0 的屏层图，HUD 不受影响。160/162 唯一实测调用 CE48 `[-1, 65546]` 是 kind -1 直切，故不画遮罩；`SystemFile/[Transition]Fade.png` 在 work/full 存在但当前不可达。验证：`tint.rs` 5 个单测 + `crates/wolf-game/tests/screen_tint.rs`（SampleMapA 地砖中性/染色/还原）+ 实机 `capture --map-run MapData/Dungeon.mps --event 1 --answer 0` 第 13 帧 tint=`[1.5, 2.0, 1.5]`（截图 work/out/dungeon_peak.png vs dungeon_neutral.png）。
 3. **CE242/CE243 战斗调度器**：由变量 `2000350` 三态驱动，静态无调用者；唯一入口 CE239 戦闘呼び出し（1108 槽，104 个外部调用点）。先做 docs/BATTLE.md 的三阶段切片 A（只读 CE189 数据视图）→ B（CE188 单回合）→ C（可玩）。
 4. **H 场景切片**：docs/HSCENE.md 的 P0 已达成（39 atlas images / 89.4% 非黑）；还需要 `--key-frame N:code` 注入 14 个 `123 [1600030,17]` 按键轮询，然后做主 H 纵切片。
 5. **BASELINE 刷新 + M3 提交**：M3 收口时更新 `docs/BASELINE.json` 的 map_runtime/opcode 统计，重跑 `verify` 与 `cargo test --workspace`。
