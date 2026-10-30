@@ -795,6 +795,7 @@ BGM 循环点来自 `SysDatabase#1 BGMリスト` 的 **col3 ループ開始位�
 > `2000352` 始终为 0，另有 17 条 `unanswered`（装备列 `装備中の武器`/`装備中の防具1..4`、敌个体列 `基本回避率`/`取得経験値`… 在 `CDataBase.json` 里缺失）。
 > 因此阶段 B 必须要么注入按键在 CE65 里完成指令选择，要么先修 `CDataBase.json` 的标签漂移；在此之前 B 的 `2000352` 判据不可达。
 > 已落地：`auto_events.rs` 新增 `GATED_CALL_ONLY = [242, 243]`，把这两条 condvar 门控的 `run==0` 事件并入边缘触发调度器（开机 2000350=0 恒休眠，跟踪数 96→98）。
+> 另有 `dump --key-frame N:CODE`（按键注入）+ `dump --watch EVENT`（看某事件 PC 变化）：实测 `--key-frame 80:10` 把 CE65 从 `pc 78` 推进到 `pc 132`，证明输入不再是硬障碍；但完整一回合还需多次导航确认 + 先修 `CDataBase.json` 的装备/敌个体列标签。
 
 ### 5.3 阶段 C · 可玩战斗（Playable battle）
 

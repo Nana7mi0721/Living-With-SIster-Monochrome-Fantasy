@@ -107,6 +107,7 @@ fn main() -> ExitCode {
     let mut show_dbs: Vec<(String, i32)> = Vec::new();
     let mut print_vars: Vec<u32> = Vec::new();
     let mut print_selfs: Vec<usize> = Vec::new();
+    let mut watch: Option<u32> = None;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -160,6 +161,12 @@ fn main() -> ExitCode {
                 if let Some((frame, code)) = args.next().as_deref().and_then(parse_key_frame) {
                     key_frames.push((frame, code));
                 }
+            }
+            // `dump --watch EVENT` prints the program counter of every coroutine for
+            // that common event whenever it moves, so a headless probe can see which
+            // poll a menu loop is blocked on.
+            "--watch" => {
+                watch = args.next().and_then(|value| value.parse().ok());
             }
             "--map" | "-m" => {
                 map = args.next();
@@ -302,6 +309,8 @@ fn main() -> ExitCode {
             &show_dbs,
             &print_vars,
             &print_selfs,
+            &key_frames,
+            watch,
         ),
         Some("list") => run_list(&root, filter.as_deref()),
         Some("play") => {
@@ -1402,6 +1411,8 @@ fn run_dump(
     show_dbs: &[(String, i32)],
     print_vars: &[u32],
     print_selfs: &[usize],
+    key_frames: &[(usize, u32)],
+    watch: Option<u32>,
 ) -> ExitCode {
     let id = match event {
         Some(id) => id,
@@ -1444,9 +1455,30 @@ fn run_dump(
     let mut total_steps = 0usize;
     let mut peak = 1usize;
     let mut frames_run = 0usize;
-    for _ in 0..frames {
+    let mut watch_pc: std::collections::BTreeMap<InstanceId, usize> = std::collections::BTreeMap::new();
+    for frame in 0..frames {
+        // One frame of a held key is one press: 123 polls read the code of whatever
+        // bits are set this frame. `--key-frame N:CODE` names a WOLF key code (10
+        // decide, 11 cancel, ...) so a probe can walk a menu without a keyboard.
+        game.key_bits = key_frames
+            .iter()
+            .find(|(at, _)| *at == frame)
+            .map_or(0, |(_, code)| wolf_game::key::bits_for_code(*code as i32));
         let outcome = game.frame();
         frames_run += 1;
+        if let Some(watched) = watch {
+            for inst in game.vm.instances() {
+                if inst.event != watched {
+                    continue;
+                }
+                if watch_pc.get(&inst.id).copied() != Some(inst.pc) {
+                    if watch_pc.len() < 400 {
+                        println!("  watch frame {frame}: id {} event {} pc {} wait {:?}", inst.id, inst.event, inst.pc, inst.wait);
+                    }
+                    watch_pc.insert(inst.id, inst.pc);
+                }
+            }
+        }
         total_steps += outcome.report.steps;
         peak = peak.max(outcome.report.running);
         if let Some(inst) = game.vm.instance(instance) {
