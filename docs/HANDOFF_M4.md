@@ -74,9 +74,12 @@ cargo build -q -p wolf-cli
 
 **测试**：`crates/wolf-game/tests/m6_mainline.rs::new_game_story_runs_on_the_background_scheduler_without_deadlock` 固定该切片：900 帧、进度帧 >600、指令 >50k、peak≥9、warnings 0、`screen.len()>30`、所有 `ENGINE_ALWAYS` + 241 + 38 都已启动、`started_events.len()>=13`。
 
-**第一段可玩行动（本轮新增）**：卧室是鼠标驱动的（opcode 123 指针轮询）。capture --map-run Map003 --event 1 --frames 3000 --answer 0 --answer-delay 2 --pointer 884,240 --press-frame 1500 会在 (885,240) 的「读书」图标上点一下，角色执行读书动作并在画面右下浮出「对各种事的理解加深了。」（work/out/m6_first_action.png）。测试 m6_mainline.rs::clicking_the_reading_icon_in_the_bedroom_runs_the_first_playable_action 固定：1500 帧到卧室 → 单帧点击 → 30 帧内画面文字包含「理解」。这说明主线已从「只到开场声明」推进到第一段真实可玩交互（点击房间图标 → 行动 → 反馈）。
+**前两段可玩行动（本轮新增）**：卧室是鼠标驱动的（opcode 123 指针轮询），画面里有两个可点图标（屏幕图片 121 = `1.4.0/comicon_11.png` 读书、122 = `1.4.0/comicon_10.png` 钻研）。
+- 读书：capture --map-run Map003 --event 1 --frames 3000 --answer 0 --answer-delay 2 --pointer 884,240 --press-frame 1500，右下浮出「对各种事的理解加深了。」（work/out/m6_first_action.png）。
+- 钻研：同一命令把 pointer 换成 195,475，右下浮出「自主训练提升各项能力。」（work/out/m6_second_action.png）。
+测试 m6_mainline.rs 固定两条：clicking_the_reading_icon_in_the_bedroom_runs_the_first_playable_action（单次读书）与 the_bedroom_actions_can_be_played_one_after_another（1500 帧到卧室 → 点读书断言「理解」→ 再点钻研断言「自主训练」，证明同一局里可连续做不同行动）。主线已从「只到开场声明」推进到真实可玩交互（点击房间图标 → 行动 → 反馈），并验证了连续多动作。
 
-**这条切片之外仍是缺口（M6 未完）**：① ~~标题画面层残留~~ **已解决**（§4.5：地图切换清负号画面层；capture --boot 92.1% 与 Map003 一致，回归测试 the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room）；② ~~剧情只到开场声明 + 卧室 HUD~~ **已推进到第一段可玩行动**（上一段）；③ 201 SetMoveRoute 无地图层、290 kind 10、CData (5,16,0) 越界读仍按既有诊断透传（均不影响本切片）。
+**这条切片之外仍是缺口（M6 未完）**：① ~~标题画面层残留~~ **已解决**（§4.5：地图切换清负号画面层；capture --boot 92.1% 与 Map003 一致，回归测试 the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room）；② ~~剧情只到开场声明 + 卧室 HUD~~ **已推进到前两段可玩行动（读书/钻研，连续可做）**（上一段）；③ 201 SetMoveRoute 无地图层、290 kind 10、CData (5,16,0) 越界读仍按既有诊断透传（均不影响本切片）。
 ## 5. 环境/协作陷阱
 
 - 音频依赖必须用这套**离线可编译**特性集：`symphonia 0.6.1 { default-features=false, features=["flac","mp3","pcm","vorbis","ogg","wav"] }` + `cpal 0.18.2`。默认/all 会拉未缓存的 mkv/adpcm/aac/rustfft。
@@ -85,4 +88,4 @@ cargo build -q -p wolf-cli
 
 ## 6. 里程碑位置
 
-M0–M3 done、M4 后端+接线 done（差人耳）；**M5 存档层** 已由 `save_roundtrip` 测试覆盖（逐字节 + 引擎级 8/8）；剩余大项是 **M6 主线贯通**。已完成：MapTree.dat 解码（§4.5）+ 新游戏起点确认 Map003 ev1 → SampleMapA 的链路（§4.5）。已交付 M6 纵切片（§4.6）：`capture --map-run Map003 --event 1` 干净跑到卧室 HUD + 开场声明，108 后台注册表活跃、6000 帧无死锁，有 `m6_mainline.rs` 测试固定。已可验收：标题入口（capture --boot 92.1% 干净卧室）与第一段可玩行动（点击「读书」图标 → 理解+，work/out/m6_first_action.png）都已打通，m6_mainline.rs 三个测试固定（后台调度 / 标题路径无残留 / 读书点击）。下一步可做更长的日常循环、把行动结果并进存档验证。
+M0–M3 done、M4 后端+接线 done（差人耳）；**M5 存档层** 已由 `save_roundtrip` 测试覆盖（逐字节 + 引擎级 8/8）；剩余大项是 **M6 主线贯通**。已完成：MapTree.dat 解码（§4.5）+ 新游戏起点确认 Map003 ev1 → SampleMapA 的链路（§4.5）。已交付 M6 纵切片（§4.6）：`capture --map-run Map003 --event 1` 干净跑到卧室 HUD + 开场声明，108 后台注册表活跃、6000 帧无死锁，有 `m6_mainline.rs` 测试固定。已可验收：标题入口（capture --boot 92.1% 干净卧室）与前两段可玩行动（读书 → 理解+、钻研 → 自主训练，可连续触发；work/out/m6_first_action.png、m6_second_action.png）都已打通，m6_mainline.rs 四个测试固定（后台调度 / 标题路径无残留 / 读书点击 / 连续读书+钻研）。下一步可做更长的日常循环、把行动结果并进存档验证。

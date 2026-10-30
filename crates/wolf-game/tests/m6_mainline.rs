@@ -175,3 +175,46 @@ fn clicking_the_reading_icon_in_the_bedroom_runs_the_first_playable_action() {
     assert_eq!(game.stats.warnings, 0);
 }
 
+
+
+fn click_icon(game: &mut Game, x: i32, y: i32) {
+    game.auto_advance = false;
+    game.mouse = [x, y];
+    game.mouse_buttons = 1;
+    game.frame();
+    game.mouse_buttons = 0;
+    game.auto_advance = true;
+    for _ in 0..30 {
+        game.frame();
+    }
+}
+
+#[test]
+fn the_bedroom_actions_can_be_played_one_after_another() {
+    let Some(mut game) = open_game() else { return };
+    game.auto_advance = true;
+    game.set_choice_cursor(0);
+    game.auto_choice = true;
+    game.auto_choice_delay = 2;
+    game.start_map_event_by_name("Map003", 1)
+        .expect("the new-game hook exists");
+    for _ in 0..1500 {
+        game.frame();
+    }
+
+    click_icon(&mut game, 884, 240); // 读书
+    let after_read: Vec<&str> = game.screen.iter().map(|p| p.text.as_str()).collect();
+    assert!(
+        after_read.iter().any(|text| text.contains("理解")),
+        "the reading action reports its effect: {after_read:?}"
+    );
+
+    click_icon(&mut game, 195, 475); // 钻研
+    let after_training: Vec<&str> = game.screen.iter().map(|p| p.text.as_str()).collect();
+    assert!(
+        after_training.iter().any(|text| text.contains("自主训练")),
+        "the training action reports its effect: {after_training:?}"
+    );
+    assert_eq!(game.stats.warnings, 0);
+}
+
