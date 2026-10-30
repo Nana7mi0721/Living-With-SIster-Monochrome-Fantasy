@@ -152,6 +152,12 @@ pub struct GameStats {
     /// engine answers a Variant default there, so these are empty cells, counted
     /// apart from the reads that miss because a label failed to resolve.
     pub database_out_of_schema: u64,
+    /// Of those, reads of a row a run-time `250` row-count shrink/clear dropped (the
+    /// battle copy events clear each temporary table before refilling it, so a read that
+    /// still uses an old address lands past the live count). The engine answers an empty
+    /// cell for a row the table no longer holds, never the stale value, so these are
+    /// empty answers counted apart from a label that truly failed to resolve.
+    pub database_row_out_of_range: u64,
     /// Messages shown.
     pub messages: u64,
     /// Choice prompts shown.
@@ -1608,6 +1614,21 @@ impl Host for GameHost<'_> {
             } else {
                 DbValue::Num(0)
             });
+        } else if row >= 0 && self.databases.has_runtime_row_count(container, db_type) {
+            // A row a run-time `250` row-count shrink dropped (set_row_count keeps the
+            // cell layer consistent, so `row_exists` is already false here). The battle
+            // copy events clear a temporary table to 0 rows and refill it; a read that
+            // still uses an old address must answer EMPTY, not the stale cell the file
+            // might still carry -- docs/BATTLE.md section 2.5 only shows the clear, but
+            // the engine drops the rows, so a dropped row is absence, not a value.
+            // Deliberately gated on a *runtime* count: a row past the file's own height
+            // with no shrink stays unanswered, because that is the label-drift signal.
+            self.stats.database_row_out_of_range += 1;
+            return Some(if wants_text {
+                DbValue::Str(String::new())
+            } else {
+                DbValue::Num(0)
+            });
         }
         // A COLUMN past the table's own field count is an EMPTY cell, not a broken
         // label: a field the .dat does not declare cannot hold a value on ANY row, so
@@ -2394,18 +2415,26 @@ mod tests {
             Some(DbValue::Num(2))
         );
         // Clearing to zero drops the rows: a read of row 0 must not answer with the
-        // stale 12. Whether the engine answers 0 here or nothing at all is not
-        // established (docs/BATTLE.md section 2.5 only shows the clear itself), so the
-        // reader records the address as unanswered instead of inventing a value.
+        // stale 12. The engine drops the rows, so a dropped row reads EMPTY (absence, not
+        // a value); it is a run-time shrink, counted apart from a label that failed.
         cell(&mut game, &set(-2, 0));
         assert_eq!(
             cell(
                 &mut game,
                 &op(read, 22, 0, 0, 0x11000, None, Some(1_600_001))
             ),
-            None,
-            "a cleared row reads as unanswered, never as the stale value"
+            Some(DbValue::Num(0)),
+            "a cleared row reads empty, never the stale value"
         );
+        assert_eq!(
+            cell(
+                &mut game,
+                &op(read, 22, 0, 0, 0x51000, None, Some(3_000_001))
+            ),
+            Some(DbValue::Str(String::new())),
+            "and empty as a string when the destination is a string variable"
+        );
+        assert_eq!(game.stats.database_row_out_of_range, 2);
     }
 
     #[test]

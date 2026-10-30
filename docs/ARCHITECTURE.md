@@ -1794,7 +1794,7 @@ wolf-cli verify --data-dir <游戏 Data/>
 | M1 | 数据层：CommonEvent / DataBase / SysDatabase / TileSetData / .mps | §8.2 L2 差分全绿；`verify` 输出 550 / 163,828 / 24,555 / 139,273 / **47 非空 opcode** 与 73 / 134 / 37,610 / 30,558，并断言 opcode 并集 = 50 |
 | M2 | `wolf-vm`：`MagicNum` + 预编译跳转表 + `step_one` + `Scheduler` | 单元测试 +「跑 TitleMap event2 闭包（813 指令 / 27 opcode）1000 帧无 panic、变量演化确定」（同一 .rsav 重放两次结果一致） |
 | M3 | 渲染：winit + wgpu 30 清屏 → tile → 角色 → 文字 → **地图切换转场（`161`/`162`/`151`）** | 能显示 SampleMapA 并走动；**地图切换有淡入淡出**（不是瞬间跳图）；§8.4 视觉对比差异 <0.5% |
-| M4 | 音频接入 | BGM 播放 + 循环点 + `179` SE 并发 |
+| M4 | 音频接入 | BGM 播放 + 循环点 + `140 Sound` 的 SE 并发（`argc` 4/6/7 三套语义，负 `arg[0]` = 停止/淡出，`stringArgs[0]` 可为转义串需先求值；注意 `179` 是 LoopTimes 循环次数，与 SE 无关） |
 | M5 | 存档层 | §8.3 三个子测试全绿（尤其 (a) 逐字节往返） |
 | M6 | 主线贯通 | 从标题画面走到 SampleMapA 的一小段剧情（对照 108 个并行事件全部活跃无死锁） |
 

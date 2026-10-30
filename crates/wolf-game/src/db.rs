@@ -276,6 +276,15 @@ impl Databases {
         })
     }
 
+    /// True when a script has resized this table at run time (`250` write to row
+    /// [ROW_COUNT_SET]). The `row_counts` overlay then wins over the `.dat` height, and a
+    /// row the overlay no longer holds is a row the table genuinely dropped -- a read of
+    /// it is empty rather than stale (see `Game::database`).
+    #[must_use]
+    pub fn has_runtime_row_count(&self, container: Container, db_type: i32) -> bool {
+        self.row_counts.contains_key(&(container, db_type))
+    }
+
     /// Sets the row count of one table -- the `250` write to row [ROW_COUNT_SET].
     ///
     /// CE191 pc30 sets 万能ウィンドウ to 2 and then writes rows 0 and 1 by hand; CE157

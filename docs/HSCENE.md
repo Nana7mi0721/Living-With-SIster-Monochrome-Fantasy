@@ -493,33 +493,29 @@ C1 加载 SaveData08：**86 张 live 图 → 只有 31 张进了 quad**。缺的
 
 **★已解决（M3，已在代码里）**：`capture` 早就支持 `--key-frame N:code`（`crates/wolf-cli/src/main.rs:85` / `:159` 解析 / `:429 parse_key_frame` / `:1878-1882` 每帧写 `game.key_bits = wolf_game::key::bits_for_code(code)`）；`crates/wolf-game/src/key.rs::bits_for_code` 把 WOLF key code（10=OK）翻成按键位。本轮又把同一注入接进 `dump`（`--key-frame` + `--watch EVENT` 打印 pc 变化）。验收：`dump --event 188 --frames 400 --watch 65` 看到 CE65 在第 68 帧命中 pc78 的 `123 [1600030,17]` 轮询，`--key-frame 80:10` 后 pc 78→132 越过轮询。⇒ headless 轮询点不再恒失败。（注：完整打一场还要连续菜单导航 + 补 CDataBase 装备/敌列标签，见 BATTLE.md §5。）
 
-### 4.3 P1 — 地图瓦片层与图片层不合成（**已验证**，C3 / C4 / C15）
+### 4.3 P1 — 地图瓦片层与图片层合成（**已解决**，commit 684d711）
 
-两条 capture 路径互不相通：
+`capture --map` 现改为驱动真实 `Game`：`start_pages` 装 tile 层并启动自动页，`--pointer/--press-frame/--key-frame/--load-save/--answer` 与 `capture` 共用 `drive_capture_frames/build_capture_frame/render_capture_frame`。于是同一条路径同时产出 tile quads 与图片层（不再有两条互不相通的路径）。`SampleMapA` ev0 是开场演出，`--frames 10` 可见米色 tile 层压在 eyecatch 图片下（98.3% 非黑，`work/out/hscene_room_f10.png`）。
 
-| 路径 | 代码 | 画什么 |
-|---|---|---|
-| `run_capture` | `crates/wolf-cli/src/main.rs:1441` | `Game` 的图片层（`Screen::quads`），**不画瓦片** |
-| `run_capture_map` | `crates/wolf-cli/src/main.rs:1847`（`TileMap::new` 在 1911） | 瓦片 quad，`draw_text(&[])` 空，**不画图片层**，也不接 `--pointer/--press-frame` |
+### 4.4 P1 — 160/162 Transition 淡入淡出（**已解决**，commit 684d711）
 
-后果：C3 出 94% 非黑（房间图是 `cg/bg_01_home_a.jpg` 一张整屏图假装的），C4 点击后背景掉成 1.8%（因为换成 `cg/bg_07_guild_e.jpg` 但那张没进 quad）。**真正的 H 场景（`SampleMapA` 的房间）需要瓦片 + 图片两层叠，今天没有任何一条路径能同时给出。**
+新增 `crates/wolf-game/src/transition.rs` `ScreenTransition`：`kind < 0` 直切（中性），`kind >= 0` 全屏淡入淡出，亮度折叠进 `apply_screen_tint`，`capture`/`play` 两条渲染路径都生效；`Game::frame` 每帧 `screen_transition.tick()`。4 个单测；合成 capture 验证亮度 1.0→0.4→0.0。**注意**：出货唯一 160 调用 CE48 `[-1, 65546]` 是 kind -1 直切，故零售实际不会出现遮罩；淡入淡出为未来地图切换保留。唯一待复核假设：162 若为单向应改 `brightness()=1-t`（代码注释已标）。
 
-### 4.4 P1 — 160/162 Transition 不画（**已验证**，C4）
+### 4.5 P2 — 250 DatabaseAccess：已基本闭环（**2026-10-30 复核**）
 
-`crates/wolf-game/src/game.rs:1417 transition()` 只记 `"160/162 Transition: kind -1 flags 65546 not drawn yet"`。H 入口的转场就是这个，缺了会看到硬切。对静态截图无害，对录像有害。
+历史 C2/C4 记录过大量未答。本轮复核：
 
-### 4.5 P2 — 250 DatabaseAccess 大量未答（**已验证**，C2 / C4）
+- `capture --root work/all --load-save work/retail_backup/Save/SaveData08.sav --frames 120`：整段 **0 条 250 诊断**（90 次 DB 访问全部应答）。
+- `ev33`（新画 HUD 的唯一路径）`dump --event 33 --frames 200`：只剩 **1 条** `CData (5,16,0)`。
 
-C2/C4 里 `933 / 1023 DB accesses`，其中 `291 / 297` 是写；未答的诊断形如：
+根因与现状（`crates/wolf-game/src/game.rs` `Game::database`）：
 
-```
-CData (0, -1, 33) flags 0x11000 labels "主人公ステータス"/"" unanswered
-CData (0, 100, 0/1/4/7/21/48/49) flags 0x51000 … unanswered
-```
+- `CData (0,-1,33)`（读行数）走 `ROW_COUNT_QUERY` 分支返回 `row_count`（game.rs:1553）——已应答。
+- `CData (0,100,0/1/…)`（战斗临时槽 `100+n`）走 `row >= EXTENSION_ROW_BASE(100)` 分支返回 0/""（game.rs:1597）——已应答。
+- 越界列走 `database_out_of_schema` 返回 0/""（game.rs:1621）——已应答。
+- 仅剩 `CData (5,16,0)`：类型 5 表 `rows=16`（行 0..15），脚本读第 16 行（越 1 行）。这是**行越界**，现设计有意判 `unanswered`（不写目标变量，避免夹到末行脏值）。retail 引擎对越界行返回空值；是否改为返回 0/"" 属「清空/缩小表运行时语义」决策（见 §4.7 与 HANDOFF §5.3②），待与战斗临时表语义统一处理。
 
-命中的是 HP/SP/レベル/経験値/顔画像/肩書き/キャラ名。
-
-**★已实测纠正**：HUD 上那条 `6220` 显示的不是运行期展开的 `\cdb[0:12:0]`，而是**存档里已经展开好的成品文本**——C17 的 `SavePart5` dump 显示它的 `md1` 直接就是 `温柔` + … + `的哥哥`，一个 `\cdb` 标记都没有。⇒ 数据库查询的缺口只影响**新画出来的** HUD（`ev33` 路径），不影响读档后的画面。对 H 立绘本身无影响。
+**★已实测纠正**：HUD 上那条 `6220` 显示的不是运行期展开的 `\cdb[0:12:0]`，而是**存档里已经展开好的成品文本**（C17 `SavePart5` 的 `md1` 直接就是 `温柔`+…+`的哥哥`）。⇒ 数据库查询缺口只影响**新画出来的** HUD（`ev33`），不影响读档后的画面，对 H 立绘无任何影响。
 
 ### 4.6 P2 — `word_effect` 目录前缀写错（**已验证**，C14）
 
@@ -533,10 +529,10 @@ CData (0, 100, 0/1/4/7/21/48/49) flags 0x51000 … unanswered
 |---|---|---|---|---|
 | ~~P0~~ | ~~脸部三层/效果层整条丢失~~ | `atlas.rs:42`（ATLAS_SIZE=4096）+ miss 诊断 | C1 对照 | **已解决**：`work/out/_m3_sd08_all2.png` 89.4% 非黑，脸三层齐全 |
 | ~~P0~~ | ~~headless 下 14 个 123 轮询恒失败~~ | `main.rs` `--key-frame` + `key.rs::bits_for_code` | §3.5 | **已解决**：dump `--key-frame 80:10` 越过 CE65 pc78 |
-| P1 | 瓦片层与图片层不合成 | `main.rs:1887-1890`（capture）/ `:2225`（capture --map） | C3 / C15 | 未做 |
-| ~~P1~~ | ~~160/162 转场不画（tint）~~ | `game.rs` `screen_tint` | C4 诊断 | **151 tint 已做**；160/162 遮罩仍是硬切（CE48 kind -1） |
-| P2 | 7 条 `Picture/word_effect*` missing | 资产解析 | C14 | 未做 |
-| P2 | 250 数据库项未答 | `game.rs:1392` | C2 / C4 | 未完 |
+| ~~P1~~ | ~~瓦片层与图片层不合成~~ | `capture --map` 驱动真实 Game | C3 / C15 | **已解决**（684d711，见 §4.3） |
+| ~~P1~~ | ~~160/162 转场不画~~ | `crates/wolf-game/src/transition.rs` `ScreenTransition` | C4 诊断 | **已解决**（684d711，见 §4.4；151 tint + 160/162 淡入淡出均落地） |
+| ~~P2~~ | ~~7 条 `Picture/word_effect*` missing~~ | `crates/wolf-game/src/assets.rs` 窄别名 | C14 | **已解决**（684d711，`Picture/word_effect*→hword/` + `asset fallback:` 诊断） |
+| P2 | 250 数据库项：仅剩 `CData(5,16,0)` 行越界 | `game.rs` `Game::database` | ev33 诊断 1 条 | **基本闭环**（capture 0 条；见 §4.5） |
 | P3 | HUD 文本比真实字体宽 6% | `textpic.rs` | `docs/TEXT_SPEC.md` |
 
 ---
