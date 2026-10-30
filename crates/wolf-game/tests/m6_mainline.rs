@@ -533,4 +533,68 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
         game.vm.instances().iter().all(|instance| instance.event != 251),
         "the day-command script finishes after the action"
     );
+
+    // The day does not stop at the command: the evening scene (dinner, CE326) plays out
+    // and the bedroom waits for the player again. Seeding the sister-click flag a second
+    // time drives the same night menu -> CE329 -> day 3, which is what makes this a
+    // repeatable daily loop rather than a one-day script.
+    for _ in 0..1200 {
+        game.frame();
+    }
+    assert_eq!(game.vm.vars.get(160), 2, "still day 2 after the evening scene");
+    assert_eq!(game.vm.vars.get(4), 19, "the evening reaches 19:00");
+    assert_eq!(game.vm.vars.get(5), 30);
+
+    game.auto_choice = false;
+    game.vm.vars.set(63, 1);
+    let mut second_options: Option<Vec<String>> = None;
+    for _ in 0..300 {
+        game.frame();
+        if let Some(choices) = &game.choices {
+            if choices.frames >= 2 {
+                second_options = Some(choices.options.clone());
+                break;
+            }
+        }
+    }
+    assert_eq!(
+        second_options.as_deref(),
+        Some(["恶作剧".to_owned(), "轻轻把被子盖好".to_owned(), "今天还是睡吧".to_owned()].as_slice()),
+        "the second night opens the same three-way sleep prompt"
+    );
+    game.set_choice_cursor(2);
+    game.key_bits = wolf_game::key::OK;
+    game.frame();
+    game.key_bits = 0;
+    let mut second_confirm: Option<Vec<String>> = None;
+    for _ in 0..120 {
+        game.frame();
+        if let Some(choices) = &game.choices {
+            if choices.frames >= 2 {
+                second_confirm = Some(choices.options.clone());
+                break;
+            }
+        }
+    }
+    assert_eq!(
+        second_confirm.as_deref(),
+        Some(["是的".to_owned(), "再想想".to_owned()].as_slice()),
+        "the second confirmation prompt appears"
+    );
+    game.set_choice_cursor(0);
+    game.key_bits = wolf_game::key::OK;
+    game.frame();
+    game.key_bits = 0;
+    for _ in 0..500 {
+        game.frame();
+        if game.vm.vars.get(160) == 3 && game.vm.vars.get(4) == 8 && game.vm.vars.get(5) >= 30 {
+            break;
+        }
+    }
+    assert_eq!(game.stats.warnings, 0, "the second day loop is warning-free");
+    assert_eq!(game.vm.vars.get(160), 3, "the loop advances to day 3");
+    assert_eq!(game.vm.vars.get(6), 2, "and to Wednesday");
+    assert_eq!(game.vm.vars.get(4), 8, "the third morning starts at 8");
+    assert_eq!(game.vm.vars.get(5), 30, "and 30 minutes");
+    assert!(game.screen.len() > 20, "the third morning is drawn");
 }
