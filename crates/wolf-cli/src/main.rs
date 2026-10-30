@@ -82,6 +82,13 @@ fn main() -> ExitCode {
     let mut pointer: Option<(i32, i32)> = None;
     let mut press_frame: Option<usize> = None;
     let mut key_frames: Vec<(usize, u32)> = Vec::new();
+    // `--press-every N:CODE` repeats a WOLF key code every Nth frame (N=1 holds it on
+    // every frame). A 123 poll fires on whatever frame the script happens to reach it,
+    // so a one-shot `--key-frame` cannot reliably satisfy a menu loop the probe cannot
+    // pre-compute; a cadence can. `--auto-input` is the common case of pressing the
+    // decide key on every frame so every poll sees a confirm.
+    let mut press_every: Vec<(usize, u32)> = Vec::new();
+    let mut auto_input = false;
     let mut filter: Option<String> = None;
     let mut frame_limit: Option<u64> = None;
     let mut hold_message = false;
@@ -107,6 +114,10 @@ fn main() -> ExitCode {
     let mut print_vars: Vec<u32> = Vec::new();
     let mut print_selfs: Vec<usize> = Vec::new();
     let mut watch: Option<u32> = None;
+    // `--watch-var ADDR` prints a variable whenever it changes, the observable trace the
+    // M3 battle state machine needs: 2000350 must show 0 -> 1 -> 2 -> 0 and 2000352 the
+    // written outcome. Accepts both a flat slot and a magic address.
+    let mut watch_vars: Vec<u32> = Vec::new();
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -161,11 +172,27 @@ fn main() -> ExitCode {
                     key_frames.push((frame, code));
                 }
             }
+            // `--press-every N:CODE` repeats a WOLF key code every Nth frame (N=1 →
+            // every frame). Repeat the flag to layer several cadences. This is how a
+            // headless probe satisfies an opcode-123 poll loop it cannot pre-compute.
+            "--press-every" => {
+                if let Some((every, code)) = args.next().as_deref().and_then(parse_key_frame) {
+                    press_every.push((every, code));
+                }
+            }
+            // `--auto-input` holds the decide key (WOLF code 10) on every frame, the
+            // common case of confirming whatever a menu asks without scripting frames.
+            "--auto-input" => auto_input = true,
             // `dump --watch EVENT` prints the program counter of every coroutine for
             // that common event whenever it moves, so a headless probe can see which
             // poll a menu loop is blocked on.
             "--watch" => {
                 watch = args.next().and_then(|value| value.parse().ok());
+            }
+            "--watch-var" => {
+                if let Some(addr) = args.next().and_then(|value| value.parse::<u32>().ok()) {
+                    watch_vars.push(addr);
+                }
             }
             "--map" | "-m" => {
                 map = args.next();
@@ -267,6 +294,10 @@ fn main() -> ExitCode {
                     pointer,
                     press_frame,
                     key_frames,
+                    press_every,
+                    auto_input,
+                    seed_vars,
+                    seed_selfs,
                     auto_events,
                 };
                 run_capture_map(&root, out, frames, name, &answers, load_save.as_deref())
@@ -297,6 +328,10 @@ fn main() -> ExitCode {
                     pointer,
                     press_frame,
                     key_frames,
+                    press_every,
+                    auto_input,
+                    seed_vars,
+                    seed_selfs,
                     auto_events,
                 };
                 run_capture(
@@ -320,6 +355,9 @@ fn main() -> ExitCode {
             &print_vars,
             &print_selfs,
             &key_frames,
+            &press_every,
+            auto_input,
+            &watch_vars,
             watch,
         ),
         Some("list") => run_list(&root, filter.as_deref()),
@@ -429,6 +467,13 @@ fn print_help() {
         "    --key-frame N:CODE Frame at which a WOLF key code is held for one frame (repeatable);"
     );
     println!("                     10=decide 11=cancel 12=sub 2/4/6/8=directions.");
+    println!(
+        "    --press-every N:CODE Hold a WOLF key code on every Nth frame (N=1 → every frame;"
+    );
+    println!("                     repeatable). Satisfies opcode-123 poll loops.");
+    println!("    --auto-input      Hold the decide key (code 10) on every frame.");
+    println!("    --watch-var <ADDR> Print a variable each time it changes (flat slot or magic;");
+    println!("                     dump only). Traces the 2000350 battle cycle.");
     println!("    --load-save <FILE>  Photograph a retail .sav instead of a script entry.");
     println!("    --engine-events <ids>  Comma separated ids that replace ENGINE_ALWAYS");
     println!("    --auto-events <on|off> Run the run_condition == 2 scheduler (default on)");
@@ -454,6 +499,33 @@ fn parse_key_frame(value: &str) -> Option<(usize, u32)> {
 fn parse_point(value: &str) -> Option<(i32, i32)> {
     let (x, y) = value.split_once(',')?;
     Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
+}
+
+/// The key bits to hold on `frame`, merged from every injection channel: a one-shot
+/// `--key-frame` for this exact frame, each `--press-every N:CODE` cadence that lands
+/// on it (`N=1` fires every frame), and `--auto-input`'s decide key. Channels OR
+/// together so a probe can, for example, hold OK every frame while also punching a
+/// direction on one specific frame. Shared by `dump` and both `capture` paths so they
+/// cannot drift.
+fn key_bits_for_frame(
+    frame: usize,
+    key_frames: &[(usize, u32)],
+    press_every: &[(usize, u32)],
+    auto_input: bool,
+) -> u32 {
+    let mut bits = 0u32;
+    if let Some((_, code)) = key_frames.iter().find(|(at, _)| *at == frame) {
+        bits |= wolf_game::key::bits_for_code(*code as i32);
+    }
+    for (every, code) in press_every {
+        if *every > 0 && frame % *every == 0 {
+            bits |= wolf_game::key::bits_for_code(*code as i32);
+        }
+    }
+    if auto_input {
+        bits |= wolf_game::key::bits_for_code(10);
+    }
+    bits
 }
 
 /// Parses a `ADDR=VALUE` variable seed for `dump --var`.
@@ -1433,6 +1505,9 @@ fn run_dump(
     print_vars: &[u32],
     print_selfs: &[usize],
     key_frames: &[(usize, u32)],
+    press_every: &[(usize, u32)],
+    auto_input: bool,
+    watch_vars: &[u32],
     watch: Option<u32>,
 ) -> ExitCode {
     let id = match event {
@@ -1473,6 +1548,7 @@ fn run_dump(
     println!();
 
     let mut last_self: Vec<Option<i32>> = vec![None; print_selfs.len()];
+    let mut watch_var_last: Vec<Option<i32>> = vec![None; watch_vars.len()];
     let mut total_steps = 0usize;
     let mut peak = 1usize;
     let mut frames_run = 0usize;
@@ -1481,10 +1557,7 @@ fn run_dump(
         // One frame of a held key is one press: 123 polls read the code of whatever
         // bits are set this frame. `--key-frame N:CODE` names a WOLF key code (10
         // decide, 11 cancel, ...) so a probe can walk a menu without a keyboard.
-        game.key_bits = key_frames
-            .iter()
-            .find(|(at, _)| *at == frame)
-            .map_or(0, |(_, code)| wolf_game::key::bits_for_code(*code as i32));
+        game.key_bits = key_bits_for_frame(frame, key_frames, press_every, auto_input);
         let outcome = game.frame();
         frames_run += 1;
         if let Some(watched) = watch {
@@ -1498,6 +1571,13 @@ fn run_dump(
                     }
                     watch_pc.insert(inst.id, inst.pc);
                 }
+            }
+        }
+        for (i, addr) in watch_vars.iter().enumerate() {
+            let value = game.vm.vars.get(normalise_var_addr(*addr));
+            if watch_var_last[i] != Some(value) {
+                println!("  var frame {frame}: {addr} = {value}");
+                watch_var_last[i] = Some(value);
             }
         }
         total_steps += outcome.report.steps;
@@ -1736,6 +1816,17 @@ struct Answers {
     press_frame: Option<usize>,
     /// (frame, WOLF key code) pairs injected for exactly one frame each.
     key_frames: Vec<(usize, u32)>,
+    /// (cadence, WOLF key code) pairs: the key is held on every frame divisible by the
+    /// cadence (`1` = every frame). Lets a capture walk an opcode-123 poll loop without
+    /// knowing the frame each poll fires on.
+    press_every: Vec<(usize, u32)>,
+    /// Hold the decide key (code 10) on every frame.
+    auto_input: bool,
+    /// Ordinary-variable seeds applied after the entry event starts (flat slot or magic
+    /// address, same normalisation as `dump --var`).
+    seed_vars: Vec<(u32, i32)>,
+    /// Self-variable seeds (flat slots) written into the entry event's instance.
+    seed_selfs: Vec<(usize, i32)>,
     /// Whether the `run_condition == 2` scheduler runs (default true; see
     /// `--auto-events off`).
     auto_events: bool,
@@ -1828,11 +1919,8 @@ fn drive_capture_frames(game: &mut Game, frames: usize, answers: &Answers) -> us
         // One frame of a held button is a click: the host compares against the previous
         // frame, so the press edge survives exactly one step.
         game.mouse_buttons = u32::from(answers.press_frame == Some(frame));
-        game.key_bits = answers
-            .key_frames
-            .iter()
-            .find(|(at, _)| *at == frame)
-            .map_or(0, |(_, code)| wolf_game::key::bits_for_code(*code as i32));
+        game.key_bits =
+            key_bits_for_frame(frame, &answers.key_frames, &answers.press_every, answers.auto_input);
         let outcome = game.frame();
         peak = peak.max(outcome.report.running);
     }
@@ -2088,6 +2176,9 @@ fn run_capture(
     // Two entry points: the real boot path (map autorun event -> splashes -> title art
     // -> menu) and the bare menu event 42, kept for regression captures of the menu
     // overlay on its own.
+    // The instance a bare common event starts, so `--self` seeds land on the event the
+    // capture drives (mirrors `dump --self`, which seeds the main event's self vars).
+    let mut entry_instance: Option<InstanceId> = None;
     let (started, label) = match entry {
         Entry::Boot => (
             game.boot().map_err(|err| err.to_string()),
@@ -2109,6 +2200,7 @@ fn run_capture(
         Entry::CommonEvent(id) => {
             game.start_engine_events();
             let started = if game.start_event(id) {
+                entry_instance = game.vm.instances().iter().rev().find(|i| i.event == id).map(|i| i.id);
                 Ok(())
             } else {
                 Err(format!("no common event with id {id}"))
@@ -2134,6 +2226,20 @@ fn run_capture(
         return ExitCode::FAILURE;
     }
     println!("  entry     : {label}");
+
+    // Seed inputs after the entry event is live, exactly as `dump` does. A capture of
+    // CE242 needs the battle-active flag and the chosen-command self var to leave its
+    // guarded prologue; without them the state-machine branch is never entered.
+    for (addr, value) in &answers.seed_vars {
+        game.vm.vars.set(normalise_var_addr(*addr), *value);
+    }
+    if let Some(instance) = entry_instance {
+        if let Some(inst) = game.vm.instance_mut(instance) {
+            for (slot, value) in &answers.seed_selfs {
+                inst.self_vars.set(*slot, *value);
+            }
+        }
+    }
 
     let peak = drive_capture_frames(&mut game, frames, &answers);
 
@@ -2839,7 +2945,7 @@ fn run_map_event(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_key_frame, resolve_capture_entry, CaptureEntry};
+    use super::{key_bits_for_frame, parse_key_frame, resolve_capture_entry, CaptureEntry};
     use std::path::{Path, PathBuf};
 
     /// `capture --event 239` used to fall through to `Entry::Boot` because `boot`
@@ -2905,6 +3011,25 @@ mod tests {
         assert_eq!(parse_key_frame("12"), None);
         assert_eq!(parse_key_frame("x:10"), None);
         assert_eq!(parse_key_frame("12:y"), None);
+    }
+
+    #[test]
+    fn key_bits_for_frame_merges_channels() {
+        let ok = wolf_game::key::bits_for_code(10);
+        let cancel = wolf_game::key::bits_for_code(11);
+        // One-shot --key-frame only fires on its own frame.
+        assert_eq!(key_bits_for_frame(5, &[(5, 10)], &[], false), ok);
+        assert_eq!(key_bits_for_frame(6, &[(5, 10)], &[], false), 0);
+        // --press-every 2:10 fires on even frames only, every time.
+        assert_eq!(key_bits_for_frame(4, &[], &[(2, 10)], false), ok);
+        assert_eq!(key_bits_for_frame(5, &[], &[(2, 10)], false), 0);
+        // --auto-input holds decide on every frame.
+        assert_eq!(key_bits_for_frame(123, &[], &[], true), ok);
+        // Channels OR together: a cadence plus a distinct one-shot on the same frame.
+        assert_eq!(
+            key_bits_for_frame(6, &[(6, 11)], &[(2, 10)], false),
+            ok | cancel
+        );
     }
 
     #[test]
