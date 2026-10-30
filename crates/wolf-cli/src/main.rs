@@ -118,6 +118,12 @@ fn main() -> ExitCode {
     // M3 battle state machine needs: 2000350 must show 0 -> 1 -> 2 -> 0 and 2000352 the
     // written outcome. Accepts both a flat slot and a magic address.
     let mut watch_vars: Vec<u32> = Vec::new();
+    // `--watch-start EVENT` reports the frame an instance of that common event is
+    // created and the frame it stops. `--watch` only prints program-counter movement,
+    // so a short-lived event (e.g. CE240 戦力処理, 47 slots) can start and finish
+    // between two prints and be invisible. This makes the scheduler itself observable:
+    // which runner events the engine actually starts, and when.
+    let mut watch_start: Vec<u32> = Vec::new();
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -192,6 +198,15 @@ fn main() -> ExitCode {
             "--watch-var" => {
                 if let Some(addr) = args.next().and_then(|value| value.parse::<u32>().ok()) {
                     watch_vars.push(addr);
+                }
+            }
+            // `dump --watch-start EVENT` prints when an instance of that event is
+            // created and when it stops (repeatable). It exposes the scheduler: a
+            // short-lived runner such as CE240 can start and end between `--watch`
+            // program-counter prints, so this reports its lifetime directly.
+            "--watch-start" => {
+                if let Some(id) = args.next().and_then(|value| value.parse::<u32>().ok()) {
+                    watch_start.push(id);
                 }
             }
             "--map" | "-m" => {
@@ -358,6 +373,7 @@ fn main() -> ExitCode {
             &press_every,
             auto_input,
             &watch_vars,
+            &watch_start,
             watch,
         ),
         Some("list") => run_list(&root, filter.as_deref()),
@@ -474,6 +490,8 @@ fn print_help() {
     println!("    --auto-input      Hold the decide key (code 10) on every frame.");
     println!("    --watch-var <ADDR> Print a variable each time it changes (flat slot or magic;");
     println!("                     dump only). Traces the 2000350 battle cycle.");
+    println!("    --watch-start <EVENT> Print the frame an event instance starts/stops");
+    println!("                     (dump only, repeatable). Makes short runners observable.");
     println!("    --load-save <FILE>  Photograph a retail .sav instead of a script entry.");
     println!("    --engine-events <ids>  Comma separated ids that replace ENGINE_ALWAYS");
     println!("    --auto-events <on|off> Run the run_condition == 2 scheduler (default on)");
@@ -1508,6 +1526,7 @@ fn run_dump(
     press_every: &[(usize, u32)],
     auto_input: bool,
     watch_vars: &[u32],
+    watch_start: &[u32],
     watch: Option<u32>,
 ) -> ExitCode {
     let id = match event {
@@ -1553,6 +1572,10 @@ fn run_dump(
     let mut peak = 1usize;
     let mut frames_run = 0usize;
     let mut watch_pc: std::collections::BTreeMap<InstanceId, usize> = std::collections::BTreeMap::new();
+    // Lifecycle state for --watch-start: store the instance id currently alive per
+    // watched event (None = not running). A fresh id means a new start; None after an
+    // id means it stopped, so both edges are reported without relying on --watch pc moves.
+    let mut watch_start_live: Vec<Option<InstanceId>> = vec![None; watch_start.len()];
     for frame in 0..frames {
         // One frame of a held key is one press: 123 polls read the code of whatever
         // bits are set this frame. `--key-frame N:CODE` names a WOLF key code (10
@@ -1560,6 +1583,25 @@ fn run_dump(
         game.key_bits = key_bits_for_frame(frame, key_frames, press_every, auto_input);
         let outcome = game.frame();
         frames_run += 1;
+        for (i, wanted) in watch_start.iter().enumerate() {
+            let live = game.vm.instances().iter().rev().find(|inst| inst.event == *wanted).map(|inst| inst.id);
+            match (watch_start_live[i], live) {
+                (None, Some(new_id)) => {
+                    println!("  start frame {frame}: id {new_id} event {wanted} (started)");
+                    watch_start_live[i] = Some(new_id);
+                }
+                (Some(old_id), None) => {
+                    println!("  start frame {frame}: id {old_id} event {wanted} (stopped)");
+                    watch_start_live[i] = None;
+                }
+                (Some(old_id), Some(new_id)) if old_id != new_id => {
+                    println!("  start frame {frame}: id {old_id} event {wanted} (stopped)");
+                    println!("  start frame {frame}: id {new_id} event {wanted} (started)");
+                    watch_start_live[i] = Some(new_id);
+                }
+                _ => {}
+            }
+        }
         if let Some(watched) = watch {
             for inst in game.vm.instances() {
                 if inst.event != watched {
