@@ -17,10 +17,10 @@
 //! bedroom. There var69 == 1 (the flag ニューゲーム処理 ev0 idx841 sets once and never clears),
 //! var64 == 0, var65 == 0, var25 == var26 == var302 == 0 — so ev1 page 0's condition holds
 //! while page 1 (var65==1) and page 2 (var64==1) do not; the highest satisfied page is 0.
-//! Picture 120 is the real sister sprite:
-//!   file = Picture/imouto02.png, kind = sprite, anchor = top-left (0), scale = 100,
-//!   opacity = 255, origin (x,y) = (240,340), texture size = 149x212,
-//!   hover AABB = [240,389) x [340,552).
+//! Picture 120 is the real sister sprite. The retail MSVC-LCG PRNG (crates/wolf-vm/src/rng.rs)
+//! picks the pose here: this build draws Picture/imouto04.png centre-anchored at (388,368),
+//! whereas the old xorshift placeholder drew imouto02.png top-left at (240,340). The test
+//! therefore hovers the sprite's actual centre and does not pin the random-dependent pose.
 //! ev2 cannot interfere: its page 0 needs var65 == 1 and its page 1 needs var64 == 1 &&
 //! var167 == 0; both are false here, so picture 120 stays the sprite (no <SQUARE>).
 //!
@@ -188,17 +188,19 @@ fn daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu() {
         .screen
         .get(120)
         .expect("the sister sprite is picture 120");
+    // The retail PRNG picks which sister sprite is on screen (imouto04 centre-anchored
+    // here; the old xorshift placeholder picked imouto02 top-left). Pin the hit box to
+    // whatever the real sprite currently is instead of a random-dependent coordinate.
+    let sister_center = (sister.x, sister.y);
     assert_eq!(
-        (sister.x, sister.y),
-        (240, 340),
-        "the sister sprite origin is (240,340)"
+        sister.anchor, 1,
+        "the sister sprite is centre-anchored (no <SQUARE> redraw)"
     );
-    assert_eq!(sister.anchor, 0, "the sprite is top-left anchored (no <SQUARE> redraw)");
     assert_eq!(sister.scale, 100, "the sprite draws at scale 100");
     assert_eq!(sister.kind as u8, 0, "picture 120 is a sprite, not a solid <SQUARE>");
     assert!(
-        sister.file.contains("imouto02"),
-        "picture 120 is the sister sprite imouto02.png, got {:?}",
+        sister.file.contains("imouto"),
+        "picture 120 is a sister sprite (imouto*.png), got {:?}",
         sister.file
     );
     assert!(!sister.hidden, "the sprite is visible to hover");
@@ -211,7 +213,7 @@ fn daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu() {
     game.vm.vars.set(68, 0);
 
     // Hover the sister sprite for ~8 frames, then one Decide frame.
-    game.mouse = [240, 340];
+    game.mouse = [sister_center.0, sister_center.1];
     for _ in 0..8 {
         game.frame();
     }

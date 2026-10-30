@@ -54,8 +54,8 @@
 
 | 步 | 缺口 | 证据 | 修法 | 验收 |
 |---|---|---|---|---|
-| 1 | **命令可用性**：`CE152 pc31` 三目 op111 `[3, self1600010,-3,op2, self1600010,-1,op3, self1600010,0,op1]` 把每个整数命令都判为不可用 ⇒ 真实攻击 26/25 被挡 | `docs/research/M6_BATTLE_REAL.md`；`CE152 pc31` | 修 Data6 命令映射（legacy 空表）；或在新游戏时按 `System.sav` 填 CData type0 47..56 | `CE152` 对至少一条真实攻击返回「可用」 |
-| 2 | **武器/物品 DB 空**：CData type8「所持武器個数」空（250 条未应答读） | 同上 | 从 `System.sav` / 存档模板填 type8 | `capture` 战斗段 250 未应答 → 0 |
+| 1 | **命令可用性（已精确到 pc89..pc95）**：Data type0 只有 18 字段、没有 col20（発動アイテム要する?），CE152 pc89 读 0 后 `>=0` 恒真 → pc91 读 CData type7 所持アイテム個数 row0=0 → pc93 `<=0` → pc95 写 CData type21 選択状態=0，因此真实攻击 26/25/30/29 全不可用。**注意不是 pc66**（运行时 c6/使用可能シーン=100，pc66 不触发） | `docs/research/M6_BATTLE_COMMANDS.md`；`m6_battle_commands.rs`（control vs seeded 两 Game 因果对照） | 数据前置：CData type7 row0 col0=1 即可让 26/25/30/29 全部 `選択可能=1`；这是数据前置，不是伪造菜单行 | `CE152` 对真实攻击返回「可用」；m6_battle_commands.rs 已 PASS |
+| 2 | **物品数量 DB 空**：CData type7「所持アイテム個数」row0=0（250 读返回 0） | `docs/research/M6_BATTLE_COMMANDS.md` | 从 `System.sav` / 存档模板填 type7 row0 col0=1 | 真实攻击行 `選択可能=1`；250 未应答 → 0 |
 | 3 | **敌目标列表空**：type18 row17 == 0 | 同上；`CE65 pc78↔pc140` | 填 type18 敌行（CE190 配置阶段应写入） | `CE65` 不再自旋，`2000350` 能走 0→1→2 |
 
 **关键根因**（[A]）：CData type0 コマンド槽 `47..56`（`docs/PARTY_DB.md:355`）只由 `CE26/CE77/CE78` 写，而 **`CE26 戦闘コマンド初期設定` 的调用者数 = 0**（`CE77` 唯一调用者 `CE13` 也是 0 调用者）⇒ **新游戏路径从不初始化这 8 槽**；现有值来自捆绑的 `Save/System.sav` 模板（`Game::new` 加载 `root/Save/System.sav`）。直接 `start_event(188) 4000` 帧 → choices=0、messages=0。
@@ -134,7 +134,7 @@
 
 > **纵切名：W1-a「一次真实战斗回合打到 CE244 结算」**
 
-**为什么选它**：它是 M7 的头号，且是唯一能解除 day4→day5 主线阻塞的路径；验收指标单一、可机检、失败点已被精确定位到 `CE152 pc31 / type8 / type18 row17`（[A]），风险可控。相比之下 W2 也独立可做，但 H 的 `Move`/`hword` 语义还带 [B] 未定项，先做战斗能拿最硬的成果。
+**为什么选它**：它是 M7 的头号，且是唯一能解除 day4→day5 主线阻塞的路径；验收指标单一、可机检、失败点已被精确定位到 `CE152 pc89..pc95 / CData type7 item count / type18 row17`（[A]），风险可控。相比之下 W2 也独立可做，但 H 的 `Move`/`hword` 语义还带 [B] 未定项，先做战斗能拿最硬的成果。
 
 **范围**（薄而全，穿数据→VM→game 三层）：
 - 数据：新游戏时从 `root/Save/System.sav` 的 CData 填 **type0 列 47..56**（命令 1..8）；填 **type8 所持武器個数**；`CE190 配置` 阶段保证 **type18 敌行**非空。
@@ -174,7 +174,7 @@
 | 主题 | 文件 | 关键行/数字 |
 |---|---|---|
 | M6 收尾判据 | `docs/HANDOFF_M4.md` | day loop → day4 08:30；teardown fix `map_runtime.rs:328-348` |
-| 战斗真实线 | `docs/research/M6_BATTLE_REAL.md` | CE239 1108 slots/104 sites；CE244 432 slots；CE152 pc31；type18 row17==0 |
+| 战斗真实线 | `docs/research/M6_BATTLE_REAL.md` / `M6_BATTLE_COMMANDS.md` | CE239 1108 slots/104 sites；CE244 432 slots；CE152 pc89..pc95；CData type7 item count；type18 row17==0 |
 | day4 强制战斗 | `docs/research/M6_SCHEDULE.md` / `crates/wolf-game/tests/m6_week_loop.rs:306` | CE251 row1 id=7→CE253→CE239；`day 5 is unreachable here` |
 | 战斗命令槽 | `docs/PARTY_DB.md:355` | CData type0 47..56 = コマンド1..8；CE26 caller=0 |
 | H 闭包 / 渲染 | `docs/HSCENE.md` §1.1/§5.1；`atlas.rs:42` | 22 events/12,609 instr；89.4%/~39 quad；4096 atlas |

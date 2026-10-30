@@ -11,15 +11,17 @@
 //! 力量锻炼 / 空挥 / 冥想.
 //!
 //! Measured effects (reproduced byte-for-byte across repeated runs; see the deltas
-//! pinned below):
-//!   * every option: clock 18:30 -> 20:00 (var4 18 -> 20, var5 30 -> 0), a 90-minute
+//! pinned below). Note the retail MSVC-LCG PRNG made the training block one hour
+//! (18:30 -> 19:30); the old xorshift placeholder happened to stretch it to 90 minutes,
+//! so the clock assertions are relative to the observed retail stream:
+//!   * every option: clock 18:30 -> 19:30 (var4 18 -> 19, var5 stays 30), a 60-minute
 //!     afternoon block; the day (var160) stays 1; no second prompt; 0 warnings.
-//!   * option 0 「力量锻炼」: energy var14 100 -> 80 (-20), stat var170 35 -> 37 (+2).
-//!   * option 1 「空挥」:     energy var14 100 -> 80 (-20), stat var172  5 ->  7 (+2).
-//!   * option 2 「冥想」:     energy var14 100 -> 90 (-10), stat var171  6 ->  8 (+2).
-//! The five status stats are var170..var174 (baseline 35/6/5/9/5); each option only
-//! touches its own stat, and var48 (day-command id) stays 0 because this is the
-//! bedroom action, not the daytime CE251 menu.
+//!   * option 0 「力量锻炼」: energy var14 100 -> 80 (-20), its stat var170 +2.
+//!   * option 1 「空挥」:     energy var14 100 -> 80 (-20), its stat var172 +2.
+//!   * option 2 「冥想」:     energy var14 100 -> 90 (-10), its stat var171 +2.
+//! The five status stats are var170..var174; each option only touches its own stat, and
+//! var48 (day-command id) stays 0 because this is the bedroom action, not the daytime
+//! CE251 menu.
 
 use std::path::PathBuf;
 
@@ -178,8 +180,11 @@ fn every_training_option_advances_the_clock_and_applies_its_real_effect() {
         assert!(settled, "option {cursor} finishes its training coroutine");
 
         assert_eq!(game.stats.warnings, 0, "option {cursor} is warning-free");
-        assert_eq!(game.vm.vars.get(4), 20, "option {cursor} advances the clock to 20:00");
-        assert_eq!(game.vm.vars.get(5), 0, "option {cursor} lands on :00");
+        assert_eq!(
+            (game.vm.vars.get(4), game.vm.vars.get(5)),
+            (19, 30),
+            "option {cursor} advances the clock to 19:30"
+        );
         assert_eq!(game.vm.vars.get(160), 1, "option {cursor} does not roll the day over");
         assert_eq!(
             game.vm.vars.get(stat_var),

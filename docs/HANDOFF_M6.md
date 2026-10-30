@@ -39,11 +39,11 @@ WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test 'm6_multiday'
 | 开场声明 + 108 后台事件无死锁 | `m6_mainline.rs::new_game_story_runs_on_the_background_scheduler_without_deadlock`（900 帧、>50k 指令、peak≥9、warnings 0） |
 | 读书/钻研可连续行动 | `m6_mainline.rs::clicking_the_reading_icon_in_the_bedroom_runs_the_first_playable_action`、`::the_bedroom_actions_can_be_played_one_after_another`；截图 work/out/m6_first_action.png、m6_second_action.png |
 | 行动后存档往返 | `m6_mainline.rs::a_live_played_scene_survives_a_save_and_reload`（画面层/800 变量/playtime 一致） |
-| 卧室自然训练菜单（无注入） | `m6_training_menu.rs` 2 测：点图片 122（comicon_10.png @195,475）→ 事件 245 三选一「力量锻炼/空挥/冥想」；18:30→20:00、体力 -20/-20/-10、对应属性 +2 |
-| CE251 日间命令真正执行 | `m6_mainline.rs::the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day`：hover+按住「学习会」→ 08:30→17:00、体力 -20、学习 +8、var48=2；随后晚餐→次日可重复 |
-| 夜间菜单自然入口 | `m6_night_menu.rs` 2 测：hover 图片 120（imouto02.png @240,340）+ Decide → ev1 page0 写 var68=1 → ev4 page0 调 CE245；点「今天先休息吧」→ 是/算了 |
+| 卧室自然训练菜单（无注入） | `m6_training_menu.rs` 2 测：点图片 122（comicon_10.png @195,475）→ 事件 245 三选一「力量锻炼/空挥/冥想」；零售 PRNG 下 18:30→19:30、体力 -20/-20/-10、对应属性 +2（旧 xorshift 时代实测为 90 分钟，现按零售流断言） |
+| CE251 日间命令真正执行 | `m6_mainline.rs::the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day`：hover+按住首个命令按钮 → 08:30→17:00、体力减少、对应属性增加、var48=命令 id；首个按钮由零售 PRNG 决定（当前实测为防御练习/var48=5/var173+7），测试按 first_label 动态断言；随后晚餐→次日可重复 |
+| 夜间菜单自然入口 | `m6_night_menu.rs` 2 测：hover 真实妹妹精灵 picture 120（零售 PRNG 下可能是 imouto02/imouto04，测试取实际中心）+ Decide → ev1 page0 写 var68=1 → ev4 page0 调 CE245；点「今天先休息吧」→ 是/算了 |
 | 纯自然夜间就寝 → day3 08:30 | `m6_night_sleep.rs::the_natural_night_menu_sleep_rolls_over_to_day_three`；仅归一化 var295=0（首次晚餐 TIPS 门） |
-| ev1 page0 白天/傍晚点击 | `m6_ev1_page0.rs::daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu`；真实 sprite 命中框 x[240,389)×y[340,552)，var68 先断言 0 后观察 1 |
+| ev1 page0 白天/傍晚点击 | `m6_ev1_page0.rs::daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu`；hover 实际妹妹精灵中心（零售 PRNG 下不固定 imouto02/(240,340)），断言 anchor=1 / 文件含 imouto，var68 先断言 0 后观察 1 |
 | ev1 page2 深夜点击 | `m6_ev1_page2.rs::hovering_sister_at_deep_night_writes_var63_and_opens_the_sleep_choice`；页门 var64==1，注入最小前置，点击框中心 (140,340) |
 | CE328/CE329 页切换中止修复 | `crates/wolf-game/src/map_runtime.rs:328-348`：仅对 `WaitState::Child` 的整页失活做延迟；`docs/research/CE328_ABORT.md`；回归 m6_night_sleep |
 | 多日循环 day1→day4 08:30（含中期存读） | `crates/wolf-game/tests/m6_multiday.rs::the_day_loop_repeats_through_day_four_with_a_midpoint_save_reload` |

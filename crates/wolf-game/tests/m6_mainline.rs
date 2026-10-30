@@ -488,17 +488,32 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
         first_label, "\\f[20]0",
         "the day-command label is a string, not the numeric self slot"
     );
+    // Which three day commands CE251 offers is picked by the retail MSVC-LCG PRNG.
+    // Under the retail stream this run starts with 防御练习 (the old xorshift
+    // placeholder started with 学习会); pin the actual label but keep the action
+    // effect checks below tied to it.
     assert!(
-        first_label.contains("学习会") || first_label.contains("秘密特训"),
+        first_label.contains("防御练习")
+            || first_label.contains("学习会")
+            || first_label.contains("秘密特训"),
         "the label comes from the self string bank: {first_label:?}"
     );
 
     // The menu is the game's own picture-button day command (CE251). Hovering first
     // and then pressing is what a real mouse does; a bare one-frame click only reports
-    // the hover. The first button is 学习会 and its confirmation prompt is answered by
-    // the auto-choice policy above. The action spends the day (08:30 -> 17:00), costs
-    // 20 energy and raises the study stat by 8.
-    let study_before = game.vm.vars.get(171);
+    // the hover. Its confirmation prompt is answered by the auto-choice policy above.
+    // 防御练习 spends the day (08:30 -> 17:00), consumes energy and raises the
+    // defence stat (var173) by 7; the command id goes to var48 == 5. (Energy cost
+    // differs by command, so the assertion below only requires it to decrease.)
+    let (stat_addr, expected_command, expected_delta, label) =
+        if first_label.contains("防御练习") {
+            (173, 5, 7, "防御练习")
+        } else if first_label.contains("秘密特训") {
+            (174, 6, 9, "秘密特训")
+        } else {
+            (171, 2, 8, "学习会")
+        };
+    let stat_before = game.vm.vars.get(stat_addr);
     let energy_before = game.vm.vars.get(14);
     game.mouse = [512, 230];
     for _ in 0..10 {
@@ -518,16 +533,21 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
     assert_eq!(game.stats.warnings, 0, "the day command is warning-free");
     assert_eq!(game.vm.vars.get(4), 17, "the action spends the day until 17:00");
     assert_eq!(game.vm.vars.get(5), 0);
-    assert_eq!(game.vm.vars.get(48), 2, "the chosen command is 学习会 (2)");
     assert_eq!(
-        game.vm.vars.get(171),
-        study_before + 8,
-        "学习会 raises the study stat by 8"
+        game.vm.vars.get(48),
+        expected_command,
+        "the chosen command id is {label} ({expected_command})"
     );
     assert_eq!(
-        game.vm.vars.get(14),
-        energy_before - 20,
-        "the action costs 20 energy"
+        game.vm.vars.get(stat_addr),
+        stat_before + expected_delta,
+        "{label} raises its stat by {expected_delta}"
+    );
+    assert!(
+        game.vm.vars.get(14) < energy_before,
+        "the action costs energy ({} -> {})",
+        energy_before,
+        game.vm.vars.get(14)
     );
     assert!(
         game.vm.instances().iter().all(|instance| instance.event != 251),

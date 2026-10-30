@@ -161,7 +161,14 @@ fn open_night_menu(game: &mut Game) {
     game.vm.vars.set(68, 0);
 
     // The natural gesture: hover picture 120 (the sister sprite) and press Decide.
-    game.mouse = [240, 340];
+    // The retail PRNG decides which sister sprite/pose is drawn, so use its actual
+    // position rather than the old placeholder's fixed (240,340) top-left anchor.
+    let sister = game
+        .screen
+        .get(120)
+        .expect("the sister sprite is picture 120");
+    let sister_center = (sister.x, sister.y);
+    game.mouse = [sister_center.0, sister_center.1];
     for _ in 0..8 {
         game.frame();
     }
@@ -196,13 +203,15 @@ fn hovering_the_sister_and_pressing_decide_opens_the_night_command_menu() {
         "the night command menu is not open yet"
     );
 
-    // The sister sprite that the hit-test polls is picture 120 at (240,340).
+    // The sister sprite that the hit-test polls is picture 120; its origin depends on
+    // the retail PRNG's pick, so assert the real sprite rather than a fixed coordinate.
     let sister = game
         .screen
         .iter()
         .find(|picture| picture.number == 120)
         .expect("the sister sprite is picture 120");
-    assert_eq!((sister.x, sister.y), (240, 340), "the sprite sits at (240,340)");
+    assert_eq!(sister.anchor, 1, "the sprite is centre-anchored");
+    assert!(sister.file.contains("imouto"), "picture 120 is a sister sprite");
     assert!(!sister.hidden, "the sprite is visible to hover");
 
     open_night_menu(&mut game);

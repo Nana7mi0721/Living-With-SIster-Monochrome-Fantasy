@@ -246,8 +246,9 @@ WolfTL 的运算符表在 `0x5000` 与 `0x7000` 之间是空的，本作却有 1
 位移`>>`或整数除法作用在这些操作数上没有任何语义（`-20000 >> 20000` 恒为 -1），
 而「随机取值再按权重挑分支」正是 WOLF 里做**加权随机/伤害浮动**的标准写法，且能在 `111` 条件链里直接被判定。
 ⇒ 实现：`arg0 = rand(eval(arg1), eval(arg2))`（含端点、上下界反了要交换、区间为 0 返回下界）。
-实现在 `crates/wolf-vm/src/rng.rs`（`WolfRng`），原版 PRNG 序列（`Game.dat` 的 `static_randoms` 表）尚在 M2 补，
-目前是 xorshift32 + 静态表异或的等价替身，**回放存档时会与原件不同**（已记录为 M2 待办）。
+实现在 `crates/wolf-vm/src/rng.rs`（`WolfRng`）：现已按 `_wolfref/game_dat_random.c` 移植零售 MSVC C 运行时 LCG
+（`state = state*0x343FD + 0x269EC3` mod 2^32，输出 `(state>>16)&0x7FFF`，本作种子 `random_a=22227`），
+旧 xorshift32 替身已移除；范围归约 `range()` 的乘法高位细节仍是推断（见 `docs/research/M7_PRNG.md`）。
 
 ### 3.3 `arg[3]` 的 `0x10000` 位
 

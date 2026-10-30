@@ -180,10 +180,10 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
 /// play the evening scene out to the 19:30 bedroom. Leaves the game ready for
 /// `sleep_into_next_morning`.
 ///
-/// The first button's command rotates by day (day 2 = 学习会 / var48 2, day 3 = 攻击练习 /
-/// var48 4), so this asserts the day-independent consequences (17:00, same day, energy
-/// spent, a real string label) and, on day 2 only, the exact 学习会 effects that
-/// m6_mainline.rs established (+8 study, -20 energy).
+/// Which day command the first button offers is picked by the retail MSVC-LCG PRNG and
+/// rotates between runs (防御练习 / 学习会 / 秘密特训 / 给店里帮忙 ...). This therefore
+/// asserts only the day-independent consequences (17:00, same day, energy spent, a real
+/// string label). Exact per-command stat/energy effects are pinned in m6_mainline.rs.
 fn spend_day_to_evening(game: &mut Game, day: i32) {
     game.auto_choice = true;
 
@@ -217,7 +217,6 @@ fn spend_day_to_evening(game: &mut Game, day: i32) {
     // Hover then press the first button, exactly like the m6_mainline loop: a bare one-frame
     // click only reports the hover. auto-choice answers the confirmation prompt.
     let energy_before = game.vm.vars.get(14);
-    let study_before = game.vm.vars.get(171);
     game.mouse = [512, 230];
     for _ in 0..10 {
         game.frame();
@@ -270,24 +269,6 @@ fn spend_day_to_evening(game: &mut Game, day: i32) {
         energy_before,
         game.vm.vars.get(14)
     );
-    if day == 2 {
-        assert_eq!(
-            game.vm.vars.get(48),
-            2,
-            "day 2: the first button is 学习会 (2)"
-        );
-        assert_eq!(
-            game.vm.vars.get(14),
-            energy_before - 20,
-            "day 2: 学习会 costs 20 energy"
-        );
-        assert_eq!(
-            game.vm.vars.get(171),
-            study_before + 8,
-            "day 2: 学习会 raises study by 8"
-        );
-    }
-
     // The day does not stop there: the evening scene (dinner, CE326) plays out and the
     // bedroom waits for the player again at 19:30.
     let mut evening = false;
@@ -408,7 +389,7 @@ fn the_day_loop_repeats_through_day_four_with_a_midpoint_save_reload() {
     // Day 1 -> day 2: the first night sleep.
     sleep_into_next_morning(&mut game, 1);
 
-    // Day 2: a full 学习会 day command, the evening scene, then sleep into day 3.
+    // Day 2: a full day command, the evening scene, then sleep into day 3.
     spend_day_to_evening(&mut game, 2);
     sleep_into_next_morning(&mut game, 2);
 

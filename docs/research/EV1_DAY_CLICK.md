@@ -4,6 +4,8 @@
 **仓库**: `E:/Study/github program/imoto life`，数据根 `work/all`
 **结论一句话**: ev1（`SampleMapA.mps` 事件 1 `妹クリック判定（夜`）**page0 可以在普通昼/傍晚状态下自然进入**，它的命中框就是**真实的妹妹精灵**（`Picture/imouto02.png`，左上锚点，位于 `(240,340)`，贴图 `149x212`），**不需要任何重绘、也不需要注入输出变量**。对 `(240,340)` hover 约 8 帧再按一次 Decide，page0 自己写出 `var68=1`（全流程 warnings=0）；`var68` 随后被 ev4 page0 消费，调用 CE245（夜コマンドメニュー）。
 
+> **M7 更新（零售 PRNG 已移植）**：`crates/wolf-vm/src/rng.rs` 从 xorshift32 换成零售 MSVC LCG 后，同一 day loop 下 picture 120 的随机姿态变成 `Picture/imouto04.png`、中心锚点 `(388,368)`。本文下面所有 `imouto02/(240,340)/anchor0` 的记录是**旧 xorshift 下的历史实测**；现行测试已改为读取实际精灵中心 hover，不 pin 随机姿态。功能结论（page0 自然命中写 var68、下游 CE245）不变。
+
 与 page2 的关键区别：page2 在深夜 `var64==1` 时由 **ev2 page1 把 picture 120 重绘成 120x80 `<SQUARE>`、中心 `(140,340)`**；page0 没有这次重绘，因为 ev2 的两页条件（`var65==1` / `var64==1 && var167==0`）在 page0 状态下都不成立，picture 120 保持为**真实精灵**。
 
 ---

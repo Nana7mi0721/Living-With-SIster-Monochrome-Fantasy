@@ -93,11 +93,11 @@
 
 **假说**：`121` 的 `0x6000` 算子 = `rand(min,max)`（闭区间）。**这一条已经证实**（1,101 处，见 OPCODE_SPEC §3.2），这里登记的是它的**实现**不确定性：
 
-**实现**：`crates/wolf-vm/src/rng.rs` 用 xorshift32 播种自 `Game.dat` 的 `random_a/random_b`（本作 22227 / 25684），并按 `static_randoms` 表逐次异或一个字节。
+**实现（已更新，M7 / task-17）**：`crates/wolf-vm/src/rng.rs` 已移植 `_wolfref/game_dat_random.c` 的零售 MSVC C 运行时 LCG：`state = state*0x343FD + 0x269EC3` (mod 2^32)，输出 `(state>>16)&0x7FFF`，默认种子 `random_a=22227`；旧 xorshift32 替身已删除。单元测试与 11 个 `crates/wolf-vm/tests/rng_retail.rs` 全绿（seed 1 -> 41,18467,6334,26500… 的标准 MSVC 序列）。
 
-**未验证**：WOLF 的真实 PRNG 序列（`docs/vendor` 里的 `_wolfref/game_dat_random.c` 线索）没有移植，因此**同一存档重放不会得到同一随机序列**。本作依赖随机的部分（战斗命中、掉落）在 M2 才会影响可玩性。
+**残余未验证**：`range(lo,hi)` 的归约细节是推断（当前用 multiply-high `draw*(span+1)>>15`），引擎源码未反编译；同一存档重放能否逐位对齐原版仍待实机对拍。见 `docs/research/M7_PRNG.md`。
 
-**怎么证实**：把 `game_dat_random.c` 的算法移植后，用「同一存档 + 同一输入序列」对拍原版输出。
+**怎么证实**：用「同一存档 + 同一输入序列」对拍原版输出；若序列有偏差，优先复核 range 归约。
 
 ---
 
@@ -105,11 +105,11 @@
 
 **假说**：`102` 的选项字符串由**运行时**（不是脚本）画出选择窗口；本作标题菜单的选项串是 `["1","2","3"]`，而玩家真正看到的菜单文字是脚本用图片画出来的，所以忠实移植必须**同时**做两件事：脚本图片照画 + 运行时选择窗口照画。
 
-**实现**：`crates/wolf-game/src/game.rs` 只把选项收进 `Game::choices` 并在按下 OK 时回填索引；**尚未绘制**运行时选择窗口（`wolf-cli capture` 里看不到 "1/2/3"）。
+**实现（已确认绘制，M7 / task-18）**：`crates/wolf-game/src/choice.rs` 的 `overlay_at_sized` 画出九宫格面板/行/光标，`crates/wolf-cli/src/main.rs` 的 `build_capture_frame` 已接线（commit 7293ee8）。回归 `crates/wolf-game/tests/m7_choice_window.rs` 两测通过；`--event 246` 截图 `work/out/m7_choice_window.png` 显示 6 个选项与 ▶ 光标。原先「尚未绘制」的记录已过时。
 
-**未验证**：WOLF 选择窗口的默认位置/边框/字体（没有文档，也没有实机截图；合理猜测是屏幕居中、宽度按最长选项、用同一块 WindowBase 皮肤）。
+**仍属猜测**：默认位置/边框/字体是从本作事件的实际锚点（如 `(512,192)`）反推的，不是文档值；更广的菜单仍按脚本给出的锚点绘制。
 
-**怎么证实**：原版实机进入一个有选择肢的对话，量出窗口矩形。
+**怎么证实**：换更多 `102` 站点比对锚点/皮肤一致性。
 
 ---
 

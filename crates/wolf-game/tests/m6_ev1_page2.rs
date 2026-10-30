@@ -178,15 +178,20 @@ fn hovering_sister_at_deep_night_writes_var63_and_opens_the_sleep_choice() {
     assert_eq!(game.vm.vars.get(302), 0, "page-2 precondition var302 == 0");
     assert!(game.choices.is_none(), "no prompt before the gesture");
 
-    // The daytime sister sprite that ev1 page 0 would poll is picture 120 at (240,340).
+    // The daytime sister sprite that ev1 page 0 would poll is picture 120. Its
+    // position depends on which pose the retail PRNG picked, so assert the real sprite.
     let day_sister = game
         .screen
         .get(120)
         .expect("the sister sprite is picture 120");
     assert_eq!(
-        (day_sister.x, day_sister.y),
-        (240, 340),
-        "at 19:30 with var64 == 0 the sprite sits at (240,340)"
+        day_sister.anchor, 1,
+        "at 19:30 with var64 == 0 the sprite is centre-anchored"
+    );
+    assert!(
+        day_sister.file.contains("imouto"),
+        "picture 120 is a sister sprite, got {:?}",
+        day_sister.file
     );
 
     // --- Apply the documented MINIMAL page-2 precondition -----------------------------

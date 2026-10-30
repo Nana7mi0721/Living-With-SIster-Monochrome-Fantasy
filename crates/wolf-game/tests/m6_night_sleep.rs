@@ -145,7 +145,12 @@ fn the_natural_night_menu_sleep_rolls_over_to_day_three() {
     assert_eq!(game.vm.vars.get(295), 1);
     game.vm.vars.set(295, 0);
     game.vm.vars.set(68, 0);
-    game.mouse = [240, 340];
+    // Hover the actual sister sprite; the retail PRNG picks its pose/centre.
+    let sister = game
+        .screen
+        .get(120)
+        .expect("the sister sprite is picture 120");
+    game.mouse = [sister.x, sister.y];
     for _ in 0..8 {
         game.frame();
     }
