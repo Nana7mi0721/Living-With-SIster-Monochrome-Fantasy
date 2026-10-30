@@ -41,7 +41,8 @@ pub mod text;
 pub mod vars;
 
 pub use exec::{
-    BlockResult, ChoiceReply, DbContainer, DbDirection, DbOp, DbValue, Host, Instance, LogLevel,
+    BlockResult, ChoiceReply, DbContainer, DbDirection, DbOp, DbValue, Host, Instance, InstanceId,
+    LogLevel,
     PictureAction, PictureCmd, SaveOp, SaveTarget, Signal, SoundAction, SoundChannel, SoundCmd,
     StepReport, Vm, WaitState,
 };

@@ -789,7 +789,12 @@ BGM 循环点来自 `SysDatabase#1 BGMリスト` 的 **col3 ループ開始位�
 
 **关键风险**：`CE242/CE243` 是 `run=0` 但靠 condvar 门控，**单事件模式下不会被 `auto_events` 调度**
 （`auto_events.rs:151 sync` 只处理 `run_condition==2`，`ENGINE_AUTO_START=[241]` 只硬编码 241）。
-所以阶段 B **不需要**让 242/243 跑起来 —— CE188 自己就能走完一回合（它调 CE191/195/197 而**不**调 242/243）。
+
+> **实测修订（M3 战斗切片）：** 上面“CE188 自己就能走完一回合（不调 242/243）”的推断**不成立**。
+> 用新增的 `wolf-cli dump --event 188 --frames 2000 --var 2000350=2` 追踪，CE188 → CE191 → **CE65（玩家指令选择）停在 pc78 等输入**（124 按键轮询），
+> `2000352` 始终为 0，另有 17 条 `unanswered`（装备列 `装備中の武器`/`装備中の防具1..4`、敌个体列 `基本回避率`/`取得経験値`… 在 `CDataBase.json` 里缺失）。
+> 因此阶段 B 必须要么注入按键在 CE65 里完成指令选择，要么先修 `CDataBase.json` 的标签漂移；在此之前 B 的 `2000352` 判据不可达。
+> 已落地：`auto_events.rs` 新增 `GATED_CALL_ONLY = [242, 243]`，把这两条 condvar 门控的 `run==0` 事件并入边缘触发调度器（开机 2000350=0 恒休眠，跟踪数 96→98）。
 
 ### 5.3 阶段 C · 可玩战斗（Playable battle）
 
@@ -799,7 +804,7 @@ BGM 循环点来自 `SysDatabase#1 BGMリスト` 的 **col3 ループ開始位�
 |---|---|
 | 入口 | `wolf-cli play --map SampleMapA --event 1` → 走到菜单 → `start_event(239)`；或直接 `capture --map-run SampleMapA --event 1` |
 | 前置修复 | 阶段 A + B 全部 |
-| 必须新增 | ① `run_condition` 调度器支持 `condvar/condval` 的**非零 condval**（当前 `auto_events` 已支持，`condition_met(operator, left, right)` 支持 1/2/3）；② 把 **CE242/CE243 加进 `ENGINE_ALWAYS` 或改调度器**——它们 `run=0` 但有 condvar，属于"条件启动的 call_only"，需要单独一类；③ `160/162` 转场绘制；④ `201` 在无地图层时的降级（记录而不报错）；⑤ `140` 的 `\cself[n]` 展开；⑥ 战斗画面 `capture` 入口 |
+| 必须新增 | ① `run_condition` 调度器支持 `condvar/condval` 的**非零 condval**（当前 `auto_events` 已支持，`condition_met(operator, left, right)` 支持 1/2/3）；② **把 CE242/CE243 加进调度器**——它们 `run=0` 但有 condvar，属于“条件启动的 call_only”；**已落地** `auto_events.rs` 的 `GATED_CALL_ONLY = [242, 243]`；③ `160/162` 转场绘制；④ `201` 在无地图层时的降级（记录而不报错）；⑤ `140` 的 `\cself[n]` 展开；⑥ 战斗画面 `capture` 入口 |
 | 验收命令 | `./target/debug/wolf-cli.exe capture --map-run SampleMapA --event 1 --frames 3000 --out work/out/battle.png` |
 | 通过判据 | ① PNG 非黑像素 > 30%（对照 §0.1 第 7 条：标题画面是 17.8%）；② 画面上能看到 `cg/battle_bg1.png` + 至少 3 个 `battle_member0*.png` + 一个 `SystemFile/WindowBase.png` 皮肤窗口；③ `2000350` 走完 0→1→2→0 至少一轮；④ 存档 `--load-save` 能恢复 `2000340..2000598` |
 | **不做** | 不做 DLC 分支（CE452/458）、不做温泉特例（`2000495==2`）、不做第三结局（`2000352==-2`）、不做 `CE305 キャンセナル` 的 19 个失败链 |

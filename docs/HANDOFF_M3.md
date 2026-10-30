@@ -6,7 +6,7 @@
 
 ## 1. 一句话现状
 
-M0（加载器/校验）与 M1（标题画面像素级还原）已完成，M2（开场可玩纵切片）基本完成，M3（完整运行时）已完成数据库、时间日程、地图审计、战斗/H 场景调研、图集扩容、地图 tile 层、按键注入与 **151/160/162 画面渲染**；**下一步从第 3 项（CE242/CE243 战斗切片）或第 4 项（H 场景主纵切片）接续**。
+M0（加载器/校验）与 M1（标题画面像素级还原）已完成，M2（开场可玩纵切片）基本完成，M3（完整运行时）已完成数据库、时间日程、地图审计、战斗/H 场景调研、图集扩容、地图 tile 层、按键注入与 **151/160/162 画面渲染**；**下一步从第 3 项（CE242/CE243 战斗切片：A 已通过、B/C 与第 4 项共用按键注入使能件）或第 4 项（H 场景主纵切片）接续**。
 
 ## 2. 怎么跑
 
@@ -85,7 +85,12 @@ e4de9d5 docs: battle subsystem audit and vertical-slice plan
 
 1. **地图传送状态（低优先级；不做相机跟随）**（`crates/wolf-game/src/game.rs` / `tilemap.rs`）：130 传送共 9 处（地图页 8 + CE42 pc118），全部用负地图 id。可以只记录 `(map, x, y, direction)` 供后续事件/传送使用，**不要**据此重算 camera；视差（SysDatabase type 13 + 地图行第 4 列）当前也没有真实使用点。
 2. **151/160/162 的画面渲染（已完成）**（`crates/wolf-game/src/tint.rs` + `crates/wolf-game/src/game.rs`）：新增 `ScreenTint` 表示 `151 ChangeColor` 的整屏乘法（R/G/B 在位 16/8/0，各 /100；bit24 = 闪烁三角形；0 帧 = 立即生效）。`GameHost::change_color` 写入 `Game.screen_tint`，`Game::frame` 每帧 `tick()`；`tile_quads` 与新增的 `picture_quads`（CLI 的 `capture`/`play` 改用它，替代直接调 `atlas.sprites`）把倍率乘进每个 quad 的 `tint`，只作用于 number<0 的屏层图，HUD 不受影响。160/162 唯一实测调用 CE48 `[-1, 65546]` 是 kind -1 直切，故不画遮罩；`SystemFile/[Transition]Fade.png` 在 work/full 存在但当前不可达。验证：`tint.rs` 5 个单测 + `crates/wolf-game/tests/screen_tint.rs`（SampleMapA 地砖中性/染色/还原）+ 实机 `capture --map-run MapData/Dungeon.mps --event 1 --answer 0` 第 13 帧 tint=`[1.5, 2.0, 1.5]`（截图 work/out/dungeon_peak.png vs dungeon_neutral.png）。
-3. **CE242/CE243 战斗调度器**：由变量 `2000350` 三态驱动，静态无调用者；唯一入口 CE239 戦闘呼び出し（1108 槽，104 个外部调用点）。先做 docs/BATTLE.md 的三阶段切片 A（只读 CE189 数据视图）→ B（CE188 单回合）→ C（可玩）。
+3. **CE242/CE243 战斗调度器（进行中：切片 A 已通过 / B 受阻 / C 画面已达成）**：由变量 `2000350` 三态驱动，静态无调用者；唯一入口 CE239 戦闘呼び出し（1108 槽，104 个外部调用点）。按 docs/BATTLE.md 三阶段推进：
+   - **切片 A（只读 CE189 数据视图）= 通过。** 新增 `wolf-cli dump` 子命令（驱动真实 `Game`/`Databases`，可选 `--var/--self/--db/--print-var/--print-self`）。`dump --event 189 --frames 20 --self 628=77 --db C:9..C:22` 证明 CE189 的 6 条 `250 row=-2`（行数写）**经标签解析**落到真实类型 10/11/12/13/14/15，六者 `row_count` 全部等于 SV28=77；`unanswered` 诊断 0。
+   - **切片 B（CE188 单回合）= 受阻。** `dump --event 188 --frames 2000 --var 2000350=2` 达 517917 指令、峰值 6 协程，但 `2000352` 未写、21 条诊断（17 条 `unanswered`）。根因：CE188→CE191→**CE65（玩家指令选择）停在 pc78 等输入**（124 按键轮询），且装备/敌个体若干列标签在 `CDataBase.json` 里不存在（读到越界列 → unanswered）。**BATTLE.md §5 line 792“CE188 不需 242/243 即能走完一回合”经验证不成立**——它先卡在玩家输入。
+   - **切片 C（可玩）= 画面已达成、状态机未达成。** 现有代码 `capture --event 239 --frames 600` 已渲染 61.4% 非黑（战斗背景 + 3 名 battle_member + WindowBase 皮肤状态窗 + 战力条，见 work/out/battle.png）；但 `2000350` 的 0→1→2→0 循环未发生（CE239 自身也停在开场输入）。
+   - **已落地**：`crates/wolf-game/src/auto_events.rs` 新增 `GATED_CALL_ONLY = [242, 243]`，把这两条 `run_condition==0` 但由变量 `2000350` 门控的战斗事件并入边缘触发的条件调度器（开机 2000350=0 恒休眠）；跟踪数 96→98，含单测。
+   - **下一步**：要过 B/C 需要按键注入（`--key-frame N:code`，与第 4 项 H 场景共用同一使能件）在 CE65 玩家指令菜单里选择动作；以及修补 `CDataBase.json` 缺失的装备/敌个体列标签。未完成前 B 的 2000352 与 C 的 2000350 循环无法观测。
 4. **H 场景切片**：docs/HSCENE.md 的 P0 已达成（39 atlas images / 89.4% 非黑）；还需要 `--key-frame N:code` 注入 14 个 `123 [1600030,17]` 按键轮询，然后做主 H 纵切片。
 5. **BASELINE 刷新 + M3 提交**：M3 收口时更新 `docs/BASELINE.json` 的 map_runtime/opcode 统计，重跑 `verify` 与 `cargo test --workspace`。
 

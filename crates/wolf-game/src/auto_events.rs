@@ -51,6 +51,22 @@ pub struct AutoEvent {
 /// docs/ENGINE_EVENTS.md section 1 conclusion 5.
 pub const SKIPPED: &[u32] = &[43];
 
+/// `run_condition == 0` events that the engine never starts on its own but that
+/// this runtime must start from a condition variable, because the battle flow
+/// relies on them.
+///
+/// WOLF's `run_condition == 0` ("called only") events normally run only when a
+/// 210/211/300 instruction calls them. The battle state machine breaks that
+/// rule: `CE242` (condvar 2000350 == 1) and `CE243` (condvar 2000350 == 2) have
+/// zero static call sites and are started purely by the engine watching their
+/// condition (docs/BATTLE.md section 1.3). This is the same edge-triggered
+/// condition scheduler as the `run_condition == 2` events; the list is an
+/// explicit allow-list so the other thirteen dormant `run==0` events seen on
+/// this data set are not accidentally woken (they are not validated battle
+/// entry points). Both conditions are false at boot (2000350 == 0), so they
+/// cost nothing until the battle sets 2000350.
+pub const GATED_CALL_ONLY: &[u32] = &[242, 243];
+
 /// Result of one scheduler pass.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SyncReport {
@@ -82,7 +98,12 @@ impl AutoEvents {
         let events = data
             .events
             .iter()
-            .filter(|event| event.run_condition() == 2 && !SKIPPED.contains(&event.id))
+            .filter(|event| {
+                !SKIPPED.contains(&event.id)
+                    && (event.run_condition() == 2
+                        || (event.run_condition() == 0
+                            && GATED_CALL_ONLY.contains(&event.id)))
+            })
             .map(|event| AutoEvent {
                 id: event.id,
                 title: event.title.clone(),
@@ -99,7 +120,7 @@ impl AutoEvents {
         }
     }
 
-    /// Number of tracked events (96 = 97 measured minus event 43).
+    /// Number of tracked events (98 = 96 `run==2` + 2 gated `run==0` calls).
     #[must_use]
     pub fn len(&self) -> usize {
         self.events.len()
@@ -241,13 +262,42 @@ mod tests {
     }
 
     #[test]
-    fn the_scheduler_tracks_96_conditional_events_and_skips_the_dead_one() {
+    fn the_scheduler_tracks_conditional_and_gated_events_and_skips_the_dead_one() {
         let Some((data, _)) = have_data() else { return };
         let auto = AutoEvents::from_common_events(&data);
-        assert_eq!(auto.len(), 96, "97 run=2 events minus dead event 43");
+        assert_eq!(auto.len(), 98, "96 run=2 events plus gated 242/243");
         assert!(auto.events().iter().all(|event| matches!(event.operator, 1..=3)));
         assert!(auto.events().iter().any(|event| event.id == 38));
         assert!(!auto.events().iter().any(|event| event.id == 43));
+        assert!(auto.events().iter().any(|event| event.id == 242));
+        assert!(auto.events().iter().any(|event| event.id == 243));
+    }
+
+    #[test]
+    fn gated_run_zero_events_start_on_their_variable_and_stay_dormant_at_boot() {
+        let Some((data, _)) = have_data() else { return };
+        let programs = ProgramSet::from_common_events(&data);
+        let mut vm = Vm::new(programs);
+        let mut auto = AutoEvents::from_common_events(&data);
+        // Dormant at boot: 2000350 == 0, so neither 242 (==1) nor 243 (==2) fires.
+        let report = auto.sync(&mut vm);
+        assert_eq!(report.started, 1, "only event 38 is true at boot");
+        assert!(!vm.instances().iter().any(|instance| instance.event == 242));
+        assert!(!vm.instances().iter().any(|instance| instance.event == 243));
+        // 2000350 == 1 starts 242 only.
+        vm.vars.set(350, 1);
+        auto.sync(&mut vm);
+        assert!(vm.instances().iter().any(|instance| instance.event == 242));
+        assert!(!vm.instances().iter().any(|instance| instance.event == 243));
+        // 2000350 == 2 stops 242 and starts 243.
+        vm.vars.set(350, 2);
+        auto.sync(&mut vm);
+        assert!(!vm.instances().iter().any(|instance| instance.event == 242));
+        assert!(vm.instances().iter().any(|instance| instance.event == 243));
+        // Back to 0 stops 243.
+        vm.vars.set(350, 0);
+        auto.sync(&mut vm);
+        assert!(!vm.instances().iter().any(|instance| instance.event == 243));
     }
 
     #[test]

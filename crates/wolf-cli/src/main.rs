@@ -18,12 +18,13 @@ use wolf_format::command::SlotStats;
 use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
 use wolf_game::atlas::Atlas;
+use wolf_game::db::Container;
 use wolf_game::tilemap::TileMap;
 use wolf_game::{choice, Game};
 use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 use wolf_vm::{
-    ChoiceReply, DbOp, DbValue, Host, LogLevel, PictureCmd, PrecompileStats, Program, ProgramSet,
-    SoundCmd, StepReport, Vm,
+    ChoiceReply, DbOp, DbValue, Host, InstanceId, LogLevel, PictureCmd, PrecompileStats, Program,
+    ProgramSet, SoundCmd, StepReport, Vm,
 };
 
 /// One asserted number.
@@ -97,6 +98,15 @@ fn main() -> ExitCode {
     let mut menu_only = false;
     let mut map: Option<String> = None;
     let mut map_run: Option<String> = None;
+    // `dump` seeds inputs into a real Game and reads state back out. It is the probe
+    // for the battle slices (docs/BATTLE.md section 5): slice A needs common event 189
+    // to run with SV28 set and then reads CDataBase row counts, slice B needs 2000350
+    // forced to 2 and then reads 2000352.
+    let mut seed_vars: Vec<(u32, i32)> = Vec::new();
+    let mut seed_selfs: Vec<(usize, i32)> = Vec::new();
+    let mut show_dbs: Vec<(String, i32)> = Vec::new();
+    let mut print_vars: Vec<u32> = Vec::new();
+    let mut print_selfs: Vec<usize> = Vec::new();
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -197,6 +207,33 @@ fn main() -> ExitCode {
             "--filter" | "-F" => {
                 filter = args.next();
             }
+            // dump inputs / probes (see run_dump).
+            "--var" => {
+                if let Some((addr, value)) = args.next().as_deref().and_then(parse_addr_val) {
+                    seed_vars.push((addr, value));
+                }
+            }
+            "--self" => {
+                if let Some((slot, value)) = args.next().as_deref().and_then(parse_slot_val) {
+                    seed_selfs.push((slot, value));
+                }
+            }
+            "--db" => {
+                if let Some((container, db_type)) = args.next().as_deref().and_then(parse_container_type)
+                {
+                    show_dbs.push((container, db_type));
+                }
+            }
+            "--print-var" => {
+                if let Some(addr) = args.next().and_then(|value| value.parse().ok()) {
+                    print_vars.push(addr);
+                }
+            }
+            "--print-self" => {
+                if let Some(slot) = args.next().and_then(|value| value.parse().ok()) {
+                    print_selfs.push(slot);
+                }
+            }
             "--help" | "-h" => {
                 print_help();
                 return ExitCode::SUCCESS;
@@ -256,6 +293,16 @@ fn main() -> ExitCode {
                 )
             }
         },
+        Some("dump") => run_dump(
+            &root,
+            event,
+            frames,
+            &seed_vars,
+            &seed_selfs,
+            &show_dbs,
+            &print_vars,
+            &print_selfs,
+        ),
         Some("list") => run_list(&root, filter.as_deref()),
         Some("play") => {
             // `play` shares capture's entry-point resolution so a map script or a single
@@ -388,6 +435,25 @@ fn parse_key_frame(value: &str) -> Option<(usize, u32)> {
 fn parse_point(value: &str) -> Option<(i32, i32)> {
     let (x, y) = value.split_once(',')?;
     Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
+}
+
+/// Parses a `ADDR=VALUE` variable seed for `dump --var`.
+fn parse_addr_val(value: &str) -> Option<(u32, i32)> {
+    let (addr, val) = value.split_once('=')?;
+    Some((addr.trim().parse().ok()?, val.trim().parse().ok()?))
+}
+
+/// Parses a `SLOT=VALUE` self-variable seed for `dump --self`.
+fn parse_slot_val(value: &str) -> Option<(usize, i32)> {
+    let (slot, val) = value.split_once('=')?;
+    Some((slot.trim().parse().ok()?, val.trim().parse().ok()?))
+}
+
+/// Parses a `CONTAINER:TYPE` database target for `dump --db` (C=CDataBase,
+/// S=SysDatabase, D=DataBase).
+fn parse_container_type(value: &str) -> Option<(String, i32)> {
+    let (container, db_type) = value.split_once(':')?;
+    Some((container.trim().to_owned(), db_type.trim().parse().ok()?))
 }
 
 fn default_root() -> PathBuf {
@@ -1014,8 +1080,9 @@ impl Host for TraceHost {
     fn database(&mut self, op: &DbOp) -> Option<DbValue> {
         self.databases += 1;
         self.note(format!(
-            "  250 database type {} data {} item {} flags {:#x} destination {:?}",
-            op.db_type, op.data_id, op.item_id, op.flags, op.destination
+            "  250 database type {} data {} item {} flags {:#x} destination {:?} source {:?} labels {:?}/{:?}",
+            op.db_type, op.data_id, op.item_id, op.flags, op.destination, op.source,
+            op.type_label, op.field_label
         ));
         None
     }
@@ -1319,6 +1386,123 @@ fn run_event(root: &Path, id: u32, frames: usize, trace: bool, answer: Option<us
         );
     }
     code
+}
+
+/// `dump` drives a real [`Game`] (real databases, real scheduler) with inputs seeded
+/// before the first frame, then reads state back out. This is the probe the battle
+/// slices need: `run --event` uses a counting stub host, so it cannot show whether a
+/// `250` write changed CDataBase or whether a variable came out at a particular value.
+#[allow(clippy::too_many_arguments)]
+fn run_dump(
+    root: &Path,
+    event: Option<u32>,
+    frames: usize,
+    seed_vars: &[(u32, i32)],
+    seed_selfs: &[(usize, i32)],
+    show_dbs: &[(String, i32)],
+    print_vars: &[u32],
+    print_selfs: &[usize],
+) -> ExitCode {
+    let id = match event {
+        Some(id) => id,
+        None => {
+            eprintln!("dump needs --event <ID>");
+            return ExitCode::from(2);
+        }
+    };
+    let mut game = match Game::new(root) {
+        Ok(game) => game,
+        Err(err) => {
+            eprintln!("cannot load the game data: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // A dump has no keyboard: dismiss messages and answer prompts so a turn loop
+    // marches to its end instead of parking on the first 101/102.
+    game.auto_advance = true;
+    game.auto_choice = true;
+    game.start_engine_events();
+    let instance: InstanceId = match game.vm.start_event(id) {
+        Some(instance) => instance,
+        None => {
+            eprintln!("no common event with id {id}");
+            return ExitCode::from(2);
+        }
+    };
+    for (addr, value) in seed_vars {
+        game.vm.vars.set(*addr as usize, *value);
+    }
+    if let Some(inst) = game.vm.instance_mut(instance) {
+        for (slot, value) in seed_selfs {
+            inst.self_vars.set(*slot, *value);
+        }
+    }
+    println!("wolf-cli dump --event {id} --frames {frames}");
+    println!();
+
+    let mut last_self: Vec<Option<i32>> = vec![None; print_selfs.len()];
+    let mut total_steps = 0usize;
+    let mut peak = 1usize;
+    let mut frames_run = 0usize;
+    for _ in 0..frames {
+        let outcome = game.frame();
+        frames_run += 1;
+        total_steps += outcome.report.steps;
+        peak = peak.max(outcome.report.running);
+        if let Some(inst) = game.vm.instance(instance) {
+            for (i, slot) in print_selfs.iter().enumerate() {
+                last_self[i] = Some(inst.self_vars.get(*slot));
+            }
+        }
+        if outcome.report.running == 0 {
+            break;
+        }
+    }
+
+    println!("  frames run      {frames_run}");
+    println!("  instructions    {total_steps}");
+    println!("  peak coroutines {peak}");
+    println!("  instance alive  {}", game.vm.instance(instance).is_some());
+    for addr in print_vars {
+        println!("  var {addr} = {}", game.vm.vars.get(*addr as usize));
+    }
+    for (i, slot) in print_selfs.iter().enumerate() {
+        match last_self[i] {
+            Some(value) => println!("  self {slot} = {value}"),
+            None => println!("  self {slot} = <never observed>"),
+        }
+    }
+    for (name, db_type) in show_dbs {
+        let container = match name.as_str() {
+            "C" | "CData" | "CDataBase" => Container::CData,
+            "S" | "Sys" | "SysDatabase" => Container::Sys,
+            "D" | "Data" | "DataBase" => Container::Data,
+            other => {
+                eprintln!("unknown db container {other} (use C, S or D)");
+                return ExitCode::from(2);
+            }
+        };
+        let rows = game.databases.row_count(container, *db_type);
+        let cols = game.databases.field_count(container, *db_type);
+        println!("  db {name}:{db_type} rows={rows:?} cols={cols:?}");
+    }
+    println!("  coroutines:");
+    for inst in game.vm.instances() {
+        println!(
+            "    id {} event {} pc {} wait {:?}",
+            inst.id, inst.event, inst.pc, inst.wait
+        );
+    }
+    let unanswered = game
+        .diagnostics
+        .iter()
+        .filter(|(msg, _)| msg.contains("unanswered"))
+        .count();
+    println!("  diagnostics     {} distinct, {unanswered} unanswered", game.diagnostics.len());
+    for (msg, count) in game.diagnostics.iter().take(30) {
+        println!("    {count}x {msg}");
+    }
+    ExitCode::SUCCESS
 }
 
 fn run_condition_label(condition: u8) -> &'static str {
@@ -1974,7 +2158,7 @@ fn run_capture(
     println!("  wrote     : {}", out.display());
 
     println!(
-        "  auto      : {} tracked run_condition==2 event(s), {} running {:?}",
+        "  auto      : {} tracked conditional/gated event(s), {} running {:?}",
         game.auto_events.len(),
         game.auto_events.running_count(),
         game.auto_events.running_ids()

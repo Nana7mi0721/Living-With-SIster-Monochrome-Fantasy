@@ -838,6 +838,14 @@ impl Vm {
         self.instances.iter().find(|i| i.id == id)
     }
 
+    /// One coroutine by id, mutably. Used by the diagnostics harness to seed a
+    /// coroutine's self variables before it runs (e.g. common event 189 reads SV28
+    /// to size the CDataBase types).
+    #[must_use]
+    pub fn instance_mut(&mut self, id: InstanceId) -> Option<&mut Instance> {
+        self.instances.iter_mut().find(|i| i.id == id)
+    }
+
     /// Load an event into a fresh coroutine. Returns `None` when the id is unknown.
     pub fn start_event(&mut self, event: EventId) -> Option<InstanceId> {
         self.start_event_with(event, None)

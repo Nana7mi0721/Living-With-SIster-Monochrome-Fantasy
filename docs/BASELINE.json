@@ -1082,7 +1082,12 @@
  },
  "auto_events": {
   "module": "crates/wolf-game/src/auto_events.rs",
-  "tracked": 96,
+  "tracked": 98,
+  "tracked_breakdown": "96 run_condition==2 events + gated call_only 242/243 (run_condition==0 but condvar-gated by 2000350==1 / ==2)",
+  "gated_call_only": [
+   242,
+   243
+  ],
   "skipped": [
    43
   ],
