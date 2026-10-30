@@ -1412,6 +1412,17 @@ fn run_event(root: &Path, id: u32, frames: usize, trace: bool, answer: Option<us
 /// slices need: `run --event` uses a counting stub host, so it cannot show whether a
 /// `250` write changed CDataBase or whether a variable came out at a particular value.
 #[allow(clippy::too_many_arguments)]
+/// Accept either the flat variable slot (350) or the script's magic address
+/// (2_000_000 + 350) so `--var 2000350=1` and `--var 350=1` mean the same slot.
+fn normalise_var_addr(addr: u32) -> usize {
+    const VAR_BASE: u32 = 2_000_000;
+    if (VAR_BASE..VAR_BASE + 1_000_000).contains(&addr) {
+        (addr - VAR_BASE) as usize
+    } else {
+        addr as usize
+    }
+}
+
 fn run_dump(
     root: &Path,
     event: Option<u32>,
@@ -1451,7 +1462,7 @@ fn run_dump(
         }
     };
     for (addr, value) in seed_vars {
-        game.vm.vars.set(*addr as usize, *value);
+        game.vm.vars.set(normalise_var_addr(*addr), *value);
     }
     if let Some(inst) = game.vm.instance_mut(instance) {
         for (slot, value) in seed_selfs {
@@ -1506,7 +1517,7 @@ fn run_dump(
     println!("  peak coroutines {peak}");
     println!("  instance alive  {}", game.vm.instance(instance).is_some());
     for addr in print_vars {
-        println!("  var {addr} = {}", game.vm.vars.get(*addr as usize));
+        println!("  var {addr} = {}", game.vm.vars.get(normalise_var_addr(*addr)));
     }
     for (i, slot) in print_selfs.iter().enumerate() {
         match last_self[i] {
