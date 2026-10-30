@@ -493,7 +493,7 @@ playtime、Sys3/Sys4、800 个通常変数、全部活着的公共事件 self �
 | 入口 | 结果 |
 |---|---|
 | `capture --map-run Map003 --event 1 --frames 600` | 新游戏处理 → `130` → SampleMapA，停在开场四选一；26,415 指令 / 654 图操作 / 0 警告 |
-| `boot` → 标题 → 回车 → 标题菜单第一项 → 900 帧 | `130 Teleport: MapData/SampleMapA.mps at (60, 34) direction 3`，同样停在开场四选一 |
+| `boot` → 标题 → 回车 → 标题菜单第一项 → 900 帧 | 先 `130 Teleport: MapData/Map003.mps at (60, 34) target -1 options 0x1`，再 `130 Teleport: MapData/SampleMapA.mps at (62, 38) target -1 options 0x1`，同样停在开场四选一 |
 
 测试：`the_new_game_processing_map_teleports_into_the_opening` 与 `the_title_menu_starts_a_new_game`
 （crates/wolf-game/tests/opening.rs，后者走完整 boot → 标题 → 菜单 → 新游戏链）。
