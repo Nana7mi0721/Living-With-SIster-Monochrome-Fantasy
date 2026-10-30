@@ -6,7 +6,7 @@
 
 ## 1. 一句话现状
 
-M0（加载器/校验）与 M1（标题画面像素级还原）已完成，M2（开场可玩纵切片）基本完成，M3（完整运行时）已完成数据库、时间日程、地图审计、战斗/H 场景调研、图集扩容、地图 tile 层、按键注入与 **151/160/162 画面渲染**、**战斗切片 A 通过 + 切片 B 的 CDataBase 越界列标签修复（读越界列→引擎默认空值）**；**下一步从第 3 项（CE242/CE243 战斗切片：B 仍卡 CE65 输入、C 画面已达成）或第 4 项（H 场景主纵切片）接续**。
+M0（加载器/校验）与 M1（标题画面像素级还原）已完成，M2（开场可玩纵切片）基本完成，M3（完整运行时）已完成数据库、时间日程、地图审计、战斗/H 场景调研、图集扩容、地图 tile 层、按键注入、**151/160/162 画面渲染**、**战斗切片 A 通过 + 切片 B 的 CDataBase 越界列标签修复**、**H 场景 P1/P2（capture --map 瓦片+图片合成、160/162 淡入淡出、word_effect 别名）**，并刷新 BASELINE。**M3 主体完成**；剩 CE242/CE243 战斗切片 C 的完整状态机（CE65 指令菜单导航 + 清空临时表运行时语义）与 HSCENE §4.5 250 数据库项，属后续迭代。
 
 ## 2. 怎么跑
 
@@ -92,8 +92,8 @@ e4de9d5 docs: battle subsystem audit and vertical-slice plan
    - **已落地**：`crates/wolf-game/src/auto_events.rs` 新增 `GATED_CALL_ONLY = [242, 243]`，把这两条 `run_condition==0` 但由变量 `2000350` 门控的战斗事件并入边缘触发的条件调度器（开机 2000350=0 恒休眠）；跟踪数 96→98，含单测。
    - **按键注入已打通**：`--key-frame N:CODE` 原本只在 `capture` 里有，现补进 `dump`（并新增 `dump --watch EVENT` 打印某事件每次 PC 变化）。实测 `dump --event 188 --var 2000350=2 --key-frame 80:10 --watch 65` 把 CE65 从 `pc 78`（万能ウィンドウ选择轮询）推进到 `pc 132`，证明按键注入确实能驱动 CE65。
    - **下一步（B/C 收口）**：`CDataBase.json` 缺失列标签问题已按“越界列→引擎默认空值”修好（见上）。仍有两块：① CE65 推进后需连续多次导航/确认走完指令菜单（曾进入 CE188↔CE188/CE194/CE122 高频循环，260 帧 3300 万指令仍未判胜负）；② 战斗进行到深处会读“被清空/重建的临时表”（如 `CData (10,0,3) 戦闘不能？`、`(10,0,6) SP`、`(11,0,17) キャラクタ番号`），这些是行号越界/表被 resize 到 0 的运行时语义（`exec.rs:2039` 读到 `None` 会保留旧值），需在完整战斗状态机里统一处理，非标签问题。做完这两块，`2000352` 与 `2000350` 循环才可观测。
-4. **H 场景切片（P0 已全部达成）**：docs/HSCENE.md 的两个 P0 现在都已在代码里闭环。① 图集容量：`crates/wolf-game/src/atlas.rs:42` `ATLAS_SIZE=4096` + `miss/take_warnings` 把放不下的图记成 `atlas full:` 诊断（不再静默丢）；同一 `SaveData08.sav` 在 `--root work/all` 下现在 **89.4% 非黑**，脸部三层（眼/嘴/眉）与动作层全部进 quad——旧 `work/out/_m3_sd08_all.png` 是没眼没嘴的空白脸，新 `work/out/_m3_sd08_all2.png` 表情完整。② 按键注入：`capture`/`dump` 都支持 `--key-frame N:CODE`（`key.rs::bits_for_code`），能把 `123 [1600030,17]` 轮询推过去。剩下的 H 场景 P1/P2（瓦片+图片层合成、160/162 遮罩、250 数据库项、word_effect 前缀）见 HSCENE.md §4.3–4.6，属 M3 之后。
-5. **BASELINE 刷新 + M3 提交**：M3 收口时更新 `docs/BASELINE.json` 的 map_runtime/opcode 统计，重跑 `verify` 与 `cargo test --workspace`。
+4. **H 场景切片（P0 已全部达成；P1/P2 已落地，提交 684d711）**：docs/HSCENE.md 的两个 P0 现在都已在代码里闭环。① 图集容量：`crates/wolf-game/src/atlas.rs:42` `ATLAS_SIZE=4096` + `miss/take_warnings` 把放不下的图记成 `atlas full:` 诊断（不再静默丢）；同一 `SaveData08.sav` 在 `--root work/all` 下现在 **89.4% 非黑**，脸部三层（眼/嘴/眉）与动作层全部进 quad——旧 `work/out/_m3_sd08_all.png` 是没眼没嘴的空白脸，新 `work/out/_m3_sd08_all2.png` 表情完整。② 按键注入：`capture`/`dump` 都支持 `--key-frame N:CODE`（`key.rs::bits_for_code`），能把 `123 [1600030,17]` 轮询推过去。**P1/P2 已实现**：③ 瓦片+图片层合成——`capture --map` 改为驱动真实 `Game`（`start_pages` 装 tile 层并启动自动页，`--pointer/--press-frame/--key-frame/--load-save/--answer`），与 `capture` 共用 `drive_capture_frames/build_capture_frame/render_capture_frame`；`SampleMapA` ev0 是开场演出，`--frames 10` 可见米色 tile 层压在 eyecatch 图片下（98.3% 非黑，work/out/hscene_room_f10.png）。④ 160/162 遮罩——新增 `crates/wolf-game/src/transition.rs` `ScreenTransition`（kind<0 直切；kind>=0 全屏淡入淡出，折叠进 `apply_screen_tint`，两条渲染路径都生效），4 单测；出货只有 CE48 直切，用合成 capture 验证亮度 1.0→0.4→0.0。⑤ word_effect 前缀——`assets.rs` 窄别名 `Picture/word_effect* -> hword/word_effect*`（30 张含 7 张原本缺的都解析到真图），记 `asset fallback:` 诊断，2 单测，docs/UNVERIFIED.md H-ASSET-1。**唯一待复核假设**：160/162 淡入淡出按对称三角实现，若 162 是单向应改 `brightness()=1-t`（代码注释已标）。剩下 250 数据库项（HSCENE §4.5）仍属 M3 之后。
+5. **BASELINE 刷新 + M3 提交（已完成本项刷新）**：`docs/BASELINE.json` 新增 `screen_tint_151` / `screen_transition_160_162` / `battle_slice` / `h_scene_p1_p2` 四段，记录 151 染色、160/162 淡入淡出、战斗切片 A/B/C 与 H 场景 P1/P2 的实现状态与证据；map_runtime/opcode 统计因本轮无加载器/opcode 变更而保持原值。`verify` **PASS 63 项 0 pending**、`cargo test --workspace` 全绿（wolf-game lib 219）。
 
 ## 6. 已知 M2 残留（不阻塞 M3）
 

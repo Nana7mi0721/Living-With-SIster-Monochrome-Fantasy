@@ -1119,5 +1119,38 @@
   "ab": "scheduler off vs on is pixel-identical at title 716, choice 600 and message 400; story 900 adds 129 instructions and 17 picture ops (events 216/217 repaint the HUD) with identical pixels",
   "save_load_delta": "retail SaveData01 frame 1: 66->67 live pictures, 548416->548260 non-black, mean abs 0.153, max 255, differences confined to the HUD strip y<32; live HUD uses script strings (所持金, blue 周六) while the saved picture table stores 持有金钱, white 周六",
   "doc": "docs/ENGINE_EVENTS.md section 11"
+ },
+ "screen_tint_151": {
+  "module": "crates/wolf-game/src/tint.rs",
+  "opcode": 151,
+  "packing": "R/G/B in bits 16/8/0 as percent (/100); bit24 = flash triangle; 0 frames = instant",
+  "law": "whole-screen multiply applied only to number<0 screen-layer quads (HUD untouched); ticked per frame in Game::frame",
+  "sites": "1 real data site in the SampleMapA/Map003 page; Dungeon ev1/ev3, SampleMapB ev5",
+  "proof": "capture --map-run MapData/Dungeon.mps --event 1 --answer 0: frame 13 tint [1.5,2.0,1.5] (work/out/dungeon_peak.png vs dungeon_neutral.png)",
+  "tests": "tint.rs 5 unit tests + crates/wolf-game/tests/screen_tint.rs"
+ },
+ "screen_transition_160_162": {
+  "module": "crates/wolf-game/src/transition.rs",
+  "opcodes": [
+   160,
+   161,
+   162
+  ],
+  "law": "160/161 install kind+flags; 162 blocks for transition.frames() (flags & 0xFF); kind<0 = hard cut (no mask), kind>=0 = full-screen fade folded into apply_screen_tint (dims tiles+pictures in both capture and capture --map)",
+  "data_reality": "only shipped 160/162 is CE48 pc145 [-1, 65546] = hard cut, so no non-cut transition exists to drive end-to-end",
+  "proof": "synthetic capture brightness 1.000 -> 0.400 -> 0.000 (work/out/hscene_transition_e00_b100.png / _e03_b039.png / _e05_b000.png); 4 unit tests",
+  "open_question": "fade assumed symmetric out-then-in; if 162 is one-way, brightness() should be 1-t (code comment)"
+ },
+ "battle_slice": {
+  "entry": "CE239 battle-call (1108 slots, 104 external call sites); scheduler GATED_CALL_ONLY=[242,243] via var 2000350",
+  "slice_a": "PASS - CE189 six 250 row=-2 writes resolve by label to CData types 10-15, row_count == SV28 == 77, 0 unanswered (dump --event 189 --frames 20 --self 628=77 --db C:9..C:22)",
+  "slice_b": "label fix landed - Game::database answers reads past a table field count with engine defaults (0 / \"\"), counted in GameStats.database_out_of_schema; CE188 diagnostics 21 distinct / 17 unanswered -> 5 / 1; still parked at CE65 player input, 2000352 not yet written; unit test a_column_past_the_field_count_reads_as_the_empty_cell",
+  "slice_c": "visuals met - capture --event 239 --frames 600 renders 61.4% non-black (battle bg + 3 members + WindowBase skin + power bar, work/out/battle.png); 2000350 cycle 0->1->2->0 still unreached",
+  "remaining": "CE65 command-menu navigation + cleared/rebuilt scratch-table read semantics (row resized to 0 -> exec.rs:2039 keeps stale value)"
+ },
+ "h_scene_p1_p2": {
+  "p1_capture_map": "capture --map now drives a real Game (load-save + start_pages + shared frame helpers); SampleMapA ev0 is the opening cinematic, --frames 10 shows beige tile layer composited under eyecatch (98.3% non-black, work/out/hscene_room_f10.png)",
+  "p2_word_effect": "narrow Picture/word_effect* -> hword/word_effect* alias in assets.rs (30 images incl 7 previously missing resolve), emits \"asset fallback: ...\" diagnostic; 2 unit tests, docs/UNVERIFIED.md H-ASSET-1",
+  "commit": "684d711"
  }
 }
