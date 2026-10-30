@@ -551,8 +551,13 @@ pub trait Host {
     }
 
     /// `130 Teleport`.
-    fn teleport(&mut self, map: i32, x: i32, y: i32, direction: i32) {
-        let _ = (map, x, y, direction);
+    ///
+    /// The raw command is `target, x, y, map, options` (WOLF's transfer command):
+    /// `target` is `0xffffffff` for the hero, `0xefd8ffff` for a saved position,
+    /// or a variable id; `options` packs precise-coordinate (bit 0) and the
+    /// transition kind (bits 4..7). `map` is the destination map id.
+    fn teleport(&mut self, target: i32, map: i32, x: i32, y: i32, options: i32) {
+        let _ = (target, map, x, y, options);
     }
 
     /// `160 Transition`.
@@ -1783,7 +1788,8 @@ fn execute(
                 None
             }
             130 => {
-                host.teleport(arg(cmd, 0), arg(cmd, 1), arg(cmd, 2), arg(cmd, 3));
+                // Raw layout is target, x, y, map, options - not map-first.
+                host.teleport(arg(cmd, 0), arg(cmd, 3), arg(cmd, 1), arg(cmd, 2), arg(cmd, 4));
                 // The map load is instant in the original; one frame of slack
                 // keeps the host from having to re-enter the interpreter.
                 inst.wait = WaitState::Frames(1);
@@ -2513,7 +2519,7 @@ mod tests {
         pictures: Vec<PictureCmd>,
         sounds: Vec<SoundCmd>,
         logs: Vec<(LogLevel, String)>,
-        teleports: Vec<(i32, i32, i32, i32)>,
+        teleports: Vec<(i32, i32, i32, i32, i32)>,
         dismiss: bool,
         reply: Option<ChoiceReply>,
         // Answers served to 124 picture queries, keyed by (number, field).
@@ -2561,8 +2567,8 @@ mod tests {
         fn sound(&mut self, cmd: &SoundCmd) {
             self.sounds.push(cmd.clone());
         }
-        fn teleport(&mut self, map: i32, x: i32, y: i32, direction: i32) {
-            self.teleports.push((map, x, y, direction));
+        fn teleport(&mut self, target: i32, map: i32, x: i32, y: i32, options: i32) {
+            self.teleports.push((target, map, x, y, options));
         }
         fn change_color(&mut self, colour: i32, frames: i32) {
             self.colours.push((colour, frames));
@@ -3767,7 +3773,8 @@ mod tests {
         let mut host = Recorder::default();
         vm.start_event(1).unwrap();
         vm.step_frame(&mut host);
-        assert_eq!(host.teleports, vec![(-1, 60, 34, 3)]);
+        // target, map, x, y, options
+        assert_eq!(host.teleports, vec![(-1, 3, 60, 34, 1)]);
         assert_eq!(vm.vars.get(0), 0);
         vm.step_frame(&mut host);
         assert_eq!(vm.vars.get(0), 1);

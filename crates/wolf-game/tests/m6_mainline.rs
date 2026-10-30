@@ -129,6 +129,21 @@ fn the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room() {
         .map(|picture| picture.file.clone())
         .collect();
     assert!(stale.is_empty(), "title art still on screen: {stale:?}");
+    // The real new-game path is CE42 -> map 3 (Map003 hook) -> map 1 (SampleMapA).
+    // The raw 130 layout is target, x, y, map, options, so this pins both hops.
+    let diagnostics: Vec<&str> = game.diagnostics.keys().map(String::as_str).collect();
+    assert!(
+        diagnostics
+            .iter()
+            .any(|line| line.contains("130 Teleport: MapData/Map003.mps")),
+        "the title menu must pass through the Map003 new-game hook: {diagnostics:?}"
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|line| line.contains("130 Teleport: MapData/SampleMapA.mps")),
+        "the hook then teleports into SampleMapA: {diagnostics:?}"
+    );
 }
 
 

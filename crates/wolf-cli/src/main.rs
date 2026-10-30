@@ -1275,10 +1275,10 @@ impl Host for TraceHost {
         ));
     }
 
-    fn teleport(&mut self, map: i32, x: i32, y: i32, direction: i32) {
+    fn teleport(&mut self, target: i32, map: i32, x: i32, y: i32, options: i32) {
         self.teleports += 1;
         self.note(format!(
-            "  130 teleport map {map} at {x},{y} dir {direction}"
+            "  130 teleport target {target} -> map {map} at {x},{y} options {options:#x}"
         ));
     }
 

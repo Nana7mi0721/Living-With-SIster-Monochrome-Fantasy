@@ -113,10 +113,14 @@ pub struct Choices {
 /// because the host cannot borrow `Game`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct MapRequest {
+    /// Raw `130` target: `-1` is the hero (`0xffffffff`), `-2` a variable.
+    target: i32,
+    /// Destination map id, the fourth raw argument.
     map: i32,
     x: i32,
     y: i32,
-    direction: i32,
+    /// Bit 0 = precise coordinates, bits 4..7 = transition kind.
+    options: i32,
 }
 
 /// Counters that make a headless run comparable to an interactive one.
@@ -1077,12 +1081,9 @@ impl Game {
         // the host cannot borrow Game while the VM is inside `step_frame`.
         let map_requests = std::mem::take(&mut self.map_requests);
         for request in map_requests {
-            let map_id = match request.map {
-                -1 => 1,
-                -2 => 0,
-                id => id,
-            };
-            let path = self.databases.map_path(map_id).map(str::to_owned);
+            // `130` already carries the destination map id; there is no
+            // "-1 keeps the current map" convention (that is `150`).
+            let path = self.databases.map_path(request.map).map(str::to_owned);
             let Some(path) = path else {
                 self.diagnostics.insert(
                     format!("130 Teleport: no map registered for id {}", request.map),
@@ -1094,8 +1095,8 @@ impl Game {
                 Ok(()) => {
                     self.diagnostics.insert(
                         format!(
-                            "130 Teleport: {} at ({}, {}) direction {}",
-                            path, request.x, request.y, request.direction
+                            "130 Teleport: {} at ({}, {}) target {} options {:#x}",
+                            path, request.x, request.y, request.target, request.options
                         ),
                         1,
                     );
@@ -1724,12 +1725,13 @@ impl Host for GameHost<'_> {
         ));
     }
 
-    fn teleport(&mut self, map: i32, x: i32, y: i32, direction: i32) {
+    fn teleport(&mut self, target: i32, map: i32, x: i32, y: i32, options: i32) {
         self.map_requests.push(MapRequest {
+            target,
             map,
             x,
             y,
-            direction,
+            options,
         });
     }
 

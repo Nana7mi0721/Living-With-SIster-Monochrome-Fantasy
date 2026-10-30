@@ -50,8 +50,8 @@ cargo build -q -p wolf-cli
 - `MapTree.dat` / `MapTreeOpenStatus.dat` 已解出并进 loader：`crates/wolf-format/src/maptree.rs`、`crates/wolf-format/tests/maptree.rs`（4 测试）、`verify` 新增 7 项（总 70 项）、`docs/FORMAT_SPEC.md` §2.6。
 - 结构：416 B = 10×0 头 + version 0x90 + u32 **50 条** + 50×`{i32 parent, u32 map_id}` + footer 0xBC；`parent==-1` 为根，全表仅 map **3/31/24** 挂在 map 0 下（正是三张无瓦片钩子图），条目顺序即树显示顺序。
 - **否定结论（重要）**：文件里没有 x/y，也没有起始地图字段 ⇒ “新游戏从哪开始”不是 MapTree 数据驱动。M6 起点仍需从引擎启动流程实测（BOOT=TitleMap ev2 是示例标题教程；真正的新游戏入口候选是 Map003 ev1，见 `docs/MAP_AUDIT.md` §7.5）。
-- **已确认（2026-10-30，本轮实测）**：真正的新游戏起点就是 **Map003 ev1**——Map003 是 MapTree 里挂在 map 0 下的钩子图（70×170，无瓦片），`[S]` 起始标记在 (62,38)，ev1 名 `ニューゲーム処理`。链路：Map003 ev1 → `121 [2000000,1]` 切游戏态 → `130 [-1,62,38,1,1]` 传送 → **SampleMapA (62,38) 方向 1** → SampleMapA ev0 `ニューゲーム処理` → 卧室 + HUD。`capture --map-run Map003 --event 1` 的诊断里能看到唯一的 `130 Teleport: MapData/SampleMapA.mps at (62, 38) direction 1`。
-- 标题菜单路径（boot → 标题 → 确认 → CE42 选项 0）也会发 `130 [-1,60,34,3,1]` 到 SampleMapA。CE42 是 WOLF 自带的示例标题脚本（`オリジナルタイトル画面Ａ`，3 个示例选项 1/2/3），它把 `SystemGraphic/TitleGraphic*.png` 画在**负号画面层**（`-2`）。这些画面层属于旧地图，地图切换时必须随旧图一起丢弃；早期版本没清，标题画会残留覆盖在卧室上。**本轮已修复**：`Screen::clear_screen_layers()`（只丢 `number < 0`，保留普通编号图片）在 `Game::switch_map` 里调用，`picture.rs` 有单测。修复后 `capture --boot --frames 3200 --key-frame 800:10 --answer 0 --answer-delay 2` 与 Map003 路径输出一致：92.1% 非黑、49 live pictures、唯一 `130 Teleport ... (60, 34) direction 3`，截图 `work/out/title_clean.png` 是干净卧室+HUD（无标题画残留）。**结论：标题菜单→新游戏这条真实玩家路径现在可用且视觉正确；Map003 ev1 是 `[S]` 钩子图路径，两条入口都干净。**
+- **已确认（2026-10-30，本轮实测）**：真正的新游戏起点就是 **Map003 ev1**——Map003 是 MapTree 里挂在 map 0 下的钩子图（70×170，无瓦片），`[S]` 起始标记在 (62,38)，ev1 名 `ニューゲーム処理`。链路：Map003 ev1 → `121 [2000000,1]` 切游戏态 → `130 [-1,62,38,1,1]` 传送 → **SampleMapA (62,38) 方向 1** → SampleMapA ev0 `ニューゲーム処理` → 卧室 + HUD。`capture --map-run Map003 --event 1` 的诊断里能看到唯一的 `130 Teleport: MapData/SampleMapA.mps at (62, 38) target -1 options 0x1`。`130` 的原始布局是 `target, x, y, map, options`（不是 `map,x,y,direction`：target=-1 是主角，地图 id 在 arg3）。
+- 标题菜单路径（boot → 标题 → 确认 → CE42 选项 0）发 `130 [-1,60,34,3,1]`，按真实布局是 **target=主角、x=60、y=34、map=3（Map003）**；Map003 ev1 再发 `130 [-1,62,38,1,1]` 到 **map=1（SampleMapA）**。早期实现把 arg0 当地图 id，于是标题路径直接落到 SampleMapA、跳过了 Map003 钩子；**本轮已修正 130 布局**。CE42 是 WOLF 自带的示例标题脚本（`オリジナルタイトル画面Ａ`，3 个示例选项 1/2/3），它把 `SystemGraphic/TitleGraphic*.png` 画在**负号画面层**（`-2`）。这些画面层属于旧地图，地图切换时必须随旧图一起丢弃；早期版本没清，标题画会残留覆盖在卧室上。**本轮已修复**：`Screen::clear_screen_layers()`（只丢 `number < 0`，保留普通编号图片）在 `Game::switch_map` 里调用，`picture.rs` 有单测。修复后 `capture --boot --frames 3200 --key-frame 800:10 --answer 0 --answer-delay 2`：92.1% 非黑、49 live pictures、**192953 指令 / 9440 图片 op / 979 DB 访问 / 39 消息 / 6 选项 / 0 warning**，诊断含两条 130：`MapData/Map003.mps at (60, 34)` 与 `MapData/SampleMapA.mps at (62, 38)`，截图 `work/out/tele130_title.png` 是干净卧室+HUD（无标题画残留）。**结论：标题菜单→新游戏这条真实玩家路径现在可用且视觉正确；Map003 ev1 是 `[S]` 钩子图路径，两条入口都干净。**
 
 ### 4.6 M6 主线纵切片：标题→新游戏→SampleMapA 剧情（本轮完成，可验收）
 
@@ -63,7 +63,7 @@ cargo build -q -p wolf-cli
   --out work/out/m6_map003_newgame.png
 ```
 
-实测（work/all）：92.1% 非黑，180674 指令 / 9544 图片 op / 8 声音 / 994 DB 访问（296 写，335 标签）/ 39 消息 / 5 选项 / 0 warning；peak 12 coroutine；`130 Teleport: MapData/SampleMapA.mps at (62, 38) direction 1`。截图 `work/out/m6_map003_newgame.png` = 卧室（妹妹睡在床上）+ 完整 HUD（第1天 18:30 周一、行动力 0/60、精力 3/3、所持金 2409G、方针/公会评价/状态面板、读书/钻研/漫画/查看图标）。
+实测（work/all）：92.1% 非黑，180674 指令 / 9544 图片 op / 8 声音 / 994 DB 访问（296 写，335 标签）/ 39 消息 / 5 选项 / 0 warning；peak 12 coroutine；`130 Teleport: MapData/SampleMapA.mps at (62, 38) target -1 options 0x1`。截图 `work/out/m6_map003_newgame.png` = 卧室（妹妹睡在床上）+ 完整 HUD（第1天 18:30 周一、行动力 0/60、精力 3/3、所持金 2409G、方针/公会评价/状态面板、读书/钻研/漫画/查看图标）。
 
 **剧情起点**：`--map-run SampleMapA --event 0` 前 900 帧 `--hold-message` 停在开场声明，99.3% 非黑：
 「本作纯属虚构，与现实存在的人物及团体全无关联。禁止对本作品二次发行、贩卖、公布、改编、挪用解包所得的数据等贩卖行为、及其他商用行为。」（`work/out/m6_msg.png`）。

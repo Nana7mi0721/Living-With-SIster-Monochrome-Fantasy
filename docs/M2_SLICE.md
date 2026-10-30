@@ -483,10 +483,10 @@ playtime、Sys3/Sys4、800 个通常変数、全部活着的公共事件 self �
 - `TitleMap.mps` event 2 的 `210 [500042]` 菜单分支里 `130 [-1, 60, 34, 3, 1]`；TitleMap 只有 53x30，
   `(60,34)` 不可能是它自己的格坐标。
 
-实现：`GameHost::teleport` 只排一个 `MapRequest { map, x, y, direction }`（host 不能借 `&mut Game`），
+实现：`GameHost::teleport` 只排一个 `MapRequest { target, map, x, y, options }`（host 不能借 `&mut Game`；130 原始布局是 target,x,y,map,options），
 `Game::frame` 在 VM 返回后处理：`runtime.stop_all(&mut vm)` 停掉旧图所有页面协程（含子协程），
 `Databases::map_path(id)` 查 SysDatabase，解析 `.mps` 后 `start_pages` 启动新图自动页；
-每次切图记一条 `130 Teleport: MapData/SampleMapA.mps at (62, 38) direction 1` 诊断。
+每次切图记一条 `130 Teleport: MapData/SampleMapA.mps at (62, 38) target -1 options 0x1` 诊断。
 
 **实测两条入口**：
 
