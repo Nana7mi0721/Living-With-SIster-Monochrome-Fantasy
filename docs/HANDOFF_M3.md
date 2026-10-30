@@ -81,7 +81,9 @@ e4de9d5 docs: battle subsystem audit and vertical-slice plan
 
 ## 5. M3 下一步（按优先级）
 
-1. **地图滚动/传送/视差**（`crates/wolf-game/src/game.rs` / `tilemap.rs`）：130 传送共 9 处（地图页 8 + CE42 pc118），全部用负地图 id；滚动变量是 SysDatabase 104/105，视差尚无模型。当前 `tilemap.quads(camera=[0,0])` 固定左上角。
+> **先读这条，避免走错方向：** Sys 变量 104/105 是 **SysDatabase type 6 第 104/105 行**的 `Ｘスクロール値` / `Ｙスクロール値`（magic `9000104` / `9000105`），是**引擎每帧输出的相机滚动值，不是 opcode**。全库没有任何脚本读写它们（扫描 550 个公共事件 + 9 张地图，`9000104`/`9000105` 命中 0 次），这正说明它们是引擎输出，**不能反推“相机必须由主人公位置推导”**。六张已注册地图都没有 page 图形，`SampleMapA` 为 64x36 格 = 1024x576，恰好一屏，因此 `tilemap.quads(camera=[0,0])` 目前是对的。`130` 是 Teleport（map,x,y,direction），不是移动；`281` 全库只有 3 处，都在 CE225，参数 `[3,0,0]` / `[2,0,0]` / `[3,0,0]`，是滚屏锁定/解除风格，没有真实位移。**不要**为了 104/105 新增 player/camera 居中模型；只有将来出现“大于屏幕且需要滚动”的地图时才重新评估。下面的“地图滚动”因此降为低优先级，建议先做第 2 项（151/160/162）或第 3 项（战斗切片）。
+
+1. **地图传送状态（低优先级；不做相机跟随）**（`crates/wolf-game/src/game.rs` / `tilemap.rs`）：130 传送共 9 处（地图页 8 + CE42 pc118），全部用负地图 id。可以只记录 `(map, x, y, direction)` 供后续事件/传送使用，**不要**据此重算 camera；视差（SysDatabase type 13 + 地图行第 4 列）当前也没有真实使用点。
 2. **151/160/162 的画面渲染**（`crates/wolf-game/src/game.rs` 的 `GameHost::change_color` 仍是 no-op，transition 没画）：151 是整屏颜色乘法/闪烁（Dungeon ev1/ev3、SampleMapB ev5 有真实数据）；160/162 的过渡遮罩是 `SystemFile/[Transition]Fade.png`（640x480 8-bit 灰度），160 默认 CE48 `[-1, 65546]` 为无遮罩直切 10 帧。
 3. **CE242/CE243 战斗调度器**：由变量 `2000350` 三态驱动，静态无调用者；唯一入口 CE239 戦闘呼び出し（1108 槽，104 个外部调用点）。先做 docs/BATTLE.md 的三阶段切片 A（只读 CE189 数据视图）→ B（CE188 单回合）→ C（可玩）。
 4. **H 场景切片**：docs/HSCENE.md 的 P0 已达成（39 atlas images / 89.4% 非黑）；还需要 `--key-frame N:code` 注入 14 个 `123 [1600030,17]` 按键轮询，然后做主 H 纵切片。
