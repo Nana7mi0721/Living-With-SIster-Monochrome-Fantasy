@@ -1193,17 +1193,19 @@
   "story_start": "--map-run SampleMapA --event 0 --frames 900 --hold-message -> 99.3% non-black, 1 message = opening disclaimer (work/out/m6_msg.png)",
   "background": "108 registered = 10 ENGINE_ALWAYS + 1 auto-start 241 + 97 run_condition==2 (96 tracked after SKIPPED 43, plus GATED_CALL_ONLY 242/243 = 98 tracked); slice starts 17 distinct common events (5 of 98 tracked), no deadlock over 6000 frames (134k@1800 -> 331k@4000 -> 510k@6000 instructions, peak 12)",
   "instrumentation": "crates/wolf-vm/src/exec.rs Vm.started_events: BTreeSet<EventId> + started_event_total; crates/wolf-cli/src/main.rs print_background_report -> 'background:' summary line",
-  "test": "crates/wolf-game/tests/m6_mainline.rs::new_game_story_runs_on_the_background_scheduler_without_deadlock + ::the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room",
+  "test": "crates/wolf-game/tests/m6_mainline.rs::new_game_story_runs_on_the_background_scheduler_without_deadlock + ::the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room + ::clicking_the_reading_icon_in_the_bedroom_runs_the_first_playable_action",
   "screenshots": [
    "work/out/m6_map003_newgame.png",
    "work/out/m6_msg.png",
    "work/out/m6_story_4000.png",
    "work/out/title_clean.png",
-   "work/out/map003_clean.png"
+   "work/out/map003_clean.png",
+   "work/out/m6_first_action.png"
   ],
-  "remaining": "story past the bedroom HUD / first playable action; title->new-game entry now works (capture --boot 92.1% clean bedroom)",
+  "remaining": "longer day loop and save integration; title->new-game entry and first playable action both work",
   "docs": "docs/HANDOFF_M4.md section 4.5-4.6",
   "title_boot": "capture --boot --frames 3200 --key-frame 800:10 --answer 0 --answer-delay 2 -> title splash -> title menu -> confirm -> CE42 130 [-1,60,34,3,1] -> SampleMapA; 92.1% non-black, 49 live pictures, 200705 instructions, 10 sound(s), 979 db accesses, 39 messages, 6 choices, 0 warnings, peak 12; diagnostics exactly one '130 Teleport: MapData/SampleMapA.mps at (60, 34) direction 3'",
-  "title_boot_fix": "Game::switch_map now calls Screen::clear_screen_layers() (drops number<0 whole-screen layers, keeps ordinary pictures); fixes sample title art persisting over the bedroom. Unit test picture::effect_tests::a_map_change_clears_only_the_negative_screen_layers; integration test crates/wolf-game/tests/m6_mainline.rs::the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room"
+  "title_boot_fix": "Game::switch_map now calls Screen::clear_screen_layers() (drops number<0 whole-screen layers, keeps ordinary pictures); fixes sample title art persisting over the bedroom. Unit test picture::effect_tests::a_map_change_clears_only_the_negative_screen_layers; integration test crates/wolf-game/tests/m6_mainline.rs::the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room",
+  "first_action": "capture --map-run Map003 --event 1 --frames 3000 --answer 0 --answer-delay 2 --pointer 884,240 --press-frame 1500 -> one left click on the 读书 icon at (885,240) runs the reading action and floats '对各种事的理解加深了。' bottom-right; 92.0% non-black, 222224 instructions, 0 warnings; test m6_mainline.rs::clicking_the_reading_icon_in_the_bedroom_runs_the_first_playable_action"
  }
 }

@@ -131,3 +131,47 @@ fn the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room() {
     assert!(stale.is_empty(), "title art still on screen: {stale:?}");
 }
 
+
+
+#[test]
+fn clicking_the_reading_icon_in_the_bedroom_runs_the_first_playable_action() {
+    let Some(mut game) = open_game() else { return };
+    game.auto_advance = true;
+    game.set_choice_cursor(0);
+    game.auto_choice = true;
+    game.auto_choice_delay = 2;
+    game.start_map_event_by_name("Map003", 1)
+        .expect("the new-game hook exists");
+
+    // Let the hook teleport into SampleMapA and the room/HUD settle.
+    for _ in 0..1500 {
+        game.frame();
+    }
+    assert!(game.screen.len() > 30, "the bedroom is drawn before the click");
+    assert_eq!(game.stats.warnings, 0);
+
+    // The bedroom menu is mouse driven: one left click on the 读书 icon
+    // (885,240 in the 1024x576 frame) starts the reading action.
+    game.auto_advance = false;
+    game.mouse = [884, 240];
+    game.mouse_buttons = 1;
+    game.frame();
+    game.mouse_buttons = 0;
+    for _ in 0..30 {
+        game.frame();
+    }
+
+    // The result is drawn as a floating text picture, not a 101 message window.
+    let texts: Vec<&str> = game
+        .screen
+        .iter()
+        .map(|picture| picture.text.as_str())
+        .chain(game.messages.iter().map(|message| message.text.as_str()))
+        .collect();
+    assert!(
+        texts.iter().any(|text| text.contains("理解")),
+        "the reading action reports its effect: {texts:?}"
+    );
+    assert_eq!(game.stats.warnings, 0);
+}
+
