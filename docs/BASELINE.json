@@ -1181,5 +1181,21 @@
   "wiring": "Game.audio: Option<wolf_audio::Engine> (None by default), Game::enable_audio() installs Engine::with_asset_root(root), GameHost.audio forwards Host::sound -> apply_sound_cmd; CLI --audio honoured by capture/capture --map/dump/play; crates/wolf-game/tests/audio_wiring.rs pins silent-by-default + recorder intact + no-device safe",
   "proof": "capture --root work/all --audio --load-save SaveData08.sav --frames 90 renders 89.4% non-black with audio engine installed and no panic (work/out/m4_hscene_audio.png)",
   "commit": "270ab37"
+ },
+ "m6_mainline": {
+  "entry": "capture --map-run Map003 --event 1 (Map003 ev1 new-game hook -> 130 Teleport SampleMapA at (62,38) direction 1 -> SampleMapA ev0 new-game processing)",
+  "chain": "Map003 ev1: 121 [2000000,1] -> 130 [-1,62,38,1,1]; SampleMapA ev0 = bedroom + HUD",
+  "measured": "2400 frames, --answer 0 --answer-delay 2, work/all: 180674 instructions / 9544 picture ops / 8 sounds / 994 db accesses (296 write, 335 label) / 39 messages / 5 choices / 0 warnings, peak 12 coroutines, 92.1% non-black; diagnostics contain exactly one '130 Teleport: MapData/SampleMapA.mps at (62, 38) direction 1'",
+  "story_start": "--map-run SampleMapA --event 0 --frames 900 --hold-message -> 99.3% non-black, 1 message = opening disclaimer (work/out/m6_msg.png)",
+  "background": "108 registered = 10 ENGINE_ALWAYS + 1 auto-start 241 + 97 run_condition==2 (96 tracked after SKIPPED 43, plus GATED_CALL_ONLY 242/243 = 98 tracked); slice starts 17 distinct common events (5 of 98 tracked), no deadlock over 6000 frames (134k@1800 -> 331k@4000 -> 510k@6000 instructions, peak 12)",
+  "instrumentation": "crates/wolf-vm/src/exec.rs Vm.started_events: BTreeSet<EventId> + started_event_total; crates/wolf-cli/src/main.rs print_background_report -> 'background:' summary line",
+  "test": "crates/wolf-game/tests/m6_mainline.rs::new_game_story_runs_on_the_background_scheduler_without_deadlock",
+  "screenshots": [
+   "work/out/m6_map003_newgame.png",
+   "work/out/m6_msg.png",
+   "work/out/m6_story_4000.png"
+  ],
+  "remaining": "real engine [S]-marker title->Map003 entry (title menu still uses sample CE42 and leaves title pictures); story past the bedroom HUD",
+  "docs": "docs/HANDOFF_M4.md section 4.5-4.6"
  }
 }

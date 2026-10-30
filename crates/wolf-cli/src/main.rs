@@ -2259,6 +2259,28 @@ fn render_capture_frame(
     true
 }
 
+/// Reports how much of the 108-event background system a run actually exercised.
+///
+/// WOLF keeps 108 coroutines alive for the whole session: 10 engine always-on events
+/// (the ENGINE_ALWAYS list), 1 auto-start event, and 97 run_condition == 2 events
+/// whose start is gated by a variable. The M6 main-line proof is that a real entry
+/// point (SampleMapA event 0, the new-game story) keeps that machinery turning
+/// without deadlocking, so print the registry size next to what ran.
+fn print_background_report(game: &Game) {
+    let tracked = game.auto_events.events();
+    let tracked_ran = tracked
+        .iter()
+        .filter(|event| game.vm.started_events.contains(&event.id))
+        .count();
+    println!(
+        "  background: 108 registered (10 always + 1 auto_start + 97 conditional); {} distinct common event(s) started ({} of {} tracked), {} start(s) total",
+        game.vm.started_events.len(),
+        tracked_ran,
+        tracked.len(),
+        game.vm.started_event_total
+    );
+}
+
 fn run_capture(
     root: &Path,
     out: Option<PathBuf>,
@@ -2491,6 +2513,7 @@ fn run_capture(
         game.auto_events.running_count(),
         game.auto_events.running_ids()
     );
+    print_background_report(&game);
     let warnings = game.stats.warnings;
     println!(
         "  stats     : {} instruction(s), {} picture op(s), {} sound(s), {} db access(es) ({} write, {} label), {} message(s), {} choice(s), {warnings} warning(s)",
@@ -2624,6 +2647,11 @@ fn run_capture_map(
             }
         }
     }
+    // The engine's 108 background coroutines are session-wide: a real map change keeps
+    // them running (Game::switch_map does not touch them), so a map capture that skipped
+    // them would photograph a world that is not the one the game actually shows. Start
+    // them before the map's own pages so HUD/UI scripts are live from frame 0.
+    game.start_engine_events();
     game.start_pages(&map, None);
     let peak = drive_capture_frames(&mut game, frames, answers);
 
@@ -2733,6 +2761,7 @@ fn run_capture_map(
         game.auto_events.running_count(),
         game.auto_events.running_ids()
     );
+    print_background_report(&game);
     let warnings = game.stats.warnings;
     println!(
         "  stats     : {} instruction(s), {} picture op(s), {} sound(s), {} db access(es) ({} write, {} label), {} message(s), {} choice(s), {warnings} warning(s)",

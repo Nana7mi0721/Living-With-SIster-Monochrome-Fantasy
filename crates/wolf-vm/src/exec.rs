@@ -31,6 +31,7 @@
 //! 200,000 by default — roughly 6x the whole title closure). Hitting it just ends
 //! the frame early; the next frame resumes at the same `pc`.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use wolf_format::command::{Command, RouteCommand, Slot, Tail};
@@ -792,6 +793,12 @@ pub struct Vm {
     pub input: InputState,
     /// Transition setting shared by 160/161/162.
     pub transition: TransitionState,
+    /// Every common-event id this VM started at least once. The M6 main-line
+    /// harness reads this to prove how many of the 108 background coroutines
+    /// were exercised by a run (docs/HANDOFF_M4.md section 4.6).
+    pub started_events: BTreeSet<EventId>,
+    /// Successful `start_event` calls, including restarts of the same id.
+    pub started_event_total: u64,
 }
 
 impl Vm {
@@ -809,6 +816,8 @@ impl Vm {
             hot_trace: false,
             input: InputState::default(),
             transition: TransitionState::default(),
+            started_events: BTreeSet::new(),
+            started_event_total: 0,
         }
     }
 
@@ -866,6 +875,8 @@ impl Vm {
         let mut inst = Instance::new(id, None, program);
         inst.return_to = return_to;
         self.instances.push(inst);
+        self.started_events.insert(event);
+        self.started_event_total += 1;
         Some(id)
     }
 

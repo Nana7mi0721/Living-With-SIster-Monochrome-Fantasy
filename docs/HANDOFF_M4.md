@@ -50,14 +50,37 @@ cargo build -q -p wolf-cli
 - `MapTree.dat` / `MapTreeOpenStatus.dat` 已解出并进 loader：`crates/wolf-format/src/maptree.rs`、`crates/wolf-format/tests/maptree.rs`（4 测试）、`verify` 新增 7 项（总 70 项）、`docs/FORMAT_SPEC.md` §2.6。
 - 结构：416 B = 10×0 头 + version 0x90 + u32 **50 条** + 50×`{i32 parent, u32 map_id}` + footer 0xBC；`parent==-1` 为根，全表仅 map **3/31/24** 挂在 map 0 下（正是三张无瓦片钩子图），条目顺序即树显示顺序。
 - **否定结论（重要）**：文件里没有 x/y，也没有起始地图字段 ⇒ “新游戏从哪开始”不是 MapTree 数据驱动。M6 起点仍需从引擎启动流程实测（BOOT=TitleMap ev2 是示例标题教程；真正的新游戏入口候选是 Map003 ev1，见 `docs/MAP_AUDIT.md` §7.5）。
-- 下一步建议：用 `dump`/`capture --map` 跟踪 TitleMap→新游戏的 host 调用（130/174/220/221），确认引擎挑图逻辑；再决定 M6 入口写死为 Map003 还是复刻引擎选择。
+- **已确认（2026-10-30，本轮实测）**：真正的新游戏起点就是 **Map003 ev1**——Map003 是 MapTree 里挂在 map 0 下的钩子图（70×170，无瓦片），`[S]` 起始标记在 (62,38)，ev1 名 `ニューゲーム処理`。链路：Map003 ev1 → `121 [2000000,1]` 切游戏态 → `130 [-1,62,38,1,1]` 传送 → **SampleMapA (62,38) 方向 1** → SampleMapA ev0 `ニューゲーム処理` → 卧室 + HUD。`capture --map-run Map003 --event 1` 的诊断里能看到唯一的 `130 Teleport: MapData/SampleMapA.mps at (62, 38) direction 1`。
+- 标题菜单路径（boot → 标题 → 确认 → CE42 选项 0）也会发 `130 [-1,60,34,3,1]` 到 SampleMapA，但 CE42 是 WOLF 自带的示例标题脚本（`オリジナルタイトル画面Ａ`，3 个示例选项 1/2/3），它画的 `SystemGraphic/TitleGraphic*.png` 画面层不会在传送前擦除，导致走这条路径时标题画残留覆盖在卧室上；Map003 起点路径干净。**结论：M6 入口以 Map003 ev1 为准**，标题→游戏的真实引擎入口（用 `[S]` 起始标记）后续再复刻。
 
+### 4.6 M6 主线纵切片：标题→新游戏→SampleMapA 剧情（本轮完成，可验收）
+
+**入口（干净、推荐）**：`--map-run Map003 --event 1`（Map003 ev1 新游戏处理 → 130 到 SampleMapA → ev0）。
+
+```bash
+./target/debug/wolf-cli.exe --root work/all capture \
+  --map-run Map003 --event 1 --frames 2400 --answer 0 --answer-delay 2 \
+  --out work/out/m6_map003_newgame.png
+```
+
+实测（work/all）：92.1% 非黑，180674 指令 / 9544 图片 op / 8 声音 / 994 DB 访问（296 写，335 标签）/ 39 消息 / 5 选项 / 0 warning；peak 12 coroutine；`130 Teleport: MapData/SampleMapA.mps at (62, 38) direction 1`。截图 `work/out/m6_map003_newgame.png` = 卧室（妹妹睡在床上）+ 完整 HUD（第1天 18:30 周一、行动力 0/60、精力 3/3、所持金 2409G、方针/公会评价/状态面板、读书/钻研/漫画/查看图标）。
+
+**剧情起点**：`--map-run SampleMapA --event 0` 前 900 帧 `--hold-message` 停在开场声明，99.3% 非黑：
+「本作纯属虚构，与现实存在的人物及团体全无关联。禁止对本作品二次发行、贩卖、公布、改编、挪用解包所得的数据等贩卖行为、及其他商用行为。」（`work/out/m6_msg.png`）。
+
+**并行事件**：注册表 108 个后台事件 = 10 个 `ENGINE_ALWAYS`（`game.rs:60-71` [48,261,269,270,271,224,225,213,214,41]）+ 1 个 `ENGINE_AUTO_START`（241）+ 97 个 `run_condition==2`（auto_events 扣掉 SKIPPED 43 后追 96，加 GATED_CALL_ONLY [242,243] 共 98 个受跟踪）。这段剧情 4000/6000 帧里实起 17 个不同 common event（受跟踪的 5 个），**0 死锁**：指令从 134k@1800 → 331k@4000 → 510k@6000 持续增长，peak 并发 12；其余 97 个是变量门控的 UI 状态，切片本来就不会全触发（属正确行为，不是缺口）。
+
+**新增可观测性**：`crates/wolf-vm/src/exec.rs` 的 `Vm` 增 `pub started_events: BTreeSet<EventId>` 与 `pub started_event_total: u64`（`start_event_with` 里插入），CLI 的 capture 摘要新增 `background:` 行（`print_background_report`）。
+
+**测试**：`crates/wolf-game/tests/m6_mainline.rs::new_game_story_runs_on_the_background_scheduler_without_deadlock` 固定该切片：900 帧、进度帧 >600、指令 >50k、peak≥9、warnings 0、`screen.len()>30`、所有 `ENGINE_ALWAYS` + 241 + 38 都已启动、`started_events.len()>=13`。
+
+**这条切片之外仍是缺口（M6 未完）**：① 标题菜单仍走 WOLF 示例 CE42，标题画面层在传送后残留（见 §4.5），需要复刻引擎按 `[S]` 进入 Map003 的真实入口；② 剧情只到开场声明 + 卧室 HUD，尚未推进到第一段可选择行动；③ 201 SetMoveRoute 无地图层、290 kind 10、CData (5,16,0) 越界读仍按既有诊断透传（均不影响本切片）。
 ## 5. 环境/协作陷阱
 
 - 音频依赖必须用这套**离线可编译**特性集：`symphonia 0.6.1 { default-features=false, features=["flac","mp3","pcm","vorbis","ogg","wav"] }` + `cpal 0.18.2`。默认/all 会拉未缓存的 mkv/adpcm/aac/rustfft。
 - cpal 各平台 crate（alsa/coreaudio/objc2-*）需要一次联网构建把 Cargo.lock 与缓存落好；之后 `--offline` 可复现。
-- `crates/wolf-vm/src/exec.rs` 是 **CRLF**；`git commit -F work/_commit_*.txt`；截图/临时产物写 `work/out/`；不要提交 3 个 wolf-format scratch 文件。
+- `crates/wolf-vm/src/exec.rs` 实测已是 **LF**（旧文档写 CRLF 已过时）；打补丁前先 `python` 统计一次 crlf/lf，按实际换行写回。`git commit -F work/_commit_*.txt`；截图/临时产物写 `work/out/`；不要提交 3 个 wolf-format scratch 文件。
 
 ## 6. 里程碑位置
 
-M0–M3 done、M4 后端+接线 done（差人耳）；**M5 存档层** 已由 `save_roundtrip` 测试覆盖（逐字节 + 引擎级 8/8）；剩余大项是 **M6 主线贯通**（标题→SampleMapA 剧情，108 并行事件无死锁）。M6 的第一块拼图 `MapTree.dat` 已解码（见 §4.5），但起点坐标不在其中。
+M0–M3 done、M4 后端+接线 done（差人耳）；**M5 存档层** 已由 `save_roundtrip` 测试覆盖（逐字节 + 引擎级 8/8）；剩余大项是 **M6 主线贯通**。已完成：MapTree.dat 解码（§4.5）+ 新游戏起点确认 Map003 ev1 → SampleMapA 的链路（§4.5）。已交付 M6 纵切片（§4.6）：`capture --map-run Map003 --event 1` 干净跑到卧室 HUD + 开场声明，108 后台注册表活跃、6000 帧无死锁，有 `m6_mainline.rs` 测试固定。仍需做：复刻引擎按 `[S]` 起始标记的真实标题→Map003 入口（现在标题菜单走示例 CE42，画面层残留），以及把剧情推进到第一段可玩行动。
