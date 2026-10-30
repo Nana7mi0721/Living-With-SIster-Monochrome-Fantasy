@@ -3,6 +3,7 @@
 > 仓库：`E:\Study\github program\imoto life`
 > 基线 HEAD：`270ab37 M4: wire the audio engine into Game and add --audio`
 > 前置：M3 已收口（`12ecfb6 M3 close: row-past-count DB semantics, battle slice C unreachable proof, doc closure`）；M0–M3 全部完成，M4 后端与接线完成，M4 只差“有设备时的人耳验收”。
+> 外部调研（GPT deep research 6 份 + PDF）的研判索引见 `docs/research/GPT_RESEARCH_TRIAGE.md`；与本仓库实测冲突处一律以本仓库代码/已验证文档为准。
 
 ## 1. 一句话现状
 
