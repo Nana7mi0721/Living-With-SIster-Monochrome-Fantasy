@@ -791,11 +791,11 @@ BGM 循环点来自 `SysDatabase#1 BGMリスト` 的 **col3 ループ開始位�
 （`auto_events.rs:151 sync` 只处理 `run_condition==2`，`ENGINE_AUTO_START=[241]` 只硬编码 241）。
 
 > **实测修订（M3 战斗切片）：** 上面“CE188 自己就能走完一回合（不调 242/243）”的推断**不成立**。
-> 用新增的 `wolf-cli dump --event 188 --frames 2000 --var 2000350=2` 追踪，CE188 → CE191 → **CE65（玩家指令选择）停在 pc78 等输入**（124 按键轮询），
-> `2000352` 始终为 0，另有 17 条 `unanswered`（装备列 `装備中の武器`/`装備中の防具1..4`、敌个体列 `基本回避率`/`取得経験値`… 在 `CDataBase.json` 里缺失）。
-> 因此阶段 B 必须要么注入按键在 CE65 里完成指令选择，要么先修 `CDataBase.json` 的标签漂移；在此之前 B 的 `2000352` 判据不可达。
+> 用新增的 `wolf-cli dump --event 188 --frames 2000 --var 2000350=2` 追踪，CE188 → CE191 → **CE65（玩家指令选择）停在 pc78 等输入**（124 按键轮询），`2000352` 始终为 0。
+> **`unanswered` 已从 17 条降到 1 条**：战斗脚本按一套更丰富的“战斗模板”读表（`CData` type10 実为 40×16、无「装備中の武器/防具1..4」；`Data` type9 実为 100×9、无「基本命中率/回避率/取得経験値/入手…」；`CData` type22 竟 0 列），这些列在出货 `.dat` 里不存在。已修：`crates/wolf-game/src/game.rs` 的 `Game::database` 对“列号越过该表字段数”的读返回引擎默认空值（数字 0 / `""`）并计入 `GameStats.database_out_of_schema`，不再记 `unanswered`；行号越界仍按原设计（行被清空读到空槽是未知态）保留 `unanswered`，故 `CData (5,16,0)`（行 16 越过 16 行）仍报 1 条。单测 `a_column_past_the_field_count_reads_as_the_empty_cell` 通过。
+> 因此阶段 B 剩余障碍只剩两条：① CE65 需要连续多次导航/确认完成指令菜单；② 深入后读“被清空/重建的临时表”（`CData (10,0,3) 戦闘不能？`、`(10,0,6) SP` 等，行被 resize 到 0 → `exec.rs:2039` 读到 `None` 保留旧值），需在完整状态机统一处理。标签漂移本身已不再是障碍。
 > 已落地：`auto_events.rs` 新增 `GATED_CALL_ONLY = [242, 243]`，把这两条 condvar 门控的 `run==0` 事件并入边缘触发调度器（开机 2000350=0 恒休眠，跟踪数 96→98）。
-> 另有 `dump --key-frame N:CODE`（按键注入）+ `dump --watch EVENT`（看某事件 PC 变化）：实测 `--key-frame 80:10` 把 CE65 从 `pc 78` 推进到 `pc 132`，证明输入不再是硬障碍；但完整一回合还需多次导航确认 + 先修 `CDataBase.json` 的装备/敌个体列标签。
+> 另有 `dump --key-frame N:CODE`（按键注入）+ `dump --watch EVENT`（看某事件 PC 变化）：实测 `--key-frame 80:10` 把 CE65 从 `pc 78` 推进到 `pc 132`，证明输入不再是硬障碍；完整一回合还需多次导航确认 + 处理“被清空临时表”的运行时语义。
 
 ### 5.3 阶段 C · 可玩战斗（Playable battle）
 

@@ -144,6 +144,13 @@ pub struct GameStats {
     /// no file holds those rows, so the answer is the empty value
     /// (docs/BATTLE.md section 2.6).
     pub database_slots: u64,
+    /// Of those, reads that fell past a table's own row or column bounds because the
+    /// shipped `.dat` is smaller than the battle template the scripts were written
+    /// against (the 16-field `戦闘時一時ステータス` carries no `装備中の武器/防具`,
+    /// the 9-field `敵キャラ個体デ—タ` carries no `基本命中率/取得経験値`). The
+    /// engine answers a Variant default there, so these are empty cells, counted
+    /// apart from the reads that miss because a label failed to resolve.
+    pub database_out_of_schema: u64,
     /// Messages shown.
     pub messages: u64,
     /// Choice prompts shown.
@@ -1569,6 +1576,27 @@ impl Host for GameHost<'_> {
                 DbValue::Num(0)
             });
         }
+        // A COLUMN past the table's own field count is an EMPTY cell, not a broken
+        // label: a field the .dat does not declare cannot hold a value on ANY row, so
+        // the row is irrelevant. THIS game was built from a battle template larger than
+        // the shipped .dat: 戦闘時一時ステータス has 16 fields (no 装備中の武器/装備中の
+        // 防具1..4) and 敵キャラ個体デ—タ has 9 (no 基本命中率/回避率/取得経験値/入手…).
+        // The engine answers a Variant default for a field it does not hold, so answer
+        // 0/"" and count it apart from the reads that miss because a label truly failed
+        // to resolve. A row past the count is deliberately left unanswered (a shrunk or
+        // cleared table must not serve a stale value), so this branch is column-only.
+        if self
+            .databases
+            .field_count(container, db_type)
+            .is_some_and(|fields| fields > 0 && usize::try_from(column).is_ok_and(|c| c >= fields))
+        {
+            self.stats.database_out_of_schema += 1;
+            return Some(if wants_text {
+                DbValue::Str(String::new())
+            } else {
+                DbValue::Num(0)
+            });
+        }
         // The labels ride along, because they are the only clue that a drifted type id is
         // the reason the read missed (an unresolvable label means the .project walk lost
         // the record, not that the script is wrong).
@@ -2388,6 +2416,40 @@ mod tests {
                 &op(read, 0, 40, 0, 0x51000, None, Some(3_000_005))
             ),
             None
+        );
+    }
+
+    #[test]
+    fn a_column_past_the_field_count_reads_as_the_empty_cell() {
+        // The battle template reads columns this game's .dat does not carry:
+        // 戦闘時一時ステータス (CData type 10) has 16 fields, but CE191 asks for
+        // 装備中の武器 at column 17 and 装備中の防具1..4 at 27..30. The engine answers
+        // a Variant default for a field it does not hold, so the read is empty, not a
+        // broken label (docs/BATTLE.md section 2.2).
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        let read = wolf_vm::DbDirection::Read;
+        let fields = game
+            .databases
+            .field_count(crate::db::Container::CData, 10)
+            .expect("戦闘時一時ステータス exists");
+        assert!(fields >= 16, "the game ships 16 fields, got {fields}");
+        let column = i32::try_from(fields).unwrap(); // one past the last field
+        assert_eq!(
+            cell(&mut game, &op(read, 10, 0, column, 0x51000, None, Some(1_600_005))),
+            Some(DbValue::Num(0)),
+            "a numeric read past the field count is zero"
+        );
+        assert_eq!(
+            cell(&mut game, &op(read, 10, 0, column, 0x51000, None, Some(3_000_005))),
+            Some(DbValue::Str(String::new())),
+            "a string read past the field count is empty"
+        );
+        assert_eq!(game.stats.database_out_of_schema, 2);
+        // A column the table DOES hold still answers, so the guard is not too wide.
+        assert!(
+            cell(&mut game, &op(read, 10, 0, 0, 0x51000, None, Some(3_000_005))).is_some(),
+            "an in-range string column still reads"
         );
     }
 }
