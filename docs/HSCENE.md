@@ -533,7 +533,7 @@ C1 加载 SaveData08：**86 张 live 图 → 只有 31 张进了 quad**。缺的
 | ~~P1~~ | ~~160/162 转场不画~~ | `crates/wolf-game/src/transition.rs` `ScreenTransition` | C4 诊断 | **已解决**（684d711，见 §4.4；151 tint + 160/162 淡入淡出均落地） |
 | ~~P2~~ | ~~7 条 `Picture/word_effect*` missing~~ | `crates/wolf-game/src/assets.rs` 窄别名 | C14 | **已解决**（684d711，`Picture/word_effect*→hword/` + `asset fallback:` 诊断） |
 | P2 | 250 数据库项：仅剩 `CData(5,16,0)` 行越界 | `game.rs` `Game::database` | ev33 诊断 1 条 | **基本闭环**（capture 0 条；见 §4.5） |
-| P3 | HUD 文本比真实字体宽 6% | `textpic.rs` | `docs/TEXT_SPEC.md` |
+| ~~P3~~ | ~~HUD 文本比真实字体宽 6%~~ | `crates/wolf-game/src/fontmetrics.rs` + `textpic.rs` | `docs/TEXT_SPEC.md` | **已解决**：`FontMetrics` 读 Lolita.ttf 的真实 advance，`Game::text_quads` 走 `layout_with`/`measure_with`；右对齐 HUD 左沿从 80 移到 83.69（零售墨迹 85），测试 `text_metrics.rs` |
 
 ---
 

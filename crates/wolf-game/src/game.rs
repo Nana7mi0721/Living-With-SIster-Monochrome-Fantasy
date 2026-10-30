@@ -229,6 +229,9 @@ pub struct Game {
     /// Whole-screen transition fade from `160`/`161`/`162`. Neutral (brightness 1.0)
     /// unless a `kind >= 0` transition is running; a `kind -1` hard cut leaves it neutral.
     pub screen_transition: ScreenTransition,
+    /// Real glyph advances for text-picture anchors, when the host has loaded the game's
+    /// font. `None` keeps the testable half-em fallback in [`crate::textpic`].
+    pub font_metrics: Option<crate::fontmetrics::FontMetrics>,
     /// The current map's tile layers, drawn underneath every picture. WOLF draws the
     /// tile grid first and the picture layer over it; keeping the two separate here
     /// preserves that order and lets a map switch replace only the tile half.
@@ -344,6 +347,7 @@ impl Game {
             screen: Screen::new(),
             screen_tint: ScreenTint::new(),
             screen_transition: ScreenTransition::new(),
+            font_metrics: None,
             tilemap: None,
             tilesets,
             assets: Assets::new(&root),
@@ -387,6 +391,13 @@ impl Game {
     /// [`Self::new`] defaults to `None`.
     pub fn enable_audio(&mut self) {
         self.audio = Some(wolf_audio::Engine::with_asset_root(self.root.clone()));
+    }
+
+    /// Installs real glyph advances for text-picture layout. Returns false when the blob
+    /// is not a usable font, in which case the half-em fallback stays in place.
+    pub fn set_font_metrics(&mut self, bytes: Vec<u8>) -> bool {
+        self.font_metrics = crate::fontmetrics::FontMetrics::load(bytes);
+        self.font_metrics.is_some()
     }
 
     /// Frames of play time, as a save file stores them.
@@ -881,13 +892,25 @@ impl Game {
             if !picture.kind.is_text() || picture.hidden || picture.text.is_empty() {
                 continue;
             }
-            let runs = crate::textpic::layout(
-                &picture.text,
-                picture.x as f32,
-                picture.y as f32,
-                picture.anchor,
-                &ctx,
-            );
+            let runs = if let Some(metrics) = &self.font_metrics {
+                let advance = |ch: char, px: f32| metrics.advance(ch, px);
+                crate::textpic::layout_with(
+                    &picture.text,
+                    picture.x as f32,
+                    picture.y as f32,
+                    picture.anchor,
+                    &ctx,
+                    &advance,
+                )
+            } else {
+                crate::textpic::layout(
+                    &picture.text,
+                    picture.x as f32,
+                    picture.y as f32,
+                    picture.anchor,
+                    &ctx,
+                )
+            };
             let alpha = picture.alpha();
             for run in runs {
                 if run.text.is_empty() {
@@ -901,7 +924,12 @@ impl Game {
                 // The box only has to be wide enough that the glyph pass never
                 // re-wraps what the layout already broke; one extra em of slack
                 // covers the shaped advance being a few percent off the half-em rule.
-                let width = crate::textpic::measure(&run.text, run.font_px) + run.font_px;
+                let width = if let Some(metrics) = &self.font_metrics {
+                    let advance = |ch: char, px: f32| metrics.advance(ch, px);
+                    crate::textpic::measure_with(&run.text, run.font_px, &advance) + run.font_px
+                } else {
+                    crate::textpic::measure(&run.text, run.font_px) + run.font_px
+                };
                 quads.push(crate::atlas::TextQuad {
                     number: picture.number,
                     text: run.text,

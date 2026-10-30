@@ -83,6 +83,8 @@ cargo build -q -p wolf-cli
 
 **跨天推进（本轮新增）**：真实就寝例程 CE329（标题「┗就寝処理」）可在真实 Game 里直接启动并验证：普通变量 4=18、5=30、160=3、6=1（18:30、第 3 天、周二）为起点，300 帧后到 08:30、第 4 天、周三（var4 18→7:45(f76)→8:00(f186)→8:30(f221)，var160 3→4，var6 1→2），0 warning、15618 指令。capture --event 329 --frames 300 --var 2000004=18 --var 2000005=30 --var 2000160=3 --var 2000006=1 出图 work/out/m6_sleep.png：91.4% 非黑、6 个音效、妹妹台词「早上好。」。测试 m6_mainline.rs::the_sleep_event_rolls_over_to_the_next_morning 固定这条。**边界**：时刻显示 CE217 本身只做分钟/小时/星期回卷，天数 +1 在 CE329 就寝処理；玩家从卧室就寝走 SampleMapA ev4「メニュー処理」page4 pc98/101 的 210 [500329,1,0/1]（受菜单状态变量 63/62/464/60 门控），本切片尚未打通该菜单入口——引擎跨天已真实跑通，可玩跨天还差菜单导航。
 
+**HUD 字宽接真实字体（本轮新增）**：文本图片的锚点/右对齐以前用半角 0.5 em 估算，数字串会比真实 Lolita.ttf 宽约 6%，右对齐 HUD 左沿偏 3–4 px。新增 `crates/wolf-game/src/fontmetrics.rs`（`FontMetrics`，用 ttf-parser 读 `Fonts/Lolita.ttf`，按字符缓存 em advance，缺字形回退半角规则），`Game` 增加可选 `font_metrics` 与 `set_font_metrics`；`Game::text_quads` 在有字体时走 `textpic::layout_with` / `measure_with`。CLI 的 `install_font_metrics`（capture/dump/play 共用 `find_font`）把同一份 TTF 喂给布局和渲染器。实测 `capture --map-run Map003 --event 1 --frames 2400`：`pic 6200`（`\f[24]18:30`）左沿由半角估算的 80 移到 83.69（零售墨迹 85），仍 92.1% 非黑、180674 指令、0 warning；截图 work/out/map003_metrics.png。测试：`fontmetrics` 3 个单测 + `crates/wolf-game/tests/text_metrics.rs`（同一 Game 在 `set_font_metrics` 前后断言右对齐左沿 80 → 83.69）。
+
 **这条切片之外仍是缺口（M6 未完）**：① ~~标题画面层残留~~ **已解决**（§4.5：地图切换清负号画面层；capture --boot 92.1% 与 Map003 一致，回归测试 the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room）；② ~~剧情只到开场声明 + 卧室 HUD~~ **已推进到前两段可玩行动（读书/钻研，连续可做）**（上一段）；③ 201 SetMoveRoute 无地图层、290 kind 10、CData (5,16,0) 越界读仍按既有诊断透传（均不影响本切片）。
 ## 5. 环境/协作陷阱
 

@@ -562,7 +562,7 @@ playtime、Sys3/Sys4、800 个通常変数、全部活着的公共事件 self �
 | `250` 的标签解析 | **已接上**（`resolve_labels`，开口实测 10 次命中，§4.4）；剩的是**行不存在**的读（CData 行 100 / 行 -1），原作语义未验证 |
 | `290` 效果的绘制接线 | **已实现**：`picture.rs` 的 `Zoom/Shake/Breath/PatternFx/color_corr/shift` 全部接到 `destination()` / `tone_byte()`；`8/9/10` パターン切替已按 `pattern_now()` 选精灵表格子（159 个 wolf-game 测试）。`0` フラッシュ 的数学仍未与零售逐像素对照 |
 | `290` 的实参求值 | **已修**：`exec.rs` 的 290 分支对每个 int 实参调用 `eval_num`，self 变量 magic（`1600021` 等）现在能取到图号（测试 `effect_operands_are_evaluated_before_the_host_sees_them`） |
-| HUD 文本排版 | **已修**：`Game::text_quads()` 按 `\f[n]` / anchor / `<R>` / `\c[n]` / `\E` 切片出图（crates/wolf-game/src/textpic.rs，25 个单测），见 §3.9；半角 advance 仍按 0.5 em 估算，anchor 1/3/4 有 ≤6% 偏差（`measure_with` 未接 cosmic-text） |
+| HUD 文本排版 | **已修**：`Game::text_quads()` 按 `\f[n]` / anchor / `<R>` / `\c[n]` / `\E` 切片出图（crates/wolf-game/src/textpic.rs，25 个单测），见 §3.9；**字宽也已接真实字体**：`FontMetrics`（crates/wolf-game/src/fontmetrics.rs，ttf-parser）读 Lolita.ttf，`layout_with`/`measure_with` 用真实 advance，锚点 1/3/4 不再有 6% 偏差（测试 `text_metrics.rs`） |
 | `290` 的图片号是**区间** | `args[2..3]` 是闭区间 [lo, hi]（官方「□～□ の欄に…」）；若按单张实现，type 4 的 7 对按钮、type 5 的整幕压暗、CE85 的「全カーソル」都会只作用一半（docs/OPCODE_290.md §0.4） |
 | 字符串实参 | **已实现**：8,260 个带字符串实参的 210/300 调用点写入 CSelf5..8（docs/OPCODE_210_RETURN.md §8），零反例 |
 | 存档/读档（220/221/222） | **读侧、221/222 与 220 mode 0 均已落地**：`--load-save` 重建画面（Part3 通常变量 / セルフ変数 / 指文字列、Part2 时间与 Sys3/4、Part5 图片表）；221/222 经 `SaveOp` 读写并落盘，9 档 9/9 逐字节可逆；`Game::save_to` 从模板 + 运行时状态重建 Part2/3/5 与 vardb（见 §4.5）。剩 221 flag=1 站点、retail 04 字体记录的字节级写回，以及「Rust 写出的 .sav 被官方游戏读回」未验证 |

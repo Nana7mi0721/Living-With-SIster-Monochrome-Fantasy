@@ -3130,6 +3130,7 @@ name = "wolf-game"
 version = "0.1.0"
 dependencies = [
  "image",
+ "ttf-parser",
  "wolf-audio",
  "wolf-format",
  "wolf-save",

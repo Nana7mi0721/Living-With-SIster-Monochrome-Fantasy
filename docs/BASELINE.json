@@ -1202,8 +1202,10 @@
    "work/out/map003_clean.png",
    "work/out/m6_first_action.png",
    "work/out/m6_second_action.png",
-   "work/out/m6_sleep.png"
+   "work/out/m6_sleep.png",
+   "work/out/map003_metrics.png"
   ],
+  "text_metrics": "Text-picture anchors use real Lolita.ttf advances now. crates/wolf-game/src/fontmetrics.rs::FontMetrics parses the TTF with ttf-parser, caches em advances per char and falls back to the half-em rule for uncovered glyphs; Game::set_font_metrics installs it and Game::text_quads then uses textpic::layout_with / measure_with. CLI install_font_metrics feeds capture/dump/play from the same find_font bytes the renderer shapes. Proof: capture --map-run Map003 --event 1 --frames 2400 -> pic 6200 (\\f[24]18:30) left edge 80 (half-em) -> 83.69 (retail ink 85), still 92.1% non-black / 180674 instructions / 0 warnings (work/out/map003_metrics.png). Tests: fontmetrics (3 unit) + crates/wolf-game/tests/text_metrics.rs (same Game before/after set_font_metrics asserts 80 -> 83.69).",
   "day_rollover": "The real sleep routine CE329 (title 就寝処理) started headlessly with vars 4=18:30, 160=3, 6=1 advances to 08:30 on day 4 (Wednesday) over 300 frames: var4 18 -> 7 (f76) -> 8 (f186), var5 30 -> 45 -> 0 -> 15 -> 30, var160 3 -> 4, var6 1 -> 2; 0 warnings, 15618 instructions. capture --event 329 --frames 300 --var 2000004=18 --var 2000005=30 --var 2000160=3 --var 2000006=1 -> 91.4% non-black, 10804 instructions, 6 sounds, message 早上好。 (work/out/m6_sleep.png). CE217 時刻表示 only wraps minutes/hours/weekdays; the day counter increments in CE329 就寝処理. The player-facing entry is SampleMapA ev4 メニュー処理 page4 pc98/101 (210 [500329,1,0/1], menu state vars 63/62/464/60) which the bedroom slice does not yet expose.",
   "remaining": "player-facing longer day loop still needs the menu-driven 就寝 route; engine-level cross-day rollover through CE329 is verified",
   "docs": "docs/HANDOFF_M4.md section 4.5-4.6",

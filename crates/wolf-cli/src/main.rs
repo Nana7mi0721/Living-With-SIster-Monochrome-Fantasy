@@ -1617,6 +1617,7 @@ fn run_dump(
     if AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
         game.enable_audio();
     }
+    install_font_metrics(&mut game, root);
     // A dump has no keyboard: dismiss messages and answer prompts so a turn loop
     // marches to its end instead of parking on the first 101/102.
     game.auto_advance = true;
@@ -1883,6 +1884,14 @@ fn game_dir() -> PathBuf {
 /// Search order: `<root>/Fonts`, `<root>`, then `$WOLF_GAME_DIR`, then the documented
 /// Steam install path. A missing font is not fatal - the capture still renders the art
 /// and reports that text was skipped.
+/// Gives text-picture layout the real glyph advances from the same TTF the renderer
+/// shapes with. Without it anchors 1/3/4 drift by the half-em-vs-real difference.
+pub(crate) fn install_font_metrics(game: &mut Game, root: &Path) {
+    if let Some((_, bytes)) = find_font(root) {
+        game.set_font_metrics(bytes);
+    }
+}
+
 fn find_font(root: &Path) -> Option<(PathBuf, Vec<u8>)> {
     const NAMES: [&str; 4] = [
         "Lolita.ttf",
@@ -2301,6 +2310,7 @@ fn run_capture(
     if AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
         game.enable_audio();
     }
+    install_font_metrics(&mut game, root);
     // A capture has no keyboard, so messages dismiss immediately. Choice prompts are
     // HELD by default: the title's first prompt is its menu, and answering it teleports
     // into the game (docs/M1_CLOSURE.md §5), so a held run is what photographs the title.
@@ -2628,6 +2638,7 @@ fn run_capture_map(
     if AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
         game.enable_audio();
     }
+    install_font_metrics(&mut game, root);
     game.auto_advance = true;
     game.auto_events.set_enabled(answers.auto_events);
     if let Some(index) = answers.index {

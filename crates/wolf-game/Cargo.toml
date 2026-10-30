@@ -16,3 +16,6 @@ wolf-audio = { workspace = true }
 # JPEG (SystemGraphic/TitleGraphic.jpg, MapChip/*.png ...). Enabling the other decoders
 # triples the cold build and buys nothing.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# Text pictures need real glyph advances for anchor/right-align maths; the renderer
+# already shapes the same TTF, so this keeps both sides on the same width.
+ttf-parser = "0.25"
