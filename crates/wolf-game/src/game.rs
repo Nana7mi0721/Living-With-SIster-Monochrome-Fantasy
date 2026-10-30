@@ -37,6 +37,7 @@ use crate::map_runtime::MapRuntime;
 use crate::picture::{PictureKind, Screen, ANCHOR_CENTRE, SCREEN_H, SCREEN_W};
 use crate::tilemap::TileMap;
 use crate::tint::ScreenTint;
+use crate::transition::ScreenTransition;
 
 /// The event the game opens with in this build (the "original title screen A").
 pub const TITLE_EVENT: u32 = 42;
@@ -219,6 +220,9 @@ pub struct Game {
     /// Whole-screen colour multiplier from `151 ChangeColor`. Neutral unless a map event
     /// is flashing or darkening the map and the screen-layer pictures.
     pub screen_tint: ScreenTint,
+    /// Whole-screen transition fade from `160`/`161`/`162`. Neutral (brightness 1.0)
+    /// unless a `kind >= 0` transition is running; a `kind -1` hard cut leaves it neutral.
+    pub screen_transition: ScreenTransition,
     /// The current map's tile layers, drawn underneath every picture. WOLF draws the
     /// tile grid first and the picture layer over it; keeping the two separate here
     /// preserves that order and lets a map switch replace only the tile half.
@@ -330,6 +334,7 @@ impl Game {
             vm: Vm::new(programs),
             screen: Screen::new(),
             screen_tint: ScreenTint::new(),
+            screen_transition: ScreenTransition::new(),
             tilemap: None,
             tilesets,
             assets: Assets::new(&root),
@@ -557,6 +562,7 @@ impl Game {
             self.playtime_frames,
         );
         self.apply_screen_tint(&mut quads, false);
+        self.drain_asset_fallbacks();
         quads
     }
 
@@ -569,6 +575,7 @@ impl Game {
     pub fn picture_quads(&mut self, atlas: &mut Atlas) -> Vec<SpriteQuad> {
         let mut quads = atlas.sprites(&self.screen, &mut self.assets);
         self.apply_screen_tint(&mut quads, true);
+        self.drain_asset_fallbacks();
         quads
     }
 
@@ -578,18 +585,40 @@ impl Game {
         self.screen_tint.rgb()
     }
 
-    /// Multiplies each quad's tint by the screen tint (only screen layers when
-    /// `screen_layers_only`), skipping the work entirely while the tint is neutral.
+    /// Folds any asset-name fallbacks taken while building this frame into diagnostics.
+    ///
+    /// Keeps the workaround (e.g. the `Picture/word_effect*` typo) visible in the same
+    /// `1x ...` diagnostic stream every other note uses, instead of silently succeeding.
+    fn drain_asset_fallbacks(&mut self) {
+        for message in self.assets.take_fallbacks() {
+            *self.diagnostics.entry(message).or_insert(0) += 1;
+        }
+    }
+
+    /// Multiplies each quad's tint by the screen tint and the transition fade.
+    ///
+    /// The 151 tint only touches the map and the negative-numbered screen-layer
+    /// pictures (`screen_layers_only`); the 160/162 transition fade is a whole-screen
+    /// overlay, so it dims *every* quad including the HUD, exactly as a screen wipe
+    /// would. Both are skipped while neutral so the common case stays a no-op.
     fn apply_screen_tint(&self, quads: &mut [SpriteQuad], screen_layers_only: bool) {
         let tint = self.screen_tint.rgb();
-        if tint == [1.0, 1.0, 1.0] {
+        let tint_on = tint != [1.0, 1.0, 1.0];
+        let fade = self.screen_transition.brightness();
+        let fade_on = fade < 1.0;
+        if !tint_on && !fade_on {
             return;
         }
         for quad in quads {
-            if !screen_layers_only || quad.number < 0 {
+            if tint_on && (!screen_layers_only || quad.number < 0) {
                 quad.tint[0] *= tint[0];
                 quad.tint[1] *= tint[1];
                 quad.tint[2] *= tint[2];
+            }
+            if fade_on {
+                quad.tint[0] *= fade;
+                quad.tint[1] *= fade;
+                quad.tint[2] *= fade;
             }
         }
     }
@@ -939,6 +968,7 @@ impl Game {
         let mut report = self.vm.step_frame(&mut GameHost {
             screen: &mut self.screen,
             screen_tint: &mut self.screen_tint,
+            screen_transition: &mut self.screen_transition,
             assets: &mut self.assets,
             databases: &mut self.databases,
             sounds: &mut self.sounds,
@@ -1041,6 +1071,8 @@ impl Game {
         // A `151 ChangeColor` ramp advances one frame at a time, alongside the picture
         // slides it shares the screen with.
         self.screen_tint.tick();
+        // A `160`/`162` transition fade advances one frame at a time on the same clock.
+        self.screen_transition.tick();
         // Sys12 (文章の表示 実行中？) is the engine's flag, not a script variable: a
         // scan of all 550 common events finds 7 reads and zero writes, and common
         // event 63 polls it every frame to decide whether to paint or erase the
@@ -1268,6 +1300,7 @@ impl crate::message::Colours for PictureColours<'_> {
 struct GameHost<'a> {
     screen: &'a mut Screen,
     screen_tint: &'a mut ScreenTint,
+    screen_transition: &'a mut ScreenTransition,
     assets: &'a mut Assets,
     databases: &'a mut crate::db::Databases,
     sounds: &'a mut Vec<SoundCmd>,
@@ -1633,11 +1666,24 @@ impl Host for GameHost<'_> {
     }
 
     fn transition(&mut self, kind: i32, flags: i32) {
-        // `160`/`162` name a fade mask, but the only shipped call (CE48 pc145) is
-        // `[-1, 65546]`: kind -1 is a hard cut, so there is nothing to draw.
-        self.note(format!(
-            "160/162 Transition: kind {kind} flags {flags} (mask fades not drawn; kind -1 is a cut)"
-        ));
+        // The low byte of `flags` is the animation length in frames; the engine treats
+        // zero as one frame (docs/OPCODE_SPEC.md section 5.20), matching TransitionState.
+        let frames = (flags & 0xFF) as u32;
+        if kind < 0 {
+            // The only shipped call (CE48 pc145) is [-1, 65546]: a hard cut, no mask.
+            self.screen_transition.cancel();
+            self.note(format!(
+                "160/162 Transition: kind {kind} flags {flags} (hard cut, no mask)"
+            ));
+        } else {
+            // 160/161/162 all call this; the last call from 162 restarts the ramp at its
+            // first frame, so the fade is timed from the execute and blocked for `frames`.
+            self.screen_transition.start(kind, frames);
+            self.note(format!(
+                "160/162 Transition: kind {kind} flags {flags} (fade {} frame(s))",
+                frames.max(1)
+            ));
+        }
     }
 
     fn party(&mut self, args: &[i32]) {
@@ -2248,6 +2294,7 @@ mod tests {
         GameHost {
             screen: &mut game.screen,
             screen_tint: &mut game.screen_tint,
+            screen_transition: &mut game.screen_transition,
             assets: &mut game.assets,
             databases: &mut game.databases,
             sounds: &mut game.sounds,
@@ -2436,19 +2483,29 @@ mod tests {
         assert!(fields >= 16, "the game ships 16 fields, got {fields}");
         let column = i32::try_from(fields).unwrap(); // one past the last field
         assert_eq!(
-            cell(&mut game, &op(read, 10, 0, column, 0x51000, None, Some(1_600_005))),
+            cell(
+                &mut game,
+                &op(read, 10, 0, column, 0x51000, None, Some(1_600_005))
+            ),
             Some(DbValue::Num(0)),
             "a numeric read past the field count is zero"
         );
         assert_eq!(
-            cell(&mut game, &op(read, 10, 0, column, 0x51000, None, Some(3_000_005))),
+            cell(
+                &mut game,
+                &op(read, 10, 0, column, 0x51000, None, Some(3_000_005))
+            ),
             Some(DbValue::Str(String::new())),
             "a string read past the field count is empty"
         );
         assert_eq!(game.stats.database_out_of_schema, 2);
         // A column the table DOES hold still answers, so the guard is not too wide.
         assert!(
-            cell(&mut game, &op(read, 10, 0, 0, 0x51000, None, Some(3_000_005))).is_some(),
+            cell(
+                &mut game,
+                &op(read, 10, 0, 0, 0x51000, None, Some(3_000_005))
+            )
+            .is_some(),
             "an in-range string column still reads"
         );
     }

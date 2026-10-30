@@ -120,3 +120,15 @@
 **已知**：`(argc=4, sub=0x4000) 359`、`(3, 0x3000) 174`、`(4, 0x1000) 37`、`(4, 0x4400) 8`、`(4, 0x1200) 1`；args[0] 恒为写目标。样本见 `docs/OPCODE_124.md`（正在编写）。
 
 **怎么证实**：见该文档的「决定性检验」一节（比对 201..213 是否同时是 150 的图片番号）。
+
+---
+
+## H-ASSET-1 `Picture/word_effect*` 作者笔误（已用带诊断的 fallback 兜住）
+
+**现象**：事件 354 里 7 个 `word_effect` 引用写成 `Picture/word_effect30|36|55|56|57|58|59.png`，但全作 119 个真实文件都在 `hword/word_effect01..119.png`，`Picture/` 下没有任何 `word_effect*`（`word/` 下是同名的 30x100 占位图）。
+
+**处理**：资产解析加了一条**刻意收窄**的回退 `Picture/word_effect* -> hword/word_effect*`（`crates/wolf-game/src/assets.rs`），命中时向诊断流吐一条 `1x asset fallback: Picture/word_effectNN.png -> hword/word_effectNN.png`，其余资产仍严格「缺文件即报」。
+
+**未验证**：原作运行时是否也认这个笔误（可能 DxLib 在 `Picture/` 不存在时另有搜索路径），以及作者原本想引用的是 `hword/` 还是 `word/`。若今后确认是脚本写错，应在数据侧修掉这 7 个引用而不是永远依赖 fallback。
+
+**怎么证实**：对照原版实机事件 354 的文字特效是否与 `hword/` 图一致。

@@ -187,6 +187,10 @@ impl std::error::Error for AssetError {
 pub struct Assets {
     root: PathBuf,
     cache: HashMap<String, Arc<ImageData>>,
+    /// Asset names that were resolved through a fallback alias (currently the
+    /// `Picture/word_effect* -> hword/` author typo). The game layer drains these into
+    /// its diagnostics so a silent path fix stays visible.
+    fallbacks: Vec<String>,
 }
 
 impl Assets {
@@ -196,6 +200,7 @@ impl Assets {
         Self {
             root: root.into(),
             cache: HashMap::new(),
+            fallbacks: Vec::new(),
         }
     }
 
@@ -226,6 +231,15 @@ impl Assets {
     #[must_use]
     pub fn cached(&self, name: &str) -> Option<Arc<ImageData>> {
         self.cache.get(name).cloned()
+    }
+
+    /// Drains the fallback resolutions taken since the last call.
+    ///
+    /// The game layer folds each message into its diagnostics (counted like every
+    /// other note), so an asset borrowed through an alias such as the
+    /// `Picture/word_effect* -> hword/` typo is still reported instead of vanishing.
+    pub fn take_fallbacks(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.fallbacks)
     }
 
     /// Resolves a WOLF asset name to a file, or None when the data tree lacks it.
@@ -272,6 +286,20 @@ impl Assets {
         }
     }
 
+    /// Resolves a name, then a narrow fallback alias if the direct lookup misses.
+    ///
+    /// Only the `Picture/word_effect* -> hword/word_effect*` author typo is aliased
+    /// (docs/HSCENE.md 4.6). Everything else obeys the strict `missing file is fatal`
+    /// rule, so a genuinely absent asset still errors out.
+    fn resolve_with_fallback(&self, name: &str) -> Option<(PathBuf, Option<String>)> {
+        if let Some(path) = self.resolve(name) {
+            return Some((path, None));
+        }
+        let alias = word_effect_alias(name)?;
+        let path = self.resolve(&alias)?;
+        Some((path, Some(alias)))
+    }
+
     /// Decodes an image, reusing the cache.
     ///
     /// # Errors
@@ -288,10 +316,21 @@ impl Assets {
                 name: name.to_owned(),
             });
         }
-        let path = self.resolve(name).ok_or_else(|| AssetError::NotFound {
-            name: name.to_owned(),
-            root: self.root.clone(),
-        })?;
+        let (path, alias) = match self.resolve_with_fallback(name) {
+            Some(pair) => pair,
+            None => {
+                return Err(AssetError::NotFound {
+                    name: name.to_owned(),
+                    root: self.root.clone(),
+                })
+            }
+        };
+        if let Some(alias) = alias {
+            let message = format!("asset fallback: {name} -> {alias}");
+            if !self.fallbacks.iter().any(|existing| existing == &message) {
+                self.fallbacks.push(message);
+            }
+        }
         let bytes = std::fs::read(&path).map_err(|source| AssetError::Io {
             name: name.to_owned(),
             source,
@@ -367,16 +406,45 @@ fn normalize(name: &str) -> Option<String> {
     }
 }
 
+/// Maps the author's misspelt `Picture/word_effectNN.png` to the real
+/// `hword/word_effectNN.png` (docs/HSCENE.md 4.6, docs/UNVERIFIED.md).
+///
+/// Deliberately narrow: only a `Picture/` directory and a `word_effect` filename.
+/// Any other missing asset is left to fail as before.
+fn word_effect_alias(name: &str) -> Option<String> {
+    let relative = normalize(name)?;
+    let (directory, file) = relative.rsplit_once('/')?;
+    if !directory.eq_ignore_ascii_case("Picture") {
+        return None;
+    }
+    if !file.to_ascii_lowercase().starts_with("word_effect") {
+        return None;
+    }
+    Some(format!("hword/{file}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn normalize_cleans_up_separators() {
-        assert_eq!(normalize("SystemGraphic/TitleGraphic.jpg").as_deref(), Some("SystemGraphic/TitleGraphic.jpg"));
-        assert_eq!(normalize("./Kagura/bg.png").as_deref(), Some("Kagura/bg.png"));
-        assert_eq!(normalize("/Kagura/bg.png").as_deref(), Some("Kagura/bg.png"));
-        assert_eq!(normalize("Kagura//bg.png").as_deref(), Some("Kagura/bg.png"));
+        assert_eq!(
+            normalize("SystemGraphic/TitleGraphic.jpg").as_deref(),
+            Some("SystemGraphic/TitleGraphic.jpg")
+        );
+        assert_eq!(
+            normalize("./Kagura/bg.png").as_deref(),
+            Some("Kagura/bg.png")
+        );
+        assert_eq!(
+            normalize("/Kagura/bg.png").as_deref(),
+            Some("Kagura/bg.png")
+        );
+        assert_eq!(
+            normalize("Kagura//bg.png").as_deref(),
+            Some("Kagura/bg.png")
+        );
     }
 
     #[test]
@@ -407,9 +475,18 @@ mod tests {
         assert_eq!(cell.pixel(0, 0), Some([4, 5, 6, 7]));
         assert_eq!(cell.pixel(1, 0), Some([8, 9, 10, 11]));
         assert_eq!(cell.pixel(0, 1), Some([16, 17, 18, 19]));
-        assert!(image.crop([2, 0, 2, 2]).is_none(), "two columns do not fit after x=2");
-        assert!(image.crop([0, 1, 3, 2]).is_none(), "two rows do not fit after y=1");
-        assert!(image.crop([0, 0, 0, 1]).is_none(), "a zero-width cell is not an image");
+        assert!(
+            image.crop([2, 0, 2, 2]).is_none(),
+            "two columns do not fit after x=2"
+        );
+        assert!(
+            image.crop([0, 1, 3, 2]).is_none(),
+            "two rows do not fit after y=1"
+        );
+        assert!(
+            image.crop([0, 0, 0, 1]).is_none(),
+            "a zero-width cell is not an image"
+        );
     }
 
     #[test]
@@ -463,6 +540,65 @@ mod tests {
         assert_eq!(image.rgba.len(), 4);
         assert_eq!(assets.len(), 1);
         assert!(assets.cached("SystemGraphic/TitleGraphic").is_some());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn word_effect_alias_is_narrowly_scoped() {
+        assert_eq!(
+            word_effect_alias("Picture/word_effect30.png").as_deref(),
+            Some("hword/word_effect30.png")
+        );
+        // Case on the directory is tolerated (the data tree is case-insensitive).
+        assert_eq!(
+            word_effect_alias("picture/word_effect30.png").as_deref(),
+            Some("hword/word_effect30.png")
+        );
+        // Anything that is not the misspelt Picture/word_effect* path is untouched.
+        assert_eq!(word_effect_alias("hword/word_effect30.png"), None);
+        assert_eq!(word_effect_alias("Picture/other.png"), None);
+        // A bare stem is still a word_effect name; the loader probes extensions later.
+        assert_eq!(
+            word_effect_alias("Picture/word_effect").as_deref(),
+            Some("hword/word_effect")
+        );
+        assert_eq!(word_effect_alias("word_effect30.png"), None);
+    }
+
+    #[test]
+    fn picture_word_effect_falls_back_to_hword_with_a_diagnostic() {
+        let root = scratch_dir("word-effect-fallback");
+        std::fs::create_dir_all(root.join("hword")).expect("dir");
+        // 1x1 PNG, the smallest legal file the decoder accepts.
+        const PNG: [u8; 67] = [
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
+            0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78,
+            0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        ];
+        std::fs::write(root.join("hword").join("word_effect30.png"), PNG).expect("write");
+
+        let mut assets = Assets::new(&root);
+        // The misspelt Picture/ path is absent, but the hword/ target exists: it resolves.
+        assets
+            .load("Picture/word_effect30.png")
+            .expect("fallback resolves the real hword asset");
+        assert_eq!(
+            assets.take_fallbacks(),
+            vec![
+                "asset fallback: Picture/word_effect30.png -> hword/word_effect30.png".to_string()
+            ]
+        );
+        // Taking the messages clears them: a second frame does not repeat the diagnostic.
+        assert!(assets.take_fallbacks().is_empty());
+
+        // A different missing asset is still a hard error, not silently aliased.
+        assert!(matches!(
+            assets.load("Picture/definitely_missing.png"),
+            Err(AssetError::NotFound { .. })
+        ));
 
         let _ = std::fs::remove_dir_all(&root);
     }

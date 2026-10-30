@@ -35,6 +35,7 @@ pub mod sysgraphic;
 pub mod textpic;
 pub mod tilemap;
 pub mod tint;
+pub mod transition;
 pub mod window;
 
 pub use assets::{AssetError, Assets, ImageData};
@@ -45,4 +46,5 @@ pub use map_runtime::{MapRuntime, PageSlot, Trigger};
 pub use picture::{Picture, PictureKind, Screen, ScreenQuad, UNCHANGED};
 pub use tilemap::{autotile_src, base_src, cull_range, TileMap, QUADRANT_PX, TILE_NUMBER, TILE_PX};
 pub use tint::ScreenTint;
+pub use transition::ScreenTransition;
 pub use window::{nine_slice, WindowPiece, PANEL_PICTURE};

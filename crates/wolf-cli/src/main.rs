@@ -17,9 +17,8 @@ use wolf_format as wf;
 use wolf_format::command::SlotStats;
 use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
-use wolf_game::atlas::Atlas;
+use wolf_game::atlas::{Atlas, SpriteQuad, TextQuad};
 use wolf_game::db::Container;
-use wolf_game::tilemap::TileMap;
 use wolf_game::{choice, Game};
 use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 use wolf_vm::{
@@ -226,7 +225,8 @@ fn main() -> ExitCode {
                 }
             }
             "--db" => {
-                if let Some((container, db_type)) = args.next().as_deref().and_then(parse_container_type)
+                if let Some((container, db_type)) =
+                    args.next().as_deref().and_then(parse_container_type)
                 {
                     show_dbs.push((container, db_type));
                 }
@@ -260,7 +260,17 @@ fn main() -> ExitCode {
         Some("precompile") => run_precompile(&root),
         Some("blocks") => run_blocks(&root, map.as_deref(), event, page),
         Some("capture") => match map.as_deref() {
-            Some(name) => run_capture_map(&root, out, name),
+            Some(name) => {
+                let answers = Answers {
+                    index: answer,
+                    delay: answer_delay,
+                    pointer,
+                    press_frame,
+                    key_frames,
+                    auto_events,
+                };
+                run_capture_map(&root, out, frames, name, &answers, load_save.as_deref())
+            }
             None => {
                 // Resolved into an owning value first: Entry borrows its map name and
                 // its save path, so the temporary must outlive the match below.
@@ -1787,6 +1797,253 @@ fn resolve_capture_entry(
     CaptureEntry::Boot
 }
 
+/// The screen contents a capture draws, built identically for the scripted
+/// (`capture`) and map (`capture --map`) paths: tile layer, picture layer, text
+/// pictures, the runtime choice window and the 101 pause cursor.
+struct CaptureFrame {
+    atlas: Atlas,
+    sprites: Vec<SpriteQuad>,
+    texts: Vec<TextQuad>,
+}
+
+/// Runs `frames` frames of the game, injecting this capture's pointer / press / key
+/// inputs one frame at a time. Returns the peak number of live coroutines seen.
+fn drive_capture_frames(game: &mut Game, frames: usize, answers: &Answers) -> usize {
+    let mut peak = 0usize;
+    for frame in 0..frames {
+        if let Some((x, y)) = answers.pointer {
+            game.mouse = [x, y];
+        }
+        // One frame of a held button is a click: the host compares against the previous
+        // frame, so the press edge survives exactly one step.
+        game.mouse_buttons = u32::from(answers.press_frame == Some(frame));
+        game.key_bits = answers
+            .key_frames
+            .iter()
+            .find(|(at, _)| *at == frame)
+            .map_or(0, |(_, code)| wolf_game::key::bits_for_code(*code as i32));
+        let outcome = game.frame();
+        peak = peak.max(outcome.report.running);
+    }
+    peak
+}
+
+/// Composites one frame from a live game: tiles, then the picture layer, then the
+/// choice window and the message cursor. Both capture paths call this so
+/// `capture --map` cannot drift from `capture`.
+fn build_capture_frame(game: &mut Game) -> CaptureFrame {
+    let mut atlas = Atlas::new();
+    let mut sprites = game.tile_quads(&mut atlas);
+    sprites.extend(game.picture_quads(&mut atlas));
+    let mut texts = game.text_quads();
+    // A WOLF script never draws its own choice frame: the engine paints a window skin and
+    // moves a cursor over it, at the coordinates system variables 3 (x) and 4 (y) name.
+    // There is no centred default (docs/OPCODE_102.md section 4.2), and when the finished
+    // rectangle falls outside the 1024x576 viewport the engine paints nothing at all -
+    // which is what the title event relies on when it parks the window at y = 1000.
+    if let Some(choices) = &game.choices {
+        let options = choices.options.clone();
+        let cursor = game.choice_cursor();
+        let (x, y) = game.choice_anchor();
+        // Sys8 sizes the option text, so the panel is measured at the size it is drawn.
+        let font_px = game.font_px();
+        if let Some((panel, rows)) = choice::overlay_at_sized(
+            &mut atlas,
+            &mut game.assets,
+            &options,
+            cursor,
+            x,
+            y,
+            font_px,
+        ) {
+            sprites.extend(panel);
+            texts.extend(rows);
+        }
+    }
+    // The engine draws the 101 pause cursor itself: SystemFile/Text_Pause.png is a strip of
+    // six 17x15 frames whose triangle bobs down and back up, and no picture command in the
+    // game names it. It is a texture, so it joins the sprite pass, not the glyph pass.
+    let newest = game.messages.last().map(|m| (m.text.clone(), m.frames));
+    if let Some((text, frames)) = newest {
+        let vars = game.message_vars();
+        let layout = wolf_game::message::layout(&text, &vars, frames);
+        if let Some(at) = layout.cursor {
+            let frame = wolf_game::message::cursor_frame(frames);
+            let src = [
+                0,
+                frame * wolf_game::message::CURSOR_FRAME_H,
+                wolf_game::message::CURSOR_FRAME_W,
+                wolf_game::message::CURSOR_FRAME_H,
+            ];
+            let dst = [
+                at[0],
+                at[1],
+                wolf_game::message::CURSOR_FRAME_W as f32,
+                wolf_game::message::CURSOR_FRAME_H as f32,
+            ];
+            if let Some(quad) = atlas.sprite_from(
+                &mut game.assets,
+                wolf_game::message::CURSOR_FILE,
+                wolf_game::message::CURSOR_SLOT,
+                src,
+                dst,
+                1.0,
+            ) {
+                sprites.push(quad);
+            }
+        }
+    }
+    for warning in atlas.take_warnings() {
+        *game.diagnostics.entry(warning).or_insert(0) += 1;
+    }
+    CaptureFrame {
+        atlas,
+        sprites,
+        texts,
+    }
+}
+
+/// Uploads the atlas, draws the sprite and glyph passes and writes the PNG. Returns
+/// false (after printing the reason) when the GPU adapter, atlas upload, readback or
+/// file write failed.
+fn render_capture_frame(
+    game: &Game,
+    root: &Path,
+    out: &Path,
+    atlas: Atlas,
+    sprites: &[SpriteQuad],
+    texts: &[TextQuad],
+) -> bool {
+    let [atlas_w, atlas_h] = atlas.size();
+    let mut renderer = match Renderer::new_offscreen() {
+        Ok(renderer) => renderer,
+        Err(err) => {
+            eprintln!("no usable GPU adapter: {err}");
+            return false;
+        }
+    };
+    if let Err(err) = renderer.set_atlas(atlas.pixels(), atlas_w, atlas_h) {
+        eprintln!("atlas upload failed: {err}");
+        return false;
+    }
+    // Text pictures need a font; the original game keeps its TTFs next to Game.exe, not
+    // inside the unpacked data root, so the lookup falls back to the install directory.
+    match find_font(root) {
+        Some((path, bytes)) => match renderer.set_font(&bytes) {
+            Ok(()) => println!("  font      : {}", path.display()),
+            Err(err) => eprintln!("  font rejected ({}): {err}", path.display()),
+        },
+        None => println!("  font      : none found; text pictures will not draw"),
+    }
+
+    let instances: Vec<SpriteInstance> = sprites.iter().map(tint_instance).collect();
+    renderer.draw(&instances);
+    let mut items: Vec<TextItem> = texts
+        .iter()
+        .map(|text| {
+            // A text picture may mix sizes, colours and outlines inside one string;
+            // the layout already turned each style change into its own quad.
+            let size = if text.font_px > 0.0 {
+                text.font_px
+            } else {
+                game.font_px()
+            };
+            let mut item = TextItem::new(text.text.clone(), text.rect, size)
+                .with_alpha(text.alpha)
+                .with_colour(text.colour);
+            if text.outline {
+                item = item.with_outline(2, [0, 0, 0]);
+            }
+            item
+        })
+        .collect();
+    // The engine draws 101 message text itself: the frame comes from common event 63 as
+    // ordinary pictures, the glyphs come from here. Only the newest message is visible,
+    // which is the order the interpreter produces.
+    if let Some(layout) = game.message_layout() {
+        let message = game.messages.last().expect("layout implies a message");
+        let vars = game.message_vars();
+        let preview: String = message.text.chars().take(60).collect();
+        let typing = if layout.typing { ", typing" } else { "" };
+        let cursor = layout.cursor.map_or(String::new(), |at| {
+            format!(", cursor at [{:.0},{:.0}]", at[0], at[1])
+        });
+        println!(
+            "  message   : {} row(s), {}/{} char(s), font {:.0} at [{:.0},{:.0}], wrap {:.0}{}{}",
+            layout.rows.len(),
+            layout.typed,
+            layout.total,
+            layout.font_px,
+            vars.x,
+            vars.y,
+            vars.wrap_width(),
+            typing,
+            cursor
+        );
+        println!("    text    : {preview:?}");
+        for run in &layout.runs {
+            // Give each run one em of slack: the layout measures with the half-em rule,
+            // while cosmic-text shapes with the real font advance, and a box that is a
+            // fraction too narrow makes the renderer wrap the last glyph onto a new line.
+            let mut rect = run.rect;
+            rect[2] += run.font_px;
+            let mut item = TextItem::new(run.text.clone(), rect, run.font_px)
+                .with_colour(run.colour.unwrap_or(wolf_game::message::DEFAULT_COLOUR));
+            if run.outline {
+                item = item.with_outline(2, [0, 0, 0]);
+            }
+            items.push(item);
+        }
+    }
+    renderer.draw_text(&items);
+
+    renderer.present();
+    // Text statistics are only known after the pass has been encoded, so they are reported
+    // here rather than next to the item list.
+    let text_stats = renderer.text_stats();
+    println!(
+        "  text      : {} item(s), {} glyph(s), {} line(s), {} substituted",
+        text_stats.items, text_stats.glyphs, text_stats.lines, text_stats.substituted
+    );
+    if let Some(missing) = text_stats.missing.first() {
+        eprintln!("  warning   : font has no glyph for {missing:?}");
+    }
+    let pixels = match renderer.capture_rgba() {
+        Ok(pixels) => pixels,
+        Err(err) => {
+            eprintln!("readback failed: {err}");
+            return false;
+        }
+    };
+
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() {
+            if let Err(err) = std::fs::create_dir_all(parent) {
+                eprintln!("cannot create {}: {err}", parent.display());
+                return false;
+            }
+        }
+    }
+    if let Err(err) =
+        image::save_buffer(out, &pixels, LOGICAL_W, LOGICAL_H, image::ColorType::Rgba8)
+    {
+        eprintln!("cannot write {}: {err}", out.display());
+        return false;
+    }
+
+    let lit = pixels
+        .chunks_exact(4)
+        .filter(|pixel| pixel[0] | pixel[1] | pixel[2] != 0)
+        .count();
+    let total = (LOGICAL_W * LOGICAL_H) as usize;
+    println!(
+        "  rendered  : {LOGICAL_W}x{LOGICAL_H}, {lit}/{total} non-black pixel(s) = {:.1}%",
+        lit as f64 * 100.0 / total as f64
+    );
+    println!("  wrote     : {}", out.display());
+    true
+}
+
 fn run_capture(
     root: &Path,
     out: Option<PathBuf>,
@@ -1867,88 +2124,14 @@ fn run_capture(
     }
     println!("  entry     : {label}");
 
-    let mut peak = 0usize;
-    for frame in 0..frames {
-        if let Some((x, y)) = answers.pointer {
-            game.mouse = [x, y];
-        }
-        // One frame of a held button is a click: the host compares against the previous
-        // frame, so the press edge survives exactly one step.
-        game.mouse_buttons = u32::from(answers.press_frame == Some(frame));
-        game.key_bits = answers
-            .key_frames
-            .iter()
-            .find(|(at, _)| *at == frame)
-            .map_or(0, |(_, code)| wolf_game::key::bits_for_code(*code as i32));
-        let outcome = game.frame();
-        peak = peak.max(outcome.report.running);
-    }
+    let peak = drive_capture_frames(&mut game, frames, &answers);
 
-    let mut atlas = Atlas::new();
-    let mut sprites = game.tile_quads(&mut atlas);
-    sprites.extend(game.picture_quads(&mut atlas));
-    let mut texts = game.text_quads();
-    // A WOLF script never draws its own choice frame: the engine paints a window skin and
-    // moves a cursor over it, at the coordinates system variables 3 (x) and 4 (y) name.
-    // There is no centred default (docs/OPCODE_102.md section 4.2), and when the finished
-    // rectangle falls outside the 1024x576 viewport the engine paints nothing at all -
-    // which is what the title event relies on when it parks the window at y = 1000.
-    if let Some(choices) = &game.choices {
-        let options = choices.options.clone();
-        let cursor = game.choice_cursor();
-        let (x, y) = game.choice_anchor();
-        // Sys8 sizes the option text, so the panel is measured at the size it is drawn.
-        let font_px = game.font_px();
-        if let Some((panel, rows)) = choice::overlay_at_sized(
-            &mut atlas,
-            &mut game.assets,
-            &options,
-            cursor,
-            x,
-            y,
-            font_px,
-        ) {
-            sprites.extend(panel);
-            texts.extend(rows);
-        }
-    }
-    // The engine draws the 101 pause cursor itself: SystemFile/Text_Pause.png is a strip of
-    // six 17x15 frames whose triangle bobs down and back up, and no picture command in the
-    // game names it. It is a texture, so it joins the sprite pass, not the glyph pass.
-    let newest = game.messages.last().map(|m| (m.text.clone(), m.frames));
-    if let Some((text, frames)) = newest {
-        let vars = game.message_vars();
-        let layout = wolf_game::message::layout(&text, &vars, frames);
-        if let Some(at) = layout.cursor {
-            let frame = wolf_game::message::cursor_frame(frames);
-            let src = [
-                0,
-                frame * wolf_game::message::CURSOR_FRAME_H,
-                wolf_game::message::CURSOR_FRAME_W,
-                wolf_game::message::CURSOR_FRAME_H,
-            ];
-            let dst = [
-                at[0],
-                at[1],
-                wolf_game::message::CURSOR_FRAME_W as f32,
-                wolf_game::message::CURSOR_FRAME_H as f32,
-            ];
-            if let Some(quad) = atlas.sprite_from(
-                &mut game.assets,
-                wolf_game::message::CURSOR_FILE,
-                wolf_game::message::CURSOR_SLOT,
-                src,
-                dst,
-                1.0,
-            ) {
-                sprites.push(quad);
-            }
-        }
-    }
+    let CaptureFrame {
+        atlas,
+        sprites,
+        texts,
+    } = build_capture_frame(&mut game);
     let [atlas_w, atlas_h] = atlas.size();
-    for warning in atlas.take_warnings() {
-        *game.diagnostics.entry(warning).or_insert(0) += 1;
-    }
 
     println!("capture");
     println!("  data root : {}", root.display());
@@ -2062,132 +2245,9 @@ fn run_capture(
         );
     }
 
-    let mut renderer = match Renderer::new_offscreen() {
-        Ok(renderer) => renderer,
-        Err(err) => {
-            eprintln!("no usable GPU adapter: {err}");
-            return ExitCode::FAILURE;
-        }
-    };
-    if let Err(err) = renderer.set_atlas(atlas.pixels(), atlas_w, atlas_h) {
-        eprintln!("atlas upload failed: {err}");
+    if !render_capture_frame(&game, root, &out, atlas, &sprites, &texts) {
         return ExitCode::FAILURE;
     }
-    // Text pictures need a font; the original game keeps its TTFs next to Game.exe, not
-    // inside the unpacked data root, so the lookup falls back to the install directory.
-    match find_font(root) {
-        Some((path, bytes)) => match renderer.set_font(&bytes) {
-            Ok(()) => println!("  font      : {}", path.display()),
-            Err(err) => eprintln!("  font rejected ({}): {err}", path.display()),
-        },
-        None => println!("  font      : none found; text pictures will not draw"),
-    }
-
-    let instances: Vec<SpriteInstance> = sprites.iter().map(tint_instance).collect();
-    renderer.draw(&instances);
-    let mut items: Vec<TextItem> = texts
-        .iter()
-        .map(|text| {
-            // A text picture may mix sizes, colours and outlines inside one string;
-            // the layout already turned each style change into its own quad.
-            let size = if text.font_px > 0.0 {
-                text.font_px
-            } else {
-                game.font_px()
-            };
-            let mut item = TextItem::new(text.text.clone(), text.rect, size)
-                .with_alpha(text.alpha)
-                .with_colour(text.colour);
-            if text.outline {
-                item = item.with_outline(2, [0, 0, 0]);
-            }
-            item
-        })
-        .collect();
-    // The engine draws 101 message text itself: the frame comes from common event 63 as
-    // ordinary pictures, the glyphs come from here. Only the newest message is visible,
-    // which is the order the interpreter produces.
-    if let Some(layout) = game.message_layout() {
-        let message = game.messages.last().expect("layout implies a message");
-        let vars = game.message_vars();
-        let preview: String = message.text.chars().take(60).collect();
-        let typing = if layout.typing { ", typing" } else { "" };
-        let cursor = layout.cursor.map_or(String::new(), |at| {
-            format!(", cursor at [{:.0},{:.0}]", at[0], at[1])
-        });
-        println!(
-            "  message   : {} row(s), {}/{} char(s), font {:.0} at [{:.0},{:.0}], wrap {:.0}{}{}",
-            layout.rows.len(),
-            layout.typed,
-            layout.total,
-            layout.font_px,
-            vars.x,
-            vars.y,
-            vars.wrap_width(),
-            typing,
-            cursor
-        );
-        println!("    text    : {preview:?}");
-        for run in &layout.runs {
-            // Give each run one em of slack: the layout measures with the half-em rule,
-            // while cosmic-text shapes with the real font advance, and a box that is a
-            // fraction too narrow makes the renderer wrap the last glyph onto a new line.
-            let mut rect = run.rect;
-            rect[2] += run.font_px;
-            let mut item = TextItem::new(run.text.clone(), rect, run.font_px)
-                .with_colour(run.colour.unwrap_or(wolf_game::message::DEFAULT_COLOUR));
-            if run.outline {
-                item = item.with_outline(2, [0, 0, 0]);
-            }
-            items.push(item);
-        }
-    }
-    renderer.draw_text(&items);
-
-    renderer.present();
-    // Text statistics are only known after the pass has been encoded, so they are reported
-    // here rather than next to the item list.
-    let text_stats = renderer.text_stats();
-    println!(
-        "  text      : {} item(s), {} glyph(s), {} line(s), {} substituted",
-        text_stats.items, text_stats.glyphs, text_stats.lines, text_stats.substituted
-    );
-    if let Some(missing) = text_stats.missing.first() {
-        eprintln!("  warning   : font has no glyph for {missing:?}");
-    }
-    let pixels = match renderer.capture_rgba() {
-        Ok(pixels) => pixels,
-        Err(err) => {
-            eprintln!("readback failed: {err}");
-            return ExitCode::FAILURE;
-        }
-    };
-
-    if let Some(parent) = out.parent() {
-        if !parent.as_os_str().is_empty() {
-            if let Err(err) = std::fs::create_dir_all(parent) {
-                eprintln!("cannot create {}: {err}", parent.display());
-                return ExitCode::FAILURE;
-            }
-        }
-    }
-    if let Err(err) =
-        image::save_buffer(&out, &pixels, LOGICAL_W, LOGICAL_H, image::ColorType::Rgba8)
-    {
-        eprintln!("cannot write {}: {err}", out.display());
-        return ExitCode::FAILURE;
-    }
-
-    let lit = pixels
-        .chunks_exact(4)
-        .filter(|pixel| pixel[0] | pixel[1] | pixel[2] != 0)
-        .count();
-    let total = (LOGICAL_W * LOGICAL_H) as usize;
-    println!(
-        "  rendered  : {LOGICAL_W}x{LOGICAL_H}, {lit}/{total} non-black pixel(s) = {:.1}%",
-        lit as f64 * 100.0 / total as f64
-    );
-    println!("  wrote     : {}", out.display());
 
     println!(
         "  auto      : {} tracked conditional/gated event(s), {} running {:?}",
@@ -2216,19 +2276,29 @@ fn run_capture(
     ExitCode::SUCCESS
 }
 
-/// Renders one map frame to a PNG. This is M2 step one: the tile pipeline end to end.
+/// Renders one map frame to a PNG, composited exactly like the scripted `capture`
+/// path: the room's tile layer, then its picture layer, then text pictures.
 ///
-/// The camera centres on the map's first event, which is where the engine puts the
-/// player when a map starts; a map with no events looks at the top-left corner. Only
-/// the cells inside the 1024x576 window are tessellated, so the 70x170 map costs the
-/// same as the 53x30 one.
-fn run_capture_map(root: &Path, out: Option<PathBuf>, name: &str) -> ExitCode {
+/// The map's automatic pages run for `frames` frames first (so a parallel page that
+/// paints the room's picture layer actually draws it), and `--pointer` /
+/// `--press-frame` / `--key-frame` inject the same one-frame inputs a scripted capture
+/// does. The tile camera is the Game's fixed origin [0, 0] (docs/HSCENE.md 4.3).
+fn run_capture_map(
+    root: &Path,
+    out: Option<PathBuf>,
+    frames: usize,
+    name: &str,
+    answers: &Answers,
+    load_save: Option<&Path>,
+) -> ExitCode {
     let out = out.unwrap_or_else(|| PathBuf::from("work/out/map.png"));
     let basic = if root.join("BasicData").is_dir() {
         root.join("BasicData")
     } else {
         root.to_path_buf()
     };
+    // The tileset is only needed for the header (its base image name); Game owns the
+    // actual tile layer.
     let tileset_bytes = match read(&basic.join("TileSetData.dat")) {
         Some(bytes) => bytes,
         None => {
@@ -2286,96 +2356,162 @@ fn run_capture_map(root: &Path, out: Option<PathBuf>, name: &str) -> ExitCode {
         }
     }
 
-    let tile_map = TileMap::new(&map, tileset, tilesets.version);
-    let [map_w, map_h] = tile_map.size_px();
-    let screen = [LOGICAL_W as i32, LOGICAL_H as i32];
-    let focus = match map.events.first() {
-        Some(event) => [
-            event.x as i32 * wolf_game::tilemap::TILE_PX as i32,
-            event.y as i32 * wolf_game::tilemap::TILE_PX as i32,
-        ],
-        None => [0, 0],
+    // Drive a real Game so the room's picture layer composites over its tiles, exactly
+    // as the scripted capture does. start_pages installs the tile layer AND starts the
+    // map's automatic pages (the ones that draw the background/picture layer).
+    let mut game = match Game::new(root) {
+        Ok(game) => game,
+        Err(err) => {
+            eprintln!("cannot load the game data: {err}");
+            return ExitCode::FAILURE;
+        }
     };
-    let camera = [
-        (focus[0] - screen[0] / 2).clamp(0, (map_w - screen[0]).max(0)),
-        (focus[1] - screen[1] / 2).clamp(0, (map_h - screen[1]).max(0)),
-    ];
+    game.auto_advance = true;
+    game.auto_events.set_enabled(answers.auto_events);
+    if let Some(index) = answers.index {
+        game.set_choice_cursor(index);
+        game.auto_choice = true;
+        game.auto_choice_delay = answers.delay;
+    }
+    if let Some(path) = load_save {
+        match game.load_save(path) {
+            Ok(loaded) => println!(
+                "  loaded    : {} picture(s), {} normal variable(s), playtime {} frame(s), choice anchor {:?}",
+                loaded.pictures, loaded.normal_vars, loaded.playtime_frames, loaded.choice_anchor
+            ),
+            Err(err) => {
+                eprintln!("{err}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    game.start_pages(&map, None);
+    let peak = drive_capture_frames(&mut game, frames, answers);
 
-    let mut atlas = Atlas::new();
-    let mut assets = wolf_game::Assets::new(root);
-    let sprites = tile_map.quads(&mut atlas, &mut assets, camera, [LOGICAL_W, LOGICAL_H], 0);
+    let CaptureFrame {
+        atlas,
+        sprites,
+        texts,
+    } = build_capture_frame(&mut game);
     let [atlas_w, atlas_h] = atlas.size();
 
+    let map_w = map.width as i32 * wolf_game::tilemap::TILE_PX as i32;
+    let map_h = map.height as i32 * wolf_game::tilemap::TILE_PX as i32;
     println!("capture --map {name}");
     println!("  data root : {}", root.display());
     println!(
         "  map       : {} {}x{} tile(s) = {}x{} px, {} layer(s), {} event(s)",
         relative.display(),
-        tile_map.width,
-        tile_map.height,
+        map.width,
+        map.height,
         map_w,
         map_h,
-        tile_map.layer_count(),
+        map.layers.len(),
         map.events.len()
     );
     println!(
         "  tileset   : index {} base {}",
-        tile_map.tileset_index, tileset.base_image
+        map.tileset_index, tileset.base_image
     );
-    println!("  camera    : [{}, {}]", camera[0], camera[1]);
-    println!("  quads     : {} tile(s)", sprites.len());
+    println!("  camera    : [0, 0] (Game tile layer, fixed origin)");
+    println!("  frames    : {frames} (peak {peak} coroutine(s))");
+    {
+        let rgb = game.screen_tint_rgb();
+        println!(
+            "  tint      : [{:.3}, {:.3}, {:.3}] (151 ChangeColor)",
+            rgb[0], rgb[1], rgb[2]
+        );
+    }
+    println!(
+        "  pictures  : {} live -> {} textured quad(s), {} text picture(s)",
+        game.screen.len(),
+        sprites.len(),
+        texts.len()
+    );
+    for picture in game.screen.iter() {
+        println!(
+            "    pic {:<6} {:?} at ({}, {}) alpha {:.2} scale {} window {:?} {}",
+            picture.number,
+            picture.kind,
+            picture.x,
+            picture.y,
+            picture.alpha(),
+            picture.scale,
+            picture.window,
+            if picture.file.is_empty() {
+                format!("text {:?}", picture.text)
+            } else {
+                format!("file {:?}", picture.file)
+            }
+        );
+    }
+    match &game.choices {
+        Some(choices) => println!(
+            "  choice    : HELD on prompt with {} option(s) {:?}",
+            choices.options.len(),
+            choices.options
+        ),
+        None => println!("  choice    : none open"),
+    }
+    println!(
+        "  sys8 font : {:.0} px (Sys8, used by every text path)",
+        game.font_px()
+    );
     println!(
         "  atlas     : {} image(s), {:.1}% of {atlas_w}x{atlas_h}",
         atlas.len(),
         atlas.fill_ratio() * 100.0
     );
+    for quad in &sprites {
+        println!(
+            "    quad pic {:>6} at [{:.0},{:.0},{:.0},{:.0}] uv [{:.3},{:.3},{:.3},{:.3}]",
+            quad.number,
+            quad.rect[0],
+            quad.rect[1],
+            quad.rect[2],
+            quad.rect[3],
+            quad.uv[0],
+            quad.uv[1],
+            quad.uv[2],
+            quad.uv[3]
+        );
+    }
+    for text in &texts {
+        let preview: String = text.text.chars().take(40).collect();
+        println!(
+            "    text pic {:>6} at [{:.0},{:.0},{:.0},{:.0}] {}",
+            text.number, text.rect[0], text.rect[1], text.rect[2], text.rect[3], preview
+        );
+    }
 
-    let mut renderer = match Renderer::new_offscreen() {
-        Ok(renderer) => renderer,
-        Err(err) => {
-            eprintln!("no usable GPU adapter: {err}");
-            return ExitCode::FAILURE;
-        }
-    };
-    if let Err(err) = renderer.set_atlas(atlas.pixels(), atlas_w, atlas_h) {
-        eprintln!("atlas upload failed: {err}");
+    if !render_capture_frame(&game, root, &out, atlas, &sprites, &texts) {
         return ExitCode::FAILURE;
     }
-    let instances: Vec<SpriteInstance> = sprites.iter().map(tint_instance).collect();
-    renderer.draw(&instances);
-    renderer.draw_text(&[]);
-    renderer.present();
-    let pixels = match renderer.capture_rgba() {
-        Ok(pixels) => pixels,
-        Err(err) => {
-            eprintln!("readback failed: {err}");
-            return ExitCode::FAILURE;
-        }
-    };
-    if let Some(parent) = out.parent() {
-        if !parent.as_os_str().is_empty() {
-            if let Err(err) = std::fs::create_dir_all(parent) {
-                eprintln!("cannot create {}: {err}", parent.display());
-                return ExitCode::FAILURE;
-            }
-        }
-    }
-    if let Err(err) =
-        image::save_buffer(&out, &pixels, LOGICAL_W, LOGICAL_H, image::ColorType::Rgba8)
-    {
-        eprintln!("cannot write {}: {err}", out.display());
-        return ExitCode::FAILURE;
-    }
-    let lit = pixels
-        .chunks_exact(4)
-        .filter(|pixel| pixel[0] | pixel[1] | pixel[2] != 0)
-        .count();
-    let total = (LOGICAL_W * LOGICAL_H) as usize;
+
     println!(
-        "  rendered  : {LOGICAL_W}x{LOGICAL_H}, {lit}/{total} non-black pixel(s) = {:.1}%",
-        lit as f64 * 100.0 / total as f64
+        "  auto      : {} tracked conditional/gated event(s), {} running {:?}",
+        game.auto_events.len(),
+        game.auto_events.running_count(),
+        game.auto_events.running_ids()
     );
-    println!("  wrote     : {}", out.display());
+    let warnings = game.stats.warnings;
+    println!(
+        "  stats     : {} instruction(s), {} picture op(s), {} sound(s), {} db access(es) ({} write, {} label), {} message(s), {} choice(s), {warnings} warning(s)",
+        game.stats.instructions,
+        game.stats.pictures,
+        game.stats.sounds,
+        game.stats.databases,
+        game.stats.database_writes,
+        game.stats.database_labels,
+        game.stats.messages,
+        game.stats.choices
+    );
+    if !game.diagnostics.is_empty() {
+        println!("  diagnostics ({} distinct):", game.diagnostics.len());
+        for (text, count) in game.diagnostics.iter().take(12) {
+            println!("    {count:>6}x {text}");
+        }
+    }
     ExitCode::SUCCESS
 }
 
