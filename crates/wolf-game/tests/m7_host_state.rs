@@ -73,6 +73,11 @@ fn engine_state_reports_the_mouse_and_neutral_none_sentinels_through_opcode_124(
         eprintln!("skipping: no WOLF data root");
         return;
     };
+    // Warm-up frame: retail computes fields 11/12 as "current mouse - position at the
+    // end of the previous frame"; the warm-up gives the real host that previous frame.
+    game.mouse = [100, 100];
+    run_once(&mut game, 899, "host warm-up", vec![cmd(172, &[], &[])]);
+
     game.mouse = [640, 300];
     game.mouse_buttons = 1; // left button down this frame, up last frame
     // Seed the destinations with a poison value so "wrote 0 / wrote -1" is
@@ -84,9 +89,9 @@ fn engine_state_reports_the_mouse_and_neutral_none_sentinels_through_opcode_124(
         // 0x3000 argc 3: [dst, sub, field]
         cmd(124, &[2_000_600, 0x3000, 20], &[]), // mouse screen X
         cmd(124, &[2_000_601, 0x3000, 21], &[]), // mouse screen Y
-        cmd(124, &[2_000_602, 0x3000, 17], &[]), // undocumented: neutral 0
-        cmd(124, &[2_000_603, 0x3000, 11], &[]), // event under pointer: none -1
-        cmd(124, &[2_000_604, 0x3000, 12], &[]), // contact event: none -1
+        cmd(124, &[2_000_602, 0x3000, 17], &[]), // this common event id: neutral 0
+        cmd(124, &[2_000_603, 0x3000, 11], &[]), // mouse X travel since last frame
+        cmd(124, &[2_000_604, 0x3000, 12], &[]), // mouse Y travel since last frame
         cmd(124, &[2_000_605, 0x3000, 7], &[]),  // left button tri-state
         cmd(172, &[], &[]),
     ];
@@ -94,9 +99,65 @@ fn engine_state_reports_the_mouse_and_neutral_none_sentinels_through_opcode_124(
     assert_eq!(game.vm.vars.get(600), 640, "field 20 = mouse X");
     assert_eq!(game.vm.vars.get(601), 300, "field 21 = mouse Y");
     assert_eq!(game.vm.vars.get(602), 0, "field 17 answers neutral 0");
-    assert_eq!(game.vm.vars.get(603), -1, "field 11 none sentinel -1");
-    assert_eq!(game.vm.vars.get(604), -1, "field 12 none sentinel -1");
+    assert_eq!(
+        game.vm.vars.get(603),
+        540,
+        "field 11 = mouse X travel (640-100)"
+    );
+    assert_eq!(
+        game.vm.vars.get(604),
+        200,
+        "field 12 = mouse Y travel (300-100)"
+    );
     assert_eq!(game.vm.vars.get(605), 2, "field 7 = just pressed = 2");
+    assert_eq!(game.stats.warnings, 0, "known fields emit no warnings");
+}
+
+#[test]
+fn engine_travel_is_zero_without_movement_and_signed_when_moving_back() {
+    let Some(mut game) = open_game() else {
+        eprintln!("skipping: no WOLF data root");
+        return;
+    };
+    game.mouse = [640, 300];
+    run_once(&mut game, 910, "travel warm-up", vec![cmd(172, &[], &[])]);
+
+    // Same pointer position as last frame: both travel answers must be exactly 0
+    // (retail subtracts the stored previous position, so this is not a sentinel).
+    for index in [630usize, 631] {
+        game.vm.vars.set(index, 424_242);
+    }
+    run_once(
+        &mut game,
+        911,
+        "travel still",
+        vec![
+            cmd(124, &[2_000_630, 0x3000, 11], &[]),
+            cmd(124, &[2_000_631, 0x3000, 12], &[]),
+            cmd(172, &[], &[]),
+        ],
+    );
+    assert_eq!(game.vm.vars.get(630), 0, "no horizontal travel");
+    assert_eq!(game.vm.vars.get(631), 0, "no vertical travel");
+
+    // Moving left/up produces negative values, which is why -1 can never be used
+    // as a "no answer" sentinel here.
+    game.mouse = [10, 20];
+    for index in [632usize, 633] {
+        game.vm.vars.set(index, 424_242);
+    }
+    run_once(
+        &mut game,
+        912,
+        "travel back",
+        vec![
+            cmd(124, &[2_000_632, 0x3000, 11], &[]),
+            cmd(124, &[2_000_633, 0x3000, 12], &[]),
+            cmd(172, &[], &[]),
+        ],
+    );
+    assert_eq!(game.vm.vars.get(632), -630, "field 11 is signed (10-640)");
+    assert_eq!(game.vm.vars.get(633), -280, "field 12 is signed (20-300)");
     assert_eq!(game.stats.warnings, 0, "known fields emit no warnings");
 }
 

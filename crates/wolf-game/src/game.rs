@@ -307,6 +307,12 @@ pub struct Game {
     previous_keys: u32,
     /// Mouse buttons held on the previous frame, so a press can be told from a hold.
     previous_mouse_buttons: u32,
+    /// Mouse position at the end of the previous frame, clamped at 0, so the
+    /// engine's "mouse X/Y movement" values (opcode 124 fields 11/12) can be
+    /// reported. The shipped engine stores the same pair at `[input+0x90]` /
+    /// `[input+0x94]` and subtracts it in the per-frame input update
+    /// (docs/research/M8_ENGINE_STATE.md).
+    previous_mouse: [i32; 2],
     /// Replaces [`ENGINE_ALWAYS`] when set, so a capture can A/B one engine event at a
     /// time without editing the constant (see `wolf-cli --engine-events`).
     pub engine_always: Option<Vec<u32>>,
@@ -414,6 +420,7 @@ impl Game {
             choice_cursor: 0,
             previous_keys: 0,
             previous_mouse_buttons: 0,
+            previous_mouse: [0, 0],
             engine_always: None,
             engine_events_started: false,
             save_requests: Vec::new(),
@@ -1140,6 +1147,7 @@ impl Game {
             mouse: self.mouse,
             mouse_buttons: self.mouse_buttons,
             previous_mouse_buttons: self.previous_mouse_buttons,
+            previous_mouse: self.previous_mouse,
             root: &self.root,
             save_requests: &mut self.save_requests,
             map_requests: &mut self.map_requests,
@@ -1245,6 +1253,10 @@ impl Game {
         // parallel page that just ended comes back on the next tick.
         self.runtime.start_pending(&mut self.vm);
         self.previous_mouse_buttons = self.mouse_buttons;
+        // The shipped engine clamps the stored mouse position at 0 before it
+        // subtracts last frame's position, so an off-window [-1, -1] reads as
+        // no travel, not as a jump to the origin.
+        self.previous_mouse = [self.mouse[0].max(0), self.mouse[1].max(0)];
         self.stats.frames += 1;
         self.stats.instructions += report.steps as u64;
         self.stats.peak_instances = self.stats.peak_instances.max(report.running);
@@ -1479,6 +1491,8 @@ struct GameHost<'a> {
     mouse: [i32; 2],
     mouse_buttons: u32,
     previous_mouse_buttons: u32,
+    /// Previous frame's clamped mouse position, for 124 fields 11/12.
+    previous_mouse: [i32; 2],
     root: &'a Path,
     save_requests: &'a mut Vec<crate::savegame::SaveRequest>,
     map_requests: &'a mut Vec<MapRequest>,
@@ -2076,7 +2090,10 @@ impl Host for GameHost<'_> {
 
     fn engine_state(&mut self, field: i32) -> Option<i32> {
         match field {
-            // Static map id and BGM data id: both unset in the port so far.
+            // 0/1: retail answers the current map id (Game's map singleton) and the
+            // BGM data id of the track that is playing (-1 when none). The port keeps
+            // no current-map id and no "which BGM id is playing" record, so these stay
+            // the boot values it can honestly claim.
             0 => Some(0),
             1 => Some(-1),
             7 => Some(mouse_state(
@@ -2091,18 +2108,29 @@ impl Host for GameHost<'_> {
                 self.mouse_buttons & 4 != 0,
                 self.previous_mouse_buttons & 4 != 0,
             )),
+            // 10 is the wheel rotation delta (`[input+0x40]` in the shipped engine).
+            // The port has no wheel input channel, so "no rotation" is the truthful
+            // answer rather than a guess.
             10 => Some(0),
-            // 11/12 report what map event sits under the pointer / is in contact.
-            // The port has no map-interaction layer yet (map runtime only tracks
-            // page programs), so nothing is ever under the pointer or in contact.
-            // The documented "none" sentinel is -1 (same as field 10 / field 18),
-            // which is truthful now; recompute real ids if a map layer is added.
-            11 => Some(-1),
-            12 => Some(-1),
-            // 17 is undocumented in this game: docs/OPCODE_124.md §9.1 cannot pin it
-            // (candidates are an event-line counter behind shifted indices). Five
-            // message-window sites read it only as an auto-increment guard, where the
-            // neutral 0 matches the old "destination stays 0" behaviour. Report 0.
+            // 11/12 are NOT "event under the pointer" / "event in contact": the
+            // shipped 0x3000 field switch reads two plain globals there, and the
+            // input update fills them with
+            //   [input+0x44] = clamped mouse X - previous mouse X
+            //   [input+0x48] = clamped mouse Y - previous mouse Y
+            // i.e. the pointer's travel since the previous frame. See
+            // docs/research/M8_ENGINE_STATE.md (§2.2) for the RVAs. The "event under
+            // the pointer" query is field 13, and this game never reads it.
+            11 => Some(self.mouse[0].max(0) - self.previous_mouse[0]),
+            12 => Some(self.mouse[1].max(0) - self.previous_mouse[1]),
+            // 17 reads `[event+0x18]`, the "this common event id" slot. Every
+            // event-start path fills it with the id of the event being started
+            // (common events) or -1 (map events), and opcode 210's relative
+            // common-event call resolves its target from it. Answering it needs the
+            // interpreter's current instance, which the Host trait does not pass -
+            // exactly why field 18 is intercepted in the interpreter
+            // (crates/wolf-vm/src/exec.rs). The five sites in this game (CE265-268,
+            // CE270) read it only as a message-window guard; 0 is the neutral answer
+            // that leaves their behaviour unchanged.
             17 => Some(0),
             20 => Some(self.mouse[0]),
             21 => Some(self.mouse[1]),
@@ -2556,6 +2584,7 @@ mod tests {
             mouse: game.mouse,
             mouse_buttons: game.mouse_buttons,
             previous_mouse_buttons: game.previous_mouse_buttons,
+            previous_mouse: game.previous_mouse,
             root: &game.root,
             save_requests: &mut game.save_requests,
             map_requests: &mut game.map_requests,
