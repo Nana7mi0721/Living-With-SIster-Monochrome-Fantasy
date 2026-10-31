@@ -35,7 +35,7 @@ use crate::auto_events::AutoEvents;
 use crate::db::Databases;
 use crate::map_runtime::MapRuntime;
 use crate::picture::{PictureKind, Screen, ANCHOR_CENTRE, SCREEN_H, SCREEN_W};
-use crate::tilemap::TileMap;
+use crate::tilemap::{tile_centre_px, tile_feet_px, TileMap};
 use crate::tint::ScreenTint;
 use crate::transition::ScreenTransition;
 
@@ -642,6 +642,20 @@ impl Game {
         self.runtime.start_pending(&mut self.vm)
     }
 
+    /// Places the party leader on the current map (the `-2` target of opcode 124).
+    ///
+    /// The shipped maps carry no player start coordinate and no walkable leader
+    /// actor (docs/MAP_AUDIT.md §7.5), so a leader position is engine state, not map
+    /// data. This is the placement hook a new-game/debug path uses; a `130` transfer
+    /// that targets the hero places it too, with the facing it had before the map
+    /// change (a transfer carries no direction of its own).
+    ///
+    /// `direction` is the WOLF numpad facing code (1..9). See
+    /// docs/research/M8_CHARACTER_STATE.md.
+    pub fn place_leader(&mut self, x: i32, y: i32, direction: i32) {
+        self.runtime.place_leader(x, y, Some(direction));
+    }
+
     /// Builds the tile-layer quads for the current map.
     ///
     /// This is the layer WOLF draws before every picture. It is empty for a map with no
@@ -728,7 +742,16 @@ impl Game {
     /// `130 Teleport` runs on the same VM, so the current map coroutines are stopped
     /// first: leaving them alive would keep a previous map parallel events
     /// drawing into the new map. Engine events are session-wide and keep running.
-    fn switch_map(&mut self, path: &str) -> Result<(), GameError> {
+    ///
+    /// `hero` is the transfer's destination when it targets the party leader
+    /// (`target == -1`): x, y, the raw options word (bit 0 = precise/half-tile
+    /// coordinates) and the facing the leader had before the change. The new map
+    /// has no start coordinate of its own, so that is what places `-2`.
+    fn switch_map(
+        &mut self,
+        path: &str,
+        hero: Option<(i32, i32, i32, Option<i32>)>,
+    ) -> Result<(), GameError> {
         self.runtime.stop_all(&mut self.vm);
         // Whole-screen layers belong to the map that drew them. The new map's
         // events rebuild whatever overlay it needs; leaving the old map's title
@@ -737,6 +760,13 @@ impl Game {
         let bytes = self.read(path)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, None);
+        if let Some((x, y, options, direction)) = hero {
+            if options & 1 != 0 {
+                self.runtime.place_leader_precise(x, y, direction);
+            } else {
+                self.runtime.place_leader(x, y, direction);
+            }
+        }
         Ok(())
     }
 
@@ -1113,6 +1143,7 @@ impl Game {
             root: &self.root,
             save_requests: &mut self.save_requests,
             map_requests: &mut self.map_requests,
+            actors: &self.runtime,
         });
         // A `220` load replaces the picture layer and the normal variables, so it runs
         // as soon as the VM step that requested it has released its borrow of `Game`.
@@ -1162,7 +1193,13 @@ impl Game {
                 );
                 continue;
             };
-            match self.switch_map(&path) {
+            // `-1` is the hero. The transfer moves the party leader onto the new
+            // map; WOLF keeps the facing it had, and a transfer carries none of
+            // its own, so an unplaced leader stays without one.
+            let facing = self.runtime.leader().and_then(|leader| leader.direction);
+            let hero = (request.target == -1)
+                .then_some((request.x, request.y, request.options, facing));
+            match self.switch_map(&path, hero) {
                 Ok(()) => {
                     self.diagnostics.insert(
                         format!(
@@ -1445,6 +1482,9 @@ struct GameHost<'a> {
     root: &'a Path,
     save_requests: &'a mut Vec<crate::savegame::SaveRequest>,
     map_requests: &'a mut Vec<MapRequest>,
+    /// The map runtime's placement layer, read-only: opcode 124 `0x1000` / `0x1200`
+    /// answers map-event and leader coordinates straight from here.
+    actors: &'a MapRuntime,
 }
 
 impl GameHost<'_> {
@@ -1988,13 +2028,50 @@ impl Host for GameHost<'_> {
     }
 
     fn character_state(&mut self, target: i32, field: i32) -> Option<i32> {
-        // The port has no map/character layer at all: the parsed Map (which holds
-        // event tile coords in wolf-format::mps and page directions) is discarded
-        // after start_pages, and MapRuntime/ TileMap retain no x/y/direction or
-        // display state. Fabricating coordinates would silently break the follower
-        // and bomb logic that reads these fields, so leave the destination alone.
-        let _ = (target, field);
-        None
+        // Field space is the measured one from docs/OPCODE_124.md §3.2:
+        // 0/1 tile x/y, 2/3 precise (0.5 tile = tile*2), 4 height px, 5 facing,
+        // 6/7 screen x (centre) / y (feet), 8/9 the zoom-reflected pair (zoom is
+        // 100% here, so identical), 10 the map-event id. `0x1200` shares this space.
+        //
+        // -2 is the party leader. Its placement is engine state, not map data: the
+        // maps carry no player start (docs/MAP_AUDIT.md §7.5), so the answer is None
+        // until Game::place_leader or a hero `130` transfer has placed it.
+        if target == -2 {
+            let leader = self.actors.leader()?;
+            return match field {
+                0 => Some(leader.x),
+                1 => Some(leader.y),
+                2 => Some(leader.precise_x),
+                3 => Some(leader.precise_y),
+                4 => Some(0),
+                5 => leader.direction,
+                6 | 8 => Some(tile_centre_px(leader.x)),
+                7 | 9 => Some(tile_feet_px(leader.y)),
+                // A party member is not a map event; the documented "none" is -1.
+                10 => Some(-1),
+                _ => None,
+            };
+        }
+        // -1 (the running event) would need the interpreter's instance context, and
+        // -3..-7 are party members 1..5; neither has a placement layer in this port.
+        if target < 0 {
+            return None;
+        }
+        // Non-negative targets are map event ids. `actor` returns None for an id the
+        // current map does not place, which leaves the destination untouched.
+        let actor = self.actors.actor(target as u32)?;
+        match field {
+            0 => Some(actor.x),
+            1 => Some(actor.y),
+            2 => Some(actor.x.saturating_mul(2)),
+            3 => Some(actor.y.saturating_mul(2)),
+            4 => Some(0),
+            5 => actor.direction,
+            6 | 8 => Some(tile_centre_px(actor.x)),
+            7 | 9 => Some(tile_feet_px(actor.y)),
+            10 => Some(actor.id as i32),
+            _ => None,
+        }
     }
 
     fn engine_state(&mut self, field: i32) -> Option<i32> {
@@ -2482,6 +2559,7 @@ mod tests {
             root: &game.root,
             save_requests: &mut game.save_requests,
             map_requests: &mut game.map_requests,
+            actors: &game.runtime,
         }
     }
 
