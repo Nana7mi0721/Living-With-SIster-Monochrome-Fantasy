@@ -33,7 +33,7 @@ use crate::assets::Assets;
 use crate::atlas::{Atlas, SpriteQuad};
 use crate::auto_events::AutoEvents;
 use crate::db::Databases;
-use crate::map_runtime::{MapRuntime, Terrain};
+use crate::map_runtime::{LeaderPlacement, MapRuntime, Terrain, TriggerRequest};
 use crate::picture::{Picture, PictureKind, Screen, SCREEN_H, SCREEN_W};
 use crate::tilemap::{tile_centre_px, tile_feet_px, TileMap};
 use crate::tint::ScreenTint;
@@ -758,6 +758,37 @@ impl Game {
         self.runtime.move_leader(dx, dy)
     }
 
+    /// Tries a one-tile leader step and returns the contact triggers it fires.
+    ///
+    /// The contact core lives in [`MapRuntime::try_move_leader_contacts`]: the
+    /// destination is checked against each event's active-page contact box, so
+    /// walking into a blocking event still fires its player-touch page.
+    pub fn try_move_leader_contacts(&mut self, direction: i32) -> (bool, Vec<TriggerRequest>) {
+        self.runtime.try_move_leader_contacts(direction)
+    }
+
+    /// The contact triggers a step from `from` into `to` would fire.
+    #[must_use]
+    pub fn contact_triggers(&self, from: (i32, i32), to: (i32, i32)) -> Vec<TriggerRequest> {
+        self.runtime.try_contact_triggers(from, to)
+    }
+
+    /// Records the map's authored player start and places the leader there.
+    ///
+    /// WOLF map files carry no player start coordinate, so the start is the
+    /// operand of the hero-targeted `130` transfer that entered this map (or an
+    /// explicit new-game/debug call). Recorded separately from the live leader so
+    /// the canonical entry point survives movement.
+    pub fn set_player_start(&mut self, x: i32, y: i32, direction: i32) {
+        self.runtime.set_player_start(x, y, Some(direction));
+    }
+
+    /// The map's recorded player start, None until a teleport/start API sets it.
+    #[must_use]
+    pub fn player_start(&self) -> Option<LeaderPlacement> {
+        self.runtime.player_start()
+    }
+
     /// Builds the tile-layer quads for the current map.
     ///
     /// This is the layer WOLF draws before every picture. It is empty for a map with no
@@ -873,10 +904,12 @@ impl Game {
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, None);
         if let Some((x, y, options, direction)) = hero {
+            // The transfer operand is the map's authored player start: record it
+            // as well as placing the live leader.
             if options & 1 != 0 {
-                self.runtime.place_leader_precise(x, y, direction);
+                self.runtime.set_player_start_precise(x, y, direction);
             } else {
-                self.runtime.place_leader(x, y, direction);
+                self.runtime.set_player_start(x, y, direction);
             }
         }
         Ok(())

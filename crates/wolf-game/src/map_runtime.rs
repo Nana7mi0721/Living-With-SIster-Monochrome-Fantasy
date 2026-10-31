@@ -121,6 +121,12 @@ struct PageState {
     /// hero, 0x20 square hitbox, 0x40 half-step up. Only 0x08 and 0x20 matter to
     /// contact selection.
     behavior_options: u8,
+    /// Contact-range extension in x from the .mps page record (editor field
+    /// "接触範囲拡張 X", stored as 0-250). Its unit is not documented; see
+    /// docs/research/M9_MAP_CONTACTS.md for the empirical model.
+    collision_width: u8,
+    /// Contact-range extension in y, same units as `collision_width`.
+    collision_height: u8,
     /// True when the page draws a character image (graphic name or chip id set).
     has_image: bool,
 }
@@ -129,6 +135,13 @@ impl PageState {
     /// The editor's "slip-through" option: the event can be walked over.
     fn skip_through(&self) -> bool {
         self.behavior_options & 0x08 != 0
+    }
+
+    /// The editor's "hit box is a full square" option: 1x1 tile instead of
+    /// 1 tile wide by 0.5 tile high. Only affects the contact box, not the
+    /// cell the event occupies.
+    fn square_hit_box(&self) -> bool {
+        self.behavior_options & 0x20 != 0
     }
 }
 
@@ -406,6 +419,10 @@ pub struct MapRuntime {
     events: Vec<EventState>,
     /// The party leader's placement on the current map, when the engine has placed it.
     leader: Option<LeaderPlacement>,
+    /// The map's authored player start, recorded from a hero teleport or set
+    /// explicitly. Unlike `leader` this survives as the map's canonical entry
+    /// point even if the leader later moves.
+    player_start: Option<LeaderPlacement>,
     /// Map width in tiles, for movement bounds. 0 until a map is collected.
     width: i32,
     /// Map height in tiles.
@@ -461,6 +478,8 @@ impl MapRuntime {
                         program,
                         direction: i32::from(page.direction),
                         behavior_options: page.route.behavior_options,
+                        collision_width: page.collision_width,
+                        collision_height: page.collision_height,
                         has_image: !page.graphic.is_empty() || page.graphic_chip_id != 0xFFFF_FFFF,
                     }
                 })
@@ -482,6 +501,7 @@ impl MapRuntime {
         Self {
             events,
             leader: None,
+            player_start: None,
             width: i32::try_from(map.width).unwrap_or(0),
             height: i32::try_from(map.height).unwrap_or(0),
             terrain: None,
@@ -534,13 +554,46 @@ impl MapRuntime {
     /// (31, 19), and the title transfer's `(60, 34)` halves to Map003 event 1's own
     /// (30, 17) tile. Tile fields therefore truncate `precise / 2`.
     pub fn place_leader_precise(&mut self, precise_x: i32, precise_y: i32, direction: Option<i32>) {
-        self.leader = Some(LeaderPlacement {
+        self.leader = Some(Self::placement(precise_x, precise_y, direction));
+    }
+
+    /// Builds a placement from half-tile units, truncating tile coordinates.
+    fn placement(precise_x: i32, precise_y: i32, direction: Option<i32>) -> LeaderPlacement {
+        LeaderPlacement {
             x: precise_x / 2,
             y: precise_y / 2,
             precise_x,
             precise_y,
             direction,
-        });
+        }
+    }
+
+    /// Records the map's player start and places the leader there, in whole tiles.
+    ///
+    /// The map files carry no player start (docs/MAP_AUDIT.md §7.5); the start
+    /// only exists as the operand of the hero-targeted 130 transfer that brought
+    /// the player here, or as an explicit debug/new-game call. Recording it
+    /// separately keeps the canonical entry point while the leader walks.
+    pub fn set_player_start(&mut self, x: i32, y: i32, direction: Option<i32>) {
+        self.set_player_start_precise(x.saturating_mul(2), y.saturating_mul(2), direction);
+    }
+
+    /// Records the player start from half-tile units (the unit of a precise 130).
+    pub fn set_player_start_precise(
+        &mut self,
+        precise_x: i32,
+        precise_y: i32,
+        direction: Option<i32>,
+    ) {
+        let placement = Self::placement(precise_x, precise_y, direction);
+        self.player_start = Some(placement);
+        self.leader = Some(placement);
+    }
+
+    /// The map's recorded player start, None until a teleport/start API set it.
+    #[must_use]
+    pub fn player_start(&self) -> Option<LeaderPlacement> {
+        self.player_start
     }
 
     /// The leader's current placement, None until the engine has placed it.
@@ -731,17 +784,118 @@ impl MapRuntime {
         true
     }
 
-    /// True when any map event with an active page stands on this tile.
+    /// True when an active map event physically occupies this tile.
     ///
-    /// Event pages carry optional collisionWidth/Height extensions (docs/FORMAT_SPEC
-    /// §5.6.1); the shipped maps use 0 for 130 of 134 pages and every page that can
-    /// block the leader here, so the core blocks the event's own tile only. The four
-    /// non-zero touch pages in Dungeon/SampleMapB need unit semantics the format
-    /// notes do not provide yet (see docs/research/M9_MOVEMENT.md §4).
+    /// The base hit box is 1x1 tiles when the square option is set and 1 wide by
+    /// half a tile high otherwise; both stay inside the event's own tile, so the
+    /// movement block reduces to the event's tile. Slip-through pages are
+    /// walkable. The collisionWidth/Height extension is a CONTACT range, not part
+    /// of the base hit box: applying it to movement would block 35x23 cells for
+    /// Dungeon event 2. Contact is handled by [`Self::contact_box`] and the
+    /// contact triggers.
     fn event_occupies(&self, x: i32, y: i32) -> bool {
-        self.events
-            .iter()
-            .any(|state| state.active.is_some() && state.x == x && state.y == y)
+        self.events.iter().any(|state| {
+            let Some(index) = state.active else {
+                return false;
+            };
+            let Some(page) = state.pages.get(index) else {
+                return false;
+            };
+            !page.skip_through() && state.x == x && state.y == y
+        })
+    }
+
+    /// The inclusive tile rectangle (min_x, min_y, max_x, max_y) that an event's
+    /// active page covers for contact checks.
+    ///
+    /// The base hit box is 1x1 tiles when the square option is set, otherwise one
+    /// tile wide by half a tile high. The page's collisionWidth/Height extend that
+    /// box by that many half-tiles on each side; the unit is empirical because the
+    /// format notes only give the 0-250 range. See
+    /// docs/research/M9_MAP_CONTACTS.md for the evidence and alternatives.
+    fn page_contact_box(state: &EventState, page: &PageState) -> (i32, i32, i32, i32) {
+        const TILE_PX: i32 = 16;
+        /// WOLF's spatial quantum is the half tile (the leader's precise_x is
+        /// 2*tile); the editor's 0-250 extension values are read in that unit.
+        const EXTENSION_UNIT_PX: i32 = 8;
+        let (base_half_w, base_half_h) = if page.square_hit_box() {
+            (TILE_PX / 2, TILE_PX / 2)
+        } else {
+            (TILE_PX / 2, TILE_PX / 4)
+        };
+        let half_w = base_half_w + i32::from(page.collision_width) * EXTENSION_UNIT_PX;
+        let half_h = base_half_h + i32::from(page.collision_height) * EXTENSION_UNIT_PX;
+        let center_x = state.x * TILE_PX + TILE_PX / 2;
+        let center_y = state.y * TILE_PX + TILE_PX / 2;
+        let min_x = (center_x - half_w).div_euclid(TILE_PX);
+        let max_x = (center_x + half_w - 1).div_euclid(TILE_PX);
+        let min_y = (center_y - half_h).div_euclid(TILE_PX);
+        let max_y = (center_y + half_h - 1).div_euclid(TILE_PX);
+        (min_x, min_y, max_x, max_y)
+    }
+
+    /// The contact rectangle of an event's active page, for diagnostics and tests.
+    #[must_use]
+    pub fn contact_box(&self, event: u32) -> Option<(i32, i32, i32, i32)> {
+        let state = self.events.iter().find(|state| state.id == event)?;
+        let index = state.active?;
+        let page = state.pages.get(index)?;
+        Some(Self::page_contact_box(state, page))
+    }
+
+    /// Which player-touch/event-touch pages a step from `from` into `to` would run.
+    ///
+    /// `from` is the tile the leader left and `to` the tile it tried to enter
+    /// (which may be blocked). Player touch fires only when the destination enters
+    /// the contact box from outside; event touch fires whenever the destination is
+    /// inside it, so an overlap can repeat. Requests are sorted by event id.
+    #[must_use]
+    pub fn try_contact_triggers(&self, from: (i32, i32), to: (i32, i32)) -> Vec<TriggerRequest> {
+        let mut requests = Vec::new();
+        for state in &self.events {
+            let Some(index) = state.active else {
+                continue;
+            };
+            let Some(page) = state.pages.get(index) else {
+                continue;
+            };
+            let (min_x, min_y, max_x, max_y) = Self::page_contact_box(state, page);
+            let inside = |point: (i32, i32)| {
+                point.0 >= min_x && point.0 <= max_x && point.1 >= min_y && point.1 <= max_y
+            };
+            let fires = match page.trigger {
+                Trigger::PlayerTouch => inside(to) && !inside(from),
+                Trigger::EventTouch => inside(to),
+                _ => false,
+            };
+            if fires {
+                requests.push(TriggerRequest {
+                    event: state.id,
+                    page: index,
+                });
+            }
+        }
+        requests.sort_unstable_by_key(|request| request.event);
+        requests
+    }
+
+    /// Moves the leader one tile and reports the contact triggers the step fires.
+    ///
+    /// The contact check uses the ATTEMPTED destination, so walking into an event
+    /// that blocks movement still fires its player-touch page (the official rule
+    /// for an impassable body/contact range).
+    pub fn try_move_leader_contacts(&mut self, direction: i32) -> (bool, Vec<TriggerRequest>) {
+        let Some(step) = facing_step(direction) else {
+            return (false, Vec::new());
+        };
+        let Some(before) = self.leader else {
+            return (false, Vec::new());
+        };
+        let (dx, dy) = step_delta(step);
+        let target = (before.x + dx, before.y + dy);
+        let moved = self.move_leader_step(dx, dy, step, direction);
+        let requests = self.try_contact_triggers((before.x, before.y), target);
+        (moved, requests)
     }
 
     /// How many runnable events have an active page with a command stream right now.

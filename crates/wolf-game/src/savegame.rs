@@ -19,6 +19,7 @@ use std::path::Path;
 use wolf_save::part5::{SavePart5, SavePart5_1};
 use wolf_save::SaveFile;
 
+use crate::db::Container;
 use crate::game::Game;
 use crate::picture::{Picture, PictureKind, Screen};
 
@@ -97,6 +98,26 @@ pub fn apply(game: &mut Game, save: &SaveFile) -> LoadedSave {
     // The variable database travels inside the save. Character creation writes the
     // player name into CDataBase type 0 row 12, and the HUD reads it back through
     // opcode 250, so a load must overlay it before the first frame is drawn.
+    //
+    // A saved table can be taller or shorter than the .dat file it came from: a 250
+    // write to row -2 (ROW_COUNT_SET) grows the runtime tables (battle scratch, the
+    // 100+n character slots) before the script writes the extra rows. The save stores
+    // the resulting row count, so the reload has to restore it as well; copying the
+    // cells alone would leave Databases::row_count answering with the stale .dat height
+    // and a later -1 query / loop bound would undercount (M10_SAVE_COMPLETENESS.md).
+    // Only the CData container travels in a save's variable database; SysDatabase and
+    // DataBase are engine configuration (docs/research/M8_TEMPLATE_SAVE.md §6).
+    for (db_type, saved) in save.vardb.types.iter().enumerate() {
+        let db_type = db_type as i32;
+        let Some(current) = game.databases.row_count(Container::CData, db_type) else {
+            continue;
+        };
+        if saved.rows.len() != current {
+            let restored = i32::try_from(saved.rows.len()).unwrap_or(i32::MAX);
+            game.databases
+                .set_row_count(Container::CData, db_type, restored);
+        }
+    }
     game.databases.apply_saved_database(&save.vardb);
 
     // Choice-window anchor. Sys3/Sys4 are absolute screen pixels (docs/OPCODE_102.md §4.2).
