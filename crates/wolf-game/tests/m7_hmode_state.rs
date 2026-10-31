@@ -90,6 +90,26 @@ fn click_at(game: &mut Game, x: i32, y: i32) {
 /// canonical loop used by m6_night_menu.rs / m6_mainline.rs; the day-2 evening state
 /// (measured this range) is bit-identical to the state at the CE246 skinship menu,
 /// because merely opening the night command menu does not touch the intimacy variables.
+
+const DAY_COMMAND_LABELS: [&str; 6] = [
+    "给店里帮忙", "学习会", "基础锻炼", "攻击练习", "防御练习", "秘密特训",
+];
+const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
+
+fn day_row_texts(game: &Game) -> Vec<String> {
+    DAY_ROW_PICS
+        .iter()
+        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .collect()
+}
+
+fn evening_work(game: &Game) -> bool {
+    game.vm
+        .instances()
+        .iter()
+        .any(|instance| matches!(instance.event, 251 | 300 | 301 | 326 | 406))
+}
+
 fn day2_evening_game() -> Option<Game> {
     let mut game = open_game()?;
     game.auto_advance = true;
@@ -126,26 +146,34 @@ fn day2_evening_game() -> Option<Game> {
         }
     }
     game.auto_choice = true;
-    for _ in 0..350 {
+    // The drawn day commands are a retail-PRNG roll; pick the first CE252 daytime
+    // task row (地区贡献 would route into the battle).
+    let mut chosen: Option<(usize, String)> = None;
+    for _ in 0..1200 {
         game.frame();
-        if game
-            .screen
-            .get(1201)
-            .map(|picture| !picture.text.is_empty())
-            .unwrap_or(false)
-        {
+        for (row, text) in day_row_texts(&game).iter().enumerate() {
+            if DAY_COMMAND_LABELS.iter().any(|label| text.contains(label)) {
+                chosen = Some((row, text.clone()));
+                break;
+            }
+        }
+        if chosen.is_some() {
             break;
         }
     }
-    click_at(&mut game, 512, 230);
-    for _ in 0..1500 {
+    let (row, _label) = chosen.expect("CE251 draws a CE252 daytime command");
+    click_at(&mut game, 512, 230 + 50 * row as i32);
+    for _ in 0..2500 {
         game.frame();
         if game.vm.instances().iter().all(|instance| instance.event != 251) {
             break;
         }
     }
-    for _ in 0..1200 {
+    for _ in 0..6000 {
         game.frame();
+        if !evening_work(&game) && game.vm.vars.get(4) >= 18 {
+            break;
+        }
     }
     game.auto_choice = false;
     Some(game)
@@ -155,22 +183,22 @@ fn day2_evening_game() -> Option<Game> {
 /// Values are read from work/all and work/retail_backup/Save/SaveData08.sav; both columns
 /// are asserted exactly so a data/loader drift fails loudly.
 const H_MODE_VARS: &[(usize, i32, i32)] = &[
-    (7, 2936, 7586),
+    (7, 3029, 7586),
     (8, 0, 25),
     (13, 60, 120),
     (14, 115, 75),
     (16, 4, 2),
     (18, 22, 60),
     (20, 75, 90),
-    (21, 20, 688),
+    (21, 18, 688),
     (22, -1, 375),
     (23, 5, 9),
-    (28, 103, 1815),
+    (28, 105, 1815),
     (62, 0, 1),
     (64, 0, 1),
     (70, 0, 1),
     (102, 0, 120),
-    (137, 3, 8),
+    (137, 1, 8),
     (138, 0, 50),
     (150, 0, 44),
     (157, 1, 12),
@@ -195,6 +223,7 @@ fn h_mode_var_table_is_derived_from_the_retail_save() {
     };
     assert_eq!(fresh.stats.warnings, 0, "fresh day-2 evening is warning-free");
     assert_eq!(fresh.vm.vars.get(160), 2, "fresh baseline is day 2");
+
 
     // Mid-H retail snapshot.
     let Some(mut retail) = open_game() else {

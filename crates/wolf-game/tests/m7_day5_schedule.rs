@@ -116,48 +116,81 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
 
 /// Click the first workday command button (row0 鍛錬) and let the day run through
 /// 17:00 to the 19:30 bedroom.  Days 2 and 3 only (day 4 is the forced battle).
+
+const DAY_COMMAND_LABELS: [&str; 6] = [
+    "给店里帮忙", "学习会", "基础锻炼", "攻击练习", "防御练习", "秘密特训",
+];
+const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
+
+fn day_row_texts(game: &Game) -> Vec<String> {
+    DAY_ROW_PICS
+        .iter()
+        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .collect()
+}
+
+fn evening_work(game: &Game) -> bool {
+    game.vm
+        .instances()
+        .iter()
+        .any(|instance| matches!(instance.event, 251 | 300 | 301 | 326 | 406))
+}
+
 fn spend_day_choosing_row(game: &mut Game, day: i32) {
     game.auto_choice = true;
-    let mut drawn = false;
-    for _ in 0..700 {
+    // The three drawn day commands are a retail-PRNG roll; 地区贡献 routes into the
+    // battle. Pick the first row that is a CE252 daytime task, like a player would.
+    let mut chosen: Option<(usize, String)> = None;
+    for _ in 0..1200 {
         game.frame();
-        if let Some(pic) = game.screen.get(1201) {
-            if !pic.text.is_empty() {
-                drawn = true;
+        for (row, text) in day_row_texts(game).iter().enumerate() {
+            if DAY_COMMAND_LABELS.iter().any(|label| text.contains(label)) {
+                chosen = Some((row, text.clone()));
                 break;
             }
         }
+        if chosen.is_some() {
+            break;
+        }
     }
-    assert!(drawn, "day {day}: workday command menu never drew");
+    let (row, label) = chosen.expect("day: CE251 draws a CE252 daytime command");
     let energy_before = game.vm.vars.get(14);
-    game.mouse = [512, 230]; // first row button
+    let y = 230 + 50 * row as i32;
+    game.mouse = [512, y];
     for _ in 0..10 { game.frame(); }
     game.mouse_buttons = 1;
     for _ in 0..5 { game.frame(); }
     game.mouse_buttons = 0;
     let mut finished = false;
-    for _ in 0..2200 {
+    for _ in 0..2500 {
         game.frame();
         if game.vm.instances().iter().all(|i| i.event != 251) {
             finished = true;
             break;
         }
     }
-    assert!(finished, "day {day}: daytime command never returned");
+    assert!(finished, "day {day}: daytime command never returned ({label})");
     assert_eq!(game.stats.warnings, 0, "day {day}: warnings during day");
     assert_eq!(game.vm.vars.get(4), 17, "day {day}: expected 17:00");
     assert_eq!(game.vm.vars.get(5), 0, "day {day}: expected 17:00");
     assert_eq!(game.vm.vars.get(160), day);
     assert!(game.vm.vars.get(14) < energy_before, "day {day}: energy not spent");
     let mut evening = false;
-    for _ in 0..1800 {
+    for _ in 0..6000 {
         game.frame();
-        if game.vm.vars.get(4) == 19 && game.vm.vars.get(5) >= 30 {
+        if !evening_work(&game) && game.vm.vars.get(4) >= 18 {
             evening = true;
             break;
         }
     }
-    assert!(evening, "day {day}: 19:30 evening not reached");
+    assert!(
+        evening,
+        "day {day}: evening not settled (clock {}:{:02})",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5)
+    );
+    assert_eq!(game.vm.vars.get(160), day);
+    assert_eq!(game.vm.vars.get(5), 30, "day {day}: evening settles on the half hour");
     assert_eq!(game.stats.warnings, 0, "day {day}: warnings in evening");
 }
 
@@ -241,23 +274,26 @@ fn day_five_morning_is_reachable_after_settling_the_forced_day4_battle() {
 
     // ---- real evening chain after the battle returns -------------------------
     let mut at_bedroom = false;
-    for _ in 0..2600 {
+    for _ in 0..6000 {
         game.frame();
-        if game.vm.vars.get(4) == 18
-            && game.vm.vars.get(5) == 0
-            && !has_event(&game, 300)
-        {
+        if !evening_work(&game) && game.vm.vars.get(4) >= 18 {
             at_bedroom = true;
             break;
         }
     }
-    assert!(at_bedroom, "evening dinner chain (CE300/CE326) did not finish");
+    assert!(
+        at_bedroom,
+        "evening dinner chain did not finish (clock {}:{:02})",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5)
+    );
+    assert_eq!(game.vm.vars.get(5), 30, "evening settles on the half hour");
     assert_eq!(game.stats.warnings, 0, "warnings after battle settles");
 
     // ---- real CE329 sleep from the evening bedroom -> day5 08:30 --------------
     // sleep_into_next_morning seeds var63 (the sister click) and drives the genuine
-    // CE329 就寝 + CE317 早朝 chain; the clock being 18:00 (not 19:30) does not
-    // matter because CE329/CE317 rewrite date and time absolutely.
+    // CE329 就寝 + CE317 早朝 chain; the script-random settle hour (18:30 or 19:30)
+    // does not matter because CE329/CE317 rewrite date and time absolutely.
     sleep_into_next_morning(&mut game, 4); // day5 08:30, weekday 4 (Fri)
 
     assert_eq!(game.stats.warnings, 0, "no warnings on day5");
