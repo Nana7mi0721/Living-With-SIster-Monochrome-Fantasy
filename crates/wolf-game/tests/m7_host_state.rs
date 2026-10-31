@@ -32,14 +32,15 @@ fn cmd(opcode: u32, args: &[i32], strings: &[&str]) -> Slot {
 /// The real data root: WOLF_DATA_ROOT when set, otherwise work/all (this checkout's
 /// merged data set) falling back to work/full.
 fn data_root() -> PathBuf {
-    if let Ok(value) = std::env::var("WOLF_DATA_ROOT") {
-        if !value.is_empty() {
-            return PathBuf::from(value);
-        }
-    }
     let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     base.pop();
     base.pop();
+    if let Ok(value) = std::env::var("WOLF_DATA_ROOT") {
+        if !value.is_empty() {
+            let path = PathBuf::from(value);
+            return if path.is_absolute() { path } else { base.join(path) };
+        }
+    }
     let all = base.join("work").join("all");
     if all.join("BasicData").join("CommonEvent.dat").is_file() {
         return all;

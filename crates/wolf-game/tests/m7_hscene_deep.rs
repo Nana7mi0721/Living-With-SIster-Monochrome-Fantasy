@@ -22,9 +22,13 @@ fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
 }
 fn data_root() -> PathBuf {
-    std::env::var("WOLF_DATA_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| repo_root().join("work/all"))
+    match std::env::var("WOLF_DATA_ROOT") {
+        Ok(value) if !value.is_empty() => {
+            let path = PathBuf::from(value);
+            if path.is_absolute() { path } else { repo_root().join(path) }
+        }
+        _ => repo_root().join("work/all"),
+    }
 }
 fn save_path(n: u32) -> PathBuf {
     repo_root().join(format!("work/retail_backup/Save/SaveData{n:02}.sav"))
