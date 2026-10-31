@@ -360,7 +360,29 @@ impl Game {
             .and_then(|bytes| TileSetData::parse(&bytes).ok());
         // System.sav is a complete save file in this game: use it as the template so a
         // brand-new game can write its first save without inventing part1/part4.
-        let base_save = crate::savegame::read_save(&root.join("Save").join("System.sav")).ok();
+        // A data root without Save/ (work/all ships none) still gets a write template:
+        // synthesize one and record a single diagnostic. This is an expected data-root
+        // shape, not a script warning, so `stats.warnings` stays untouched.
+        let save_path = root.join("Save").join("System.sav");
+        let mut diagnostics = BTreeMap::new();
+        let base_save = match crate::savegame::read_save(&save_path) {
+            Ok(save) => Some(save),
+            Err(err) => {
+                let note = if save_path.is_file() {
+                    format!(
+                        "220 SaveLoad: cannot read {} ({err}); using a synthesized new-game template",
+                        save_path.display()
+                    )
+                } else {
+                    format!(
+                        "220 SaveLoad: {} is absent; using a synthesized new-game template",
+                        save_path.display()
+                    )
+                };
+                diagnostics.insert(note, 1);
+                Some(wolf_save::SaveFile::new_game_template())
+            }
+        };
         let auto_events = AutoEvents::from_common_events(&events);
         Ok(Self {
             vm: Vm::new(programs),
@@ -378,7 +400,7 @@ impl Game {
             messages: Vec::new(),
             choices: None,
             stats: GameStats::default(),
-            diagnostics: BTreeMap::new(),
+            diagnostics,
             replies: std::collections::VecDeque::new(),
             auto_advance: false,
             auto_choice: false,
