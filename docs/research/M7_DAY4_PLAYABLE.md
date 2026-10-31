@@ -1,5 +1,13 @@
 # M7 task-38 — Day-4 real battle: exact blocking edge (no-injection audit)
 
+> **SUPERSEDED by M8 W1-c (`docs/research/M8_BATTLE_SETTLE.md`).** The deadlock traced
+> below came from the rebuilt wiring forwarding `2000354` (the battle context/enemy type)
+> as CE242's arg0. CE242's arg0 is the **acting character slot** (pc143 splits on
+> `self1600000 IN {1,2,3}`), so with slot 1 the same from-scratch replay settles
+> (`2000352=1`, `2000343=1`) and reaches day 5. `crates/wolf-game/tests/m7_day4_playable.rs`
+> now asserts the settlement and the day4→day5 run; this file remains the exact blocker
+> record for the old wiring version.
+
 Status: **COMPLETE (honest blocker report)**. Deliverable: this doc + the green test
 `crates/wolf-game/tests/m7_day4_playable.rs`.
 HEAD: `1d36ebe` (+ task-34 wiring). No production source edits, no commit/push.

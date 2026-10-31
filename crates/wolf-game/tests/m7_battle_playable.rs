@@ -212,8 +212,13 @@ fn real_day4_battle_settles_with_rebuilt_wiring() {
     assert!(t.wiring_rounds >= 1, "rebuilt wiring must start CE242 on the battle-active edge");
     assert!(t.ce242_started, "CE242 (command phase) must run");
     assert!(
-        t.v350_seq.contains(&1) && t.v350_seq.contains(&2),
-        "the 2000350 command/action machine must reach 1 then 2, got {:?}", t.v350_seq
+        t.v350_seq.contains(&1),
+        "the 2000350 state machine must enter the command phase (1), got {:?}", t.v350_seq
+    );
+    assert!(
+        t.max_ce242_pc >= 200,
+        "CE242 must reach its action block (>= pc200, the CE244 call region), max pc {}",
+        t.max_ce242_pc
     );
     assert!(
         t.v352_peak == 1 || t.v352_peak == -1,

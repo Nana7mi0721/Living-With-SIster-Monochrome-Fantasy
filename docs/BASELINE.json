@@ -1245,5 +1245,11 @@
   "choice_window": "The runtime choice window was already drawn in b5a2d56 by choice::overlay_at_sized plus the wolf-cli capture path. crates/wolf-game/tests/m7_choice_window.rs adds 2 regression tests; --event 246 shows six options at anchor (512,192) with engine rect [512,192,122,208], while --event 4 has no choice and event 42 is off-screen. docs/research/M7_CHOICE_WINDOW.md.",
   "prng_test_adjustments": "Retail-PRNG draws replaced old xorshift coincidences: m6_mainline reads first_label dynamically; m6_training_menu asserts 18:30->19:30; time_system keeps clock semantics with a wider frame range; m6_ev1_page0/m6_ev1_page2/m6_night_menu/m6_night_sleep hover the actual sister sprite (anchor=1/file contains imouto); m6_multiday asserts day-level consequences only. cargo test -q --workspace is green and wolf-cli verify is PASS 70/0.",
   "docs": "docs/HANDOFF_M7.md"
+ },
+ "m8_workstreams": {
+  "battle_settle": "M8 W1-c DONE: crates/wolf-game/src/battle_wiring.rs now starts CE242 with the acting character slot (1), not 2000354 (battle context/enemy type). CE242 pc143 splits on self1600000 IN {1,2,3}; CE239 pc581 seeds the action 2000496=4 before the phase. The genuine day-4 CE253->CE239 replay settles: 2000350 0->1->0, 2000352=1, 2000343=1, CE239 returns, warnings 0. docs/research/M8_BATTLE_SETTLE.md.",
+  "day4_day5": "m7_day4_playable::day4_real_battle_settles_and_reaches_day5_without_injection: day1->day4 genuine schedule, forced CE253 battle settles, CE251 resumes at 16:00, CE300 walks to 17:00 + CE326 dinner ends ~18:00, natural night menu (hover sister + Decide, 今天先休息吧 -> 是, CE329) -> day 5 08:30 (var160=5, var6=4, var4=8, var5=30), warnings 0, frames 8008. No vars.set on 2000340/343/350/352; only var295 (first-dinner TIPS) and var68 are normalized as in m6_night_sleep.",
+  "battle_playable": "m7_battle_playable updated: with the slot argument SaveData01's day-4 wrapper settles immediately (v350_seq [0,1,0], v352=1, v343=1, max242pc 415, warnings 0, unanswered 250 = 0).",
+  "remaining": "H forward wrapper chain (W2-d), character/map-actor layer (W3-a), engine_state field17 (W3-b), new-game template save (W4-b), dangling-map guard (W4-c), PRNG range reduction (W5-a). See docs/research/M8_BACKLOG.md."
  }
 }

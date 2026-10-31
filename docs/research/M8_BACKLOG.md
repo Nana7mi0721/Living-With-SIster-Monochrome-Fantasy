@@ -49,9 +49,14 @@ Note: `M7_BATTLE_FULL.md` (task-20) is the strongest W1 evidence and is **newer*
 
 Legend: **blocker** = what physically prevents closing the gap today.
 
-### G1 — Battle settlement is not wired into real play (W1 head gap)
-- Evidence: `docs/research/M7_BATTLE_FULL.md` §7; `docs/research/M7_BATTLE_ROUND.md`
-  Scenario B; `docs/BASELINE.json` `battle_slice.slice_c_entry_proof` / `decision`.
+### G1 — Battle settlement is not wired into real play (W1 head gap) — **RESOLVED (W1-c)**
+- Evidence: `docs/research/M8_BATTLE_SETTLE.md`; `docs/research/M7_BATTLE_FULL.md` §7;
+  `docs/BASELINE.json` `battle_slice`.
+- Resolution: CE242's arg0 is the acting character slot (1..3), not `2000354`
+  (battle context). `battle_wiring.rs` now supplies slot 1; the genuine day-4 replay
+  settles and reaches day 5 08:30 with no settlement injection
+  (`m7_day4_playable`). The old bootstrap/circularity analysis below remains true for
+  the shipped call graph.
 - Fact: CE244 settlement logic is correct and reachable via a **direct**
   `start_event(242)` (SC1: 2000350 → [0,1,0,2,0], 2000352=1, 2000343=1). The only way
   in-data is a circular bootstrap: `2000350=1` is written only by `CE242 pc14`, and
@@ -155,24 +160,17 @@ Sub-tasks:
 - **W1-a (DONE)**: command availability (G2/G3 partial) via `seed_battle_databases()`.
 - **W1-b (DONE, test-only)**: settlement logic proven reachable (`m7_battle_full` SC1) — this
   is the acceptance oracle for W1-c.
-- **W1-c (REMAINING, core)**: wire the battle end. Two honest options, decide with Lead:
-  (a) engine rising-edge hook: when global `2000340` goes 0→1 (CE239 battle start), call
-    `start_event(242)` — mark as **reconstructed wiring, documented** (there is no
-    210-call in data, so this is an engine policy, not a claimed script edge); or
-  (b) keep the `m7_battle_full` seeded SC1 path and accept it as the milestone.
-  Acceptance (either): a single test drives CE188 → real attack → CE244 settlement →
-  CE239 returns pc1106, `2000352∈{1,-1}`, `2000343=1`, `2000350` final 0, warnings 0,
-  battle-segment `250 unanswered == 0`; **and** the same test then runs day4 dinner →
-  `CE329 就寝` → `CE317 早朝` → `var160=5, var6=4, var4=8, var5=30` with **no**
-  `vars.set` injection (replaces the 4-var injection in `m7_day5_schedule`).
-- **W1-d (REMAINING, menu)**: CE65 command menu DB strings (G2) + type18 target rows (G3)
-  so the command window is fully localized and target list populates.
-- Candidate files: `crates/wolf-game/src/game.rs` (battle-phase scheduler / rising-edge
-  hook), optional new `crates/wolf-game/src/battle_phase.rs`; `crates/wolf-game/src/db.rs`
-  (seed/default cells). Tests: extend `m7_battle_full.rs` or new
-  `m8_battle_settle.rs`, new `m8_battle_menu.rs`. Depends on: battle_seed (done),
-  PRNG exactness (W5, only for reproducibility parity).
-**Do not**: auto-seed inside `start_event(188/239)` — breaks `m6_battle_commands.rs:148-151`.
+- **W1-c (DONE, M8)**: wire the battle end. The rebuilt wiring now supplies CE242's real
+  arg0 — the **acting character slot** (1), not the battle context `2000354`.
+  `docs/research/M8_BATTLE_SETTLE.md`; acceptance test
+  `m7_day4_playable::day4_real_battle_settles_and_reaches_day5_without_injection`
+  (day1→day4, genuine CE253→CE239, CE244 settles `2000352=1`/`2000343=1`, CE239 returns,
+  dinner, natural night menu, **day 5 08:30**, warnings 0, no settlement injection).
+  `m7_battle_playable` updated to the new state sequence.
+- **W1-d (DONE, M7 batch-2)**: CE65 command menu strings + type18 target rows; see
+  `M7_BATTLE_MENU_DB.md`, `M7_BATTLE_TARGET_SCHEDULER.md`.
+- Remaining W1 polish: a multi-member party would need the per-member CE242 loop; the
+  day-4 replay party power is still 132 (normal progression, not a defect).
 
 ### W2 — H-scene visibility and forward path
 **Goal**: H text/word glyphs actually appear, and the scene is playable forward from the
@@ -229,16 +227,15 @@ DONE in M7 (all have a test or a documented capture):
 PRNG port · battle round (CE188 line) · battle seed (command availability) · real CE244
 settlement reachable via SC1 · H advance 14/14 · H resume + var62 UI walk · H auto-event
 scheduler · opcode124 interpreter + host fields · day5 with 4-var injection · map edge
-cases · new-game entry route · save 5-part roundtrip · choice window · window skin.
+cases · new-game entry route · save 5-part roundtrip · choice window · window skin ·
+battle command-menu DB strings · H word-layer visibility · **battle settlement wired into
+real play (W1-c, day4→day5 no injection)**.
 
-REMAINING (M8): battle **settlement wired into real play** (W1-c) · battle command-menu
-strings/target rows (W1-d) · H word-layer visibility (W2-c) · H forward wrapper chain
-(W2-d) · character/map-actor layer (W3-a) · engine_state field17 (W3-b) · new-game
-template save (W4-b) · dangling-map guard (W4-c) · PRNG range reduction (W5-a) · anchor/slot
-and audio polish (W5-b/c).
+REMAINING (M8): H forward wrapper chain (W2-d) · character/map-actor layer (W3-a) ·
+engine_state field17 (W3-b) · new-game template save (W4-b) · dangling-map guard (W4-c) ·
+PRNG range reduction (W5-a) · anchor/slot and audio polish (W5-b/c).
 
-Estimated priority order for M8: **W1-c, W1-d, W2-c, W2-d, W3-a, W4-b, W4-c, W3-b,
-W5-a**, then polish.
+Estimated priority order for M8: **W2-d, W3-a, W4-b, W4-c, W3-b, W5-a**, then polish.
 
 ---
 

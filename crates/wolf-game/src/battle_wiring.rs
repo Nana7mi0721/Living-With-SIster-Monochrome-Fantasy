@@ -23,9 +23,18 @@
 //! ## What the real engine must do (BATTLE.md section 5.3.1, option B)
 //!
 //! When a battle becomes active (the 0 -> 1 edge of 2000340) and the command phase is
-//! idle (2000350 == 0), the engine starts the command-phase script CE242. CE242 then
-//! sets 2000350 = 1 itself and reads the command the caller already stored in 2000354
-//! (CE239 pc104 copies its argument there). This file is that wiring.
+//! idle (2000350 == 0), the engine starts the command-phase script CE242 once for each
+//! acting party member. CE242 then sets 2000350 = 1 itself, executes that member's
+//! action (the action code lives in 2000496, which CE239 seeds to 4 before the phase)
+//! and either calls CE244 to settle or sets 2000350 = 2 for the enemy/turn phase.
+//!
+//! CE242's lone argument (`self1600000`) is the **acting character slot**, not the
+//! battle command: pc143 takes the main-party action block when it is 1..3 and the
+//! `DLC用追加処理` branch otherwise. That is why the earlier version of this file, which
+//! forwarded 2000354 (the enemy/battle type the caller selected), deadlocked whenever
+//! the caller's low-power branch passed 0. `wolf-cli dump --event 242 --self 600=1`
+//! settles 2000352=1 / 2000343=1 with no other injection; `--self 600=0` takes the DLC
+//! branch and never calls CE244. This file therefore supplies the first party slot.
 //!
 //! ## Honesty contract
 //!
@@ -33,8 +42,10 @@
 //!   Game::set_battle_wiring toggle exist so the addition is auditable, not hidden.
 //! * It does NOT hardcode 2000350 = 1: it only starts the script, and the script
 //!   writes the variable as it was written to do.
-//! * It does NOT fake menu input: the command the player would have chosen is already
-//!   in 2000354 because the real caller (CE239, fed by CE253/CE256/...) put it there.
+//! * It does NOT fake menu input: the action the player would have chosen is already
+//!   in 2000496 (CE239 pc581 seeds the default 4 = normal attack; other writers set
+//!   the real selected command). The slot argument is the engine-side identity of the
+//!   acting member, not a choice.
 //! * It does NOT seed 2000352/2000343: those are CE244's settlement outputs.
 //!
 //! ## Toggle
@@ -53,11 +64,10 @@ const VAR_COMMAND_PHASE: usize = 350;
 const VAR_BATTLE_ACTIVE: usize = 340;
 /// Normal-variable flat slot for 2000343 -- battle decided (CE244 sets it to 1).
 const VAR_BATTLE_DECIDED: usize = 343;
-/// Normal-variable flat slot for 2000354 -- the command code CE239 received from its
-/// caller (pc104: `2000354 = self1600003`). It is the value the player-menu would have
-/// selected, so it is the honest argument to hand CE242 (whose lone argument is
-/// `選択コマンド`, self1600000).
-const VAR_CHOSEN_COMMAND: usize = 354;
+/// The slot handed to CE242 as `self1600000` (its arg0). CE242 pc143 splits on it:
+/// 1..3 = main party action block, anything else = `DLC用追加処理`. The seeded party has
+/// one member, so the leader is slot 1. (See the module docs for the proof.)
+const ACTING_PARTY_SLOT: i32 = 1;
 /// Common event that runs the player command phase (command processing).
 const EVENT_COMMAND_PHASE: u32 = 242;
 
@@ -116,16 +126,17 @@ impl BattleWiring {
         if vm.vars.get(VAR_COMMAND_PHASE) != 0 || vm.vars.get(VAR_BATTLE_DECIDED) != 0 {
             return None;
         }
-        // Start the command-phase script, then hand it the command the caller already
-        // resolved into 2000354, exactly as a `210 500242, ..., <command>` edge would
-        // (call arguments land in self group 6, magic::SELF_ARG_BASE + slot). Without
-        // this argument CE242 reads self1600000 == 0 and falls through pc143
-        // (`self1600000 in {1,2,3}`) without ever reaching pc201/pc207/pc208, so no
-        // turn executes and 2000350 never advances to 2 (docs/BATTLE.md:824).
-        let command = vm.vars.get(VAR_CHOSEN_COMMAND);
+        // Start the command-phase script, then hand it the acting character slot exactly
+        // as an engine `500242` invocation would (call arguments land in self group 6,
+        // magic::SELF_ARG_BASE + slot). Without this argument CE242 reads self1600000 == 0
+        // and falls through pc143 (`self1600000 in {1,2,3}`) into the DLC branch, never
+        // reaching pc201 CALL 500244 / pc207 CALL 500243 / pc208 SET 2000350=2.
+        // The slot is NOT the battle command: the command/action is 2000496, which CE239
+        // seeds to 4 (pc581) before the phase and CE242 consumes.
+        let slot = ACTING_PARTY_SLOT;
         if let Some(id) = vm.start_event(EVENT_COMMAND_PHASE) {
             if let Some(inst) = vm.instance_mut(id) {
-                inst.self_vars.set(SELF_ARG_BASE, command);
+                inst.self_vars.set(SELF_ARG_BASE, slot);
             }
             self.started_rounds = self.started_rounds.saturating_add(1);
             return Some(EVENT_COMMAND_PHASE);
