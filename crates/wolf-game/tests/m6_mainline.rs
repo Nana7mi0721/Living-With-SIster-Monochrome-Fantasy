@@ -35,6 +35,46 @@ fn open_game() -> Option<Game> {
     }
 }
 
+/// The CE251 day-command rows that route to CE252 (the normal daytime tasks).
+/// (button label, `var48` command id, the stat the task raises).
+///
+/// CE251 rolls three distinct increasing values from 1..=10 into self[10..12] and
+/// labels the first three rows from them; ids 7/8/9 are 地区贡献/探索/远征
+/// (CE253/CE254). Which task lands on row 1 is therefore a retail-PRNG draw, so the
+/// test picks the first CE252 row the way a player would instead of assuming 学习会.
+const DAY_COMMANDS: [(&str, i32, Option<usize>); 6] = [
+    ("给店里帮忙", 1, None),       // pays money (var7)
+    ("学习会", 2, Some(171)),      // 賢さ
+    ("基础锻炼", 3, Some(174)),    // 根性
+    ("攻击练习", 4, Some(170)),    // 攻撃技術
+    ("防御练习", 5, Some(173)),    // 防御技術
+    ("秘密特训", 6, Some(174)),    // 根性
+];
+
+fn day_command(label: &str) -> Option<(i32, Option<usize>)> {
+    DAY_COMMANDS
+        .iter()
+        .find(|(name, _, _)| label.contains(name))
+        .map(|(_, id, stat)| (*id, *stat))
+}
+
+const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
+
+fn day_row_texts(game: &Game) -> Vec<String> {
+    DAY_ROW_PICS
+        .iter()
+        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .collect()
+}
+
+/// True while the day-command / evening machinery still has work in flight.
+fn evening_work(game: &Game) -> bool {
+    game.vm
+        .instances()
+        .iter()
+        .any(|instance| matches!(instance.event, 251 | 300 | 301 | 326 | 406))
+}
+
 #[test]
 fn new_game_story_runs_on_the_background_scheduler_without_deadlock() {
     let Some(mut game) = open_game() else { return };
@@ -362,9 +402,18 @@ fn the_sleep_event_rolls_over_to_the_next_morning() {
     game.vm.vars.set(6, 1);
     let id = game.vm.start_event(329).expect("the sleep event exists");
     assert!(game.vm.instance(id).is_some());
-    for _ in 0..300 {
+    // The wake-up chain contains script-random waits (CE317's 217 deltas and the
+    // early-morning scene), so run until the clock actually reaches 08:30 instead of
+    // pinning a frame count.
+    let mut arrived = false;
+    for _ in 0..4000 {
         game.frame();
+        if game.vm.vars.get(4) == 8 && game.vm.vars.get(5) >= 30 && game.vm.vars.get(160) == 4 {
+            arrived = true;
+            break;
+        }
     }
+    assert!(arrived, "the sleep event reaches day 4 08:30 (no deadlock)");
     assert_eq!(game.stats.warnings, 0, "no interpreter warnings");
     assert_eq!(game.vm.vars.get(4), 8, "the next morning starts at 8");
     assert_eq!(game.vm.vars.get(5), 30, "and 30 minutes");
@@ -473,49 +522,42 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
     // and friends. The self string bank holds the label, so \cself must prefer it over
     // the (zero) numeric slot; before that fix every button rendered a bare "0".
     game.auto_choice = true;
-    let mut first_label: Option<String> = None;
-    for _ in 0..350 {
+    let mut labels: Vec<String> = Vec::new();
+    let mut chosen: Option<(usize, String, i32, Option<usize>)> = None;
+    for _ in 0..1200 {
         game.frame();
-        if let Some(picture) = game.screen.get(1201) {
-            if !picture.text.is_empty() {
-                first_label = Some(picture.text.clone());
+        labels = day_row_texts(&game);
+        for (row, text) in labels.iter().enumerate() {
+            if let Some((id, stat)) = day_command(text) {
+                chosen = Some((row, text.clone(), id, stat));
                 break;
             }
         }
+        if chosen.is_some() {
+            break;
+        }
     }
-    let first_label = first_label.expect("CE251 draws its first day-command button");
+    let (row, label, expected_command, stat) = chosen.unwrap_or_else(|| {
+        panic!("CE251 draws no CE252 day command; labels={labels:?}")
+    });
     assert_ne!(
-        first_label, "\\f[20]0",
+        label, "\\f[20]0",
         "the day-command label is a string, not the numeric self slot"
-    );
-    // Which three day commands CE251 offers is picked by the retail MSVC-LCG PRNG.
-    // Under the retail stream this run starts with 防御练习 (the old xorshift
-    // placeholder started with 学习会); pin the actual label but keep the action
-    // effect checks below tied to it.
-    assert!(
-        first_label.contains("防御练习")
-            || first_label.contains("学习会")
-            || first_label.contains("秘密特训"),
-        "the label comes from the self string bank: {first_label:?}"
     );
 
     // The menu is the game's own picture-button day command (CE251). Hovering first
     // and then pressing is what a real mouse does; a bare one-frame click only reports
     // the hover. Its confirmation prompt is answered by the auto-choice policy above.
-    // 防御练习 spends the day (08:30 -> 17:00), consumes energy and raises the
-    // defence stat (var173) by 7; the command id goes to var48 == 5. (Energy cost
-    // differs by command, so the assertion below only requires it to decrease.)
-    let (stat_addr, expected_command, expected_delta, label) =
-        if first_label.contains("防御练习") {
-            (173, 5, 7, "防御练习")
-        } else if first_label.contains("秘密特训") {
-            (174, 6, 9, "秘密特训")
-        } else {
-            (171, 2, 8, "学习会")
-        };
-    let stat_before = game.vm.vars.get(stat_addr);
+    // The label determines the command id (var48) and the stat the task raises; the
+    // exact gain is a second retail-PRNG draw inside CE252. Assert both the identity
+    // and a real increase, not a hard-coded delta (the old stream's 7/8/9 no longer
+    // exists).
+    let stat_addr = stat;
+    let money_before = game.vm.vars.get(7);
+    let stat_before = stat_addr.map(|addr| game.vm.vars.get(addr));
     let energy_before = game.vm.vars.get(14);
-    game.mouse = [512, 230];
+    let y = 230 + 50 * row as i32;
+    game.mouse = [512, y];
     for _ in 0..10 {
         game.frame();
     }
@@ -524,7 +566,7 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
         game.frame();
     }
     game.mouse_buttons = 0;
-    for _ in 0..1500 {
+    for _ in 0..2500 {
         game.frame();
         if game.vm.instances().iter().all(|instance| instance.event != 251) {
             break;
@@ -538,11 +580,19 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
         expected_command,
         "the chosen command id is {label} ({expected_command})"
     );
-    assert_eq!(
-        game.vm.vars.get(stat_addr),
-        stat_before + expected_delta,
-        "{label} raises its stat by {expected_delta}"
-    );
+    if let (Some(addr), Some(before)) = (stat_addr, stat_before) {
+        assert!(
+            game.vm.vars.get(addr) > before,
+            "{label} raises its stat var {addr} ({before} -> {})",
+            game.vm.vars.get(addr)
+        );
+    } else {
+        assert!(
+            game.vm.vars.get(7) > money_before,
+            "{label} pays money (var7 {money_before} -> {})",
+            game.vm.vars.get(7)
+        );
+    }
     assert!(
         game.vm.vars.get(14) < energy_before,
         "the action costs energy ({} -> {})",
@@ -554,16 +604,35 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
         "the day-command script finishes after the action"
     );
 
-    // The day does not stop at the command: the evening scene (dinner, CE326) plays out
-    // and the bedroom waits for the player again. Seeding the sister-click flag a second
-    // time drives the same night menu -> CE329 -> day 3, which is what makes this a
-    // repeatable daily loop rather than a one-day script.
-    for _ in 0..1200 {
+    // The day does not stop at the command: the evening scene (dinner/CE326 and the
+    // CE300 daytime pipeline) plays out and the bedroom waits for the player again.
+    // The settle time is script-random (18:30 or 19:30), so wait for the machinery to
+    // go idle rather than for one hard-coded minute. Seeding the sister-click flag a
+    // second time drives the same night menu -> CE329 -> day 3, which is what makes
+    // this a repeatable daily loop rather than a one-day script.
+    let mut evening = false;
+    for _ in 0..6000 {
         game.frame();
+        if !evening_work(&game) && game.vm.vars.get(4) >= 18 {
+            evening = true;
+            break;
+        }
     }
+    assert!(
+        evening,
+        "the evening scene settles into the bedroom (clock={}:{}, instances={:?})",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5),
+        game.vm.instances().iter().map(|i| i.event).collect::<Vec<_>>()
+    );
     assert_eq!(game.vm.vars.get(160), 2, "still day 2 after the evening scene");
-    assert_eq!(game.vm.vars.get(4), 19, "the evening reaches 19:00");
-    assert_eq!(game.vm.vars.get(5), 30);
+    assert!(
+        game.vm.vars.get(4) >= 18,
+        "the evening reaches an evening hour ({}:{})",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5)
+    );
+    assert_eq!(game.vm.vars.get(5), 30, "the evening settles on the half hour");
 
     game.auto_choice = false;
     game.vm.vars.set(63, 1);

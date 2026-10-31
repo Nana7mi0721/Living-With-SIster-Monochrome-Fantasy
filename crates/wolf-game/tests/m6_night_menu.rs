@@ -1,4 +1,4 @@
-//! M6 night command menu: at the day-2 19:30 bedroom the player opens the night
+//! M6 night command menu: at the day-2 evening bedroom the player opens the night
 //! command menu (common event 245, 夜コマンドメニュー) with a natural mouse gesture —
 //! hover the sister sprite (picture 120, Picture/imouto02.png at 240,340) and press
 //! the Decide key — and the menu really draws its five button rows.
@@ -18,9 +18,9 @@
 //!     clears it when the player opens the status/skill screen; a straight fast-forward
 //!     leaves it 1, so this test normalizes var295 = 0 like a player who closed the tip.
 //!
-//! Setup reaches the day-2 19:30 bedroom by the canonical new game followed by the
-//! real day loop: day-1 evening -> 今天还是睡吧 (CE329) -> day 2 morning -> one 学习会
-//! day command -> the evening scene (dinner, CE326) -> 19:30 bedroom. The sleep at the
+//! Setup reaches the day-2 evening bedroom by the canonical new game followed by the
+//! real day loop: day-1 evening -> 今天还是睡吧 (CE329) -> day 2 morning -> one CE252
+//! day command -> the evening scene (dinner, CE326) -> the evening bedroom. The sleep at the
 //! first night seeds var63 = 1 (the flag the sister-click branch leaves behind), which
 //! is how m6_mainline drives the same loop headlessly.
 
@@ -52,6 +52,73 @@ fn open_game() -> Option<Game> {
     }
 }
 
+/// CE251's day-command rows that route to CE252 (normal daytime tasks), in the
+/// (label, var48 id, stat raised) form the menu can produce. The task on row 1 is a
+/// retail-PRNG draw, so the helper picks the first CE252 row like a player would.
+const DAY_COMMANDS: [(&str, i32, Option<usize>); 6] = [
+    ("给店里帮忙", 1, None),
+    ("学习会", 2, Some(171)),
+    ("基础锻炼", 3, Some(174)),
+    ("攻击练习", 4, Some(170)),
+    ("防御练习", 5, Some(173)),
+    ("秘密特训", 6, Some(174)),
+];
+
+fn day_command(label: &str) -> Option<(i32, Option<usize>)> {
+    DAY_COMMANDS
+        .iter()
+        .find(|(name, _, _)| label.contains(name))
+        .map(|(_, id, stat)| (*id, *stat))
+}
+
+const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
+
+fn day_row_texts(game: &Game) -> Vec<String> {
+    DAY_ROW_PICS
+        .iter()
+        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .collect()
+}
+
+fn evening_work(game: &Game) -> bool {
+    game.vm
+        .instances()
+        .iter()
+        .any(|instance| matches!(instance.event, 251 | 300 | 301 | 326 | 406))
+}
+
+/// The pointer point at the visible centre of a picture. The retail PRNG picks the
+/// sister sprite pose, and a top-left-anchored sprite stores its origin, not its
+/// centre, in x/y; computing from the real texture size keeps the hover faithful.
+fn picture_center(game: &mut Game, number: i32) -> Option<(i32, i32)> {
+    let (x, y, anchor, scale, file, window) = {
+        let picture = game.screen.get(number)?;
+        (
+            picture.x,
+            picture.y,
+            picture.anchor,
+            picture.scale.max(1),
+            picture.file.clone(),
+            picture.window,
+        )
+    };
+    let (width, height) = match window {
+        Some((width, height)) if width > 0 && height > 0 => (width, height),
+        _ => {
+            let (width, height) = game.assets.texture_size(&file)?;
+            (width as i32, height as i32)
+        }
+    };
+    let scale = f32::from(scale as i16) / 100.0;
+    let (width, height) = (width as f32 * scale, height as f32 * scale);
+    let (left, top) = if anchor == wolf_game::picture::ANCHOR_CENTRE {
+        (x as f32 - width / 2.0, y as f32 - height / 2.0)
+    } else {
+        (x as f32, y as f32)
+    };
+    Some(((left + width / 2.0) as i32, (top + height / 2.0) as i32))
+}
+
 /// Press and release the Decide key for one frame.
 fn decide(game: &mut Game) {
     game.key_bits = wolf_game::key::OK;
@@ -73,12 +140,12 @@ fn click_at(game: &mut Game, x: i32, y: i32) {
     game.mouse_buttons = 0;
 }
 
-/// Drive the canonical new game through day 1 into the day-2 19:30 bedroom.
+/// Drive the canonical new game through day 1 into the day-2 evening bedroom.
 ///
 /// Uses auto-choice to answer the character-creation and sleep prompts; the first-night
 /// sleep seeds var63 = 1 exactly as the sister-click branch does on a real click, which
-/// headless input cannot reproduce from its hit-test. A 学习会 day command spends day 2
-/// to 17:00, then the evening scene plays out to the 19:30 bedroom. Leaves the game with
+/// headless input cannot reproduce from its hit-test. A CE252 day command spends day 2
+/// to 17:00, then the evening scene plays out to the evening bedroom. Leaves the game with
 /// auto-choice off and auto-advance on.
 fn day2_evening_game() -> Option<Game> {
     let mut game = open_game()?;
@@ -118,35 +185,45 @@ fn day2_evening_game() -> Option<Game> {
         }
     }
 
-    // Day 2: auto-answer, wait for the CE251 day-command button, spend the day with the
-    // first command (学习会, at 512,230), then let the evening scene settle.
+    // Day 2: auto-answer, spend the day with the first CE252 task row, then let the
+    // evening scene settle to the bedroom (18:30 or 19:30, a script-random choice).
     game.auto_choice = true;
-    for _ in 0..350 {
+    let mut chosen: Option<(usize, String)> = None;
+    for _ in 0..1200 {
         game.frame();
-        if game
-            .screen
-            .get(1201)
-            .map(|picture| !picture.text.is_empty())
-            .unwrap_or(false)
-        {
+        let labels = day_row_texts(&game);
+        for (row, text) in labels.iter().enumerate() {
+            if day_command(text).is_some() {
+                chosen = Some((row, text.clone()));
+                break;
+            }
+        }
+        if chosen.is_some() {
             break;
         }
     }
-    click_at(&mut game, 512, 230);
-    for _ in 0..1500 {
+    let (row, _label) = chosen.unwrap_or_else(|| panic!("CE251 draws no CE252 day command"));
+    click_at(&mut game, 512, 230 + 50 * row as i32);
+    for _ in 0..2500 {
         game.frame();
         if game.vm.instances().iter().all(|instance| instance.event != 251) {
             break;
         }
     }
-    for _ in 0..1200 {
+    let mut evening = false;
+    for _ in 0..6000 {
         game.frame();
+        if !evening_work(&game) && game.vm.vars.get(4) >= 18 {
+            evening = true;
+            break;
+        }
     }
+    assert!(evening, "day 2 evening settles into the bedroom");
     game.auto_choice = false;
     Some(game)
 }
 
-/// From the day-2 19:30 bedroom, normalize the stale first-dinner tip and open the night
+/// From the day-2 evening bedroom, normalize the stale first-dinner tip and open the night
 /// menu with the natural hover-sister + Decide gesture. Leaves the game at the open menu.
 fn open_night_menu(game: &mut Game) {
     // Documented state normalization: var295==1 means the first-dinner skill TIPS was
@@ -160,14 +237,13 @@ fn open_night_menu(game: &mut Game) {
     game.vm.vars.set(295, 0);
     game.vm.vars.set(68, 0);
 
-    // The natural gesture: hover picture 120 (the sister sprite) and press Decide.
-    // The retail PRNG decides which sister sprite/pose is drawn, so use its actual
-    // position rather than the old placeholder's fixed (240,340) top-left anchor.
-    let sister = game
-        .screen
-        .get(120)
-        .expect("the sister sprite is picture 120");
-    let sister_center = (sister.x, sister.y);
+    // The natural gesture: hover picture 120 (the sister sprite) at its real centre
+    // and press Decide. The retail PRNG decides which sister sprite/pose is drawn
+    // (and whether it is centre- or top-left-anchored), so derive the centre from the
+    // picture instead of the old placeholder's fixed (240,340).
+    let Some(sister_center) = picture_center(game, 120) else {
+        panic!("picture 120 has no readable texture");
+    };
     game.mouse = [sister_center.0, sister_center.1];
     for _ in 0..8 {
         game.frame();
@@ -190,10 +266,15 @@ fn menu_picture_numbers(game: &Game) -> Vec<i32> {
 fn hovering_the_sister_and_pressing_decide_opens_the_night_command_menu() {
     let Some(mut game) = day2_evening_game() else { return };
 
-    // The bedroom is day 2, 19:30, warning-free, with no menu up and no var64 injected.
+    // The bedroom is day 2 in the evening, warning-free, with no menu up and no var64 injected.
     assert_eq!(game.vm.vars.get(160), 2, "the day counter is day 2");
-    assert_eq!(game.vm.vars.get(4), 19, "the clock is 19:00");
-    assert_eq!(game.vm.vars.get(5), 30, "and 19:30");
+    assert!(
+        game.vm.vars.get(4) >= 18,
+        "the clock is evening ({}:{})",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5)
+    );
+    assert_eq!(game.vm.vars.get(5), 30, "the evening settles on the half hour");
     assert_eq!(game.stats.warnings, 0, "the evening scene is warning-free");
     assert_eq!(game.vm.vars.get(64), 0, "no var64 injection is needed");
     assert_eq!(game.vm.vars.get(69), 1, "the evening-day flag var69 is set");
@@ -203,15 +284,19 @@ fn hovering_the_sister_and_pressing_decide_opens_the_night_command_menu() {
         "the night command menu is not open yet"
     );
 
-    // The sister sprite that the hit-test polls is picture 120; its origin depends on
-    // the retail PRNG's pick, so assert the real sprite rather than a fixed coordinate.
+    // The sister sprite that the hit-test polls is picture 120; its pose, anchor and
+    // origin all depend on the retail PRNG's pick, so assert the real sprite rather
+    // than a fixed coordinate or anchor.
     let sister = game
         .screen
         .iter()
         .find(|picture| picture.number == 120)
         .expect("the sister sprite is picture 120");
-    assert_eq!(sister.anchor, 1, "the sprite is centre-anchored");
-    assert!(sister.file.contains("imouto"), "picture 120 is a sister sprite");
+    assert!(
+        sister.file.contains("imouto"),
+        "picture 120 is a sister sprite, got {:?}",
+        sister.file
+    );
     assert!(!sister.hidden, "the sprite is visible to hover");
 
     open_night_menu(&mut game);

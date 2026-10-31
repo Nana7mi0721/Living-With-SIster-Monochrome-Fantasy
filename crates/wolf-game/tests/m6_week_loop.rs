@@ -140,43 +140,81 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
     assert!(!has_battle(game), "day {expected_day} 08:30: no resident 253/239 battle coroutine");
 }
 
-/// Drive the CE251 five-row day-command menu on a normal 08:30 morning and click row row0
-/// (0-based) via the real picture button at (512, 230 + 50*row0). auto-choice answers the
-/// follow-up confirmation prompt. Asserts the row completed a real (non-battle) day task to
-/// 17:00 and returns the observed internal id (var48 / 2000048). Used only for days 2-3, which
-/// do draw the training menu; day 4 does not (see the module docs).
-fn spend_day_choosing_row(game: &mut Game, day: i32, row0: usize) -> i32 {
+/// The CE251 day-command rows that route to CE252 (the normal daytime tasks).
+/// (button label, `var48` command id, the stat variable the task raises).
+///
+/// CE251 rolls three distinct increasing values from 1..=10 into self[10..12]; ids
+/// 7/8/9 are 地区贡献/探索/远征 (CE253/CE254), a different flow. The roll decides
+/// which task row 1 is, so the test picks the first CE252 row like a player would.
+const DAY_COMMANDS: [(&str, i32, Option<usize>); 6] = [
+    ("给店里帮忙", 1, None),
+    ("学习会", 2, Some(171)),
+    ("基础锻炼", 3, Some(174)),
+    ("攻击练习", 4, Some(170)),
+    ("防御练习", 5, Some(173)),
+    ("秘密特训", 6, Some(174)),
+];
+
+fn day_command(label: &str) -> Option<(i32, Option<usize>)> {
+    DAY_COMMANDS
+        .iter()
+        .find(|(name, _, _)| label.contains(name))
+        .map(|(_, id, stat)| (*id, *stat))
+}
+
+const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
+const DAY_ROW_Y: i32 = 230;
+
+fn day_row_texts(game: &Game) -> Vec<String> {
+    DAY_ROW_PICS
+        .iter()
+        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .collect()
+}
+
+fn evening_work(game: &Game) -> bool {
+    game.vm
+        .instances()
+        .iter()
+        .any(|instance| matches!(instance.event, 251 | 300 | 301 | 326 | 406))
+}
+
+/// Drive the CE251 day-command menu on a normal 08:30 morning, pick the first row
+/// that is a CE252 daytime task (the roll can put 地区贡献 first), let it spend the
+/// day to 17:00, wait for the evening to settle, and return the observed internal id
+/// (var48). Used only for days 2-3, which do draw the training menu; day 4 does not
+/// (see the module docs).
+fn spend_day_choosing_row(game: &mut Game, day: i32) -> i32 {
     game.auto_choice = true;
     game.auto_advance = true;
 
-    // CE251 draws its day-command rows into pictures 1201/1203/1205/1207/1209 once the
-    // morning menu opens. Wait for any row label rather than a fixed frame count.
-    let label_pics = [1201i32, 1203, 1205, 1207, 1209];
-    let mut drawn = false;
+    let mut labels: Vec<String> = Vec::new();
+    let mut chosen: Option<(usize, String, i32, Option<usize>)> = None;
     for _ in 0..4000 {
         game.frame();
-        if label_pics
-            .iter()
-            .any(|&i| game.screen.get(i).map(|p| !p.text.is_empty()).unwrap_or(false))
-        {
-            drawn = true;
+        labels = day_row_texts(game);
+        for (row, text) in labels.iter().enumerate() {
+            if let Some((id, stat)) = day_command(text) {
+                chosen = Some((row, text.clone(), id, stat));
+                break;
+            }
+        }
+        if chosen.is_some() {
             break;
         }
     }
-    assert!(drawn, "day {day}: CE251 draws its day-command menu (no deadlock; clock={}:{}, instances={:?})", game.vm.vars.get(4), game.vm.vars.get(5), instances_events(game));
-    let labels: Vec<String> = label_pics
-        .iter()
-        .map(|&i| game.screen.get(i).map(|p| p.text.clone()).unwrap_or_default())
-        .collect();
-    assert!(row0 < labels.len(), "day {day}: row {} out of range", row0 + 1);
-    assert!(
-        !labels[row0].is_empty(),
-        "day {day}: row {} (y={}) is a drawn button (labels={labels:?})",
-        row0 + 1,
-        230 + 50 * row0
-    );
+    let (row, label, command_id, stat) = chosen.unwrap_or_else(|| {
+        panic!(
+            "day {day}: CE251 draws no CE252 day command (no deadlock; clock={}:{}, instances={:?}, labels={labels:?})",
+            game.vm.vars.get(4),
+            game.vm.vars.get(5),
+            instances_events(game)
+        )
+    });
 
-    let y = 230 + 50 * row0 as i32;
+    let money_before = game.vm.vars.get(7);
+    let stat_before = stat.map(|addr| game.vm.vars.get(addr));
+    let y = DAY_ROW_Y + 50 * row as i32;
     let energy_before = game.vm.vars.get(14);
     game.mouse = [512, y];
     for _ in 0..10 {
@@ -204,35 +242,49 @@ fn spend_day_choosing_row(game: &mut Game, day: i32, row0: usize) -> i32 {
     let var48 = game.vm.vars.get(48);
     if battle {
         panic!(
-            "day {day}: row {} (y={y}) routed into the CE253/CE239 BATTLE (var48={var48}, instances={:?}, clock={}:{})",
-            row0 + 1,
+            "day {day}: {label} (y={y}) routed into the CE253/CE239 BATTLE (var48={var48}, instances={:?}, clock={}:{})",
             instances_events(game),
             game.vm.vars.get(4),
             game.vm.vars.get(5)
         );
     }
-    assert!(finished, "day {day}: row {} (y={y}) day-command did not finish at 17:00 (instances={:?}, clock={}:{}, var48={var48})", row0 + 1, instances_events(game), game.vm.vars.get(4), game.vm.vars.get(5));
+    assert!(finished, "day {day}: {label} (y={y}) day-command did not finish at 17:00 (instances={:?}, clock={}:{}, var48={var48})", instances_events(game), game.vm.vars.get(4), game.vm.vars.get(5));
     assert_eq!(game.stats.warnings, 0, "day {day}: the day command is warning-free");
-    assert_eq!(game.vm.vars.get(4), 17, "day {day}: the day command spends the day until 17:00");
+    assert_eq!(game.vm.vars.get(4), 17, "day {day}: {label} spends the day until 17:00");
     assert_eq!(game.vm.vars.get(5), 0, "day {day}: on the hour");
     assert_eq!(game.vm.vars.get(160), day, "day {day}: the day command does not roll the day over");
-    assert!(var48 <= 6, "day {day}: the chosen row is a non-battle CE252 task (var48={var48} <= 6)");
-    assert!(game.vm.vars.get(14) < energy_before, "day {day}: the day command spends energy ({} -> {})", energy_before, game.vm.vars.get(14));
+    assert_eq!(var48, command_id, "day {day}: {label} writes its real command id");
+    assert!(game.vm.vars.get(14) < energy_before, "day {day}: {label} spends energy ({} -> {})", energy_before, game.vm.vars.get(14));
+    if let (Some(addr), Some(before)) = (stat, stat_before) {
+        assert!(
+            game.vm.vars.get(addr) > before,
+            "day {day}: {label} raises stat var {addr} ({before} -> {})",
+            game.vm.vars.get(addr)
+        );
+    } else {
+        assert!(
+            game.vm.vars.get(7) > money_before,
+            "day {day}: {label} pays money (var7 {money_before} -> {})",
+            game.vm.vars.get(7)
+        );
+    }
 
-    // Evening scene (dinner, CE326) plays out to the 19:30 bedroom.
+    // Evening scene (dinner/CE326 and the CE300 daytime pipeline) plays out to the
+    // bedroom. The settle time is script-random (18:30 or 19:30), so wait for the
+    // machinery to go idle instead of pinning one minute.
     let mut evening = false;
-    for _ in 0..1800 {
+    for _ in 0..6000 {
         game.frame();
-        if game.vm.vars.get(4) == 19 && game.vm.vars.get(5) >= 30 {
+        if !evening_work(game) && game.vm.vars.get(4) >= 18 {
             evening = true;
             break;
         }
     }
-    assert!(evening, "day {day}: the evening scene reaches the 19:30 bedroom (instances={:?}, clock={}:{})", instances_events(game), game.vm.vars.get(4), game.vm.vars.get(5));
+    assert!(evening, "day {day}: the evening scene settles into the bedroom (instances={:?}, clock={}:{})", instances_events(game), game.vm.vars.get(4), game.vm.vars.get(5));
     assert_eq!(game.stats.warnings, 0, "day {day}: the evening scene is warning-free");
     assert_eq!(game.vm.vars.get(160), day, "day {day}: still day {day} after the evening scene");
-    assert_eq!(game.vm.vars.get(4), 19, "day {day}: the evening reaches 19:00");
-    assert_eq!(game.vm.vars.get(5), 30, "day {day}: and 19:30");
+    assert!(game.vm.vars.get(4) >= 18, "day {day}: the evening reaches an evening hour ({}:{})", game.vm.vars.get(4), game.vm.vars.get(5));
+    assert_eq!(game.vm.vars.get(5), 30, "day {day}: the evening settles on the half hour");
     assert!(game.screen.len() > 20, "day {day}: the evening bedroom is drawn: {} pictures", game.screen.len());
     var48
 }
@@ -258,9 +310,9 @@ fn day_four_morning_is_forced_into_the_subjugation_battle_wall() {
     // Day 1 -> day 2. Days 2 and 3 draw the real training menu; take the first row (CE252 鍛錬,
     // non-battle) as m6_multiday proves is safe.
     sleep_into_next_morning(&mut game, 1);
-    spend_day_choosing_row(&mut game, 2, 0);
+    spend_day_choosing_row(&mut game, 2);
     sleep_into_next_morning(&mut game, 2);
-    spend_day_choosing_row(&mut game, 3, 0);
+    spend_day_choosing_row(&mut game, 3);
     sleep_into_next_morning(&mut game, 3);
 
     // Day 4 08:30: the furthest the generic day loop guarantees.

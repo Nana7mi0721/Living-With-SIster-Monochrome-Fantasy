@@ -93,11 +93,11 @@
 
 **假说**：`121` 的 `0x6000` 算子 = `rand(min,max)`（闭区间）。**这一条已经证实**（1,101 处，见 OPCODE_SPEC §3.2），这里登记的是它的**实现**不确定性：
 
-**实现（已更新，M7 / task-17）**：`crates/wolf-vm/src/rng.rs` 已移植 `_wolfref/game_dat_random.c` 的零售 MSVC C 运行时 LCG：`state = state*0x343FD + 0x269EC3` (mod 2^32)，输出 `(state>>16)&0x7FFF`，默认种子 `random_a=22227`；旧 xorshift32 替身已删除。单元测试与 11 个 `crates/wolf-vm/tests/rng_retail.rs` 全绿（seed 1 -> 41,18467,6334,26500… 的标准 MSVC 序列）。
+**实现（已更新，M8 W5-a）**：`121` 的 `0x6000` 随机分支已按反编译结果落地（`docs/research/M8_PRNG_RANGE.md` §1-2）。引擎在 RVA `0xaf7c0` 调用 RVA `0x35810` 的 **Park-Miller MINSTD**（`state = state*16807 % 0x7FFFFFFF`，超过 2,000,000,000 再乘一次，为 0 则重播种），取 31 位状态后用 `low + draw % (abs(b-a)+1)`（32 位回绕）归约；每次调用（含零宽区间）消耗一次抽样。`crates/wolf-vm/src/rng.rs` 新增 `next_event_draw()` / `from_event_seed()` / `set_event_seed()`，`range()` 改用该事件流与上述模运算律；M7 的 MSVC C 运行时 LCG（`next_raw()`，`state*0x343FD+0x269EC3 mod 2^32`）**只用于 Game.dat 静态表/解密流**，已被 M8 §3 证实不是事件发生器。默认事件种子为固定值 `EVENT_SEED=1`（零售用时钟自播种；零状态重播种为固定 `EVENT_RESEED=1`），以便回放确定。`cargo test -q -p wolf-vm` 全绿（unit 91 / rng_retail 15）。
 
-**残余未验证**：`range(lo,hi)` 的归约细节是推断（当前用 multiply-high `draw*(span+1)>>15`），引擎源码未反编译；同一存档重放能否逐位对齐原版仍待实机对拍。见 `docs/research/M7_PRNG.md`。
+**残余未验证**：零售事件发生器以时钟自播种，本移植用固定种子 → **同一存档 + 同一输入能否与原版逐位对齐仍未证**（缺一次实机运行的时钟种子）；抽样算法与归约律本身已是反编译证实。见 `docs/research/M8_PRNG_RANGE.md` §6。
 
-**怎么证实**：用「同一存档 + 同一输入序列」对拍原版输出；若序列有偏差，优先复核 range 归约。
+**怎么证实**：在原版运行时于 RVA `0x35810` 下断点或读首次状态，取出该次运行的种子；用同一种子 + 同一存档/输入驱动本移植并逐帧对比输出。
 
 ---
 

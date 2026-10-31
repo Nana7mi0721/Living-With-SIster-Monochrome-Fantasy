@@ -10,20 +10,20 @@
 //! var64 is written by CE328 (就寝前パジャマ) as the "deep night" branch flag. The real day
 //! loop that would set it (CE245/CE290 night menu -> CE328 -> 睡衣/熬夜) is long and its
 //! post-pc700 path is still WIP (docs/research/M6_NIGHT_FLOW.md), so this test reaches the
-//! day-2 19:30 bedroom with the same real day loop as m6_night_menu.rs and then applies the
+//! the day-2 evening bedroom with the same real day loop as m6_night_menu.rs and then applies the
 //! documented MINIMAL page-2 precondition directly: var64 = 1, var25 = var26 = var302 = 0,
 //! leaving var63 = 0 so the observed var63 = 1 is genuinely produced by the click.
 //!
-//! Why the hover target is (140,340), not the daytime (240,340)
-//! -----------------------------------------------------------
-//! At 19:30 with var64 == 0, picture 120 is the sister sprite Picture/imouto02.png at
-//! (240,340) and ev1 page 0 (var69 == 1) polls it. Setting var64 == 1 selects ev1 page 2
+//! Why the hover target is (140,340), not the daytime sprite origin
+//! ---------------------------------------------------------------
+//! In the evening with var64 == 0, picture 120 is the sister sprite (whose pose, anchor and
+//! position are a retail-PRNG draw) and ev1 page 0 (var69 == 1) polls it. Setting var64 == 1 selects ev1 page 2
 //! (verified: the active ev1 page becomes 2) AND activates ev2 (妹クリック判定) page 1, whose
 //! condition var64 == 1 && var167 == 0 makes it REDRAW picture 120 as a 120x80 <SQUARE>
 //! hit box centred at (140,340) (op150 [4144,120,0,120,80,1,0,140,340,100,...]). ev1 page 2
 //! then hit-tests that same slot 120. So in the page-2 state picture 120 lives at (140,340),
-//! anchor = ANCHOR_CENTRE, and hovering (240,340) misses the box ([80,200)x[300,380)); the
-//! correct hover is the picture's centre (140,340). This is synthesizable, so no blocker.
+//! anchor = ANCHOR_CENTRE, and the daytime sprite's origin misses the box ([80,200)x[300,380));
+//! the correct hover is the picture's centre (140,340). This is synthesizable, so no blocker.
 //!
 //! Input path exercised (bytecode refs in work/maps_full.json SampleMapA.mps ev1):
 //!   * page 2 idx135 op124 [self100,0x4000,120,8] = picture 120 field 8 = hover test;
@@ -61,6 +61,39 @@ fn open_game() -> Option<Game> {
     }
 }
 
+/// CE251's day-command rows that route to CE252 (normal daytime tasks).
+const DAY_COMMANDS: [(&str, i32, Option<usize>); 6] = [
+    ("给店里帮忙", 1, None),
+    ("学习会", 2, Some(171)),
+    ("基础锻炼", 3, Some(174)),
+    ("攻击练习", 4, Some(170)),
+    ("防御练习", 5, Some(173)),
+    ("秘密特训", 6, Some(174)),
+];
+
+fn day_command(label: &str) -> Option<(i32, Option<usize>)> {
+    DAY_COMMANDS
+        .iter()
+        .find(|(name, _, _)| label.contains(name))
+        .map(|(_, id, stat)| (*id, *stat))
+}
+
+const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
+
+fn day_row_texts(game: &Game) -> Vec<String> {
+    DAY_ROW_PICS
+        .iter()
+        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .collect()
+}
+
+fn evening_work(game: &Game) -> bool {
+    game.vm
+        .instances()
+        .iter()
+        .any(|instance| matches!(instance.event, 251 | 300 | 301 | 326 | 406))
+}
+
 /// Press and release the Decide key for one frame.
 fn decide(game: &mut Game) {
     game.key_bits = wolf_game::key::OK;
@@ -82,11 +115,11 @@ fn click_at(game: &mut Game, x: i32, y: i32) {
     game.mouse_buttons = 0;
 }
 
-/// Drive the canonical new game through day 1 into the day-2 19:30 bedroom.
+/// Drive the canonical new game through day 1 into the day-2 evening bedroom.
 ///
 /// Identical to m6_night_menu.rs: auto-answer character creation and the first-night
 /// sleep (seeding var63 = 1 the way the real sister-click branch does), spend day 2 with
-/// one 学习会 day command, then let the evening scene settle to the 19:30 bedroom.
+/// one CE252 day command, then let the evening scene settle to the evening bedroom.
 /// Leaves the game with auto-choice off and auto-advance on.
 fn day2_evening_game() -> Option<Game> {
     let mut game = open_game()?;
@@ -126,22 +159,26 @@ fn day2_evening_game() -> Option<Game> {
         }
     }
 
-    // Day 2: auto-answer, wait for the CE251 day-command button, spend the day with the
-    // first command (学习会, at 512,230), then let the evening scene settle.
+    // Day 2: auto-answer, pick the first CE252 task row, spend the day, then let the
+    // evening scene settle to the bedroom (18:30 or 19:30 depending on the draw).
     game.auto_choice = true;
-    for _ in 0..350 {
+    let mut chosen: Option<(usize, String)> = None;
+    for _ in 0..1200 {
         game.frame();
-        if game
-            .screen
-            .get(1201)
-            .map(|picture| !picture.text.is_empty())
-            .unwrap_or(false)
-        {
+        let labels = day_row_texts(&game);
+        for (row, text) in labels.iter().enumerate() {
+            if day_command(text).is_some() {
+                chosen = Some((row, text.clone()));
+                break;
+            }
+        }
+        if chosen.is_some() {
             break;
         }
     }
-    click_at(&mut game, 512, 230);
-    for _ in 0..1500 {
+    let (row, _label) = chosen.unwrap_or_else(|| panic!("CE251 draws no CE252 day command"));
+    click_at(&mut game, 512, 230 + 50 * row as i32);
+    for _ in 0..2500 {
         game.frame();
         if game
             .vm
@@ -152,9 +189,15 @@ fn day2_evening_game() -> Option<Game> {
             break;
         }
     }
-    for _ in 0..1200 {
+    let mut evening = false;
+    for _ in 0..6000 {
         game.frame();
+        if !evening_work(&game) && game.vm.vars.get(4) >= 18 {
+            evening = true;
+            break;
+        }
     }
+    assert!(evening, "day 2 evening settles into the bedroom");
     game.auto_choice = false;
     Some(game)
 }
@@ -165,10 +208,15 @@ fn hovering_sister_at_deep_night_writes_var63_and_opens_the_sleep_choice() {
         return;
     };
 
-    // --- Baseline: day 2, 19:30, warning-free, page-2 conditions all false -------------
+    // --- Baseline: day 2 evening, warning-free, page-2 conditions all false --------------
     assert_eq!(game.vm.vars.get(160), 2, "the day counter is day 2");
-    assert_eq!(game.vm.vars.get(4), 19, "the clock is 19:00");
-    assert_eq!(game.vm.vars.get(5), 30, "and 19:30");
+    assert!(
+        game.vm.vars.get(4) >= 18,
+        "the clock is evening ({}:{})",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5)
+    );
+    assert_eq!(game.vm.vars.get(5), 30, "the evening settles on the half hour");
     assert_eq!(game.stats.warnings, 0, "the evening scene is warning-free");
     assert_eq!(game.vm.vars.get(69), 1, "the evening-day flag var69 is set");
     assert_eq!(game.vm.vars.get(64), 0, "var64 (deep-night) is not set yet");
@@ -178,16 +226,13 @@ fn hovering_sister_at_deep_night_writes_var63_and_opens_the_sleep_choice() {
     assert_eq!(game.vm.vars.get(302), 0, "page-2 precondition var302 == 0");
     assert!(game.choices.is_none(), "no prompt before the gesture");
 
-    // The daytime sister sprite that ev1 page 0 would poll is picture 120. Its
-    // position depends on which pose the retail PRNG picked, so assert the real sprite.
+    // The daytime sister sprite that ev1 page 0 would poll is picture 120. Its pose and
+    // anchor depend on the retail PRNG, so assert the real sprite rather than a fixed
+    // coordinate; the page-2 gesture below uses the ev2 redrawn hit box anyway.
     let day_sister = game
         .screen
         .get(120)
         .expect("the sister sprite is picture 120");
-    assert_eq!(
-        day_sister.anchor, 1,
-        "at 19:30 with var64 == 0 the sprite is centre-anchored"
-    );
     assert!(
         day_sister.file.contains("imouto"),
         "picture 120 is a sister sprite, got {:?}",
