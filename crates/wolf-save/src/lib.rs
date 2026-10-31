@@ -363,6 +363,265 @@ impl SaveFile {
         })
     }
 
+    /// Build a structurally valid save file containing no game state.
+    ///
+    /// This is the "new game" template: a data root that ships no `Save/System.sav`
+    /// (this repository's `work/all`, for example) still has to be able to write its
+    /// first save, and [`SaveFile::rebuild`] needs something to rebuild Part1 and
+    /// Part4 from.
+    ///
+    /// Everything is at its version-gate default for `file_version = 0x8C`:
+    ///
+    /// * the header marks the strings UTF-8 (`raw[6] = 0x55`) and the checksum is
+    ///   computed from the synthesized body;
+    /// * SavePart1 carries **no map snapshot** (the `0xFFFFFFFF` sentinel), 31 empty
+    ///   automatic-tile names and the 11-word tail the version requires;
+    /// * SavePart2 has every `>= 0x8C` block present but empty/zero;
+    /// * SavePart3 has row 0 = the 800 normal variables (all zero) and 550 event
+    ///   groups of 100 self numbers / 5 self strings, i.e. the shape a save this
+    ///   game writes has; the other group/row/mds tables are empty;
+    /// * SavePart4 has an all-default lead object and no further objects;
+    /// * SavePart5 has no pictures, the variable database has no types, and SavePart7
+    ///   is the one-byte `0` gate every retail save carries.
+    ///
+    /// The typed views and the stored bytes agree by construction, so
+    /// [`SaveFile::rebuild`] and [`SaveFile::serialize`] produce the same bytes and
+    /// [`SaveFile::to_bytes_rebuilt`] parses back to an equal file. No game data is
+    /// read: 550 groups is the widest event table the retail saves use (500 is the
+    /// narrowest), so every common event of this build has a self-variable slot.
+    ///
+    /// `new_game_template()` cannot fail: the defaults are chosen to satisfy each
+    /// segment encoder's count checks. It replaces the old "no template save" refusal
+    /// in `Game::save_to` when `Save/System.sav` is absent.
+    #[must_use]
+    pub fn new_game_template() -> SaveFile {
+        const FILE_VERSION: u16 = 0x8C;
+        // SavePart3 stores self numbers for common events; retail uses 500 or 550.
+        const EVENT_GROUPS: u32 = 550;
+        // Every event group holds CSelf0..CSelf99 in Part3.
+        const SELF_NUMBERS: u8 = 100;
+        // and CSelf5..CSelf9 as five MemData bodies.
+        const SELF_STRINGS: u8 = 5;
+        // Row 0 of Part3 is the 800 normal variables (docs/SAVE_SPEC.md §6.1).
+        const NORMAL_VARS: u32 = 800;
+
+        let name = "New Game".to_owned();
+        let mut header = SaveHeader {
+            raw: [0u8; HEADER_LEN],
+            start_byte: START_BYTE,
+        };
+        // 0x55 at offset 6 is the "strings are UTF-8" marker (SAVE_SPEC §3).
+        header.raw[6] = 0x55;
+
+        let part1 = SavePart1 {
+            // The three leading words are 1/0/0 in every save this game writes.
+            var1: 1,
+            var2: 0,
+            var3: 0,
+            // The dimensions are only meaningful with a snapshot; keep the retail
+            // numbers so a re-encoded header still describes the shipping map grid.
+            map_width: 64,
+            map_height: 36,
+            // An empty vector makes to_bytes emit the "no map snapshot" sentinel.
+            map_tiles: Vec::new(),
+            chip_image: Vec::new(),
+            auto_tiles: vec![Vec::new(); 31],
+            // The fixed 192-word switch table every retail save carries.
+            vars2_new: vec![0; 192],
+            vars2_old: Vec::new(),
+            objects: Vec::new(),
+            // measured constant in all nine retail saves (SAVE_SPEC §4.6).
+            tail_vars: vec![0, 0, 0, 0, 100, 100, 0, 0, 0, 0, 100],
+            vars3: Vec::new(),
+        };
+
+        let part2 = part2::SavePart2 {
+            var1: 0,
+            var2: 0,
+            vars3_21: [0; 19],
+            vars22_24: [0; 3],
+            var25: 0,
+            vars26_28: [0; 3],
+            vars29_37: [0; 9],
+            var38: 0,
+            var39: 0,
+            vars40_41: [0; 2],
+            vars42_45: [0; 4],
+            vars46_48: [0; 3],
+            var49: 0,
+            // m_var50 is only on disk below 0x60, so it stays a Rust-side zero.
+            var50: 0,
+            var51: 0,
+            vars52_53: [0; 2],
+            block100: Some(part2::SavePart2Block100 {
+                var54: 0,
+                var55: 0,
+                var56: 0,
+                vars1: Vec::new(),
+                vars2: Vec::new(),
+                vars59_63: [0; 5],
+            }),
+            vars64_69: [0; 6],
+            var70: 0,
+            md1_md2: Some((Vec::new(), Vec::new())),
+            var71: 0,
+            vars72_74: [0; 3],
+            bgm: Some(part2::SavePart2Bgm {
+                path1: Vec::new(),
+                vars75_77: [0; 3],
+                path2: Vec::new(),
+                vars78_80: [0; 3],
+            }),
+            block109: Some(part2::SavePart2Block109 {
+                background: Vec::new(),
+                md6: Vec::new(),
+                var81: 0,
+            }),
+            var82: 0,
+            mds7_9: Some([Vec::new(), Vec::new(), Vec::new()]),
+            var83: 0,
+            var84: 0,
+            var85: 0,
+            var86: 0,
+            var87: 0,
+            vars88_89: [0; 2],
+            var90: 0,
+            var91: 0,
+            vars92_95: [0; 4],
+            var96: 0,
+            var97: 0,
+            block137: Some(part2::SavePart2Block137 {
+                vars98_101: [0; 4],
+                vars2: [0; 24],
+            }),
+            block8a: Some(part2::SavePart2Block8A {
+                vars102_105: [0; 4],
+                md10: Vec::new(),
+                mds2: Vec::new(),
+            }),
+        };
+
+        let part3 = SavePart3 {
+            var1: 0,
+            // No group table: the layer is unexplained in the reference source.
+            var2: 0,
+            group_counts: Vec::new(),
+            group_bytes: Vec::new(),
+            group_words: Vec::new(),
+            // One row, row 0: the 800 normal variables.
+            var3: 1,
+            row_counts: vec![NORMAL_VARS],
+            row_words: vec![0; NORMAL_VARS as usize],
+            // No chapter/thumbnail strings from the save menu.
+            var4: 0,
+            mds1: Vec::new(),
+            var5: EVENT_GROUPS,
+            list_counts: vec![SELF_NUMBERS; EVENT_GROUPS as usize],
+            list_words: vec![0; EVENT_GROUPS as usize * usize::from(SELF_NUMBERS)],
+            // The encoder rejects var6 == 0 (parse treats it as corruption), so the
+            // template fills the whole event table with empty slots instead.
+            var6: EVENT_GROUPS,
+            slot_counts: vec![SELF_STRINGS; EVENT_GROUPS as usize],
+            slot_strings: vec![vec![0u8]; EVENT_GROUPS as usize * usize::from(SELF_STRINGS)],
+        };
+
+        let part4 = SavePart4 {
+            lead: empty_object(),
+            objects: Vec::new(),
+            var2: 0,
+            var3: 0,
+            vars2: Vec::new(),
+            vars3: Vec::new(),
+        };
+
+        let part5 = SavePart5 {
+            // Bit 15 clear with a zero count is the ordinary "no pictures" table.
+            var1: 0,
+            events: Vec::new(),
+        };
+
+        let vardb = VariableDatabase {
+            // The byte every retail database stores; no types means no rows.
+            unknown: 0x6F,
+            type_count: 0,
+            types: Vec::new(),
+        };
+
+        let part7 = SavePart7 {
+            // Anything but 1 ends SavePart7 immediately: this is its whole body.
+            var1: 0,
+            entries: Vec::new(),
+        };
+
+        let mut name_bytes = name.as_bytes().to_vec();
+        name_bytes.push(0);
+        let name_len = u16::try_from(name_bytes.len())
+            .expect("the template name is far shorter than a MemData<WORD>");
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&header.raw);
+        data.push(header.start_byte);
+        data.extend_from_slice(&name_len.to_le_bytes());
+        data.extend_from_slice(&name_bytes);
+        data.extend_from_slice(&FILE_VERSION.to_le_bytes());
+
+        let mut chunks = Vec::with_capacity(7);
+        let segments = [
+            ("SavePart1", part1.to_bytes(FILE_VERSION)),
+            ("SavePart2", part2.to_bytes(FILE_VERSION)),
+            ("SavePart3", part3.to_bytes_with_version(FILE_VERSION)),
+            ("SavePart4", part4.to_bytes(FILE_VERSION)),
+            ("SavePart5", part5.to_bytes(FILE_VERSION)),
+            ("VariableDatabase", vardb.to_bytes()),
+        ];
+        for (id, (segment, encoded)) in segments.into_iter().enumerate() {
+            let encoded = encoded.expect("the synthesized new-game segment is consistent");
+            let offset = data.len();
+            data.extend_from_slice(&encoded);
+            chunks.push(SaveChunk {
+                id: id as u32,
+                name: segment,
+                offset,
+                len: encoded.len(),
+            });
+        }
+        // SavePart7 has no writer yet; its default body is exactly the gate byte.
+        let offset = data.len();
+        data.push(part7.var1);
+        chunks.push(SaveChunk {
+            id: PART7_ID,
+            name: "SavePart7",
+            offset,
+            len: 1,
+        });
+        data.push(END_BYTE);
+
+        let checksum = data[CRYPT_START..]
+            .iter()
+            .fold(0u8, |acc, byte| acc.wrapping_add(*byte));
+        data[2] = checksum;
+        header.raw[2] = checksum;
+
+        SaveFile {
+            header,
+            name,
+            file_version: FILE_VERSION,
+            is_utf8: true,
+            part1,
+            part2,
+            part3,
+            part4,
+            part5,
+            vardb,
+            part7,
+            end_byte: END_BYTE,
+            stored_checksum: checksum,
+            computed_checksum: checksum,
+            chunks,
+            data,
+        }
+    }
+
     /// Every segment, in file order.
     #[must_use]
     pub fn chunks(&self) -> &[SaveChunk] {
@@ -888,6 +1147,61 @@ impl SaveFile {
     }
 }
 
+/// A `SavePart1_1` (object) with every optional table empty and the two
+/// retail "nothing here" sentinels set.
+///
+/// `SavePart1_1` has no `Default` derive (its fields are a straight
+/// transcription of the C++ `m_var1..m_var39`), so the new-game template spells
+/// the defaults out here. `var1 = 0xFFFFFFFE` is the value every retail SavePart4
+/// lead object carries; `var6 = 0xFFFFFFFF` is what every retail object carries;
+/// `md1` holds the single NUL byte a MemData<WORD> string slot has.
+fn empty_object() -> SavePart1_1 {
+    SavePart1_1 {
+        var1: u32::MAX - 1,
+        var2: 0,
+        var3: 0,
+        var4: 0,
+        var5: 0,
+        var6: u32::MAX,
+        md1: vec![0],
+        var7: 0,
+        var8: 0,
+        var9: 0,
+        var10: 0,
+        var11: 0,
+        var12: 0,
+        sp1: part1::SavePart1_1_1::default(),
+        sp2: part1::SavePart1_1_1::default(),
+        var13: 0,
+        var14: 0,
+        var15: 0,
+        var16: 0,
+        var17: 0,
+        var18: 0,
+        var19: 0,
+        var20: 0,
+        var21: 0,
+        vars1: Vec::new(),
+        var23: 0,
+        var24: 0,
+        var25: 0,
+        var26: 0,
+        var27: 0,
+        var28: 0,
+        var29: 0,
+        var30: 0,
+        var31: 0,
+        var32: 0,
+        mds1: Vec::new(),
+        var34: 0,
+        var35: 0,
+        var36: 0,
+        var37: 0,
+        var38: 0,
+        var39: 0,
+    }
+}
+
 /// Read one `MemData<T>` body: a length whose width is `size`, then the bytes.
 ///
 /// `MemData` stores a **byte** count, not an element count, and a count of zero
@@ -967,5 +1281,94 @@ pub(crate) fn ensure_fits(
                 r.remaining()
             ),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_synthesized_new_game_template_round_trips() {
+        let save = SaveFile::new_game_template();
+        assert_eq!(save.file_version, 0x8C);
+        assert_eq!(save.header.start_byte, START_BYTE);
+        assert_eq!(save.end_byte, END_BYTE);
+        assert!(save.header.is_utf8());
+        assert!(save.checksum_ok());
+        assert_eq!(save.header.raw[6], 0x55);
+
+        // The typed views and the bytes captured by the constructor agree, so the two
+        // writers produce the same file.
+        let serialized = save.serialize().expect("serialize");
+        let rebuilt = save.rebuild().expect("rebuild");
+        assert_eq!(
+            serialized, rebuilt,
+            "the synthesized bytes and the typed views must agree"
+        );
+
+        let bytes = save
+            .to_bytes_rebuilt()
+            .expect("encrypt the rebuilt template");
+        let parsed = SaveFile::parse(&bytes).expect("parse the synthesized template");
+        assert!(parsed.checksum_ok());
+        assert_eq!(parsed.file_version, save.file_version);
+        assert_eq!(parsed.name, save.name);
+        assert_eq!(parsed.part1, save.part1);
+        assert_eq!(parsed.part2, save.part2);
+        assert_eq!(parsed.part3, save.part3);
+        assert_eq!(parsed.part4, save.part4);
+        assert_eq!(parsed.part5, save.part5);
+        assert_eq!(parsed.vardb, save.vardb);
+        assert_eq!(parsed.part7, save.part7);
+        assert_eq!(parsed.header.start_byte, START_BYTE);
+        assert_eq!(parsed.end_byte, END_BYTE);
+
+        assert_eq!(parsed.to_bytes().expect("to_bytes"), bytes);
+        assert_eq!(parsed.to_bytes_rebuilt().expect("to_bytes_rebuilt"), bytes);
+    }
+
+    #[test]
+    fn the_synthesized_template_has_the_documented_defaults() {
+        let save = SaveFile::new_game_template();
+        assert!(
+            save.part1.map_tiles.is_empty(),
+            "an empty map_tiles vector is the no-snapshot sentinel"
+        );
+        assert_eq!(save.part1.auto_tiles.len(), 31);
+        assert_eq!(save.part1.tail_vars.len(), 11);
+        assert_eq!(save.part1.vars2_new.len(), 192);
+        assert!(save.part1.objects.is_empty());
+
+        assert_eq!(save.part2.vars3_21, [0; 19]);
+        assert!(save.part2.block100.is_some());
+        assert!(save.part2.bgm.is_some());
+        assert!(save.part2.block109.is_some());
+        assert!(save.part2.mds7_9.is_some());
+        assert!(save.part2.block137.is_some());
+        assert!(save.part2.block8a.is_some());
+
+        // Part3 row 0 is the 800 normal variables; events 0..=549 each have 100 self
+        // numbers and 5 self strings.
+        assert_eq!(save.part3.row_counts, vec![800]);
+        assert_eq!(save.part3.normal_var(0), Some(0));
+        assert_eq!(save.part3.normal_var(799), Some(0));
+        assert_eq!(save.part3.normal_var(800), None);
+        assert_eq!(save.part3.self_var(0, 0), Some(0));
+        assert_eq!(save.part3.self_var(549, 99), Some(0));
+        assert_eq!(save.part3.self_var(550, 0), None);
+        assert_eq!(save.part3.self_string(549, 4), Some(""));
+        assert_eq!(save.part3.self_string(550, 0), None);
+
+        assert!(save.part4.objects.is_empty());
+        assert_eq!(save.part4.lead.var1, 0xFFFF_FFFE);
+        assert_eq!(save.part5.var1, 0);
+        assert!(save.part5.events.is_empty());
+        assert_eq!(save.vardb.unknown, 0x6F);
+        assert_eq!(save.vardb.type_count, 0);
+        assert!(save.vardb.types.is_empty());
+        assert_eq!(save.part7.var1, 0);
+        assert!(save.part7.entries.is_empty());
+        assert_eq!(save.chunk(PART7_ID).expect("part 7").len, 1);
     }
 }
