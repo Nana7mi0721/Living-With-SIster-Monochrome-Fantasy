@@ -2,6 +2,8 @@
 
 本文件登记**已经写进代码、但证据不足以称为定论**的判断。每条给：假说、当前实现、支持证据、反证 / 未验证部分、以及「怎么才能证实」。
 
+> **状态审计（task-45 / `docs/research/M7_UNVERIFIED_AUDIT.md`，HEAD bcbcfba）**：本清单 9 条中 **2 条已解除**（H-MENU-1、H-124 指令层），**7 条仍开放**（H-PIC-1 / H-PIC-2 / H-ANC-1 / H-WIN-1 / H-KEY-2 / H-PRNG-1 / H-ASSET-1，均属低风险视觉 / 数据 / 确定性，无功能阻断）。清单之外的**真残余**（opcode 111 值操作数引用、CE159/CE162 目标分发、CE333 坏结局不可达、character_state 限制、PRNG 时钟种子、音频）见文末「其它真残余」。逐条依据见审计文档。
+
 约定：一旦某条被证实或推翻，从这里删掉并写进 `docs/FORMAT_SPEC.md` / `docs/OPCODE_SPEC.md` 的对应小节（那两份是「已实测」文档，本文件是「待实测」文档）。
 
 ---
@@ -101,7 +103,7 @@
 
 ---
 
-## H-MENU-1 选择肢（102）的可视化责任归属
+## H-MENU-1 选择肢（102）的可视化责任归属（已解除 ✅）
 
 **假说**：`102` 的选项字符串由**运行时**（不是脚本）画出选择窗口；本作标题菜单的选项串是 `["1","2","3"]`，而玩家真正看到的菜单文字是脚本用图片画出来的，所以忠实移植必须**同时**做两件事：脚本图片照画 + 运行时选择窗口照画。
 
@@ -113,7 +115,7 @@
 
 ---
 
-## H-124 变量操作（扩展）124（已确认实现，M7 / task-23）
+## H-124 变量操作（扩展）124（已确认实现，M7 / task-23；指令层已解除 ✅）
 
 **实现（已确认）**：`crates/wolf-vm/src/exec.rs:1721-1778` 已按长格式 `[dst, sub, object, field]`（argc=4）/ 短格式 `[dst, sub, field]`（仅 0x3000，argc=3）完整分派，纯查询、不阻塞；对象走 `eval_num`，目标走 `store_num`；值来自 Host 的 `picture_state`/`character_state`/`engine_state`，`None` 时不写目标（保持旧值）；`0x3000 field 18` 由解释器回答（公共事件号 + 500000）。回归 `crates/wolf-vm/tests/opcode_124_long.rs` 7 测通过。
 
@@ -134,3 +136,24 @@
 **未验证**：原作运行时是否也认这个笔误（可能 DxLib 在 `Picture/` 不存在时另有搜索路径），以及作者原本想引用的是 `hword/` 还是 `word/`。若今后确认是脚本写错，应在数据侧修掉这 7 个引用而不是永远依赖 fallback。
 
 **怎么证实**：对照原版实机事件 354 的文字特效是否与 `hword/` 图一致。
+
+---
+
+## 其它真残余（清单外，task-45 补录）
+
+以下是「已写代码但仍有证据缺口/未实现分支」的真残余，不属于上面 9 条，来源为 M7/M8 已合入测试与报告（详见 `docs/research/M7_UNVERIFIED_AUDIT.md` §2）：
+
+- **opcode 111 值操作数引用语义（功能性真残余）**：`crates/wolf-vm/src/exec.rs:2222` 仍 `let value = arg(cmd, 2 + 3 * i);`，值按字面量比较（lhs 在 :2224 走 `eval_num`）；`crates/wolf-vm/tests/opcode_111_semantics.rs` 5 测中最后一条 `#[ignore]`（:204-206），4 过 1 忽略。数据里 356 处（22,695 三元组的 1.57%）`value` 是变量/自身变量引用，当前条件会错；`docs/research/M7_OPCODE_111.md` 的 1 行补丁（rhs 走 `eval_num`）**尚未落地**。
+- **CE159/CE162 目标选择执行侧分发（开放）**：目标*生成*已修（ENEMY_COUNT 单元 CData type18 row69 col0=1；CE190 pc36 / CE162 pc12 读取；`tests/m7_battle_target_scheduler.rs` 6 测、`tests/m7_battle_target.rs` 3 测），但 `CE188` 指令线从未生成 `CE159`（技能選択実行），`CE162` 唯一真实调用者是 CE159 `pc247`；`tests/m7_battle_target_flow.rs` 仅为 zz 调试探针，非绿色验收。
+- **CE333 H-scene 坏结局不可达（状态缺失）**：入口 `CE246 pc1943` 需 `var157==13`（全库无字面量 13，只有 {1,2,16}），且坏结局需 `v23==0`，而零售 `v23={9,9,10,6,6,9,8,9}` 全 ≥6；强设 v23=0 触发爆炸。CE346 cutin 可达（`tests/m7_hscene_deep.rs`），坏结局不可达（`tests/m7_hmode_state.rs`）。
+- **character_state 限制（非缺陷）**：`tests/m8_character_state.rs` 3 测 —— 对地图事件与队长(-2) 已返回真实坐标，但无移动模型、身高 field4 恒 0、`-1`/`-3..-7` 返回 None、屏幕偏移靠推断。
+- **PRNG 时钟种子回放位对齐（确定性）**：算式已反编译落地（`tests/rng_retail.rs` 15 测），残余=零售以时钟自播种、移植用固定 `EVENT_SEED=1`，同存档+同输入的逐位对齐未证。
+- **音频**：无自动化比对，需人耳核对（M8_BACKLOG G10）。
+
+### 已从旧文档证伪的「过时否定」（供交叉核对）
+
+- opcode 250 写分支**已支持字符串**（`exec.rs:2050-2059`，`tests/opcode_250_string.rs` 4 测 + `tests/m7_battle_menu_text.rs`），不再是残余。
+- CE244 战斗结算**已可达**（M8 W1-c：`crates/wolf-game/src/battle_wiring.rs` `CE242` arg0=行动槽 1；`tests/m7_day4_playable.rs` day4→day5 08:30 无注入）。仅余 111 字面量使胜负展示分支恒死（显示层）。
+- H 文字 word_effect 层**已可见**（W2-c：`picture.rs` `Transition::from_command` 回退 raw slot 2 淡入时长；`tests/m7_hword_visible.rs`）。
+- H 选择窗口(102)**已绘制**（见 H-MENU-1）；H-124 **指令层已解除**（见 H-124）。
+- day4→day5 **存在自然非战斗路径且已证**（`tests/m7_day4_playable.rs`）。

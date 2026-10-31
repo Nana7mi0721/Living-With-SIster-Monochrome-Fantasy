@@ -75,6 +75,11 @@ impl DecodedAudio {
 }
 
 /// Decode an audio file from disk.
+///
+/// Symphonia is the primary decoder. If it cannot even *probe* the container, one
+/// narrow retry is attempted for RIFF/WAVE PCM files whose fmt chunk is
+/// non-canonical (see try_decode_wav_pcm_tolerant); every other error is returned
+/// unchanged, so genuinely invalid files are still rejected.
 pub fn decode_file(path: impl AsRef<Path>) -> Result<DecodedAudio, AudioError> {
     let path = path.as_ref();
     let file = File::open(path)
@@ -83,12 +88,37 @@ pub fn decode_file(path: impl AsRef<Path>) -> Result<DecodedAudio, AudioError> {
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         hint.with_extension(ext);
     }
-    decode_source(Box::new(file), &hint)
+    match decode_source(Box::new(file), &hint) {
+        Ok(audio) => Ok(audio),
+        Err(AudioError::Unsupported(msg)) if is_probe_failure(&msg) => {
+            let bytes = std::fs::read(path)
+                .map_err(|e| AudioError::Io(format!("read {}: {e}", path.display())))?;
+            match try_decode_wav_pcm_tolerant(&bytes) {
+                Some(retry) => retry,
+                None => Err(AudioError::Unsupported(msg)),
+            }
+        }
+        Err(err) => Err(err),
+    }
 }
 
 /// Decode audio from an in-memory byte buffer (format probed by content).
 pub fn decode_bytes(bytes: Vec<u8>) -> Result<DecodedAudio, AudioError> {
-    decode_source(Box::new(std::io::Cursor::new(bytes)), &Hint::new())
+    match decode_source(Box::new(std::io::Cursor::new(bytes.clone())), &Hint::new()) {
+        Ok(audio) => Ok(audio),
+        Err(AudioError::Unsupported(msg)) if is_probe_failure(&msg) => {
+            match try_decode_wav_pcm_tolerant(&bytes) {
+                Some(retry) => retry,
+                None => Err(AudioError::Unsupported(msg)),
+            }
+        }
+        Err(err) => Err(err),
+    }
+}
+
+/// True when a decode error came from the container probe (not from decoding frames).
+fn is_probe_failure(msg: &str) -> bool {
+    msg.starts_with("probe:")
 }
 
 fn decode_source(
@@ -228,5 +258,165 @@ fn scan_tag(tag: &symphonia::core::meta::Tag, start: &mut Option<u64>, length: &
         "LOOPSTART" => *start = parsed,
         "LOOPLENGTH" => *length = parsed,
         _ => {}
+    }
+}
+
+/// Canonical PCM fields read out of a WAVE `fmt ` chunk.
+struct WavFmt {
+    audio_format: u16,
+    channels: u16,
+    sample_rate: u32,
+    block_align: u16,
+    bits: u16,
+}
+
+/// Strict, narrow fallback for RIFF/WAVE PCM files that Symphonia rejects at probe time
+/// only because the `fmt ` chunk size is non-canonical (e.g. 26 bytes instead of 16/18)
+/// while the canonical 16-byte PCM header fields are still present and intact.
+///
+/// Returns:
+/// * `None` when the bytes are not a RIFF/WAVE stream, or are RIFF/WAVE but not integer
+///   PCM -- the caller keeps the original Symphonia error (no weakening).
+/// * `Some(Err(..))` when the stream claims to be RIFF/WAVE PCM but is malformed/truncated.
+/// * `Some(Ok(..))` when a fully validated PCM stream was decoded.
+fn try_decode_wav_pcm_tolerant(bytes: &[u8]) -> Option<Result<DecodedAudio, AudioError>> {
+    if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
+        return None;
+    }
+
+    let mut fmt: Option<WavFmt> = None;
+    // (data body start, clamped end, declared size)
+    let mut data: Option<(usize, usize, usize)> = None;
+
+    let mut pos = 12usize;
+    while pos + 8 <= bytes.len() {
+        let size = u32::from_le_bytes([
+            bytes[pos + 4],
+            bytes[pos + 5],
+            bytes[pos + 6],
+            bytes[pos + 7],
+        ]) as usize;
+        let body = pos + 8;
+        match &bytes[pos..pos + 4] {
+            b"fmt " => {
+                if bytes.len().saturating_sub(body) < 16 {
+                    return Some(Err(AudioError::Unsupported(
+                        "wav: fmt chunk shorter than the canonical 16-byte PCM header".into(),
+                    )));
+                }
+                fmt = Some(WavFmt {
+                    audio_format: u16::from_le_bytes([bytes[body], bytes[body + 1]]),
+                    channels: u16::from_le_bytes([bytes[body + 2], bytes[body + 3]]),
+                    sample_rate: u32::from_le_bytes([
+                        bytes[body + 4],
+                        bytes[body + 5],
+                        bytes[body + 6],
+                        bytes[body + 7],
+                    ]),
+                    block_align: u16::from_le_bytes([bytes[body + 12], bytes[body + 13]]),
+                    bits: u16::from_le_bytes([bytes[body + 14], bytes[body + 15]]),
+                });
+            }
+            b"data" => {
+                let declared_end = body.saturating_add(size);
+                let end = declared_end.min(bytes.len());
+                data = Some((body, end, size));
+            }
+            _ => {}
+        }
+        // RIFF chunks are word-aligned: advance by the declared size plus pad byte.
+        let advance = 8usize.saturating_add(size).saturating_add(size & 1);
+        pos = pos.saturating_add(advance);
+        if pos <= body {
+            break;
+        }
+    }
+
+    let Some(fmt) = fmt else {
+        return Some(Err(AudioError::Unsupported("wav: missing fmt chunk".into())));
+    };
+    let Some((data_start, data_end, data_size)) = data else {
+        return Some(Err(AudioError::Unsupported("wav: missing data chunk".into())));
+    };
+
+    // Only integer PCM (audioFormat == 1) is handled here. Other codecs are left to
+    // Symphonia so we never fabricate a result for something we cannot decode.
+    if fmt.audio_format != 1 {
+        return None;
+    }
+    if fmt.channels == 0 || fmt.sample_rate == 0 || fmt.bits == 0 {
+        return Some(Err(AudioError::Unsupported(
+            "wav: zero channels / sample-rate / bit-depth".into(),
+        )));
+    }
+    if !matches!(fmt.bits, 8 | 16 | 24 | 32) {
+        return Some(Err(AudioError::Unsupported(format!(
+            "wav: unsupported PCM bit depth {}",
+            fmt.bits
+        ))));
+    }
+    let bytes_per_sample = (fmt.bits / 8) as usize;
+    let frame_bytes = (fmt.channels as usize) * bytes_per_sample;
+    if frame_bytes == 0 || fmt.block_align as usize != frame_bytes {
+        return Some(Err(AudioError::Unsupported(
+            "wav: blockAlign inconsistent with channels / bit-depth".into(),
+        )));
+    }
+    // A declared data chunk that runs past the end of the buffer is truncated data.
+    if data_end < data_start.saturating_add(data_size) {
+        return Some(Err(AudioError::Unsupported(
+            "wav: truncated data chunk".into(),
+        )));
+    }
+    if data_size % frame_bytes != 0 {
+        return Some(Err(AudioError::Unsupported(
+            "wav: data chunk length is not a multiple of blockAlign".into(),
+        )));
+    }
+    let frames = data_size / frame_bytes;
+    if frames == 0 {
+        return Some(Err(AudioError::Empty(
+            "wav: data chunk produced no complete frames".into(),
+        )));
+    }
+
+    let mut samples = Vec::with_capacity(frames * fmt.channels as usize);
+    for f in 0..frames {
+        for c in 0..fmt.channels as usize {
+            let off = data_start + f * frame_bytes + c * bytes_per_sample;
+            samples.push(decode_pcm_sample(bytes, off, fmt.bits));
+        }
+    }
+
+    Some(Ok(DecodedAudio {
+        sample_rate: fmt.sample_rate,
+        channels: fmt.channels,
+        samples,
+        loop_start: None,
+        loop_end: None,
+    }))
+}
+
+/// Convert one integer PCM sample at `off` to normalised f32 in -1.0..=1.0.
+fn decode_pcm_sample(bytes: &[u8], off: usize, bits: u16) -> f32 {
+    match bits {
+        8 => (bytes[off] as f32 - 128.0) / 128.0,
+        16 => i16::from_le_bytes([bytes[off], bytes[off + 1]]) as f32 / 32_768.0,
+        24 => {
+            let v = (bytes[off] as i32)
+                | ((bytes[off + 1] as i32) << 8)
+                | ((bytes[off + 2] as i32) << 16);
+            ((v << 8) >> 8) as f32 / 8_388_608.0
+        }
+        32 => {
+            i32::from_le_bytes([
+                bytes[off],
+                bytes[off + 1],
+                bytes[off + 2],
+                bytes[off + 3],
+            ]) as f32
+                / 2_147_483_648.0
+        }
+        _ => 0.0,
     }
 }

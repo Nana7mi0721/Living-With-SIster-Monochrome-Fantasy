@@ -28,6 +28,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use wolf_format::mps::{Map, PageCondition, CONDITION_SLOTS};
+use wolf_format::tileset::TileSet;
 use wolf_vm::exec::InstanceId;
 use wolf_vm::{Magic, MagicKind, Program, SelfVars, Variables, Vm};
 
@@ -46,6 +47,11 @@ pub enum Trigger {
     Parallel,
     /// Runs when the player touches the event's tile.
     PlayerTouch,
+    /// Runs when either the player or the event touches the other.
+    ///
+    /// The engine defines it (manual trigger query 0..4), but no shipped page uses
+    /// it, so the tile-only trigger core records the kind without firing it.
+    EventTouch,
     /// A trigger byte no known WOLF build uses; kept so a real file never panics.
     Unknown(u8),
 }
@@ -58,6 +64,7 @@ impl Trigger {
             1 => Trigger::Autorun,
             2 => Trigger::Parallel,
             3 => Trigger::PlayerTouch,
+            4 => Trigger::EventTouch,
             other => Trigger::Unknown(other),
         }
     }
@@ -70,6 +77,7 @@ impl Trigger {
             Trigger::Autorun => 1,
             Trigger::Parallel => 2,
             Trigger::PlayerTouch => 3,
+            Trigger::EventTouch => 4,
             Trigger::Unknown(other) => other,
         }
     }
@@ -106,6 +114,22 @@ struct PageState {
     /// Opcode 124 `0x1000` field 5 reports this for the event's active page, so it
     /// must survive page switches instead of being read from page 0 forever.
     direction: i32,
+    /// The page behaviour bitfield (the editor's page `flags` byte).
+    ///
+    /// WodiLib MapEventPageOption.cs defines the bits: 0x01 idle animation,
+    /// 0x02 move animation, 0x04 fixed direction, 0x08 slip-through, 0x10 above
+    /// hero, 0x20 square hitbox, 0x40 half-step up. Only 0x08 and 0x20 matter to
+    /// contact selection.
+    behavior_options: u8,
+    /// True when the page draws a character image (graphic name or chip id set).
+    has_image: bool,
+}
+
+impl PageState {
+    /// The editor's "slip-through" option: the event can be walked over.
+    fn skip_through(&self) -> bool {
+        self.behavior_options & 0x08 != 0
+    }
 }
 
 /// One map event: its placement, pages, and which page is active right now.
@@ -167,6 +191,196 @@ pub struct LeaderPlacement {
     pub direction: Option<i32>,
 }
 
+/// A per-cell, per-direction passability grid for the current map.
+///
+/// WOLF stores passability per tileset chip, not per map. This structure is the
+/// bridge the movement layer needs: [`Terrain::from_map`] ORs the passability of
+/// every chip on every tile layer into one 4-bit direction mask per map cell.
+///
+/// Bit order is the `TilePassability::blocked` order: bit 0 up, bit 1 right,
+/// bit 2 left, bit 3 down. A set bit means "entering this cell while moving this
+/// way is blocked". The shipped SampleMapA is 100% passable; tests can build a
+/// synthetic grid with [`Terrain::new`] + [`Terrain::set_tile_blocked`].
+#[derive(Clone, Debug, Default)]
+pub struct Terrain {
+    /// Map width in tiles.
+    pub width: i32,
+    /// Map height in tiles.
+    pub height: i32,
+    /// One 4-bit direction mask per cell, row-major.
+    blocked: Vec<u8>,
+}
+
+impl Terrain {
+    /// An all-passable grid of the given tile size.
+    #[must_use]
+    pub fn new(width: i32, height: i32) -> Self {
+        let count = usize::try_from(width.max(0))
+            .ok()
+            .and_then(|w| usize::try_from(height.max(0)).ok().map(|h| w * h))
+            .unwrap_or(0);
+        Self {
+            width,
+            height,
+            blocked: vec![0; count],
+        }
+    }
+
+    /// Build the grid from the map's three tile layers and the tileset's chip passability.
+    ///
+    /// Chip id decoding follows the measured rule (docs/FORMAT_SPEC.md §7.3,
+    /// work/_yado_0600.txt:535): an autotile word is `id * 100_000 + corner_digits`,
+    /// while a base chip is its own id (`>= 32`). Chip 0 is transparent and carries
+    /// no collision. The passability table is indexed by that chip id.
+    #[must_use]
+    pub fn from_map(map: &Map, tileset: &TileSet) -> Self {
+        let width = i32::try_from(map.width).unwrap_or(i32::MAX);
+        let height = i32::try_from(map.height).unwrap_or(i32::MAX);
+        let mut terrain = Self::new(width, height);
+        if width <= 0 || height <= 0 {
+            return terrain;
+        }
+        let width_usize = width as usize;
+        let count = width_usize.saturating_mul(height as usize);
+        for layer in &map.layers {
+            if layer.len() < count {
+                continue;
+            }
+            for y in 0..height {
+                for x in 0..width {
+                    let raw = layer[y as usize * width_usize + x as usize];
+                    if raw == Map::EMPTY_TILE {
+                        continue;
+                    }
+                    let autotile = raw / 100_000;
+                    let chip = if autotile > 0 { autotile } else { raw };
+                    let Some(passability) = tileset.passability.get(chip as usize) else {
+                        continue;
+                    };
+                    let bits = if passability.quarter_tile {
+                        // Quarter tiles store corner *passability*. A whole-tile step
+                        // is blocked only when both corners on that side are blocked.
+                        let tl = passability.top_left_passable;
+                        let tr = passability.top_right_passable;
+                        let bl = passability.bottom_left_passable;
+                        let br = passability.bottom_right_passable;
+                        let mut bits = 0u8;
+                        if !(tl || tr) {
+                            bits |= 1; // up
+                        }
+                        if !(tr || br) {
+                            bits |= 1 << 1; // right
+                        }
+                        if !(tl || bl) {
+                            bits |= 1 << 2; // left
+                        }
+                        if !(bl || br) {
+                            bits |= 1 << 3; // down
+                        }
+                        bits
+                    } else {
+                        (u8::from(passability.upwards_not_passable))
+                            | (u8::from(passability.rightwards_not_passable) << 1)
+                            | (u8::from(passability.leftwards_not_passable) << 2)
+                            | (u8::from(passability.downwards_not_passable) << 3)
+                    };
+                    let index = y as usize * width_usize + x as usize;
+                    terrain.blocked[index] |= bits;
+                }
+            }
+        }
+        terrain
+    }
+
+    /// True when entering `(x, y)` while moving in `step` is blocked.
+    ///
+    /// `step` uses the `TilePassability::blocked` order: 0 up, 1 right, 2 left,
+    /// 3 down. Out-of-range cells and step values answer false; bounds are the
+    /// movement layer's job.
+    #[must_use]
+    pub fn is_blocked(&self, x: i32, y: i32, step: u8) -> bool {
+        if x < 0 || y < 0 || step > 3 {
+            return false;
+        }
+        let Some(index) = (y as usize)
+            .checked_mul(self.width.max(0) as usize)
+            .and_then(|row| row.checked_add(x as usize))
+        else {
+            return false;
+        };
+        self.blocked
+            .get(index)
+            .is_some_and(|bits| bits & (1 << step) != 0)
+    }
+
+    /// Marks one direction of one cell as blocked. Intended for tests and for
+    /// engine extensions; loading a real map uses [`Terrain::from_map`].
+    pub fn set_blocked(&mut self, x: i32, y: i32, step: u8, blocked: bool) {
+        if x < 0 || y < 0 || step > 3 || self.width <= 0 {
+            return;
+        }
+        let Some(index) = (y as usize)
+            .checked_mul(self.width as usize)
+            .and_then(|row| row.checked_add(x as usize))
+        else {
+            return;
+        };
+        let Some(cell) = self.blocked.get_mut(index) else {
+            return;
+        };
+        let mask = 1 << step;
+        if blocked {
+            *cell |= mask;
+        } else {
+            *cell &= !mask;
+        }
+    }
+
+    /// Marks a whole cell solid (all four entry directions blocked).
+    pub fn set_tile_blocked(&mut self, x: i32, y: i32, blocked: bool) {
+        for step in 0..4 {
+            self.set_blocked(x, y, step, blocked);
+        }
+    }
+
+    /// True when a whole-tile step can never enter this cell.
+    ///
+    /// "Solid" means all four entry directions are blocked, which is how both a
+    /// full-tile star chip and a fully enclosed quarter tile end up. Out-of-range
+    /// cells answer true so a contact test never invents walkable space.
+    #[must_use]
+    pub fn is_solid_cell(&self, x: i32, y: i32) -> bool {
+        if x < 0 || y < 0 || self.width <= 0 {
+            return true;
+        }
+        let Some(index) = (y as usize)
+            .checked_mul(self.width as usize)
+            .and_then(|row| row.checked_add(x as usize))
+        else {
+            return true;
+        };
+        match self.blocked.get(index) {
+            Some(bits) => *bits == 0b1111,
+            None => true,
+        }
+    }
+
+    /// The inverse of is_solid_cell.
+    #[must_use]
+    pub fn is_passable_cell(&self, x: i32, y: i32) -> bool {
+        !self.is_solid_cell(x, y)
+    }
+}
+
+/// One event page the player's current contact would run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TriggerRequest {
+    /// Map event id.
+    pub event: u32,
+    /// Active page index of that event.
+    pub page: usize,
+}
+
 /// The public view of one running map event.
 pub struct PageSlot {
     pub event: u32,
@@ -192,6 +406,12 @@ pub struct MapRuntime {
     events: Vec<EventState>,
     /// The party leader's placement on the current map, when the engine has placed it.
     leader: Option<LeaderPlacement>,
+    /// Map width in tiles, for movement bounds. 0 until a map is collected.
+    width: i32,
+    /// Map height in tiles.
+    height: i32,
+    /// Tile passability, when the caller supplied a decoded tileset.
+    terrain: Option<Terrain>,
     /// Total starts across all events, i.e. how much the map is doing.
     pub restarts: u64,
     /// How many times an event switched to a different page.
@@ -240,6 +460,8 @@ impl MapRuntime {
                         conditions: page.conditions(),
                         program,
                         direction: i32::from(page.direction),
+                        behavior_options: page.route.behavior_options,
+                        has_image: !page.graphic.is_empty() || page.graphic_chip_id != 0xFFFF_FFFF,
                     }
                 })
                 .collect();
@@ -260,6 +482,9 @@ impl MapRuntime {
         Self {
             events,
             leader: None,
+            width: i32::try_from(map.width).unwrap_or(0),
+            height: i32::try_from(map.height).unwrap_or(0),
+            terrain: None,
             restarts: 0,
             switches: 0,
         }
@@ -308,12 +533,7 @@ impl MapRuntime {
     /// transfer targets `(62, 38)` on a 64x36 map, which only fits after halving to
     /// (31, 19), and the title transfer's `(60, 34)` halves to Map003 event 1's own
     /// (30, 17) tile. Tile fields therefore truncate `precise / 2`.
-    pub fn place_leader_precise(
-        &mut self,
-        precise_x: i32,
-        precise_y: i32,
-        direction: Option<i32>,
-    ) {
+    pub fn place_leader_precise(&mut self, precise_x: i32, precise_y: i32, direction: Option<i32>) {
         self.leader = Some(LeaderPlacement {
             x: precise_x / 2,
             y: precise_y / 2,
@@ -327,6 +547,201 @@ impl MapRuntime {
     #[must_use]
     pub fn leader(&self) -> Option<LeaderPlacement> {
         self.leader
+    }
+
+    /// The current map's tile size, for callers that need to clamp or display it.
+    #[must_use]
+    pub fn map_size(&self) -> (i32, i32) {
+        (self.width, self.height)
+    }
+
+    /// Installs the tile passability grid and adopts its dimensions as map bounds.
+    ///
+    /// [`crate::game::Game::start_pages`] calls this right after collecting a map;
+    /// tests can call it with a synthetic [`Terrain`]. No terrain means every tile
+    /// is passable (the map data has no collision at all in that case).
+    pub fn set_terrain(&mut self, terrain: Terrain) {
+        if terrain.width > 0 && terrain.height > 0 {
+            self.width = terrain.width;
+            self.height = terrain.height;
+        }
+        self.terrain = Some(terrain);
+    }
+
+    /// The installed terrain grid, if any.
+    #[must_use]
+    pub fn terrain(&self) -> Option<&Terrain> {
+        self.terrain.as_ref()
+    }
+
+    /// Which action-key or player-touch pages the player's contact would run.
+    ///
+    /// leader is the tile the party leader stands on, facing a WOLF facing code,
+    /// action_pressed a fresh confirm press and touch a movement contact. Only
+    /// pages that are already the event's active page are candidates, so the
+    /// caller must run start_pending first. The help rule used here: action-key
+    /// contact takes the SMALLEST event id among overlapping events; player-touch
+    /// returns every candidate in ascending id order.
+    ///
+    /// The contact test follows the official implicit rules: an event whose body
+    /// tile is passable (or which has an image with slip-through on, or no image)
+    /// must be stood on, while an event on an impassable tile (or with an image and
+    /// slip-through off) can be reached from the adjacent tile. Event-touch (trigger
+    /// 4) is decoded but never fires here because no shipped page uses it and its
+    /// quarter-tile hitbox geometry is not specified.
+    #[must_use]
+    pub fn try_trigger(
+        &self,
+        leader: (i32, i32),
+        facing: i32,
+        action_pressed: bool,
+        touch: bool,
+    ) -> Vec<TriggerRequest> {
+        if !action_pressed && !touch {
+            return Vec::new();
+        }
+        let mut action: Option<TriggerRequest> = None;
+        let mut touches: Vec<TriggerRequest> = Vec::new();
+        for state in &self.events {
+            let Some(index) = state.active else {
+                continue;
+            };
+            let Some(page) = state.pages.get(index) else {
+                continue;
+            };
+            let wants_action = action_pressed && page.trigger == Trigger::ActionKey;
+            let wants_touch = touch && page.trigger == Trigger::PlayerTouch;
+            if !wants_action && !wants_touch {
+                continue;
+            }
+            if !self.player_contacts(state, page, leader, facing) {
+                continue;
+            }
+            let request = TriggerRequest {
+                event: state.id,
+                page: index,
+            };
+            if wants_action {
+                match action {
+                    Some(current) if current.event <= request.event => {}
+                    _ => action = Some(request),
+                }
+            } else {
+                touches.push(request);
+            }
+        }
+        touches.sort_by_key(|request| request.event);
+        match action {
+            Some(request) => {
+                let mut result = Vec::with_capacity(touches.len() + 1);
+                result.push(request);
+                result.extend(touches);
+                result
+            }
+            None => touches,
+        }
+    }
+
+    /// True when the leader touches this event's active page at leader facing facing.
+    fn player_contacts(
+        &self,
+        state: &EventState,
+        page: &PageState,
+        leader: (i32, i32),
+        facing: i32,
+    ) -> bool {
+        if leader.0 == state.x && leader.1 == state.y {
+            return true;
+        }
+        let requires_overlap = if page.has_image {
+            page.skip_through()
+        } else {
+            match self.terrain.as_ref() {
+                Some(terrain) => terrain.is_passable_cell(state.x, state.y),
+                None => true,
+            }
+        };
+        if requires_overlap {
+            return false;
+        }
+        let Some(step) = facing_step(facing) else {
+            return false;
+        };
+        let (dx, dy) = step_delta(step);
+        leader.0.saturating_add(dx) == state.x && leader.1.saturating_add(dy) == state.y
+    }
+
+    /// Tries a one-tile step in a WOLF facing direction (2 down, 4 left, 6 right, 8 up).
+    ///
+    /// Returns true only when the leader actually moved. The facing is updated even
+    /// when the step is blocked, matching the engine rule that a direction press
+    /// turns the character first and the collision test decides the step separately.
+    /// Diagonals, 0 and other codes are rejected without moving or turning.
+    pub fn try_move_leader(&mut self, direction: i32) -> bool {
+        let Some(step) = facing_step(direction) else {
+            return false;
+        };
+        let (dx, dy) = match step {
+            0 => (0, -1), // up
+            1 => (1, 0),  // right
+            2 => (-1, 0), // left
+            _ => (0, 1),  // down
+        };
+        self.move_leader_step(dx, dy, step, direction)
+    }
+
+    /// Tries a one-tile step by delta. Exactly one of dx/dy must be non-zero.
+    ///
+    /// The derived WOLF facing is 2 down, 4 left, 6 right, 8 up. See
+    /// [`Self::try_move_leader`] for the blocked-step facing rule.
+    pub fn move_leader(&mut self, dx: i32, dy: i32) -> bool {
+        let Some(step) = delta_step(dx, dy) else {
+            return false;
+        };
+        self.move_leader_step(dx, dy, step, step_facing(step))
+    }
+
+    fn move_leader_step(&mut self, dx: i32, dy: i32, step: u8, direction: i32) -> bool {
+        let Some(mut leader) = self.leader else {
+            return false;
+        };
+        // Turn first: a blocked step still changes the facing.
+        leader.direction = Some(direction);
+        let target_x = leader.x.saturating_add(dx);
+        let target_y = leader.y.saturating_add(dy);
+        let out_of_bounds = target_x < 0
+            || target_y < 0
+            || (self.width > 0 && target_x >= self.width)
+            || (self.height > 0 && target_y >= self.height);
+        let blocked = out_of_bounds
+            || self
+                .terrain
+                .as_ref()
+                .is_some_and(|terrain| terrain.is_blocked(target_x, target_y, step))
+            || self.event_occupies(target_x, target_y);
+        if blocked {
+            self.leader = Some(leader);
+            return false;
+        }
+        leader.x = target_x;
+        leader.y = target_y;
+        leader.precise_x = leader.precise_x.saturating_add(dx.saturating_mul(2));
+        leader.precise_y = leader.precise_y.saturating_add(dy.saturating_mul(2));
+        self.leader = Some(leader);
+        true
+    }
+
+    /// True when any map event with an active page stands on this tile.
+    ///
+    /// Event pages carry optional collisionWidth/Height extensions (docs/FORMAT_SPEC
+    /// §5.6.1); the shipped maps use 0 for 130 of 134 pages and every page that can
+    /// block the leader here, so the core blocks the event's own tile only. The four
+    /// non-zero touch pages in Dungeon/SampleMapB need unit semantics the format
+    /// notes do not provide yet (see docs/research/M9_MOVEMENT.md §4).
+    fn event_occupies(&self, x: i32, y: i32) -> bool {
+        self.events
+            .iter()
+            .any(|state| state.active.is_some() && state.x == x && state.y == y)
     }
 
     /// How many runnable events have an active page with a command stream right now.
@@ -514,6 +929,48 @@ impl MapRuntime {
             }
         }
         started
+    }
+}
+
+/// Map a WOLF facing code to a passability step (0 up, 1 right, 2 left, 3 down).
+fn facing_step(direction: i32) -> Option<u8> {
+    match direction {
+        8 => Some(0),
+        6 => Some(1),
+        4 => Some(2),
+        2 => Some(3),
+        _ => None,
+    }
+}
+
+/// The inverse of [`facing_step`].
+fn step_facing(step: u8) -> i32 {
+    match step {
+        0 => 8,
+        1 => 6,
+        2 => 4,
+        _ => 2,
+    }
+}
+
+/// The unit delta of a passability step (0 up, 1 right, 2 left, 3 down).
+fn step_delta(step: u8) -> (i32, i32) {
+    match step {
+        0 => (0, -1),
+        1 => (1, 0),
+        2 => (-1, 0),
+        _ => (0, 1),
+    }
+}
+
+/// Map a one-tile delta to a passability step; diagonals and zero are rejected.
+fn delta_step(dx: i32, dy: i32) -> Option<u8> {
+    match (dx, dy) {
+        (0, -1) => Some(0),
+        (1, 0) => Some(1),
+        (-1, 0) => Some(2),
+        (0, 1) => Some(3),
+        _ => None,
     }
 }
 

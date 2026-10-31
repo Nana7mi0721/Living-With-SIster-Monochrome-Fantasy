@@ -33,8 +33,8 @@ use crate::assets::Assets;
 use crate::atlas::{Atlas, SpriteQuad};
 use crate::auto_events::AutoEvents;
 use crate::db::Databases;
-use crate::map_runtime::MapRuntime;
-use crate::picture::{PictureKind, Screen, ANCHOR_CENTRE, SCREEN_H, SCREEN_W};
+use crate::map_runtime::{MapRuntime, Terrain};
+use crate::picture::{Picture, PictureKind, Screen, SCREEN_H, SCREEN_W};
 use crate::tilemap::{tile_centre_px, tile_feet_px, TileMap};
 use crate::tint::ScreenTint;
 use crate::transition::ScreenTransition;
@@ -609,10 +609,40 @@ impl Game {
         self.battle_wiring.set_enabled(enabled);
     }
 
+    /// Enables the honest multi-round battle driver (M9 task-57).
+    ///
+    /// Off by default, so a game that never calls this behaves exactly as the shipped
+    /// single-round battle (byte-for-byte). When enabled together with
+    /// Game::set_battle_wiring, the driver chains additional command rounds by starting
+    /// the REAL turn-start event CE241 (which resets 2000350 2 -> 0 at its pc628) between
+    /// rounds, instead of the shipped flow parking at 2000350 = 2 forever. It only matters
+    /// for a battle whose enemy gauge (2000342) survives the first command round - i.e. the
+    /// BOSS path (CE239 pc202, 2000445 == 1). See src/battle_wiring.rs.
+    pub fn set_battle_round_loop(&mut self, enabled: bool) {
+        self.battle_wiring.set_round_loop(enabled);
+    }
+
+    /// Sets the CE242 command-index schedule the rebuilt wiring hands to the command phase
+    /// (M9 task-63 live-menu bridge).
+    ///
+    /// Each value is a CE242 command index 1..8 selecting one command body / party member.
+    /// Default is `[1, 3]` (single-shot mode only ever consumes the first entry = 1, exactly
+    /// the shipped behaviour). This lets a caller feed the real player menu selection in
+    /// instead of the hardcoded schedule. It does not itself enable any wiring or round loop.
+    pub fn set_battle_command_schedule(&mut self, schedule: Vec<i32>) {
+        self.battle_wiring.set_command_schedule(schedule);
+    }
+
     /// How many command phases the rebuilt battle wiring has started (0 when disabled).
     #[must_use]
     pub fn battle_wiring_rounds(&self) -> u64 {
         self.battle_wiring.started_rounds()
+    }
+
+    /// How many times the multi-round driver has started the real turn-start event CE241.
+    #[must_use]
+    pub fn battle_wiring_turn_starts(&self) -> u64 {
+        self.battle_wiring.turn_starts()
     }
 
     /// Starts the coroutines the runtime owns rather than the script.
@@ -681,13 +711,17 @@ impl Game {
     /// (an autorun page would be started by `MapRuntime` too, and starting it
     /// twice is a behaviour change nobody asked for).
     pub fn start_pages(&mut self, map: &Map, skip: Option<u32>) -> usize {
-        self.tilemap = match &self.tilesets {
-            Some(sets) => sets
-                .get(map.tileset_index)
-                .map(|tileset| TileMap::new(map, tileset, sets.version)),
-            None => None,
-        };
+        let tileset = self
+            .tilesets
+            .as_ref()
+            .and_then(|sets| sets.get(map.tileset_index));
+        self.tilemap = tileset
+            .zip(self.tilesets.as_ref().map(|sets| sets.version))
+            .map(|(tileset, version)| TileMap::new(map, tileset, version));
         self.runtime = MapRuntime::collect_except(map, skip);
+        if let Some(tileset) = tileset {
+            self.runtime.set_terrain(Terrain::from_map(map, tileset));
+        }
         self.runtime.start_pending(&mut self.vm)
     }
 
@@ -703,6 +737,25 @@ impl Game {
     /// docs/research/M8_CHARACTER_STATE.md.
     pub fn place_leader(&mut self, x: i32, y: i32, direction: i32) {
         self.runtime.place_leader(x, y, Some(direction));
+    }
+
+    /// Tries a one-tile step of the party leader in a WOLF facing direction
+    /// (2 down, 4 left, 6 right, 8 up).
+    ///
+    /// The headless movement core lives in [`MapRuntime::try_move_leader`]: it checks
+    /// map bounds, the current map's tile passability and map-event occupancy, turns
+    /// the leader even when the step is blocked, and keeps `precise_x/precise_y`
+    /// (`2 * tile`) exact. Returns true only when the leader actually moved. No
+    /// scripted-event semantics, animation, or rendering are involved.
+    #[must_use]
+    pub fn try_move_leader(&mut self, direction: i32) -> bool {
+        self.runtime.try_move_leader(direction)
+    }
+
+    /// Tries a one-tile leader step by delta; exactly one of dx/dy must be non-zero.
+    #[must_use]
+    pub fn move_leader(&mut self, dx: i32, dy: i32) -> bool {
+        self.runtime.move_leader(dx, dy)
     }
 
     /// Builds the tile-layer quads for the current map.
@@ -740,6 +793,16 @@ impl Game {
         self.apply_screen_tint(&mut quads, true);
         self.drain_asset_fallbacks();
         quads
+    }
+
+    /// The opcode 124 field 8 hit test for one picture: 1 over the picture, 0 outside,
+    /// -1 when the slot does not exist.
+    ///
+    /// This is the same function the running host uses, exposed for headless hit-test
+    /// probes and tests. `number` is the picture slot.
+    #[must_use]
+    pub fn picture_hover(&mut self, number: i32) -> i32 {
+        hover_picture(&self.screen, &mut self.assets, self.mouse, number)
     }
 
     /// The `151` colour multiplier as RGB, `[1, 1, 1]` when nothing is tinting the screen.
@@ -1571,42 +1634,85 @@ impl GameHost<'_> {
     /// 1 when the pointer is over the picture, 0 when not, -1 when there is no such
     /// picture (docs/OPCODE_124.md field 8).
     ///
-    /// The test is a plain axis-aligned box that includes transparent pixels, as the
-    /// engine documentation says: a picture hit area is its rectangle, not its alpha.
+    /// The hit area is the picture's real destination rectangle, the same one
+    /// [`Picture::destination`] gives the renderer: anchor code, percent scale, sprite-sheet
+    /// cell size and positional effects all apply. It therefore agrees with what is drawn
+    /// for every anchor (top-left, centre, bottom-left, top-right, bottom-right, top-centre
+    /// and bottom-centre) instead of the old centre-only special case. The test stays a
+    /// plain axis-aligned box that includes transparent pixels, as the engine documentation
+    /// says: a picture hit area is its rectangle, not its alpha.
     fn hover(&mut self, number: i32) -> i32 {
-        let Some(picture) = self.screen.get(number) else {
-            return -1;
-        };
-        let scale = f32::from(picture.scale.max(1) as i16) / 100.0;
-        let size = match picture.window {
-            Some((width, height))
-                if width > crate::window::MIN_BOX && height > crate::window::MIN_BOX =>
-            {
-                (width as f32 * scale, height as f32 * scale)
-            }
-            _ if picture.is_screen_layer() => (SCREEN_W as f32, SCREEN_H as f32),
-            _ => {
-                let Some((width, height)) = self.assets.texture_size(&picture.file) else {
-                    return -1;
-                };
-                (width as f32 * scale, height as f32 * scale)
-            }
-        };
-        let mut left = picture.x as f32;
-        let mut top = picture.y as f32;
-        if picture.anchor == ANCHOR_CENTRE {
-            left -= size.0 / 2.0;
-            top -= size.1 / 2.0;
-        }
-        let (px, py) = (self.mouse[0] as f32, self.mouse[1] as f32);
-        let inside_screen = self.mouse[0] >= 0
-            && self.mouse[1] >= 0
-            && px < SCREEN_W as f32
-            && py < SCREEN_H as f32;
-        let over =
-            inside_screen && px >= left && px < left + size.0 && py >= top && py < top + size.1;
-        i32::from(over)
+        hover_picture(self.screen, self.assets, self.mouse, number)
     }
+}
+
+/// The opcode 124 field 8 hit test, shared by the runtime host and the read-only probe
+/// below.
+///
+/// The picture's destination is computed the way the renderer computes it, so an anchor
+/// move changes the hit box with the art and a sprite-sheet cell is hit-tested at the cell
+/// size rather than at the whole sheet. A screen layer covers the logical screen regardless
+/// of x/y/scale, exactly as it draws.
+fn hover_picture(screen: &Screen, assets: &mut Assets, mouse: [i32; 2], number: i32) -> i32 {
+    let Some(picture) = screen.get(number) else {
+        return -1;
+    };
+    let Some(dst) = picture_hit_box(picture, assets) else {
+        return -1;
+    };
+    let (px, py) = (mouse[0] as f32, mouse[1] as f32);
+    let inside_screen = mouse[0] >= 0
+        && mouse[1] >= 0
+        && px < SCREEN_W as f32
+        && py < SCREEN_H as f32;
+    let over = inside_screen
+        && px >= dst[0]
+        && px < dst[0] + dst[2]
+        && py >= dst[1]
+        && py < dst[1] + dst[3];
+    i32::from(over)
+}
+
+/// The extent a picture draws before anchor/scale/effect placement.
+///
+/// Mirrors picture_frame's size choice without needing its private source rectangle: a
+/// window kind uses its window box, a normal file uses the whole texture or one cell of its
+/// sprite sheet, and a built-in system graphic uses its box size. Text keeps its window box.
+fn picture_hit_box(picture: &Picture, assets: &mut Assets) -> Option<[f32; 4]> {
+    if picture.is_screen_layer() {
+        return Some([0.0, 0.0, SCREEN_W as f32, SCREEN_H as f32]);
+    }
+    let (width, height) = if picture.kind.is_text() {
+        let (width, height) = picture.window.unwrap_or((0, 0));
+        (width.max(0) as f32, height.max(0) as f32)
+    } else if let Some((width, height)) = picture.window {
+        if width > crate::window::MIN_BOX && height > crate::window::MIN_BOX {
+            (width as f32, height as f32)
+        } else {
+            picture_texture_extent(picture, assets)?
+        }
+    } else {
+        picture_texture_extent(picture, assets)?
+    };
+    Some(picture.destination(width, height))
+}
+
+/// The unscaled width and height of one frame of a picture.
+fn picture_texture_extent(picture: &Picture, assets: &mut Assets) -> Option<(f32, f32)> {
+    if let Some((full_w, full_h)) = assets.texture_size(&picture.file) {
+        let (columns, rows) = (picture.split.0.max(1), picture.split.1.max(1));
+        if columns == 1 && rows == 1 {
+            return Some((full_w as f32, full_h as f32));
+        }
+        let (cell_w, cell_h) = (full_w / columns, full_h / rows);
+        if cell_w == 0 || cell_h == 0 {
+            return Some((full_w as f32, full_h as f32));
+        }
+        return Some((cell_w as f32, cell_h as f32));
+    }
+    let shape = crate::sysgraphic::parse(&picture.file)?;
+    let (width, height) = crate::sysgraphic::box_size(shape, picture.window)?;
+    Some((width as f32, height as f32))
 }
 
 /// WOLF reports a mouse button as 0 released, 1 held, 2 pressed this frame.
@@ -2185,6 +2291,7 @@ impl Host for GameHost<'_> {
 mod tests {
     use super::*;
     use crate::key;
+    use crate::picture::ANCHOR_CENTRE;
 
     fn data_root() -> PathBuf {
         if let Ok(value) = std::env::var("WOLF_DATA_ROOT") {

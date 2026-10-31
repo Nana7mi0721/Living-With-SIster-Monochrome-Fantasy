@@ -15,9 +15,9 @@
 //!
 //! | args[..] | meaning | evidence |
 //! |---|---|---|
-//! | 0 | unknown flag word (0 everywhere except the title background, which uses 30) | ev42 pc20 |
+//! | 0 | fade-in length in frames, 0 = instant (raw slot [2]) | every splash draw carries 20 and the retail disclaimer frame is trunc(255 * age / 20) of the art; the title background uses 30 |
 //! | 1,2 | window width/height - only meaningful for the window picture kinds | ev42 draws a 300x200 window at (855,200) |
-//! | 3 | constant 1 in every sample | |
+//! | 3 | sprite-sheet cell number, one-based (raw slot [5]) | retail save 90's 6 x 2 standing sheet records pattern 2; save 92's 7 x 1 eye strip records pattern 7 |
 //! | 4 | opacity, 0..255 | always 255 on the title path |
 //! | 5 | x | pc43 feeds self-variables here |
 //! | 6 | y | |
@@ -30,6 +30,11 @@
 //! Reading x/y from args[0]/args[1] instead (as the editor docs suggest for short forms)
 //! would put the 1024x576 title image at scale 1% - a 10x6 pixel dot.
 //!
+//! Read against the raw instruction words, args[0] is long-form slot [2] and args[3] is
+//! slot [5] - exactly the two slots docs/UNVERIFIED.md listed as unknown (H-PIC-2). They
+//! are the fade-in length and the sprite-sheet cell, and both are already honoured by
+//! `merge_args`.
+//!
 //! # The head word carries an anchor code in bits 12..14
 //!
 //! Grouping the 13,637 long-form draws of this game by that nibble shows the x/y values
@@ -37,13 +42,13 @@
 //!
 //! | bits | count | x seen | y seen | reading |
 //! |---|---|---|---|---|
-//! | 0x0000 | 8,911 | x=0 (5,782x) | y=0 (5,047x) | top-left, x/y is the corner |
-//! | 0x1000 | 4,393 | x=512 (788x) | y=288 (216x) | centred on x/y |
-//! | 0x2000 | 84 | x=384 (57x) | y=570 | unverified |
-//! | 0x3000 | 105 | x=1000 | y=60 | unverified |
-//! | 0x4000 | 67 | x=1024 | y=570 | unverified |
-//! | 0x5000 | 8 | x=512 | y=0/100 | unverified |
-//! | 0x6000 | 69 | x=800 | y=576 | unverified |
+//! | 0x0000 | 8,911 | x=0 (5,782x) | y=0 (5,047x) | top-left: x/y is the corner |
+//! | 0x1000 | 4,393 | x=512 (788x) | y=288 (216x) | centre: both axes are the middle |
+//! | 0x2000 | 84 | x=10 | y=570 | bottom-left: y is the bottom edge |
+//! | 0x3000 | 105 | x=140/1000 | y=7/60 | top-right: x is the right edge |
+//! | 0x4000 | 67 | x=1024 | y=570 | bottom-right: both edges |
+//! | 0x5000 | 8 | x=512 | y=0/100 | top-centre: x is the horizontal centre |
+//! | 0x6000 | 69 | x=240/800 | y=576 | bottom-centre: x centre, y bottom edge |
 //!
 //! 512 is exactly 1024/2 and 288 is exactly 576/2, i.e. the logical screen centre. The
 //! decisive check is the retail title screen: TitleMap event 2 draws SystemFile/Button01.png
@@ -53,9 +58,16 @@
 //! transparent margin of the PNG accounting for the remaining pixels. So 0x1000 anchors
 //! BOTH axes on the centre.
 //!
-//! Only 0x0000 and 0x1000 are implemented; the other nibbles keep the corner behaviour and
-//! are listed as unverified in docs/UNVERIFIED.md, because no title-screen instruction uses
-//! them and guessing would move live pictures to the wrong place.
+//! Codes 0x2000..0x4000 are pinned by the retail layout: docs/OPCODE_101.md's verified
+//! `0x404f11` window is exactly the bottom-right rectangle (64,408)-(1024,576), every
+//! bottom description text sits at y=570 with its own bottom edge on the screen, and the
+//! right-aligned HUD text sits at x=1000/1024. Codes 0x5000/0x6000 are inferred from
+//! geometry rather than from a retail screenshot: the 718x700 album stand is drawn at
+//! x=512 and only lands centred under a horizontal-centre rule, and every 482x225
+//! day/night menu icon is drawn at y=576, which only stays on screen under a bottom-edge
+//! rule. Code 7 never occurs in this game and keeps the corner fallback. A fresh census of
+//! the non-corner sites in BasicData/CommonEvent.dat plus all MapData/*.mps found 349 of
+//! them; docs/research/M9_ANCHOR_SLOTS.md records the samples and the residual uncertainty.
 //!
 //! # A move with a frame count slides instead of popping
 //!
@@ -78,6 +90,25 @@
 //! `Screen::advance` is the clock for those slides while `Screen::tick` stays the fade-in and
 //! colour-effect clock; the host calls both once per frame. A finished slide is dropped and the
 //! picture then draws exactly the fields the command asked for.
+//!
+//! # A negative scale is a mirror, not an invisible picture
+//!
+//! The slot [9] percentage is signed. The official WOLF editor help
+//! (http://yado.tk/wolf/02_ibekoma/1000_picture/, saved as work/out/yadot_picture.html)
+//! says 「拡大率をマイナス値にすると、画像が反転します。」 ("a negative zoom flips the
+//! image"), and its table shows 横-100/縦100 and 横100/縦-100 as the two mirror cases. The
+//! command's long form carries one uniform percentage, and common event 245 draws its seven
+//! 482x225 night-menu reaction pictures with -100 in that slot at anchor 6 (x=240, y=576),
+//! so a negative uniform value has to mirror the horizontal axis at |scale|; vertical
+//! mirroring would need the separate Y percentage that only a save record carries (H-PIC-2
+//! remains the place to record that). The other reading - treating -100 as a zero scale -
+//! would delete pictures the retail game shows.
+//!
+//! The atlas UVs are always ordered u0<u1 and its destination snap clamps widths to >=1, so
+//! a single quad cannot encode a flip. `Screen::quads` therefore emits the mirrored image as
+//! one 1-pixel-wide quad per source column, in reverse column order: the same texture is
+//! sampled, and the destination is pixel-for-pixel the mirror the manual specifies. The
+//! geometry is unchanged, so hit-testing and the drawn rectangle still agree.
 //!
 //! # Negative numbers are whole-screen layers
 //!
@@ -107,6 +138,16 @@ pub const SCREEN_H: u32 = 576;
 pub const ANCHOR_TOP_LEFT: u8 = 0;
 /// Anchor code 1 (head bit 0x1000): x/y name the picture centre.
 pub const ANCHOR_CENTRE: u8 = 1;
+/// Anchor code 2: x is the left edge, y is the bottom edge.
+pub const ANCHOR_BOTTOM_LEFT: u8 = 2;
+/// Anchor code 3: x is the right edge, y is the top edge.
+pub const ANCHOR_TOP_RIGHT: u8 = 3;
+/// Anchor code 4: x is the right edge, y is the bottom edge.
+pub const ANCHOR_BOTTOM_RIGHT: u8 = 4;
+/// Anchor code 5: x is the horizontal centre, y is the top edge.
+pub const ANCHOR_TOP_CENTRE: u8 = 5;
+/// Anchor code 6: x is the horizontal centre, y is the bottom edge.
+pub const ANCHOR_BOTTOM_CENTRE: u8 = 6;
 /// Scale field value that means "no scaling" (percent).
 pub const SCALE_ONE: i32 = 100;
 
@@ -127,7 +168,10 @@ pub const MAX_TRANSITION_FRAMES: u32 = 600;
 
 /// Field indices inside PictureCmd::args, from the table in the module docs.
 pub mod field {
-    /// Unknown flag word; 0 except for the title background (30).
+    /// Head word of the argument block; raw long-form slot [2].
+    ///
+    /// The picture layer reads it as the fade-in length (see [`FADE_IN`]); 0 means the
+    /// picture appears at once.
     pub const FLAG: usize = 0;
     /// Fade-in length in frames, same slot as FLAG. 0 means the picture appears at once.
     /// Evidence: every splash draw in the boot chain carries 20 here and the retail
@@ -137,10 +181,10 @@ pub mod field {
     pub const WINDOW_W: usize = 1;
     /// Window height, for the window picture kinds.
     pub const WINDOW_H: usize = 2;
-    /// Sprite-sheet cell number for file pictures, one-based; constant 1 in every
-    /// plain draw. A `150` draw and a save record agree: retail save 90's 6 x 2
-    /// `stand_imouto_paja2.png` carries pattern 2 here, and save 92's 7 x 1 eye strip
-    /// carries pattern 7, which only fits a one-based count.
+    /// Sprite-sheet cell number for file pictures, one-based; raw long-form slot [5].
+    /// Constant 1 in every plain draw. A `150` draw and a save record agree: retail
+    /// save 90's 6 x 2 `stand_imouto_paja2.png` carries pattern 2 here, and save 92's
+    /// 7 x 1 eye strip carries pattern 7, which only fits a one-based count.
     pub const RESERVED: usize = 3;
     /// Opacity, 0..=255.
     pub const OPACITY: usize = 4;
@@ -737,7 +781,8 @@ pub struct Picture {
     pub blend: i32,
     /// Window size for the window kinds.
     pub window: Option<(i32, i32)>,
-    /// Anchor code from the head word bits 12..14: 0 top-left, 1 centre.
+    /// Anchor code from the head word bits 12..14: 0 top-left, 1 centre, 2 bottom-left,
+    /// 3 top-right, 4 bottom-right, 5 top-centre, 6 bottom-centre. See [`place`].
     pub anchor: u8,
     /// Kind-specific trailing arguments, kept verbatim for the animation layer.
     pub extras: Vec<i32>,
@@ -1332,7 +1377,16 @@ impl Screen {
                 let Some((src, (w, h))) = picture_frame(picture, &mut tex_size) else {
                     continue;
                 };
-                (src, picture.destination(w as f32, h as f32))
+                let dst = picture.destination(w as f32, h as f32);
+                if picture.is_mirrored() {
+                    out.extend(
+                        mirrored_columns(picture, src, dst)
+                            .into_iter()
+                            .filter(|quad| on_screen(quad.dst)),
+                    );
+                    continue;
+                }
+                (src, dst)
             };
             if !on_screen(dst) {
                 continue;
@@ -1341,6 +1395,37 @@ impl Screen {
         }
         out
     }
+}
+
+/// Splits a horizontally mirrored picture into one quad per source column.
+///
+/// The atlas cannot encode a mirrored UV (see the module docs), so a negative scale is
+/// reproduced by walking the source columns right-to-left across the same destination
+/// rectangle. Column 0 of the texture lands at the right edge and the last column at the
+/// left, which is exactly a horizontal flip under nearest sampling. The rectangle comes
+/// from Picture::destination, so hit-testing sees the same pixels the draw covers.
+fn mirrored_columns(picture: &Picture, src: [u32; 4], dst: [f32; 4]) -> Vec<ScreenQuad> {
+    let width = src[2];
+    let height = src[3];
+    if width == 0 || height == 0 || dst[2] <= 0.0 || dst[3] <= 0.0 {
+        return Vec::new();
+    }
+    let mut out = Vec::with_capacity(width as usize);
+    let span = dst[2];
+    for column in 0..width {
+        let mirrored = width - 1 - column;
+        let x0 = dst[0] + span * mirrored as f32 / width as f32;
+        let x1 = dst[0] + span * (mirrored + 1) as f32 / width as f32;
+        if x1 <= x0 {
+            continue;
+        }
+        out.push(ScreenQuad::from(
+            picture,
+            [src[0] + column, src[1], 1, height],
+            [x0, dst[1], x1 - x0, dst[3]],
+        ));
+    }
+    out
 }
 
 /// True when a destination rectangle overlaps the logical screen at all.
@@ -1368,10 +1453,20 @@ impl Picture {
     /// and a shaken sprite cannot drift apart.
     #[must_use]
     pub fn destination(&self, w: f32, h: f32) -> [f32; 4] {
-        let scale = self.scale.max(0) as f32 / SCALE_ONE as f32;
+        // The sign is not a size: a negative percentage means "mirror this axis" (see the
+        // module docs), so the placed extent uses the magnitude. Screen::quads reverses
+        // the columns; hit-testing only needs the same rectangle, which is why this method
+        // deliberately ignores the sign after taking the absolute value.
+        let scale = self.scale.unsigned_abs() as f32 / SCALE_ONE as f32;
         let (sx, sy) = self.effect_scale();
         let placed = place(self.anchor, self.x, self.y, w * scale * sx, h * scale * sy);
         self.transform(placed)
+    }
+
+    /// True when the signed scale asks for a horizontal mirror.
+    #[must_use]
+    pub fn is_mirrored(&self) -> bool {
+        self.scale < 0
     }
 
     /// The animation pattern the picture shows right now, if a type 8/9/10 owns it.
@@ -1483,14 +1578,30 @@ impl ScreenQuad {
 
 /// Turns an anchor code plus a w*h extent into the destination rectangle.
 ///
-/// ANCHOR_CENTRE shifts by half the extent on both axes, which is what the retail title
-/// banner needs; every other code keeps the corner behaviour and is unverified.
+/// The code is the nibble WOLF packs into bits 12..14 of the head word. Codes 0..=6 map
+/// onto the seven alignments the editor offers: top-left, centre, bottom-left, top-right,
+/// bottom-right, top-centre and bottom-centre. Code 7 never occurs in this game and keeps
+/// the top-left fallback.
 fn place(anchor: u8, x: i32, y: i32, w: f32, h: f32) -> [f32; 4] {
     let mut left = x as f32;
     let mut top = y as f32;
-    if anchor == ANCHOR_CENTRE {
-        left -= w / 2.0;
-        top -= h / 2.0;
+    match anchor {
+        ANCHOR_CENTRE => {
+            left -= w / 2.0;
+            top -= h / 2.0;
+        }
+        ANCHOR_BOTTOM_LEFT => top -= h,
+        ANCHOR_TOP_RIGHT => left -= w,
+        ANCHOR_BOTTOM_RIGHT => {
+            left -= w;
+            top -= h;
+        }
+        ANCHOR_TOP_CENTRE => left -= w / 2.0,
+        ANCHOR_BOTTOM_CENTRE => {
+            left -= w / 2.0;
+            top -= h;
+        }
+        _ => {}
     }
     [left, top, w, h]
 }
@@ -1695,17 +1806,42 @@ mod tests {
     }
 
     #[test]
-    fn place_only_shifts_the_centre_anchor() {
-        assert_eq!(
-            place(ANCHOR_TOP_LEFT, 512, 520, 606.0, 35.0),
-            [512.0, 520.0, 606.0, 35.0]
-        );
+    fn place_honours_the_seven_anchor_codes() {
+        // The retail title banner needs the centre, so both axes shift.
         assert_eq!(
             place(ANCHOR_CENTRE, 512, 520, 606.0, 35.0),
             [209.0, 502.5, 606.0, 35.0]
         );
-        // The unverified codes must behave like the corner, never like the centre.
-        assert_eq!(place(3, 100, 50, 20.0, 10.0), [100.0, 50.0, 20.0, 10.0]);
+        assert_eq!(
+            place(ANCHOR_TOP_LEFT, 512, 520, 606.0, 35.0),
+            [512.0, 520.0, 606.0, 35.0]
+        );
+        // The other five codes move one or both edges onto x/y. The samples come from the
+        // real data: bottom descriptions at (10, 570), right-aligned HUD text at x=140/1000,
+        // the verified 101 window at (1024, 570), 718x700 album art at x=512 and the 482x225
+        // menu icons at y=576.
+        assert_eq!(
+            place(ANCHOR_BOTTOM_LEFT, 10, 570, 100.0, 40.0),
+            [10.0, 530.0, 100.0, 40.0]
+        );
+        assert_eq!(
+            place(ANCHOR_TOP_RIGHT, 140, 7, 100.0, 40.0),
+            [40.0, 7.0, 100.0, 40.0]
+        );
+        assert_eq!(
+            place(ANCHOR_BOTTOM_RIGHT, 1024, 570, 100.0, 40.0),
+            [924.0, 530.0, 100.0, 40.0]
+        );
+        assert_eq!(
+            place(ANCHOR_TOP_CENTRE, 512, 100, 718.0, 700.0),
+            [153.0, 100.0, 718.0, 700.0]
+        );
+        assert_eq!(
+            place(ANCHOR_BOTTOM_CENTRE, 800, 576, 482.0, 225.0),
+            [559.0, 351.0, 482.0, 225.0]
+        );
+        // Code 7 is never emitted; it keeps the top-left fallback.
+        assert_eq!(place(7, 100, 50, 20.0, 10.0), [100.0, 50.0, 20.0, 10.0]);
     }
 
     #[test]

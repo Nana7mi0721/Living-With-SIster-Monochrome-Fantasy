@@ -2,6 +2,44 @@
 
 日期：M7 W5 · 仓库 HEAD 1d36ebe · 归属任务 task-37
 
+> **状态更新（M9 W5 / task-53）：补丁已准备并暂存（PARKED，未落地 HEAD）。** 见下方「M9 W5 / task-53：补丁已准备并暂存」章节；补丁包在 work/out/opcode111_landed.patch。原「建议补丁」章节保留作历史记录。
+
+## M9 W5 / task-53：补丁已准备并暂存（PARKED，未落地 HEAD）
+
+本任务（shared task-53）把上面「结论」中要求的一行补丁连同回归测试更新做成了完整补丁包，暂存到 `work/out/opcode111_landed.patch`（work/out 已被 git 忽略）。**该补丁未落地到 HEAD**：Lead 决定暂存（PARKED），因为落地会使 3 个 wolf-game 战斗测试变红（详见下节及 docs/research/M9_OPCODE_111_REGRESSION.md），待战斗布线/测试（task-49/task-50）重推后再落地。当前 HEAD 的 exec.rs 与 opcode_111_semantics.rs 仍为原样。
+
+### 补丁内容（在 opcode111_landed.patch 内，当前未落地）
+
+- crates/wolf-vm/src/exec.rs:2228（原文件对应位置，旧文档记作 2207）由
+  `let value = arg(cmd, 2 + 3 * i);`
+  改为
+  `let value = eval_num(arg(cmd, 2 + 3 * i), inst, vars);`
+  并在其上加了 6 行注释指向本文档。git diff --stat exec.rs = 7 insertions(+), 1 deletion(-)：真正的语义变化只有这一行，爆炸半径最小。
+- 语义契约（复确认）：值操作数是完整 magic 操作数，必须走 eval_num。eval_num（exec.rs:1293）对 <1_000_000 的字面量与负数 Opaque 哨兵（-1..-7、-1_000_000）原样返回，所以 22339 个（98.43%）纯字面量站点语义不变；只有 356 个（1.57%）变量引用站点（1_000_000..1_999_999 自身变量、2_000_000.. 普通变量、9_000_000.. 系统变量）改变。魔法分 bank 见 magic.rs。
+
+### 补丁中的回归文件更新（crates/wolf-vm/tests/opcode_111_semantics.rs；当前 HEAD 文件仍未改动）
+
+- 5 个测试全部启用，0 个 #[ignore]；辅助函数 cmd/event/vm_with/run/guarded/Silent host 保留。
+- t1 `a_literal_value_operand_is_compared_as_an_integer`：字面量仍按整数比较（未变）。
+- t2 `a_variable_valued_operand_is_resolved_before_comparison`（原 ..._currently_read_as_a_literal）：变量值操作数解析后比较，断言 v3==1。
+- t3 `a_magic_shaped_operand_is_resolved_to_its_self_variable`：self1600010=7 且 v0=7 → v6==1；若 v0 恰等于 1_600_010（巧合）→ v6==2。
+- t4 `the_ce244_display_gate_and_win_lose_compare_resolve_under_reference_semantics`（原 ..._fall_through_under_literal_semantics）：子例 A v5==1、v6==1；真实 CE244 门（var349=1 vs self1600010=11）→ v5==2。
+- t5 `reference_valued_operands_resolve_before_comparison`（原 #[ignore] 用例，已取消 ignore）：断言 v3==1、v5==1。
+
+### 测试结果（本任务命令）
+
+- 在打过补丁的工作树上 `cargo test -q -p wolf-vm`：全绿——91 个单元测试通过；所有集成测试二进制 ok；定向 `cargo test -q -p wolf-vm --test opcode_111_semantics` → 输出 `running 5 tests ... 5 passed; 0 failed; 0 ignored`（全局 0 ignored）。revert 回 HEAD 后同样全绿。
+
+### 回归影响（重要：打上本补丁会使 wolf-game 3 个测试变红；补丁已按 Lead 决定暂存、未落地）
+
+- 打上本补丁后 `cargo test -q -p wolf-game` 有 3 个测试失败（补丁现已 revert，工作树恢复绿）。归因方法：把补丁版 exec.rs 暂存到 /tmp，`git checkout -- crates/wolf-vm/src/exec.rs` 回到 base 后重跑，这 3 个测试**全部通过**；再恢复补丁文件（grep 确认 exec.rs:2228 为补丁版，git diff --stat 7+/1-）。所以失败可直接归因于本补丁：
+  1. `m7_ce244_direct::the_win_lose_display_branch_opens_only_on_the_raw_self_magic`（crates/wolf-game/tests/m7_ce244_direct.rs:137，「2000349=11 expects outcome 1」）：现在 left=-1 right=1 —— 解析后 11==self1600010 进入显示分支，旧测试把"字面量不命中"当预期。
+  2. `m7_battle_target_scheduler::battle_wiring_advances_to_phase_two_but_ce244_gate_blocks_settlement`（crates/wolf-game/tests/m7_battle_target_scheduler.rs:363，「command phase advances to 2 and then cannot leave」）：left=0 right=2（var350 未到 2）。
+  3. `m7_day4_playable::day4_real_battle_settles_and_reaches_day5_without_injection`（crates/wolf-game/tests/m7_day4_playable.rs:570）：「the round must settle on the genuine day-4 replay」；打印 v350_seq=[0,1,2] ce241=false ce239_alive=true ce239_pc=Some(13) v352_peak=0 v343_peak=0（2000352 从未置位，无结算）。
+- 归因根因：CE239/241/242/243/244 里有大量 opcode-111 魔法值操作数，例如 CE242 pc184/1099/1338 var2000029 vs 2000028；CE241 pc428/471 var2000029 vs 2000028；CE243 pc46/490/813/995/1005/1024/1054/1071/1178；CE244 pc36 var2000349 vs self1600010、pc44 var2000192 vs var2000193、pc132 var2000029 vs 2000028；CE239 pc181/186/811/827/848。正确解析它们会实质改变战斗控制流；现有战斗测试是在旧的"字面量"语义下推导出来的，因此需要在正确语义下重新推导。这些测试文件**不在本任务写范围**（只允许 exec.rs + vm 测试 + 本文档），故只上报不修改，交由战斗负责人/Lead 派生新预期。
+- 另有一条与本补丁无关的失败：wolf-game lib 测试 `picture::tests::place_only_shifts_the_centre_anchor`（crates/wolf-game/src/picture.rs:1746，left [80,50,20,10] right [100,50,20,10]）—— 由并发队友此刻正在编辑 crates/wolf-game/src/picture.rs（任务中途以 M 出现）导致，非本改动。
+
+
 ## 结论（先看这个）
 
 本作数据里 opcode 111 的**值操作数**（每个条件三元组 [var, value, operator] 的 value）有 356 处是变量/自身变量引用，占全部 22695 个条件三元组的 1.57%。这些站点只有在 value 走 eval_num 解析时才成立；当前解释器（crates/wolf-vm/src/exec.rs:2207）把它当**原始整数**比较，因此这 356 处实际都按字面量处理，语义错误。

@@ -93,6 +93,11 @@ pub struct WolfRng {
     state: u32,
     /// Park-Miller state, for opcode 121's 0x6000 operator (RVA 0x35810).
     event_state: u32,
+    /// The seed the event generator was last (re)seeded with, after the zero
+    /// normalisation. Recorded so a run can report the seed it actually used
+    /// (the production hook in resolve_event_seed) and a replay can be
+    /// reproduced from that number.
+    event_seed: u32,
     /// How many range() draws happened. Saved so a replay can be diffed
     /// against the original's draw count instead of guessing.
     draws: u64,
@@ -122,9 +127,11 @@ impl WolfRng {
     /// A generator with both streams seeded explicitly.
     #[must_use]
     pub fn from_seeds(seed: u32, event_seed: u32) -> Self {
+        let event_seed = normalise_event_seed(event_seed);
         Self {
             state: seed,
-            event_state: normalise_event_seed(event_seed),
+            event_state: event_seed,
+            event_seed,
             draws: 0,
         }
     }
@@ -136,9 +143,29 @@ impl WolfRng {
         Self::from_seeds(DEFAULT_SEED, event_seed)
     }
 
+    /// Production hook: seed the event generator from the WOLF_EVENT_SEED
+    /// environment variable, leaving the MSVC static-table stream at its
+    /// default. Absent or invalid means the fixed EVENT_SEED, so behaviour is
+    /// unchanged unless a seed is supplied explicitly.
+    #[must_use]
+    pub fn from_event_seed_env() -> Self {
+        Self::from_event_seed(event_seed_from_env())
+    }
+
     /// Reseed the event generator in place, keeping the static-table stream.
+    /// The recorded active seed (see WolfRng::event_seed) is updated too.
     pub fn set_event_seed(&mut self, event_seed: u32) {
-        self.event_state = normalise_event_seed(event_seed);
+        let event_seed = normalise_event_seed(event_seed);
+        self.event_state = event_seed;
+        self.event_seed = event_seed;
+    }
+
+    /// The seed the event generator was last seeded with (after zero
+    /// normalisation). This is the number a replay must be given to reproduce
+    /// the same stream; the production hook records it here.
+    #[must_use]
+    pub const fn event_seed(&self) -> u32 {
+        self.event_seed
     }
 
     /// Same, seeded from a parsed Game.dat (random_a, random_b, static_randoms).
@@ -227,6 +254,33 @@ const fn normalise_event_seed(seed: u32) -> u32 {
     } else {
         seed
     }
+}
+
+/// Environment variable the production event-RNG hook reads. No retail binary
+/// is involved: a caller that captures the retail clock seed can pass it here to
+/// reproduce a retail run bit for bit (see docs/research/M9_PRNG_SEED.md).
+pub const EVENT_SEED_ENV: &str = "WOLF_EVENT_SEED";
+
+/// Resolve an event seed from a raw environment value. None (variable absent)
+/// or an unparsable value returns the fixed EVENT_SEED, so the default build is
+/// unchanged; a valid u32 is zero-normalised exactly like from_event_seed.
+#[must_use]
+pub fn resolve_event_seed(raw: Option<&str>) -> u32 {
+    match raw {
+        Some(text) => text
+            .trim()
+            .parse::<u32>()
+            .map_or(EVENT_SEED, normalise_event_seed),
+        None => EVENT_SEED,
+    }
+}
+
+/// Read WOLF_EVENT_SEED and resolve it through resolve_event_seed. This is the
+/// only place the environment is consulted; WolfRng::new/from_seed never look at
+/// it, which is why the default sequence stays deterministic.
+#[must_use]
+pub fn event_seed_from_env() -> u32 {
+    resolve_event_seed(std::env::var(EVENT_SEED_ENV).ok().as_deref())
 }
 
 #[cfg(test)]
