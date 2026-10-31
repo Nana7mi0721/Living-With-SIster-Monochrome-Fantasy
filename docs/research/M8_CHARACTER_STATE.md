@@ -1,6 +1,6 @@
 # M8 W3-a — real map/actor coordinates behind `character_state`
 
-Date: 2026-10-31. Base: branch `worktree-agent-afe08b54f3679529c` at `1d36ebe`
+Date: 2026-10-31. Base: worktree branch cut from `1d36ebe` (merged into master as `f9b625f`)
 (the M7 second batch `b9e0d36`, which contains `docs/research/M7_HOST_STATE.md`,
 `docs/research/M7_OPCODE_124.md` and `tests/m7_host_state.rs`, is **not merged into
 this branch**; the field semantics below come from `docs/OPCODE_124.md §3`, which is

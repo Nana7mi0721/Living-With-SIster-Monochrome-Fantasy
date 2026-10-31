@@ -105,7 +105,7 @@ Legend: **blocker** = what physically prevents closing the gap today.
   opcode-124 `0x1000/0x1200` sites keep stale values.
 - **Blocker**: no map/actor coordinate layer exists in the port (M2-scale work).
 
-### G7 — engine_state field 17 semantics / 11/12 sentinels
+### G7 — engine_state field 17 semantics / 11/12 sentinels — **ADDRESSED (W3-b)**
 - Evidence: `docs/research/M7_HOST_STATE.md` §残余 1,3; `M7_OPCODE_124.md` (5 sites
   CE265-270 as message-window guard; 11/12 each 1 site CE225).
 - Fact: field17 returns 0 (probable "processing event rows"); 11/12 return -1 valid only
@@ -202,8 +202,15 @@ map H button.
   id). A hero `130` transfer places the leader (options bit 0 = half-tiles). Tests:
   `m8_character_state.rs` (3), `map_runtime` (3), lib 230; docs
   `M8_CHARACTER_STATE.md`. Limits: no movement model; height 0; `-1`/`-3..-7` stay None.
-- **W3-b (REMAINING)**: pin `engine_state` field17 (G7) with a breakpoint/decompile;
-  adjust 11/12 when W3-a lands. Files: `game.rs`. Test extend `m7_host_state`.
+- **W3-b (DONE, M8)**: the 0x3000 field switch (RVA 0xb3497) pins the real meanings:
+  fields 11/12 are signed per-frame **mouse travel** (`[input+0x44/0x48]`, filled at
+  0x484eae..0x484ec6), not "event under pointer/contact"; field 13 is the
+  event-under-cursor query (zero sites in this game); field 17 is `[event+0x18]`, the
+  "this common event id" slot (filled by every start path, used by opcode 210 relative
+  calls), not an event-line counter (that is field 19). `game.rs` now carries
+  `previous_mouse` (clamped at 0) and answers 11/12 for real; 17 stays 0 because the Host
+  trait has no current-instance context. `m7_host_state` 4/4; docs
+  `M8_ENGINE_STATE.md`.
 
 ### W4 — Save / new-game / data robustness
 - **W4-a (DONE)**: 5-part save roundtrip + Part4 template regression fix (`m7_save_parts`).
@@ -243,13 +250,12 @@ cases · new-game entry route · save 5-part roundtrip · choice window · windo
 battle command-menu DB strings · H word-layer visibility · **battle settlement wired into
 real play (W1-c, day4→day5 no injection)** · **map/actor placement layer (W3-a)** ·
 **synthesized new-game template save (W4-b)** · **dangling-map guard (W4-c)** ·
-**H forward wrapper chain (W2-d)**.
+**H forward wrapper chain (W2-d)** · **engine_state 11/12/13/17 pinned (W3-b)**.
 
 REMAINING (M8): PRNG Park-Miller generator + range law (W5-a, delegated; the reduction
-law itself is pinned) · engine_state fields 11/12/17 (W3-b, delegated) · anchor/slot and
-audio polish (W5-b/c).
+law itself is pinned) · anchor/slot and audio polish (W5-b/c).
 
-Estimated priority order for M8: **W5-a, W3-b**, then polish.
+Estimated priority order for M8: **W5-a**, then polish.
 
 ---
 

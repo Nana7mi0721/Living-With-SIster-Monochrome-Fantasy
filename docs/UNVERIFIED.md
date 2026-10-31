@@ -119,7 +119,7 @@
 
 **证据**：全库（公共事件 + 地图事件）共 1045 站点；公共事件 579 条与旧记录一致：`(4,0x4000) 359`、`(3,0x3000) 174`、`(4,0x1000) 37`、`(4,0x4400) 8`、`(4,0x1200) 1`；`dst` 高 4 位全为 0（纯覆写）；未处理 sub 站点 0。详见 `docs/research/M7_OPCODE_124.md` 与 `docs/OPCODE_124.md`。
 
-**残余（host 侧，非本指令缺陷）**：`wolf-game` 的 `engine_state` 未实现 field 11/12/17、`picture_state` 未实现 field 5（均返回 None → 保持旧值）；`character_state` 恒 None（M2 地图层待办），故 0x1000/0x1200 的 40 个站点暂保持旧值。地图事件 field18 偏移无样本。
+**残余（host 侧，非本指令缺陷，M8 已大部分解除）**：`engine_state` 11/12 已按反编译实现为逐帧鼠标位移、17 已钉死为「当前公共事件号」（Host 无实例上下文，仍返回 0 中性值）；`picture_state` field 5 已返回 0；`character_state` 自 M8 W3-a 起返回真实地图事件/队长坐标（见 `docs/research/M8_CHARACTER_STATE.md`）。仅 field 13（光标下事件，本作 0 站点）仍返回 None。
 
 **怎么证实**：见 `docs/OPCODE_124.md` 的「决定性检验」一节（比对 201..213 是否同时是 150 的图片番号）。
 
