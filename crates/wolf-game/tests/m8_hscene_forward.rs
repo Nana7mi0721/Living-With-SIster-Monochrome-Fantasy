@@ -866,8 +866,10 @@ fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
     let mut toilet_choices: Vec<Vec<String>> = Vec::new();
     let mut ev372_max_pc = 0usize;
     let mut stage_samples: Vec<(i32, i32)> = Vec::new(); // (frame, var218)
+    let mut var218_max = 0i32; // peak var218 across the run (stage 2 is transient)
     for frame in 0..2500 {
         toilet.frame();
+        var218_max = var218_max.max(toilet.vm.vars.get(218));
         seen_toilet.extend(alive_events(&toilet));
         for inst in toilet.vm.instances() {
             if inst.event == 372 {
@@ -887,10 +889,12 @@ fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
     assert!(seen_toilet.contains(&372), "the toilet menu must call CE372");
     assert!(seen_toilet.contains(&371), "CE372 must call CE371 (トイレタイマー)");
     assert!(ev372_max_pc >= 30, "CE372 must execute its stage body, max pc {ev372_max_pc}");
+    // opcode-111 reference semantics: CE371's timer now advances var218 0->2->1->0 so
+    // stage 2 is transient instead of the literal-bug pinning it at 2 at run end.
     assert_eq!(
-        toilet.vm.vars.get(218),
+        var218_max,
         2,
-        "CE372 [arg0=0, arg1=1] selects var218 = 2 and CE371 loops on that stage"
+        "CE372 [arg0=0, arg1=1] selects var218 = 2 (peak across the run)"
     );
     assert!(
         toilet.screen.iter().any(|picture| picture.file.contains("cutin/cutin_")),

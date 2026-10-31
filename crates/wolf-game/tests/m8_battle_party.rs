@@ -20,16 +20,17 @@
 //! the data-level proof that the party is multi-member: four different members act via four
 //! different commands.
 //!
-//! ## The blocker this test also documents
+//! ## Genuine multi-round behaviour (opcode-111 reference semantics)
 //!
-//! Every one of those eight single commands SETTLES the battle (CE244 sets
-//! 2000352 in {1,-1} and 2000343 = 1) because the enemy gauge 2000342 is seeded to only
-//! party-power/8 (CE239 pc195) and a single hit zeroes it. So the shipped data never runs a
-//! SECOND command round — there is nothing for the round loop to chain. Combined with CE241
-//! (the only writer that resets 2000350 2->0) being a boot-once ENGINE_AUTO_START event, a
-//! genuine multi-ROUND fight is unreachable in the shipped event graph. Test 2 proves the
-//! round-loop wiring stays inert (exactly one round) for such a battle, i.e. it does not
-//! break the shipped day4/m7 path.
+//! Under correct opcode-111 value-operand (reference) semantics the enemy gauge 2000342 and
+//! damage are large enough that a command does NOT always one-shot the enemy. Measured with a
+//! hand-driven single command (wiring OFF): members 1 and 2 (commands 1-4) still drain the
+//! gauge in one hit and settle (2000352 in {1,-1}, 2000343 = 1), while members 3 and 4 and the
+//! generic body (commands 5-8) leave the enemy alive (2000352 = 0, 2000343 = 0) — a SECOND
+//! command round would be required to finish them. The old "every single command settles"
+//! premise was an artifact of the literal-operand bug that mis-sized the gauge. Test 2 shows
+//! that the standard CE253 battle (fresh SaveData01 + seeded DBs) still settles in exactly one
+//! command round with the round loop off, so the shipped day4/m7 path is unaffected.
 //!
 //! Run: WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m8_battle_party -- --nocapture
 
@@ -144,23 +145,25 @@ fn run_command(cmd: i32) -> CmdRun {
     CmdRun { started, pre, post: pools(&game), max_242_pc, v352, v343, warnings: game.stats.warnings }
 }
 
-/// Expected: (command, pool index that loses one point or 4 = none, body_pc_lo, body_pc_hi_excl).
-const EXPECT: [(i32, usize, i32, i32); 8] = [
-    (1, 0, 145, 475),
-    (2, 0, 476, 761),
-    (3, 1, 761, 970),
-    (4, 1, 972, 1057),
-    (5, 2, 1057, 1134),
-    (6, 3, 1134, 1194),
-    (7, 2, 1196, 1403),
-    (8, 4, 1405, 1436), // 4 = no named member pool
+/// Expected: (command, pool index that loses one point or 4 = none, body_pc_lo,
+/// body_pc_hi_excl, settles_in_one_round). Members 1/2 hit hard enough to settle; members
+/// 3/4 and the generic body leave the enemy alive and need a second round (reference semantics).
+const EXPECT: [(i32, usize, i32, i32, bool); 8] = [
+    (1, 0, 145, 475, true),
+    (2, 0, 476, 761, true),
+    (3, 1, 761, 970, true),
+    (4, 1, 972, 1057, true),
+    (5, 2, 1057, 1134, false),
+    (6, 3, 1134, 1194, false),
+    (7, 2, 1196, 1403, false),
+    (8, 4, 1405, 1436, false), // 4 = no named member pool
 ];
 
 #[test]
 fn multi_member_commands_map_to_distinct_party_pools() {
     // 2000598 is DLC-only, so a normal battle seeds the four-pool branch: 5/4/3/2.
     let init = [5i32, 4, 3, 2];
-    for (cmd, pool_idx, lo, hi) in EXPECT {
+    for (cmd, pool_idx, lo, hi, settles) in EXPECT {
         let r = run_command(cmd);
         assert!(r.started, "cmd {cmd}: CE242 must start once battle is active");
         assert_eq!(r.pre, init, "cmd {cmd}: CE239 must seed the four party pools 5/4/3/2");
@@ -179,9 +182,15 @@ fn multi_member_commands_map_to_distinct_party_pools() {
                 [345, 346, 347, 348][i], r.post[i], r.pre, r.post
             );
         }
-        // The single command still settles the shipped battle.
-        assert_eq!(r.v343, 1, "cmd {cmd}: battle must be decided");
-        assert!(r.v352 == 1 || r.v352 == -1, "cmd {cmd}: 2000352 must be a real result, got {}", r.v352);
+        // Settlement depends on the member's damage (opcode-111 reference semantics):
+        // members 1/2 settle in one command, members 3/4 and the generic body do not.
+        if settles {
+            assert_eq!(r.v343, 1, "cmd {cmd}: strong command must decide the battle");
+            assert!(r.v352 == 1 || r.v352 == -1, "cmd {cmd}: 2000352 must be a real result, got {}", r.v352);
+        } else {
+            assert_eq!(r.v343, 0, "cmd {cmd}: weak command leaves the enemy alive (needs a 2nd round)");
+            assert_eq!(r.v352, 0, "cmd {cmd}: no decisive result written yet, got {}", r.v352);
+        }
         assert_eq!(r.warnings, 0, "cmd {cmd}: no script warnings allowed");
         println!(
             "cmd {cmd}: body_pc={} pool_delta(idx {pool_idx}) pre={:?} post={:?} v352={} v343={} warnings={}",

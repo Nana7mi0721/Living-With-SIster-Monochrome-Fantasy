@@ -306,10 +306,10 @@ fn injected_ce242_exposes_the_three_state_cycle() {
 }
 /// Rebuilt wiring path (battle_wiring.rs, off by default): with
 /// Game::set_battle_wiring(true), CE239 raising 2000340 0->1 starts CE242 and
-/// 2000350 advances 0 -> 1 -> 2. It still does not settle: CE239 leaves
-/// 2000349 = 1 while CE244 pc36 needs 2000349 == self1600010 (11 for a command
-/// whose 2000354 is not 20/7/13), so CE244 skips its win/lose/draw arms and
-/// 2000352/2000343 stay 0.
+/// 2000350 advances 0 -> 1 -> 2 -> 0 (returns to idle; under the old opcode-111
+/// literal bug it stuck at 2). It still does not settle: CE239 leaves 2000349 = 1
+/// while CE244 pc36 needs 2000349 == self1600010 (11 for a command whose 2000354 is
+/// not 20/7/13), so CE244 skips its win/lose/draw arms and 2000352/2000343 stay 0.
 #[test]
 fn battle_wiring_advances_to_phase_two_but_ce244_gate_blocks_settlement() {
     // Static gate: CE244 pc36 is 111 [1, 2000349, 1600010, 2].
@@ -360,7 +360,10 @@ fn battle_wiring_advances_to_phase_two_but_ce244_gate_blocks_settlement() {
     assert_eq!(max340, 1, "CE239 raises 2000340");
     assert!(transitions.contains(&1), "phase 1 observed: {transitions:?}");
     assert!(transitions.contains(&2), "phase 2 observed: {transitions:?}");
-    assert_eq!(var(&g, 350), 2, "command phase advances to 2 and then cannot leave");
+    // opcode-111 reference semantics: CE239 pc1043 (the 2->0 cleanup writer) plus CE241/CE242
+    // let 2000350 cycle 0->1->2->0 instead of the literal-bug "stuck at 2". CE244 still writes
+    // no result (2000349=1 != self1600010).
+    assert_eq!(var(&g, 350), 0, "command phase cycles 0->1->2->0 (old literal-bug stuck at 2)");
     assert_eq!(var(&g, 352), 0, "CE244 settlement never runs");
     assert_eq!(var(&g, 343), 0, "CE244 decided flag never runs");
     assert_eq!(var(&g, 349), 1, "CE239 leaves 2000349 = 1");

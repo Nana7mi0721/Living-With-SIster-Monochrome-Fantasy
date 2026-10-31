@@ -53,6 +53,25 @@ fn run(with_seed: bool, frames: usize) -> Outcome {
     game.auto_choice_delay = 1;
     if with_seed {
         game.seed_battle_databases();
+    } else {
+        // Party-only roster: under opcode-111 reference semantics CE172 pc21/pc32
+        // needs a nonzero ally count (type18 row4 col0) or it aborts 0==0 before
+        // CE192. Seed just the party; item/weapon/command cells stay empty so a
+        // real attack is still unselectable in the control run.
+        game.databases.set_num(Container::CData, 18, 4, 0, 1);
+        // One enemy (type18 row69 col0): with 0 enemies CE172 pc42/pc53 sees enemy-total
+        // 0 == dead 0 and declares an instant victory-abort before CE192. One enemy
+        // keeps the line alive; it is NOT a seed that makes real attacks selectable.
+        game.databases.set_num(Container::CData, 18, 69, 0, 1);
+        // Leader stat block (type0 row12 cols 20/21/22/23/24/25/26/27/28/9/10/4),
+        // identical to battle_seed::LEADER_STATS. Without HP>0 CE176 marks the single
+        // ally dead and CE172 pc32 aborts 0==0. Kept local (battle_seed is private).
+        for (col, val) in [
+            (20, 100), (21, 100), (22, 50), (23, 50), (24, 20), (25, 15),
+            (26, 10), (27, 30), (28, 30), (9, 20), (10, 10), (4, 10),
+        ] {
+            game.databases.set_num(Container::CData, 0, 12, col, val);
+        }
     }
     let _ = game.start_event(188);
 

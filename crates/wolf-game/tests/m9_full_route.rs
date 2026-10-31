@@ -495,6 +495,9 @@ fn the_continuous_new_game_route_reaches_day_five_0830() {
     let pre_power = game.vm.vars.get(28);
     let _ = game.start_engine_events();
     game.set_battle_wiring(true);
+    // opcode-111 reference semantics: enemy gauge now spans multiple command rounds;
+    // enable the round loop so the day-4 battle can settle.
+    game.set_battle_round_loop(true);
     assert_eq!(
         game.vm.vars.get(340),
         0,
@@ -519,7 +522,7 @@ fn the_continuous_new_game_route_reaches_day_five_0830() {
     let mut trace = BattleTrace::default();
     let mut last350 = i32::MIN;
     let mut settled = false;
-    for frame in 0..1600 {
+    for frame in 0..40000 {
         game.key_bits = if frame % 2 == 0 { key::OK } else { 0 };
         game.frame();
         let v340 = game.vm.vars.get(340);
@@ -621,9 +624,13 @@ fn the_continuous_new_game_route_reaches_day_five_0830() {
         "the rebuilt wiring must start CE242"
     );
     assert!(trace.ce242_started, "CE242 command phase must run");
+    // opcode-111 reference semantics raises the party power to 201 (var28), which
+    // crosses the CE253 >=200 threshold and selects the HIGH (harder) branch; the
+    // low-branch instakill was a literal-operand artifact. This branch fights a
+    // genuine multi-round battle that the fresh party loses (2000352 = -1).
     assert!(
-        pre_power < 200,
-        "weak party power {pre_power} takes the CE253 low branch"
+        pre_power >= 200,
+        "party power {pre_power} takes the CE253 HIGH branch"
     );
     assert!(
         trace.max_ce242_pc >= 200,

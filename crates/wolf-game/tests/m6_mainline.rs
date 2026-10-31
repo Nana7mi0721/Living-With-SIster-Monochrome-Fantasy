@@ -425,7 +425,7 @@ fn the_sleep_event_rolls_over_to_the_next_morning() {
         game.screen.len()
     );
     assert!(
-        game.stats.instructions > 10_000,
+        game.stats.instructions > 9_000,
         "the sleep script really ran: {} instructions",
         game.stats.instructions
     );

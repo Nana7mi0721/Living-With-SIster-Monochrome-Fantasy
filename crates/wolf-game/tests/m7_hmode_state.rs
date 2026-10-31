@@ -186,8 +186,10 @@ const H_MODE_VARS: &[(usize, i32, i32)] = &[
     (7, 3029, 7586),
     (8, 0, 25),
     (13, 60, 120),
-    (14, 115, 75),
-    (16, 4, 2),
+    // opcode-111 reference semantics: CE226 pc15 111[18,1600012,1600010,1] now clamps
+    // var14 to var13 (fresh day-2 35, was the literal-bug 115) and var16 shifted 4->3.
+    (14, 35, 75),
+    (16, 3, 2),
     (18, 22, 60),
     (20, 75, 90),
     (21, 18, 688),

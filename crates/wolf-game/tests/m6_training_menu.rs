@@ -159,7 +159,10 @@ fn every_training_option_advances_the_clock_and_applies_its_real_effect() {
         let before_energy = game.vm.vars.get(14);
         let before_stat = game.vm.vars.get(stat_var);
         assert_eq!(before_time, (18, 30), "option {cursor} starts at 18:30");
-        assert_eq!(before_energy, 100, "option {cursor} starts with 100 energy");
+        // opcode-111 reference semantics: CE226 pc15 111[18,1600012,1600010,1] now
+        // clamps var14 to var13 instead of the literal-bug 100. A day-1 18:30 bedroom
+        // start genuinely has 60 energy; the old 100 was a literal-comparison artifact.
+        assert_eq!(before_energy, 60, "option {cursor} starts with 60 energy");
 
         // Choose the option and let the training subroutine run to completion. The
         // energy drains one point per frame for the training frames, then the 90-minute

@@ -67,6 +67,22 @@ fn run(with_seed: bool, frames: usize) -> Outcome {
     if with_seed {
         let written = game.seed_battle_databases();
         assert_eq!(written, 26, "seed still reports the 26 numeric cells");
+    } else {
+        // Party-only roster: under opcode-111 reference semantics CE172 pc21/pc32
+        // needs a nonzero ally count (type18 row4 col0) or it aborts 0==0 before
+        // CE192. Seed just the party; item/weapon/command cells stay empty so a
+        // real attack is still unselectable in the control run.
+        game.databases.set_num(wolf_game::db::Container::CData, 18, 4, 0, 1);
+        // One enemy (type18 row69 col0): 0 enemies makes CE172 pc42/pc53 see 0==0 and
+        // victory-abort before CE192; one enemy keeps the line alive. Not a seed that
+        // makes real attacks selectable.
+        game.databases.set_num(wolf_game::db::Container::CData, 18, 69, 0, 1);
+        for (col, val) in [
+            (20, 100), (21, 100), (22, 50), (23, 50), (24, 20), (25, 15),
+            (26, 10), (27, 30), (28, 30), (9, 20), (10, 10), (4, 10),
+        ] {
+            game.databases.set_num(wolf_game::db::Container::CData, 0, 12, col, val);
+        }
     }
     let _ = game.start_event(188);
 

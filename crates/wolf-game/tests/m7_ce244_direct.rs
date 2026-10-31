@@ -120,12 +120,12 @@ fn the_outcome_is_decided_only_by_2000354() {
 
 #[test]
 fn the_win_lose_display_branch_opens_only_on_the_raw_self_magic() {
-    // pc36 is "2000349 == self 1600010". The right operand is compared as a raw
-    // literal, so the real self value (11) never matches and the display branch
-    // stays dead (fall-through win). Writing the magic 1600010 into 2000349 forces
-    // the branch; pc44 then compares two variables and takes the else, so outcome
-    // becomes the defeat arm (-1).
-    let cases: [(i32, i32); 2] = [(11, 1), (1_600_010, -1)];
+    // pc36 is "2000349 == self 1600010". Under opcode-111 reference semantics the
+    // right operand (self 1600010) is a variable reference, so the real self value
+    // 11 matches and the display branch OPENS: outcome is the defeat arm (-1).
+    // Writing the magic 1600010 into 2000349 makes 2000349==1600010 raw-match too,
+    // but self 1600010 is the actual value, so the fall-through win branch runs.
+    let cases: [(i32, i32); 2] = [(11, -1), (1_600_010, 1)];
     for (probe, want) in cases {
         let Some(mut game) = open_game() else {
             eprintln!("skipping: no game data at {:?}", data_root());

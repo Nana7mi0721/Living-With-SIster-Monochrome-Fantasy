@@ -425,6 +425,9 @@ fn day4_real_battle_settles_and_reaches_day5_without_injection() {
     let _ = game.start_engine_events();
     // THE WIRING UNDER TEST: on the battle-active edge start CE242 command phase.
     game.set_battle_wiring(true);
+    // opcode-111 reference semantics makes the enemy gauge big enough for a genuine
+    // multi-round fight; enable the round loop so the battle can actually settle.
+    game.set_battle_round_loop(true);
 
     // NO-INJECTION GUARD: the settlement variables must be pristine before the battle.
     assert_eq!(game.vm.vars.get(340), 0, "pre-battle 2000340 must be idle (no injection)");

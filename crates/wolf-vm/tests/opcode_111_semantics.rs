@@ -5,11 +5,16 @@
 //! compares a 300 call result with the CSelf argument, CE109 tests flag masks,
 //! CE64 compares scroll flags and CE244 tests the display / win-lose gates.
 //! Those 356 sites only make sense if the value operand is resolved through
-//! eval_num. At HEAD 1d36ebe the interpreter still reads it as a raw integer
-//! (exec.rs:2207), so the tests below pin the *current* literal behaviour and
-//! mark the intended reference behaviour as ignored until that one-line patch is
-//! applied. The patch is deliberately not applied in this task because
-//! crates/wolf-vm/src/exec.rs is owned by another change (Lead coordination).
+//! eval_num.
+//!
+//! task-53 (M9 W5) landed that one-line patch in crates/wolf-vm/src/exec.rs: the
+//! condition handler now reads
+//!   let value = eval_num(arg(cmd, 2 + 3 * i), inst, vars);
+//! so a variable / self-variable / system-variable operand is dereferenced
+//! before the comparison, while a plain literal (< 1_000_000) or a negative
+//! Opaque sentinel is returned unchanged by eval_num. The tests below pin the
+//! resolved behaviour and keep a literal-operand control so the 98.43% literal
+//! path is protected against regression.
 
 use wolf_format::command::{Command, Slot, Tail};
 use wolf_format::commonevent::{CommonEvent, CommonEventData};
@@ -103,7 +108,8 @@ fn guarded(var: i32, value: i32, operator: i32, dest: usize, then_value: i32, el
 
 #[test]
 fn a_literal_value_operand_is_compared_as_an_integer() {
-    // if (v0 > 5) { v2 = 1 } else { v2 = 2 }
+    // if (v0 > 5) { v2 = 1 } else { v2 = 2 }. eval_num leaves a < 1_000_000
+    // literal unchanged, so the literal path is identical before/after the patch.
     let taken = run(guarded(2_000_000, 5, 0, 2, 1, 2), &[(0, 9)]);
     assert_eq!(taken.vars.get(2), 1, "9 > 5 takes the then body");
     let skipped = run(guarded(2_000_000, 5, 0, 2, 1, 2), &[(0, 1)]);
@@ -111,47 +117,64 @@ fn a_literal_value_operand_is_compared_as_an_integer() {
 }
 
 #[test]
-fn a_variable_valued_operand_is_currently_read_as_a_literal() {
-    // Both variables hold 5, so a resolved comparison (v0 == v1) is true.
-    // The current interpreter compares 5 with the raw integer 2_000_001 and
-    // takes the else branch. This pins the bug; it will flip to 1 after the
-    // proposed eval_num patch.
+fn a_variable_valued_operand_is_resolved_before_comparison() {
+    // Both variables hold 5, so the resolved comparison (v0 == v1) is true and
+    // the then body runs. (Before task-53 the interpreter compared 5 with the
+    // raw integer 2_000_001 and fell through; that was the bug.)
     let vm = run(guarded(2_000_000, 2_000_001, 2, 3, 1, 2), &[(0, 5), (1, 5)]);
     assert_eq!(vm.vars.get(0), 5);
     assert_eq!(vm.vars.get(1), 5);
     assert_eq!(
         vm.vars.get(3),
-        2,
-        "raw literal semantics compares 5 with 2000001, not with v1"
+        1,
+        "v0 == v1 once the value operand is evaluated"
     );
 
-    // Control: the same equality works when the right side is a real literal.
+    // Control: equality with a real literal still works.
     let control = run(guarded(2_000_000, 5, 2, 3, 1, 2), &[(0, 5)]);
     assert_eq!(control.vars.get(3), 1, "v0 == literal 5 is true");
 }
 
 #[test]
-fn a_magic_shaped_operand_matches_only_when_the_left_side_holds_the_raw_integer() {
-    // The operand 1_600_010 is the self-variable address for slot 610, but the
-    // current interpreter treats it as the integer 1_600_010. It "matches" only
-    // when v0 literally contains that integer.
-    let matching = run(guarded(2_000_000, 1_600_010, 2, 4, 1, 2), &[(0, 1_600_010)]);
-    assert_eq!(matching.vars.get(0), 1_600_010);
-    assert_eq!(matching.vars.get(4), 1, "literal 1600010 == literal 1600010");
+fn a_magic_shaped_operand_is_resolved_to_its_self_variable() {
+    // The operand 1_600_010 addresses self slot 610. It is now dereferenced: the
+    // comparison sees the slot's *value*, not the address. Seed the slot to 7
+    // (via opcode 121, [dst=1_600_010]) and v0 to 7 so v0 == slot.
+    let commands = vec![
+        cmd(121, &[1_600_010, 7, 0, 0], &[]), // self slot 610 = 7
+        cmd(121, &[2_000_006, 2, 0, 0], &[]), // v6 = else
+        cmd(111, &[1, 2_000_000, 1_600_010, 2], &[]),
+        cmd(401, &[1], &[]),
+        cmd(121, &[2_000_006, 1, 0, 0], &[]), // v6 = then
+        cmd(499, &[], &[]),
+    ];
+    let matched = run(commands.clone(), &[(0, 7)]);
+    assert_eq!(
+        matched.vars.get(6),
+        1,
+        "v0(7) == self slot 610(7) once the operand is resolved"
+    );
+
+    // A raw-integer coincidence no longer matches: v0 = 1_600_010 is compared
+    // against the slot value 7, not against the address itself.
+    let coincidence = run(commands, &[(0, 1_600_010)]);
+    assert_eq!(
+        coincidence.vars.get(6),
+        2,
+        "the address 1_600_010 is no longer compared literally"
+    );
 }
 
 #[test]
-fn the_ce244_display_gate_and_win_lose_compare_fall_through_under_literal_semantics() {
+fn the_ce244_display_gate_and_win_lose_compare_resolve_under_reference_semantics() {
     // Synthetic reconstruction of the two decisive CE244 conditions.
     //
     // CE244 pc3 assigns 11 to the self slot addressed by 1_600_010; its pc36 is
     // 111 [1, 2_000_349, 1_600_010, 2] = "if (var349 == that self slot)". With
-    // var349 seeded to 11 the resolved comparison is TRUE, but raw-literal
-    // semantics compares 11 with 1_600_010 and falls through.
+    // var349 seeded to 11 the resolved comparison is TRUE.
     //
     // CE244 pc44 is 111 [17, 2_000_192, 2_000_193, 0] = "if (var192 > var193)".
-    // With 5 and 3 the resolved comparison is TRUE, but raw-literal semantics
-    // compares 5 with 2_000_193 and falls through.
+    // With 5 and 3 the resolved comparison is TRUE.
     let commands = vec![
         cmd(121, &[1_600_010, 11, 0, 0], &[]), // self slot 610 = 11
         cmd(121, &[2_000_005, 2, 0, 0], &[]),
@@ -169,15 +192,14 @@ fn the_ce244_display_gate_and_win_lose_compare_fall_through_under_literal_semant
     let vm = run(commands, &[(349, 11), (192, 5), (193, 3)]);
     assert_eq!(vm.vars.get(349), 11, "var349 equals the self slot value");
     assert_eq!(vm.vars.get(7), 11, "the self slot really is 11");
-    assert_eq!(vm.vars.get(5), 2, "pc36-like display gate falls through");
-    assert_eq!(vm.vars.get(6), 2, "pc44-like win/lose compare falls through");
+    assert_eq!(vm.vars.get(5), 1, "pc36-like display gate resolves");
+    assert_eq!(vm.vars.get(6), 1, "pc44-like win/lose compare resolves");
 
     // Task-31 day4 wiring: var349 is 1 while the self slot is 11 (default) or
-    // 5 (set by event 20). Raw-literal compares 1 with 1_600_010; a resolved
-    // compare would test 1 == 11 (or 5). BOTH are false, so pc36 falls through
-    // under either semantics and is NOT the CE244 settlement blocker. The real
-    // decider is pc79 (2000354 == 11 or 16). This case is kept because the
-    // operand is still a variable reference by intent.
+    // 5 (set by event 20). Under reference semantics the compare tests 1 == 11
+    // (or 5): BOTH are false and pc36 still falls through. So pc36 is NOT the
+    // CE244 settlement blocker in the real data; the real decider is pc79
+    // (2000354 == 11 or 16). This case pins that even after the fix.
     let real = run(
         vec![
             cmd(121, &[1_600_010, 11, 0, 0], &[]),
@@ -199,10 +221,9 @@ fn the_ce244_display_gate_and_win_lose_compare_fall_through_under_literal_semant
     );
 }
 
-/// Documents the behaviour that the proposed eval_num patch produces. Kept
-/// ignored until the patch lands; then remove the ignore and this test must pass.
+/// The behaviour the landed patch produces: reference-valued operands resolve
+/// before the comparison.
 #[test]
-#[ignore = "requires the proposed opcode-111 value-operand patch (docs/research/M7_OPCODE_111.md)"]
 fn reference_valued_operands_resolve_before_comparison() {
     let vm = run(guarded(2_000_000, 2_000_001, 2, 3, 1, 2), &[(0, 5), (1, 5)]);
     assert_eq!(vm.vars.get(3), 1, "v0 == v1 once the operand is evaluated");

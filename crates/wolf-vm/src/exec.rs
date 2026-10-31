@@ -1461,9 +1461,13 @@ fn compound(kind: i32, current: i32, value: i32) -> i32 {
                 current % value
             }
         }
-        0x600 => value,
-        0x700 => value,
-        0x800 => value.abs(),
+        // 0x600/0x700/0x800 are UNARY transforms of the target's CURRENT value
+        // (docs/OPCODE_SPEC.md §3.1: cur.floor()/cur.ceil()/cur.abs()), NOT of the
+        // binary result. Returning `value` here let CE172 pc27/pc28 force the ally
+        // dead-count accumulator to 1 regardless of the CE176 status read.
+        0x600 => current,
+        0x700 => current,
+        0x800 => current.abs(),
         0x900 => {
             // Angle from slope, in tenths of a degree.
             let deg = (value as f64).atan2(current as f64).to_degrees();
@@ -2219,7 +2223,13 @@ fn enter_block(
             let mut matched = None;
             for i in 0..count {
                 let var = arg(cmd, 1 + 3 * i);
-                let value = arg(cmd, 2 + 3 * i);
+                // The value operand is a full magic operand: 98.43% of the
+                // 22,695 condition triples are plain literals that eval_num
+                // returns unchanged, but 356 (1.57%) are variable / self-variable
+                // references that must be dereferenced before the comparison
+                // (CE26 compares a call result with a CSelf argument, CE109 tests
+                // flag masks, CE64 compares scroll flags; docs/research/M7_OPCODE_111.md).
+                let value = eval_num(arg(cmd, 2 + 3 * i), inst, vars);
                 let operator = arg(cmd, 3 + 3 * i);
                 let lhs = eval_num(var, inst, vars);
                 if compare(lhs, value, operator) {
