@@ -11,16 +11,17 @@
 //! 158, 200, 258; single-option cutscene Choices). That story routes through the 地域貢献 branch
 //! (CE251 JumpLabel 地域貢献 idx 419 -> SetLabel 地域貢献 idx 2465 -> CommonEvent [500253,0] idx
 //! 2466) into CE253, whose combat branch calls CE239 at CE253 idx 174/177/180/185/188/191. CE239
-//! is the real battle entry (1108 slots, docs/BATTLE.md:17) and is a still-unfinished subsystem,
-//! so the day-4 story stalls there: the clock freezes at 08:30 and the day never advances. There
-//! is therefore no selectable non-battle row on day 4 and day 5 08:30 is unreachable through the
-//! real day loop in this build.
+//! is the real battle entry (1108 slots, docs/BATTLE.md:17). With the rebuilt battle wiring
+//! OFF (the default) the day-4 story stalls there: the clock freezes and the day never advances.
+//! There is no selectable non-battle row on day 4, so day 5 08:30 is unreachable through the
+//! real day loop **without** `Game::set_battle_wiring(true)`.
 //!
-//! This regression test therefore locks the wall rather than faking day 5: it drives the real
-//! day 1 -> day 4 08:30 chain (day-command menu days 2-3, dinner/evening, real CE329 sleep), then
-//! asserts that the day-4 daytime is forced into the CE253/CE239 battle with NO day-command menu
-//! ever drawn and no clock advance. When the battle subsystem is finished this test should be
-//! flipped to expect the day-5 morning; the companion audit lives in docs/research/M6_SCHEDULE.md.
+//! This regression test locks the wiring-off behaviour: it drives the real day 1 -> day 4 08:30
+//! chain (day-command menu days 2-3, dinner/evening, real CE329 sleep), then asserts that the
+//! day-4 daytime is forced into the CE253/CE239 battle with NO day-command menu ever drawn and
+//! no clock advance. The wiring-on acceptance run (battle settles, day 5 reached with no
+//! injection) is `crates/wolf-game/tests/m7_day4_playable.rs`; the companion audit lives in
+//! docs/research/M6_SCHEDULE.md.
 //!
 //! Facts asserted: day counter var160, weekday var6, clock var4/var5, stats.warnings == 0, and a
 //! drawn morning scene (screen.len() > 20). The sister-click flag var63 is seeded only where the
@@ -303,13 +304,17 @@ fn day_four_morning_is_forced_into_the_subjugation_battle_wall() {
     assert!(battle_seen, "day 4 daytime is forced into the CE253/CE239 subjugation battle (instances={:?}, clock={}:{})", instances_events(&game), game.vm.vars.get(4), game.vm.vars.get(5));
     assert!(has_battle(&game), "the CE253/CE239 battle coroutine is resident (instances={:?})", instances_events(&game));
     assert_eq!(game.stats.warnings, 0, "the forced day-4 story is warning-free (no deadlock before the battle)");
-    assert_eq!(game.vm.vars.get(160), 4, "day 4 never rolls over: day 5 is unreachable here");
+    assert_eq!(
+        game.vm.vars.get(160),
+        4,
+        "day 4 never rolls over while the rebuilt battle wiring is off: day 5 is unreachable here"
+    );
     assert_eq!(game.vm.vars.get(4), 8, "the day-4 story consumes no clock time before the battle");
     assert_eq!(game.vm.vars.get(5), 30, "clock still 08:30 at the battle wall");
 
     let frames = game.stats.frames;
     let instructions = game.stats.instructions;
-    eprintln!("m6_week_loop: reached day 4 08:30; day-4 daytime forced into CE253/CE239 battle (day 5 unreachable in this build) after {frames} frames, {instructions} instructions");
+    eprintln!("m6_week_loop: reached day 4 08:30; day-4 daytime forced into CE253/CE239 battle (day 5 unreachable with the wiring off) after {frames} frames, {instructions} instructions");
     assert!(instructions > 200_000, "several days of real story ran: {instructions} instructions");
     assert!(frames > 4_000, "the loop really ticked frames: {frames}");
 }

@@ -1,6 +1,9 @@
 # M7 · W1 battle playable — rebuilt command-phase wiring (task-34)
 
-Status: implemented and green.
+Status: implemented and green. **Updated by M8 W1-c** (`docs/research/M8_BATTLE_SETTLE.md`):
+the wiring now supplies CE242's real arg0 (the acting character slot, 1), not 2000354.
+With SaveData01 the leader's action wins immediately, so the state sequence is
+`[0,1,0]` (CE244 settles inside the command phase) and CE243/CE241 do not run.
 Scope: three production files touched — **NEW** `crates/wolf-game/src/battle_wiring.rs`,
 a minimal hook in `crates/wolf-game/src/game.rs`; test **NEW** `crates/wolf-game/tests/m7_battle_playable.rs`;
 this report **NEW**. No edit to `exec.rs`, `battle_seed.rs`, `db.rs` or any other test. No commit/push.
@@ -15,16 +18,17 @@ WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m7_battle_playable -- 
 Result line produced by the test:
 
 ```
-RESULT: ce253=true ce239=true ce242=true ce243=true ce241=true rounds=1
-        battle_active_f=Some(520) v350_seq=[0, 1, 0, 2, 0] v352=1 v343=1
-        max239pc=1099 max242pc=1048 warnings=0 unanswered250=0
+RESULT (after M8 W1-c): ce253=true ce239=true ce242=true ce243=false ce241=true
+        rounds=1 battle_active_f=Some(520) v350_seq=[0, 1, 0] v352=1 v343=1
+        max239pc=1099 max242pc=415 warnings=0 unanswered250=0
 ```
 
-i.e. a **real battle round** now runs and settles: `2000350` walks the full
-`0 → 1 → (CE244 clears 0) → 2 → 0` three-state machine, CE244 writes
-`2000352 = 1` and `2000343 = 1`, CE243 (enemy action) and CE241 (turn start) both run,
-warnings are 0, no `250` read is unanswered, and CE239 returns (its coroutine is gone at
-the end of the run).
+i.e. a **real battle round** now runs and settles: the command phase starts
+(`2000350` 0 → 1), CE244 writes `2000352 = 1` and `2000343 = 1` and clears
+`2000350` back to 0, and CE239 returns (its coroutine is gone at the end of the run).
+Warnings are 0 and no `250` read is unanswered. The action-phase `2000350 = 2`
+(CE243/CE241) is not reached because the leader's action settles the round; that is the
+data's win path, not a missing phase.
 
 ---
 
