@@ -129,12 +129,13 @@ Legend: **blocker** = what physically prevents closing the gap today.
 - Evidence: `docs/BASELINE.json` `m4_audio`; `M7_BACKLOG` W5 notes audio needs human ear.
 - **Blocker**: requires a human listener; not machine-checkable.
 
-### G11 — New-game template save absent on some roots
+### G11 — New-game template save absent on some roots — CLOSED (W4-b)
 - Evidence: `docs/research/M7_NEW_GAME_ENTRY.md` §2 benign diagnostic
   `0x 220 SaveLoad: no template save`; `M7_NEW_GAME_ENTRY` reproduction on `work/all`.
 - Fact: `Game::new` `base_save = read_save(root/Save/System.sav).ok()`; roots without
-  `Save/System.sav` get `None` → `save_to` fails. `work/full` supplies it.
-- **Blocker**: production packaging of a template save, or a synthesized base.
+  `Save/System.sav` got `None` → `save_to` failed.
+- Resolution: `Game::new` synthesizes the template (W4-b, then seeded with the static
+  CData variable database); `base_save` is always `Some`. See `M8_TEMPLATE_SAVE.md`.
 
 ### G12 — Dangling map id in shipped data
 - Evidence: `docs/research/M7_MAP_EDGE.md` §2/§4 (Map031 on-load teleport to map id 27,
@@ -215,12 +216,18 @@ map H button.
 ### W4 — Save / new-game / data robustness
 - **W4-a (DONE)**: 5-part save roundtrip + Part4 template regression fix (`m7_save_parts`).
 - **W4-b (DONE, M8)**: `SaveFile::new_game_template()` builds a structurally valid 0x8C
-  template (no-map sentinel, 31 auto-tiles, 800 normal vars, 550 event groups, empty vardb,
+  template (no-map sentinel, 31 auto-tiles, 800 normal vars, 550 event groups,
   one-byte Part7); `Game::new` falls back to it when System.sav is absent and records one
-  diagnostic. Test `m8_template_save.rs` on `work/all` (no Save/): save + fresh `load_into`
-  restores playtime, 800 vars and the picture layer; retail saves still byte-identical.
-  Docs `M8_TEMPLATE_SAVE.md`. Residuals: synthesized vardb has no types (CData cells are
-  reported as `unmodelled`), and Part2/Part1 defaults are zero.
+  diagnostic. Test `m8_template_save.rs` on `work/all`: save + fresh `load_into` restores
+  playtime, 800 vars and the picture layer; retail saves still byte-identical.
+  Follow-up (also DONE): the template's variable database is seeded from the static
+  `CDataBase` schema (`Databases::template_vardb()` +
+  `SaveFile::new_game_template_with_vardb()`), so runtime CData cells are stored instead
+  of counted `unmodelled` (`m7_save_parts` passes on `work/all`); a `System.sav` that
+  parses with `type_count == 0` gets the same schema filled in. Docs
+  `M8_TEMPLATE_SAVE.md`. Residuals: SysDatabase/DataBase cells stay out by design, a
+  row past the static height needs a `250` row-count write, and Part2/Part1 defaults
+  are zero.
 - **W4-c (DONE)**: `db::map_path` returns `None` for an empty path cell, so the dangling
   id 27 is skipped with one diagnostic instead of reading the data root. Test
   `m7_map_edge::a_dangling_map_id_is_skipped_without_a_read_error`; `m7_map_edge` 4/4 green.
