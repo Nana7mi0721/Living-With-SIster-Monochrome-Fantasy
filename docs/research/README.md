@@ -144,9 +144,20 @@ M10 剩余边界项（task-79..84）的验收底稿；见 `../HANDOFF_M10.md` §
 | [`M11_HSCENE_REAL_GATE.md`](M11_HSCENE_REAL_GATE.md) | M11 task-80 — 8 个零售存档的 H 深链 gate 矩阵（var304/var326） |
 | [`M11_MOVEMENT_NPC.md`](M11_MOVEMENT_NPC.md) | M11 task-81 — 8 向对角移动、NPC 占位与 contact |
 
+### M11 round 1（4 篇）
+
+M11 第二批（task-85..88）的验收底稿；见 `../HANDOFF_M10.md` §9。
+
+| 文档 | 内容 |
+| --- | --- |
+| [`M11_AUDIO_LOOP_REGRESSION.md`](M11_AUDIO_LOOP_REGRESSION.md) | M11 task-88 — 31 首 loop-tagged 的逐曲阈值固定与二次 decode 位相同回归 |
+| [`M11_BATTLE_MENU_BRIDGE.md`](M11_BATTLE_MENU_BRIDGE.md) | M11 task-85 — CE157 菜单确认采集、命令队列桥与 CE157 cursor 残余 |
+| [`M11_HSCENE_PROGRESSION.md`](M11_HSCENE_PROGRESSION.md) | M11 task-86 — var304/var326 真实进度与 CE328 早退边界 |
+| [`M11_WINDOW_EDGE.md`](M11_WINDOW_EDGE.md) | M11 task-87 — CE94 窗口/文本几何、CN patch 右缘 data-only 结论 |
+
 ## 状态约定
 
 - **M6–M9 文档**：历史记录，可能描述当时的 blocker；如果与现行实现冲突，以现行代码/测试和 HANDOFF 为准。
 - **M10 文档**：对应 M10 已收口的实现与重基线；其中 `M10_OPCODE_111_PLAN.md`、`M10_BATTLE_EXPECTATIONS.md` 是计划/期望推导，最终以 `M10_OPCODE_111_LANDING.md` 与 HEAD 测试为准。
-- **M11 文档**：M10 剩余边界项的验收底稿；结论以 `docs/HANDOFF_M10.md` §8 与 HEAD 测试为准。
+- **M11 文档**：M10 剩余边界项与 M11 round 1 的验收底稿；结论以 `docs/HANDOFF_M10.md` §8/§9 与 HEAD 测试为准。
 - **M7_BACKLOG / M8_BACKLOG**：历史计划，已被后续 M9/M10 交接取代；只用于了解当时的缺口清单。

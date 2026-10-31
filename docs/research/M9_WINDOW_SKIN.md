@@ -168,12 +168,17 @@ quads sorted by number; and the 667-site census with 576/91 kind counts, one fix
 
 ## 8. Residual risk
 
-H-WIN-1 remains a visual-only risk, not a geometry bug. The CN patch text picture
-#12501 is placed at (715, 115) with adaptive size about 309x461, while the shipped
-#12500 window is 300x200 at (855, 200); the text is not nested in the window and its
-right edge exceeds the 1024-wide screen. Rendering keeps the shipped coordinates
-faithfully. If that patch is meant to run on this 1024-wide data, the data placement
-is the thing to fix, not window.rs.
+H-WIN-1 is resolved as data-only, with no rendering or geometry bug (M11 task-87).
+The earlier note here that the CN patch text overflowed the 1024-wide screen was an
+arithmetic error. The real CE94 placement is: #12500 WindowString at (855, 200) with
+anchor = 1 (centre) and box 300x200, so Picture::destination gives [705, 100, 300,
+200] (right edge 1005, bottom 300, both inside 1024x576); the 18x18 skin
+SystemFile/WindowBase_amania.png nine-slices at [705,100,3,3] / [708,103,294,194] /
+[1002,297,3,3], all on screen. The #12501 Text is anchor 0 at (715, 115) relative to
+window (1, 1), and its seven runs span x715..955, y115..297 - also fully on screen.
+See docs/research/M11_WINDOW_EDGE.md and crates/wolf-game/tests/m11_window_edge.rs.
+The only residual is cosmetic: the CN patch text picture is not visually nested in
+the 300x200 window frame.
 
 No literal #12505 is present in the current data; if a future data revision adds
 one, it will use the same type-3/type-4 and MIN_BOX rules. Self-sized and

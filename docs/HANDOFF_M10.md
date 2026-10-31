@@ -2,7 +2,7 @@
 
 > 仓库：`E:\Study\github program\imoto life`
 > 阅读顺序：本文件（M10 最新）→ `docs/README.md`（文档总索引）→ `PLAN.md`（当前路线图）；历史 M9/M8/M7/M6/M4/M3 交接已标为历史归档，需要追溯时从索引进入。
-> 基线：M9 集成 HEAD `22148d8`；M10 由 `ce680b3`（残项）与 `3bbbb12`（opcode 111 落地）两个提交组成。M10 剩余边界项（M11 第一批 task-79..84）已收口，见 §8。`docs/gpt调研/` 与 `.claude/` 不是项目文件，不提交。
+> 基线：M9 集成 HEAD `22148d8`；M10 由 `ce680b3`（残项）与 `3bbbb12`（opcode 111 落地）两个提交组成。M10 剩余边界项（M11 第一批 task-79..84）已收口，见 §8；M11 round 1（task-85..88）已收口，见 §9。`docs/gpt调研/` 与 `.claude/` 不是项目文件，不提交。
 
 ## 1. 一句话现状
 
@@ -109,3 +109,16 @@ cargo test -q --workspace --no-fail-fast   # 全部二进制绿，0 failed
 | task-84 音频 loop 验收 | `crates/wolf-audio/tests/m11_audio_loop_audit.rs`；`docs/research/M11_AUDIO_ACCEPTANCE.md` | 31 首 loop-tagged 全 ogg、31/31 decode 且有界；14 首 A1 高绝对接缝优先人工听；机器不能替代人工听感 |
 
 验证门禁（Lead 集成后）：`cargo test -q --workspace --no-fail-fast` 全绿；`wolf-cli verify --root work/all` PASS 70 / pending 0。
+
+## 9. M11 round 1（task-85..88）：菜单桥、H 进度、窗口右缘、音频回归
+
+本批四项全部完成，均未由子代理提交；Lead 集成时只在 `crates/wolf-game/src/game.rs` 补了 `Game::set_battle_menu_command_queue(Vec<i32>)` 这一应用层入口（委托 `BattleWiring::set_menu_command_queue`），使 `battle_wiring.rs` 模块文档的入口承诺与实际代码一致。唯一生产文件改动是 `crates/wolf-game/src/battle_wiring.rs`（+180/-1）。
+
+| 任务 | 交付 / 证据 | 结论 |
+| --- | --- | --- |
+| task-85 真实多成员菜单桥 | `crates/wolf-game/src/battle_wiring.rs`；`tests/m11_battle_menu_bridge.rs` 2 测；`docs/research/M11_BATTLE_MENU_BRIDGE.md` | 新增 `MenuSelection{activator,skill,row,command_index}`、`harvest_menu_registrations`（扫 live CE157，读 self1600000/1600001/1600017，按 instance id 去重，`command_index=row.clamp(1,8)`）、`set_menu_command_queue`、`menu_queue_len`；`next_command` 先 drain 队列再回退 schedule（空时 byte-identical）；3 个 unit + 2 个集成测。真实 BOSS 路径 schedule [1,3] + round_loop：rounds=5、turn_starts=4、v352=1、v343=1、warnings=0。剩余 producer 缺口：CE157 pc121 门 `self1600023==0` 被 pc93/pc100 置 100 后跳过 pc124-125，`コマンド入力位置` 恒 0，live 菜单只注册 row 1；需数据/VM 修复或应用层显式 feed（`Game::set_battle_menu_command_queue`）。 |
+| task-86 H CG 真实进度 | `tests/m11_hscene_progression.rs` 4 测；`docs/research/M11_HSCENE_PROGRESSION.md` | var304=1 真实可达：`start_event(290)` 夜间菜单 case7 → `pc403 op121[2000304,1]` → `op210[500328]` 调 CE328（SaveData01 peak 1、maxpc≥640、warnings0）。var326=2 只由 CE301 pc6320/pc6365 写，需 var276>=1 && var277>=1；var277 只由书店 CE314 增，CE314 只由 CE308/CE310 调用，8 档全 0。即使 seed var326=2 + 真 var304，CE328 H 分支在 pc741 `op172` 就寝黑屏终止，maxpc<985，CE402（唯一调用 pc986）不可进。 |
+| task-87 窗口 CN patch 右缘 | `tests/m11_window_edge.rs` 3 测；`docs/research/M11_WINDOW_EDGE.md`；截图 `work/out/task87_event94.png` | DATA-ONLY，无渲染 bug；M9 §8 的 1155 右缘溢出是算术错误，已就地更正。真实 CE94：#12500 WindowString (855,200) anchor1 300x200 → dst [705,100,300,200]（右 1005、下 300 均在 1024x576 内），皮肤 nine-slice [705,100,3,3]/[708,103,294,194]/[1002,297,3,3]；#12501 Text anchor0 (715,115) 七段 x715..955 y115..297。`window.rs`/`atlas.rs` 未改。 |
+| task-88 音频 loop 回归 | `crates/wolf-audio/tests/m11_audio_loop_regression.rs` 476 行 1 测；`docs/research/M11_AUDIO_LOOP_REGRESSION.md` | 31 首 loop-tagged 全 ogg、31/31 decode；tag→region 契约固定（`loop_start==LOOPSTART`、`loop_end==min(LOOPSTART+LOOPLENGTH,frames)`）；逐曲 seam_abs/step/ratio/rms_jump/dc_delta 阈值固定；tier A=17/B=1/C=10/D=3；flags SEAM_ABS=14、SEAM_RATIO=11、RMS_JUMP=18、OVERRUN=3、LEN_EQUALS_TRACK=3；最差 seam_abs nemesis_loop .8079、ratio Acoustic_High_Collar 20.02、rms_jump p_egg_loop .3772、dc_delta p_egg_loop .0228；第二次 decode 位相同；输出 `work/out/m11_audio_loop_manifest.md`（gitignored）。 |
+
+验证门禁（Lead 集成后）：`cargo test -q --workspace --no-fail-fast -j 2` 全绿（CARGO_EXIT=0）；`wolf-cli verify --root work/all` PASS 70 / pending 0。

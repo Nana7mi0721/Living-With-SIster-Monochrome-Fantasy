@@ -116,6 +116,29 @@
 //! This driver therefore cannot be fed a >1 index schedule from the real menu; multi-member
 //! action is only reachable through the rebuilt per-index CE242 rounds above (BOSS path,
 //! real CE241 turn-start). Full analysis: docs/research/M9_BATTLE_MULTI_INPUT.md.
+//!
+//! ## Menu -> CE242 bridge (M11, task-85)
+//!
+//! The driver already consumes a *successive sequence of command indexes*: legacy single-shot
+//! takes the next scheduled index, and the round loop takes the next index every round. What was
+//! missing is the producer that turns a player's per-member menu picks into that sequence.
+//! `harvest_menu_registrations` captures the real CE157 (コマンド登録) confirmations while they
+//! live and records, per confirmation, the activator/skill/row the producer actually wrote plus
+//! the CE242 command index the *row* maps to (`harvested_command_indexes`). It intentionally uses
+//! the ROW, never the ability code (25/26/29/30 is disjoint from the 1..8 index board).
+//! `set_menu_command_queue` lets the application layer install a fresh sequence it read from the
+//! command-list table; the driver drains it front-first (one entry = one round) before the
+//! rotating schedule (`next_command`).
+//!
+//! The bridge is faithful to the data contract but cannot by itself manufacture a >1 sequence:
+//! the shipped CE157 producer writes command row 1 and never advances コマンド入力位置, so the
+//! live menu can only ever confirm one row (task-67 / M9_BATTLE_MULTI_INPUT.md). The queue path
+//! therefore becomes reachable as soon as the producer cursor bug (CE157 pc121/124-125) is fixed
+//! in the data/VM layer (out of this file's scope); until then the app-layer hook
+//! `Game::set_battle_menu_command_queue(Vec<i32>)` (delegating here) is the bounded entry point,
+//! reusing real registered rows read from CData type14.
+
+use std::collections::{BTreeSet, VecDeque};
 
 use wolf_vm::magic::SELF_ARG_BASE;
 use wolf_vm::Vm;
@@ -135,6 +158,34 @@ const EVENT_COMMAND_PHASE: u32 = 242;
 const EVENT_TURN_START: u32 = 241;
 /// Common event ┣敵の行動 -- the enemy action phase, started by auto_events when 350 == 2.
 const EVENT_ENEMY_ACTION: u32 = 243;
+/// Common event X[共]コマンド登録 -- the menu producer that writes a command row (task-85).
+/// Each time the real menu confirms a command, CE157 runs once. Harvesting those instances is
+/// how the bridge turns real menu confirmations into CE242 command indexes.
+const EVENT_COMMAND_REGISTER: u32 = 157;
+/// Offsets inside a CE157 instance's self-vars (all are SELF_ARG_BASE + k).
+const REG_ACTIVATOR: usize = 0; //  self1600000 発動者番号 (member number)
+const REG_SKILL: usize = 1; //      self1600001 発動技能 (ability code, NOT a CE242 index)
+const REG_ROW: usize = 17; //       self1600017 command row index the producer is writing
+
+/// One real battle-menu confirmation, captured from the CE157 (コマンド登録) instance that
+/// the live menu (CE188 -> CE191 -> CE192) spawns. This is the engine-side record that the
+/// application layer can also read straight from the command-list CData table; here it keeps
+/// the bridge self-contained and auditable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MenuSelection {
+    /// 発動者番号 -- the acting party member number the menu handed over (0 = first member).
+    pub activator: i32,
+    /// 発動技能 -- the chosen ability *code* (25/26/29/30/0...). Disjoint from the CE242 index
+    /// domain 1..8 and therefore deliberately NOT used to pick a command body.
+    pub skill: i32,
+    /// コマンド入力位置 the producer was writing (command row index, 0-based). In the shipped
+    /// flow this is always 0 because CE157 never advances its cursor (the documented blocker).
+    pub row: i32,
+    /// The CE242 command index this confirmation is assigned, in confirmation order (1-based).
+    /// This reconstructs the row-append the shipped producer is missing: the k-th real menu
+    /// confirmation feeds command index k, exactly the row-index == command-index contract.
+    pub command_index: i32,
+}
 
 /// The rebuilt command-phase starter. See the module docs.
 #[derive(Debug, Clone)]
@@ -157,8 +208,16 @@ pub struct BattleWiring {
     started_rounds: u64,
     /// How many times this wiring has started the turn-start event (round loop only).
     turn_starts: u64,
+    /// Real menu confirmations harvested from live CE157 instances, in arrival order.
+    menu_selections: Vec<MenuSelection>,
+    /// CE157 instance ids already harvested (BTreeSet keeps this deterministic).
+    seen_registrations: BTreeSet<u32>,
+    /// Explicit command-index queue fed by the menu bridge. Drained (front first) before the
+    /// rotating `command_schedule`; one entry = one CE242 command round.
+    menu_queue: VecDeque<i32>,
 }
 
+#[allow(dead_code)] // bridge API is consumed by the Game-layer hook documented in the module docs
 impl BattleWiring {
     /// Disabled wiring, with no edge history.
     #[must_use]
@@ -175,6 +234,9 @@ impl BattleWiring {
             command_cursor: 0,
             started_rounds: 0,
             turn_starts: 0,
+            menu_selections: Vec::new(),
+            seen_registrations: BTreeSet::new(),
+            menu_queue: VecDeque::new(),
         }
     }
 
@@ -212,6 +274,77 @@ impl BattleWiring {
         self.turn_starts
     }
 
+    /// The CE242 command index a registered command row maps to. The row index the menu writes
+    /// (CData type14 row, 1-based) is the driver's command index by the documented
+    /// row-index == command-index contract; clamp into the valid 1..=8 board.
+    #[must_use]
+    fn command_index_for_row(row: i32) -> i32 {
+        row.clamp(1, 8)
+    }
+
+    /// The real menu confirmations harvested so far (arrival order). Each carries the actual
+    /// activator/skill/row the CE157 producer wrote, plus the CE242 command index it maps to.
+    #[must_use]
+    pub fn menu_selections(&self) -> &[MenuSelection] {
+        &self.menu_selections
+    }
+
+    /// The CE242 command indexes derived from the harvested menu confirmations, in order. This
+    /// is the faithful bridge payload: it uses the *row* each registration actually wrote (never
+    /// the ability code), so it cannot invent a code -> index map.
+    #[must_use]
+    pub fn harvested_command_indexes(&self) -> Vec<i32> {
+        self.menu_selections.iter().map(|s| s.command_index).collect()
+    }
+
+    /// Harvest real menu confirmations from live CE157 (コマンド登録) instances. Each new CE157
+    /// instance is recorded once (deduplicated by instance id, in arrival order). Returns the
+    /// number of newly harvested confirmations. This is the engine-side capture half of the
+    /// menu -> CE242 bridge; see the module docs for why the shipped producer only ever yields
+    /// one row and therefore one confirmation.
+    pub fn harvest_menu_registrations(&mut self, vm: &Vm) -> usize {
+        let mut fresh: Vec<(u32, i32, i32, i32)> = Vec::new();
+        for inst in vm.instances() {
+            if inst.event == EVENT_COMMAND_REGISTER && !self.seen_registrations.contains(&inst.id) {
+                let activator = inst.self_vars.get(SELF_ARG_BASE + REG_ACTIVATOR);
+                let skill = inst.self_vars.get(SELF_ARG_BASE + REG_SKILL);
+                let row = inst.self_vars.get(SELF_ARG_BASE + REG_ROW);
+                fresh.push((inst.id, activator, skill, row));
+            }
+        }
+        // Arrival order is instance-id order (instances are stored in spawn order).
+        fresh.sort_by_key(|t| t.0);
+        let n = fresh.len();
+        for (id, activator, skill, row) in fresh {
+            self.seen_registrations.insert(id);
+            let command_index = Self::command_index_for_row(row);
+            self.menu_selections.push(MenuSelection {
+                activator,
+                skill,
+                row,
+                command_index,
+            });
+            self.menu_queue.push_back(command_index);
+        }
+        n
+    }
+
+    /// Install an explicit command-index queue (one entry = one command round), used by the
+    /// application layer once it has read the registered rows from the command-list table. The
+    /// queue is drained front-first by the driver before it falls back to the rotating schedule.
+    pub fn set_menu_command_queue(&mut self, commands: Vec<i32>) {
+        self.menu_queue = commands
+            .into_iter()
+            .map(Self::command_index_for_row)
+            .collect();
+    }
+
+    /// Number of command indexes still queued from the menu bridge.
+    #[must_use]
+    pub fn menu_queue_len(&self) -> usize {
+        self.menu_queue.len()
+    }
+
     /// Start CE242 once with the given command index as `self1600000`.
     fn start_command(&mut self, vm: &mut Vm, command: i32) -> Option<u32> {
         if let Some(id) = vm.start_event(EVENT_COMMAND_PHASE) {
@@ -226,8 +359,12 @@ impl BattleWiring {
         }
     }
 
-    /// The next command index from the schedule, then advance the cursor.
+    /// The next command index: drain the menu bridge queue first, otherwise take the next entry
+    /// from the rotating schedule (the cursor advances in `start_command`).
     fn next_command(&mut self) -> i32 {
+        if let Some(command) = self.menu_queue.pop_front() {
+            return command;
+        }
         let len = self.command_schedule.len().max(1);
         *self
             .command_schedule
@@ -243,6 +380,9 @@ impl BattleWiring {
             self.prev_battle_active = vm.vars.get(VAR_BATTLE_ACTIVE) != 0;
             return None;
         }
+        // Bridge half 1: capture any real menu confirmations (CE157 instances) while they live,
+        // so a subsequent battle can be driven with the command indexes the player selected.
+        self.harvest_menu_registrations(vm);
         let battle_active = vm.vars.get(VAR_BATTLE_ACTIVE) != 0;
         let rising = battle_active && !self.prev_battle_active;
         self.prev_battle_active = battle_active;
@@ -306,5 +446,44 @@ impl BattleWiring {
 impl Default for BattleWiring {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn menu_queue_drains_before_schedule() {
+        let mut w = BattleWiring::new();
+        w.set_menu_command_queue(vec![1, 3, 5]);
+        assert_eq!(w.menu_queue_len(), 3);
+        assert_eq!(w.next_command(), 1);
+        assert_eq!(w.next_command(), 3);
+        assert_eq!(w.next_command(), 5);
+        assert_eq!(w.menu_queue_len(), 0);
+        // Falls back to the default rotating schedule [1, 3]. The cursor is advanced by
+        // start_command, so drive it directly here to observe the rotation.
+        assert_eq!(w.next_command(), 1); // schedule[0]
+        w.command_cursor = 1;
+        assert_eq!(w.next_command(), 3); // schedule[1]
+    }
+
+    #[test]
+    fn command_index_for_row_clamps_to_board() {
+        assert_eq!(BattleWiring::command_index_for_row(0), 1);
+        assert_eq!(BattleWiring::command_index_for_row(1), 1);
+        assert_eq!(BattleWiring::command_index_for_row(3), 3);
+        assert_eq!(BattleWiring::command_index_for_row(9), 8);
+    }
+
+    #[test]
+    fn set_menu_command_queue_clamps_entries() {
+        let mut w = BattleWiring::new();
+        w.set_menu_command_queue(vec![0, -5, 9, 2]);
+        assert_eq!(w.next_command(), 1);
+        assert_eq!(w.next_command(), 1);
+        assert_eq!(w.next_command(), 8);
+        assert_eq!(w.next_command(), 2);
     }
 }

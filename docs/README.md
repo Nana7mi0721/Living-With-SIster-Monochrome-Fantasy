@@ -1,7 +1,7 @@
 # 文档总索引（docs/README.md）
 
 > 本文件是仓库文档的唯一总入口。**新增、移动、归档文档时，必须同步更新本索引。**
-> 当前里程碑：**M0–M10 已完成；M11 第一批（M10 剩余边界项 task-79..84）已收口**；最新交接：[`HANDOFF_M10.md`](HANDOFF_M10.md)（§8 为本批）。当前路线图：[`../PLAN.md`](../PLAN.md)。
+> 当前里程碑：**M0–M10 已完成；M11 第一批（M10 剩余边界项 task-79..84）与 M11 round 1（task-85..88）已收口**；最新交接：[`HANDOFF_M10.md`](HANDOFF_M10.md)（§8 为第一批、§9 为 round 1）。当前路线图：[`../PLAN.md`](../PLAN.md)。
 
 ## 0. 先读什么
 
@@ -11,7 +11,7 @@
 | 查格式 / 解码 | [`FORMAT_SPEC.md`](FORMAT_SPEC.md) → [`SAVE_SPEC.md`](SAVE_SPEC.md) → [`PARTY_DB.md`](PARTY_DB.md) |
 | 查 opcode 语义 | [`OPCODE_SPEC.md`](OPCODE_SPEC.md) → 对应的 [`OPCODE_*.md`](OPCODE_SPEC.md) 专题 |
 | 查战斗 / H / 地图 | [`BATTLE.md`](BATTLE.md) / [`HSCENE.md`](HSCENE.md) / [`MAP_AUDIT.md`](MAP_AUDIT.md) |
-| 查某里程碑做了什么 | [`HANDOFF_M10.md`](HANDOFF_M10.md)（现行）→ 历史交接（见 §3） |
+| 查某里程碑做了什么 | [`HANDOFF_M10.md`](HANDOFF_M10.md)（现行，§8 M11 第一批、§9 M11 round 1）→ 历史交接（见 §3） |
 | 查研究/实测底稿 | [`research/README.md`](research/README.md) |
 
 ## 1. 状态图例
@@ -27,7 +27,7 @@
 | 文档 | 状态 | 用途 |
 | --- | --- | --- |
 | [`NEW_SESSION_START.md`](NEW_SESSION_START.md) | 现行 | 新会话启动提示，可直接复制给下一个 agent |
-| [`HANDOFF_M10.md`](HANDOFF_M10.md) | 现行 | 最新里程碑交接（M10 成果、边界、下一步） |
+| [`HANDOFF_M10.md`](HANDOFF_M10.md) | 现行 | 最新里程碑交接（M10 成果、边界、下一步；§8/§9 为 M11 两批收口） |
 | [`../PLAN.md`](../PLAN.md) | 现行 | 当前路线图（M0–M10 汇总 + M11 候选） |
 | [`../AGENT.md`](../AGENT.md) | 现行 | Lead 与子代理协作约定（并行、写范围、验收、清理） |
 

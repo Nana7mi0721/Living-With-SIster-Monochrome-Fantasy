@@ -633,6 +633,16 @@ impl Game {
         self.battle_wiring.set_command_schedule(schedule);
     }
 
+    /// Installs an explicit queue of CE242 command indexes read from the real command-menu
+    /// table (M11 task-85). One entry drives one command round; the rebuilt wiring drains the
+    /// queue front-first before falling back to the rotating schedule. Entries are clamped to
+    /// the valid 1..=8 command-index board. This is the bounded application-layer entry point
+    /// for the menu -> CE242 bridge while the shipped CE157 producer cannot advance its row
+    /// cursor; it does not itself enable any wiring or round loop.
+    pub fn set_battle_menu_command_queue(&mut self, commands: Vec<i32>) {
+        self.battle_wiring.set_menu_command_queue(commands);
+    }
+
     /// How many command phases the rebuilt battle wiring has started (0 when disabled).
     #[must_use]
     pub fn battle_wiring_rounds(&self) -> u64 {
