@@ -13,14 +13,14 @@
 //! State and hit box (measured)
 //! ----------------------------
 //! Reached by the same real day loop as m6_night_menu.rs / m6_mainline.rs: new game ->
-//! day-1 night (今天还是睡吧) -> day 2 morning -> one 学习会 -> dinner -> day-2 19:30
-//! bedroom. There var69 == 1 (the flag ニューゲーム処理 ev0 idx841 sets once and never clears),
+//! day-1 night (今天还是睡吧) -> day 2 morning -> one CE252 day command -> dinner ->
+//! the day-2 evening bedroom. There var69 == 1 (the flag ニューゲーム処理 ev0 idx841 sets once and never clears),
 //! var64 == 0, var65 == 0, var25 == var26 == var302 == 0 — so ev1 page 0's condition holds
 //! while page 1 (var65==1) and page 2 (var64==1) do not; the highest satisfied page is 0.
-//! Picture 120 is the real sister sprite. The retail MSVC-LCG PRNG (crates/wolf-vm/src/rng.rs)
-//! picks the pose here: this build draws Picture/imouto04.png centre-anchored at (388,368),
-//! whereas the old xorshift placeholder drew imouto02.png top-left at (240,340). The test
-//! therefore hovers the sprite's actual centre and does not pin the random-dependent pose.
+//! Picture 120 is the real sister sprite. The retail Park-Miller event PRNG
+//! (crates/wolf-vm/src/rng.rs) picks the pose here, so the sprite file, anchor and
+//! position all vary by draw; the test therefore derives the pointer point from the
+//! actual picture (anchor- and texture-aware) and does not pin the pose.
 //! ev2 cannot interfere: its page 0 needs var65 == 1 and its page 1 needs var64 == 1 &&
 //! var167 == 0; both are false here, so picture 120 stays the sprite (no <SQUARE>).
 //!
@@ -35,7 +35,7 @@
 //! Boundary: only the minimum is seeded — nothing is done to ev1; var68 is NEVER injected,
 //! it is asserted 0 before the gesture and observed 1 after. var63 = 1 is seeded only on
 //! day 1 to drive the canonical day-loop sleep branch into day 2 (the m6_mainline technique);
-//! it is page 2's flag, not page 0's output, and is 0 again at 19:30.
+//! it is page 2's flag, not page 0's output, and is 0 again in the evening.
 
 use std::path::PathBuf;
 
@@ -64,6 +64,69 @@ fn open_game() -> Option<Game> {
     }
 }
 
+/// CE251's day-command rows that route to CE252 (normal daytime tasks).
+const DAY_COMMANDS: [(&str, i32, Option<usize>); 6] = [
+    ("给店里帮忙", 1, None),
+    ("学习会", 2, Some(171)),
+    ("基础锻炼", 3, Some(174)),
+    ("攻击练习", 4, Some(170)),
+    ("防御练习", 5, Some(173)),
+    ("秘密特训", 6, Some(174)),
+];
+
+fn day_command(label: &str) -> Option<(i32, Option<usize>)> {
+    DAY_COMMANDS
+        .iter()
+        .find(|(name, _, _)| label.contains(name))
+        .map(|(_, id, stat)| (*id, *stat))
+}
+
+const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
+
+fn day_row_texts(game: &Game) -> Vec<String> {
+    DAY_ROW_PICS
+        .iter()
+        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .collect()
+}
+
+fn evening_work(game: &Game) -> bool {
+    game.vm
+        .instances()
+        .iter()
+        .any(|instance| matches!(instance.event, 251 | 300 | 301 | 326 | 406))
+}
+
+/// Pointer point at the visible centre of a picture (anchor- and texture-aware).
+fn picture_center(game: &mut Game, number: i32) -> Option<(i32, i32)> {
+    let (x, y, anchor, scale, file, window) = {
+        let picture = game.screen.get(number)?;
+        (
+            picture.x,
+            picture.y,
+            picture.anchor,
+            picture.scale.max(1),
+            picture.file.clone(),
+            picture.window,
+        )
+    };
+    let (width, height) = match window {
+        Some((width, height)) if width > 0 && height > 0 => (width, height),
+        _ => {
+            let (width, height) = game.assets.texture_size(&file)?;
+            (width as i32, height as i32)
+        }
+    };
+    let scale = f32::from(scale as i16) / 100.0;
+    let (width, height) = (width as f32 * scale, height as f32 * scale);
+    let (left, top) = if anchor == wolf_game::picture::ANCHOR_CENTRE {
+        (x as f32 - width / 2.0, y as f32 - height / 2.0)
+    } else {
+        (x as f32, y as f32)
+    };
+    Some(((left + width / 2.0) as i32, (top + height / 2.0) as i32))
+}
+
 /// Press and release the Decide key for one frame.
 fn decide(game: &mut Game) {
     game.key_bits = wolf_game::key::OK;
@@ -84,9 +147,9 @@ fn click_at(game: &mut Game, x: i32, y: i32) {
     game.mouse_buttons = 0;
 }
 
-/// Reach the day-2 19:30 bedroom by the real day loop (identical to m6_night_menu.rs). The
+/// Reach the day-2 evening bedroom by the real day loop (identical to m6_night_menu.rs). The
 /// only seed is var63 = 1 on day 1, which drives the canonical first-night sleep branch into
-/// day 2; it is not page 0's output and is 0 again by 19:30.
+/// day 2; it is not page 0's output and is 0 again by the evening.
 fn day2_evening_game() -> Option<Game> {
     let mut game = open_game()?;
     game.auto_advance = true;
@@ -125,30 +188,40 @@ fn day2_evening_game() -> Option<Game> {
         }
     }
 
-    // Day 2: auto-answer, spend the day with the first command (学习会 at 512,230), then let
-    // the evening scene settle to the 19:30 bedroom.
+    // Day 2: auto-answer, pick the first CE252 task row, spend the day, then let the
+    // evening scene settle to the bedroom (18:30 or 19:30 depending on the draw).
     game.auto_choice = true;
-    for _ in 0..350 {
+    let mut chosen: Option<(usize, String)> = None;
+    for _ in 0..1200 {
         game.frame();
-        if game
-            .screen
-            .get(1201)
-            .map(|picture| !picture.text.is_empty())
-            .unwrap_or(false)
-        {
+        let labels = day_row_texts(&game);
+        for (row, text) in labels.iter().enumerate() {
+            if day_command(text).is_some() {
+                chosen = Some((row, text.clone()));
+                break;
+            }
+        }
+        if chosen.is_some() {
             break;
         }
     }
-    click_at(&mut game, 512, 230);
-    for _ in 0..1500 {
+    let (row, _label) = chosen.unwrap_or_else(|| panic!("CE251 draws no CE252 day command"));
+    click_at(&mut game, 512, 230 + 50 * row as i32);
+    for _ in 0..2500 {
         game.frame();
         if game.vm.instances().iter().all(|instance| instance.event != 251) {
             break;
         }
     }
-    for _ in 0..1200 {
+    let mut evening = false;
+    for _ in 0..6000 {
         game.frame();
+        if !evening_work(&game) && game.vm.vars.get(4) >= 18 {
+            evening = true;
+            break;
+        }
     }
+    assert!(evening, "day 2 evening settles into the bedroom");
     game.auto_choice = false;
     Some(game)
 }
@@ -167,8 +240,13 @@ fn daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu() {
 
     // --- The day/evening bedroom state, warning-free ---------------------------------
     assert_eq!(game.vm.vars.get(160), 2, "the day counter is day 2");
-    assert_eq!(game.vm.vars.get(4), 19, "the clock is 19:00");
-    assert_eq!(game.vm.vars.get(5), 30, "and 19:30");
+    assert!(
+        game.vm.vars.get(4) >= 18,
+        "the clock is evening ({}:{})",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5)
+    );
+    assert_eq!(game.vm.vars.get(5), 30, "the evening settles on the half hour");
     assert_eq!(game.stats.warnings, 0, "the evening scene is warning-free");
 
     // ev1 page 0's condition holds; the higher pages' conditions do not, so page 0 is active.
@@ -184,18 +262,14 @@ fn daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu() {
     assert!(game.choices.is_none(), "no prompt before the gesture");
 
     // --- Hit box: the real sister sprite, not a redrawn square ------------------------
+    // The retail PRNG picks which sister sprite/pose is on screen; the pose also
+    // decides whether the draw is anchored at its centre or at its top-left. Derive
+    // the pointer point from the actual picture so the gesture stays faithful.
+    let sister_center = picture_center(&mut game, 120).expect("picture 120 has a texture");
     let sister = game
         .screen
         .get(120)
         .expect("the sister sprite is picture 120");
-    // The retail PRNG picks which sister sprite is on screen (imouto04 centre-anchored
-    // here; the old xorshift placeholder picked imouto02 top-left). Pin the hit box to
-    // whatever the real sprite currently is instead of a random-dependent coordinate.
-    let sister_center = (sister.x, sister.y);
-    assert_eq!(
-        sister.anchor, 1,
-        "the sister sprite is centre-anchored (no <SQUARE> redraw)"
-    );
     assert_eq!(sister.scale, 100, "the sprite draws at scale 100");
     assert_eq!(sister.kind as u8, 0, "picture 120 is a sprite, not a solid <SQUARE>");
     assert!(

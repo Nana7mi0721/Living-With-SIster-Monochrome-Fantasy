@@ -1,12 +1,17 @@
 # M8 W5-a: retail range reduction for 121 / operator 0x6000 `rand(min,max)`
 
-Status: **PINNED by decompilation**; the range law itself is exact, but the code
-change was **reverted** because the port still feeds it the wrong stream. Retail
-draws 31-bit Park-Miller; `WolfRng::next_raw` draws 15-bit MSVC. Applying the
-correct modulo law to the wrong stream changed player-visible sequences (the
-day-menu roll, sister sprite pick) without increasing fidelity, so the port keeps
-the old reduction until the Park-Miller generator lands in the same change.
-§6 item 1 is the follow-up task. No commit/push.
+Status: **DONE (implementation landed).** The range law *and* the generator it
+consumes are now in `crates/wolf-vm/src/rng.rs`: `WolfRng::next_event_draw` runs
+the retail Park-Miller MINSTD stream from RVA 0x35810 and `WolfRng::range`
+applies the pinned modulo law from RVA 0xaf7c0. The MSVC C LCG is kept only for
+the Game.dat static-table stream (`next_raw`), matching §3's finding that it is
+not the event source. No commit/push; the Lead integrates.
+
+Residual (not closed by this task): the retail event generator self-seeds from
+the clock, so byte-for-byte parity with a real run needs that run's clock seed;
+this build uses a fixed default seed (`EVENT_SEED = 1`) for determinism. Same
+save + same input replay parity against the retail binary therefore remains
+unproven; see §6.
 
 ## 1. Verdict
 
@@ -112,7 +117,7 @@ div  esi                 ; esi = abs(span)+1
 ... cmovl / add edx,eax  ; min + remainder
 ```
 
-## 3. What the draw actually is (new finding, not yet ported)
+## 3. What the draw actually is
 
 The retail handler does **not** call the MSVC LCG at RVA 0x2c3cd2 that
 `WolfRng::next_raw` replays. It calls RVA `0x35810`:
@@ -124,11 +129,10 @@ The retail handler does **not** call the MSVC LCG at RVA 0x2c3cd2 that
   again until it does not; if it becomes 0, reseed from the clock.
 * Returns a value in roughly `1..=2_000_000_000`.
 
-So the retail `rand(min,max)` operates on a ~31-bit value, while the current
-port applies the (now-correct) modulo law to a 15-bit value. Concrete
-consequence for a 40001-wide range: retail spans both tails; the port currently
-reaches only `-20000 + draw` (max 12767). This is documented in the tests, not
-hidden.
+So the retail `rand(min,max)` operates on a ~31-bit value, while M7 applied the
+(then-inferred) multiply-high law to a 15-bit value. For a 40001-wide range the
+old code could only reach `-20000 + draw` (max +12767); the landed event stream
+spans both tails.
 
 The MSVC LCG is real and is used elsewhere: the Game.dat static-random block
 and data-file decryption. Re-deriving the packed Game.dat confirms the
@@ -144,48 +148,81 @@ and data-file decryption. Re-deriving the packed Game.dat confirms the
   (`17925 % 3000 = 2925`): `2925 + 200 + 4 + 328 + 22227 = 25684`.
 * Therefore M7's `from_game` premise "random_a seeds the stream" is a
   reconstruction convenience, not the retail relationship. It does not affect
-  this task (the 0x6000 operator does not use this stream at all) but should be
+  the 0x6000 operator (which does not use this stream at all) but should be
   corrected before anyone claims byte parity for the static table.
 
-## 4. Code changes (prototype reverted — see the status note)
+## 4. Landed implementation
 
-The prototype below was tested and then reverted with
-`git checkout -- crates/wolf-vm/src/rng.rs crates/wolf-vm/tests/rng_retail.rs`.
-It is recorded because the exact law must be re-applied when the Park-Miller
-stream lands. Reverting restored the 5 day-loop tests it broke.
+`crates/wolf-vm/src/rng.rs` now carries **two** streams:
 
-`crates/wolf-vm/src/rng.rs` (prototype)
+1. **Event stream (0x6000).** `event_state: u32` advanced as
+   `state = (state as u64 * 16807) % 0x7FFFFFFF`, with the retail rejection loop
+   (`while state > 2_000_000_000: multiply again`) and a zero-state reseed.
+   `next_event_draw() -> u32` returns the state. Seeds:
 
-* `range()` now implements the pinned law:
-  `diff = max.wrapping_sub(min)`, `modulus = diff.unsigned_abs().wrapping_add(1)`,
-  `low = min.min(max)`, `low.wrapping_add((draw % modulus) as i32)`.
-* It always calls `next_raw()` once per range call, including zero-width spans,
-  matching the retail call order.
-* 32-bit wrapping is deliberate: for `i32::MIN..=i32::MAX` retail's `max-min`
-  wraps to `-1`, giving modulus 2, and the port reproduces that.
-* Module docs now separate the two retail generators and mark the remaining
-  generator gap.
+   * `EVENT_SEED = 1` — the default, the canonical MINSTD anchor. The retail
+     generator has no seed constant (it reads the clock), so this is a
+     determinism choice, pinned by tests.
+   * `EVENT_RESEED = 1` — what a zero state becomes. State 0 is an LCG fixed
+     point, so it is never kept. The real clock reseed is a future production
+     hook.
+   * `from_event_seed(seed)` / `set_event_seed(seed)` reseed only this stream;
+     `from_seeds(msvc, event)` seeds both. `new()` = MSVC `DEFAULT_SEED =
+     22227` + event `EVENT_SEED = 1`.
+   * `from_seed(seed)` keeps its M7 meaning (static-table stream, event stays
+     at the default) and `from_game` is unchanged for API stability.
 
-`crates/wolf-vm/tests/rng_retail.rs` (+ `rng.rs` unit tests)
+2. **Static-table stream (MSVC).** `state`, `next_raw()` and `state()` are
+   unchanged: `state*0x343FD + 0x269EC3 (mod 2^32)`, draw
+   `(state >> 16) & 0x7fff`. This stream is no longer consumed by `range()`.
 
-* New law test: `range` is compared draw-for-draw against
-  `low + draw % (abs(max-min)+1)` for plain, reversed, zero-width, very wide
-  and extreme ranges.
-* New pinned vectors under the modulo law (default seed 22227):
+`range(min, max)` consumes **one** event draw per call (including zero width)
+and applies the pinned law:
 
-```text
-range(1,10)          first 8: 7, 1, 4, 6, 3, 9, 7, 7
-range(-20000,20000)  first 8: -12914, -18940, -14447, -1585,
-                              5972, 10038, -4434, -7774
+```rust
+let draw = self.next_event_draw();
+let low = min.min(max);
+let diff = max.wrapping_sub(min);
+let modulus = diff.unsigned_abs().wrapping_add(1);
+low.wrapping_add((draw % modulus) as i32)
 ```
 
-  (multiply-high used to give `3, 1, 2, 6, 8, 10, 5, 4` for `range(1,10)`)
-* New test: a zero-width range advances the stream exactly once, like retail.
-* Updated the old `a_wide_range_uses_both_halves` test. It now documents the
-  honest limitation: with a 15-bit draw and a 40001-wide range, only the lower
-  part is reachable (3000 draws: min -19997, max 12748).
+The 32-bit wrapping keeps the retail edge case: `i32::MIN..=i32::MAX` has
+`diff = -1`, `modulus = 2`, so only the lower two values are reachable.
 
-## 5. Verification
+## 5. Vectors and tests
+
+MINSTD with seed 1 (pinned in `crates/wolf-vm/src/rng.rs` and
+`crates/wolf-vm/tests/rng_retail.rs`):
+
+```text
+draw: 16807, 282475249, 1622650073, 984943658, 1144108930,
+      470211272, 101027544, 1457850878, ...
+```
+
+`range()` under the modulo law, default event seed 1:
+
+```text
+range(1,10)          first 8: 8, 10, 4, 9, 1, 3, 5, 9
+range(0,10)          first 8: 10, 1, 0, 6, 8, 3, 2, 0
+range(-20000,20000)  first 8: -3193, 8188, -10492, 19036,
+                              -19672, 19518, 5019, -5567
+```
+
+With event seed 22227 (for cross-checking the old seed choice):
+
+```text
+range(-20000,20000)  first 8: 19851, 2277, 19785, -13511,
+                              19102, 13181, -6096, 8956
+```
+
+Tests now prove: inclusive bounds; both endpoints of `0..=1`; both tails of a
+40001-wide range; swapped bounds draw-for-draw; a zero-width range consumes
+exactly one draw; wide/extreme ranges; the rejection loop multiplies again
+above 2e9; a zero seed reseeds; the two streams are independent; and the range
+result matches an independent re-implementation of the decompiled law.
+
+## 6. Verification and residual
 
 ```text
 cargo test -q -p wolf-vm
@@ -194,23 +231,33 @@ cargo test -q -p wolf-vm
 Result (exit 0):
 
 ```text
-lib:            90 passed, 0 failed
-rng_retail:     14 passed, 0 failed
-other suites:   4 + 7 + 4 passed, 0 failed (1 ignored in one suite)
-doctests:       0 passed, 0 failed
+lib:         91 passed, 0 failed
+rng_retail:  15 passed, 0 failed
+doctests:     0 passed, 0 failed
 ```
 
-## 6. Remaining work (exact parity)
+Sequence-sensitive game suites (all green after the repairs described in the
+task report):
 
-1. Port RVA 0x35810 into the VM's event RNG: Park-Miller 16807 / 2^31-1,
-   rejection > 2,000,000,000, clock seed on first use. Then feed its 31-bit
-   output into the pinned modulo law. This changes `WolfRng`'s draw domain and
-   therefore battle/H-scene sequences; it should be its own task with a fresh
-   same-save replay.
-2. Decide how to model the clock seed for determinism: expose
-   `from_seed`/`debug_seed` and keep the production path self-seeding, or seed
-   from a save-time value. Exact retail vectors cannot exist without capturing
-   a run's clock seed.
-3. Correct the static-table story: the MSVC stream's actual seed state for
-   this Game.dat is recoverable (0xe765b62e); `random_a`/`random_b` are encoded
-   draws, not seeds.
+```text
+WOLF_DATA_ROOT='E:/Study/github program/imoto life/work/full' \
+  cargo test -q -p wolf-game --test m6_mainline --test m6_training_menu \
+  --test m6_night_menu --test m6_ev1_page0 --test m6_ev1_page2 \
+  --test m6_multiday --test m6_night_sleep --test m6_week_loop \
+  --test time_system -- --nocapture
+```
+
+Remaining work (exact parity):
+
+1. **Clock seed.** Retail self-seeds RVA 0x35810 from the clock. This build
+   fixes the seed at 1 so replays are deterministic. For retail parity, capture
+   the first draw/seed of a run (debugger breakpoint at 0x35810 or a
+   save-time value) and add a production seed hook; the generator/range law
+   need no change.
+2. **Same-save replay parity.** With the clock seed unknown, "same save + same
+   input" cannot be compared bit-for-bit against retail yet. The draw sequence
+   and reduction are now exact; only the seed source differs.
+3. **Static-table story.** The MSVC stream's actual seed state for this Game.dat
+   is recoverable (`0xe765b62e`); `random_a`/`random_b` are encoded draws, not
+   seeds. `from_game` still accepts them for API stability but should not be
+   described as "seeding the stream".
