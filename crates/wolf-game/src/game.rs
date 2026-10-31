@@ -372,7 +372,32 @@ impl Game {
         let save_path = root.join("Save").join("System.sav");
         let mut diagnostics = BTreeMap::new();
         let base_save = match crate::savegame::read_save(&save_path) {
-            Ok(save) => Some(save),
+            Ok(mut save) => {
+                // A template that parses but carries no variable types cannot store a
+                // single CData cell: `set_num` refuses an unknown type/row/field and
+                // `write_into` counts the write as unmodelled. A save written by the
+                // earlier M8 W4-b build is exactly this shape ("New Game", type_count
+                // 0), and a root that still has it would otherwise keep losing every
+                // runtime database write. Fill the schema in from the static table;
+                // a retail System.sav has 30 types and is left byte-for-byte alone.
+                if save.vardb.type_count == 0 {
+                    let vardb = databases.template_vardb();
+                    if !vardb.types.is_empty() {
+                        let note = match save.set_vardb(&vardb) {
+                            Ok(()) => format!(
+                                "220 SaveLoad: {} has an empty variable database; filled it from the static CData schema",
+                                save_path.display()
+                            ),
+                            Err(err) => format!(
+                                "220 SaveLoad: cannot fill the empty variable database of {} ({err}); database cells cannot be stored",
+                                save_path.display()
+                            ),
+                        };
+                        diagnostics.insert(note, 1);
+                    }
+                }
+                Some(save)
+            }
             Err(err) => {
                 let note = if save_path.is_file() {
                     format!(
@@ -386,7 +411,24 @@ impl Game {
                     )
                 };
                 diagnostics.insert(note, 1);
-                Some(wolf_save::SaveFile::new_game_template())
+                // The save's variable database has to carry the static CData schema:
+                // `set_num` refuses a type, row or field that is not in it, so an
+                // empty database would silently drop every runtime cell
+                // (`Databases::write_into` counts those as unmodelled). Build it from
+                // the .dat table this root already loaded.
+                match wolf_save::SaveFile::new_game_template_with_vardb(databases.template_vardb())
+                {
+                    Ok(save) => Some(save),
+                    Err(err) => {
+                        diagnostics.insert(
+                            format!(
+                                "220 SaveLoad: cannot encode the static CData schema ({err}); the template variable database stays empty"
+                            ),
+                            1,
+                        );
+                        Some(wolf_save::SaveFile::new_game_template())
+                    }
+                }
             }
         };
         let auto_events = AutoEvents::from_common_events(&events);

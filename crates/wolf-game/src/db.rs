@@ -513,6 +513,103 @@ impl Databases {
         }
     }
 
+    /// Builds a save-file variable database carrying the static `CDataBase` schema.
+    ///
+    /// A save's variable database is not just values: every type's field config and
+    /// every row have to exist before [`wolf_save::VariableDatabase::set_num`] will
+    /// accept a cell. A data root without `Save/System.sav` has no such database, so
+    /// `Game::new` builds one here from the `.dat` table it already loaded:
+    ///
+    /// * one [`VariableType`](wolf_save::vardb::VariableType) per CData type, in
+    ///   table order;
+    /// * `config` is the field table's raw position word per logical column
+    ///   (`1000 + n` for numeric, `2000 + n` for textual), which is exactly what a
+    ///   retail save stores and what decides `set_num` versus `set_text`;
+    /// * `row_count`/`rows` are every row of the static table, with each numeric and
+    ///   textual cell taken from the row. Text becomes a `MemData<DWORD>` body, so a
+    ///   NUL terminator is appended; an empty editor string becomes the one-byte
+    ///   `[0]` body the retail saves carry.
+    ///
+    /// `m_unknown = -2` (the shape every retail type uses) makes the encoder write
+    /// `m_dis` and `m_fieldCount`. `m_dis` is the static table's `data_id_method`,
+    /// which matches the retail value on every type measured against a save
+    /// (`0:1`, `7:20002`, `8:20003`, `9:20004`, `17:30000`, ..., SAVE_SPEC §9.1).
+    ///
+    /// Only CData belongs in a save, so DataBase and SysDatabase contribute nothing
+    /// here by design -- [`Databases::write_into`] skips them for the same reason.
+    /// Runtime row-count resizes and engine cells are not folded in; those travel
+    /// through [`Databases::write_into`] at save time, as they do with a retail
+    /// template.
+    #[must_use]
+    pub fn template_vardb(&self) -> wolf_save::VariableDatabase {
+        use wolf_save::vardb::{
+            VariableDatabase, VariableField, VariableRow, VariableType, VariableValue,
+        };
+
+        let Some(table) = self.cdata.as_ref() else {
+            return VariableDatabase {
+                unknown: 0x6F,
+                type_count: 0,
+                types: Vec::new(),
+            };
+        };
+        let types: Vec<VariableType> = table
+            .types
+            .iter()
+            .map(|kind| {
+                let config: Vec<u32> = kind.fields.iter().map(FieldKind::raw).collect();
+                let rows: Vec<VariableRow> = kind
+                    .rows
+                    .iter()
+                    .enumerate()
+                    .map(|(index, row)| {
+                        let fields = kind
+                            .fields
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(column, field)| {
+                                let id = column as u32;
+                                match field {
+                                    FieldKind::Num(slot) => {
+                                        row.numbers.get(*slot).map(|value| VariableField {
+                                            id,
+                                            value: VariableValue::Number(*value),
+                                        })
+                                    }
+                                    FieldKind::Str(slot) => row.strings.get(*slot).map(|text| {
+                                        let mut body = text.as_bytes().to_vec();
+                                        body.push(0);
+                                        VariableField {
+                                            id,
+                                            value: VariableValue::String(body),
+                                        }
+                                    }),
+                                }
+                            })
+                            .collect();
+                        VariableRow {
+                            index: index as u32,
+                            fields,
+                        }
+                    })
+                    .collect();
+                VariableType {
+                    unknown: -2,
+                    dis: i32::try_from(kind.data_id_method).unwrap_or(0),
+                    field_count: config.len() as u32,
+                    config,
+                    row_count: rows.len() as u32,
+                    rows,
+                }
+            })
+            .collect();
+        VariableDatabase {
+            unknown: 0x6F,
+            type_count: types.len() as u32,
+            types,
+        }
+    }
+
     /// Copies the engine-owned `CData` cells into a save file variable database.
     ///
     /// Only the 可変DB belongs in a save: `CDataBase` is the game's variable table,
@@ -1171,6 +1268,104 @@ mod tests {
         assert!(
             database.to_bytes().is_ok(),
             "the reconciled variable database must serialize"
+        );
+    }
+
+    #[test]
+    fn the_static_cdata_schema_becomes_a_save_variable_database() {
+        // A root without Save/System.sav builds its template database from this table;
+        // the shape has to match the .dat or set_num would refuse the runtime cells.
+        let Some(root) = have_data() else { return };
+        let databases = Databases::load(&root.join("BasicData"), DEFAULT_SCREEN);
+        let vardb = databases.template_vardb();
+        let source = databases.cdata.as_ref().expect("CDataBase loaded");
+        assert_eq!(vardb.unknown, 0x6F);
+        assert_eq!(vardb.type_count as usize, source.types.len());
+
+        for (index, (kind, table)) in vardb.types.iter().zip(&source.types).enumerate() {
+            assert_eq!(kind.unknown, -2, "type {index}");
+            assert_eq!(
+                kind.dis,
+                i32::try_from(table.data_id_method).expect("data_id_method fits"),
+                "type {index}: m_dis is the .dat data_id_method"
+            );
+            assert_eq!(
+                kind.field_count as usize,
+                table.fields.len(),
+                "type {index}"
+            );
+            assert_eq!(
+                kind.config,
+                table
+                    .fields
+                    .iter()
+                    .map(FieldKind::raw)
+                    .collect::<Vec<u32>>(),
+                "type {index}: config must keep the raw position words"
+            );
+            assert_eq!(kind.row_count as usize, table.rows.len(), "type {index}");
+            assert_eq!(kind.rows.len(), table.rows.len(), "type {index}");
+            for (row_index, row) in kind.rows.iter().enumerate() {
+                assert_eq!(
+                    row.index as usize, row_index,
+                    "type {index} row {row_index}"
+                );
+                assert_eq!(
+                    row.fields.len(),
+                    table.fields.len(),
+                    "type {index} row {row_index}: every column must be present"
+                );
+            }
+        }
+
+        // The static cells arrive, string cells as the NUL-terminated MemData body a
+        // save stores (the .dat keeps the text without its terminator).
+        let kind = &vardb.types[0];
+        assert_eq!(kind.rows[0].number(5), Some(1), "勇気 = 1 in CDataBase");
+        assert_eq!(
+            kind.rows[0].string(0),
+            Some(&b"\xe5\x8b\x87\xe8\x80\x85\xe5\x85\x88\xe7\x94\x9f\0"[..]),
+            "勇者先生 plus the NUL the save stores"
+        );
+
+        // A runtime write lands exactly as `Databases::write_into` needs it to, and a
+        // row the static table does not have is still refused.
+        let mut copy = vardb.clone();
+        assert!(copy.set_num(0, 0, 5, 4242));
+        assert_eq!(copy.number(0, 0, 5), Some(4242));
+        assert!(
+            !copy.set_num(0, kind.rows.len(), 5, 1),
+            "no row beyond the table"
+        );
+
+        // A `250` row-count write still grows and shrinks the template database: the
+        // static rows are the starting height, not a ceiling.
+        let before = vardb.types[0].rows.len();
+        let mut grown = vardb.clone();
+        let mut runtime = Databases::with_engine_defaults(DEFAULT_SCREEN);
+        runtime.set_row_count(Container::CData, 0, (before + 1) as i32);
+        runtime.set_num(Container::CData, 0, before as i32, 5, 77);
+        let (written, missed) = runtime.write_into(&mut grown);
+        assert_eq!(missed, 0, "the appended row must be storable");
+        assert_eq!(written, 3, "two engine defaults plus the appended cell");
+        assert_eq!(grown.types[0].rows.len(), before + 1);
+        assert_eq!(grown.number(0, before, 5), Some(77));
+        runtime.set_row_count(Container::CData, 0, 2);
+        let (_, missed) = runtime.write_into(&mut grown);
+        assert_eq!(missed, 0);
+        assert_eq!(
+            grown.types[0].rows.len(),
+            2,
+            "a shrink truncates the template"
+        );
+
+        assert_eq!(
+            databases
+                .table(Container::CData)
+                .expect("CDataBase")
+                .types
+                .len(),
+            vardb.types.len()
         );
     }
 

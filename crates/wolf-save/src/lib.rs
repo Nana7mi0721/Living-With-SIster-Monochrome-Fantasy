@@ -393,8 +393,41 @@ impl SaveFile {
     /// `new_game_template()` cannot fail: the defaults are chosen to satisfy each
     /// segment encoder's count checks. It replaces the old "no template save" refusal
     /// in `Game::save_to` when `Save/System.sav` is absent.
+    ///
+    /// The empty variable database means runtime cells cannot be stored -- a caller
+    /// that has a data schema should use [`SaveFile::new_game_template_with_vardb`]
+    /// instead (see `wolf_game::db::Databases::template_vardb`).
     #[must_use]
     pub fn new_game_template() -> SaveFile {
+        Self::new_game_template_with_vardb(VariableDatabase {
+            // The byte every retail database stores; no types means no rows.
+            unknown: 0x6F,
+            type_count: 0,
+            types: Vec::new(),
+        })
+        .expect("the empty new-game variable database encodes")
+    }
+
+    /// Build the new-game template with a caller-supplied variable database.
+    ///
+    /// The caller owns the database's schema: one [`vardb::VariableType`] per
+    /// CData type, with its field config and every static row. This is what makes a
+    /// data root without `Save/System.sav` able to store `CData` cells at all --
+    /// [`VariableDatabase::set_num`](vardb::VariableDatabase::set_num) refuses a
+    /// type, row or field that is not in the database, so an empty template would
+    /// silently drop every runtime write.
+    ///
+    /// The database is encoded as the sixth segment; its typed view and stored bytes
+    /// are the same value, opposite to a parsed file where the bytes are captured
+    /// separately. An inconsistent database (a `row_count` that disagrees with
+    /// `rows`, or a row index that is not its position) is refused rather than
+    /// producing a file that cannot be parsed back.
+    ///
+    /// # Errors
+    ///
+    /// Fails when `vardb` cannot be encoded by [`VariableDatabase::to_bytes`]. Every
+    /// other segment uses the fixed defaults described on [`SaveFile::new_game_template`].
+    pub fn new_game_template_with_vardb(vardb: VariableDatabase) -> Result<SaveFile> {
         const FILE_VERSION: u16 = 0x8C;
         // SavePart3 stores self numbers for common events; retail uses 500 or 550.
         const EVENT_GROUPS: u32 = 550;
@@ -540,12 +573,7 @@ impl SaveFile {
             events: Vec::new(),
         };
 
-        let vardb = VariableDatabase {
-            // The byte every retail database stores; no types means no rows.
-            unknown: 0x6F,
-            type_count: 0,
-            types: Vec::new(),
-        };
+        let vardb_bytes = vardb.to_bytes()?;
 
         let part7 = SavePart7 {
             // Anything but 1 ends SavePart7 immediately: this is its whole body.
@@ -572,7 +600,7 @@ impl SaveFile {
             ("SavePart3", part3.to_bytes_with_version(FILE_VERSION)),
             ("SavePart4", part4.to_bytes(FILE_VERSION)),
             ("SavePart5", part5.to_bytes(FILE_VERSION)),
-            ("VariableDatabase", vardb.to_bytes()),
+            ("VariableDatabase", Ok::<_, Error>(vardb_bytes)),
         ];
         for (id, (segment, encoded)) in segments.into_iter().enumerate() {
             let encoded = encoded.expect("the synthesized new-game segment is consistent");
@@ -602,7 +630,7 @@ impl SaveFile {
         data[2] = checksum;
         header.raw[2] = checksum;
 
-        SaveFile {
+        Ok(SaveFile {
             header,
             name,
             file_version: FILE_VERSION,
@@ -619,7 +647,7 @@ impl SaveFile {
             computed_checksum: checksum,
             chunks,
             data,
-        }
+        })
     }
 
     /// Every segment, in file order.
@@ -1326,6 +1354,69 @@ mod tests {
 
         assert_eq!(parsed.to_bytes().expect("to_bytes"), bytes);
         assert_eq!(parsed.to_bytes_rebuilt().expect("to_bytes_rebuilt"), bytes);
+    }
+
+    #[test]
+    fn a_template_with_a_supplied_variable_database_round_trips_and_takes_cells() {
+        use vardb::{VariableDatabase, VariableField, VariableRow, VariableType, VariableValue};
+
+        // The shape the game layer builds from CDataBase.dat: one type with one
+        // numeric and one textual field, and one static row.
+        let vardb = VariableDatabase {
+            unknown: 0x6F,
+            type_count: 1,
+            types: vec![VariableType {
+                unknown: -2,
+                dis: 1,
+                field_count: 2,
+                config: vec![1000, 2000],
+                row_count: 1,
+                rows: vec![VariableRow {
+                    index: 0,
+                    fields: vec![
+                        VariableField {
+                            id: 0,
+                            value: VariableValue::Number(7),
+                        },
+                        VariableField {
+                            id: 1,
+                            value: VariableValue::String(vec![0]),
+                        },
+                    ],
+                }],
+            }],
+        };
+        let mut save = SaveFile::new_game_template_with_vardb(vardb.clone())
+            .expect("a consistent caller database encodes");
+        assert_eq!(save.vardb, vardb, "the typed view is the supplied database");
+        assert_eq!(
+            save.serialize().expect("serialize"),
+            save.rebuild().expect("rebuild"),
+            "the supplied database is in both the stored bytes and the typed view"
+        );
+
+        assert!(save.set_vardb_num(0, 0, 0, 42).expect("numeric write"));
+        assert!(save.set_vardb_text(0, 0, 1, "written").expect("text write"));
+        let parsed = SaveFile::parse(&save.to_bytes_rebuilt().expect("encrypt"))
+            .expect("parse the template with a database");
+        assert_eq!(parsed.vardb.number(0, 0, 0), Some(42));
+        assert_eq!(parsed.vardb.text(0, 0, 1).as_deref(), Some("written"));
+
+        // An inconsistent database is refused rather than written into a file that
+        // cannot be parsed back.
+        let broken = VariableDatabase {
+            unknown: 0x6F,
+            type_count: 1,
+            types: vec![VariableType {
+                unknown: -2,
+                dis: 0,
+                field_count: 0,
+                config: Vec::new(),
+                row_count: 1,
+                rows: Vec::new(),
+            }],
+        };
+        assert!(SaveFile::new_game_template_with_vardb(broken).is_err());
     }
 
     #[test]
