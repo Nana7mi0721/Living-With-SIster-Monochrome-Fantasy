@@ -201,15 +201,14 @@ map H button.
 
 ### W4 — Save / new-game / data robustness
 - **W4-a (DONE)**: 5-part save roundtrip + Part4 template regression fix (`m7_save_parts`).
-- **W4-b (REMAINING)**: ship/synthesize a new-game template save so `work/all`-style roots
-  can `save_to` (G11). Acceptance: `Game::new(root)` on a root without
+- **W4-b (IN PROGRESS, delegated)**: synthesize a new-game template save so `work/all`-style
+  roots can `save_to` (G11). Acceptance: `Game::new(root)` on a root without
   `Save/System.sav` yields a non-None `base_save` (synthesized) and `save_to`
   round-trips; no `220 SaveLoad: no template save` diagnostic. Files:
   `crates/wolf-game/src/game.rs` / `savegame.rs`. Test `m8_template_save.rs`.
-- **W4-c (REMAINING)**: guard dangling map ids (G12). Acceptance: `switch_map` to an
-  unregistered/empty `SysDatabase` row is skipped with a warning instead of a read error;
-  regression `m7_map_edge` green. Files: `crates/wolf-game/src/game.rs` (`switch_map`),
-  `db.rs` (`map_path`). Test extend `m7_map_edge`.
+- **W4-c (DONE)**: `db::map_path` returns `None` for an empty path cell, so the dangling
+  id 27 is skipped with one diagnostic instead of reading the data root. Test
+  `m7_map_edge::a_dangling_map_id_is_skipped_without_a_read_error`; `m7_map_edge` 4/4 green.
 
 ### W5 — PRNG exactness + visual fidelity polish (lowest)
 - **W5-a (REMAINING)**: decompile Game.exe `0x6000` range reduction, align

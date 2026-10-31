@@ -149,14 +149,17 @@ game = "load map id 3, run its event 1", which lands the player in SampleMapA at
 * `db.rs:386` `map_path` doc comment ("-1 is map 1, -2 is map 0") — stale; negatives are
   rejected and never appear as map ids in the data.
 * `MapTree.dat` new-game entry — **blocked**: no coordinate field and no engine reader.
-* `Map031` load-time teleport to map id 27 — **dangling**: empty `SysDatabase` row, load
-  fails (see §2).
+* `Map031` load-time teleport to map id 27 — **dangling**: empty `SysDatabase` row.
+  **Fixed in M8 W4-c**: `db::map_path` treats an empty path cell as unregistered, so the
+  teleport is skipped with one `130 Teleport: no map registered for id 27` diagnostic
+  instead of a failed read of the data root; pinned by
+  `m7_map_edge::a_dangling_map_id_is_skipped_without_a_read_error`.
 * `switch_map` / `130` do **not** position the player: coordinates are variable-typed
   magic operands that the host logs but never resolves; only the map switch happens.
 
 ## 5. Test + evidence
 
-`crates/wolf-game/tests/m7_map_edge.rs` (3 tests, all green):
+`crates/wolf-game/tests/m7_map_edge.rs` (4 tests, all green):
 
 * `map002_teleport_uses_an_ordinary_map_id_and_variable_coordinates` — pins the four
   sites, checks `map_path(0)==Some("MapData/TitleMap.mps")`, `map_path(-2)==None`, and
@@ -167,5 +170,8 @@ game = "load map id 3, run its event 1", which lands the player in SampleMapA at
 * `maptree_names_the_new_game_hook_and_map003_is_the_real_start_coordinate` — MapTree
   has 50 entries and root children 3/31/24; `Map003` event 1 is the single teleport
   `[-1,62,38,1,1]`; runtime reaches `130 Teleport: MapData/SampleMapA.mps ...`.
+* `a_dangling_map_id_is_skipped_without_a_read_error` — starts Map031's real load event,
+  sees `130 Teleport: no map registered for id 27`, no "cannot read" diagnostic, 0
+  warnings.
 
 Screens: `work/out/m7_map024.png`, `work/out/m7_map031.png` (both black, 0 non-black px).

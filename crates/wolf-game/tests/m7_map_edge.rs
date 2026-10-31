@@ -225,3 +225,57 @@ fn maptree_names_the_new_game_hook_and_map003_is_the_real_start_coordinate() {
     );
     println!("Map003 new-game teleport diagnostic: {key}");
 }
+
+/// A registered SysDatabase row with an empty path cell is a dangling map id. The
+/// shipped Map031 page is the witness: it issues `130 [-1,22,18,27,16]` and row 27 is
+/// empty. The switch must be skipped with one diagnostic, not a failed read of the data
+/// root itself (docs/research/M7_MAP_EDGE.md §2/§4).
+#[test]
+fn a_dangling_map_id_is_skipped_without_a_read_error() {
+    let Some(map031) = load_map("Map031.mps") else {
+        return;
+    };
+    let sites = teleport_sites(&map031);
+    assert!(
+        sites.iter().any(|(_, _, _, args)| args[3] == 27),
+        "Map031 must still carry its dangling teleport to map id 27, got {sites:?}"
+    );
+    assert!(
+        sites.iter().any(|(_, _, _, args)| args[3] == 27),
+        "map id 27 is the dangling row this test pins"
+    );
+
+    let Some(mut game) = open_game() else {
+        return;
+    };
+    let event = map031
+        .events
+        .first()
+        .map(|event| event.id)
+        .expect("Map031 has one event");
+    game.start_map_event_by_name("Map031", event)
+        .expect("Map031 starts");
+    for _ in 0..30 {
+        game.frame();
+    }
+
+    let diagnostics: Vec<String> = game
+        .diagnostics
+        .iter()
+        .map(|(message, count)| format!("x{count}: {message}"))
+        .collect();
+    println!("Map031 diagnostics: {diagnostics:?}");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|message| message.contains("no map registered for id 27")),
+        "the dangling id is skipped with its own diagnostic, got {diagnostics:?}"
+    );
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|message| message.contains("cannot read")),
+        "no failed read of the data root may happen, got {diagnostics:?}"
+    );
+    assert_eq!(game.stats.warnings, 0, "skipping a dangling id is not a warning");
+}
