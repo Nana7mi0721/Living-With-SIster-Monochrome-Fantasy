@@ -17,9 +17,9 @@
    git status --short
    git log --oneline -5
    cargo test -q --workspace
-3. 确认当前 HEAD 与测试全绿后，按 docs/HANDOFF_M8.md 的“边界/下一步”继续（M0–M6 的日常循环、M7 两批均已完成收口；M8 已完成：day4 战斗结算→day5 08:30 无注入、H 前向链、地图角色层、模板存档、engine_state 反编译。剩余：Park-Miller 事件 RNG 移植、锚点/音频 polish）。
+3. 确认当前 HEAD 与测试全绿后，按 docs/HANDOFF_M8.md 的“边界/下一步”继续（M0–M6 的日常循环、M7 两批均已完成收口；M8 已完成：day4 战斗结算→day5 08:30 无注入、H 前向链、地图角色层、模板存档、engine_state 反编译。剩余：锚点/槽位与音频 polish；PRNG 若要逐位对拍需捕获零售时钟种子）。
 
-项目状态：M0（加载器/verify）、M1（标题画面像素级还原）、M2（开场纵切片）、M3（完整运行时）、M4（音频）、M5（存档层）、M6（主线贯通与日常循环）均已完成并收口。当前不要重做已完成部分，也不要推倒现有架构。下一步优先项见 docs/research/M8_BACKLOG.md：Park-Miller 事件 RNG（归约律已定）、锚点/槽位与音频 polish。地图滚动按 Sys 104/105 的真实语义接相机参数，不要建 player/camera 居中模型。
+项目状态：M0（加载器/verify）、M1（标题画面像素级还原）、M2（开场纵切片）、M3（完整运行时）、M4（音频）、M5（存档层）、M6（主线贯通与日常循环）均已完成并收口。当前不要重做已完成部分，也不要推倒现有架构。下一步优先项见 docs/research/M8_BACKLOG.md：锚点/槽位与音频 polish；PRNG 逐位对拍需时钟种子。地图滚动按 Sys 104/105 的真实语义接相机参数，不要建 player/camera 居中模型。
 工程约束：不要提交 crates/wolf-format/examples/opscan.rs、crates/wolf-format/tests/_scratch_cdata.rs、_scratch_event.rs（永久 scratch）；不提交 docs/gpt调研/；提交信息用 git commit -F work/_commit_*.txt；crates/wolf-vm/src/exec.rs 实测为 LF，改前核对；截图/临时产物写 work/out/。
 
 先汇报你读到的状态和准备做的第一个具体改动，再动手。

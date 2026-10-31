@@ -226,14 +226,17 @@ map H button.
   `m7_map_edge::a_dangling_map_id_is_skipped_without_a_read_error`; `m7_map_edge` 4/4 green.
 
 ### W5 — PRNG exactness + visual fidelity polish (lowest)
-- **W5-a (LAW PINNED; generator port in progress)**: Game.exe RVA 0xaf7c0 proves the
-  reduction is `min(a,b) + draw % (abs(b-a)+1)` (one draw per call, wrapping 32-bit).
-  A second finding: the draw is 31-bit Park-Miller MINSTD (RVA 0x35810, 16807/2^31-1,
-  clock-seeded, rejection > 2e9), **not** the MSVC LCG that `WolfRng::next_raw` replays
-  (that stream is the Game.dat static table/crypto). Applying the law to the 15-bit MSVC
-  stream was prototyped, broke the day-loop sequences, and was reverted. Follow-up task:
-  port Park-Miller into the event RNG and re-align `range` in the same change. Docs
-  `M8_PRNG_RANGE.md`; residual = deterministic seed stand-in vs retail clock seed.
+- **W5-a (DONE, M8)**: the 0x6000 range reduction (RVA 0xaf7c0) is
+  `min(a,b) + draw % (abs(b-a)+1)`, one draw per call, 32-bit wrapping. The draw
+  source is a 31-bit Park-Miller MINSTD (RVA 0x35810, 16807/2^31-1, multiply again
+  while > 2e9, clock-seeded in retail); the MSVC LCG is the Game.dat static-table /
+  file-crypto stream, not the event RNG. `rng.rs` now runs both streams separately and
+  `range()` uses the event stream with the pinned law; default `EVENT_SEED = 1` is a
+  deterministic stand-in for the clock seed. Tests: MINSTD vectors, law vectors
+  (narrow/wide/swapped/zero-width/extreme), stream independence, MSVC vectors
+  unchanged. Sequence-sensitive M6/M7 tests repaired to the new draws without
+  weakening their semantic assertions. Residual: byte-for-byte same-save replay parity
+  needs a captured clock seed. Docs `M8_PRNG_RANGE.md`; correction to `M7_PRNG.md`.
 - **W5-b (OPTIONAL)**: anchor nibbles / picture `[2]`,`[5]` slots (G9) with retail
   screenshots. Files: `crates/wolf-game/src/picture.rs`. Low priority.
 - **W5-c (OPTIONAL, human)**: M4 audio ear check (G10) — cannot be machine-gated.
@@ -250,12 +253,10 @@ cases · new-game entry route · save 5-part roundtrip · choice window · windo
 battle command-menu DB strings · H word-layer visibility · **battle settlement wired into
 real play (W1-c, day4→day5 no injection)** · **map/actor placement layer (W3-a)** ·
 **synthesized new-game template save (W4-b)** · **dangling-map guard (W4-c)** ·
-**H forward wrapper chain (W2-d)** · **engine_state 11/12/13/17 pinned (W3-b)**.
+**H forward wrapper chain (W2-d)** · **engine_state 11/12/13/17 pinned (W3-b)** · **Park-Miller event RNG + pinned range law (W5-a)**.
 
-REMAINING (M8): PRNG Park-Miller generator + range law (W5-a, delegated; the reduction
-law itself is pinned) · anchor/slot and audio polish (W5-b/c).
-
-Estimated priority order for M8: **W5-a**, then polish.
+REMAINING (M8): anchor/slot and audio polish (W5-b/c). PRNG parity residual: capture a
+retail clock seed if byte-for-byte replay is ever required.
 
 ---
 

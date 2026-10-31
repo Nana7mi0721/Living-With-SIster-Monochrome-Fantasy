@@ -19,6 +19,10 @@ M0–M7 保持可交付；M8 已落地并机检：
   s01→var62 1→2、end→CE345；另以 fresh replay 到 stage 11，并重放 CE333 函数体
   （1739 条指令、重绘 pose_10/word_effect102）。兄弟包装器 CE246→CE217/CE346、
   CE323→CE372/CE371、CE328→CE402 的阻挡条件全部钉死。
+- **W5-a 零售事件 RNG**：`0x6000` 现在使用 Park-Miller MINSTD（16807 / 2^31-1，
+  >2e9 时继续乘、为 0 时重播种），并按反编译的归约律 `min(a,b)+draw%(abs(b-a)+1)`
+  每调用消耗一次抽样；MSVC LCG 仅保留为 Game.dat 静态表/文件解密流。默认事件种子
+  `EVENT_SEED=1`（确定性的时钟种子替身）。序列敏感的 M6/M7 测试已按新抽样修复。
 - **W3-a 地图角色层**：`MapRuntime` 保留每个地图事件的瓦片 x/y 与每页朝向；
   `GameHost::character_state` 对地图事件与队长（`-2`）返回真实字段 0..10；英雄 `130`
   传送会放置队长（options bit0 = 半格）。
@@ -64,7 +68,8 @@ WOLF_DATA_ROOT=work/full cargo test -q -p wolf-game --test m7_map_edge -- --noca
 | W4-b 模板存档 | `94e94e0`；`crates/wolf-save/src/lib.rs`；`tests/m8_template_save.rs`；`docs/research/M8_TEMPLATE_SAVE.md` | `work/all` 可存档并回读；9/9 零售存档仍逐字节 |
 | W4-c 悬空地图 | `5e996f0`；`db.rs`；`m7_map_edge` 4/4 | 跳过 + 单条诊断，无读错误 |
 | 测试路径 | `5538bd7` | 相对 `WOLF_DATA_ROOT` 统一按仓库根解析 |
-| PRNG 归约 | `docs/research/M8_PRNG_RANGE.md` | **归约律已定**：`min(a,b)+draw%(abs(b-a)+1)`；零售抽样是 Park-Miller（见 §5） |
+| W5-a 事件 RNG | `1fa7cf1`；`crates/wolf-vm/src/rng.rs` + `tests/rng_retail.rs`；`docs/research/M8_PRNG_RANGE.md` | Park-Miller MINSTD + 取模归约；MINSTD/归约向量、零宽消耗一次、流独立、MSVC 向量不变 |
+| RNG 测试修复 | `eb83b23` | M6/M7 日循环按新抽样动态选行/等待晚间收敛，语义断言未削弱 |
 | 状态文档 | `7c28480`、`4e69014` | M8_BACKLOG/BASELINE 与实测同步 |
 
 ## 4. 关键源码位置
@@ -82,10 +87,10 @@ WOLF_DATA_ROOT=work/full cargo test -q -p wolf-game --test m7_map_edge -- --noca
 
 ## 5. 已确认边界 / 未完成
 
-1. **PRNG 生成器**：`0x6000` 的归约律已由 RVA 0xaf7c0 钉死；零售抽样来自 31 位 Park-Miller
-   MINSTD（RVA 0x35810，16807/2^31-1，时钟播种、拒绝 >2e9），**不是** M7 移植的 MSVC LCG
-   （那是 Game.dat 静态表/文件解密流）。仅改归约律的原型会改变玩家可见序列，已回退；
-   生成器移植（含确定性种子替代时钟种子）是 M8 剩余工作。
+1. **PRNG（已完成，含残余）**：归约律由 RVA 0xaf7c0 钉死，抽样已移植为 31 位
+   Park-Miller MINSTD（RVA 0x35810）；MSVC LCG 只用于 Game.dat 静态表/解密。残余：零售
+   事件流从时钟自播种，本移植固定 `EVENT_SEED=1`，因此“同一存档+同一输入”的逐位对拍仍
+   未证明（需要捕获时钟种子/生产种子钩子）。
 2. **engine_state 字段（已反编译）**：11/12 是逐帧鼠标位移（已实现）；13 是光标下事件
    （本作 0 站点，返回 None）；17 是「当前公共事件号」（Host 无实例上下文，仍返回 0 中性值）。
 3. **H 深链**：`ev33`（挿入抜く）必须 `var460==1`，而射精链要求 `v111>=100`（零售存档为 0）
@@ -114,6 +119,6 @@ WOLF_DATA_ROOT=work/full cargo test -q -p wolf-game --test m7_map_edge -- --noca
 
 ## 7. 下一步建议
 
-1. 完成 Park-Miller 事件 RNG 移植（归约律已就绪），重跑 day-loop/战斗/H 序列敏感测试。
-2. 完成 engine_state 11/12/17 的反编译与实现（角色层已提供放置数据）。
-3. 低优先级：锚点位/图片槽位像素对照、M4 人耳验收、多队员 CE242 循环。
+1. 低优先级：锚点位/图片槽位像素对照、M4 人耳验收、多队员 CE242 循环。
+2. 若要逐位对拍零售：捕获一次真实运行的时钟种子，接上生产种子钩子；
+   `random_a/random_b` 是 MSVC 流的编码抽样，不是种子（已修正文档）。
