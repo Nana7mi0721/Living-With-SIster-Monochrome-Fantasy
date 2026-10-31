@@ -190,30 +190,37 @@ map H button.
 
 ### W3 — Map/actor layer & host state (structural)
 **Goal**: real `character_state` coordinates so the 40 opcode-124 sites see true values.
-- **W3-a (REMAINING)**: keep the parsed `Map` + a coordinate/direction actor layer in
-  `MapRuntime`; answer `character_state` fields 0..10 (G6). Acceptance: opcode-124 mock→real
-  test where obj=-2 (leader) returns tile x/y and direction matching a placed actor;
-  character_state no longer None; warnings 0; no regression to `m7_host_state`. Files:
-  `crates/wolf-game/src/game.rs` (`start_pages`/`start_engine_events`), `map_runtime.rs`,
-  `tilemap.rs`. Test `m8_character_state.rs`. Depends: none (large).
+- **W3-a (DONE, M8)**: `MapRuntime` now keeps every event's tile x/y and each page's
+  facing (`MapActor`, `LeaderPlacement`, `place_leader`), and `GameHost::character_state`
+  answers fields 0..10 for map events and the leader (precise = tile*2, screen centre/feet,
+  id). A hero `130` transfer places the leader (options bit 0 = half-tiles). Tests:
+  `m8_character_state.rs` (3), `map_runtime` (3), lib 230; docs
+  `M8_CHARACTER_STATE.md`. Limits: no movement model; height 0; `-1`/`-3..-7` stay None.
 - **W3-b (REMAINING)**: pin `engine_state` field17 (G7) with a breakpoint/decompile;
   adjust 11/12 when W3-a lands. Files: `game.rs`. Test extend `m7_host_state`.
 
 ### W4 — Save / new-game / data robustness
 - **W4-a (DONE)**: 5-part save roundtrip + Part4 template regression fix (`m7_save_parts`).
-- **W4-b (IN PROGRESS, delegated)**: synthesize a new-game template save so `work/all`-style
-  roots can `save_to` (G11). Acceptance: `Game::new(root)` on a root without
-  `Save/System.sav` yields a non-None `base_save` (synthesized) and `save_to`
-  round-trips; no `220 SaveLoad: no template save` diagnostic. Files:
-  `crates/wolf-game/src/game.rs` / `savegame.rs`. Test `m8_template_save.rs`.
+- **W4-b (DONE, M8)**: `SaveFile::new_game_template()` builds a structurally valid 0x8C
+  template (no-map sentinel, 31 auto-tiles, 800 normal vars, 550 event groups, empty vardb,
+  one-byte Part7); `Game::new` falls back to it when System.sav is absent and records one
+  diagnostic. Test `m8_template_save.rs` on `work/all` (no Save/): save + fresh `load_into`
+  restores playtime, 800 vars and the picture layer; retail saves still byte-identical.
+  Docs `M8_TEMPLATE_SAVE.md`. Residuals: synthesized vardb has no types (CData cells are
+  reported as `unmodelled`), and Part2/Part1 defaults are zero.
 - **W4-c (DONE)**: `db::map_path` returns `None` for an empty path cell, so the dangling
   id 27 is skipped with one diagnostic instead of reading the data root. Test
   `m7_map_edge::a_dangling_map_id_is_skipped_without_a_read_error`; `m7_map_edge` 4/4 green.
 
 ### W5 — PRNG exactness + visual fidelity polish (lowest)
-- **W5-a (REMAINING)**: decompile Game.exe `0x6000` range reduction, align
-  `WolfRng::range`, prove same-save replay parity (G8). Files:
-  `crates/wolf-vm/src/rng.rs`, `tests/rng_retail.rs`. Depends: external decompile.
+- **W5-a (LAW PINNED; generator port in progress)**: Game.exe RVA 0xaf7c0 proves the
+  reduction is `min(a,b) + draw % (abs(b-a)+1)` (one draw per call, wrapping 32-bit).
+  A second finding: the draw is 31-bit Park-Miller MINSTD (RVA 0x35810, 16807/2^31-1,
+  clock-seeded, rejection > 2e9), **not** the MSVC LCG that `WolfRng::next_raw` replays
+  (that stream is the Game.dat static table/crypto). Applying the law to the 15-bit MSVC
+  stream was prototyped, broke the day-loop sequences, and was reverted. Follow-up task:
+  port Park-Miller into the event RNG and re-align `range` in the same change. Docs
+  `M8_PRNG_RANGE.md`; residual = deterministic seed stand-in vs retail clock seed.
 - **W5-b (OPTIONAL)**: anchor nibbles / picture `[2]`,`[5]` slots (G9) with retail
   screenshots. Files: `crates/wolf-game/src/picture.rs`. Low priority.
 - **W5-c (OPTIONAL, human)**: M4 audio ear check (G10) — cannot be machine-gated.
@@ -228,13 +235,14 @@ settlement reachable via SC1 · H advance 14/14 · H resume + var62 UI walk · H
 scheduler · opcode124 interpreter + host fields · day5 with 4-var injection · map edge
 cases · new-game entry route · save 5-part roundtrip · choice window · window skin ·
 battle command-menu DB strings · H word-layer visibility · **battle settlement wired into
-real play (W1-c, day4→day5 no injection)**.
+real play (W1-c, day4→day5 no injection)** · **map/actor placement layer (W3-a)** ·
+**synthesized new-game template save (W4-b)** · **dangling-map guard (W4-c)**.
 
-REMAINING (M8): H forward wrapper chain (W2-d) · character/map-actor layer (W3-a) ·
-engine_state field17 (W3-b) · new-game template save (W4-b) · dangling-map guard (W4-c) ·
-PRNG range reduction (W5-a) · anchor/slot and audio polish (W5-b/c).
+REMAINING (M8): H forward wrapper chain (W2-d, delegated) · PRNG Park-Miller generator
++ range law (W5-a, delegated; the reduction law itself is pinned) · engine_state field17
+(W3-b) · anchor/slot and audio polish (W5-b/c).
 
-Estimated priority order for M8: **W2-d, W3-a, W4-b, W4-c, W3-b, W5-a**, then polish.
+Estimated priority order for M8: **W2-d, W5-a, W3-b**, then polish.
 
 ---
 
