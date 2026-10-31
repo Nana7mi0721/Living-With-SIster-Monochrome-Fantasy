@@ -88,7 +88,7 @@ Legend: **blocker** = what physically prevents closing the gap today.
 - **Blocker**: needs a picture-move semantics change (cmd=1 move + fade!=0 → timed
   transition), which is a prod edit outside the M7 tasks' write scopes.
 
-### G5 — H forward path not end-to-end
+### G5 — H forward path not end-to-end — **ADDRESSED (W2-d)**
 - Evidence: `docs/research/M7_HSCENE_ADVANCE.md` §8 (stage-selected, wrapper from
   `SampleMapA ev33 → CE333` not attempted); `M7_HSCENE_FULL.md` boundary (resume, not
   forward).
@@ -182,11 +182,17 @@ map H button.
   `hword/word_effect*` quad reaches alpha>0 for ≥N frames (assert alpha>0 + quad count
   increase), warnings 0; regression `m7_hauto_events` still green. Files:
   `crates/wolf-game/src/picture.rs`. Test `m8_hword_visible.rs`. Depends: none.
-- **W2-d (REMAINING)**: drive the forward wrapper chain `SampleMapA ev33 → CE333 →
-  CE246/217/346` (and CE372/CE323, CE402/CE328) as one playthrough (G5). Acceptance:
-  a continuous run advances `var218`/stage through all H stages with only real key/mouse
-  input; warnings 0. Files: test-only (+ possibly `game.rs start_pages`). Test
-  `m8_hscene_forward.rs`. Depends: W2-c (for visibility checks optional).
+- **W2-d (DONE, M8)**: `m8_hscene_forward.rs` drives the wrapper chain with real
+  pointer input. One continuous SaveData08 session: wipe picture 406 → map ev21 pc1072
+  (crosses CE343 pc963 / CE333 pc986), s01 picture 400 → `var62` 1→2, end picture 294 →
+  ev25 → CE345; a fresh replay s04 picture 403 → stage 11. CE333's body replays 1,739
+  instructions and redraws `DLC_data/pose_10.png` + `hword/word_effect102.png`. Siblings:
+  CE246→CE217 (clock 0:42→0:52 + header text), CE246 deep → CE346 (max pc 180, visible
+  cutin), CE323→CE372/CE371 via the toilet menu (`var218` stays 2 by design), CE328→CE402
+  blocked by `v104/v105==0` and `v4>=21`. The map H button ev33 stays gated on
+  `var460==1`: the ejaculation path needs `v111>=100` (save 0) then CE344/CE347, and the
+  shallow/anal/end guards (v267, v100>=12, v98>=1) are asserted exactly. warnings 0.
+  Docs `M8_HSCENE_FORWARD.md`.
 
 ### W3 — Map/actor layer & host state (structural)
 **Goal**: real `character_state` coordinates so the 40 opcode-124 sites see true values.
@@ -236,13 +242,14 @@ scheduler · opcode124 interpreter + host fields · day5 with 4-var injection ·
 cases · new-game entry route · save 5-part roundtrip · choice window · window skin ·
 battle command-menu DB strings · H word-layer visibility · **battle settlement wired into
 real play (W1-c, day4→day5 no injection)** · **map/actor placement layer (W3-a)** ·
-**synthesized new-game template save (W4-b)** · **dangling-map guard (W4-c)**.
+**synthesized new-game template save (W4-b)** · **dangling-map guard (W4-c)** ·
+**H forward wrapper chain (W2-d)**.
 
-REMAINING (M8): H forward wrapper chain (W2-d, delegated) · PRNG Park-Miller generator
-+ range law (W5-a, delegated; the reduction law itself is pinned) · engine_state field17
-(W3-b) · anchor/slot and audio polish (W5-b/c).
+REMAINING (M8): PRNG Park-Miller generator + range law (W5-a, delegated; the reduction
+law itself is pinned) · engine_state fields 11/12/17 (W3-b, delegated) · anchor/slot and
+audio polish (W5-b/c).
 
-Estimated priority order for M8: **W2-d, W5-a, W3-b**, then polish.
+Estimated priority order for M8: **W5-a, W3-b**, then polish.
 
 ---
 
