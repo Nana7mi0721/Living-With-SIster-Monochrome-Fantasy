@@ -47,6 +47,14 @@ fn retail_save_dir() -> Option<PathBuf> {
     let dir = std::env::var("WOLF_RETAIL_SAVE_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| repo_root().join("work").join("retail_backup").join("Save"));
+    // Tests run with cwd = the crate directory, so a relative override
+    // (WOLF_RETAIL_SAVE_DIR=work/retail_backup/Save) must resolve against the
+    // repo root, like WOLF_DATA_ROOT above.
+    let dir = if dir.is_absolute() {
+        dir
+    } else {
+        repo_root().join(dir)
+    };
     dir.is_dir().then_some(dir)
 }
 
