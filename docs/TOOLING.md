@@ -194,7 +194,7 @@ Plan token（`-Plan` 参数）：`w<ms>` 等待 / `c[name]` 整窗抓帧裁客�
 
 ## 9. 相关文档
 
-- [PLAN.md](PLAN.md) — 总体重写计划
+- [PLAN.md](../PLAN.md) — 当前重写路线图（旧稿见 [docs/archive/PLAN_2026-10-26.md](archive/PLAN_2026-10-26.md)）
 - [docs/FORMAT_SPEC.md](FORMAT_SPEC.md) — 二进制格式规格
 - [docs/OPCODE_SPEC.md](OPCODE_SPEC.md) — 50 条 opcode 语义
 - [docs/ARCHITECTURE.md](ARCHITECTURE.md) — crate 架构与依赖表

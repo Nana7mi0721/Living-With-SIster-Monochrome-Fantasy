@@ -1,6 +1,6 @@
 # 新会话启动提示（复制即可）
 
-> 用途：本文件给“下一次新开会话”的 coding agent 用。新会话没有旧聊天记录，读完本文件 + `docs/HANDOFF_M10.md`（最新交接）+ `docs/HANDOFF_M9.md` + `docs/HANDOFF_M8.md` + `docs/HANDOFF_M7.md` + `docs/HANDOFF_M6.md` + `docs/HANDOFF_M4.md` + `docs/HANDOFF_M3.md` 即可接续。
+> 用途：本文件给“下一次新开会话”的 coding agent 用。新会话没有旧聊天记录，读完本文件 + `docs/README.md`（文档总索引）+ `docs/HANDOFF_M10.md`（最新交接）即可接续；`HANDOFF_M3`–`HANDOFF_M9` 已标为历史归档，需要追溯时从索引进入。
 > 当前仓库：`E:\Study\github program\imoto life`
 > 当前源码 HEAD：以 `git log` 为准（M10 交接见 `docs/HANDOFF_M10.md`）。M10 的两个提交为 `ce680b3`（残项）与 `3bbbb12`（opcode 111 落地）。
 
@@ -10,7 +10,7 @@
 你在继续一个“用 Rust 重写 WOLF RPG Editor 游戏”的项目，仓库在 E:\Study\github program\imoto life。
 
 先做三件事，不要凭记忆猜：
-1. 读 docs/HANDOFF_M10.md（最新交接：M10 已完成 opcode 111 引用语义 + compound 修复、12 个战斗/H 测试重基线、存档 row counts、地图 contact、CE246→CE346、H 深链合成档、音频残留）、docs/HANDOFF_M9.md、docs/HANDOFF_M8.md、docs/HANDOFF_M7.md、docs/HANDOFF_M6.md、docs/HANDOFF_M4.md、docs/HANDOFF_M3.md 和 docs/NEW_SESSION_START.md（本文件）。
+1. 读 docs/README.md（文档总索引，先看状态图例与推荐阅读路径）、docs/HANDOFF_M10.md（最新交接：M10 已完成 opcode 111 引用语义 + compound 修复、12 个战斗/H 测试重基线、存档 row counts、地图 contact、CE246→CE346、H 深链合成档、音频残留）和 docs/NEW_SESSION_START.md（本文件）；历史交接只在需要追溯时从索引进入。
 2. 在仓库根目录执行：
    cd '/e/Study/github program/imoto life'
    source tools/env.sh >/dev/null 2>&1
@@ -27,12 +27,12 @@
 
 ## 新会话最需要知道的 6 个事实
 
-1. **权威文档**：`docs/HANDOFF_M10.md` 是最新交接（M9/M8/M7/M6 历史见 HANDOFF_M9.md / HANDOFF_M8.md / HANDOFF_M7.md / HANDOFF_M6.md）；格式看 `docs/FORMAT_SPEC.md`、`docs/SAVE_SPEC.md`；opcode 看 `docs/OPCODE_*.md`；地图/战斗/H 场景看 `docs/MAP_AUDIT.md`、`docs/BATTLE.md`、`docs/HSCENE.md`；M10 研究成果在 `docs/research/M10_*.md`。
+1. **权威文档**：`docs/README.md` 是文档总索引；`docs/HANDOFF_M10.md` 是最新交接，`PLAN.md` 是当前路线图；格式看 `docs/FORMAT_SPEC.md`、`docs/SAVE_SPEC.md`；opcode 看 `docs/OPCODE_*.md`；地图/战斗/H 场景看 `docs/MAP_AUDIT.md`、`docs/BATTLE.md`、`docs/HSCENE.md`；研究底稿索引在 `docs/research/README.md`。旧里程碑交接与 `M1_CLOSURE.md`/`M2_SLICE.md` 仅作历史参考。
 2. **数据位置**：`work/full` 是测试数据根；`work/all` 是全部 23 个 `.wolf` 的解包结果；游戏安装在 `E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy`（文件夹名确实拼错）。
 3. **构建命令**：`cargo test -q --workspace`；`cargo build -q -p wolf-cli`；CLI 在 `target/debug/wolf-cli.exe`；静态验收 `./target/debug/wolf-cli.exe verify`（预期 PASS 70，pending 0）。
 4. **当前未完成重点**：战斗自然路线 RNG 仍受 `started_events` HashSet 顺序影响（3~4 回合/胜负摆动，PRNG 时钟种子未证）；H 深链 CE402/CE410 仅合成存档可达；多队员真实菜单只注册一条命令（多回合靠 rebuilt CE241 loop）；音频人工听感；锚点 5/6 像素对照；窗口皮肤 CN patch 右缘数据放置。
 5. **不要做的事**：不要用 shell 启 Godot；不要杀用户进程；不要把旧聊天当作权威（旧会话可能已压缩/摘要）；以仓库文档和 git 状态为准；不要把 Sys 104/105（引擎滚动输出）和 opcode 104/105 混为一谈，也不要为它们新增 player/camera 模型；不要为了 `cargo fmt --all --check` 重排未涉及的文件（全仓历史不是绿门禁）。
-6. **完成任务后**：更新 `docs/HANDOFF_M10.md`（或新增下一里程碑交接），同步 `docs/BASELINE.json`（`m10_workstreams` 记录本批证据），保证下一次仍能从新会话接续。
+6. **完成任务后**：更新 `docs/HANDOFF_M10.md`（或新增下一里程碑交接），同步 `docs/BASELINE.json`（记录本批证据）、`PLAN.md` 与 `docs/README.md`，保证下一次仍能从新会话接续；里程碑完成后按 `AGENT.md` §6 清理临时文件/构建缓存/worktree。
 
 ## 恢复后的第一条命令
 

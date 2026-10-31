@@ -1,484 +1,84 @@
-# 用 Rust 重写《Living With Sister: Monochrome Fantasy》— 可行性研究与实施规划
-
-> 目标游戏：**Living With Sister -Monochrome Fantasy-**（Steam appid 2429860，WOLF RPG Editor 制作）
-> 规划日期：2026-10-26　｜　工作目录：`E:\Study\github program\imoto life`
-> 本文所有数字均来自对本机真实游戏文件的实测解析，不是估计值。配套规格文档见 `docs/` 目录。
->
-> **配套交付物**（均已落盘，可直接照着写代码）：
-> - `docs/OPCODE_SPEC.md`（87 KB）— 50 种 opcode 逐条语义规格：二进制布局、魔法数字寻址、运算符表、控制流跳转表、协程阻塞语义、逐条真实样例、M1/M2/M3 优先级、15 项未确认清单
-> - `docs/FORMAT_SPEC.md`（75 KB）— 8 种二进制格式的逐字节规格：Game.dat / CommonEvent.dat / 指令流 / .mps / 三个数据库 / TileSetData / .wolf DXArchive v8 / .sav，含 37 处「已验证」与 15 处 TODO
-> - `docs/ARCHITECTURE.md`（101 KB）— Rust 架构设计：7 crate 布局、解释器状态机骨架、wgpu 30 / winit 0.30 / glyphon 0.12 逐条破坏性变更对照、资源与音频管线、存档保真模型、CN 镜像与精确依赖表、六层测试、11 条风险、6 个里程碑
-> - `docs/BASELINE.json` — 机器可校验的期望值（供 `wolf-cli verify` 当防回归基线）
-
----
-
-## 0. 一句话结论
-
-**可行，而且比大多数"Rust 重写老游戏"项目更可行** —— 因为这个游戏的**全部逻辑只有 6.7 MB、50 种字节码指令、550 个事件脚本**，而引擎是数据完全外置的 WOLF RPG Editor。真正的重写工作量不在"逆向"，而在"把 50 个 opcode 和一个协程调度器写对"，以及 1.5 GB 媒体资源的渲染/播放管线。
-
-但要先说清楚代价：参照同类项目（doukutsu-rs 约 9 万行 Rust / 6 年，EasyRPG Player 约 13 万行 C++ / 14 年），**做到完整对等的单人项目量级是 12–18 个月的业余投入**。所以本文给出的路线是**垂直切片优先**：先用 3–5 周做出"能进标题画面并选菜单"的可运行程序，再逐层加厚，而不是一上来追求 100% 对等。
-
----
-
-## 1. 这个游戏到底是什么
-
-### 1.1 引擎身份（已确认）
-
-| 项目 | 实测值 | 来源 |
-|---|---|---|
-| 引擎 | WOLF RPG Editor（ウディタ）v3.x，DxLib + DirectX | `Game.exe` / 数据结构 |
-| 数据位置 | 全部外置于 `Data/` 下 26 个 `.wolf` 归档 | 目录清点 |
-| 加密 | DXArchive v8，`CharCodeFormat=932`，`Flags=0x013A0000`，`cryptVersion=314 < 331` ⇒ **7 字节 XOR（非 ChaCha20）**，`HuffmanEncodeKB=12` | `.wolf` 头字节实测 |
-| 内层 .dat | 明文 v3 结构，**无 Pro 加密**（`Game.dat` footer=0xC3，`CommonEvent.dat` version=0xC9） | 已完整解析验证 |
-| 屏幕 | **1024×576**，tile 16px，60 fps | `Game.dat` u16_settings |
-| 角色图 | 8 方向 × 3 帧动画 | `Game.dat` `dir_image=8, anim_patterns=3` |
-| 主字体 | **LOLITA**（35,898 字形 / 20,908 CJK） | `Game.dat` + 字体 cmap 实测 |
-| 存档 | 自家加密（MSVC `rand` 三流异或），`fileVersion=0x8C` | **已完全破解并验证** |
-| Pro 特性 | 使用了（`GamePro.exe` 存在，`pro_loadingpic`/`pro_gauge` 已配置，脚本里有 code 1000） | `Game.dat` + 指令扫描 |
-
-### 1.2 数据构成：逻辑极小，媒体极大
-
-解包全部 23 个 `.wolf` 后的 4,092 个文件、1.5 GB：
-
-| 类别 | 文件数 | 体积 | 说明 |
-|---|---:|---:|---|
-| **逻辑数据**（`.dat`） | 9 | **5.5 MB** | `CommonEvent.dat` 5.5MB 独占，其余都是几十 KB |
-| **地图**（`.mps`） | 9 | **1.2 MB** | 实际只用到 6 张 |
-| 图片（png/jpg） | 3,680 | 417 MB | 背景 / CG / 立绘 / 图标 |
-| 音频（ogg/mp3/wav） | 358 | 311 MB | BGM 248MB + SE 22MB + 其余 |
-| 字体 | 4 | 27 MB | LOLITA 等 |
-
-> **关键洞察：真正需要"理解"的数据只有 6.7 MB。** 1.5 GB 里的 99.5% 是美术和音频，Rust 程序只需要会**解码 + 播放**它们，不需要理解内容。这就是为什么这个项目比"重写一个 3D 游戏"简单一个数量级。
-
-### 1.3 脚本规模：550 个事件 / 139,273 条指令 / 50 种 opcode
-
-`CommonEvent.dat` 二进制直接解析结果（`work/parse_ce.py`，550 个事件全部解析 0 错误）：
-
-- 163,828 个指令槽位，其中 24,555 个是空指令（code 0）⇒ **139,273 条真实指令**
-- **公共事件里只有 47 种不同的 opcode**（若把空指令 code 0 也算作一个取值则是 48 个；WOLF 规范定义约 80 种，这个游戏只用了其中一半多一点）。
-- **地图事件额外贡献 3 种公共事件里没有的 opcode：`151 ChangeColor`、`161 PrepareTransition`、`162 ExecuteTransition`** —— 转场/调色相关语义恰好全在地图事件里（公共事件里的 `160 SetTransition` 反而没在地图事件出现）。两者并集 **50 种**，这 50 种就是必须实现的全集。
-- **run_condition 分布：442 个 call_only ／ 97 个 parallel_process ／ 10 个 parallel_process_always ／ 1 个 auto_start**
-  ⇒ **108 个事件是每帧在后台并行运行的协程**。这是架构上最重要的一条约束：解释器必须是**多实例调度器**，不能是单调用栈。
-- **地图事件是同一套 VM**：9 张地图的 header 声明共 73 个事件，**9 张已全部逐字节解析到 EOF**（`work/probe89.py` → `work/maps_full.json`）：73 事件 / 134 页 / 37,610 个指令槽，其中 7,052 个是空槽 ⇒ **30,558 条真实地图指令**。地图事件里出现 **40 种 opcode**，与公共事件重合 37 种；只有公共事件出现的 10 种是 `106 DebugMessage`/`107 ClearDebugText`/`160 SetTransition`/`171 BreakLoop`/`175 EndGame`/`176 StartLoop2`/`211 CommonEventReserve`/`222 SaveGame`/`281 ScrollScreen`/`1000 ProFeature`。**解释器只有一份**，地图事件和公共事件共用同一套 VM（`work/probe97.py` 实测）。
-- 因此**总 VM 面积 ≈ 169,831 条指令**（公共事件 139,273 + 地图事件 30,558），而不是只有公共事件的 139,273。`SampleMapA` 一张地图就占了地图字节码的 82%（31,083 个槽位）。
-
-**opcode 覆盖率（累计占比，这是分阶段的依据）：**
-
-| 排名 | opcode | 次数 | 占比 | 累计 |
-|---|---|---:|---:|---:|
-| 1 | 401 ChoiceCase | 18,555 | 13.3% | 13.3% |
-| 2 | 210 CommonEvent | 18,468 | 13.3% | 26.6% |
-| 3 | 121 SetVariable | 17,258 | 12.4% | 39.0% |
-| 4 | 150 Picture | 16,716 | 12.0% | 51.0% |
-| 5 | 101 Message | 12,027 | 8.6% | 59.6% |
-| 6 | 499 BranchEnd | 11,361 | 8.2% | 67.8% |
-| 7 | 111 VariableCondition | 10,743 | 7.7% | 75.5% |
-| 8 | 103 Comment | 9,707 | 7.0% | 82.5% |
-| 9 | 180 Wait | 4,696 | 3.4% | 85.8% |
-| 10 | 420 ElseCase | 3,279 | 2.4% | 88.2% |
-| 11 | 250 Database | 2,592 | 1.9% | 90.0% |
-| 12 | 498 LoopEnd | 2,018 | 1.4% | 91.5% |
-| 13 | 179 LoopTimes | 1,836 | 1.3% | 92.8% |
-| 14 | 213 JumpLabel | 1,543 | 1.1% | 93.9% |
-
-> **前 14 个 opcode = 93.9% 的游戏内容**，其中 `103 Comment` 是空操作，`499/498` 只是结构标记。真正要写语义的只有 **11 个**。
-
-### 1.4 内容构成（决定"重写到什么程度算完"）
-
-按事件名归类（550 个事件、139,273 条指令）：
-
-| 类别 | 事件数 | 指令数 | 占比 |
-|---|---:|---:|---:|
-| 日常/剧情/其他 | 470 | 111,031 | 79.7% |
-| 事件触发（`■DLCストーリー`、`ランダムイベント` 等） | 21 | 15,189 | 10.9% |
-| H 场景 | 12 | 5,634 | 4.0% |
-| 系统/菜单/存档 | 19 | 4,815 | 3.5% |
-| **战斗** | **28** | **2,604** | **1.9%** |
-
-**对话文本量：12,027 条消息 / 192,273 字符 / 7,963 个不重复文本块；选项标签 1,010 条。** 全部是 UTF-8，带 WOLF 内联标记（`\E` 描边 11,956 次、`\c[n]` 颜色 386、`\cself[n]` 自符串 113、`\f[n]` 脸图 76、`\v[n]` 变量 35）。
-
-> **战斗系统只占 1.9% 的指令**。这意味着"能不能打完整场战斗"对整体进度的影响远小于它的名声 —— 可以先做占位实现，把 79.7% 的日常剧情跑通。
-
-### 1.5 地图：一个很小的世界
-
-| 地图 | 尺寸 | tileset | 事件数 | 是否在游戏中注册 |
-|---|---|---:|---:|---|
-| TitleMap.mps | 53×30 | 4 | 1 | ✅ 标题画面 |
-| SampleMapA.mps | 64×36 | 4 | **40** | ✅ **主舞台** |
-| SampleMapA_1.mps | 64×36 | 4 | 12 | ✅ |
-| Map003.mps | **70×170** | 4 | 2 | ✅ 最大的地图 |
-| Map024.mps | 53×30 | 4 | 1 | ✅ |
-| Map031.mps | 53×30 | 0 | 1 | ✅ |
-| Dungeon.mps / Map002.mps / SampleMapB.mps | 40×30 / 100×30 / 30×30 | 0/4/0 | 5/5/6 | ❌ 未注册（遗留） |
-
-渲染器必须支持**纵向滚动**（Map003 有 170 tile 高），不是单屏游戏。
-
-**地图文件解析的两个硬约束（已实测）**：
-
-1. **空地图约定**：如果瓦片块第一个 u32 是 `0xFFFFFFFF`，则整块 `width×height×12` 字节被省略（`Map024.mps` 只有 237 字节、`Map031.mps` 1,545 字节）。解析器必须按这个分支跳读，否则越界。
-2. **指令尾字节不是 have_route**：`0x00` 才是普通结束；`0x01` 表示 **Move**，后面跟 5 个未知字节 + 1 个 flags 字节 + `u4 routeCount` + `RouteCommand[]`。早期把"非 0 就当 routeCount 读"的做法正是 `Map002`/`Map003`/`Map031` 解析失败的真正原因，改对之后 9 张里 7 张立刻逐字节通过。
-3. **页尾容错**：WolfTL 的规则是"`features > 3` 则多读 1 字节"，但 `Dungeon.mps`（偏移 17716）与 `Map024.mps`（偏移 234）的页结束字节是 **`0x00` 而非 `0x7A`**，其后紧跟事件结束符 `0x70`。Rust 实现应接受"`0x00` 且下一字节是 `0x70`/`0x79`"为合法页结束，否则在 ≤64 字节窗口内前扫 `0x7A`+`0x70/0x79` 重同步并记 warning。**WolfTL 自己解析不了这 2 张**（这正是它只 dump 出 7/9 张地图的原因）。`Map024` 是注册槽位 24，所以容错不是可选项。
-4. **`TileSetData.dat` 的版本字节是 `0xD2`**（`CommonEvent.dat` 是 `0xC9`、三个数据库是 `0xC2`、`Game.dat` 是 `0x55`）⇒ **加载器必须按文件类型分别判定，不存在统一的 magic/version 检查**。
-
----
-
-## 2. 法律与伦理边界（开工前必须先定死）
-
-这一节不是免责声明，而是**决定项目能不能长期存在的工程约束**。业界已有的判例非常清晰：
-
-**可以照做的先例**（全部是"引擎重写 + 零资产分发 + 要求用户自备正版"）：
-- **Ship of Harkinian**（塞尔达时之笛）：官方声明"不包含任何版权资产，你必须提供受支持的游戏副本"，并做 SHA1 校验
-- **OpenMW**（晨风）、**OpenRCT2**（过山车大亨2）：只发引擎，资产从用户自己的安装目录读
-- **doukutsu-rs**（洞窟物语）：Rust + MIT，仓库里没有一个原版资源文件，FAQ 教用户怎么自己提取
-- **EasyRPG Player**：GPL 引擎，从不打包 RPG Maker 素材
-
-**被打击的反例**：
-- Take-Two 两次 DMCA 下架 **re3 / reVC**（GTA 逆向源码）
-- 任天堂诉 **yuzu** 和解赔 **$240 万**（关键罪状是**绕过加密**、助长盗版）
-
-**两者的区别在于：是否提供了"绕过正版保护"的能力，以及是否分发了原版资产。**
-
-据此，本项目设定四条硬规则：
-
-1. **仓库里不出现任何来自游戏的二进制资产**。`Data/`、解包出来的 png/ogg/ttf、`.dat`/`.mps` 一律不进版本库（`.gitignore` 第一行就是它们）。开发期的解包产物放 `work/`（本地、不提交）。
-2. **启动时向用户索取其自己的游戏安装目录**，并做一次**版本指纹校验**（不是反盗版，是防"用错版本的数据导致行为不一致"——本游戏有 `+DLC v2.03` 和 CN 汉化补丁多个版本，指令集和文本都不一样）。
-3. **不实现任何 Steam / DLC 校验绕过**。游戏是买来的，`dlc.dat` 和 Steam 校验原样保留；我们只做"读用户已有数据并解释执行"。
-4. **不发布解密后的资产、不发布存档修改器的成品数据包**。存档工具可以发（技术上是格式转换器），但只接受用户自己的 `.sav`。
-
-> 另外：本作含成人内容，若公开发布需注意目标平台的年龄分级与 TOS；技术上这不是问题，分发上要单独考虑。
-
----
-
-## 3. 技术架构
-
-### 3.1 总体分层
-
-~~~
-imoto-life/                       Cargo workspace
-├─ Cargo.toml                     [workspace]
-├─ crates/
-│  ├─ wolf-format/                ① 数据层：.wolf 解包、.dat/.mps/.sav 读写（binrw 结构）
-│  ├─ wolf-vm/                    ② 解释器：50 opcode + 协程调度 + 变量库
-│  ├─ wolf-save/                  ③ 存档兼容层：与官方 .sav 双向互通
-│  ├─ wolf-render/                ④ 渲染：winit + wgpu + glyphon（tilemap / Picture VM / 文字标记）
-│  ├─ wolf-audio/                 ⑤ 音频：kira（BGM/BGS/SE）
-│  ├─ wolf-game/                  ⑥ 组装：场景栈、输入、主循环、设置、资源管理
-│  └─ wolf-cli/                   ⑦ 工具：unpack / dump / verify / save-edit（先做这个！）
-└─ app/                           最终可执行程序
-~~~
-
-**依赖方向严格单向**：`wolf-format` 不依赖任何东西（只有 binrw/encoding_rs/png），`wolf-vm` 只依赖 `wolf-format`，`wolf-render`/`wolf-audio`/`wolf-save` 是叶子服务，`wolf-game` 组装全部，`app` 只调 `wolf-game`。
-
-这样切的好处：**`wolf-format` 和 `wolf-vm` 可以完全脱离图形环境做单元测试**（headless、毫秒级、可以在 CI 里跑）。而图形部分永远是最难测的，把它隔离出来。
-
-### 3.2 解释器与协程模型（本项目最关键的架构决策）
-
-**约束**：108 个事件每帧并行运行；同时 `210 CommonEvent` 是**同步阻塞调用**（调用者等被调用者执行完才继续），`211 CommonEventReserve` 才是异步排队。
-
-**方案对比**：
-
-| 方案 | 优点 | 缺点 | 结论 |
-|---|---|---|---|
-| 每事件一个 OS 线程 | 直白 | 108 线程 × 每帧调度 = 灾难 | ❌ |
-| `corosensei` 有栈协程 | 代码像同步写法 | 需要 unsafe、栈切换开销、调试困难 | ❌ |
-| **显式状态机 + 每实例调用帧栈** | 纯 safe Rust、可序列化（存档友好）、可逐帧单步调试 | 需要手写"阻塞点"处理 | ✅ **选这个** |
-
-**核心数据结构**（`wolf-vm`）：
-
-~~~rust
-/// 一个正在运行的事件实例（来自 210 调用、并行事件、或地图事件页）
-pub struct EventInstance {
-    pub root: EventId,              // 根事件 id
-    pub frames: Vec<Frame>,         // 调用栈，210 调用压栈，返回弹栈
-    pub vars: SelfVars,             // 该实例的 self 变量（100 个数字 + 100 个字符串 + cself 名）
-    pub wait: WaitState,            // 阻塞点
-    pub loops: Vec<LoopCtx>,        // 179 LoopTimes / 498 LoopEnd 的循环计数
-    pub labels: HashMap<u32, u32>,  // 212 SetLabel 预编译出的标签跳转表
-}
-
-pub struct Frame {
-    pub event: EventId,
-    pub pc: usize,                  // 预编译后的指令下标（不是字节偏移）
-    pub branch: Vec<BranchCtx>,     // 401/420/421 分支链
-}
-
-pub enum WaitState {
-    None,
-    Frames(u32),                    // 180 Wait
-    Message,                        // 101 等玩家按键
-    Choice,                         // 102 等选择
-    Move,                           // 201 等移动结束
-    CallReturn,                     // 210 的返回点（其实由 frames 栈天然表达）
-}
-~~~
-
-**加载期预编译**（性能与正确性的关键）：`CommonEvent.dat` 里 `401 ChoiceCase / 420 ElseCase / 421 CancelCase / 499 BranchEnd / 498 LoopEnd / 179 LoopTimes / 212 SetLabel / 213 JumpLabel` 是**扁平字节码里的结构化标记**。加载时一次性把它们解析成：
-
-- 每个 `111 VariableCondition` 后面连续的 `401/420/421` 分支 → **跳转表** `Vec<(case_index, target_pc)>`
-- 每个 `212 SetLabel` 的**字符串标签**（注意：WOLF 的标签是字符串，不是整数索引！）→ `HashMap<label_hash, pc>`
-- 每个 `179 LoopTimes` ↔ `498 LoopEnd` → 配对成 `(start_pc, end_pc, count)`
-
-这样运行时**永远不需要线性扫描找分支边界**，每帧只是 `pc += 1` 加查表。这是把 139,273 条指令跑在 60fps 内的前提。
-
-**变量体系**（WOLF 的"魔法数字"寻址，必须在加载期就归一化）：
-
-| 数值范围 | 含义 |
-|---|---|
-| 0 – 999,999 | 字面量 |
-| 1,000,000 – 1,999,999 | 事件 self 值（`1000000 + n` → self 变量 n） |
-| 2,000,000 – 2,999,999 | **普通变量**（id = 值 − 2,000,000，共 200 个「汎用変数」+ 数千个预留） |
-| 9,000,000 – 9,999,999 | **系统变量**（id = 值 − 9,000,000） |
-
-存储用**扁平 `Vec<i32>` + `Vec<String>`**，按 (bank, index) 计算偏移。**不要用 HashMap** —— 变量访问是最热的路径（17,258 次 SetVariable + 10,743 次条件判断）。
-
-### 3.3 渲染管线
-
-~~~
-winit 0.30.13  →  wgpu 30.0.1  →  glyphon 0.12 + cosmic-text 0.19
-~~~
-
-- **逻辑分辨率固定 1024×576**，渲染到 offscreen texture，再**整数倍最近邻**放大到窗口（`img_scale` 在 Game.dat 里是 0，即原始像素风）。**不要交给 OS 做 DPI 缩放**（winit 在 Windows 上的混合 DPI bug 会拉伸画面）。
-- **图层栈**（按 WOLF 的绘制顺序）：地图 3 层 tile → 角色 chip（8 向 3 帧）→ `150 Picture` 的动态图层（负 layer 有特殊语义）→ 消息窗口 → UI。
-- **tile 批量绘制**：`MapChip` 是 102 个 PNG，多数是 `16×80`（5 个 tile 纵向堆叠）的调色板图。加载时全部解码成 RGBA 打成一张图集，用 **instanced quad** 一次 draw call 画完一整层。
-- **`150 Picture` 是一个小 VM**，16,716 次调用，是本项目**第二大实现风险**（仅次于解释器核心）：
-  - 类型 `(intArgs[0] >> 4) & 7`：0=文件图(14,106) / 1=文件名字符串(82) / 2=文字(2,179) / 3=窗口+文件(258) / 4=窗口+文字(91)
-  - 参数是**位置可选的变长字段**，且任意槽位 ≥ 1,600,000 表示"去读系统变量"
-  - `intArgs[1]` 是图层号，经常是**变量**（4,361 次系统变量 + 1,148 次 self 值），还有负数魔法值 `-1`(1849) / `-10`(1591) / `-9`(447) 表示擦除/清屏/移动
-  - 结论：**必须实现成一个真正的图层对象系统**（`Vec<Layer>` + 每层有 x/y/scale/rot/opacity/blend/anim），不能当"画一张图"处理。
-- **文字渲染**：cosmic-text 处理 CJK 断行 + 字体回退；`\E`（描边，11,956 次，几乎每条对话开头都有）= 对同一段文字做 4 次偏移绘制；`\c[n]` = 调色板索引（SysDatabase 的「文字色」表，默认 255,255,255 / 青 140,175,255）；`\v[n]`/`\cself[n]` = 运行时文本替换。
-
-### 3.4 资源管线
-
-1. **`.wolf` 解包**（Rust 实现，可选）：DXArchive v8，`DX` + `0x0008` 头 → 名字/文件/目录三张表各自经 **XOR → Huffman → LZ** 三层解压 → 7 字节密钥由「文件名 + 所有父目录名」拼串后偶/奇位字节分别 CRC32 派生。**鸡生蛋问题**：密钥依赖 `Game.dat` 里的 `encryption_key`，而 `Game.dat` 自己在 `BasicData.wolf` 里 —— 解法是先用一个已知的默认密钥（`"DXLIBARC"`）打开 `BasicData.wolf` 拿到 key，再解其余（这正是 UberWolf 的做法）。
-   > **务实建议：M0–M2 阶段不要自己写解包器**，直接要求用户先跑一次 `wolf-cli unpack`（或调用 UberWolf），之后全程读明文。把解包器放到 M4 再做。
-2. **资源索引**：解包后建一张 `HashMap<路径, 文件偏移>`，**不预加载**。
-3. **懒加载 + LRU**：1.5 GB 里常用的是 `MapChip`/`CharaChip`/`SystemGraphic`（约 15 MB）+ 当前地图背景；CG 和 H 场景图按需解码，缓存上限设 512 MB（机器有 4GB 显存 + 充裕内存）。
-4. **调色板 PNG**（`mode P`）用 `png` crate 解码后转 RGBA8，上传前做一次**图集打包**（每张图集 2048×2048）。
-
-### 3.5 音频
-
-- **本游戏没有 MIDI**（虽然根目录有 `GuruguruSMF4.dll`，但 140 Sound 指令引用的 902 个 mp3 + 285 个 ogg + 19 个 wav 里没有一个是 MIDI）⇒ **不需要 `rustysynth` + SF2**，这是省掉的一大块工作量。
-- `kira 0.12.5`（内含 cpal 0.18 + symphonia 0.6）足够：BGM 用 streaming sound + loop point（SysDatabase 的 BGM 列表带 loop 起点）；BGS 与 BGM 分离两条总线；SE 用 static sound 池（150 个不同文件，最多同帧并发 4–6 个）。
-- `SEandBGM` 开关在 `Game.ini` 里是 3（全开），设置界面要能改。
-
-### 3.6 存档层
-
-**已完全破解**（`docs/vendor/WolfSave/`，MIT，5,895 行 C++ 参考）：
-
-~~~
-seeds = [b[0], b[3], b[9]]
-for i, seed in enumerate(seeds):
-    inc = [1, 2, 5][i]
-    s = seed                       # MSVC rand
-    for j in range(0x14, len, inc):
-        s = (s * 214013 + 2531011) & 0xFFFFFFFF
-        b[j] ^= ((s >> 16) & 0x7FFF) >> 12
-# 校验：解完 b[0x14] == 0x19，末字节 == 0x19，b[2] == sum(b[0x14:]) & 0xFF
-~~~
-
-头部：`[0..0x14)` 20 字节（含 `NEUC` 标记 @4、校验和 @2、种子 @0/3/9），`0x14` 起 `u1=0x19` + `u2 名字长度` + UTF-8 标题 + `u2 fileVersion=0x8C`，**正文从 `0x44` 开始**。正文熵只有 1.24 bit/byte（大量零字段的紧凑结构体），不是密文。
-
-> **这是本项目最大的"隐藏红利"**：存档格式可解 ⇒ 我们有一个**逐字节精确的对照 oracle**（见 `6 测试策略）。
-
----
-
-## 4. 分阶段路线图
-
-每个阶段都有**可测量的验收标准**（数字来自 `1.3 的实测闭包计算），不是"感觉差不多了"。
-
-### M0 — 地基（1 周）
-
-| 交付 | 验收标准 |
-|---|---|
-| Rust 工具链（USTC 镜像） | `cargo --version` 输出 ≥ 1.87；`cargo build` 在 16 核上 < 30s |
-| workspace 骨架 + 7 个 crate | `cargo check` 全绿，无循环依赖 |
-| `wolf-format`：`Game.dat` 读取 | 单元测试断言解出 `title="妹相随～黑白世界的缤纷冒险～"`、`1024×576`、`tile_size=16`、`fps=60` |
-| `wolf-format`：`CommonEvent.dat` 读取 | 单元测试断言 **550 个事件、163,828 槽位 / 24,555 空 / 139,273 条真实指令、47 种非空 opcode**（这些数字不对就是解析错了；完整期望值见 `docs/BASELINE.json`） |
-| `wolf-format`：`.mps` 读取 | 9 张地图全部解析到 EOF：断言 **73 个事件 / 134 页 / 37,610 个指令槽 / 7,052 个空槽（⇒ 30,558 条真实指令）/ 40 种 opcode**，且每张图页尾 `0x70` + 地图尾 `0x66` 落在文件最后一字节 |
-| `wolf-format`：`TileSetData.dat` 读取 | 断言 **6 个 tileset**、tileset 4 的 base = `MapChip/kiri_project.png`、文件尾字节 `0xCF` |
-| `wolf-cli verify` | 一条命令打印上述全部统计并与内置期望值比对 |
-
-> **M0 的验收数字是"防回归基线"**：以后任何解析改动让这三个数字变了，CI 立刻报错。
-
-### M1 — 标题画面（2–3 周）★ 第一个可运行里程碑
-
-闭包实测：`TitleMap` 事件 2 → **4 个事件 / 671 条指令 / 26 种 opcode**。
-
-~~~
-99 Checkpoint · 102 Choices · 103 Comment · 106 DebugMessage · 111 VariableCondition
-121 SetVariable · 123 InputKey · 130 Teleport · 140 Sound · 150 Picture · 170 StartLoop
-171 BreakLoop · 172 BreakEvent · 175 EndGame · 179 LoopTimes · 180 Wait · 210 CommonEvent
-212 SetLabel · 213 JumpLabel · 250 Database · 270 Party · 300 CommonEventByName
-401 ChoiceCase · 420 ElseCase · 498 LoopEnd · 499 BranchEnd
-~~~
-
-| 交付 | 验收标准 |
-|---|---|
-| 解释器内核（26 opcode + 状态机 + 变量库） | 能单步执行任意事件，`wolf-cli run --event 42` 打印指令轨迹 |
-| 分支/循环/标签预编译 | 401/420/421/499/498/179/212/213 全部走跳转表，无线性扫描 |
-| winit + wgpu 窗口 + 整数缩放 blit | 1024×576 画面正确放大到任意窗口尺寸，无拉伸 |
-| Picture 图层系统（type 0 + type 2） | 标题的 10 张 `SystemGraphic/TitleGraphic*.jpg` + `Kagura/*.png` 正确显示、动画、擦除 |
-| 音频 BGM/SE | 标题 BGM 播放、循环、按钮音效 |
-| **能进标题画面并选择菜单项** | 标题画面**不崩、帧率稳定 60**、菜单项可选、切换分支正确 |
-
-> 标题闭包里**一条 Message 都没有**（0 条），它全是 Picture 画的 —— 所以 M1 可以**完全跳过文字渲染**，先啃渲染和解释器。这是路线设计上的刻意安排。
-
-### M2 — 主玩法垂直切片（2–3 个月）★ 真正的门槛
-
-闭包实测：`SampleMapA` 事件 1 → **103 个事件 / 45,364 条指令 / 35 种 opcode**。
-（在 M1 的 26 种上新增：101 Message、112 StringCondition、122 SetString、124 SetVariableEx、125 AutoInput、126 BanInput、174 ReturnToTitle、201 Move、220 SaveLoad、221 LoadGame、222 SaveGame、290 Effect、421 CancelCase、1000 ProFeature）
-
-| 交付 | 验收标准 |
-|---|---|
-| tilemap 渲染 + 3 层 + 相机滚动 | Map003（70×170）滚动不掉帧；autotile（4 象限）正确拼接 |
-| 角色 chip（8 向 × 3 帧） | 主角走遍 8 方向动画正确 |
-| **文字系统**（101 Message + 全套内联标记） | 12,027 条消息全部可显示；`\E` 描边 / `\c[n]` 颜色 / `\f[n]` 脸图 / `\v[n]` / `\cself[n]` 正确；打字机效果 + 按键等待 + 消息窗口位置（系统变量 1/2/5/6） |
-| 选择支（102 Choices + 123 InputKey） | 1,010 条选项标签正确显示、光标、确定/取消 |
-| 存档读写（220/221/222 + `wolf-save`） | **读官方 .sav 100% 正确**；写出的 .sav 能被官方游戏读回 |
-| 地图事件页 + 触发条件 | 73 个地图事件（决定键/自动/并行/接触）全部按规则触发；9 张 .mps 全部能解析（含空地图 `0xFFFFFFFF`、`0x01`=Move 的指令尾、`0x00` 页尾容错） |
-| **能玩一段完整日常** | 从标题 → 新游戏 → 起床 → 对话 → 选择 → 存档 → 读档，全程不崩 |
-
-> **M2 结束时项目"证明成立"**：一个陌生人能拿自己的正版数据，跑起这个 Rust 程序，玩到真实内容。
-
-### M3 — 完整运行时（4–6 个月）
-
-闭包实测：**108 个自动事件 ∪ 全部地图入口 → 290 个事件 / 113,149 条指令 / 45 种 opcode**。
-
-| 交付 | 验收标准 |
-|---|---|
-| 全部 50 种 opcode | 补齐地图独有的 151/161/162 与剩余的 104/105/160/171/175/176/211/222/281/1000 |
-| 完整的并行协程调度 | 108 个后台事件同时跑，60fps 不掉；`Wait` 语义与官方一致 |
-| 数据库系统（250 Database，2,592 次） | 44 个游戏 DB 类型 + 33 个自定义 DB 类型全部可读可写 |
-| 时间/日程循环 | 早朝/昼/夕/夜/深夜 的日程推进（`■早朝処理`/`■昼コマンド`/`深夜差分描画` 等） |
-| 全部 6 张注册地图 | 地图切换、传送（130）、远景滚动 |
-| 战斗系统（占 1.9%） | 战斗指令 242/243/165 等 28 个事件能跑（可先用简化伤害公式，`ダメージ計算タイプ` 300 条在 SysDatabase 里） |
-| H 场景（占 4.0%） | `■Hカットイン` / `文字エフェクト` 等 12 个事件（这部分是 Picture VM 的极限测试） |
-
-### M4 — 对等与打磨（3–4 个月）
-
-- 剩余 3 种 opcode（211 CommonEventReserve 4 次、107 ClearDebugText 1 次，以及 code 1000 ProFeature 24 次）
-- `290 Effect`（640 次）的震动/闪白/淡入淡出预设
-- 设置界面（`Config.exe` 对应的全部选项）、截图、剪贴板（`Game.ini` 里的开关）
-- 性能优化：**169,831 条指令**（公共事件 139,273 + 地图事件 30,558）+ 108 个并行协程的每帧预算
-- **Rust 版 `.wolf` 解包器**（去掉对 UberWolf 的外部依赖）
-- 发布打包：Windows MSI/portable，启动时校验用户数据目录
-
-### M5 — 可选：超越原版
-
-原版做不到而 Rust 版容易做的（这也是"重写"真正的价值所在）：
-- **多语言**（原版 CN 汉化是改 `CommonEvent.dat` 文本实现的；我们可以做成运行时字符串表替换，不碰二进制）
-- **高分辨率/高帧率**（1024×576 → 4K，tile 用最近邻但 UI 用矢量）
-- **Mod 加载**（脚本级 hook、事件替换、资产覆盖）
-- **调试器**（逐指令单步、变量监视、事件调用图可视化）—— 这个会极大加速 M2/M3 本身
-- **无级缩放 + 宽屏适配**
-
----
-
-## 5. 工作量与风险
-
-### 5.1 规模估算（按行数）
-
-| 模块 | 估计行数 | 参照 |
-|---|---:|---|
-| `wolf-format`（全部格式） | 4,000–6,000 | WolfTL 数据层 C++ 5,130 行 |
-| `wolf-vm`（50 opcode + 调度器） | 3,000–4,000 | — |
-| `wolf-render`（tilemap/Picture VM/文字标记） | 3,500–5,000 | — |
-| `wolf-save` | 2,000–2,500 | WolfSave C++ 5,895 行（Rust 会更短） |
-| `wolf-audio` | 600–900 | — |
-| `wolf-game`（场景/输入/设置/资源） | 3,000–4,000 | — |
-| `.wolf` 解包器（M4） | 2,000–3,000 | WolfDec DXArchive.cpp 3,985 + Huffman.cpp 875 |
-| **合计** | **约 18,000–25,000 行** | |
-
-对照：doukutsu-rs 约 9 万行 / 6 年 / 34 位贡献者；EasyRPG 约 13 万行 / 14 年。**本项目目标规模只有它们的 1/5**，因为 WOLF 的 opcode 集小、2D 管线简单、且我们**不需要实现编辑器**（只实现运行时）。
-
-### 5.2 时间估算（单人业余，每周 10–15 小时）
-
-| 阶段 | 日历时间 | 累计 |
-|---|---|---|
-| M0 地基 | 1 周 | 1 周 |
-| M1 标题画面 | 2–3 周 | **1 个月** ← 第一个可运行版本 |
-| M2 主玩法切片 | 2–3 个月 | 4 个月 ← **项目"证明成立"** |
-| M3 完整运行时 | 4–6 个月 | 8–10 个月 |
-| M4 对等打磨 | 3–4 个月 | **12–14 个月** |
-| M5 超越原版 | 持续 | — |
-
-若全职投入，M0–M2 约 6–8 周，M3 约 3 个月。
-
-### 5.3 风险登记表
-
-| # | 风险 | 概率 | 影响 | 缓解措施 |
-|---|---|---|---|---|
-| R1 | **`150 Picture` 的语义还原度**（16,716 次，13.6% 的指令，参数是变长可选字段 + 变量间接 + 负值魔法） | 高 | 高 | 先做 M1 的 21 个 Picture 用例（标题画面全是 Picture，是最干净的样本）；建立"参数形状 → 语义"的对照表；对 2,179 个文字型 Picture 单独一条路径 |
-| R2 | **并行协程调度的时序偏差**（108 个事件每帧跑，`Wait` 的帧数语义、事件执行顺序） | 高 | 中 | 用存档差分做 oracle（见 `6）；把"每帧事件执行顺序"做成可配置，与原版逐帧比对 |
-| R3 | **文字内联标记的边界情况**（`\cself[n]` 在非地图事件里的语义、`\E` 描边、`\space[n]`、ruby） | 中 | 中 | 官方文档已抓全（`work/yado2.txt`，42 种特殊字符完整表）；先实现 6 个高频的，其余按需 |
-| R4 | **战斗系统**（28 个事件 / 2,604 条指令 / 19 种敌 / 42 种敌技能 / 300 条伤害公式类型） | 中 | 中（只占 1.9%） | 最后做，或用"自动战斗占位"绕过；`ダメージ計算タイプ` 300 条在 SysDatabase 里可枚举 |
-| R5 | **1.5 GB 媒体的加载性能** | 低 | 中 | 懒加载 + LRU + 图集；`MapChip` 全量常驻只有 15MB |
-| R6 | **用户数据版本不一致**（CN 补丁 / `+DLC v2.03` / 原版，指令集和文本不同） | 中 | 高 | 启动时校验 `Game.dat` 的 title + `fileVersion`；不支持就明确拒绝并提示 |
-| R7 | **法律风险** | 低 | 高 | `2 的四条硬规则，一条都不能破 |
-| R8 | **单人项目半途而废**（历史数据：绝大多数引擎重写项目死在这里） | **高** | **致命** | **这就是为什么路线是"垂直切片优先"**：M1 一个月内就有可运行的东西，M2 四个月内就"证明成立"。永远保持"能跑"的状态，而不是"重构到一半" |
-
----
-
-## 6. 测试策略：我们有一个别人没有的 oracle
-
-引擎重写的经典难题是"没有对照物，怎么知道写对了"。**这个项目有一个罕见的优势：存档格式已被完全破解。**
-
-**存档差分测试（Save-Diff Oracle）**：
-
-1. 在**官方游戏**里做一串操作（新游戏 → 起床 → 对话 → 选择 A → 存档），得到 `SaveData09.sav`。
-2. 在**我们的 Rust 引擎**里做完全相同的操作序列（可以用脚本化输入回放），得到 `our.sav`。
-3. **解密两者，逐字节比对**。
-
-因为存档正文是熵 1.24 bit/byte 的紧凑结构体，**逐字节相等是一个极强的正确性断言** —— 任何变量算错、任何分支走错、任何事件少跑一帧，都会立刻在某个字节上体现。这比"截图看起来一样"精确几个数量级。
-
-配套的三层验证：
-
-| 层次 | 方法 | 覆盖什么 |
-|---|---|---|
-| **单元** | `wolf-format` 对真实文件断言结构数字（550 / 139,273 / 48 / 9 张地图尺寸） | 解析正确性 |
-| **差分** | 存档逐字节比对（上） | 运行时语义正确性 |
-| **交叉** | 用 WolfTL 的 JSON dump 与我们的二进制解析互相校验（注意 WolfTL JSON 有损 ~11%，只能校验公共子集） | 解析器交叉验证 |
-| **视觉** | 官方游戏录屏 vs 我们逐帧截图比对（1024×576 定尺寸，可直接像素 diff） | 渲染正确性 |
-| **模糊** | 对 `.dat`/`.mps`/`.sav` 做随机字节翻转，断言解析器不 panic 而是返回 `Err` | 健壮性（发布前必须有，否则用户数据一坏就崩） |
-
----
-
-## 7. 立刻可以执行的第一步
-
-~~~
-# 1) 装 Rust（官方源在国内约 35KB/s，必须走镜像）
-curl -sS -o rustup-init.exe \
-  https://mirrors.ustc.edu.cn/rust-static/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
-./rustup-init.exe -y --default-toolchain stable --profile default
-
-# 2) 让 rustup 与 cargo 都走镜像（否则 cargo build 会爬到天荒地老）
-#    ~/.cargo/config.toml:
-#    [source.crates-io]
-#    replace-with = "ustc"
-#    [source.ustc]
-#    registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"
-#    环境变量：RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static
-#              RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup
-
-# 3) 建 workspace，先只写 wolf-format 的三个 loader + 一个 verify 子命令
-cargo new --lib crates/wolf-format
-cargo new --bin crates/wolf-cli
-#    wolf-cli verify <游戏安装目录>
-#    期望输出：550 events / 139273 instructions / 47 common opcodes / 50 total opcodes
-#              73 map events / 30558 map instructions / 9 maps / 1024x576
-~~~
-
-**第一个可交付物**：`wolf-cli verify "E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy"` 打印出上面那串数字。跑通它，M0 就完成了一半，而且后续所有工作都有了一个防回归基线。
-
----
-
-## 8. 配套文档
-
-| 文档 | 状态 | 内容 |
-|---|---|---|
-| `docs/BASELINE.json` | ✅ 已生成 | 机器可校验期望值：550 事件 / 163,828 槽 / 24,555 空 / 139,273 真实 / 47 非空 opcode；73 地图事件 / 134 页 / 37,610 槽 / 30,558 真实；并集 50；逐图 w/h/tileset；Game.dat 全标量；存档参数；6 个 tileset。`wolf-cli verify` 直接读它，不硬编码 |
-| `docs/OPCODE_SPEC.md` | ✅ 已交付 | 50 种 opcode 的完整语义规格（参数布局 / 执行语义 / 真实样例 / M1M2M3 优先级 / 15 项未确认清单） |
-| `docs/FORMAT_SPEC.md` | ✅ 已交付 | 逐字节的二进制格式规格（Game.dat `0x55` / CommonEvent.dat `0xC9` / .mps + 页与指令尾 / DataBase·CDataBase·SysDatabase `0xC2` / **TileSetData `0xD2`（已破解：count=6，per-tileset = title+base+31 个 autotile 文件 + 标签表 + 通行表，尾 `0xCF`）** / .wolf DXArchive v8（636/636 文件与参考解包逐字节一致）/ .sav（9/9 解密成功））；标注 37 处「已验证」与 15 处 TODO |
-| `docs/ARCHITECTURE.md` | ✅ 已交付 | Rust 架构设计（crate 布局 / 解释器结构体骨架 / 渲染管线 / Cargo 依赖清单 / 工程化 / 六层测试 / 11 条风险 / 6 个里程碑） |
-
-参考资料（已 vendor 到 `docs/vendor/`）：WolfTL（MIT，数据层 C++ 参考）、WolfSave（MIT，存档 C++ 参考）、WolfDec（.wolf 解包参考）、`_wolfref/` 下 8 个 Kaitai Struct `.ksy`（可直接翻译成 `binrw` 结构）。
+# 《妹相随～黑白世界的缤纷冒险～》Rust 重写 — 当前路线图
+
+> 本文件是**当前路线图（living document）**，只记录“现在做到哪、接下来做什么”。
+> 原始可行性研究与 M0–M5 的详细规划已归档到 [`docs/archive/PLAN_2026-10-26.md`](docs/archive/PLAN_2026-10-26.md)，仅作历史参考。
+> 最新交接：[docs/HANDOFF_M10.md](docs/HANDOFF_M10.md)　｜　文档总索引：[docs/README.md](docs/README.md)　｜　协作约定：[AGENT.md](AGENT.md)
+
+## 1. 当前状态
+
+- 当前源码 HEAD：`e52855d`（M10 交接/基线文档提交；M10 代码提交为 `ce680b3` + `3bbbb12`）。以 `git log` 为准。
+- 里程碑：**M0–M10 全部完成并收口**，可运行、可交付的工程约 **90%**；严格 1:1 原版等价约 **80–85%**。
+- 质量门禁：`cargo test -q --workspace` 全绿；`./target/debug/wolf-cli.exe verify --root work/all` = **PASS 70 / pending 0**。
+- 工作树：仅允许 3 个永久 scratch（`crates/wolf-format/examples/opscan.rs`、`crates/wolf-format/tests/_scratch_cdata.rs`、`crates/wolf-format/tests/_scratch_event.rs`）与用户资料 `docs/gpt调研/` 未跟踪。
+
+## 2. 里程碑总表（现行命名）
+
+| 里程碑 | 状态 | 主题 | 主要记录 |
+| --- | --- | --- | --- |
+| M0 | 完成 | 加载器 / 格式解析 / verify 基线 | `FORMAT_SPEC.md`、`BASELINE.json` |
+| M1 | 完成 | 标题画面像素级还原 | [`M1_CLOSURE.md`](docs/M1_CLOSURE.md) |
+| M2 | 完成 | 开场剧情纵切片（消息/选择/存档） | [`M2_SLICE.md`](docs/M2_SLICE.md) |
+| M3 | 完成 | 完整运行时：数据库、时间/日程、地图、战斗/H 调研 | [`HANDOFF_M3.md`](docs/HANDOFF_M3.md) |
+| M4 | 完成 | 音频后端与接线 | [`HANDOFF_M4.md`](docs/HANDOFF_M4.md)、[`AUDIO.md`](docs/AUDIO.md) |
+| M5 | 完成 | 存档层与官方 .sav 互通 | [`SAVE_SPEC.md`](docs/SAVE_SPEC.md)、[M10 save audit](docs/research/M10_SAVE_COMPLETENESS.md) |
+| M6 | 完成 | 主线贯通与可玩日常循环 | [`HANDOFF_M6.md`](docs/HANDOFF_M6.md) |
+| M7 | 完成 | 真实战斗 / H 场景切片 / 零售 PRNG / 选择窗口 | [`HANDOFF_M7.md`](docs/HANDOFF_M7.md) |
+| M8 | 完成 | day4 战斗结算→day5、H 前向链、地图角色层、模板存档、事件 RNG | [`HANDOFF_M8.md`](docs/HANDOFF_M8.md) |
+| M9 | 完成 | 锚点/图片槽位、H 闭环、战斗多回合/多队员、移动与地图触发、音频盘点 | [`HANDOFF_M9.md`](docs/HANDOFF_M9.md) |
+| M10 | 完成 | opcode 111 引用语义与 compound 修复、12 个战斗/H 测试重基线、残项收口 | [`HANDOFF_M10.md`](docs/HANDOFF_M10.md) |
+
+## 3. 当前完成度（按子系统）
+
+| 子系统 | 完成度 | 说明 |
+| --- | ---: | --- |
+| 数据格式 / VM / opcode | 100% | 50 种 opcode 与格式解析已收口；opcode 111 引用语义已落地 |
+| 存档 | 95% | 官方 .sav 往返、SavePart 完整性、模板存档、row counts 已覆盖；剩余逐段全量对照 |
+| 主线 / 日常循环 | 95% | 标题→新游戏→多日 08:30 日程→睡眠→次日已打通 |
+| 战斗 | 85–90% | 真实回合、结算、BOSS 多回合、多队员已证；自然路线 RNG 与多命令菜单仍是硬缺口 |
+| H 场景 | 85–90% | 真实入口→推进→退出→次日已闭环；深层 CG 仅合成存档可达 |
+| 地图移动 / NPC | 70–75% | 地形/碰撞/接触触发/玩家起点已实现；对角移动、NPC、动画仍缺 |
+| 视觉 | 90% | 标题/地图/窗口/锚点大部分还原；锚点 5/6 与 CN 窗口右缘待像素对照 |
+| 音频 | 90% | 358 个音频盘点、混音回归、异常 WAV 容错；剩余人工听感验收 |
+| 测试 / 文档 | 100% | 99 binaries / 701 tests、verify 70、HANDOFF/BASELINE 齐全 |
+
+## 4. M11 候选与优先级
+
+> 原则：先消除“会让玩家流程不确定”的缺口，再做视觉/音频打磨；每项都必须有测试或可复现证据。
+
+### P0 — 确定性与真实流程
+
+1. **战斗自然路线确定性**：`started_events` 的顺序影响预战斗 RNG 消费，导致 3–4 回合/胜负摆动；需要把事件 RNG 的零售时钟种子与 replay 固定下来（见 `docs/research/M9_PRNG_SEED.md`、`HANDOFF_M10.md` §5）。
+2. **真实多命令菜单桥接**：shipped CE188/CE157 数据层只注册一条命令；需要在不改数据的引擎侧补上“菜单选择 → CE242 命令索引”的桥（见 `docs/research/M9_BATTLE_LIVE_BRIDGE.md`、`M9_BATTLE_MULTI_INPUT.md`）。
+
+### P1 — 内容完整性
+
+3. **H 完整 CG 分支**：CE402/CE410 深层链目前只靠合成存档可达；目标是在真实存档/真实操作下达到。
+4. **移动 / NPC**：对角移动、连续行走动画、NPC 占位与交互、地图间传送后的起点一致性。
+5. **日程边界**：更多天数/随机事件的自然推进与跨天存档一致性。
+
+### P2 — 还原度与交付
+
+6. 视觉像素对照：锚点 5/6 几何、CN 窗口皮肤右缘、关键场景截图 diff。
+7. 音频人工听感验收（BGM 循环点、SE 音量/延迟）。
+8. 打包/性能：Windows 发布包、启动时用户数据目录校验、每帧预算与资源缓存。
+9. 文档：每个新里程碑完成时按 §5 收口。
+
+## 5. 里程碑完成的定义（Definition of Done）
+
+一个里程碑只有同时满足以下条件才算完成：
+
+1. **代码**：实现落地，未破坏既有测试；关键行为有集成测试或可复现命令。
+2. **验证**：`cargo test -q --workspace` 全绿；`wolf-cli verify` 保持 PASS 70 / pending 0（或同步更新基线并说明原因）。
+3. **交接**：写 `docs/HANDOFF_Mx.md`（现状、证据、边界、下一步），把上一份交接标为历史归档。
+4. **文档**：更新本 `PLAN.md`、`docs/README.md`、`docs/BASELINE.json`；研究底稿登记到 `docs/research/README.md`。
+5. **清理**：按 [AGENT.md](AGENT.md) §6 清理临时文件/构建缓存/worktree，确认 `git status` 只剩约定的未跟踪文件。
+
+## 6. 文档地图
+
+- 总索引：[docs/README.md](docs/README.md)
+- 新会话启动：[docs/NEW_SESSION_START.md](docs/NEW_SESSION_START.md)
+- 最新交接：[docs/HANDOFF_M10.md](docs/HANDOFF_M10.md)
+- 技术规格：[docs/FORMAT_SPEC.md](docs/FORMAT_SPEC.md)、[docs/OPCODE_SPEC.md](docs/OPCODE_SPEC.md)、[docs/SAVE_SPEC.md](docs/SAVE_SPEC.md)
+- 子系统全景：[docs/BATTLE.md](docs/BATTLE.md)、[docs/HSCENE.md](docs/HSCENE.md)、[docs/MAP_AUDIT.md](docs/MAP_AUDIT.md)
+- 研究底稿：[docs/research/README.md](docs/research/README.md)
+- 历史原稿：[docs/archive/PLAN_2026-10-26.md](docs/archive/PLAN_2026-10-26.md)

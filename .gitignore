@@ -13,3 +13,5 @@
 /tools/rustup-init.exe
 /tools/smoke/target/
 /tools/wgpusmoke/target/
+/docs/gpt调研/
+/.claude/

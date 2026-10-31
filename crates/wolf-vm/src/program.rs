@@ -19,7 +19,7 @@
 //! * a `498 LoopEnd` knows its loop head, so the loop counter lives in one flat
 //!   vector;
 //! * `212 SetLabel` names are collected into a map. **Labels are strings, not
-//!   indices** (docs/PLAN.md §3.2). 5 of the 1,543 `213 JumpLabel` instructions
+//!   indices** (docs/archive/PLAN_2026-10-26.md §3.2). 5 of the 1,543 `213 JumpLabel` instructions
 //!   embed a `cself[n]` and are only resolvable at run time, so they are marked
 //!   dynamic instead of being resolved to `None`.
 //!
