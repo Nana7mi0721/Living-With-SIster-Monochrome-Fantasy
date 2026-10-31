@@ -202,6 +202,26 @@ impl TileMap {
     }
 }
 
+/// Screen x of an actor's horizontal centre standing on a map tile.
+///
+/// Opcode 124 `0x1000` field 6 is documented as the character's centre in screen
+/// pixels. The camera is fixed at the map origin in this game (see [`TileMap::quads`]),
+/// so map and screen pixels share an origin and a tile's centre is `x * 16 + 8`.
+#[must_use]
+pub fn tile_centre_px(tile_x: i32) -> i32 {
+    tile_x * TILE_PX as i32 + (TILE_PX / 2) as i32
+}
+
+/// Screen y of an actor's feet standing on a map tile.
+///
+/// Field 7 is the character's feet, i.e. the bottom edge of the tile: `(y + 1) * 16`.
+/// The engine's optional jump height would be subtracted here; this port's maps
+/// carry no height state, so the field-4 answer stays 0.
+#[must_use]
+pub fn tile_feet_px(tile_y: i32) -> i32 {
+    (tile_y + 1) * TILE_PX as i32
+}
+
 /// Turns a base chip index into a source rectangle inside the tileset base image.
 ///
 /// The base sheet is a plain grid of 16x16 cells, eight columns wide in every shipped
@@ -291,6 +311,16 @@ mod tests {
         assert_eq!(autotile_src(0, 0, 64, 6), Some([32, 0, 8, 8]));
         assert_eq!(autotile_src(5, 0, 16, 0), None);
         assert_eq!(autotile_src(0, 4, 16, 0), None);
+    }
+
+    #[test]
+    fn actor_screen_anchors_are_the_tile_centre_and_the_feet() {
+        // The 64x36 playable map: the last column/row still lands on screen.
+        assert_eq!(tile_centre_px(0), 8);
+        assert_eq!(tile_centre_px(63), 1016);
+        assert_eq!(tile_feet_px(0), 16);
+        assert_eq!(tile_feet_px(35), 576);
+        assert_eq!(tile_centre_px(-1), -8);
     }
 
     #[test]

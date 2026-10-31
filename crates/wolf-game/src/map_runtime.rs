@@ -101,13 +101,25 @@ struct PageState {
     conditions: [PageCondition; CONDITION_SLOTS],
     /// None for a page with an empty command stream (blank page).
     program: Option<Arc<Program>>,
+    /// Facing direction of this page (WOLF numpad code; the shipped maps use 2 and 9).
+    ///
+    /// Opcode 124 `0x1000` field 5 reports this for the event's active page, so it
+    /// must survive page switches instead of being read from page 0 forever.
+    direction: i32,
 }
 
-/// One map event: its pages, and which page is active right now.
+/// One map event: its placement, pages, and which page is active right now.
 struct EventState {
     id: u32,
     name: String,
+    /// Event placement on the map, in tiles (the .mps event record's map_x/map_y).
+    x: i32,
+    /// Event placement on the map, in tiles.
+    y: i32,
     pages: Vec<PageState>,
+    /// False for the boot event started by the caller and for blank events: the
+    /// placement is kept (opcode 124 can still query it) but no coroutine is owned.
+    runs: bool,
     /// Index of the active page, None when no page's conditions hold.
     active: Option<usize>,
     instance: Option<InstanceId>,
@@ -117,6 +129,42 @@ struct EventState {
     starts_on_page: u64,
     /// The event-owned self-variable bank, WOLF style. None until a page runs.
     self_vars: Option<SelfVars>,
+}
+
+/// A placed map event as opcode 124 `0x1000` / `0x1200` sees it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MapActor {
+    /// Map event id (the object operand of `124`).
+    pub id: u32,
+    /// Tile x from the event's map placement.
+    pub x: i32,
+    /// Tile y from the event's map placement.
+    pub y: i32,
+    /// Facing of the active page, None while no page's conditions hold.
+    pub direction: Option<i32>,
+    /// Index of the active page, None while no page's conditions hold.
+    pub active_page: Option<usize>,
+}
+
+/// The party leader's placement, when the engine has placed it on the current map.
+///
+/// The map files in this game carry no player start coordinate (MAP_AUDIT §7.5:
+/// `MapTree.dat` has no x/y and no start field), and the game is point-and-click,
+/// so there is no walkable leader actor in the data. A position therefore exists
+/// only after the engine places one: [`MapRuntime::place_leader`] (the new-game /
+/// debug hook) or a `130` transfer that targets the hero.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LeaderPlacement {
+    /// Tile x (precise units divided by two, truncating like the engine's integer math).
+    pub x: i32,
+    /// Tile y.
+    pub y: i32,
+    /// Precise x: half-tile units (`2 * tile` for a static placement).
+    pub precise_x: i32,
+    /// Precise y: half-tile units.
+    pub precise_y: i32,
+    /// Facing, when the placement carried one. A bare `130` transfer does not.
+    pub direction: Option<i32>,
 }
 
 /// The public view of one running map event.
@@ -142,6 +190,8 @@ impl PageSlot {
 #[derive(Default)]
 pub struct MapRuntime {
     events: Vec<EventState>,
+    /// The party leader's placement on the current map, when the engine has placed it.
+    leader: Option<LeaderPlacement>,
     /// Total starts across all events, i.e. how much the map is doing.
     pub restarts: u64,
     /// How many times an event switched to a different page.
@@ -154,28 +204,26 @@ impl MapRuntime {
         Self::default()
     }
 
-    /// Collect the pages of every event of a map.
+    /// Collect the pages and placements of every event of a map.
     #[must_use]
     pub fn collect(map: &Map) -> Self {
         Self::collect_except(map, None)
     }
 
-    /// Same, but never collects a skipped event (the boot event is started by
-    /// the caller, and collecting it too would run the title script twice).
+    /// Same, but never runs a skipped event (the boot event is started by the
+    /// caller, and starting it too would run the title script twice).
     ///
-    /// Events whose every page has an empty command stream are dropped: WOLF
-    /// treats them as blank, and keeping them would burn an instance slot per
-    /// frame for nothing.
+    /// Every event keeps its map placement (x/y and each page's direction) so
+    /// opcode 124 can answer for any event id, but events whose every page has an
+    /// empty command stream, and the skipped event, get `runs == false` and never
+    /// own a coroutine. That preserves the old behaviour of not burning an instance
+    /// slot per frame on a blank event while making the placement layer complete.
     #[must_use]
     pub fn collect_except(map: &Map, skip: Option<u32>) -> Self {
-        let mut events = Vec::new();
+        let mut events = Vec::with_capacity(map.events.len());
         for event in &map.events {
-            if Some(event.id) == skip {
-                continue;
-            }
-            if event.pages.iter().all(|page| page.commands.is_empty()) {
-                continue;
-            }
+            let runs =
+                Some(event.id) != skip && event.pages.iter().any(|page| !page.commands.is_empty());
             let pages = event
                 .pages
                 .iter()
@@ -191,13 +239,17 @@ impl MapRuntime {
                         trigger: Trigger::from_byte(page.trigger),
                         conditions: page.conditions(),
                         program,
+                        direction: i32::from(page.direction),
                     }
                 })
                 .collect();
             events.push(EventState {
                 id: event.id,
                 name: event.name.clone(),
+                x: event.x as i32,
+                y: event.y as i32,
                 pages,
+                runs,
                 active: None,
                 instance: None,
                 starts: 0,
@@ -207,29 +259,89 @@ impl MapRuntime {
         }
         Self {
             events,
+            leader: None,
             restarts: 0,
             switches: 0,
         }
     }
 
-    /// How many events are tracked (not all of them are active at once).
+    /// Every event this runtime knows, runnable or not.
     #[must_use]
     pub fn event_count(&self) -> usize {
         self.events.len()
     }
 
-    /// How many events have an active page with a command stream right now.
+    /// The placement of map event `id` as `124` sees it.
+    ///
+    /// Tile x/y always come from the parsed map. `direction` is the facing of the
+    /// page selected this frame, so it follows page switches; it is `None` while no
+    /// page's conditions hold (the event is not on the map), which is exactly the
+    /// "no placement" case callers must not fabricate.
+    #[must_use]
+    pub fn actor(&self, id: u32) -> Option<MapActor> {
+        let state = self.events.iter().find(|state| state.id == id)?;
+        let direction = state
+            .active
+            .and_then(|index| state.pages.get(index))
+            .map(|page| page.direction);
+        Some(MapActor {
+            id: state.id,
+            x: state.x,
+            y: state.y,
+            direction,
+            active_page: state.active,
+        })
+    }
+
+    /// Places the party leader (the `-2` target of `124`), in whole tiles.
+    ///
+    /// `direction` is the WOLF facing code; pass None when the placement carries no
+    /// facing (a bare `130` transfer has none) so field 5 stays unanswered instead
+    /// of inventing one. The precise (0.5-tile) coordinates are derived as `tile * 2`.
+    pub fn place_leader(&mut self, x: i32, y: i32, direction: Option<i32>) {
+        self.place_leader_precise(x.saturating_mul(2), y.saturating_mul(2), direction);
+    }
+
+    /// Places the leader from half-tile units, the space a precise `130` transfer uses.
+    ///
+    /// WOLF's `130` options bit 0 means "precise coordinates": the shipped new-game
+    /// transfer targets `(62, 38)` on a 64x36 map, which only fits after halving to
+    /// (31, 19), and the title transfer's `(60, 34)` halves to Map003 event 1's own
+    /// (30, 17) tile. Tile fields therefore truncate `precise / 2`.
+    pub fn place_leader_precise(
+        &mut self,
+        precise_x: i32,
+        precise_y: i32,
+        direction: Option<i32>,
+    ) {
+        self.leader = Some(LeaderPlacement {
+            x: precise_x / 2,
+            y: precise_y / 2,
+            precise_x,
+            precise_y,
+            direction,
+        });
+    }
+
+    /// The leader's current placement, None until the engine has placed it.
+    #[must_use]
+    pub fn leader(&self) -> Option<LeaderPlacement> {
+        self.leader
+    }
+
+    /// How many runnable events have an active page with a command stream right now.
     #[must_use]
     pub fn len(&self) -> usize {
         self.events
             .iter()
             .filter(|state| {
-                state.active.is_some_and(|index| {
-                    state
-                        .pages
-                        .get(index)
-                        .is_some_and(|page| page.program.is_some())
-                })
+                state.runs
+                    && state.active.is_some_and(|index| {
+                        state
+                            .pages
+                            .get(index)
+                            .is_some_and(|page| page.program.is_some())
+                    })
             })
             .count()
     }
@@ -239,12 +351,15 @@ impl MapRuntime {
         self.len() == 0
     }
 
-    /// One slot per active event, in map file order.
+    /// One slot per active event that the runtime runs, in map file order.
     #[must_use]
     pub fn slots(&self) -> Vec<PageSlot> {
         self.events
             .iter()
             .filter_map(|state| {
+                if !state.runs {
+                    return None;
+                }
                 let index = state.active?;
                 let page = state.pages.get(index)?;
                 let program = page.program.as_ref()?;
@@ -353,11 +468,16 @@ impl MapRuntime {
                     }
                     vm.stop_instance(id);
                 }
-                if state.active.is_some() {
+                if state.runs && state.active.is_some() {
                     self.switches += 1;
                 }
                 state.active = want;
                 state.starts_on_page = 0;
+            }
+            // A skipped boot event or a blank event keeps its placement and page
+            // selection (so 124 can answer for it) but never owns a coroutine.
+            if !state.runs {
+                continue;
             }
             let Some(index) = state.active else {
                 continue;
@@ -742,5 +862,140 @@ mod tests {
             2,
             "a restarted parallel page must resume with the event's bank"
         );
+    }
+
+    #[test]
+    fn placements_are_kept_for_skipped_and_blank_events() {
+        let map = map_with(vec![
+            MapEvent {
+                id: 1,
+                name: "skip".to_owned(),
+                x: 4,
+                y: 5,
+                pages: vec![page(2, vec![Slot::Blank])],
+            },
+            MapEvent {
+                id: 2,
+                name: "blank".to_owned(),
+                x: 6,
+                y: 7,
+                pages: vec![page(2, Vec::new())],
+            },
+            MapEvent {
+                id: 3,
+                name: "run".to_owned(),
+                x: 8,
+                y: 9,
+                pages: vec![page(2, vec![Slot::Blank])],
+            },
+        ]);
+        let mut runtime = MapRuntime::collect_except(&map, Some(1));
+        let mut vm = Vm::new(ProgramSet::default());
+        let mut host = Quiet;
+        runtime.start_pending(&mut vm);
+
+        // The boot event and the blank event own no coroutine ...
+        assert_eq!(runtime.len(), 1, "only event 3 may run");
+        let slots = runtime.slots();
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].event, 3);
+        // ... but their placement is still queryable for opcode 124.
+        let skipped = runtime.actor(1).expect("skipped event placement");
+        assert_eq!((skipped.x, skipped.y), (4, 5));
+        assert_eq!(skipped.direction, Some(2));
+        let blank = runtime.actor(2).expect("blank event placement");
+        assert_eq!((blank.x, blank.y), (6, 7));
+        assert!(runtime.actor(99).is_none(), "no such map event");
+        let _ = vm.step_frame(&mut host);
+    }
+
+    #[test]
+    fn an_actors_direction_follows_the_active_page() {
+        // Page 0 faces down (2); page 1 faces up-right (9) and takes over when v10 = 1.
+        let mut up = page_with(
+            2,
+            [0x21, 0, 0, 0],
+            [2_000_010, 0, 0, 0],
+            [1, 0, 0, 0],
+            vec![Slot::Blank],
+        );
+        up.direction = 9;
+        let map = map_with(vec![MapEvent {
+            id: 7,
+            name: "facing".to_owned(),
+            x: 12,
+            y: 13,
+            pages: vec![page(2, vec![Slot::Blank]), up],
+        }]);
+        let mut runtime = MapRuntime::collect(&map);
+        let mut vm = Vm::new(ProgramSet::default());
+
+        runtime.start_pending(&mut vm);
+        let first = runtime.actor(7).expect("placed event");
+        assert_eq!((first.x, first.y), (12, 13));
+        assert_eq!(first.active_page, Some(0));
+        assert_eq!(first.direction, Some(2));
+
+        vm.vars.set(10, 1);
+        runtime.start_pending(&mut vm);
+        let second = runtime.actor(7).expect("placed event");
+        assert_eq!(second.active_page, Some(1));
+        assert_eq!(
+            second.direction,
+            Some(9),
+            "field 5 must read the active page, not page 0"
+        );
+    }
+
+    #[test]
+    fn an_actor_without_an_active_page_has_no_direction() {
+        let map = map_with(vec![MapEvent {
+            id: 4,
+            name: "conditional".to_owned(),
+            x: 2,
+            y: 3,
+            pages: vec![page_with(
+                2,
+                [0x21, 0, 0, 0],
+                [2_000_010, 0, 0, 0],
+                [5, 0, 0, 0],
+                vec![Slot::Blank],
+            )],
+        }]);
+        let mut runtime = MapRuntime::collect(&map);
+        let mut vm = Vm::new(ProgramSet::default());
+        runtime.start_pending(&mut vm);
+        let actor = runtime.actor(4).expect("placement exists");
+        assert_eq!((actor.x, actor.y), (2, 3), "the map placement is real");
+        assert_eq!(actor.active_page, None);
+        assert_eq!(actor.direction, None, "no page means no facing to report");
+    }
+
+    #[test]
+    fn the_leader_exists_only_after_an_explicit_placement() {
+        let mut runtime = MapRuntime::new();
+        assert_eq!(runtime.leader(), None);
+        runtime.place_leader(11, 12, None);
+        assert_eq!(
+            runtime.leader(),
+            Some(LeaderPlacement {
+                x: 11,
+                y: 12,
+                precise_x: 22,
+                precise_y: 24,
+                direction: None
+            })
+        );
+        runtime.place_leader(11, 12, Some(8));
+        assert_eq!(runtime.leader().unwrap().direction, Some(8));
+        // A precise `130` transfer stores half-tiles; the tile fields truncate.
+        runtime.place_leader_precise(63, 39, Some(2));
+        let precise = runtime.leader().unwrap();
+        assert_eq!((precise.x, precise.y), (31, 19));
+        assert_eq!((precise.precise_x, precise.precise_y), (63, 39));
+        // A fresh collection is a new map; it must not carry the old map's position.
+        let map = map_with(Vec::new());
+        let collected = MapRuntime::collect(&map);
+        assert_eq!(collected.leader(), None);
     }
 }
