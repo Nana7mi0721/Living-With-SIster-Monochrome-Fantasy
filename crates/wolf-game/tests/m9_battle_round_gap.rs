@@ -7,14 +7,17 @@
 //! single-round artifact (the literal-operand bug mis-sized the gauge so the first command
 //! zeroed it before phase 2 was ever reached).
 //!
-//! Measured (WOLF_DATA_ROOT=work/all): v350=[0,1,2,0,1,2,0,1,2,0,1,2,0], settle frame 1616,
-//! 2000349=4 (four command rounds), 2000342 min 0 (enemy gauge drained), 2000343=1, 2000352=1
-//! (victory). CE241 live for 258 frames, CE243 for 393 frames.
+//! Measured (WOLF_DATA_ROOT=work/all): v350=[0,1,2,0,1,2,0,1,2,0,1,0], settle frame 1516,
+//! 2000349=4 (four command rounds: three full 0->1->2 cycles + a final 0->1->0), 2000342 min 0
+//! (enemy gauge drained), 2000343=1, 2000352=1 (victory). CE241 live for 258 frames, CE243 for
+//! 294 frames. Task-79 proved this trajectory is byte-reproducible across process restarts (5x,
+//! identical trace) — the exact values below are locked as a determinism regression.
 //!
 //! Two probes in this file:
 //!  1. the natural continuous route above (test-only trace of live event ids, phase, enemy
-//!     gauge, CE241/CE243 presence and CE244 result writes), asserting four full command
-//!     rounds (0->1->2->0 x4) settle at frame 1616 with CE241/CE243 running before settle;
+//!     gauge, CE241/CE243 presence and CE244 result writes), asserting the exact locked
+//!     trajectory v350=[0,1,2,0,1,2,0,1,2,0,1,0] settling at frame 1516 with v349=4 and
+//!     pools [3,2,3,2], CE241/CE243 running before settle;
 //!  2. the task-57 BOSS path with set_battle_round_loop(true) as an independent multi-round
 //!     control.
 //!
@@ -547,7 +550,7 @@ fn natural_day_four_battle_runs_genuine_multi_round_and_settles() {
     let newly_started: Vec<u32> = started_after.difference(&started_before).copied().collect();
 
     println!(
-        "m9_battle_round_gap NATURAL: v350={:?} phases={:?} active_f={:?} ce253={} ce239={} ce242={} ce241_frames={} ce243_frames={} ce244_frames={} first244_f={:?} first244_pc={} first244_live={:?} max239pc={} max242pc={} v342_min={} gauge_zero_f={:?} result_write_f={:?} decided_f={:?} settle_f={:?} v349={} pools={:?} newly_started={:?} started_before_241={} started_after_241={} started_before_243={} started_after_243={} started_before_244={} started_after_244={} ce243_first={:?} ce243_last={:?} ce243_frames={} tail_live={:?} warnings={}",
+        "m9_battle_round_gap NATURAL: v350={:?} phases={:?} active_f={:?} ce253={} ce239={} ce242={} ce241_frames={} ce243_frames={} ce244_frames={} first244_f={:?} first244_pc={} first244_live={:?} max239pc={} max242pc={} v342_min={} gauge_zero_f={:?} result_write_f={:?} decided_f={:?} settle_f={:?} v349={} pools={:?} newly_started={:?} started_before_241={} started_after_241={} started_before_243={} started_after_243={} started_before_244={} started_after_244={} ce243_first={:?} ce243_last={:?} ce243_frames={} tail_live={:?} v352_settle={} v343_settle={} warnings={}",
         trace.v350_seq,
         trace.phase_frames,
         trace.battle_active_frame,
@@ -580,6 +583,8 @@ fn natural_day_four_battle_runs_genuine_multi_round_and_settles() {
         trace.ce243_frame_list.last(),
         trace.ce243_frames,
         trace.tail_live,
+        trace.v352_at_settle,
+        trace.v343_at_settle,
         game.stats.warnings
     );
 
@@ -588,6 +593,9 @@ fn natural_day_four_battle_runs_genuine_multi_round_and_settles() {
         "CE253/239/242 dispatch chain"
     );
     assert!(trace.battle_active_frame.is_some(), "2000340 rose");
+    // Task-79 determinism lock: this natural battle trajectory is byte-reproducible across
+    // repeated process runs (verified 5x with an identical trace/md5), so pin exact values
+    // instead of the old structural shape guards.
     let settle = trace.settle_frame.expect("settled frame");
     let main_phases: Vec<i32> = trace
         .phase_frames
@@ -595,70 +603,45 @@ fn natural_day_four_battle_runs_genuine_multi_round_and_settles() {
         .filter(|(f, _, _)| *f <= settle)
         .map(|(_, _, v)| *v)
         .collect();
-    // opcode-111 reference semantics: the day-4 battle is a genuine multi-round fight, 2000350
-    // cycling 0 -> 1 -> 2 -> 0 several times (old literal-bug did 0->1->0 once). Exact round
-    // count varies (3-4) with battle RNG, so assert the structural multi-round shape.
-    assert_eq!(main_phases.first(), Some(&0), "command phase starts idle");
-    assert_eq!(main_phases.last(), Some(&0), "command phase settles back to idle");
+    assert_eq!(
+        main_phases,
+        vec![0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 0],
+        "2000350 exact trajectory: four command rounds (0->1->2 x3 then 0->1->0 settle)"
+    );
+    assert_eq!(settle, 1516, "CE244 settles on the exact deterministic frame");
     let command_rounds = main_phases.iter().filter(|v| **v == 1).count();
     let action_phases = main_phases.iter().filter(|v| **v == 2).count();
-    assert!(
-        command_rounds >= 2,
-        "multiple command rounds, got {command_rounds} (phases {main_phases:?})"
+    assert_eq!(command_rounds, 4, "exactly four command rounds");
+    assert_eq!(action_phases, 3, "exactly three enemy-action phases");
+    assert_eq!(trace.v349_at_settle, 4, "2000349 = four command rounds elapsed");
+    assert_eq!(
+        trace.pools_at_settle,
+        [3, 2, 3, 2],
+        "member pools (2000345/346/347/348) at settle"
     );
-    assert!(
-        action_phases >= 1,
-        "at least one enemy action phase, got {action_phases}"
-    );
-    assert!(
-        trace
-            .phase_frames
-            .iter()
-            .any(|(f, _, v)| *f <= settle && *v == 2),
-        "phase 2 (enemy action) IS entered before CE244 settles"
-    );
-    assert!(
-        trace.ce241_frames > 0,
-        "CE241 turn start fires every round, got {} frames",
-        trace.ce241_frames
-    );
-    assert!(
-        trace.ce243_first_frame.map_or(false, |f| f <= settle),
-        "CE243 runs its first action phase before the decisive frame, got {:?}",
-        trace.ce243_first_frame
-    );
-    assert!(
-        trace.ce243_frames > 0,
-        "CE243 runs real action phases, got {} sampled frames",
-        trace.ce243_frames
+    assert_eq!(trace.ce241_frames, 258, "CE241 turn-start live-frame count");
+    assert_eq!(trace.ce243_frames, 294, "CE243 enemy-action live-frame count");
+    assert_eq!(
+        trace.ce243_first_frame,
+        Some(775),
+        "CE243 first observed frame"
     );
     assert_eq!(
         trace.result_write_frame,
         Some(settle),
         "CE244 result and decided flag land on the same decisive frame"
     );
-    assert!(
-        trace.enemy_gauge_zero_frame.is_some(),
-        "2000342 reached <= 0"
+    assert_eq!(
+        trace.enemy_gauge_zero_frame,
+        Some(settle),
+        "2000342 drained to <= 0 on the settle frame"
     );
-    assert!(
-        trace.v342_min <= 0,
-        "enemy gauge drained: {}",
-        trace.v342_min
-    );
-    assert!(
-        trace.v349_at_settle >= 2,
-        "multiple command rounds elapsed before CE244 settled (2000349 = {})",
-        trace.v349_at_settle
-    );
-    // Reference semantics turns the day-4 battle into a real multi-round fight that CE244
-    // settles with a genuine result. Whether it is a win or a loss depends on battle RNG, so
-    // accept either decisive value (the old single-round path always wrote victory instantly).
-    assert!(
-        trace.v352_at_settle == 1 || trace.v352_at_settle == -1,
-        "CE244 wrote a real result (2000352 = {})",
-        trace.v352_at_settle
-    );
+    assert_eq!(trace.v342_min, 0, "enemy gauge drained to exactly 0");
+    assert_eq!(trace.max_ce239_pc, 1099, "CE239 reaches its cleanup tail pc");
+    assert_eq!(trace.max_ce242_pc, 967, "CE242 reaches the slot-3 body pc");
+    // Deterministic victory: the reference-semantics day-4 fight always ends 2000352 = 1 (win);
+    // this is NOT a {1,-1} coin flip (proven stable across process restarts by task-79).
+    assert_eq!(trace.v352_at_settle, 1, "CE244 writes 2000352 = 1 (win)");
     assert_eq!(trace.v343_at_settle, 1, "battle-decided flag");
     assert!(!has_event(&game, 239), "CE239 returned");
     assert_eq!(game.stats.warnings, 0, "no warnings");

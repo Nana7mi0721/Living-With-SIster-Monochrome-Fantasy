@@ -2,7 +2,7 @@
 
 > 仓库：`E:\Study\github program\imoto life`
 > 阅读顺序：本文件（M10 最新）→ `docs/README.md`（文档总索引）→ `PLAN.md`（当前路线图）；历史 M9/M8/M7/M6/M4/M3 交接已标为历史归档，需要追溯时从索引进入。
-> 基线：M9 集成 HEAD `22148d8`；M10 由 `ce680b3`（残项）与 `3bbbb12`（opcode 111 落地）两个提交组成。`docs/gpt调研/` 与 `.claude/` 不是项目文件，不提交。
+> 基线：M9 集成 HEAD `22148d8`；M10 由 `ce680b3`（残项）与 `3bbbb12`（opcode 111 落地）两个提交组成。M10 剩余边界项（M11 第一批 task-79..84）已收口，见 §8。`docs/gpt调研/` 与 `.claude/` 不是项目文件，不提交。
 
 ## 1. 一句话现状
 
@@ -66,12 +66,12 @@ cargo test -q --workspace --no-fail-fast   # 全部二进制绿，0 failed
 | 8 | `m7_hmode_state.rs` | (var14,115), (var16,4) | (var14,35), (var16,3)（CE226 pc15 clamp） |
 | 9 | `m8_battle_party.rs` | 8 命令均单回合结算 | cmd1-4 结算(v343=1)，cmd5-8 留敌(v343=0,v352=0) |
 | 10 | `m8_hscene_forward.rs:890` | `vars.get(218)==2` | `var218_max==2`（瞬态） |
-| 11 | `m9_battle_round_gap.rs` | 单回合 v350=[0,1,0] | `+round_loop` 结构断言：首尾 0、phase2 已入、≥2 回合、CE241/CE243 出现、v352∈{1,-1} |
-| 12 | `m9_full_route.rs` | pre_power<200 未结算 | `pre_power>=200`（201 高能量分支）+round_loop 到 day5 08:30 |
+| 11 | `m9_battle_round_gap.rs` | 单回合 v350=[0,1,0] | `+round_loop` 定值（task-79 逐字节复现）：v350=[0,1,2,0,1,2,0,1,2,0,1,0]、settle=1516、v349=4、pools=[3,2,3,2]、v352=1、CE241/CE243 出现 |
+| 12 | `m9_full_route.rs` | pre_power<200 未结算 | `pre_power>=200`（201 高能量分支）+round_loop 到 day5 08:30；战斗定值 rounds=4、v350=[0,1,2,0,1,2,0,1,2,0,1,0]、v352_peak=1、max239pc=845 |
 
 ## 5. 已确认边界 / 未完成
 
-1. **自然路线 RNG 抖动**：`started_events`（HashSet，进程级 RandomState）的遍历顺序影响战斗前 RNG 消费，自然 day4 战斗在 3~4 回合、胜负 ±1 之间摆动。故 #11 用结构断言、#12 断言 v352∈{1,-1}；直接加载 SaveData01 的测试是确定的。PRNG 零售时钟种子重放等价性仍未证（H-PRNG-1）。
+1. **战斗确定性（已证，task-79）**：`started_events` 现为 `BTreeSet<EventId>`（`exec.rs:806`），`instances` 为 `Vec`（按启动顺序），其余 `HashMap`（`program.rs` 的 labels/by_name）只用于键查表、从不迭代；RNG 只依赖固定帧循环 + Vec 实例顺序（EVENT_SEED 固定）。`m9_battle_round_gap` / `m9_full_route` 连续 5 次进程重跑轨迹逐字节一致（md5 相同）：v350=[0,1,2,0,1,2,0,1,2,0,1,0]、settle=1516、v349=4、pools=[3,2,3,2]、v352=1。故 #11/#12 已改为定值断言（见 `docs/research/M11_BATTLE_DETERMINISM.md`）；旧『HashSet 抖动』结论作废。PRNG 零售时钟种子重放等价性（H-PRNG-1）仍待单独证明。
 2. **H 深链**：CE402/CE410 只在 **合成存档**（基于 SaveData07，`work/out/m10_deep_synth.sav`）下可达；真实 8 个零售存档无单一同时满足所有 gate。CE346 走 CE246 真实存档可达。
 3. **opcode 111 已落地，M10_OPCODE_111_PLAN.md 的 Phase0..3 可视为完成**；旧 PARKED patch 作废，以 HEAD `exec.rs` 为准。
 4. 其余边界沿用 HANDOFF_M9：多输入菜单只注册一条命令、CE242 arg0=命令索引、H 深链 gate、窗口右缘、移动无 diagonal/NPC、音频人工听感、锚点 5/6 几何推断。
@@ -90,7 +90,22 @@ cargo test -q --workspace --no-fail-fast   # 全部二进制绿，0 failed
 
 ## 7. 下一步建议
 
-1. **战斗确定性**：定位 `started_events` HashSet 遍历顺序对预战斗 RNG 消费的量化影响；让自然路线可逐位复现（或显式排序），再把 #11/#12 改为定值断言。
+1. **战斗确定性（已完成，task-79）**：`started_events` 已是 `BTreeSet`、无 HashSet 顺序问题；自然 day4 路线已逐位复现，并把 #11/#12 改为定值断言（`docs/research/M11_BATTLE_DETERMINISM.md`）。剩余仅 H-PRNG-1 零售时钟种子重放等价性待证。
 2. **H 完整 CG 分支**：把合成存档的 gate 组合拆成多个测试或做成数据补丁，不要硬改真实存档。
 3. **音频人工听感**：按 `M10_AUDIO_RESIDUAL.md` 的 18 个 heuristic 候选听一遍循环点；调查 kana.mp3 来源。
 4. **像素**：锚点 5/6 零售画面对照；窗口皮肤 CN patch 右缘数据放置。
+
+## 8. M10 剩余边界项收口（M11 第一批，task-79..84）
+
+本批六项全部完成，均未改动生产逻辑（唯一生产代码改动是 task-81 在 `crates/wolf-game/src/map_runtime.rs` 增加 8 向移动/NPC contact，随后由 Lead 统一验证）。
+
+| 任务 | 交付 / 证据 | 结论 |
+| --- | --- | --- |
+| task-79 战斗确定性 | `crates/wolf-game/tests/m9_battle_round_gap.rs`、`m9_full_route.rs` 收紧为定值；`docs/research/M11_BATTLE_DETERMINISM.md` | 5 次进程重跑轨迹 md5 一致：v350=[0,1,2,0,1,2,0,1,2,0,1,0]、settle=1516、v349=4、pools=[3,2,3,2]、v352=1；旧 HashSet 抖动结论作废 |
+| task-80 H 真实 gate 矩阵 | `crates/wolf-game/tests/m11_hscene_real_gate.rs` 4 测；`docs/research/M11_HSCENE_REAL_GATE.md` | 8 个零售存档均缺 var304（夜间亲密置 1）与 var326（CE301 学会骑乗位）；CE402/CE410 仍只能合成档到达，属内容进度而非数据 bug |
+| task-81 对角移动 / NPC | `crates/wolf-game/src/map_runtime.rs` +214 行；`tests/m11_movement_npc.rs` 7 测；`docs/research/M11_MOVEMENT_NPC.md` | WOLF 8 向、对角不切角、阻挡仍转向、NPC 占位；game.rs 未改 |
+| task-82 锚点 5/6 像素几何 | `tests/m11_anchor_pixels.rs` 5 测；`docs/research/M11_ANCHOR_PIXELS.md` | 七个锚点几何与负缩放镜像已固定；仍缺零售像素 diff，垂直镜像需独立 Y scale 字段 |
+| task-83 多成员命令序列 | `tests/m11_battle_command_sequence.rs` 418 行 2 测；`docs/research/M11_BATTLE_COMMAND_SEQUENCE.md` | 真实 CE253→CE239 BOSS gauge 下 schedule [1,2,3,4] 4 回合结算、[1,3,5,6] 9 回合；命令索引桥仍需引擎侧数据补丁 |
+| task-84 音频 loop 验收 | `crates/wolf-audio/tests/m11_audio_loop_audit.rs`；`docs/research/M11_AUDIO_ACCEPTANCE.md` | 31 首 loop-tagged 全 ogg、31/31 decode 且有界；14 首 A1 高绝对接缝优先人工听；机器不能替代人工听感 |
+
+验证门禁（Lead 集成后）：`cargo test -q --workspace --no-fail-fast` 全绿；`wolf-cli verify --root work/all` PASS 70 / pending 0。

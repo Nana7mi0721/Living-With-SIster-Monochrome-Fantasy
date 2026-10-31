@@ -131,8 +131,22 @@ opcode 111 引用语义、战斗重基线与残项收口的底稿（当前里程
 | [`M10_REBASELINE_REVIEW.md`](M10_REBASELINE_REVIEW.md) | M10 — Independent review of the opcode-111 re-baselined tests |
 | [`M10_SAVE_COMPLETENESS.md`](M10_SAVE_COMPLETENESS.md) | M10 — SavePart completeness audit |
 
+### M11 第一批（6 篇）
+
+M10 剩余边界项（task-79..84）的验收底稿；见 `../HANDOFF_M10.md` §8。
+
+| 文档 | 内容 |
+| --- | --- |
+| [`M11_ANCHOR_PIXELS.md`](M11_ANCHOR_PIXELS.md) | M11 task-82 — 锚点 5/6 像素几何、负缩放镜像与残余 |
+| [`M11_AUDIO_ACCEPTANCE.md`](M11_AUDIO_ACCEPTANCE.md) | M11 task-84 — 31 首 loop-tagged BGM 验收档案与人工听感分层 |
+| [`M11_BATTLE_COMMAND_SEQUENCE.md`](M11_BATTLE_COMMAND_SEQUENCE.md) | M11 task-83 — 真实多成员战斗命令序列与回合/池消耗 |
+| [`M11_BATTLE_DETERMINISM.md`](M11_BATTLE_DETERMINISM.md) | M11 task-79 — 战斗自然路线确定性证明（BTreeSet、逐字节轨迹） |
+| [`M11_HSCENE_REAL_GATE.md`](M11_HSCENE_REAL_GATE.md) | M11 task-80 — 8 个零售存档的 H 深链 gate 矩阵（var304/var326） |
+| [`M11_MOVEMENT_NPC.md`](M11_MOVEMENT_NPC.md) | M11 task-81 — 8 向对角移动、NPC 占位与 contact |
+
 ## 状态约定
 
 - **M6–M9 文档**：历史记录，可能描述当时的 blocker；如果与现行实现冲突，以现行代码/测试和 HANDOFF 为准。
 - **M10 文档**：对应 M10 已收口的实现与重基线；其中 `M10_OPCODE_111_PLAN.md`、`M10_BATTLE_EXPECTATIONS.md` 是计划/期望推导，最终以 `M10_OPCODE_111_LANDING.md` 与 HEAD 测试为准。
+- **M11 文档**：M10 剩余边界项的验收底稿；结论以 `docs/HANDOFF_M10.md` §8 与 HEAD 测试为准。
 - **M7_BACKLOG / M8_BACKLOG**：历史计划，已被后续 M9/M10 交接取代；只用于了解当时的缺口清单。

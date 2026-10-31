@@ -754,6 +754,99 @@ impl MapRuntime {
         self.move_leader_step(dx, dy, step, step_facing(step))
     }
 
+    /// Tries a one-tile step in any of WOLF's eight facing directions.
+    ///
+    /// WOLF's keypad codes are 1 down-left, 2 down, 3 down-right, 4 left,
+    /// 6 right, 7 up-left, 8 up, 9 up-right. Unlike Self::try_move_leader,
+    /// which keeps the historical four-direction contract, this entry point
+    /// accepts a diagonal as one tile step. The facing updates even when the
+    /// step is blocked, and a successful step moves the precise coordinates by
+    /// two half-tiles per axis.
+    pub fn try_move_leader_8(&mut self, direction: i32) -> bool {
+        let Some((dx, dy)) = facing_delta(direction) else {
+            return false;
+        };
+        self.move_leader_delta(dx, dy, direction)
+    }
+
+    /// Tries a one-tile step by a signed delta in [-1, 1] on each axis.
+    ///
+    /// This is the axis form of Self::try_move_leader_8; both axes may be
+    /// non-zero for a diagonal. A zero delta, a delta larger than one tile, or a
+    /// leader that has not been placed returns false without turning.
+    pub fn move_leader_8(&mut self, dx: i32, dy: i32) -> bool {
+        let Some(direction) = delta_facing(dx, dy) else {
+            return false;
+        };
+        self.move_leader_delta(dx, dy, direction)
+    }
+
+    fn move_leader_delta(&mut self, dx: i32, dy: i32, direction: i32) -> bool {
+        let Some(mut leader) = self.leader else {
+            return false;
+        };
+        // Turn first: a blocked step still changes the facing.
+        leader.direction = Some(direction);
+        let target_x = leader.x.saturating_add(dx);
+        let target_y = leader.y.saturating_add(dy);
+        let out_of_bounds = target_x < 0
+            || target_y < 0
+            || (self.width > 0 && target_x >= self.width)
+            || (self.height > 0 && target_y >= self.height);
+        let diagonal = dx != 0 && dy != 0;
+        // A diagonal is also blocked when either orthogonal neighbour is
+        // occupied by a solid (non-slip-through) event, so a corner cannot be
+        // squeezed past an NPC.
+        let blocked = out_of_bounds
+            || self.diagonal_terrain_blocked(leader.x, leader.y, target_x, target_y, dx, dy)
+            || self.event_occupies(target_x, target_y)
+            || (diagonal
+                && (self.event_occupies(target_x, leader.y)
+                    || self.event_occupies(leader.x, target_y)));
+        if blocked {
+            self.leader = Some(leader);
+            return false;
+        }
+        leader.x = target_x;
+        leader.y = target_y;
+        leader.precise_x = leader.precise_x.saturating_add(dx.saturating_mul(2));
+        leader.precise_y = leader.precise_y.saturating_add(dy.saturating_mul(2));
+        self.leader = Some(leader);
+        true
+    }
+
+    /// Terrain test for a cardinal or diagonal entry into (to_x, to_y).
+    ///
+    /// A diagonal must be enterable along both component directions. To keep a
+    /// one-tile wall corner watertight it also requires both orthogonal
+    /// neighbours to be enterable along the corresponding axis, so a diagonal
+    /// step cannot cut through a solid corner.
+    fn diagonal_terrain_blocked(
+        &self,
+        from_x: i32,
+        from_y: i32,
+        to_x: i32,
+        to_y: i32,
+        dx: i32,
+        dy: i32,
+    ) -> bool {
+        let Some(terrain) = self.terrain.as_ref() else {
+            return false;
+        };
+        let horizontal_step = if dx < 0 { 2 } else { 1 }; // left / right
+        let vertical_step = if dy < 0 { 0 } else { 3 }; // up / down
+        let target_blocked = (dx != 0 && terrain.is_blocked(to_x, to_y, horizontal_step))
+            || (dy != 0 && terrain.is_blocked(to_x, to_y, vertical_step));
+        if target_blocked {
+            return true;
+        }
+        if dx == 0 || dy == 0 {
+            return false;
+        }
+        terrain.is_blocked(to_x, from_y, horizontal_step)
+            || terrain.is_blocked(from_x, to_y, vertical_step)
+    }
+
     fn move_leader_step(&mut self, dx: i32, dy: i32, step: u8, direction: i32) -> bool {
         let Some(mut leader) = self.leader else {
             return false;
@@ -896,6 +989,94 @@ impl MapRuntime {
         let moved = self.move_leader_step(dx, dy, step, direction);
         let requests = self.try_contact_triggers((before.x, before.y), target);
         (moved, requests)
+    }
+
+    /// Eight-direction form of Self::try_move_leader_contacts.
+    ///
+    /// The contact check uses the attempted destination, so a diagonal step into
+    /// a blocking event still fires its player-touch page exactly like the
+    /// cardinal path.
+    pub fn try_move_leader_contacts_8(&mut self, direction: i32) -> (bool, Vec<TriggerRequest>) {
+        let Some((dx, dy)) = facing_delta(direction) else {
+            return (false, Vec::new());
+        };
+        let Some(before) = self.leader else {
+            return (false, Vec::new());
+        };
+        let target = (before.x + dx, before.y + dy);
+        let moved = self.move_leader_delta(dx, dy, direction);
+        let requests = self.try_contact_triggers((before.x, before.y), target);
+        (moved, requests)
+    }
+
+    /// Every map event whose own placement tile is (x, y), ascending event id.
+    ///
+    /// This is the runtime form of WOLF's "event ID at a tile" query: the manual
+    /// says overlapping events return the smallest id first. Unlike
+    /// contact_events_at this ignores image and contact boxes; it reports physical
+    /// placements, which is what an NPC/interaction probe needs.
+    #[must_use]
+    pub fn events_at(&self, x: i32, y: i32) -> Vec<u32> {
+        let mut ids: Vec<u32> = self
+            .events
+            .iter()
+            .filter(|state| state.x == x && state.y == y)
+            .map(|state| state.id)
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// The smallest event id standing on (x, y), or None when the tile is empty.
+    #[must_use]
+    pub fn event_at(&self, x: i32, y: i32) -> Option<u32> {
+        self.events_at(x, y).first().copied()
+    }
+
+    /// The smallest active, image-bearing event standing on (x, y).
+    ///
+    /// Image-bearing events are the visible NPC/character sprites; blank helper
+    /// events are intentionally skipped so an interaction probe never treats a
+    /// trigger volume as a person.
+    #[must_use]
+    pub fn npc_at(&self, x: i32, y: i32) -> Option<u32> {
+        self.events
+            .iter()
+            .filter(|state| {
+                state.x == x
+                    && state.y == y
+                    && state.active.is_some_and(|index| {
+                        state.pages.get(index).is_some_and(|page| page.has_image)
+                    })
+            })
+            .map(|state| state.id)
+            .min()
+    }
+
+    /// Every active event whose contact box includes (x, y), ascending event id.
+    ///
+    /// Contact boxes include the empirical collisionWidth/Height extension, so
+    /// this answers "which events could react if the leader stood here" for both
+    /// player-touch and event-touch pages.
+    #[must_use]
+    pub fn contact_events_at(&self, x: i32, y: i32) -> Vec<u32> {
+        let mut ids: Vec<u32> = self
+            .events
+            .iter()
+            .filter(|state| {
+                let Some(index) = state.active else {
+                    return false;
+                };
+                let Some(page) = state.pages.get(index) else {
+                    return false;
+                };
+                let (min_x, min_y, max_x, max_y) = Self::page_contact_box(state, page);
+                x >= min_x && x <= max_x && y >= min_y && y <= max_y
+            })
+            .map(|state| state.id)
+            .collect();
+        ids.sort_unstable();
+        ids
     }
 
     /// How many runnable events have an active page with a command stream right now.
@@ -1093,6 +1274,39 @@ fn facing_step(direction: i32) -> Option<u8> {
         6 => Some(1),
         4 => Some(2),
         2 => Some(3),
+        _ => None,
+    }
+}
+
+/// Map a WOLF facing code to a signed tile delta, including diagonals.
+///
+/// The keypad layout is 1 down-left, 2 down, 3 down-right, 4 left, 6 right,
+/// 7 up-left, 8 up, 9 up-right.
+fn facing_delta(direction: i32) -> Option<(i32, i32)> {
+    match direction {
+        1 => Some((-1, 1)),
+        2 => Some((0, 1)),
+        3 => Some((1, 1)),
+        4 => Some((-1, 0)),
+        6 => Some((1, 0)),
+        7 => Some((-1, -1)),
+        8 => Some((0, -1)),
+        9 => Some((1, -1)),
+        _ => None,
+    }
+}
+
+/// The WOLF facing code for a signed tile delta, including diagonals.
+fn delta_facing(dx: i32, dy: i32) -> Option<i32> {
+    match (dx, dy) {
+        (-1, 1) => Some(1),
+        (0, 1) => Some(2),
+        (1, 1) => Some(3),
+        (-1, 0) => Some(4),
+        (1, 0) => Some(6),
+        (-1, -1) => Some(7),
+        (0, -1) => Some(8),
+        (1, -1) => Some(9),
         _ => None,
     }
 }

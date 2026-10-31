@@ -47,19 +47,19 @@
 
 ### P0 — 确定性与真实流程
 
-1. **战斗自然路线确定性**：`started_events` 的顺序影响预战斗 RNG 消费，导致 3–4 回合/胜负摆动；需要把事件 RNG 的零售时钟种子与 replay 固定下来（见 `docs/research/M9_PRNG_SEED.md`、`HANDOFF_M10.md` §5）。
+1. **战斗自然路线确定性（已完成，task-79）**：`started_events` 已是 `BTreeSet`（有序，非 HashSet），实例为 `Vec`，HashMap 仅键查表；自然 day4 路线已逐字节复现（5 次重跑一致：4 回合、v352=1），#11/#12 已改为定值断言（见 `docs/research/M11_BATTLE_DETERMINISM.md`）。仅剩 H-PRNG-1 零售时钟种子重放等价性待证（`docs/research/M9_PRNG_SEED.md`）。
 2. **真实多命令菜单桥接**：shipped CE188/CE157 数据层只注册一条命令；需要在不改数据的引擎侧补上“菜单选择 → CE242 命令索引”的桥（见 `docs/research/M9_BATTLE_LIVE_BRIDGE.md`、`M9_BATTLE_MULTI_INPUT.md`）。
 
 ### P1 — 内容完整性
 
-3. **H 完整 CG 分支**：CE402/CE410 深层链目前只靠合成存档可达；目标是在真实存档/真实操作下达到。
-4. **移动 / NPC**：对角移动、连续行走动画、NPC 占位与交互、地图间传送后的起点一致性。
+3. **H 完整 CG 分支（gate 矩阵已摸清，task-80）**：CE402/CE410 深层链仍只靠合成存档可达；8 个真实存档均缺 var304（夜间亲密置 1）与 var326（CE301 学会骑乗位），属内容进度而非数据 bug（`docs/research/M11_HSCENE_REAL_GATE.md`）。
+4. **移动 / NPC（对角与占位已做，task-81）**：8 向对角移动（不切角、阻挡转向）与 NPC contact 已实现并有 7 测；剩余连续行走动画、NPC 交互、地图间传送后的起点一致性。
 5. **日程边界**：更多天数/随机事件的自然推进与跨天存档一致性。
 
 ### P2 — 还原度与交付
 
-6. 视觉像素对照：锚点 5/6 几何、CN 窗口皮肤右缘、关键场景截图 diff。
-7. 音频人工听感验收（BGM 循环点、SE 音量/延迟）。
+6. 视觉像素对照：锚点 5/6 几何已固定（task-82，`M11_ANCHOR_PIXELS.md`），剩余零售像素 diff、CN 窗口皮肤右缘、关键场景截图 diff。
+7. 音频人工听感验收：已产出 31 首 loop 验收档案与分层（task-84，`M11_AUDIO_ACCEPTANCE.md`），剩余 BGM 循环点/SE 音量延迟的人工确认。
 8. 打包/性能：Windows 发布包、启动时用户数据目录校验、每帧预算与资源缓存。
 9. 文档：每个新里程碑完成时按 §5 收口。
 

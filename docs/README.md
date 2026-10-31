@@ -1,7 +1,7 @@
 # 文档总索引（docs/README.md）
 
 > 本文件是仓库文档的唯一总入口。**新增、移动、归档文档时，必须同步更新本索引。**
-> 当前里程碑：**M0–M10 已完成**；最新交接：[`HANDOFF_M10.md`](HANDOFF_M10.md)。当前路线图：[`../PLAN.md`](../PLAN.md)。
+> 当前里程碑：**M0–M10 已完成；M11 第一批（M10 剩余边界项 task-79..84）已收口**；最新交接：[`HANDOFF_M10.md`](HANDOFF_M10.md)（§8 为本批）。当前路线图：[`../PLAN.md`](../PLAN.md)。
 
 ## 0. 先读什么
 
@@ -93,7 +93,7 @@
 
 ## 6. 研究记录
 
-所有一次性调查、测试底稿与跨里程碑研究在 [`research/README.md`](research/README.md) 按 M6–M10 分组索引。研究文档不是当前指令；与 HANDOFF/规格冲突时，以现行代码与 HANDOFF 为准。
+所有一次性调查、测试底稿与跨里程碑研究在 [`research/README.md`](research/README.md) 按 M6–M11 分组索引。研究文档不是当前指令；与 HANDOFF/规格冲突时，以现行代码与 HANDOFF 为准。
 
 ## 7. 归档
 

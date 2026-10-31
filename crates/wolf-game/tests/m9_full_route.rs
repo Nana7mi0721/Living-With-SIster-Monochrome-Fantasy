@@ -613,15 +613,20 @@ fn the_continuous_new_game_route_reaches_day_five_0830() {
     );
     assert!(trace.ce253_started, "day 4 must dispatch CE253");
     assert!(trace.ce239_started, "CE253 must call the real battle CE239");
-    assert!(
-        trace.max_ce239_pc >= 700,
-        "CE239 must reach battle staging, max pc {}",
-        trace.max_ce239_pc
+    assert_eq!(
+        trace.max_ce239_pc, 845,
+        "CE239 reaches its exact deterministic staging pc"
     );
-    assert!(trace.battle_active_frame.is_some(), "2000340 must rise");
-    assert!(
-        trace.wiring_rounds >= 1,
-        "the rebuilt wiring must start CE242"
+    // Task-79 determinism lock: the whole route is byte-reproducible across process restarts
+    // (verified 5x, identical milestone/trace lines), so pin the exact battle figures.
+    assert_eq!(
+        trace.battle_active_frame,
+        Some(707),
+        "2000340 rises on the exact deterministic frame"
+    );
+    assert_eq!(
+        trace.wiring_rounds, 4,
+        "the rebuilt wiring starts exactly four CE242 command rounds"
     );
     assert!(trace.ce242_started, "CE242 command phase must run");
     // opcode-111 reference semantics raises the party power to 201 (var28), which
@@ -632,21 +637,19 @@ fn the_continuous_new_game_route_reaches_day_five_0830() {
         pre_power >= 200,
         "party power {pre_power} takes the CE253 HIGH branch"
     );
-    assert!(
-        trace.max_ce242_pc >= 200,
-        "CE242 must reach the CE244 call region, max pc {}",
-        trace.max_ce242_pc
+    assert_eq!(
+        trace.max_ce242_pc, 967,
+        "CE242 reaches the exact slot-3 body pc"
     );
     assert!(settled, "the day-4 round must settle");
-    assert!(
-        trace.v350_seq.first() == Some(&0) && trace.v350_seq.contains(&1),
-        "2000350 starts idle and enters the command phase, got {:?}",
-        trace.v350_seq
+    assert_eq!(
+        trace.v350_seq,
+        vec![0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 0],
+        "2000350 exact deterministic trajectory (four command rounds)"
     );
-    assert!(
-        trace.v352_peak == 1 || trace.v352_peak == -1,
-        "CE244 must settle: 2000352 in {{1,-1}}, got {}",
-        trace.v352_peak
+    assert_eq!(
+        trace.v352_peak, 1,
+        "CE244 deterministically settles as a win (2000352 = 1)"
     );
     assert_eq!(trace.v343_peak, 1, "CE244 must set 2000343 = 1");
     assert!(
