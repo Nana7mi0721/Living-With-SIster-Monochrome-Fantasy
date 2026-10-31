@@ -13,6 +13,12 @@
 //! work/out/autotile_test.png shows the result: code 4 for all
 //! four quadrants is a solid tile, code 0 for all four is an isolated blob, and the
 //! mixed codes produce the expected edges and corners.
+//!
+//! Not every map has a floor: Map024 and Map031 ship the 0xFFFFFFFF "no tile block"
+//! marker, so their `layers` is empty and `layer_count()` is 0. `quads()` then returns
+//! nothing and the map paints no background of its own — from a cold capture the frame
+//! stays the renderer's cleared black (work/out/m7_map024.png, work/out/m7_map031.png,
+//! both 1024x576 with 0 non-black pixels). See docs/research/M7_MAP_EDGE.md.
 
 use crate::assets::Assets;
 use crate::atlas::{Atlas, AtlasRect, SpriteQuad};

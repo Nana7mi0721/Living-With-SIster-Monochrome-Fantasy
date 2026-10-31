@@ -70,7 +70,15 @@ pub enum SaveRequest {
 pub fn load_into(game: &mut Game, path: &Path) -> Result<LoadedSave, String> {
     let bytes = std::fs::read(path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
     let save = SaveFile::parse(&bytes).map_err(|err| format!("cannot parse {}: {err}", path.display()))?;
-    Ok(apply(game, &save))
+    let loaded = apply(game, &save);
+    // The file just loaded becomes the template for the next write. A full save needs
+    // the map snapshot (Part1) and the object-table continuation (Part4), which the
+    // running game does not keep; `Game::save_to` copies them from `base_save`. Without
+    // this a load-then-save cycle would reuse the previous template (`System.sav` for a
+    // fresh game) and silently swap the loaded save's Part4 for the template's, even
+    // though Part1 happens to be identical across the retail saves.
+    game.base_save = Some(save);
+    Ok(loaded)
 }
 
 /// Applies an already parsed save. Kept separate so tests can build a \`SaveFile\` in memory.

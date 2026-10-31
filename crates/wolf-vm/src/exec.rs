@@ -2041,7 +2041,22 @@ fn execute(
                     DbDirection::Read if argc(cmd) >= 5 => (Some(arg(cmd, 4)), None),
                     DbDirection::Read => (None, None),
                     DbDirection::Write if argc(cmd) >= 5 => {
-                        (None, Some(DbValue::Num(eval_num(arg(cmd, 4), inst, vars))))
+                        // The value operand may *hold* a string: a prior 250 read of a
+                        // string column stored it in the operand's string bank, so a
+                        // numeric eval would flatten it to 0. Pick the value kind from
+                        // the operand -- an explicit string bank (Magic::is_string) or a
+                        // self variable whose string bank is non-empty is a string; every
+                        // other operand stays numeric (docs/OPCODE_250.md section 1.3).
+                        let value_raw = arg(cmd, 4);
+                        let value_magic = Magic::decode(value_raw);
+                        if value_magic.is_string()
+                            || (matches!(value_magic.kind(), MagicKind::SelfVar)
+                                && !eval_str(value_raw, inst, vars).is_empty())
+                        {
+                            (None, Some(DbValue::Str(eval_str(value_raw, inst, vars))))
+                        } else {
+                            (None, Some(DbValue::Num(eval_num(value_raw, inst, vars))))
+                        }
                     }
                     DbDirection::Write => (
                         None,

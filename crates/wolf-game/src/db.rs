@@ -605,10 +605,42 @@ impl Databases {
         column: i32,
         value: i32,
     ) {
-        self.cells.insert((container, db_type, row, column), value);
+        // A numeric write aimed at a string field would SHADOW the text: the read
+        // path consults the numeric cell layer before the text layer (game.rs
+        // `engine_num` before `engine_text`), so a stale numeric 0 would hide a
+        // column a script filled through `set_text`. Refuse it: a string column
+        // only ever holds text, and the 250 write path now sends `DbValue::Str`
+        // for string operands (crates/wolf-vm/src/exec.rs opcode 250), which lands
+        // in `set_text` instead.
+        // Only refuse when the string column actually holds text right now: a
+        // number-only cell in a string-typed column (the engine has historically
+        // allowed one, and game::tests::a_script_write_lands_in_the_cell_the_next_read_sees
+        // exercises it) must still round-trip. But a numeric 0 must never overwrite a
+        // real label a script put there through set_text, because the read path checks
+        // the numeric cell layer first and would hide the text.
+        let key = (container, db_type, row, column);
+        if let Some(fields) = self.field_kinds(container, db_type) {
+            let is_text_field = usize::try_from(column)
+                .ok()
+                .and_then(|column| fields.get(column))
+                .is_some_and(|field| matches!(field, FieldKind::Str(_)));
+            if is_text_field && self.texts.get(&key).is_some_and(|text| !text.is_empty()) {
+                return;
+            }
+        }
+        self.cells.insert(key, value);
     }
 
     /// Overwrites a string cell in the engine layer.
+    ///
+    /// A number was never meant to live in a string column and a string never in
+    /// a number column, so the two setters route by the field kind: a `Str` field
+    /// takes text, a `Num` field takes a number. Routing a text write to a
+    /// numeric field parses it (a text operand can carry the decimal form of a
+    /// number, e.g. when a script feeds a string variable into a numeric column);
+    /// the inverse is refused by [`Databases::set_num`]. This keeps a string
+    /// column from being shadowed and a numeric column from being clobbered by
+    /// text, whichever operand kind the interpreter sends.
     pub fn set_text(
         &mut self,
         container: Container,
@@ -617,8 +649,48 @@ impl Databases {
         column: i32,
         value: &str,
     ) {
+        let mut is_text_field = false;
+        if let Some(fields) = self.field_kinds(container, db_type) {
+            match usize::try_from(column)
+                .ok()
+                .and_then(|column| fields.get(column))
+            {
+                Some(FieldKind::Num(_)) => {
+                    let number = value.trim().parse::<i32>().unwrap_or(0);
+                    self.set_num(container, db_type, row, column, number);
+                    return;
+                }
+                Some(FieldKind::Str(_)) => is_text_field = true,
+                None => {}
+            }
+        }
+        // Only when the column is known to be a string field is text authoritative
+        // enough to drop a numeric shadow: the read path checks the numeric cell
+        // layer first, so a stale engine_num entry would hide the label. When the
+        // schema is unknown (e.g. the engine-default index built without a .project)
+        // keep both layers as before; the write_into counters rely on that.
+        if is_text_field {
+            self.cells.remove(&(container, db_type, row, column));
+        }
         self.texts
             .insert((container, db_type, row, column), value.to_owned());
+    }
+
+    /// Writes several numeric cells of one table row in a single call.
+    ///
+    /// Convenience for the battle seed (`crate::battle_seed`), which fills a whole
+    /// status/command row from a static table. Returns how many cells were written.
+    pub fn seed_numbers(
+        &mut self,
+        container: Container,
+        db_type: i32,
+        row: i32,
+        cells: &[(i32, i32)],
+    ) -> usize {
+        for (column, value) in cells {
+            self.set_num(container, db_type, row, *column, *value);
+        }
+        cells.len()
     }
 
     /// Resolves the editor labels a `250` command carries onto real table indices.

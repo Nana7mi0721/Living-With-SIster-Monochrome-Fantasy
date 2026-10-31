@@ -673,7 +673,22 @@ impl Transition {
     /// (1,600,0xx, 52 moves) and anything past [`MAX_TRANSITION_FRAMES`] all mean "no
     /// duration": the move teleports, which is what the 2,817 duration-less moves already do.
     fn from_command(cmd: &PictureCmd, from: Pose, to: Pose) -> Option<Self> {
-        let frames = u32::try_from(*cmd.animate.first()?).ok()?;
+        // The explicit animation tail (raw slots 13.., i.e. args[11..]) wins when present,
+        // even when it holds a literal 0 or an unresolved self-variable: an authored tail is a
+        // deliberate teleport. Only when the tail is absent AND the move changes the opacity
+        // do we fall back to raw slot 2 — WOLF's picture fade time, in frames (this game: 0×9770, 15×1568, 5×481, 30×431,
+        // 100×242, 10×210, 20×185, 3×162 entries). Without that fallback the word_effect park
+        // moves, which pass 100 in raw slot 2 and carry no tail (argc 11), collapse to an
+        // instant jump straight to opacity 0, so the H glyph layer never shows a lit frame.
+        let frames = match cmd.animate.first() {
+            Some(frames) => u32::try_from(*frames).ok()?,
+            // No explicit tail: only a move that actually changes the opacity needs a timed
+            // transition. A pure position/scale move keeps its old instant-snap behaviour, so
+            // the ~1,600 non-fading moves are untouched; the word_effect park (opacity 255 -> 0)
+            // gets its fade, and any fade-in/out move is interpolated as WOLF intends.
+            None if from.opacity != to.opacity => u32::try_from(*cmd.args.first()?).ok()?,
+            None => return None,
+        };
         if frames == 0 || frames > MAX_TRANSITION_FRAMES {
             return None;
         }
@@ -1147,6 +1162,11 @@ impl Screen {
                         picture.y = transition.from.y;
                         picture.scale = transition.from.scale;
                         picture.opacity = transition.from.opacity;
+                        // The transition's own opacity interpolation drives the alpha. Clear the
+                        // fade-in ramp that merge_args took from raw slot 2, or alpha() would
+                        // multiply the (already interpolated) opacity by age/duration and darken
+                        // every frame of the slide. Draw still uses raw slot 2 as its fade-in.
+                        picture.fade = 0;
                         picture.transition = Some(transition);
                     }
                     None => picture.transition = None,

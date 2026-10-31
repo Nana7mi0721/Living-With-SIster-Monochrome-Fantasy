@@ -39,6 +39,19 @@ use crate::tilemap::TileMap;
 use crate::tint::ScreenTint;
 use crate::transition::ScreenTransition;
 
+// The battle seed lives in its own file (src/battle_seed.rs) so the data table and
+// its rationale stay together. Declared here with an explicit path so lib.rs needs no
+// change; `Game::seed_battle_databases` is the public entry point.
+#[path = "battle_seed.rs"]
+mod battle_seed;
+
+// Rebuilt battle command-phase wiring (M7 task-34). Declared here with an explicit path
+// so lib.rs needs no change; the only public surface is Game::set_battle_wiring.
+#[path = "battle_wiring.rs"]
+mod battle_wiring;
+
+use battle_wiring::BattleWiring;
+
 /// The event the game opens with in this build (the "original title screen A").
 pub const TITLE_EVENT: u32 = 42;
 
@@ -279,6 +292,9 @@ pub struct Game {
     /// Common events whose header says `run_condition == 2`: one coroutine each,
     /// created while the condition holds and destroyed when it fails.
     pub auto_events: AutoEvents,
+    /// Rebuilt engine wiring that starts the battle command phase (CE242) on the
+    /// battle-active edge. Off by default; see Game::set_battle_wiring.
+    battle_wiring: BattleWiring,
     /// Frames of play time; the save stores this in SavePart2.vars3_21[0].
     pub playtime_frames: u32,
     /// Mouse position in logical pixels, [-1, -1] when the pointer is outside.
@@ -369,6 +385,7 @@ impl Game {
             auto_choice_delay: 0,
             runtime: MapRuntime::new(),
             auto_events,
+            battle_wiring: BattleWiring::new(),
             playtime_frames: 0,
             mouse: [-1, -1],
             mouse_buttons: 0,
@@ -496,6 +513,35 @@ impl Game {
     /// Starts one common event as a coroutine. Returns false when the id is unknown.
     pub fn start_event(&mut self, id: u32) -> bool {
         self.vm.start_event(id).is_some()
+    }
+
+    /// Seeds the battle-only `CData` cells a fresh game never initialises (command slots
+    /// コマンド1..8, item 0 stock, weapon stock, party count) so the real CE152/CE192
+    /// battle command line can list selectable attacks. Returns how many cells were
+    /// written. See docs/research/M7_BATTLE_SEED.md and `crate::battle_seed`.
+    ///
+    /// Explicit, not automatic: the m6 control test asserts an empty inventory leaves
+    /// real attacks unselectable, so seeding is left to the battle entry point / tests.
+    pub fn seed_battle_databases(&mut self) -> usize {
+        battle_seed::seed(self)
+    }
+
+    /// Turns the rebuilt battle command-phase wiring on or off (M7 task-34).
+    ///
+    /// The shipped event graph never starts CE242, the command-phase script, because the
+    /// only thing that sets 2000350 = 1 is CE242 itself. This wiring starts CE242 on the
+    /// 0 -> 1 edge of the battle-active flag 2000340 while the command phase is idle, and
+    /// lets CE242 write 2000350 itself. It is **rebuilt wiring** (the data has no such
+    /// call), off by default, and starts nothing else. See `src/battle_wiring.rs` and
+    /// docs/BATTLE.md section 5.3.1.
+    pub fn set_battle_wiring(&mut self, enabled: bool) {
+        self.battle_wiring.set_enabled(enabled);
+    }
+
+    /// How many command phases the rebuilt battle wiring has started (0 when disabled).
+    #[must_use]
+    pub fn battle_wiring_rounds(&self) -> u64 {
+        self.battle_wiring.started_rounds()
     }
 
     /// Starts the coroutines the runtime owns rather than the script.
@@ -1017,6 +1063,9 @@ impl Game {
         // section 2.2). This is edge-triggered: a condition that stays true does not
         // restart a coroutine that already ended on its own.
         self.auto_events.sync(&mut self.vm);
+        // Rebuilt battle wiring (M7 task-34): start the command phase on the battle-active
+        // edge. No-op unless Game::set_battle_wiring(true) was called. See battle_wiring.rs.
+        self.battle_wiring.tick(&mut self.vm);
         self.handle_choice_input();
         let mut report = self.vm.step_frame(&mut GameHost {
             screen: &mut self.screen,
@@ -1902,6 +1951,11 @@ impl Host for GameHost<'_> {
             1 => Some(picture.y),
             2 | 3 => Some(picture.scale),
             4 => picture.extras.first().copied(),
+            // Field 5 is "未定" in the reference notes and only appears once in this
+            // game's data (a map event that paints a picture). docs/OPCODE_124.md
+            // §9.3 resolves it as "暂返回 0", so answer 0 instead of leaving the
+            // destination holding an unrelated leftover value.
+            5 => Some(0),
             10 => Some(if PictureKind::from_code(picture.kind as u8).is_text() {
                 1
             } else {
@@ -1912,8 +1966,11 @@ impl Host for GameHost<'_> {
     }
 
     fn character_state(&mut self, target: i32, field: i32) -> Option<i32> {
-        // No map layer until M2: leaving the destination alone is honest, while
-        // fabricating coordinates would silently break follower logic.
+        // The port has no map/character layer at all: the parsed Map (which holds
+        // event tile coords in wolf-format::mps and page directions) is discarded
+        // after start_pages, and MapRuntime/ TileMap retain no x/y/direction or
+        // display state. Fabricating coordinates would silently break the follower
+        // and bomb logic that reads these fields, so leave the destination alone.
         let _ = (target, field);
         None
     }
@@ -1936,6 +1993,18 @@ impl Host for GameHost<'_> {
                 self.previous_mouse_buttons & 4 != 0,
             )),
             10 => Some(0),
+            // 11/12 report what map event sits under the pointer / is in contact.
+            // The port has no map-interaction layer yet (map runtime only tracks
+            // page programs), so nothing is ever under the pointer or in contact.
+            // The documented "none" sentinel is -1 (same as field 10 / field 18),
+            // which is truthful now; recompute real ids if a map layer is added.
+            11 => Some(-1),
+            12 => Some(-1),
+            // 17 is undocumented in this game: docs/OPCODE_124.md §9.1 cannot pin it
+            // (candidates are an event-line counter behind shifted indices). Five
+            // message-window sites read it only as an auto-increment guard, where the
+            // neutral 0 matches the old "destination stays 0" behaviour. Report 0.
+            17 => Some(0),
             20 => Some(self.mouse[0]),
             21 => Some(self.mouse[1]),
             _ => None,
