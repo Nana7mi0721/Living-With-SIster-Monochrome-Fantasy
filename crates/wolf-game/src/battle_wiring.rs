@@ -100,13 +100,27 @@
 //!   member/ability body runs, exactly as a menu selection would.
 //! * It does NOT seed 2000352/2000343: those are CE244's settlement outputs.
 //!
-//! ## Toggle
+//! ## Toggle and the natural-battle auto-arm (M11, task-95)
 //!
-//! BattleWiring::new() is disabled. Game::set_battle_wiring(true) turns the wiring on in
-//! single-shot mode. The multi-round loop is opt-in via BattleWiring::set_round_loop(true)
-//! and is OFF by default, so every shipped single-round battle is byte-for-byte unchanged.
-//! Game::set_battle_round_loop is the one-line hook that enables this driver from the
-//! runtime; it stays off unless a caller opts in.
+//! There are three modes:
+//!
+//! * **Auto-arm (default).** With no explicit `Game::set_battle_wiring` call, the wiring arms
+//!   itself as soon as the shipped battle *dispatch* event CE253 (地域貢献) is resident and the
+//!   battle-active flag 2000340 rises. CE253 parks on its `210 500239` call for the whole
+//!   fight, so its presence is exactly "a real in-game battle is running". Auto-armed battles
+//!   also run the multi-round loop, because the day-4 battle genuinely needs two command
+//!   rounds to settle. This is what makes the natural CE253 -> CE239 line drive CE242 without
+//!   any test-only flag. Turn it off with `Game::set_battle_auto_arm(false)`.
+//! * **Explicit opt-in.** `Game::set_battle_wiring(true)` forces the drive regardless of
+//!   CE253; `Game::set_battle_round_loop(true/false)` then selects round-loop vs single-shot.
+//!   This is the old behaviour every battle test relies on, unchanged.
+//! * **Explicit opt-out.** `Game::set_battle_wiring(false)` is a hard opt-out that overrides
+//!   auto-arm (acceptance c): the shipped stall (CE239 parks, 2000350 stays 0) is preserved.
+//!
+//! Guard against double-driving: if a test already drives CE242 by hand it starts CE239/CE242
+//! *directly* (no CE253), so auto-arm stays inert; and any explicit `set_battle_wiring(false)`
+//! wins over auto-arm. The wiring never starts a second CE242 while a CE242/CE241/CE243 round
+//! event is already alive.
 //!
 //! ## Live menu multi-input is a data-level dead end (M9, task-67)
 //!
@@ -158,6 +172,11 @@ const EVENT_COMMAND_PHASE: u32 = 242;
 const EVENT_TURN_START: u32 = 241;
 /// Common event ┣敵の行動 -- the enemy action phase, started by auto_events when 350 == 2.
 const EVENT_ENEMY_ACTION: u32 = 243;
+/// Common event 地域貢献 (CE253) -- the natural battle *dispatch* event. It calls the real
+/// battle caller CE239 and stays resident (parked on the call) until CE239 returns. Its
+/// presence distinguishes a genuine in-game battle from the unit/probe tests that start
+/// CE239 or CE242 directly, so it is the auto-arm signal for the shipped route (task-95).
+const EVENT_BATTLE_DISPATCH: u32 = 253;
 /// Common event X[共]コマンド登録 -- the menu producer that writes a command row (task-85).
 /// Each time the real menu confirms a command, CE157 runs once. Harvesting those instances is
 /// how the bridge turns real menu confirmations into CE242 command indexes.
@@ -190,8 +209,17 @@ pub struct MenuSelection {
 /// The rebuilt command-phase starter. See the module docs.
 #[derive(Debug, Clone)]
 pub struct BattleWiring {
-    /// Master switch. Off by default; Game::set_battle_wiring flips it.
-    enabled: bool,
+    /// Whether Game::set_battle_wiring was ever called. `None` = never set, so the wiring
+    /// auto-arms on the natural CE253 battle; `Some(true/false)` = explicit opt-in/opt-out
+    /// (an explicit `false` is a hard opt-out that overrides auto-arm, task-95).
+    manual_enable: Option<bool>,
+    /// Explicit manual round-loop state set by Game::set_battle_round_loop. `None` = never
+    /// set; in that case an auto-armed natural battle runs the multi-round loop (day-4 needs
+    /// it to settle) while an explicit single-shot opt-in stays single-shot.
+    manual_round_loop: Option<bool>,
+    /// Auto-arm the rebuilt drive on the shipped natural battle (CE253 -> CE239). Default on;
+    /// disable with Game::set_battle_auto_arm(false) to reproduce the raw shipped stall.
+    auto_arm: bool,
     /// Multi-round driver. OFF by default (opt-in via set_round_loop). It is also a no-op
     /// for any battle CE244 settles inside the first command round (which is every shipped
     /// non-boss battle, because the enemy gauge 2000342 is only party-power/8 - one hit
@@ -223,7 +251,9 @@ impl BattleWiring {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            enabled: false,
+            manual_enable: None,
+            manual_round_loop: None,
+            auto_arm: true,
             round_loop: false,
             prev_battle_active: false,
             // Default round schedule: alternate the first two party members' attack
@@ -240,15 +270,32 @@ impl BattleWiring {
         }
     }
 
-    /// Enable or disable the rebuilt wiring.
+    /// Enable or disable the rebuilt wiring. This is an EXPLICIT opt-in/opt-out: it records
+    /// that the switch was set by hand, so `set_enabled(false)` is a hard opt-out that beats
+    /// the natural-battle auto-arm (task-95 acceptance c).
     pub fn set_enabled(&mut self, enabled: bool) {
-        self.enabled = enabled;
+        self.manual_enable = Some(enabled);
     }
 
-    /// Enable or disable the opt-in multi-round turn loop. When off (default) only the
-    /// legacy single command phase is started on the rising edge.
+    /// Turn the natural-battle auto-arm on or off. Default on; `false` restores the raw
+    /// shipped stall (CE253 -> CE239 with no command-phase driver) unless the wiring is also
+    /// explicitly enabled. This does not change an explicit `set_enabled` opt-in/opt-out.
+    pub fn set_auto_arm(&mut self, enabled: bool) {
+        self.auto_arm = enabled;
+    }
+
+    /// Whether the natural-battle auto-arm is enabled (default true).
+    #[must_use]
+    pub fn auto_armed(&self) -> bool {
+        self.auto_arm
+    }
+
+    /// Enable or disable the multi-round turn loop. When set explicitly it also records the
+    /// choice (`manual_round_loop`). Left unset, an auto-armed natural battle runs the loop
+    /// (day-4 needs it to settle) while an explicit single-shot opt-in stays single-shot.
     pub fn set_round_loop(&mut self, enabled: bool) {
         self.round_loop = enabled;
+        self.manual_round_loop = Some(enabled);
     }
 
     /// Replace the command-index schedule the round loop cycles through (e.g. `[1, 3]`).
@@ -375,20 +422,40 @@ impl BattleWiring {
     /// One engine tick, called at the top of Game::frame after the automatic events
     /// are synced and before the VM steps.
     pub fn tick(&mut self, vm: &mut Vm) -> Option<u32> {
-        if !self.enabled {
-            // Still track the edge so toggling on mid-battle behaves predictably.
-            self.prev_battle_active = vm.vars.get(VAR_BATTLE_ACTIVE) != 0;
-            return None;
-        }
-        // Bridge half 1: capture any real menu confirmations (CE157 instances) while they live,
-        // so a subsequent battle can be driven with the command indexes the player selected.
-        self.harvest_menu_registrations(vm);
         let battle_active = vm.vars.get(VAR_BATTLE_ACTIVE) != 0;
         let rising = battle_active && !self.prev_battle_active;
         self.prev_battle_active = battle_active;
 
+        // Resolve the effective drive mode (M11 task-95).
+        //
+        // * An explicit Game::set_battle_wiring(v) wins outright: `Some(false)` is a hard
+        //   opt-out (acceptance c) and `Some(true)` is the old opt-in.
+        // * Otherwise the wiring auto-arms on the shipped natural battle: the CE253 dispatch
+        //   event is resident (it parked on its CE239 call). Unit/probe tests that start CE239
+        //   or CE242 directly have no CE253, so they stay byte-for-byte untouched.
+        let dispatch_alive = vm.instances().iter().any(|i| i.event == EVENT_BATTLE_DISPATCH);
+        let auto = self.auto_arm && dispatch_alive;
+        let drive = match self.manual_enable {
+            Some(v) => v,
+            None => auto,
+        };
+        if !drive {
+            return None;
+        }
+        // Round loop: an explicit setting wins; an auto-armed natural battle runs the loop
+        // (day-4 needs more than one command round to settle under correct opcode-111
+        // semantics); an explicit single-shot opt-in stays single-shot.
+        let round_loop = match self.manual_round_loop {
+            Some(v) => v,
+            None => auto,
+        };
+
+        // Bridge half 1: capture any real menu confirmations (CE157 instances) while they live,
+        // so a subsequent battle can be driven with the command indexes the player selected.
+        self.harvest_menu_registrations(vm);
+
         // Legacy single-shot path: byte-for-byte the original behaviour.
-        if !self.round_loop {
+        if !round_loop {
             if !rising {
                 return None;
             }

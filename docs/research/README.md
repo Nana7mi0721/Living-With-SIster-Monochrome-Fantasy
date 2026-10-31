@@ -1,11 +1,11 @@
 # 研究文档索引（docs/research/README.md）
 
-> 本目录保存**一次性调查、探针结果与验收底稿**。它们不是当前指令；结论以对应的 `docs/HANDOFF_M10.md`、技术规格和现行代码/测试为准。
+> 本目录保存**一次性调查、探针结果与验收底稿**。它们不是当前指令；结论以对应的 `docs/HANDOFF_M11.md`、技术规格和现行代码/测试为准。
 > 新增研究文档时：文件名用 `Mx_主题.md`（或 `主题.md`），写清测量 HEAD/数据根/复现命令，并登记到本表。
 
 ## 推荐入口（想快速了解某个结论）
 
-- 最新综合：[`../HANDOFF_M10.md`](../HANDOFF_M10.md)
+- 最新综合：[`../HANDOFF_M11.md`](../HANDOFF_M11.md)
 - 完整路线：[`M9_FULL_ROUTE.md`](M9_FULL_ROUTE.md)（标题→day5 08:30）
 - opcode 111 落地：[`M10_OPCODE_111_LANDING.md`](M10_OPCODE_111_LANDING.md)、[`M10_REBASELINE_REVIEW.md`](M10_REBASELINE_REVIEW.md)
 - 战斗/H/地图边界：[`M9_BATTLE_ROUND_GAP.md`](M9_BATTLE_ROUND_GAP.md)、[`M9_BATTLE_LIVE_BRIDGE.md`](M9_BATTLE_LIVE_BRIDGE.md)、[`M9_HSCENE_LOOP.md`](M9_HSCENE_LOOP.md)
@@ -155,9 +155,24 @@ M11 第二批（task-85..88）的验收底稿；见 `../HANDOFF_M10.md` §9。
 | [`M11_HSCENE_PROGRESSION.md`](M11_HSCENE_PROGRESSION.md) | M11 task-86 — var304/var326 真实进度与 CE328 早退边界 |
 | [`M11_WINDOW_EDGE.md`](M11_WINDOW_EDGE.md) | M11 task-87 — CE94 窗口/文本几何、CN patch 右缘 data-only 结论 |
 
+### M11 round 2（8 篇）
+
+M11 第三批（task-89..96）的验收底稿；见 `../HANDOFF_M11.md`。
+
+| 文档 | 内容 |
+| --- | --- |
+| [`M11_BATTLE_AUTOSTART.md`](M11_BATTLE_AUTOSTART.md) | M11 task-95 — 默认武装战斗驱动与自然 day4 结算 |
+| [`M11_CE157_CURSOR.md`](M11_CE157_CURSOR.md) | M11 task-89 — CE157 物理 cursor = CData type18 row73，推翻 VM bug 前提 |
+| [`M11_HSCENE_BOOKSTORE.md`](M11_HSCENE_BOOKSTORE.md) | M11 task-90 — H 书店线 var276/277/326/304 与 CE328 入口 |
+| [`M11_HSCENE_CE328_BRANCHES.md`](M11_HSCENE_CE328_BRANCHES.md) | M11 task-94 — CE328 分支图与 CE402 唯一 caller |
+| [`M11_HSCENE_CE328_REAL_CG.md`](M11_HSCENE_CE328_REAL_CG.md) | M11 task-96 — 真实 CE328→CE402/CE410 深链与门表 |
+| [`M11_NPC_INTERACTION.md`](M11_NPC_INTERACTION.md) | M11 task-91 — NPC ActionKey 与每 8 帧持续行走 |
+| [`M11_PARTY_LIVE_BRIDGE.md`](M11_PARTY_LIVE_BRIDGE.md) | M11 task-93 — 2 成员真实菜单 15 行→CE242 四个 body |
+| [`M11_VISUAL_REGRESSION.md`](M11_VISUAL_REGRESSION.md) | M11 task-92 — 5 场景像素/quad 回归基线 |
+
 ## 状态约定
 
 - **M6–M9 文档**：历史记录，可能描述当时的 blocker；如果与现行实现冲突，以现行代码/测试和 HANDOFF 为准。
 - **M10 文档**：对应 M10 已收口的实现与重基线；其中 `M10_OPCODE_111_PLAN.md`、`M10_BATTLE_EXPECTATIONS.md` 是计划/期望推导，最终以 `M10_OPCODE_111_LANDING.md` 与 HEAD 测试为准。
-- **M11 文档**：M10 剩余边界项与 M11 round 1 的验收底稿；结论以 `docs/HANDOFF_M10.md` §8/§9 与 HEAD 测试为准。
+- **M11 文档**：M11 第一批/round 1/round 2 的验收底稿；结论以 `docs/HANDOFF_M11.md` 与 HEAD 测试为准（第一批/round 1 亦见 HANDOFF_M10 §8/§9）。
 - **M7_BACKLOG / M8_BACKLOG**：历史计划，已被后续 M9/M10 交接取代；只用于了解当时的缺口清单。

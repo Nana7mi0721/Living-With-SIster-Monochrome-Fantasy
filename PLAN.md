@@ -2,12 +2,12 @@
 
 > 本文件是**当前路线图（living document）**，只记录“现在做到哪、接下来做什么”。
 > 原始可行性研究与 M0–M5 的详细规划已归档到 [`docs/archive/PLAN_2026-10-26.md`](docs/archive/PLAN_2026-10-26.md)，仅作历史参考。
-> 最新交接：[docs/HANDOFF_M10.md](docs/HANDOFF_M10.md)　｜　文档总索引：[docs/README.md](docs/README.md)　｜　协作约定：[AGENT.md](AGENT.md)
+> 最新交接：[docs/HANDOFF_M11.md](docs/HANDOFF_M11.md)　｜　文档总索引：[docs/README.md](docs/README.md)　｜　协作约定：[AGENT.md](AGENT.md)
 
 ## 1. 当前状态
 
-- 当前源码 HEAD：`e52855d`（M10 交接/基线文档提交；M10 代码提交为 `ce680b3` + `3bbbb12`）。以 `git log` 为准。
-- 里程碑：**M0–M10 全部完成并收口**，可运行、可交付的工程约 **90%**；严格 1:1 原版等价约 **80–85%**。
+- 当前源码 HEAD：以 `git log` 为准。M10 交接/基线为 `e52855d`；M11 第一批/round 1/round 2 分别见 `22de104`、`5ef6b1f` 与本批提交。
+- 里程碑：**M0–M10 全部完成并收口；M11 三批已收口（P0/P1 主体推进，P2 残余）**，可运行、可交付的工程约 **92%**；严格 1:1 原版等价约 **82–86%**。
 - 质量门禁：`cargo test -q --workspace` 全绿；`./target/debug/wolf-cli.exe verify --root work/all` = **PASS 70 / pending 0**。
 - 工作树：仅允许 3 个永久 scratch（`crates/wolf-format/examples/opscan.rs`、`crates/wolf-format/tests/_scratch_cdata.rs`、`crates/wolf-format/tests/_scratch_event.rs`）与用户资料 `docs/gpt调研/` 未跟踪。
 
@@ -26,6 +26,7 @@
 | M8 | 完成 | day4 战斗结算→day5、H 前向链、地图角色层、模板存档、事件 RNG | [`HANDOFF_M8.md`](docs/HANDOFF_M8.md) |
 | M9 | 完成 | 锚点/图片槽位、H 闭环、战斗多回合/多队员、移动与地图触发、音频盘点 | [`HANDOFF_M9.md`](docs/HANDOFF_M9.md) |
 | M10 | 完成 | opcode 111 引用语义与 compound 修复、12 个战斗/H 测试重基线、残项收口 | [`HANDOFF_M10.md`](docs/HANDOFF_M10.md) |
+| M11 | 三批已收口 | 战斗默认驱动/确定性、菜单桥、H 深链、NPC 行走、视觉/音频回归 | [`HANDOFF_M11.md`](docs/HANDOFF_M11.md) |
 
 ## 3. 当前完成度（按子系统）
 
@@ -34,28 +35,28 @@
 | 数据格式 / VM / opcode | 100% | 50 种 opcode 与格式解析已收口；opcode 111 引用语义已落地 |
 | 存档 | 95% | 官方 .sav 往返、SavePart 完整性、模板存档、row counts 已覆盖；剩余逐段全量对照 |
 | 主线 / 日常循环 | 95% | 标题→新游戏→多日 08:30 日程→睡眠→次日已打通 |
-| 战斗 | 85–90% | 真实回合、结算、BOSS 多回合、多队员已证；自然路线 RNG 与多命令菜单仍是硬缺口 |
-| H 场景 | 85–90% | 真实入口→推进→退出→次日已闭环；深层 CG 仅合成存档可达 |
-| 地图移动 / NPC | 70–75% | 地形/碰撞/接触触发/玩家起点已实现；对角移动、NPC、动画仍缺 |
+| 战斗 | 88–93% | 真实回合、结算、BOSS 多回合、多队员、默认 auto-arm 自然 day4 结算、菜单桥与 2 成员真实菜单已证；完整玩家 UI 多命令验收与 PRNG 时钟种子仍缺 |
+| H 场景 | 88–93% | 真实入口→推进→退出→次日已闭环；真实 CE328→CE402/CE410 已实证，自然日历帧时序与像素截图入口仍缺 |
+| 地图移动 / NPC | 80–85% | 地形/碰撞/接触触发/玩家起点、8 向对角移动、ActionKey 交互与持续行走已实现；行走动画、NPC 全对话、传送起点一致性仍缺 |
 | 视觉 | 90% | 标题/地图/窗口/锚点大部分还原；锚点 5/6 与 CN 窗口右缘待像素对照 |
 | 音频 | 90% | 358 个音频盘点、混音回归、异常 WAV 容错；剩余人工听感验收 |
-| 测试 / 文档 | 100% | 99 binaries / 701 tests、verify 70、HANDOFF/BASELINE 齐全 |
+| 测试 / 文档 | 100% | 123 test suites / 786 passed / 1 ignored、verify 70/0、HANDOFF_M11/BASELINE/research 索引齐全 |
 
 ## 4. M11 候选与优先级
 
 > 原则：先消除“会让玩家流程不确定”的缺口，再做视觉/音频打磨；每项都必须有测试或可复现证据。
 >
-> 进度：M11 第一批（task-79..84）与 round 1（task-85..88）已收口，见 `docs/HANDOFF_M10.md` §8/§9；下列条目保留仍未完成的部分。
+> 进度：M11 第一批（task-79..84）与 round 1（task-85..88）见 `docs/HANDOFF_M10.md` §8/§9；round 2（task-89..96）见 `docs/HANDOFF_M11.md`。下列条目保留仍未完成的部分。
 
 ### P0 — 确定性与真实流程
 
 1. **战斗自然路线确定性（已完成，task-79）**：`started_events` 已是 `BTreeSet`（有序，非 HashSet），实例为 `Vec`，HashMap 仅键查表；自然 day4 路线已逐字节复现（5 次重跑一致：4 回合、v352=1），#11/#12 已改为定值断言（见 `docs/research/M11_BATTLE_DETERMINISM.md`）。仅剩 H-PRNG-1 零售时钟种子重放等价性待证（`docs/research/M9_PRNG_SEED.md`）。
-2. **真实多命令菜单桥接（引擎桥已完成，task-85）**：`crates/wolf-game/src/battle_wiring.rs` 已实现 CE157 确认采集与 `set_menu_command_queue`，`Game::set_battle_menu_command_queue` 为应用层入口；队列先于轮转 schedule 消费，空队列时 byte-identical。剩余是 shipped producer 的 CE157 pc121/124-125 cursor bug（数据/VM 层），修复前 live 菜单仍只注册 row 1（见 `docs/research/M11_BATTLE_MENU_BRIDGE.md`）。
+2. **真实多命令菜单桥接（引擎桥 + 真实 cursor 已证，task-85/89/93/95）**：`battle_wiring.rs` 实现 CE157 确认采集、`set_menu_command_queue`，`Game::set_battle_menu_command_queue` 为应用层入口。task-89 推翻“CE157 cursor VM bug”：物理 cursor 是 CData type18 row73，真实连续确认逐行推进（input_pos 1→8）；task-93 用 2 成员 fixture 注册 15 行并驱动 4 个不同 CE242 body；task-95 默认 auto-arm 让自然 day4 战斗自行结算。剩余是完整玩家 UI→CE157 多输入验收（`M11_CE157_CURSOR.md`、`M11_PARTY_LIVE_BRIDGE.md`、`M11_BATTLE_AUTOSTART.md`）。
 
 ### P1 — 内容完整性
 
-3. **H 完整 CG 分支（进度边界已定位，task-80/86）**：var304=1 已可经真实夜间菜单 case7 到 CE245/CE290（SaveData01 peak 1）；var326=2 只由 CE301 在书店线（var277，CE314 仅由 CE308/CE310 调用，8 档全 0）学到，属内容进度而非数据 bug。即使两者合成，CE328 在 pc741 就寝分支提前终止，CE402/CE410 仍不可达（`M11_HSCENE_REAL_GATE.md`、`M11_HSCENE_PROGRESSION.md`）。
-4. **移动 / NPC（对角与占位已做，task-81）**：8 向对角移动（不切角、阻挡转向）与 NPC contact 已实现并有 7 测；剩余连续行走动画、NPC 交互、地图间传送后的起点一致性。
+3. **H 完整 CG 分支（真实 CE328→CE402/CE410 已实证，task-80/86/90/94/96）**：var304=1、var276/277/326 可从 SaveData01 真实输入获得；task-96 用 calendar-consistent fixture 只 `start_event(328)` 经 pc986 进 CE402（pc0→511）并驱动 CE410（pc0→247），warnings=0。关键修正：pc122 就寝是 `var6==4 && var4<6`（不是 >20）；可达路径是 pc850 假→else pc969→pc986，不经过 pc964/var64。剩余：从自然日期/真实帧时序复现，以及像素截图入口（`M11_HSCENE_CE328_REAL_CG.md`）。
+4. **移动 / NPC（对角、行走与 ActionKey 已做，task-81/91）**：8 向对角移动（不切角、阻挡转向）、NPC contact、按住方向每 8 帧连续行走、ActionKey 触发页面均已实现并有测试；剩余行走动画帧、NPC 对话全路由、传送后起点一致性。
 5. **日程边界**：更多天数/随机事件的自然推进与跨天存档一致性。
 
 ### P2 — 还原度与交付
@@ -79,7 +80,7 @@
 
 - 总索引：[docs/README.md](docs/README.md)
 - 新会话启动：[docs/NEW_SESSION_START.md](docs/NEW_SESSION_START.md)
-- 最新交接：[docs/HANDOFF_M10.md](docs/HANDOFF_M10.md)
+- 最新交接：[docs/HANDOFF_M11.md](docs/HANDOFF_M11.md)
 - 技术规格：[docs/FORMAT_SPEC.md](docs/FORMAT_SPEC.md)、[docs/OPCODE_SPEC.md](docs/OPCODE_SPEC.md)、[docs/SAVE_SPEC.md](docs/SAVE_SPEC.md)
 - 子系统全景：[docs/BATTLE.md](docs/BATTLE.md)、[docs/HSCENE.md](docs/HSCENE.md)、[docs/MAP_AUDIT.md](docs/MAP_AUDIT.md)
 - 研究底稿：[docs/research/README.md](docs/research/README.md)

@@ -6,21 +6,18 @@
 //!   (the day-4 workday menu never draws a selectable non-battle row; see
 //!    docs/research/M7_DAY5_SCHEDULE.md and m6_week_loop.rs).
 //!
-//! TEST-ONLY INJECTION: the engine's battle turn settlement (CE244) is unreachable
-//! in the shipped event graph (circular 2000350 bootstrap, see docs/HANDOFF_M7.md),
-//! so this test writes the four documented CE244 *win* settlement variables
-//!   2000350=0, 2000342=0, 2000352=1, 2000343=1
-//! at the exact CE239 stall in order to let CE239 return normally.  No other
-//! variables are faked.  Everything downstream — the evening dinner chain
-//! (CE300/CE326), the real CE329 就寝 (day+1, weekday+1), CE317 早朝 (08:30) and
-//! the day/weekday counters — is genuine schedule code.
+//! Since M11 task-95 the rebuilt battle wiring is auto-armed on the shipped CE253
+//! dispatch, so the forced day-4 fight settles naturally: no settlement variable is
+//! injected any more (the old circular 2000350 bootstrap is gone).  The battle is
+//! followed by the real evening dinner chain (CE300/CE326), the real CE329 就寝
+//! (day+1, weekday+1), CE317 早朝 (08:30) and the day/weekday counters.
 //!
-//! The only other hand-set flag is var63=1, exactly as the existing sleep helper
-//! does: var63 is the "sister click" flag that opens the night sleep prompt, and it
-//! is seeded at the bedroom waiting state (here reached at 18:00 instead of the
-//! usual 19:30 because the post-battle evening is shorter).
+//! The only seed is var63=1 in the shared sleep helper: var63 is the "sister click"
+//! flag that opens the night sleep prompt.  The post-battle evening is shorter than
+//! the normal menu route, so the bedroom is reached at 18:00 rather than 19:30.
 
 use std::path::PathBuf;
+use wolf_game::db::Container;
 use wolf_game::Game;
 
 fn resolve_root(raw: &str) -> PathBuf {
@@ -114,6 +111,49 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
     assert_eq!(game.stats.warnings, 0, "day {expected}: warnings appeared");
 }
 
+/// After the day-4 battle settles: let CE251 finish (16:00 on the forced route), then
+/// CE300 walks to 17:00 and runs the real CE326 dinner, which ends around 18:00.
+fn finish_day_after_battle(game: &mut Game, day: i32) {
+    let mut finished = false;
+    for f in 0..4000 {
+        game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.frame();
+        if game.vm.instances().iter().all(|i| i.event != 251) {
+            finished = true;
+            break;
+        }
+    }
+    game.key_bits = 0;
+    assert!(finished, "day {day}: daytime command never returned after the battle");
+    assert_eq!(game.stats.warnings, 0, "day {day}: warnings after the battle");
+    assert_eq!(game.vm.vars.get(160), day);
+    assert!(
+        game.vm.vars.get(4) >= 16,
+        "day {day}: expected the clock past 15:00, got {}:{:02}",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5)
+    );
+    let mut dinner_done = false;
+    for f in 0..6000 {
+        game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.frame();
+        let alive300 = game.vm.instances().iter().any(|i| i.event == 300);
+        let alive326 = game.vm.instances().iter().any(|i| i.event == 326);
+        if !alive300 && !alive326 && game.vm.vars.get(4) >= 18 {
+            dinner_done = true;
+            break;
+        }
+    }
+    game.key_bits = 0;
+    assert!(
+        dinner_done,
+        "day {day}: dinner never finished (clock {}:{:02})",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5)
+    );
+    assert_eq!(game.stats.warnings, 0, "day {day}: warnings in the evening");
+}
+
 /// Click the first workday command button (row0 鍛錬) and let the day run through
 /// 17:00 to the 19:30 bedroom.  Days 2 and 3 only (day 4 is the forced battle).
 
@@ -194,9 +234,6 @@ fn spend_day_choosing_row(game: &mut Game, day: i32) {
     assert_eq!(game.stats.warnings, 0, "day {day}: warnings in evening");
 }
 
-fn event_pc(game: &Game, event: u32) -> Option<usize> {
-    game.vm.instances().iter().find(|i| i.event == event).map(|i| i.pc)
-}
 fn has_event(game: &Game, event: u32) -> bool {
     game.vm.instances().iter().any(|i| i.event == event)
 }
@@ -232,63 +269,68 @@ fn day_five_morning_is_reachable_after_settling_the_forced_day4_battle() {
     assert_eq!(game.vm.vars.get(5), 30, "day4 08:30");
     assert!(game.screen.len() > 20, "day4 screen should be populated");
 
-    // ---- day 4 daytime: forced into CE253 -> CE239 battle ---------------------
+    // ---- day 4 daytime: forced CE253 -> CE239, settled by the auto-armed drive ----
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;
 
+    // Real battle database seed (party stats / command slots / item stock) and the one
+    // cosmetic command-menu section-header label a fresh save leaves blank.  No
+    // settlement variable is seeded.
+    let seeded = game.seed_battle_databases();
+    assert!(seeded > 0, "seed_battle_databases must seed the battle cells");
+    game.databases
+        .set_text(Container::CData, 5, 16, 0, "┗ 状態リスト");
+    let _ = game.start_engine_events();
+
     let mut saw_253 = false;
     let mut saw_239 = false;
+    let mut saw_242 = false;
     let mut saw_training_menu = false;
-    let mut stalled = false;
-    for _ in 0..2600 {
+    let mut settled = false;
+    let mut v352_peak: i32 = 0;
+    let mut v343_peak: i32 = 0;
+    for f in 0..4000 {
+        game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
         game.frame();
         if has_event(&game, 253) { saw_253 = true; }
         if has_event(&game, 239) { saw_239 = true; }
+        if has_event(&game, 242) { saw_242 = true; }
         if let Some(choice) = &game.choices {
             if choice.options.len() == 5 { saw_training_menu = true; }
         }
-        // CE239 parks at pc13 with 2000340=1: battle waiting for a command that the
-        // (unfinished) command UI never produces; the clock is frozen at 15:00.
-        if game.vm.vars.get(340) == 1
-            && game.vm.vars.get(4) == 15
-            && event_pc(&game, 239) == Some(13)
-        {
-            stalled = true;
+        let v352 = game.vm.vars.get(352);
+        if v352.abs() > v352_peak.abs() { v352_peak = v352; }
+        v343_peak = v343_peak.max(game.vm.vars.get(343));
+        if game.vm.vars.get(343) == 1 && game.vm.vars.get(350) == 0 {
+            settled = true;
             break;
         }
     }
+    // Let CE239 drain its victory sequence before returning to CE253.
+    if settled {
+        for f in 0..2000 {
+            game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
+            game.frame();
+            if !has_event(&game, 239) { break; }
+        }
+    }
+    game.key_bits = 0;
     assert!(saw_253, "day4 should dispatch CE253 地域貢献");
     assert!(saw_239, "CE253 should call the real battle event CE239");
+    assert!(saw_242, "the auto-armed drive must start the CE242 command phase");
     assert!(!saw_training_menu, "day4 must not draw the 5-row workday menu");
-    assert!(stalled, "day4 daytime should stall in the CE239 battle");
-    assert_eq!(game.stats.warnings, 0, "no warnings at the battle wall");
-
-    // TEST-ONLY INJECTION: CE244 win settlement (see file header).  CE244 cannot be
-    // reached because 2000350 has a circular bootstrap (HANDOFF_M7).  These are the
-    // exact four variables CE244's win branch (pc312-317) writes.
-    game.vm.vars.set(350, 0); // 2000350 = 0
-    game.vm.vars.set(342, 0); // 2000342 = 0
-    game.vm.vars.set(352, 1); // 2000352 = 1 (win)
-    game.vm.vars.set(343, 1); // 2000343 = 1 (settled)
+    assert!(settled, "the day-4 fight must settle without injection");
+    assert!(
+        v352_peak == 1 || v352_peak == -1,
+        "CE244 must settle 2000352 in {{1,-1}}, got {v352_peak}"
+    );
+    assert_eq!(v343_peak, 1, "CE244 must set 2000343 = 1");
+    assert!(!has_event(&game, 239), "CE239 must return after settlement");
+    assert_eq!(game.stats.warnings, 0, "no warnings through the day-4 battle");
 
     // ---- real evening chain after the battle returns -------------------------
-    let mut at_bedroom = false;
-    for _ in 0..6000 {
-        game.frame();
-        if !evening_work(&game) && game.vm.vars.get(4) >= 18 {
-            at_bedroom = true;
-            break;
-        }
-    }
-    assert!(
-        at_bedroom,
-        "evening dinner chain did not finish (clock {}:{:02})",
-        game.vm.vars.get(4),
-        game.vm.vars.get(5)
-    );
-    assert_eq!(game.vm.vars.get(5), 30, "evening settles on the half hour");
-    assert_eq!(game.stats.warnings, 0, "warnings after battle settles");
+    finish_day_after_battle(&mut game, 4);
 
     // ---- real CE329 sleep from the evening bedroom -> day5 08:30 --------------
     // sleep_into_next_morning seeds var63 (the sister click) and drives the genuine

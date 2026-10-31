@@ -695,6 +695,62 @@ impl MapRuntime {
         }
     }
 
+    /// Starts the active page a trigger request names.
+    ///
+    /// [`try_trigger`](Self::try_trigger) and
+    /// [`try_contact_triggers`](Self::try_contact_triggers) only report which page
+    /// *would* run; this is the matching launch step for action-key and contact
+    /// dispatch. The page must still be the event's active page - `start_pending`
+    /// owns page selection - and an already-live page is left alone so holding a
+    /// key cannot start a second copy of the same coroutine. Returns true only when
+    /// a new instance was started.
+    pub fn start_trigger_page(&mut self, request: TriggerRequest, vm: &mut Vm) -> bool {
+        let Some(position) = self
+            .events
+            .iter()
+            .position(|state| state.id == request.event)
+        else {
+            return false;
+        };
+        let program = {
+            let state = &self.events[position];
+            if !state.runs || state.active != Some(request.page) {
+                return false;
+            }
+            match state
+                .pages
+                .get(request.page)
+                .and_then(|page| page.program.as_ref())
+            {
+                Some(program) => Arc::clone(program),
+                None => return false,
+            }
+        };
+        let started = {
+            let state = &mut self.events[position];
+            if let Some(id) = state.instance {
+                if vm.instance(id).is_some() {
+                    return false;
+                }
+                state.instance = None;
+            }
+            let self_vars = state.self_vars.clone().unwrap_or_default();
+            match vm.start_program_with_self(program, self_vars) {
+                Some(id) => {
+                    state.instance = Some(id);
+                    state.starts = state.starts.saturating_add(1);
+                    state.starts_on_page = state.starts_on_page.saturating_add(1);
+                    true
+                }
+                None => false,
+            }
+        };
+        if started {
+            self.restarts = self.restarts.saturating_add(1);
+        }
+        started
+    }
+
     /// True when the leader touches this event's active page at leader facing facing.
     fn player_contacts(
         &self,

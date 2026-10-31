@@ -10,4 +10,4 @@
 
 - 旧里程碑交接 `HANDOFF_M3.md`–`HANDOFF_M9.md`、`M1_CLOSURE.md`、`M2_SLICE.md` 仍保留在 `docs/` 根下，但已在 [`docs/README.md`](../README.md) 标为“历史归档”。
 - 研究底稿在 [`docs/research/`](../research/README.md)，按里程碑索引。
-- 不要把归档文档里的“下一步”当成当前任务；以 [`docs/HANDOFF_M10.md`](../HANDOFF_M10.md)、[`PLAN.md`](../../PLAN.md) 和源码/测试为准。
+- 不要把归档文档里的“下一步”当成当前任务；以 [`docs/HANDOFF_M11.md`](../HANDOFF_M11.md)、[`PLAN.md`](../../PLAN.md) 和源码/测试为准。

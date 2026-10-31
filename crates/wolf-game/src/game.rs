@@ -61,6 +61,16 @@ pub const BOOT_MAP: &str = "MapData/TitleMap.mps";
 /// The autorun event on [`BOOT_MAP`] that plays the splashes and reaches the title.
 pub const BOOT_EVENT: u32 = 2;
 
+/// Frames between held-direction walking steps.
+///
+/// WOLF's hero move speeds are stored as `(pixels per frame, frames per step)`
+/// pairs in `Game.dat` (docs/FORMAT_SPEC.md:248): the default `(2, 1)` means two
+/// pixels per frame, so one 16-pixel tile takes eight frames. The first step is
+/// taken on the press itself and every eighth frame thereafter; the input core
+/// does not animate sub-tile pixels, it only decides when the next whole tile is
+/// entered.
+pub const WALK_STEP_FRAMES: u32 = 8;
+
 /// Events the engine starts unconditionally, because their header says
 /// `parallel_process_always(3)` (docs/ENGINE_EVENTS.md section 7).
 ///
@@ -305,6 +315,10 @@ pub struct Game {
     choice_cursor: usize,
     /// Keys held on the previous frame, so a choice sees presses and not holds.
     previous_keys: u32,
+    /// Last direction the held-direction walker stepped/turned in, 0 when idle.
+    walk_last_direction: i32,
+    /// Frames until the held direction may take its next whole-tile step.
+    walk_wait: u32,
     /// Mouse buttons held on the previous frame, so a press can be told from a hold.
     previous_mouse_buttons: u32,
     /// Mouse position at the end of the previous frame, clamped at 0, so the
@@ -461,6 +475,8 @@ impl Game {
             mouse_buttons: 0,
             choice_cursor: 0,
             previous_keys: 0,
+            walk_last_direction: 0,
+            walk_wait: 0,
             previous_mouse_buttons: 0,
             previous_mouse: [0, 0],
             engine_always: None,
@@ -620,6 +636,23 @@ impl Game {
     /// BOSS path (CE239 pc202, 2000445 == 1). See src/battle_wiring.rs.
     pub fn set_battle_round_loop(&mut self, enabled: bool) {
         self.battle_wiring.set_round_loop(enabled);
+    }
+
+    /// Turns the natural-battle auto-arm on or off (M11 task-95).
+    ///
+    /// ON by default. With no explicit `set_battle_wiring`, the rebuilt battle drive arms
+    /// itself when the shipped battle dispatch event CE253 (地域貢献) is resident and
+    /// 2000340 rises, then runs the multi-round loop so the night-4 battle settles. Turn it
+    /// off to reproduce the raw shipped stall (CE239 parks with 2000350 stuck at 0). An
+    /// explicit `set_battle_wiring(false)` still overrides auto-arm. See src/battle_wiring.rs.
+    pub fn set_battle_auto_arm(&mut self, enabled: bool) {
+        self.battle_wiring.set_auto_arm(enabled);
+    }
+
+    /// Whether the natural-battle auto-arm is enabled (default true).
+    #[must_use]
+    pub fn battle_wiring_auto_armed(&self) -> bool {
+        self.battle_wiring.auto_armed()
     }
 
     /// Sets the CE242 command-index schedule the rebuilt wiring hands to the command phase
@@ -799,6 +832,76 @@ impl Game {
         self.runtime.player_start()
     }
 
+    /// Fires the action-key page the leader is standing on or facing.
+    ///
+    /// This is the interactive half of [`MapRuntime::try_trigger`]: it asks the
+    /// runtime which action-key page the leader's tile/facing reaches, then starts
+    /// that page through [`MapRuntime::start_trigger_page`]. The WOLF rule is the
+    /// official one: an event with an image and slip-through off can be talked to
+    /// from the adjacent tile, while a passable/no-image event has to be stood on.
+    /// Only the smallest event id is chosen when several overlap.
+    ///
+    /// Returns the requests that were started, for diagnostics and tests. A message
+    /// window or choice prompt suppresses interaction, the same way it suppresses
+    /// movement in [`Self::frame`].
+    pub fn interact_action_key(&mut self) -> Vec<TriggerRequest> {
+        if self.choices.is_some() || !self.messages.is_empty() {
+            return Vec::new();
+        }
+        let (x, y, facing) = match self.runtime.leader() {
+            Some(leader) => (leader.x, leader.y, leader.direction.unwrap_or(0)),
+            None => return Vec::new(),
+        };
+        let requests = self.runtime.try_trigger((x, y), facing, true, false);
+        for request in &requests {
+            self.runtime.start_trigger_page(*request, &mut self.vm);
+        }
+        requests
+    }
+
+    /// Samples movement/action input once per frame.
+    ///
+    /// A fresh confirm press gets the action-key interaction first (that is what a
+    /// player expects when standing in front of a person), then a held direction
+    /// walks one whole tile immediately and every [`WALK_STEP_FRAMES`] frames while
+    /// it stays held. Releasing the direction or opening a message/choice resets
+    /// the cadence, so the next press starts with an immediate step. The step core
+    /// turns the leader even when collision blocks the move, which is why a tap at
+    /// a wall still changes facing.
+    fn advance_player_input(&mut self) {
+        let pressed = self.key_bits & !self.previous_keys;
+        let dialogue_open = self.choices.is_some() || !self.messages.is_empty();
+
+        if !dialogue_open && self.runtime.leader().is_some() && pressed & crate::key::OK != 0 {
+            let requests = self.interact_action_key();
+            if !requests.is_empty() {
+                self.walk_last_direction = 0;
+                self.walk_wait = 0;
+                return;
+            }
+        }
+
+        let held = crate::key::code(self.key_bits & crate::key::DIRECTIONS);
+        if dialogue_open || held == crate::key::CODE_NONE || self.runtime.leader().is_none() {
+            self.walk_last_direction = 0;
+            self.walk_wait = 0;
+            return;
+        }
+        if held != self.walk_last_direction {
+            self.walk_last_direction = held;
+            self.walk_wait = 0;
+        }
+        if self.walk_wait == 0 {
+            let (_moved, requests) = self.runtime.try_move_leader_contacts_8(held);
+            for request in &requests {
+                self.runtime.start_trigger_page(*request, &mut self.vm);
+            }
+            self.walk_wait = WALK_STEP_FRAMES.saturating_sub(1);
+        } else {
+            self.walk_wait -= 1;
+        }
+    }
+
     /// Builds the tile-layer quads for the current map.
     ///
     /// This is the layer WOLF draws before every picture. It is empty for a map with no
@@ -913,6 +1016,9 @@ impl Game {
         let bytes = self.read(path)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, None);
+        // A map change starts a new walking context even if the same key stays held.
+        self.walk_last_direction = 0;
+        self.walk_wait = 0;
         if let Some((x, y, options, direction)) = hero {
             // The transfer operand is the map's authored player start: record it
             // as well as placing the live leader.
@@ -1273,6 +1379,9 @@ impl Game {
         // Rebuilt battle wiring (M7 task-34): start the command phase on the battle-active
         // edge. No-op unless Game::set_battle_wiring(true) was called. See battle_wiring.rs.
         self.battle_wiring.tick(&mut self.vm);
+        // Player input is sampled before the VM step: a movement step or action-key
+        // page start has to be visible to this frame's step, not the next one.
+        self.advance_player_input();
         self.handle_choice_input();
         let mut report = self.vm.step_frame(&mut GameHost {
             screen: &mut self.screen,
