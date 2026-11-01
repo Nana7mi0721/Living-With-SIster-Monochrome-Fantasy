@@ -1,7 +1,7 @@
 # 文档总索引（docs/README.md）
 
 > 本文件是仓库文档的唯一总入口。**新增、移动、归档文档时，必须同步更新本索引。**
-> 当前里程碑：**M0–M11 已完成；M11 round 3（task-97..100）已收口**；最新交接：[`HANDOFF_M12.md`](HANDOFF_M12.md)。当前路线图：[`../PLAN.md`](../PLAN.md)。
+> 当前里程碑：**M0–M12 已完成；M12 零售范围审计已收口**；最新交接：[`HANDOFF_M12.md`](HANDOFF_M12.md)。当前路线图：[`../PLAN.md`](../PLAN.md)。
 
 ## 0. 先读什么
 
@@ -11,7 +11,7 @@
 | 查格式 / 解码 | [`FORMAT_SPEC.md`](FORMAT_SPEC.md) → [`SAVE_SPEC.md`](SAVE_SPEC.md) → [`PARTY_DB.md`](PARTY_DB.md) |
 | 查 opcode 语义 | [`OPCODE_SPEC.md`](OPCODE_SPEC.md) → 对应的 [`OPCODE_*.md`](OPCODE_SPEC.md) 专题 |
 | 查战斗 / H / 地图 | [`BATTLE.md`](BATTLE.md) / [`HSCENE.md`](HSCENE.md) / [`MAP_AUDIT.md`](MAP_AUDIT.md) |
-| 查某里程碑做了什么 | [`HANDOFF_M12.md`](HANDOFF_M12.md)（现行，M11 round 3）→ [`HANDOFF_M11.md`](HANDOFF_M11.md)（M11 round 2，历史）→ 更早历史交接（见 §3） |
+| 查某里程碑做了什么 | [`HANDOFF_M12.md`](HANDOFF_M12.md)（现行，M11 round 3 + M12 审计）→ [`HANDOFF_M11.md`](HANDOFF_M11.md)（M11 round 2，历史）→ 更早历史交接（见 §3） |
 | 查研究/实测底稿 | [`research/README.md`](research/README.md) |
 
 ## 1. 状态图例
@@ -27,7 +27,7 @@
 | 文档 | 状态 | 用途 |
 | --- | --- | --- |
 | [`NEW_SESSION_START.md`](NEW_SESSION_START.md) | 现行 | 新会话启动提示，可直接复制给下一个 agent |
-| [`HANDOFF_M12.md`](HANDOFF_M12.md) | 现行 | 最新里程碑交接（M11 round 3：自然帧 H、真实战斗菜单、PRNG 时钟种子、打包/帧预算） |
+| [`HANDOFF_M12.md`](HANDOFF_M12.md) | 现行 | 最新里程碑交接（M11 round 3：自然帧 H、真实战斗菜单、PRNG 时钟种子、打包/帧预算；M12 零售范围审计） |
 | [`../PLAN.md`](../PLAN.md) | 现行 | 当前路线图（M0–M12 汇总与剩余项） |
 | [`../AGENT.md`](../AGENT.md) | 现行 | Lead 与子代理协作约定（并行、写范围、验收、清理） |
 
@@ -95,7 +95,7 @@
 
 ## 6. 研究记录
 
-所有一次性调查、测试底稿与跨里程碑研究在 [`research/README.md`](research/README.md) 按 M6–M11 分组索引；M11 的 round 2（task-89..96）与 round 3（task-97..100）均已登记。研究文档不是当前指令；与 HANDOFF/规格冲突时，以现行代码与 HANDOFF 为准。
+所有一次性调查、测试底稿与跨里程碑研究在 [`research/README.md`](research/README.md) 按 M6–M12 分组索引；M11 的 round 2/round 3 与 M12 零售范围审计均已登记。研究文档不是当前指令；与 HANDOFF/规格冲突时，以现行代码与 HANDOFF 为准。
 
 ## 7. 归档
 

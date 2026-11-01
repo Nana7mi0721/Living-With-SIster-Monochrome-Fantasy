@@ -1,4 +1,4 @@
-# M12 交接：M11 round 3 收口（自然帧 H、真实战斗菜单、PRNG 时钟、打包/帧预算）
+# M12 交接：M11 round 3 收口 + 零售范围审计
 
 > 仓库：`E:\Study\github program\imoto life`
 > 阅读顺序：本文件（M12 最新）→ `docs/README.md`（文档总索引）→ `PLAN.md`（当前路线图）；M11 及更早已标历史归档。
@@ -12,6 +12,7 @@ M0–M11 保持可交付；M11 round 3 已完成四项剩余边界，并全部�
 - **真实玩家战斗菜单全链路**：harvester 改读已提交的 CData type14，并移到 `drive` 判断之前；真实 2 成员菜单无需测试注入即可注册 2 行并驱动 3 个不同 CE242 body。
 - **零售 PRNG 时钟种子**：反汇编确认零售在 `0x35847` 调用 `KERNEL32!GetTickCount` 并直接存 `0x011b17f0`，无 folding；新增 `WolfRng::from_clock_ticks`，并如实记录零状态重读导致单 tick 不可重放。
 - **打包与帧预算**：新增独立 `wolf-package` 校验/组装工具（4087 文件、约 1.53 GB VALID）与 `FrameBudgetReport`（debug 600 帧 p50 5.6µs / max 102.6µs）。
+- **零售范围审计**：确认本作是纯鼠标点触式；方向键行走/碰撞/contact/ActionKey、地图触发 3/4、相机滚动/281、201 路线播放、远景视差都是引擎通用能力，零售不使用。存档/读档/回标题/退出/截图存档/相册/DLC 则全部有真实调用点。详见 `docs/research/M12_RETAIL_SCOPE.md`。
 
 ## 2. M11 round 3 交付与证据（task-97..100）
 
@@ -39,14 +40,42 @@ cargo build -q -p wolf-cli                                             # EXIT 0
 
 本批集成实测：`cargo test --workspace` EXIT 0，128 个 test-result 块，803 passed / 0 failed / 1 ignored（唯一 warning 来自永久 scratch `_scratch_cdata.rs` 未用变量）；`verify` = PASS 70 / pending 0；`wolf-cli` 单测与回归全绿。
 
-## 5. 边界 / 剩余（M12 可继续）
+## 5. 零售范围审计结论（M12）
 
-1. **H 深链**：自然帧已到 CE402 pc509 / CE410 act≤3；act4/5 的 CE410 pc>200（`v144_cg20`、`cutin_189/190`）在自然早退路径不可达。若要从自然日历必然进入更深分支，仍需事件/日历推进而非测试 fixture。
-2. **战斗 UI**：真实菜单 harvester 已通；玩家在多命令界面里的完整输入序列（含取消、返回、多回合连续确认）仍只覆盖 2 成员 fixture。可扩展到 shipped 3–4 人队伍。
-3. **移动/NPC**：零售注册地图是点触式（6 张地图 115 页 `graphic` 全空，交互靠 150 Picture + 124 悬停），没有 NPC 行走动画/走位对话内容可补；现有 8 向行走与 ActionKey 只是引擎通用能力/测试夹具，不计入内容缺口。剩余仅是点触命中框与事件格坐标一致性（若还有未覆盖的 confirm 页）。
-4. **像素/音频**：锚点 5/6 仍是几何推断，无零售像素 diff；31 首 loop 的人工听感（seam/音量/延迟）仍待验收。
-5. **打包/性能**：`wolf-package` 已有 validate/assemble/check/bench，但 Windows 发布包（安装器/资源布局）与启动数据目录自动校验仍未接线到主程序；release 性能未测。
-6. **PRNG**：零售时钟种子来源与折叠已证，但“同 tick 完全重放”受零状态重读限制；如需逐帧重放，仍以 `EVENT_RESEED` 为准。
+**原则**：只实现游戏零售能走到的流程；WOLF 引擎有、但本作不用的通用能力不再新增，也不再写成“剩余缺口”。完整证据见 `docs/research/M12_RETAIL_SCOPE.md`。
+
+### 5.1 零售实际使用（必须保留）
+
+| 功能 | 证据 |
+| --- | --- |
+| 220 SaveLoad / 221 LoadGame / 222 SaveGame | 220 8 条、221 16 条、222 5 条；CE131/CE435/CE436 存档/自动存档，CE94 载入窗口，TitleMap ev2 初始化 system.sav/system2.sav |
+| 174 ReturnToTitle / 175 EndGame | 174 13 条（CE246/247/305/322/323/326/359/405 + SampleMapA ev4/5/24）；175 2 条（CE38/CE42） |
+| 1000 ProFeature（截图） | CE131 存档截图、CE435 自动存档截图、CE452 DLC `Data/SC1.jpg`、CE525/526 相册 |
+| 150 Picture + 124 hover/click | 零售交互主路径；全库 150 共 16716 CE + 3709 地图页 = 20425 条，124 共 579 CE + 466 地图页 = 1045 条 |
+| 130 Teleport / 151/160/161/162 | 新游戏 Map003 ev1 → SampleMapA；地图侧唯一转场组 |
+
+### 5.2 引擎通用、零售不使用（不新增、不列缺口）
+
+- **方向键行走/碰撞/contact/ActionKey**：注册 6 张地图 115 页 `graphic` 全空，0 个 player-touch/event-touch 页；`game.rs:1384 advance_player_input()` 是唯一接进帧循环的行走钩子，现有 8 向/接触 API 仅供 synthetic 测试。
+- **触发类型 3/4、相机滚动/culling/281 ScrollScreen、201 SetMoveRoute 路线播放、远景视差**：281 全库 3 条且只在其无调用者的 CE225；201 在注册地图只剩 `[-2]`/`[-4]` 无形定位；SampleMapA 64×36 正好 1024×576，地图铺满 viewport；远景速度全 0 且被 3 层 tile 完全遮住。
+- **处理**：现有 API 保留，避免大范围回归；以后若清理，优先摘 `game.rs:1384` 的行走钩子并同步改 `crates/wolf-game/tests/m11_npc_interaction.rs`，这属于代码瘦身，不是内容缺口。
+
+### 5.3 示例资产 / 无零售证据（不计必做）
+
+- Dungeon / SampleMapB / Map002 是 WOLF 编辑器示例（目的地 map 27/32 未注册，Map002 未注册）；Map024/Map031 无 tile 层且无自然 130 入口。
+- **TitleMap 不是死资产**：`game.rs:723-742 boot()` 实测 TitleMap ev2 → CE549 三 splash → 按键等待 → CE42；文档旧说法已修正。
+- H act4/5：自然帧 CE402 pc208 早退到 tail pc509，CE410 acts=[1,1,2,1,3]；act4/5 只在 budget≤5 饥饿观测出现，无零售存档证据。
+- 3–4 人队伍：CData type18 row4 col0=2，真实队伍只有 2 人。
+
+### 5.4 真正的剩余
+
+1. **战斗完整玩家输入**：2 人真实菜单已驱动 3 个 CE242 body；取消/返回/连续确认的 UI 验收仍可补。
+2. **点触命中框与事件格坐标一致性**：SampleMapA 6 个 confirm 页（ev11/14/18/21/22/24）与底部 UI 命中区。
+3. **视觉像素**：锚点 5/6 的零售像素 diff、关键场景截图 diff。
+4. **音频人工听感**：31 首 loop 的 seam/音量/延迟。
+5. **存档逐段全量对照**（M10 已列剩余项）。
+6. **日程/多日自然推进**（若还有未覆盖边界）。
+7. **工具/保真（非游戏流程）**：PRNG 单 tick 完全重放、`wolf-package` 发布流水线、release 帧预算——按需做，不算内容缺口。
 
 ## 6. 关键源码位置
 
@@ -65,7 +94,8 @@ cargo build -q -p wolf-cli                                             # EXIT 0
 
 ## 7. 下一步建议（恢复后）
 
-1. 若继续内容：把 2 成员真实菜单扩展到 shipped 队伍，补完整多命令 UI（取消/返回/连续确认）验收。
-2. 若继续 H：用自然日历/事件把 act4/5 深分支推进到真实可达，并补 Game 帧 raster 的稳定截图入口。
-3. 若继续交付：把 `wolf-package` 接成发布流水线，补 release 帧预算与数据目录启动校验。
-4. 每个新里程碑完成时按 `AGENT.md` §5 收口：HANDOFF、BASELINE、PLAN、README、research 索引同步。
+1. **不要再扩展引擎通用能力**：行走/碰撞/8 向/contact/ActionKey、触发 3/4、相机/281/201/远景视差均不是零售内容；现有实现保留即可。
+2. 零售流程优先：补战斗取消/返回/连续确认的玩家 UI 验收；核对 SampleMapA 6 个 confirm 页的命中框与事件格坐标。
+3. 还原度：锚点 5/6 零售像素 diff、31 首 loop 人工听感、存档逐段对照。
+4. 工具按需：PRNG 单 tick 重放、`wolf-package` 发布流水线、release 帧预算——不作为内容缺口。
+5. 每个新里程碑完成时按 `AGENT.md` §5 收口：HANDOFF、BASELINE、PLAN、README、research 索引同步。

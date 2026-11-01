@@ -181,9 +181,18 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 | [`M11_PACKAGING.md`](M11_PACKAGING.md) | M11 task-100 — wolf-package 校验/组装与 FrameBudgetReport |
 | [`M11_PRNG_CLOCK.md`](M11_PRNG_CLOCK.md) | M11 task-99 — 零售 GetTickCount 播种与零状态重读边界 |
 
+### M12（1 篇）
+
+零售范围审计：区分游戏流程、引擎通用能力、示例资产与保真工具。
+
+| 文档 | 内容 |
+| --- | --- |
+| [`M12_RETAIL_SCOPE.md`](M12_RETAIL_SCOPE.md) | M12 — 零售点触式输入实证；行走/触发 3/4/相机/281/201/远景为非零售；存档/回标题/截图/DLC 为真实流程；H act4/5 与 3–4 人队伍不计缺口 |
+
 ## 状态约定
 
 - **M6–M9 文档**：历史记录，可能描述当时的 blocker；如果与现行实现冲突，以现行代码/测试和 HANDOFF 为准。
 - **M10 文档**：对应 M10 已收口的实现与重基线；其中 `M10_OPCODE_111_PLAN.md`、`M10_BATTLE_EXPECTATIONS.md` 是计划/期望推导，最终以 `M10_OPCODE_111_LANDING.md` 与 HEAD 测试为准。
 - **M11 文档**：M11 第一批/round 1/round 2/round 3 的验收底稿；结论以 `docs/HANDOFF_M12.md`（round 3）与 `docs/HANDOFF_M11.md`（round 2）及 HEAD 测试为准（第一批/round 1 亦见 HANDOFF_M10 §8/§9）。
+- **M12 文档**：零售范围审计底稿；结论以 `docs/HANDOFF_M12.md` §5 与 HEAD 代码/数据为准。
 - **M7_BACKLOG / M8_BACKLOG**：历史计划，已被后续 M9/M10 交接取代；只用于了解当时的缺口清单。
