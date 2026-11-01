@@ -7,9 +7,9 @@
 ## 1. 当前状态
 
 - 当前源码 HEAD：以 `git log` 为准。M10 交接/基线为 `e52855d`；M11 第一批/round 1/round 2 分别见 `22de104`、`5ef6b1f`、`fdeed07`；M11 round 3 见 M12 交接提交。
-- 里程碑：**M0–M11 全部完成并收口；M12 round 1（task-101..103）、day6（task-104）与 30/90 天 soak（task-105）已完成**，可运行、可交付的工程约 **96%**；严格 1:1 原版等价约 **87–91%**。
+- 里程碑：**M0–M11 全部完成并收口；M12 round 1（task-101..103）、day6（task-104）与 30/90 天 soak（task-105）已完成**，可运行、可交付的工程约 **96%**；严格 1:1 原版等价约 **87–91%**。该百分比是引擎/子系统口径——按用户 2026-11-01 的“全内容一致 + 修 bug”口径，主线后半/结局、DLC、随机事件与 H 阈值矩阵仍未验收（见 §4.5）。
 - 质量门禁：`cargo test -q --workspace` 全绿（133 test result / 812 passed / 2 ignored）；`./target/debug/wolf-cli.exe verify --root work/all` = **PASS 70 / pending 0**。
-- 工作树：仅允许 3 个永久 scratch（`crates/wolf-format/examples/opscan.rs`、`crates/wolf-format/tests/_scratch_cdata.rs`、`crates/wolf-format/tests/_scratch_event.rs`）与用户资料 `docs/gpt调研/` 未跟踪。
+- 工作树：3 个永久 scratch（`crates/wolf-format/examples/opscan.rs`、`crates/wolf-format/tests/_scratch_cdata.rs`、`crates/wolf-format/tests/_scratch_event.rs`）与用户资料（`docs/gpt调研/`、`docs/攻略文档/`、`游戏示例图片/`、`docs/research/GUIDE_CONTENT_CROSSWALK.md`）未跟踪；`docs/README.md`、`docs/research/README.md` 有用户自己的未提交改动。**这些都不提交**。
 
 ## 2. 里程碑总表（现行命名）
 
@@ -43,6 +43,8 @@
 | 音频 | 90% | 358 个音频盘点、混音回归、异常 WAV 容错；剩余人工听感验收 |
 | 测试 / 文档 | 100% | 133 test suites / 812 passed / 2 ignored、verify 70/0、HANDOFF_M12/BASELINE/research 索引齐全 |
 
+> 上表按引擎/子系统口径；`主线 / 日常循环 97%` 指循环本身，不等于全内容通关。按 2026-11-01“内容一致 + 修 bug”标准的内容缺口见 §4.5。
+
 ## 4. M12 候选与优先级
 
 > 原则：先消除“会让玩家流程不确定”的缺口，再做视觉/音频打磨；每项都必须有测试或可复现证据。
@@ -67,6 +69,21 @@
 - **day5→day7 周末日程**：`crates/wolf-game/tests/m12_day6_weekend.rs` + `docs/research/M12_DAY6_WEEKEND.md`。day5 工作日 → 周六 09:30 CE310 休日五按钮（外出/自主锻炼/处理积攒的家务/努力打工/悠然自得）→ 三个活动时段（12:00/15:00/17:00）→ 18:30 晚餐/就寝 → 周日 09:30 同一菜单；`frames=11247 instructions=580912`、warnings=0，3 次运行一致；无时间/日程注入。
 - **多日通用 soak**：`crates/wolf-game/tests/m12_multiday_soak.rs` + `docs/research/M12_MULTIDAY_SOAK.md`。一个驱动连续 30 天到 day31（11 个战斗日、4 个周末、7 个工作日菜单日，warnings=0）；`#[ignore]` 90 天到 day97（含剧情跳天）；修复 auto-arm 只认 CE253 的缺口，parented CE239 也可武装。
 
+### 4.5 下一阶段：内容一致（M13，2026-11-01 用户定标）
+
+> 完成标准：**重构版体验内容与原版一致，且修复可能存在的 bug**。验收对象是每条零售可达内容路径，不是引擎百分比。
+
+已核实边界（HEAD `b2da473`，8 个零售存档）：最远 day90（SaveData01/08），`var619 DLCチャプター` 全 0，`var466/492/493` 结局旗标全 0；后半与 DLC 没有零售存档可对照。`m12_multiday_soak` 到 day97 只证循环，不证 stage/结局。
+
+- **P0-A 主线后半与结局**：SaveData01/08 day90 → stage 25→27→28/30；另跑约 day100 期限的逃亡 END；再补其余 7 个结局。
+- **P0-B DLC CE452**：CE251@2498 → EP0–EP34 → CE446/447；第二主线 CE424–CE428 温泉讨伐链。
+- **P0-C 内容矩阵**：111 条随机事件、H 分支、战斗敌人/胜负、道具/技能/CG，逐条标 `已测 / 需夹具 / 数据不可达`。
+- **P1-D**：跨天存读 + NG+ 继承（CE436）+ 全存档槽。
+- **P1-E**：锚点 5/6 与关键场景零售像素 diff；31 首 loop 人耳。
+- **Bug 政策**：移植版 bug 必修；原版明确缺陷（死锁/崩溃/内容不可达/文本错位）修并记录差异；无害怪癖默认保留，单列决策。
+
+第一步与可执行细节见 `docs/HANDOFF_M12.md` §9。
+
 ### P1 — 内容完整性
 
 3. **H 完整 CG 分支（自然帧已证，task-80/86/90/94/96/97）**：var304=1、var276/277/326 可从 SaveData01 真实输入获得；task-96 用 calendar-consistent fixture 只 `start_event(328)` 经 pc986 进 CE402（pc0→511）并驱动 CE410（pc0→247），warnings=0；task-97 用默认 200000 预算、普通 `Game::frame`、关闭背景 AutoEvents 复现自然帧 `frames=3667 maxpc402=509 CE410 acts=[1,1,2,1,3] warnings=0`，并新增 `--load-save`+`--event` 截图入口。关键修正：pc122 就寝是 `var6==4 && var4<6`；可达路径是 pc850 假→else pc969→pc986，不经过 pc964/var64。**已确认非缺口**：act4/5 只在 budget≤5 饥饿观测出现，无零售自然证据（`M11_HSCENE_NATURAL.md`、`M12_RETAIL_SCOPE.md`）。
@@ -74,6 +91,8 @@
 5. **日程边界**：通用 soak 已连续覆盖 30 天（默认测试）与 90 天（ignored，day84→97 剧情跳天）；跨天存档一致性仍可补。
 
 ### P2 — 还原度与交付
+
+> 2026-11-01 标准下，P2 排在内容覆盖之后；先做 §4.5 的 P0-A/B/C。
 
 6. 视觉像素对照：锚点 5/6 几何已固定（task-82，`M11_ANCHOR_PIXELS.md`）；CN 窗口皮肤右缘已证为 data-only 且无 1024 宽溢出（task-87，`M11_WINDOW_EDGE.md`）。剩余零售像素 diff、关键场景截图 diff。
 7. 音频人工听感验收：已产出 31 首 loop 验收档案与分层（task-84，`M11_AUDIO_ACCEPTANCE.md`），并有逐曲阈值固定、两次 decode 位相同的回归（task-88，`M11_AUDIO_LOOP_REGRESSION.md`）；剩余 BGM 循环点/SE 音量延迟的人工确认。

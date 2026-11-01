@@ -1,6 +1,6 @@
 # AGENT.md — 本项目协作约定
 
-本文件面向在本仓库工作的 AI coding agent（Lead 与子代理），补充 `docs/README.md`（文档总索引）、`docs/NEW_SESSION_START.md` 与最新的 `docs/HANDOFF_M10.md`。
+本文件面向在本仓库工作的 AI coding agent（Lead 与子代理），补充 `docs/README.md`（文档总索引）、`docs/NEW_SESSION_START.md` 与最新的 `docs/HANDOFF_M12.md`。
 
 ## 1. 默认并行推进
 
@@ -41,7 +41,7 @@ cargo build -q -p wolf-cli
 ## 5. 事实优先级
 
 1. 仓库当前源码与实测命令输出；
-2. `docs/README.md` 中标记为**现行/稳定参考**的文档：`docs/HANDOFF_M10.md`、`PLAN.md`、`docs/BASELINE.json`、技术规格与经测试验证的 `docs/research/*`；
+2. `docs/README.md` 中标记为**现行/稳定参考**的文档：`docs/HANDOFF_M12.md`、`PLAN.md`、`docs/BASELINE.json`、技术规格与经测试验证的 `docs/research/*`；
 3. 历史归档文档（`HANDOFF_M3`–`HANDOFF_M9`、`M1_CLOSURE.md`、`M2_SLICE.md`、`docs/archive/`）只作追溯，不作为当前指令；
 4. 旧聊天摘要仅作线索，不作为权威；
 5. 外部调研（GPT/攻略）与实测冲突时，以实测为准。
@@ -51,8 +51,8 @@ cargo build -q -p wolf-cli
 ### 6.1 文档维护
 
 - **单一入口**：`docs/README.md` 是唯一文档总索引；任何新增/移动/删除文档都必须同步更新它。研究底稿还要登记到 `docs/research/README.md`。
-- **现状与历史分开**：最新交接只保留 `docs/HANDOFF_M10.md`（下一个里程碑则 `HANDOFF_M11.md`）；旧交接、旧验收基准统一标为“历史归档”，保留不删。
-- **每次里程碑收口必须同步**：`docs/HANDOFF_Mx.md`（现状/证据/边界/下一步）→ `PLAN.md`（里程碑表与 M11+ 优先级）→ `docs/BASELINE.json`（本批证据）→ `docs/README.md` 与 `docs/research/README.md`。
+- **现状与历史分开**：最新交接只保留 `docs/HANDOFF_M12.md`（下一个里程碑则 `HANDOFF_M13.md`）；旧交接、旧验收基准统一标为“历史归档”，保留不删。
+- **每次里程碑收口必须同步**：`docs/HANDOFF_Mx.md`（现状/证据/边界/下一步）→ `PLAN.md`（里程碑表与 M12/M13+ 优先级）→ `docs/BASELINE.json`（本批证据）→ `docs/README.md` 与 `docs/research/README.md`。
 - **文档必须可复现**：技术/研究文档开头写清状态（现行/已验证/未验证/历史）、测量 HEAD、数据根（`work/all` / `work/full`）和复现命令；不要只写结论。
 - **路线图不双轨**：`PLAN.md` 只放当前路线；旧规划稿放 `docs/archive/`，不在根目录保留过期版本。
 

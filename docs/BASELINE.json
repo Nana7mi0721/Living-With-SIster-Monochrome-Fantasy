@@ -1345,5 +1345,21 @@
   "thirty_days": "crates/wolf-game/tests/m12_multiday_soak.rs (default test): generic day driver reacts to CE251/CE310 menus, feeds OK for stories/battles, seeds only var63 for the sleep prompt. Reaches day31 with battle_days=[4,11,15,16,17,18,19,22,23,24,30], weekend_days=[6,7,13,14,20,21,27,28] (each 3 CE310 actions), 7 weekday-menu days, frames=65649 instructions=3183844 warnings=0.",
   "ninety_days": "Same file, #[ignore] long run (~46s): reaches day97 including scripted jump day84->97; 27 battle days, 23 weekend days, 7 weekday-menu days, frames=223752 instructions=10437869 warnings=0.",
   "verification": "WOLF_DATA_ROOT=work/all cargo test -q --workspace --no-fail-fast -j 2 => EXIT 0, 133 test-result blocks, 812 passed / 0 failed / 2 ignored; verify PASS 70 / pending 0; wolf-cli build EXIT 0."
+ },
+ "m12_save_stages": {
+  "status": "measured at HEAD b2da473; data root work/all; retail saves work/retail_backup/Save",
+  "method": "Game::new + Game::load_save each SaveDataNN.sav, then read vm.vars (160 day, 6 weekday, 4/5 clock, 619 DLC chapter, 466/492/493 ending flags). One-off temporary probe, deleted; a missing retail save directory skips like m12_save_full_compare.",
+  "saves": {
+   "SaveData01": {"day": 90, "weekday": 5, "clock": "21:40", "dlc": 0, "ending_flags": [0, 0, 0]},
+   "SaveData02": {"day": 2, "weekday": 1, "clock": "18:30", "dlc": 0, "ending_flags": [0, 0, 0]},
+   "SaveData03": {"day": 62, "weekday": 5, "clock": "22:00", "dlc": 0, "ending_flags": [0, 0, 0]},
+   "SaveData04": {"day": 72, "weekday": 1, "clock": "21:30", "dlc": 0, "ending_flags": [0, 0, 0]},
+   "SaveData05": {"day": 73, "weekday": 2, "clock": "18:30", "dlc": 0, "ending_flags": [0, 0, 0]},
+   "SaveData06": {"day": 53, "weekday": 3, "clock": "18:30", "dlc": 0, "ending_flags": [0, 0, 0]},
+   "SaveData07": {"day": 68, "weekday": 4, "clock": "19:30", "dlc": 0, "ending_flags": [0, 0, 0]},
+   "SaveData08": {"day": 90, "weekday": 6, "clock": "00:42", "dlc": 0, "ending_flags": [0, 0, 0]}
+  },
+  "finding": "Max day 90 (SaveData01/08); all eight have var619=0 and var466/492/493=0, so no retail save carries an ending or DLC progress. Late mainline, endings and DLC must be validated from scripts + synthetic state, not from a retail save. The 90-day soak reaches day97 but asserts only the loop, not stage/ending.",
+  "source": "docs/HANDOFF_M12.md section 9.1"
  }
 }
