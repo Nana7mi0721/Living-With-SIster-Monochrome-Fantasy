@@ -1,19 +1,26 @@
-//! M13 P0-A — 主线后半与结局探针 (mainline endings probe).
+//! M13 P0-F — 主线后半自然驱动与结局复验 (mainline endings, post common-self fix).
 //!
-//! 目的（2026-11-01 口径：内容与原版一致 + 修 bug）：
-//!   1. 用零售存档驱动主线后半，确认「正常通关」与「逃亡」两条结局路径。
-//!   2. 证明结局脚本内容存在且可正常渲染；记录自然驱动时跑不通的精确卡点。
+//! 目的（2026-11-01 口径：游戏体验内容与原版一致 + 修复 bug）：
+//!   1. 证明「正常通关」与「逃亡」两条结局脚本内容存在且可正常渲染。
+//!   2. 证明 common-event self 持久修复（7c3b728）后，最远的零售存档
+//!      (SaveData01 / SaveData08，均为 day90) 可以**无需注入**逐日自然推进到
+//!      stage28 決着 → stage29 旅路 → 通关贺词，并置 var492=1。
+//!   3. 如实记录 stage30 的真实身份（尖叫胡萝卜支线，非大结局）。
 //!
-//! 数据根：work/all（可用 WOLF_DATA_ROOT 覆盖）。零售存档：work/retail_backup/Save/SaveDataNN.sav。
+//! 数据根：work/all（可用 WOLF_DATA_ROOT 覆盖）。
+//! 零售存档：work/retail_backup/Save/SaveDataNN.sav（WOLF_RETAIL_SAVE_DIR 不改时用默认）。
 //!
-//! 复现命令（在 repo 根）：
+//! 复现命令（在 repo 根，务必 pin 环境变量，否则 wolf-save 会读用户 Steam 安装档）：
 //!   # 默认测试（快，约 1s）
 //!   WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m13_mainline_endings
-//!   # 长跑（忽略；驱动零售存档逐日推进）
-//!   M13_SLOT=5 cargo test -q -p wolf-game --test m13_mainline_endings drive_escape_path_from_retail_save -- --ignored --nocapture
+//!   # 长跑：自然正常通关（SaveData01 day90 -> stage28/29），约 3s
 //!   M13_SLOT=1 cargo test -q -p wolf-game --test m13_mainline_endings drive_normal_path_diagnostic -- --ignored --nocapture
+//!   # 长跑：自然正常通关（SaveData08 day90 00:42 深夜，先结束 H 场景再推进），约 3s
+//!   M13_SLOT=8 cargo test -q -p wolf-game --test m13_mainline_endings drive_normal_path_diagnostic -- --ignored --nocapture
+//!   # 长跑：逃亡 END（SaveData05 var366=0 -> day100+ stage27），约数秒
+//!   M13_SLOT=5 cargo test -q -p wolf-game --test m13_mainline_endings drive_escape_path_from_retail_save -- --ignored --nocapture
 //!
-//! 结论与证据详见 docs/research/M13_MAINLINE_ENDINGS.md。
+//! 结论与逐项证据详见 docs/research/M13_MAINLINE_ENDINGS.md。
 use std::path::PathBuf;
 use wolf_game::Game;
 
@@ -172,6 +179,37 @@ fn sleep_to_next_morning(game: &mut Game, day: i32) -> bool {
     false
 }
 
+/// Advances from the loaded save state to the next morning.
+///
+/// - 傍晚/正常时刻（hour >= 5）：走 sleep_to_next_morning（var63=1 → 今天还是睡吧）。
+/// - 深夜（hour < 5，如 SaveData08 的 day90 00:42）：此时可能停在一个交互场景（例如 H 场景，
+///   屏幕上有 pic 294 = Picture/endbutton.png）。先点「结束」按钮关闭该场景，再连续喂 OK
+///   让引擎自然过渡到次日 07:45。整个过程不修改任何存档变量，纯输入驱动。
+fn reach_next_morning(game: &mut Game) -> bool {
+    let day0 = game.vm.vars.get(160);
+    if game.vm.vars.get(4) < 5 {
+        // Dismiss a deep-night interactive scene via its end button, if present.
+        for _ in 0..3 {
+            if game.screen.get(294).is_some() {
+                click_picture(game, 294);
+                for _ in 0..90 { game.frame(); }
+            } else { break; }
+        }
+        for f in 0..8000 {
+            game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
+            game.frame();
+            game.key_bits = 0;
+            if game.vm.vars.get(160) != day0 {
+                eprintln!("deep-night -> morning: day {} {}:{:02} (was day {day0})", game.vm.vars.get(160), game.vm.vars.get(4), game.vm.vars.get(5));
+                return true;
+            }
+        }
+        eprintln!("deep-night: still day {day0} {}:{:02} after 8000 frames", game.vm.vars.get(4), game.vm.vars.get(5));
+        return false;
+    }
+    sleep_to_next_morning(game, day0)
+}
+
 /// Directly starts common event 305 with self0 (=stage) pre-seeded and runs it to completion.
 /// Returns (stage progression, final ending-flag tuple, warnings).
 /// stage = CE305 self0 = magic 1_600_000 (flat self slot 600); each stage is its own story block.
@@ -218,7 +256,7 @@ fn run_injected_stage(stage: i32, verbose: bool) -> (Vec<(i32, usize)>, [i32; 6]
 }
 
 // ---------------------------------------------------------------------------
-// 默认测试（快）— 证明两条结局脚本存在、可渲染，且 stage 机已接线
+// 默认测试（快）— 证明两条结局脚本存在、可渲染；并明确 stage30 是支线
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -260,19 +298,49 @@ fn escape_ending_script_renders_from_stage27() {
     assert_eq!(game.stats.warnings, 0, "warnings should be 0");
 }
 
+/// stage30（CE305 的 @index 3404「エンディング」标签 / CE251 idx913 派发点）不是大结局，
+/// 而是「尖叫胡萝卜」支线小事件：找魔物→无害→放走，返回后只「干劲提升」，不置任何结局旗标。
+/// 这里明确断言它不设置 var492（大结局旗标），把「支线」与「大结局」区分开，避免夸大。
+#[test]
+fn stage30_is_side_event_not_grand_ending() {
+    if retail_dir().is_none() { eprintln!("retail saves absent, skip"); return; }
+    let mut game = Game::new(data_root()).expect("game");
+    let _ = game.load_save(&retail_dir().unwrap().join("SaveData01.sav"));
+    let id = game.vm.start_event(305).expect("start305");
+    game.vm.instance_mut(id).unwrap().self_vars.set(600, 30);
+    game.auto_advance = true;
+    game.auto_choice = true;
+    game.auto_choice_delay = 1;
+    let mut log = String::new();
+    for f in 0..4000usize {
+        game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.frame();
+        game.key_bits = 0;
+        for m in game.messages.iter() {
+            let t = m.text.trim();
+            if !t.is_empty() && !log.contains(t) { log.push_str(t); log.push('\n'); }
+        }
+        if game.vm.instances().iter().all(|i| i.event != 305) { break; }
+    }
+    assert!(log.contains("胡萝卜"), "stage30 should be the 尖叫胡萝卜 side event; log={log}");
+    assert!(!log.contains("恭喜"), "stage30 is NOT the grand ending; log={log}");
+    assert_eq!(game.vm.vars.get(492), 0, "stage30 must not set the grand-ending flag var492");
+    assert_eq!(game.stats.warnings, 0, "warnings should be 0");
+}
+
 // ---------------------------------------------------------------------------
-// 长跑（#[ignore]）— 用零售存档自然驱动
+// 长跑（#[ignore]）— 用零售存档自然驱动（无需注入）
 // ---------------------------------------------------------------------------
 
 /// 逃亡 END 自然可达：从 var366=0 的零售存档 (SaveData05, day73) 逐日推进到 day102，
-/// CE317 早朝処理在 day>=100 且 var366==0 时唤 CE305 stage27（期限切れ / BAD END 逃亡），末了置 var493=1。
+/// CE317 早朝処理在 day>=100 且 var366==0 时唤 CE305 stage27（期限切れ / BAD END 逃亡）。
 #[test]
 #[ignore]
 fn drive_escape_path_from_retail_save() {
     let slot = std::env::var("M13_SLOT").ok().and_then(|s| s.parse().ok()).unwrap_or(5u32);
     let max_day: i32 = std::env::var("M13_MAXDAY").ok().and_then(|s| s.parse().ok()).unwrap_or(102);
     let mut game = resume(slot);
-    { let d = game.vm.vars.get(160); sleep_to_next_morning(&mut game, d); }
+    reach_next_morning(&mut game);
     let mut last_stage = -1;
     let mut saw27 = false;
     let mut escape_day: i32 = -1;
@@ -298,50 +366,60 @@ fn drive_escape_path_from_retail_save() {
         let d2 = game.vm.vars.get(160);
         eprintln!("day{day}: evening {}:{:02} v366={} v492={} v493={} ev405={} (no escape yet)", game.vm.vars.get(4), game.vm.vars.get(5), game.vm.vars.get(366), game.vm.vars.get(492), game.vm.vars.get(493), has(&game,405));
         if d2 >= max_day { break; }
-        if !sleep_to_next_morning(&mut game, d2) { break; }
+        if !reach_next_morning(&mut game) { break; }
     }
     assert!(saw27, "escape END (CE305 stage27 期限切れ) not dispatched within day {max_day}");
     assert!(escape_day > 0, "escape day not recorded");
     assert_eq!(game.stats.warnings, 0, "warnings should be 0");
 }
 
-/// 正常通关自然驱动：从最远的零售存档 (SaveData01, day90, var366=1) 逐日推进。
+/// 正常通关自然驱动（无需注入）：从最远的零售存档 (SaveData01/SaveData08, day90) 逐日推进。
 ///
-/// M13 common-self 修复前：CE251 每个工作日新建全 0 SelfVars，交流战倒计时 self51
-/// 每天复位为 4、self65 复位为 1，body 每天重放，self51 永远到不了 0，stage28 決着
-/// 不可达。修复后 self51/self65 跨调用持久，倒计时 4->3->2->1->0，self51==0 时
-/// CE251 idx400 以 210 [500305,1,28] 唤 stage28，stage28 尾部自动接 stage29 旅路，
-/// 置 var492=1。本测试断言这条自然路径真实可达。
+/// M13 common-self 修复前（7c3b728 之前）：spawn_child 给每个 common-event 实例新建全 0
+/// SelfVars，CE251 的交流战倒计时 self51 每天复位为 4、self65 复位为 1，body 每天重放，
+/// self51 永远到不了 0，stage28 決着 不可达。修复后 common_self 银行跨调用持久，
+/// self51 递减 4→3→2→1→0，self51==0 时 CE251 idx400 以 210 [500305,1,28] 唤 stage28，
+/// stage28 尾部自动接 stage29 旅路，末段给出「恭喜您完成了整个故事剧情，辛苦了！」并置 var492=1。
+///
+/// 环境变量：M13_SLOT（默认 1；用 8 验证 SaveData08 深夜存档）、M13_DAYS（默认 30）。
 #[test]
 #[ignore]
 fn drive_normal_path_diagnostic() {
     let slot = std::env::var("M13_SLOT").ok().and_then(|s| s.parse().ok()).unwrap_or(1u32);
     let max_days: i32 = std::env::var("M13_DAYS").ok().and_then(|s| s.parse().ok()).unwrap_or(30);
     let mut game = resume(slot);
-    { let d = game.vm.vars.get(160); sleep_to_next_morning(&mut game, d); }
+    reach_next_morning(&mut game);
     let start_day = game.vm.vars.get(160);
     let end = start_day + max_days;
 
-    // (day, 当天看到的 self51 最大值, 当天看到的 self65 最大值)
     let mut daily: Vec<(i32, i32, i32)> = Vec::new();
     let mut saw28 = false;
     let mut saw29 = false;
     let mut saw_high51 = false;
     let mut zero_after_high = false;
+    let mut stage28_at: Option<(i32, usize)> = None;
     let mut frames = 0usize;
     let mut stages_seen: std::collections::BTreeSet<i32> = std::collections::BTreeSet::new();
-    // 驱动若干自然日，直到 stage28 決着 被调度（v366 由 1 变 2）。
+    let mut all_msgs: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut collect_msgs = |g: &Game| {
+        for m in g.messages.iter() {
+            let t = m.text.trim();
+            if !t.is_empty() { all_msgs.insert(t.to_string()); }
+        }
+    };
+
     while game.vm.vars.get(160) < end && game.vm.vars.get(366) != 2 && !saw28 {
         let day = game.vm.vars.get(160);
         let mut max51 = i32::MIN;
         let mut max65 = i32::MIN;
-        let mut logger = |g: &Game, _f: usize| {
+        let mut logger = |g: &Game, f: usize| {
             frames += 1;
+            collect_msgs(g);
             for i in g.vm.instances() {
                 if i.event == 305 {
                     let s = i.self_vars.get(600);
                     stages_seen.insert(s);
-                    if s == 28 { saw28 = true; }
+                    if s == 28 { saw28 = true; if stage28_at.is_none() { stage28_at = Some((g.vm.vars.get(160), f)); } }
                     if s == 29 { saw29 = true; }
                 }
             }
@@ -351,10 +429,7 @@ fn drive_normal_path_diagnostic() {
             let mut live51 = None;
             let mut live65 = None;
             for i in g.vm.instances() {
-                if i.event == 251 {
-                    live51 = Some(i.self_vars.get(651)); // self51
-                    live65 = Some(i.self_vars.get(665)); // self65
-                }
+                if i.event == 251 { live51 = Some(i.self_vars.get(651)); live65 = Some(i.self_vars.get(665)); }
             }
             let s51 = live51.or_else(|| g.vm.common_self(251).map(|b| b.get(651)));
             let s65 = live65.or_else(|| g.vm.common_self(251).map(|b| b.get(665)));
@@ -377,42 +452,44 @@ fn drive_normal_path_diagnostic() {
         if saw28 || game.vm.vars.get(366) == 2 { break; }
         let d2 = game.vm.vars.get(160);
         if d2 >= end { break; }
-        if !sleep_to_next_morning(&mut game, d2) { break; }
+        if !reach_next_morning(&mut game) { break; }
     }
 
-    // stage28 決着 由 CE251 idx400 唤出，play_day 在 day 跳变时会提前返回，
-    // 此时 stage28 可能仍在跑；继续空转帧让 stage28 -> stage29 旅路 完整播完，
-    // 观察 stage29 并对齐 var492。
+    // stage28 決着 由 CE251 idx400 唤出；play_day 会在 day 跳变时提前返回，
+    // 此时 stage28/29 可能仍在跑；继续空转帧让 28→29 旅路 完整播完。
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;
-    for f in 0..80_000usize {
+    for f in 0..120_000usize {
         frames += 1;
+        collect_msgs(&game);
         for i in game.vm.instances() {
             if i.event == 305 {
                 let s = i.self_vars.get(600);
                 stages_seen.insert(s);
-                if s == 28 { saw28 = true; }
+                if s == 28 { saw28 = true; if stage28_at.is_none() { stage28_at = Some((game.vm.vars.get(160), f)); } }
                 if s == 29 { saw29 = true; }
             }
         }
         if stages_seen.contains(&29)
             && !game.vm.instances().iter().any(|i| i.event == 305)
             && game.vm.vars.get(492) == 1
-        {
-            break;
-        }
+        { break; }
         game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
         game.frame();
         game.key_bits = 0;
     }
+    let saw_congrats = all_msgs.iter().any(|m| m.contains("恭喜"));
     eprintln!(
-        "normal path: start_day={start_day} days_driven={} frames={frames} saw28={saw28} saw29={saw29} stages={stages_seen:?} v492={} v366={} warnings={}",
-        daily.len(), game.vm.vars.get(492), game.vm.vars.get(366), game.stats.warnings
+        "normal path slot{slot}: start_day={start_day} days_driven={} frames={frames} stage28_at={:?} saw28={saw28} saw29={saw29} stages={stages_seen:?} v492={} v366={} warnings={} saw_congrats={saw_congrats}",
+        daily.len(), stage28_at, game.vm.vars.get(492), game.vm.vars.get(366), game.stats.warnings
     );
     eprintln!("daily self51/self65: {daily:?}");
+    if saw_congrats {
+        for m in &all_msgs { if m.contains("恭喜") { eprintln!("  CONGRATS MSG: {m}"); } }
+    }
 
-    // self51 必须先高后降到 0（不是每天复位为 4）。
+    // self51 必须先高后降到 0（不再每天复位为 4）。
     assert!(saw_high51, "CE251 self51 should start high (>=2) before counting down");
     assert!(
         zero_after_high,
@@ -420,9 +497,7 @@ fn drive_normal_path_diagnostic() {
     );
     assert!(saw28, "CE305 stage28 決着 should be dispatched along the natural path: daily={daily:?}");
     assert!(saw29, "stage28 should chain into stage29 旅路 along the natural path: daily={daily:?}");
-    assert_eq!(
-        game.vm.vars.get(492), 1,
-        "normal clear should set var492=1, v366={}", game.vm.vars.get(366)
-    );
+    assert_eq!(game.vm.vars.get(492), 1, "normal clear should set var492=1, v366={}", game.vm.vars.get(366));
+    assert!(saw_congrats, "the grand-ending completion text (恭喜...) should render along the natural path");
     assert_eq!(game.stats.warnings, 0, "warnings should be 0");
 }
