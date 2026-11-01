@@ -181,9 +181,9 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 | [`M11_PACKAGING.md`](M11_PACKAGING.md) | M11 task-100 — wolf-package 校验/组装与 FrameBudgetReport |
 | [`M11_PRNG_CLOCK.md`](M11_PRNG_CLOCK.md) | M11 task-99 — 零售 GetTickCount 播种与零状态重读边界 |
 
-### M12（5 篇）
+### M12（6 篇）
 
-零售范围审计 + round 1/day6 的玩家流程验收：区分游戏流程、引擎通用能力、示例资产与保真工具；补齐战斗取消/返回/连续确认、confirm 页命中审计与存档逐段全量对照。
+零售范围审计 + round 1/day6/multi-day soak 的玩家流程验收：区分游戏流程、引擎通用能力、示例资产与保真工具；补齐战斗取消/返回/连续确认、confirm 页命中审计与存档逐段全量对照。
 
 | 文档 | 内容 |
 | --- | --- |
@@ -192,6 +192,7 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 | [`M12_CONFIRM_PAGES.md`](M12_CONFIRM_PAGES.md) | M12 task-102 — SampleMapA 6 个 confirm 页：5 个空页选择器 + ev24 p6 调试专用；事件格不是点击命中区，124 图片矩形才是 |
 | [`M12_SAVE_FULL_COMPARE.md`](M12_SAVE_FULL_COMPARE.md) | M12 task-103 — 8 个零售存档经 Game load→save 整文件逐字节一致；Part5 未建模 bank/文本 md1/淡入/纵向缩放保留 |
 | [`M12_DAY6_WEEKEND.md`](M12_DAY6_WEEKEND.md) | M12 task-104 — day5 工作日 → 周六 09:30 CE310 休日五按钮 → 12:00/15:00/17:00 三个活动时段 → 周日 09:30 同一菜单；无时间/日程注入 |
+| [`M12_MULTIDAY_SOAK.md`](M12_MULTIDAY_SOAK.md) | M12 task-105 — 通用驱动连续 30 天到 day31、90 天到 day97（含剧情跳天）；11/27 个战斗日；修复 parented CE239 auto-arm |
 
 ## 状态约定
 

@@ -105,12 +105,16 @@
 //! There are three modes:
 //!
 //! * **Auto-arm (default).** With no explicit `Game::set_battle_wiring` call, the wiring arms
-//!   itself as soon as the shipped battle *dispatch* event CE253 (地域貢献) is resident and the
-//!   battle-active flag 2000340 rises. CE253 parks on its `210 500239` call for the whole
-//!   fight, so its presence is exactly "a real in-game battle is running". Auto-armed battles
-//!   also run the multi-round loop, because the day-4 battle genuinely needs two command
-//!   rounds to settle. This is what makes the natural CE253 -> CE239 line drive CE242 without
-//!   any test-only flag. Turn it off with `Game::set_battle_auto_arm(false)`.
+//!   itself as soon as a real battle is running, detected in either of two ways:
+//!   (a) the shipped battle *dispatch* event CE253 (地域貢献) is resident - it parks on its
+//!   `210 500239` call for the whole fight; or (b) a CE239 (■戦闘呼び出し) instance has a
+//!   parent, i.e. a script called it (CE305 キャンセナル, CE256 討伐依頼, ...), which covers
+//!   every other real battle dispatcher. Direct `start_event(239)` in unit/probe tests
+//!   creates a parentless instance, so those tests stay untouched. Auto-armed battles also
+//!   run the multi-round loop, because the day-4 battle genuinely needs two command rounds
+//!   to settle. This is what makes the natural CE253 -> CE239 line and the day-11 CE305 ->
+//!   CE239 story battle drive CE242 without any test-only flag. Turn it off with
+//!   `Game::set_battle_auto_arm(false)`.
 //! * **Explicit opt-in.** `Game::set_battle_wiring(true)` forces the drive regardless of
 //!   CE253; `Game::set_battle_round_loop(true/false)` then selects round-loop vs single-shot.
 //!   This is the old behaviour every battle test relies on, unchanged.
@@ -171,6 +175,11 @@ const EVENT_ENEMY_ACTION: u32 = 243;
 /// presence distinguishes a genuine in-game battle from the unit/probe tests that start
 /// CE239 or CE242 directly, so it is the auto-arm signal for the shipped route (task-95).
 const EVENT_BATTLE_DISPATCH: u32 = 253;
+/// Common event ■戦闘呼び出し (CE239) -- the real battle caller. A CE239 instance that has a
+/// parent was started by a script (CE305 キャンセナル, CE256 討伐依頼, ...), while the
+/// unit/probe tests start it directly and get `parent == None`. This is the second auto-arm
+/// signal: it covers every real battle dispatcher, not just CE253 (M12 day11 soak).
+const EVENT_BATTLE_CALLER: u32 = 239;
 /// Common event X[共]コマンド登録 -- the menu producer that writes a command row (task-85).
 /// Each time the real menu confirms a command, CE157 runs once. Harvesting those instances is
 /// how the bridge turns real menu confirmations into CE242 command indexes.
@@ -421,6 +430,20 @@ impl BattleWiring {
             .unwrap_or(&ACTING_PARTY_SLOT)
     }
 
+    /// True when a genuine in-game battle is on screen: either CE253 is parked on its
+    /// `210 500239` dispatch call, or a CE239 instance was started by a parent script
+    /// (CE305 キャンセナル, CE256 討伐依頼, ...). A directly started CE239/CE242 has no
+    /// parent, which is how unit/probe tests keep the raw shipped behaviour.
+    #[must_use]
+    pub fn real_battle_running(vm: &Vm) -> bool {
+        vm.instances()
+            .iter()
+            .any(|instance| instance.event == EVENT_BATTLE_DISPATCH)
+            || vm.instances().iter().any(|instance| {
+                instance.event == EVENT_BATTLE_CALLER && instance.parent.is_some()
+            })
+    }
+
     /// One engine tick, called at the top of Game::frame after the automatic events
     /// are synced and before the VM steps.
     pub fn tick(&mut self, vm: &mut Vm, db: &Databases) -> Option<u32> {
@@ -432,11 +455,12 @@ impl BattleWiring {
         //
         // * An explicit Game::set_battle_wiring(v) wins outright: `Some(false)` is a hard
         //   opt-out (acceptance c) and `Some(true)` is the old opt-in.
-        // * Otherwise the wiring auto-arms on the shipped natural battle: the CE253 dispatch
-        //   event is resident (it parked on its CE239 call). Unit/probe tests that start CE239
-        //   or CE242 directly have no CE253, so they stay byte-for-byte untouched.
-        let dispatch_alive = vm.instances().iter().any(|i| i.event == EVENT_BATTLE_DISPATCH);
-        let auto = self.auto_arm && dispatch_alive;
+        // * Otherwise the wiring auto-arms on the shipped natural battle: either the CE253
+        //   dispatch event is resident (it parked on its CE239 call), or CE239 was started by
+        //   a parent script (any real battle dispatcher, e.g. CE305 / CE256). Unit/probe tests
+        //   that start CE239 or CE242 directly create a parentless instance and have no CE253,
+        //   so they stay byte-for-byte untouched.
+        let auto = self.auto_arm && BattleWiring::real_battle_running(vm);
         let drive = match self.manual_enable {
             Some(v) => v,
             None => auto,
