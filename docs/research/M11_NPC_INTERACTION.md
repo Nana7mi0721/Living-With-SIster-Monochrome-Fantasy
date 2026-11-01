@@ -19,6 +19,17 @@ The engine-side input core now has both halves the task asked for:
 * Both paths are frame-based and headless: no rendering, animation, NPC route
   movement, or pathfinding is added.
 
+## Retail scope (M11 round 3 correction)
+
+The shipped game is point-and-click: the six registered maps have 115 event pages
+with empty `graphic`/`graphic_chip_id`, and interaction runs through 150 Picture
+hotspots plus 124 hover checks (`docs/MAP_AUDIT.md:233-268`). Across all 9 `.mps`
+files (134 pages), 133 pages use fixed `route_mode` and every page has route length
+0; the 73 scripted 201 Move commands only do bomb/approach effects in the isolated
+Map002 sample and invisible load/new-game positioning in Map003/Map031. This
+module is therefore engine-generic input coverage, not a shipped NPC walking or
+walk-up dialogue gap; there is no retail walking animation to port.
+
 ## Frame input contract
 
 All code is in crates/wolf-game/src/game.rs.

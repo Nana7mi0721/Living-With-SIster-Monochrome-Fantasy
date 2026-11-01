@@ -26,7 +26,7 @@
 | M8 | 完成 | day4 战斗结算→day5、H 前向链、地图角色层、模板存档、事件 RNG | [`HANDOFF_M8.md`](docs/HANDOFF_M8.md) |
 | M9 | 完成 | 锚点/图片槽位、H 闭环、战斗多回合/多队员、移动与地图触发、音频盘点 | [`HANDOFF_M9.md`](docs/HANDOFF_M9.md) |
 | M10 | 完成 | opcode 111 引用语义与 compound 修复、12 个战斗/H 测试重基线、残项收口 | [`HANDOFF_M10.md`](docs/HANDOFF_M10.md) |
-| M11 | 完成 | 战斗默认驱动/确定性、菜单桥、H 深链、NPC 行走、视觉/音频回归 | [`HANDOFF_M11.md`](docs/HANDOFF_M11.md) |
+| M11 | 完成 | 战斗默认驱动/确定性、菜单桥、H 深链、引擎行走/交互能力、视觉/音频回归 | [`HANDOFF_M11.md`](docs/HANDOFF_M11.md) |
 | M12 | round 3 已收口 | 自然帧 H 深链、真实战斗菜单、PRNG 时钟种子、打包/帧预算 | [`HANDOFF_M12.md`](docs/HANDOFF_M12.md) |
 
 ## 3. 当前完成度（按子系统）
@@ -38,7 +38,7 @@
 | 主线 / 日常循环 | 95% | 标题→新游戏→多日 08:30 日程→睡眠→次日已打通 |
 | 战斗 | 90–94% | 真实回合、结算、BOSS 多回合、多队员、默认 auto-arm 自然 day4 结算、真实 CData type14 菜单→3 个 CE242 body 已证；剩余 shipped 队伍完整多输入 UI 验收 |
 | H 场景 | 90–94% | 真实入口→推进→退出→次日已闭环；真实 CE328→CE402/CE410 自然帧（默认预算）已证，act4/5 深分支与零售像素仍缺 |
-| 地图移动 / NPC | 80–85% | 地形/碰撞/接触触发/玩家起点、8 向对角移动、ActionKey 交互与持续行走已实现；行走动画、NPC 全对话、传送起点一致性仍缺 |
+| 地图移动 / NPC | —（非内容项） | 零售注册地图是点触式（6 张地图 115 页 `graphic` 全空，150 图片 + 124 悬停）；没有 NPC 行走动画/走位对话可补，8 向行走/ActionKey 仅为引擎通用能力与测试夹具 |
 | 视觉 | 90% | 标题/地图/窗口/锚点大部分还原；锚点 5/6 与 CN 窗口右缘待像素对照 |
 | 音频 | 90% | 358 个音频盘点、混音回归、异常 WAV 容错；剩余人工听感验收 |
 | 测试 / 文档 | 100% | 128 test suites / 803 passed / 1 ignored、verify 70/0、HANDOFF_M12/BASELINE/research 索引齐全 |
@@ -57,7 +57,7 @@
 ### P1 — 内容完整性
 
 3. **H 完整 CG 分支（自然帧已证，task-80/86/90/94/96/97）**：var304=1、var276/277/326 可从 SaveData01 真实输入获得；task-96 用 calendar-consistent fixture 只 `start_event(328)` 经 pc986 进 CE402（pc0→511）并驱动 CE410（pc0→247），warnings=0；task-97 用默认 200000 预算、普通 `Game::frame`、关闭背景 AutoEvents 复现自然帧 `frames=3667 maxpc402=509 CE410 acts=[1,1,2,1,3] warnings=0`，并新增 `--load-save`+`--event` 截图入口。关键修正：pc122 就寝是 `var6==4 && var4<6`；可达路径是 pc850 假→else pc969→pc986，不经过 pc964/var64。剩余：自然路径 CE402 pc208 早退使 act4/5 的 CE410 pc>200 不可达（`M11_HSCENE_NATURAL.md`）。
-4. **移动 / NPC（对角、行走与 ActionKey 已做，task-81/91）**：8 向对角移动（不切角、阻挡转向）、NPC contact、按住方向每 8 帧连续行走、ActionKey 触发页面均已实现并有测试；剩余行走动画帧、NPC 对话全路由、传送后起点一致性。
+4. **移动 / NPC（引擎通用，不是零售内容，task-81/91）**：零售注册地图是点触式（6 张地图 115 页 `graphic` 全空，交互靠 150 图片 + 124 悬停），没有 NPC 行走动画/走位对话；8 向对角移动、contact、每 8 帧连续行走与 ActionKey 只是引擎能力与测试夹具，不再作为内容缺口。剩余仅是点触命中框与事件格坐标一致性。
 5. **日程边界**：更多天数/随机事件的自然推进与跨天存档一致性。
 
 ### P2 — 还原度与交付
