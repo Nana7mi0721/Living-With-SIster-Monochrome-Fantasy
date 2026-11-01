@@ -84,6 +84,13 @@
 
 第一步与可执行细节见 `docs/HANDOFF_M12.md` §9。
 
+### 4.6 M13 进展（2026-11-01 首批验收）
+
+- 已修复 common-event self 跨调用持久 bug（`7c3b728`）与 Text picture 存读尺寸丢失（`dcd513a`）。
+- 已验收：主线 SaveData01/08 无注入通关（stage28→29，var492=1）、逃亡 END、DLC CE452（自然 var619 0→25；注入 EP0–36 全通）、111 随机事件抽样（25/115，dead=0）、H 阈值矩阵（37 门边界）、NG+ 继承（CE436/SampleMapA）、跨天存读与 8/8 槽 round-trip。
+- 全量：836 passed / 0 failed / 10 ignored；verify PASS 70/0。
+- 剩余：九结局其余条目、条件注入 17 项逐条、像素/音频人工验收、DLC EP26–36 自然门。详见 `docs/HANDOFF_M13.md` §6。
+
 ### P1 — 内容完整性
 
 3. **H 完整 CG 分支（自然帧已证，task-80/86/90/94/96/97）**：var304=1、var276/277/326 可从 SaveData01 真实输入获得；task-96 用 calendar-consistent fixture 只 `start_event(328)` 经 pc986 进 CE402（pc0→511）并驱动 CE410（pc0→247），warnings=0；task-97 用默认 200000 预算、普通 `Game::frame`、关闭背景 AutoEvents 复现自然帧 `frames=3667 maxpc402=509 CE410 acts=[1,1,2,1,3] warnings=0`，并新增 `--load-save`+`--event` 截图入口。关键修正：pc122 就寝是 `var6==4 && var4<6`；可达路径是 pc850 假→else pc969→pc986，不经过 pc964/var64。**已确认非缺口**：act4/5 只在 budget≤5 饥饿观测出现，无零售自然证据（`M11_HSCENE_NATURAL.md`、`M12_RETAIL_SCOPE.md`）。
