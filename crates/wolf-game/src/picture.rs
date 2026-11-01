@@ -826,6 +826,15 @@ pub struct Picture {
     /// picture all have to agree on where it is. The destination travels in `to` and only
     /// reaches the fields when the slide lands.
     pub transition: Option<Transition>,
+    /// The `SavePart5_1` record this picture was loaded from, when it came from a save.
+    ///
+    /// The record holds fields this runtime does not model yet (tone/effect banks, the
+    /// animation tail words). `savegame::picture_to_record` starts from this record and
+    /// overwrites the fields the live picture owns, so a load -> save cycle preserves the
+    /// retail state instead of zeroing the parts the port does not read. It is also the
+    /// byte source for a text picture's `md1`: re-encoding the decoded text would rewrite
+    /// escapes the decoder only approximates. `None` for pictures created by a `150`.
+    pub saved_record: Option<Box<wolf_save::part5::SavePart5_1>>,
 }
 
 impl Picture {
@@ -859,6 +868,7 @@ impl Picture {
             pattern: None,
             hidden: false,
             transition: None,
+            saved_record: None,
         }
     }
 

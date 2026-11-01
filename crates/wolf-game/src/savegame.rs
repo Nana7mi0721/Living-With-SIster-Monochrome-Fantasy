@@ -202,6 +202,9 @@ pub fn picture_from_record(record: &SavePart5_1) -> Option<Picture> {
         picture.pattern_index = u32::try_from(v[4]).unwrap_or(1).max(1);
     }
     picture.anchor = record.var4 as u8;
+    // Keep the record as the write baseline: fields this runtime does not model
+    // (tone/effect banks and the animation tail) must survive a load -> save cycle.
+    picture.saved_record = Some(Box::new(record.clone()));
 
     Some(picture)
 }
@@ -213,13 +216,28 @@ pub fn picture_from_record(record: &SavePart5_1) -> Option<Picture> {
 /// sprite-sheet grid, scale, opacity, blend, anchor and the last fade length.
 #[must_use]
 pub fn picture_to_record(picture: &Picture) -> SavePart5_1 {
-    let mut record = SavePart5_1::default();
+    // A picture loaded from a save keeps its record as the baseline. Only the fields the
+    // live picture owns are overwritten below, so the tone/effect banks and animation tail
+    // words this runtime does not read round-trip byte for byte instead of being zeroed.
+    // Pictures created by a `150` have no baseline and fall back to the defaults.
+    let saved = picture.saved_record.as_deref();
+    let mut record = saved.cloned().unwrap_or_default();
     record.var1 = picture.number as u32;
     record.var4 = u16::from(picture.anchor);
     record.var5 = u8::from(picture.kind.is_text());
     record.var6 = u8::from(picture.kind.is_window());
     record.md1 = if picture.kind.is_text() {
-        encode_picture_text(&picture.text)
+        // The decoder only approximates some style escapes (a combined font/spacing escape
+        // becomes `\f[n]`), so re-encoding unchanged text would shorten or reshape the byte
+        // stream. Keep the retail bytes while the text still matches what was decoded.
+        match saved {
+            Some(saved)
+                if saved.var5 == 1 && decode_picture_text(&saved.md1) == picture.text =>
+            {
+                saved.md1.clone()
+            }
+            _ => encode_picture_text(&picture.text),
+        }
     } else {
         let mut bytes = picture.file.as_bytes().to_vec();
         bytes.push(0);
@@ -241,15 +259,34 @@ pub fn picture_to_record(picture: &Picture) -> SavePart5_1 {
     v[4] = picture.pattern_index;
     v[5] = picture.opacity as u32;
     v[6] = picture.blend as u32;
-    v[7] = u32::MAX;
-    v[8] = picture.fade;
+    if saved.is_none() {
+        v[7] = u32::MAX;
+        v[11] = 0;
+    }
+    // [8] is the length of the last fade-in, not a fade in progress: the loader starts
+    // every picture fully visible, so keep the saved length while the live fade is 0.
+    v[8] = if picture.fade != 0 {
+        picture.fade
+    } else {
+        saved.map_or(0, |saved| saved.vars7_18[8])
+    };
     // Keep the sign: retail SaveData08 stores window pictures 1996/1998 with a
     // horizontal scale of -100 (a sentinel the renderer clamps, but the save must
     // reproduce byte-for-byte on a load -> save round trip). Clamping to 0 here used
     // to silently rewrite -100 as 0.
     v[9] = picture.scale as u32;
-    v[10] = v[9];
-    v[11] = 0;
+    // Picture has one uniform scale, but the record has separate horizontal and vertical
+    // factors: the action-bar fill (6233) is stored as e.g. 62 x 100. Preserve the saved
+    // vertical factor while the live scale still equals the saved horizontal one; a
+    // scripted scale change makes both factors the new uniform value.
+    v[10] = match saved {
+        Some(saved)
+            if saved.vars7_18[9] == v[9] && saved.vars7_18[10] != saved.vars7_18[9] =>
+        {
+            saved.vars7_18[10]
+        }
+        _ => v[9],
+    };
     record
 }
 

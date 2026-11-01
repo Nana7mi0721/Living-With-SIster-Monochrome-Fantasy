@@ -181,18 +181,21 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 | [`M11_PACKAGING.md`](M11_PACKAGING.md) | M11 task-100 — wolf-package 校验/组装与 FrameBudgetReport |
 | [`M11_PRNG_CLOCK.md`](M11_PRNG_CLOCK.md) | M11 task-99 — 零售 GetTickCount 播种与零状态重读边界 |
 
-### M12（1 篇）
+### M12（4 篇）
 
-零售范围审计：区分游戏流程、引擎通用能力、示例资产与保真工具。
+零售范围审计 + round 1 的玩家流程验收：区分游戏流程、引擎通用能力、示例资产与保真工具；补齐战斗取消/返回/连续确认、confirm 页命中审计与存档逐段全量对照。
 
 | 文档 | 内容 |
 | --- | --- |
 | [`M12_RETAIL_SCOPE.md`](M12_RETAIL_SCOPE.md) | M12 — 零售点触式输入实证；行走/触发 3/4/相机/281/201/远景为非零售；存档/回标题/截图/DLC 为真实流程；H act4/5 与 3–4 人队伍不计缺口 |
+| [`M12_BATTLE_CANCEL.md`](M12_BATTLE_CANCEL.md) | M12 task-101 — 真实菜单取消/返回/连续确认：CE191 取消重开不登记；CE192 取消退出；后续确认仍登记 (1,0,26)/(2,1,25) 并启动 2 次 CE157 |
+| [`M12_CONFIRM_PAGES.md`](M12_CONFIRM_PAGES.md) | M12 task-102 — SampleMapA 6 个 confirm 页：5 个空页选择器 + ev24 p6 调试专用；事件格不是点击命中区，124 图片矩形才是 |
+| [`M12_SAVE_FULL_COMPARE.md`](M12_SAVE_FULL_COMPARE.md) | M12 task-103 — 8 个零售存档经 Game load→save 整文件逐字节一致；Part5 未建模 bank/文本 md1/淡入/纵向缩放保留 |
 
 ## 状态约定
 
 - **M6–M9 文档**：历史记录，可能描述当时的 blocker；如果与现行实现冲突，以现行代码/测试和 HANDOFF 为准。
 - **M10 文档**：对应 M10 已收口的实现与重基线；其中 `M10_OPCODE_111_PLAN.md`、`M10_BATTLE_EXPECTATIONS.md` 是计划/期望推导，最终以 `M10_OPCODE_111_LANDING.md` 与 HEAD 测试为准。
 - **M11 文档**：M11 第一批/round 1/round 2/round 3 的验收底稿；结论以 `docs/HANDOFF_M12.md`（round 3）与 `docs/HANDOFF_M11.md`（round 2）及 HEAD 测试为准（第一批/round 1 亦见 HANDOFF_M10 §8/§9）。
-- **M12 文档**：零售范围审计底稿；结论以 `docs/HANDOFF_M12.md` §5 与 HEAD 代码/数据为准。
+- **M12 文档**：零售范围审计 + round 1（战斗取消、confirm 页、存档逐字节）底稿；结论以 `docs/HANDOFF_M12.md` §5/§8 与 HEAD 代码/数据/测试为准。
 - **M7_BACKLOG / M8_BACKLOG**：历史计划，已被后续 M9/M10 交接取代；只用于了解当时的缺口清单。

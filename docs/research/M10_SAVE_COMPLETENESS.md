@@ -102,10 +102,13 @@ cargo test -q -p wolf-game
   the other system-variable slots are transient and have no save region (documented in
   `docs/SAVE_SPEC.md:459-462`).
 * **Picture presentation state.** `extras`, `tone`, `effects`, `color_corr`, `shift`,
-  `shake/zoom/breath/pattern`, `age`, `transition` and the active fade are not stored by
-  SavePart5; only the last fade length is. They are transient visual state, and the retail
-  format does not persist them. A loaded save therefore redraws the picture positions and
-  static appearance but not a mid-effect animation.
+  `shake/zoom/breath/pattern`, `age`, `transition` and the active fade are not restored
+  into the live `Picture` by `picture_from_record`. Retail SavePart5 **does** carry a
+  picture-state tail bank (M12 task-103 measured it and preserves it byte-for-byte via
+  `Picture::saved_record` — see `docs/research/M12_SAVE_FULL_COMPARE.md`), but this port
+  does not interpret those words yet. A loaded save therefore redraws the picture
+  positions and static appearance but not a mid-effect animation, and a load→save keeps
+  the saved tail values rather than simulating them.
 * **DB containers.** SysDatabase and DataBase cells are excluded by design (engine
   configuration vs the player's 可変DB), see `docs/research/M8_TEMPLATE_SAVE.md §6`.
 * **Extension rows without a resize.** A script that writes `100+n` without first growing
