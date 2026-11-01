@@ -95,7 +95,7 @@
 
 ## 6. 研究记录
 
-所有一次性调查、测试底稿与跨里程碑研究在 [`research/README.md`](research/README.md) 按 M6–M12 分组索引；M11 的 round 2/round 3、M12 零售范围审计、round 1（战斗取消/confirm 页/存档逐字节）、day6 周末日程与 30/90 天多日 soak 均已登记。研究文档不是当前指令；与 HANDOFF/规格冲突时，以现行代码与 HANDOFF 为准。
+所有一次性调查、测试底稿与跨里程碑研究在 [`research/README.md`](research/README.md) 按 M6–M12 分组索引；M11 的 round 2/round 3、M12 零售范围审计、round 1（战斗取消/confirm 页/存档逐字节）、day6 周末日程与 30/90 天多日 soak 均已登记。外部攻略与零售脚本的内容对照见 [`research/GUIDE_CONTENT_CROSSWALK.md`](research/GUIDE_CONTENT_CROSSWALK.md)（索引/检查清单，不是规格）。研究文档不是当前指令；与 HANDOFF/规格冲突时，以现行代码与 HANDOFF 为准。
 
 ## 7. 归档
 

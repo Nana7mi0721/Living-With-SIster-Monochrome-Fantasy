@@ -12,13 +12,14 @@
 
 ## 按里程碑索引
 
-### 基础与方法（3 篇）
+### 基础与方法（4 篇）
 
 跨里程碑的格式逆向、字节码交叉验证和外部调研研判。
 
 | 文档 | 内容 |
 | --- | --- |
 | [`GPT_RESEARCH_TRIAGE.md`](GPT_RESEARCH_TRIAGE.md) | GPT 外部调研报告 · 综合研判与落地对照（GPT_RESEARCH_TRIAGE） |
+| [`GUIDE_CONTENT_CROSSWALK.md`](GUIDE_CONTENT_CROSSWALK.md) | 10 份玩家攻略（151 页）↔ 零售脚本内容对照：变量/译名索引、主线日数门与 CE305/CE452 章节、111 条随机事件定位、H 阈值 vs 脚本门、物品/技能/CG 覆盖清单、冲突与笔误 |
 | [`wolf-bytecode-crosscheck.md`](wolf-bytecode-crosscheck.md) | WOLF RPG Editor 3.5 事件字节码语义交叉验证报告 |
 | [`wolf-decompile-feasibility.md`](wolf-decompile-feasibility.md) | 完整逆向 WOLF RPG Editor 事件逻辑并生成可读伪代码：可行性与实施报告 |
 
@@ -199,5 +200,6 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 - **M6–M9 文档**：历史记录，可能描述当时的 blocker；如果与现行实现冲突，以现行代码/测试和 HANDOFF 为准。
 - **M10 文档**：对应 M10 已收口的实现与重基线；其中 `M10_OPCODE_111_PLAN.md`、`M10_BATTLE_EXPECTATIONS.md` 是计划/期望推导，最终以 `M10_OPCODE_111_LANDING.md` 与 HEAD 测试为准。
 - **M11 文档**：M11 第一批/round 1/round 2/round 3 的验收底稿；结论以 `docs/HANDOFF_M12.md`（round 3）与 `docs/HANDOFF_M11.md`（round 2）及 HEAD 测试为准（第一批/round 1 亦见 HANDOFF_M10 §8/§9）。
-- **M12 文档**：零售范围审计 + round 1（战斗取消、confirm 页、存档逐字节）底稿；结论以 `docs/HANDOFF_M12.md` §5/§8 与 HEAD 代码/数据/测试为准。
+- **M12 文档**：零售范围审计 + round 1/day6/multi-day soak 底稿；结论以 `docs/HANDOFF_M12.md` §5/§8 与 HEAD 代码/数据/测试为准。
+- **GUIDE_CONTENT_CROSSWALK**：外部攻略索引，不是规格；攻略为玩家观测，数值/天数/译名均需回 `work/full` 脚本核对。攻略 PDF 留在 `docs/攻略文档/`（用户资料，未跟踪）。
 - **M7_BACKLOG / M8_BACKLOG**：历史计划，已被后续 M9/M10 交接取代；只用于了解当时的缺口清单。
