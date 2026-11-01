@@ -2,12 +2,12 @@
 
 > 本文件是**当前路线图（living document）**，只记录“现在做到哪、接下来做什么”。
 > 原始可行性研究与 M0–M5 的详细规划已归档到 [`docs/archive/PLAN_2026-10-26.md`](docs/archive/PLAN_2026-10-26.md)，仅作历史参考。
-> 最新交接：[docs/HANDOFF_M11.md](docs/HANDOFF_M11.md)　｜　文档总索引：[docs/README.md](docs/README.md)　｜　协作约定：[AGENT.md](AGENT.md)
+> 最新交接：[docs/HANDOFF_M12.md](docs/HANDOFF_M12.md)　｜　文档总索引：[docs/README.md](docs/README.md)　｜　协作约定：[AGENT.md](AGENT.md)
 
 ## 1. 当前状态
 
-- 当前源码 HEAD：以 `git log` 为准。M10 交接/基线为 `e52855d`；M11 第一批/round 1/round 2 分别见 `22de104`、`5ef6b1f` 与本批提交。
-- 里程碑：**M0–M10 全部完成并收口；M11 三批已收口（P0/P1 主体推进，P2 残余）**，可运行、可交付的工程约 **92%**；严格 1:1 原版等价约 **82–86%**。
+- 当前源码 HEAD：以 `git log` 为准。M10 交接/基线为 `e52855d`；M11 第一批/round 1/round 2 分别见 `22de104`、`5ef6b1f`、`fdeed07`；M11 round 3 见 M12 交接提交。
+- 里程碑：**M0–M11 全部完成并收口；M11 round 3（task-97..100）已完成**，可运行、可交付的工程约 **93%**；严格 1:1 原版等价约 **83–87%**。
 - 质量门禁：`cargo test -q --workspace` 全绿；`./target/debug/wolf-cli.exe verify --root work/all` = **PASS 70 / pending 0**。
 - 工作树：仅允许 3 个永久 scratch（`crates/wolf-format/examples/opscan.rs`、`crates/wolf-format/tests/_scratch_cdata.rs`、`crates/wolf-format/tests/_scratch_event.rs`）与用户资料 `docs/gpt调研/` 未跟踪。
 
@@ -26,7 +26,8 @@
 | M8 | 完成 | day4 战斗结算→day5、H 前向链、地图角色层、模板存档、事件 RNG | [`HANDOFF_M8.md`](docs/HANDOFF_M8.md) |
 | M9 | 完成 | 锚点/图片槽位、H 闭环、战斗多回合/多队员、移动与地图触发、音频盘点 | [`HANDOFF_M9.md`](docs/HANDOFF_M9.md) |
 | M10 | 完成 | opcode 111 引用语义与 compound 修复、12 个战斗/H 测试重基线、残项收口 | [`HANDOFF_M10.md`](docs/HANDOFF_M10.md) |
-| M11 | 三批已收口 | 战斗默认驱动/确定性、菜单桥、H 深链、NPC 行走、视觉/音频回归 | [`HANDOFF_M11.md`](docs/HANDOFF_M11.md) |
+| M11 | 完成 | 战斗默认驱动/确定性、菜单桥、H 深链、NPC 行走、视觉/音频回归 | [`HANDOFF_M11.md`](docs/HANDOFF_M11.md) |
+| M12 | round 3 已收口 | 自然帧 H 深链、真实战斗菜单、PRNG 时钟种子、打包/帧预算 | [`HANDOFF_M12.md`](docs/HANDOFF_M12.md) |
 
 ## 3. 当前完成度（按子系统）
 
@@ -35,27 +36,27 @@
 | 数据格式 / VM / opcode | 100% | 50 种 opcode 与格式解析已收口；opcode 111 引用语义已落地 |
 | 存档 | 95% | 官方 .sav 往返、SavePart 完整性、模板存档、row counts 已覆盖；剩余逐段全量对照 |
 | 主线 / 日常循环 | 95% | 标题→新游戏→多日 08:30 日程→睡眠→次日已打通 |
-| 战斗 | 88–93% | 真实回合、结算、BOSS 多回合、多队员、默认 auto-arm 自然 day4 结算、菜单桥与 2 成员真实菜单已证；完整玩家 UI 多命令验收与 PRNG 时钟种子仍缺 |
-| H 场景 | 88–93% | 真实入口→推进→退出→次日已闭环；真实 CE328→CE402/CE410 已实证，自然日历帧时序与像素截图入口仍缺 |
+| 战斗 | 90–94% | 真实回合、结算、BOSS 多回合、多队员、默认 auto-arm 自然 day4 结算、真实 CData type14 菜单→3 个 CE242 body 已证；剩余 shipped 队伍完整多输入 UI 验收 |
+| H 场景 | 90–94% | 真实入口→推进→退出→次日已闭环；真实 CE328→CE402/CE410 自然帧（默认预算）已证，act4/5 深分支与零售像素仍缺 |
 | 地图移动 / NPC | 80–85% | 地形/碰撞/接触触发/玩家起点、8 向对角移动、ActionKey 交互与持续行走已实现；行走动画、NPC 全对话、传送起点一致性仍缺 |
 | 视觉 | 90% | 标题/地图/窗口/锚点大部分还原；锚点 5/6 与 CN 窗口右缘待像素对照 |
 | 音频 | 90% | 358 个音频盘点、混音回归、异常 WAV 容错；剩余人工听感验收 |
-| 测试 / 文档 | 100% | 123 test suites / 786 passed / 1 ignored、verify 70/0、HANDOFF_M11/BASELINE/research 索引齐全 |
+| 测试 / 文档 | 100% | 128 test suites / 803 passed / 1 ignored、verify 70/0、HANDOFF_M12/BASELINE/research 索引齐全 |
 
-## 4. M11 候选与优先级
+## 4. M12 候选与优先级
 
 > 原则：先消除“会让玩家流程不确定”的缺口，再做视觉/音频打磨；每项都必须有测试或可复现证据。
 >
-> 进度：M11 第一批（task-79..84）与 round 1（task-85..88）见 `docs/HANDOFF_M10.md` §8/§9；round 2（task-89..96）见 `docs/HANDOFF_M11.md`。下列条目保留仍未完成的部分。
+> 进度：M11 第一批（task-79..84）与 round 1（task-85..88）见 `docs/HANDOFF_M10.md` §8/§9；round 2（task-89..96）见 `docs/HANDOFF_M11.md`；round 3（task-97..100）见 `docs/HANDOFF_M12.md`。下列条目保留仍未完成的部分。
 
 ### P0 — 确定性与真实流程
 
-1. **战斗自然路线确定性（已完成，task-79）**：`started_events` 已是 `BTreeSet`（有序，非 HashSet），实例为 `Vec`，HashMap 仅键查表；自然 day4 路线已逐字节复现（5 次重跑一致：4 回合、v352=1），#11/#12 已改为定值断言（见 `docs/research/M11_BATTLE_DETERMINISM.md`）。仅剩 H-PRNG-1 零售时钟种子重放等价性待证（`docs/research/M9_PRNG_SEED.md`）。
-2. **真实多命令菜单桥接（引擎桥 + 真实 cursor 已证，task-85/89/93/95）**：`battle_wiring.rs` 实现 CE157 确认采集、`set_menu_command_queue`，`Game::set_battle_menu_command_queue` 为应用层入口。task-89 推翻“CE157 cursor VM bug”：物理 cursor 是 CData type18 row73，真实连续确认逐行推进（input_pos 1→8）；task-93 用 2 成员 fixture 注册 15 行并驱动 4 个不同 CE242 body；task-95 默认 auto-arm 让自然 day4 战斗自行结算。剩余是完整玩家 UI→CE157 多输入验收（`M11_CE157_CURSOR.md`、`M11_PARTY_LIVE_BRIDGE.md`、`M11_BATTLE_AUTOSTART.md`）。
+1. **战斗自然路线确定性（已完成，task-79）**：`started_events` 已是 `BTreeSet`（有序，非 HashSet），实例为 `Vec`，HashMap 仅键查表；自然 day4 路线已逐字节复现（5 次重跑一致：4 回合、v352=1），#11/#12 已改为定值断言（见 `docs/research/M11_BATTLE_DETERMINISM.md`）。PRNG 零售时钟种子来源与无 folding 已由 task-99 反汇编证实（`M11_PRNG_CLOCK.md`）；剩余仅是零状态重读导致“单 tick 完全重放”不可证。
+2. **真实多命令菜单桥接（真实菜单已通，task-85/89/93/95/98）**：`battle_wiring.rs` 实现 CE157 确认采集、`set_menu_command_queue`，`Game::set_battle_menu_command_queue` 为应用层入口。task-89 推翻“CE157 cursor VM bug”：物理 cursor 是 CData type18 row73；task-93 用 2 成员 fixture 注册 15 行并驱动 4 个不同 CE242 body；task-95 默认 auto-arm 让自然 day4 战斗自行结算；task-98 harvester 改读 committed CData type14 并移到 `drive` 判断之前，真实 2 成员菜单无需注入即注册 2 行、驱动 3 个 CE242 body。剩余是 shipped 队伍完整多输入 UI（取消/返回/连续确认）验收（`M11_BATTLE_MENU_LIVE.md`）。
 
 ### P1 — 内容完整性
 
-3. **H 完整 CG 分支（真实 CE328→CE402/CE410 已实证，task-80/86/90/94/96）**：var304=1、var276/277/326 可从 SaveData01 真实输入获得；task-96 用 calendar-consistent fixture 只 `start_event(328)` 经 pc986 进 CE402（pc0→511）并驱动 CE410（pc0→247），warnings=0。关键修正：pc122 就寝是 `var6==4 && var4<6`（不是 >20）；可达路径是 pc850 假→else pc969→pc986，不经过 pc964/var64。剩余：从自然日期/真实帧时序复现，以及像素截图入口（`M11_HSCENE_CE328_REAL_CG.md`）。
+3. **H 完整 CG 分支（自然帧已证，task-80/86/90/94/96/97）**：var304=1、var276/277/326 可从 SaveData01 真实输入获得；task-96 用 calendar-consistent fixture 只 `start_event(328)` 经 pc986 进 CE402（pc0→511）并驱动 CE410（pc0→247），warnings=0；task-97 用默认 200000 预算、普通 `Game::frame`、关闭背景 AutoEvents 复现自然帧 `frames=3667 maxpc402=509 CE410 acts=[1,1,2,1,3] warnings=0`，并新增 `--load-save`+`--event` 截图入口。关键修正：pc122 就寝是 `var6==4 && var4<6`；可达路径是 pc850 假→else pc969→pc986，不经过 pc964/var64。剩余：自然路径 CE402 pc208 早退使 act4/5 的 CE410 pc>200 不可达（`M11_HSCENE_NATURAL.md`）。
 4. **移动 / NPC（对角、行走与 ActionKey 已做，task-81/91）**：8 向对角移动（不切角、阻挡转向）、NPC contact、按住方向每 8 帧连续行走、ActionKey 触发页面均已实现并有测试；剩余行走动画帧、NPC 对话全路由、传送后起点一致性。
 5. **日程边界**：更多天数/随机事件的自然推进与跨天存档一致性。
 
@@ -63,7 +64,7 @@
 
 6. 视觉像素对照：锚点 5/6 几何已固定（task-82，`M11_ANCHOR_PIXELS.md`）；CN 窗口皮肤右缘已证为 data-only 且无 1024 宽溢出（task-87，`M11_WINDOW_EDGE.md`）。剩余零售像素 diff、关键场景截图 diff。
 7. 音频人工听感验收：已产出 31 首 loop 验收档案与分层（task-84，`M11_AUDIO_ACCEPTANCE.md`），并有逐曲阈值固定、两次 decode 位相同的回归（task-88，`M11_AUDIO_LOOP_REGRESSION.md`）；剩余 BGM 循环点/SE 音量延迟的人工确认。
-8. 打包/性能：Windows 发布包、启动时用户数据目录校验、每帧预算与资源缓存。
+8. 打包/性能：`wolf-package`（validate/assemble/check/bench）与 `FrameBudgetReport` 已落地（task-100，`M11_PACKAGING.md`）；剩余 Windows 发布包接线、启动数据目录自动校验、release 性能与资源缓存。
 9. 文档：每个新里程碑完成时按 §5 收口。
 
 ## 5. 里程碑完成的定义（Definition of Done）
@@ -80,7 +81,7 @@
 
 - 总索引：[docs/README.md](docs/README.md)
 - 新会话启动：[docs/NEW_SESSION_START.md](docs/NEW_SESSION_START.md)
-- 最新交接：[docs/HANDOFF_M11.md](docs/HANDOFF_M11.md)
+- 最新交接：[docs/HANDOFF_M12.md](docs/HANDOFF_M12.md)
 - 技术规格：[docs/FORMAT_SPEC.md](docs/FORMAT_SPEC.md)、[docs/OPCODE_SPEC.md](docs/OPCODE_SPEC.md)、[docs/SAVE_SPEC.md](docs/SAVE_SPEC.md)
 - 子系统全景：[docs/BATTLE.md](docs/BATTLE.md)、[docs/HSCENE.md](docs/HSCENE.md)、[docs/MAP_AUDIT.md](docs/MAP_AUDIT.md)
 - 研究底稿：[docs/research/README.md](docs/research/README.md)

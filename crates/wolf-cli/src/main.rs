@@ -337,8 +337,16 @@ fn main() -> ExitCode {
                     boot_explicit,
                     menu_only,
                 );
+                let mut entry_event: Option<u32> = None;
                 let entry = match &resolved {
                     CaptureEntry::Save(path) => Entry::Save(path.as_path()),
+                    // Save + event: keep the plain Save entry (so play.rs and the Entry
+                    // match stay untouched) and pass the event id to run_capture, which
+                    // starts it after the save loads.
+                    CaptureEntry::SaveWithEvent { path, event } => {
+                        entry_event = Some(*event);
+                        Entry::Save(path.as_path())
+                    }
                     CaptureEntry::Script { map, event } => Entry::Script {
                         map: map.as_str(),
                         event: *event,
@@ -367,6 +375,7 @@ fn main() -> ExitCode {
                     hold_message,
                     engine_events,
                     entry,
+                    entry_event,
                 )
             }
         },
@@ -399,6 +408,9 @@ fn main() -> ExitCode {
             );
             let entry = match &resolved {
                 CaptureEntry::Save(path) => Entry::Save(path.as_path()),
+                // play drives the save interactively; the event id is a capture-only
+                // convenience and is dropped here (Entry::Save stays single-argument).
+                CaptureEntry::SaveWithEvent { path, .. } => Entry::Save(path.as_path()),
                 CaptureEntry::Script { map, event } => Entry::Script {
                     map: map.as_str(),
                     event: *event,
@@ -1982,6 +1994,11 @@ enum CaptureEntry {
     Menu,
     Script { map: String, event: u32 },
     Save(PathBuf),
+    // A save file, then a single common event started on top of it. capture
+    // --load-save <FILE> --event <ID> resolves here: the save restores pictures/vars,
+    // then the event is started so the capture can drive one common event from a real
+    // save state (e.g. CE328 from SaveData08). --load-save alone stays plain Save.
+    SaveWithEvent { path: PathBuf, event: u32 },
     CommonEvent(u32),
 }
 
@@ -2003,6 +2020,14 @@ fn resolve_capture_entry(
     menu_only: bool,
 ) -> CaptureEntry {
     if let Some(path) = load_save {
+        // Combining --load-save with --event restores the save, then starts one event on
+        // top of it (the event is what the capture drives). Otherwise a plain save load.
+        if let Some(id) = event {
+            return CaptureEntry::SaveWithEvent {
+                path: path.to_path_buf(),
+                event: id,
+            };
+        }
         return CaptureEntry::Save(path.to_path_buf());
     }
     if let Some(map) = map_run {
@@ -2298,6 +2323,7 @@ fn run_capture(
     hold_message: bool,
     engine_events: Option<Vec<u32>>,
     entry: Entry<'_>,
+    entry_event: Option<u32>,
 ) -> ExitCode {
     let out = out.unwrap_or_else(|| PathBuf::from("work/out/title.png"));
     let mut game = match Game::new(root) {
@@ -2359,14 +2385,34 @@ fn run_capture(
             (started, format!("common event {id}"))
         }
         Entry::Save(path) => {
-            let label = format!("save file {}", path.display());
+            let mut label = format!("save file {}", path.display());
             match game.load_save(path) {
                 Ok(loaded) => {
                     println!(
                         "  loaded    : {} picture(s), {} normal variable(s), playtime {} frame(s), choice anchor {:?}",
                         loaded.pictures, loaded.normal_vars, loaded.playtime_frames, loaded.choice_anchor
                     );
-                    (Ok(()), label)
+                    // --load-save + --event: start the event on top of the restored
+                    // save. The engine events go first for the same reason as the bare
+                    // CommonEvent arm (they own the window/input subsystem).
+                    if let Some(id) = entry_event {
+                        game.start_engine_events();
+                        if game.start_event(id) {
+                            entry_instance = game
+                                .vm
+                                .instances()
+                                .iter()
+                                .rev()
+                                .find(|i| i.event == id)
+                                .map(|i| i.id);
+                            label = format!("save file {} + common event {id}", path.display());
+                            (Ok(()), label)
+                        } else {
+                            (Err(format!("no common event with id {id}")), label)
+                        }
+                    } else {
+                        (Ok(()), label)
+                    }
                 }
                 Err(err) => (Err(err), label),
             }
@@ -3205,6 +3251,15 @@ mod tests {
                 true,
                 true
             ),
+            CaptureEntry::SaveWithEvent { path, event: 239 }
+        );
+    }
+
+    #[test]
+    fn load_save_alone_is_plain_save() {
+        let path = PathBuf::from("save.sav");
+        assert_eq!(
+            resolve_capture_entry(Some(Path::new("save.sav")), None, None, false, false),
             CaptureEntry::Save(path)
         );
     }

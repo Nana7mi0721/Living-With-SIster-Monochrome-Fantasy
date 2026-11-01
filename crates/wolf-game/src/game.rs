@@ -1378,7 +1378,7 @@ impl Game {
         self.auto_events.sync(&mut self.vm);
         // Rebuilt battle wiring (M7 task-34): start the command phase on the battle-active
         // edge. No-op unless Game::set_battle_wiring(true) was called. See battle_wiring.rs.
-        self.battle_wiring.tick(&mut self.vm);
+        self.battle_wiring.tick(&mut self.vm, &self.databases);
         // Player input is sampled before the VM step: a movement step or action-key
         // page start has to be visible to this frame's step, not the next one.
         self.advance_player_input();

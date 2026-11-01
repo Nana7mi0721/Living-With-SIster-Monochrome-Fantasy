@@ -26,6 +26,7 @@ pub mod auto_events;
 pub mod choice;
 pub mod db;
 pub mod fontmetrics;
+pub mod frame_budget;
 pub mod game;
 pub mod key;
 pub mod map_runtime;

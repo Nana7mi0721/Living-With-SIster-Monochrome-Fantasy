@@ -14,12 +14,16 @@
 //! state = state * 16807 % 0x7FFFFFFF      // 16807 = 0x41A7, Mersenne 2^31-1
 //! ```
 //!
-//!    It self-seeds from the clock on first use, then a rejection loop
-//!    multiplies again while the state exceeds 2,000,000,000 and reseeds if it
-//!    becomes 0; the returned draw is the state, roughly `1..=2_000_000_000`.
-//!    `next_event_draw()` runs exactly that loop. For determinism this build
-//!    reseeds a zero state to `EVENT_RESEED` instead of the clock; the clock
-//!    seed is a documented production hook, not wired yet.
+//!    It self-seeds from the Windows `GetTickCount()` clock on first use, then
+//!    a rejection loop multiplies again while the state exceeds 2,000,000,000
+//!    and reseeds if it becomes 0; the returned draw is the state, roughly
+//!    `1..=2_000_000_000`. `next_event_draw()` runs exactly that loop. The
+//!    retail seed is the raw 32-bit tick count: RVA 0x35847 calls
+//!    KERNEL32!GetTickCount and RVA 0x35852 stores EAX into the Park-Miller
+//!    state with no folding (proven in docs/research/M11_PRNG_CLOCK.md).
+//!    For determinism this build keeps `EVENT_SEED` as the default and
+//!    reseeds a zero state to `EVENT_RESEED` instead of the clock; a captured
+//!    retail tick can be injected with `WolfRng::from_clock_ticks`.
 //!
 //! 2. The **static-table / crypto stream** (the MSVC C-runtime LCG).
 //!
@@ -143,6 +147,24 @@ impl WolfRng {
         Self::from_seeds(DEFAULT_SEED, event_seed)
     }
 
+    /// The retail initial seed: feed a raw Windows `GetTickCount()` DWORD into
+    /// the event generator, exactly as RVA 0x35810 does.
+    ///
+    /// Retail provenance (docs/research/M11_PRNG_CLOCK.md):
+    /// - RVA 0x35847: `FF 15 44 20 80 00  call dword ptr [0x802044]`, and
+    ///   0x802044 is KERNEL32!GetTickCount in the import table;
+    /// - RVA 0x35852: `A3 F0 17 1B 01  mov dword ptr [0x11b17f0], eax`.
+    ///
+    /// The raw tick is stored directly: there is no add/xor/shift/multiply
+    /// folding before the first Park-Miller step. The MSVC static-table stream
+    /// keeps `DEFAULT_SEED`. A zero tick is normalised by
+    /// `from_event_seed` to `EVENT_RESEED`; retail would instead re-read the
+    /// clock on a zero state, which cannot be replayed from one captured tick.
+    #[must_use]
+    pub fn from_clock_ticks(ticks: u32) -> Self {
+        Self::from_event_seed(seed_from_clock_ticks(ticks))
+    }
+
     /// Production hook: seed the event generator from the WOLF_EVENT_SEED
     /// environment variable, leaving the MSVC static-table stream at its
     /// default. Absent or invalid means the fixed EVENT_SEED, so behaviour is
@@ -244,6 +266,16 @@ impl WolfRng {
         let modulus = diff.unsigned_abs().wrapping_add(1);
         low.wrapping_add((draw % modulus) as i32)
     }
+}
+
+/// The retail folding of a raw `GetTickCount()` DWORD into the Park-Miller
+/// seed. The disassembly proves the folding is the identity: RVA 0x35847 calls
+/// KERNEL32!GetTickCount through IAT slot 0x802044 and RVA 0x35852 writes its
+/// EAX return straight into the state at 0x11b17f0. Kept as a named helper so
+/// the zero-folding fact is explicit and testable.
+#[must_use]
+pub const fn seed_from_clock_ticks(ticks: u32) -> u32 {
+    ticks
 }
 
 /// A zero event seed is a fixed point of the Park-Miller LCG; the retail routine

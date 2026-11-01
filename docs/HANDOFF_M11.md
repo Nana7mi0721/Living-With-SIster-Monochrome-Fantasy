@@ -1,7 +1,8 @@
 # M11 交接：战斗默认驱动、真实菜单/行走、H 深链实证
 
 > 仓库：`E:\Study\github program\imoto life`
-> 阅读顺序：本文件（M11 最新）→ `docs/README.md`（文档总索引）→ `PLAN.md`（当前路线图）；M10 及更早已标历史归档。
+> 阅读顺序：`docs/HANDOFF_M12.md`（最新）→ `docs/README.md`（文档总索引）→ `PLAN.md`（当前路线图）；本文件是 M11 round 2 历史归档，M10 及更早已标历史归档。
+> 后续：M11 round 3（task-97..100：自然帧 H、真实战斗菜单、PRNG 时钟、打包/帧预算）已由 `docs/HANDOFF_M12.md` 收口。
 > 基线：M11 第一批/round 1 的集成交付在 `22de104` 与 `5ef6b1f`；本文件记录 round 2（task-89..96）与本批集成提交。数据根 `work/all`，零售存档 `work/retail_backup/Save`。
 > 本批结束后按用户要求暂停推进 M11。
 

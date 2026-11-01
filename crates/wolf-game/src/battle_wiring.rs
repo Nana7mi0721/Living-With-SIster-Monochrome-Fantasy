@@ -122,38 +122,32 @@
 //! wins over auto-arm. The wiring never starts a second CE242 while a CE242/CE241/CE243 round
 //! event is already alive.
 //!
-//! ## Live menu multi-input is a data-level dead end (M9, task-67)
-//!
-//! The shipped CE188 -> CE191 -> CE192 -> CE157 command line can only ever register ONE
-//! command: CE157 writes command row 1 but never advances コマンド入力位置 (CData 20,73),
-//! so every selection overwrites row 1 and CE194 (the multi-command consumer) is fed 0.
-//! This driver therefore cannot be fed a >1 index schedule from the real menu; multi-member
-//! action is only reachable through the rebuilt per-index CE242 rounds above (BOSS path,
-//! real CE241 turn-start). Full analysis: docs/research/M9_BATTLE_MULTI_INPUT.md.
-//!
-//! ## Menu -> CE242 bridge (M11, task-85)
+//! ## Menu -> CE242 bridge (M11 task-85, corrected by task-89 / task-98)
 //!
 //! The driver already consumes a *successive sequence of command indexes*: legacy single-shot
-//! takes the next scheduled index, and the round loop takes the next index every round. What was
-//! missing is the producer that turns a player's per-member menu picks into that sequence.
-//! `harvest_menu_registrations` captures the real CE157 (コマンド登録) confirmations while they
-//! live and records, per confirmation, the activator/skill/row the producer actually wrote plus
-//! the CE242 command index the *row* maps to (`harvested_command_indexes`). It intentionally uses
-//! the ROW, never the ability code (25/26/29/30 is disjoint from the 1..8 index board).
-//! `set_menu_command_queue` lets the application layer install a fresh sequence it read from the
-//! command-list table; the driver drains it front-first (one entry = one round) before the
-//! rotating schedule (`next_command`).
+//! takes the next scheduled index, and the round loop takes the next index every round. The
+//! producer that turns a player's per-member menu picks into that sequence is the shipped
+//! CE188 -> CE191 -> CE192 -> CE152 -> CE65 -> CE157 (コマンド登録) line. Each confirmed command
+//! is written into the command-processing list CData type14 at command row = コマンド入力位置
+//! (CData 18,73), and CE157 advances that cursor (pc124-125).
 //!
-//! The bridge is faithful to the data contract but cannot by itself manufacture a >1 sequence:
-//! the shipped CE157 producer writes command row 1 and never advances コマンド入力位置, so the
-//! live menu can only ever confirm one row (task-67 / M9_BATTLE_MULTI_INPUT.md). The queue path
-//! therefore becomes reachable as soon as the producer cursor bug (CE157 pc121/124-125) is fixed
-//! in the data/VM layer (out of this file's scope); until then the app-layer hook
-//! `Game::set_battle_menu_command_queue(Vec<i32>)` (delegating here) is the bounded entry point,
-//! reusing real registered rows read from CData type14.
+//! NOTE: an earlier M9 task-67 note claimed CE157 can only ever register row 1 because it never
+//! advances the cursor. M11 round-2 task-89 retracted that folklore: with real consecutive OK
+//! confirms the cursor advances 1 -> 8 and distinct rows 1..7 are written. m11_battle_menu_live.rs
+//! drives the real menu and reads back two distinct rows, proving it.
+//!
+//! `harvest_menu_registrations` reads those *committed* CData type14 rows (activator = col 0,
+//! ability code = col 3) once at least one CE157 is live, dedupes by row index, and pushes the
+//! row's command index (row.clamp(1,8)) into the driver queue. It deliberately reads the table,
+//! NOT the CE157 self-var self1600017: that self-var is only assigned the row at pc80-84 and is
+//! incremented at pc124, so a step-boundary read catches the instance parked at pc64 with a stale
+//! (0) value -- the exact bug task-98 fixed (it had produced a [1,1] queue). `set_menu_command_queue`
+//! remains a bounded app-layer hook that installs a sequence read from the same table; the driver
+//! drains the harvested queue (or an injected one) front-first before the rotating schedule.
 
 use std::collections::{BTreeSet, VecDeque};
 
+use crate::db::{Container, Databases};
 use wolf_vm::magic::SELF_ARG_BASE;
 use wolf_vm::Vm;
 
@@ -181,10 +175,9 @@ const EVENT_BATTLE_DISPATCH: u32 = 253;
 /// Each time the real menu confirms a command, CE157 runs once. Harvesting those instances is
 /// how the bridge turns real menu confirmations into CE242 command indexes.
 const EVENT_COMMAND_REGISTER: u32 = 157;
-/// Offsets inside a CE157 instance's self-vars (all are SELF_ARG_BASE + k).
-const REG_ACTIVATOR: usize = 0; //  self1600000 発動者番号 (member number)
-const REG_SKILL: usize = 1; //      self1600001 発動技能 (ability code, NOT a CE242 index)
-const REG_ROW: usize = 17; //       self1600017 command row index the producer is writing
+/// Physical CData table the CE157 producer writes each confirmed command row into
+/// (論理 コマンド処理リスト -> physical type 14). Row index r is the CE242 command index.
+const CMD_LIST_TYPE: i32 = 14;
 
 /// One real battle-menu confirmation, captured from the CE157 (コマンド登録) instance that
 /// the live menu (CE188 -> CE191 -> CE192) spawns. This is the engine-side record that the
@@ -197,8 +190,9 @@ pub struct MenuSelection {
     /// 発動技能 -- the chosen ability *code* (25/26/29/30/0...). Disjoint from the CE242 index
     /// domain 1..8 and therefore deliberately NOT used to pick a command body.
     pub skill: i32,
-    /// コマンド入力位置 the producer was writing (command row index, 0-based). In the shipped
-    /// flow this is always 0 because CE157 never advances its cursor (the documented blocker).
+    /// Command-processing-list row (論理 コマンド処理リスト, physical CData type14) this
+    /// confirmation filled, 1-based. Harvested from the committed table, not the transient CE157
+    /// self-var; the row index equals the CE242 command index by contract.
     pub row: i32,
     /// The CE242 command index this confirmation is assigned, in confirmation order (1-based).
     /// This reconstructs the row-append the shipped producer is missing: the k-th real menu
@@ -238,8 +232,8 @@ pub struct BattleWiring {
     turn_starts: u64,
     /// Real menu confirmations harvested from live CE157 instances, in arrival order.
     menu_selections: Vec<MenuSelection>,
-    /// CE157 instance ids already harvested (BTreeSet keeps this deterministic).
-    seen_registrations: BTreeSet<u32>,
+    /// Command rows already harvested from the committed command list (dedup by row index).
+    harvested_rows: BTreeSet<i32>,
     /// Explicit command-index queue fed by the menu bridge. Drained (front first) before the
     /// rotating `command_schedule`; one entry = one CE242 command round.
     menu_queue: VecDeque<i32>,
@@ -265,7 +259,7 @@ impl BattleWiring {
             started_rounds: 0,
             turn_starts: 0,
             menu_selections: Vec::new(),
-            seen_registrations: BTreeSet::new(),
+            harvested_rows: BTreeSet::new(),
             menu_queue: VecDeque::new(),
         }
     }
@@ -344,26 +338,33 @@ impl BattleWiring {
         self.menu_selections.iter().map(|s| s.command_index).collect()
     }
 
-    /// Harvest real menu confirmations from live CE157 (コマンド登録) instances. Each new CE157
-    /// instance is recorded once (deduplicated by instance id, in arrival order). Returns the
-    /// number of newly harvested confirmations. This is the engine-side capture half of the
-    /// menu -> CE242 bridge; see the module docs for why the shipped producer only ever yields
-    /// one row and therefore one confirmation.
-    pub fn harvest_menu_registrations(&mut self, vm: &Vm) -> usize {
-        let mut fresh: Vec<(u32, i32, i32, i32)> = Vec::new();
-        for inst in vm.instances() {
-            if inst.event == EVENT_COMMAND_REGISTER && !self.seen_registrations.contains(&inst.id) {
-                let activator = inst.self_vars.get(SELF_ARG_BASE + REG_ACTIVATOR);
-                let skill = inst.self_vars.get(SELF_ARG_BASE + REG_SKILL);
-                let row = inst.self_vars.get(SELF_ARG_BASE + REG_ROW);
-                fresh.push((inst.id, activator, skill, row));
-            }
+    /// Harvest real menu confirmations from live CE157 (コマンド登録) instances. While a CE157
+    /// is live (the menu is open in ordinary map state) every committed command row in the
+    /// command-processing list (CData type14) not yet seen is recorded once (deduplicated by row
+    /// index). Returns the number of newly harvested rows. This is the engine-side capture half
+    /// of the menu -> CE242 bridge; reading the committed table (not the transient CE157
+    /// self-var) is what makes multiple distinct confirmations harvestable -- task-98.
+    pub fn harvest_menu_registrations(&mut self, vm: &Vm, db: &Databases) -> usize {
+        // Only harvest while a real command-registration coroutine is live (the CE188 -> CE192
+        // -> CE157 menu is open in ordinary map state, before the rebuilt drive arms). Gating on
+        // a live CE157 keeps stale command rows from a previous fight out of a later battle.
+        if !vm.instances().iter().any(|i| i.event == EVENT_COMMAND_REGISTER) {
+            return 0;
         }
-        // Arrival order is instance-id order (instances are stored in spawn order).
-        fresh.sort_by_key(|t| t.0);
-        let n = fresh.len();
-        for (id, activator, skill, row) in fresh {
-            self.seen_registrations.insert(id);
+        let mut added = 0usize;
+        // The row index IS the CE242 command index (row-index == command-index contract).
+        for row in 1..=8i32 {
+            if self.harvested_rows.contains(&row) {
+                continue;
+            }
+            // col 0 = 発動者番号 (member number, >= 0 once the producer committed this row).
+            let activator = match db.num(Container::CData, CMD_LIST_TYPE, row, 0) {
+                Some(a) if a >= 0 => a,
+                _ => continue,
+            };
+            // col 3 = chosen ability code; recorded only, never used to pick a command body.
+            let skill = db.num(Container::CData, CMD_LIST_TYPE, row, 3).unwrap_or(0);
+            self.harvested_rows.insert(row);
             let command_index = Self::command_index_for_row(row);
             self.menu_selections.push(MenuSelection {
                 activator,
@@ -372,8 +373,9 @@ impl BattleWiring {
                 command_index,
             });
             self.menu_queue.push_back(command_index);
+            added += 1;
         }
-        n
+        added
     }
 
     /// Install an explicit command-index queue (one entry = one command round), used by the
@@ -421,7 +423,7 @@ impl BattleWiring {
 
     /// One engine tick, called at the top of Game::frame after the automatic events
     /// are synced and before the VM steps.
-    pub fn tick(&mut self, vm: &mut Vm) -> Option<u32> {
+    pub fn tick(&mut self, vm: &mut Vm, db: &Databases) -> Option<u32> {
         let battle_active = vm.vars.get(VAR_BATTLE_ACTIVE) != 0;
         let rising = battle_active && !self.prev_battle_active;
         self.prev_battle_active = battle_active;
@@ -439,6 +441,15 @@ impl BattleWiring {
             Some(v) => v,
             None => auto,
         };
+        // Bridge half 1: capture any real menu confirmations (CE157 instances) while they live,
+        // so a subsequent battle can be driven with the command indexes the player selected.
+        // This MUST run even when the drive is off (M11 task-98): the player's battle command
+        // menu (CE188 -> CE192 -> CE157) is confirmed in ordinary map state, before the rebuilt
+        // drive arms on the CE253 battle dispatch. Harvesting only inside the drive would miss
+        // every real menu confirmation. Deduplication by row index makes the call idempotent
+        // and a no-op when no CE157 (menu) instance is live, so non-menu ticks are unaffected.
+        self.harvest_menu_registrations(vm, db);
+
         if !drive {
             return None;
         }
@@ -449,10 +460,6 @@ impl BattleWiring {
             Some(v) => v,
             None => auto,
         };
-
-        // Bridge half 1: capture any real menu confirmations (CE157 instances) while they live,
-        // so a subsequent battle can be driven with the command indexes the player selected.
-        self.harvest_menu_registrations(vm);
 
         // Legacy single-shot path: byte-for-byte the original behaviour.
         if !round_loop {
