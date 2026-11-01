@@ -20,14 +20,12 @@
 //! is the only entry point that reconstructs the live daily loop. This is recorded as a
 //! finding, not silently papered over.
 //!
-//! Known residual (pre-existing, picture layer, NOT the self-persist fix): the live
-//! message-window text picture 16001 stores its box size in vars7_18[2]/[3]; when it is
-//! captured mid-scene picture_from_record (crates/wolf-game/src/savegame.rs) drops those
-//! two words for a Text picture (var5==1, var6==0), so the FIRST mid-scene save is not a
-//! fixed point. It converges on the next cycle (2nd save onward identical) and retail
-//! saves never contain picture 16001 (saving from the menu has no live message box), so
-//! sections 1 and the fixed-point assertion in section 2 are unaffected. Reported to the
-//! Lead; production src is owned by the self-persist work and is not edited here.
+//! Fixed (Text picture record): the live message-window text picture 16001 stores its box
+//! size in vars7_18[2]/[3]. picture_from_record (crates/wolf-game/src/savegame.rs) now
+//! carries those words in Picture.window and picture_to_record writes them back instead of
+//! substituting the Text split (1,1), so the FIRST mid-scene save is a fixed point. Retail
+//! saves never contain picture 16001 (a menu save has no live message box), so section 1
+//! was already byte equal; section 2 now asserts the stronger S1 == S2 == S3 fixed point.
 //!
 //! Run (default, fast):  WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m13_crossday_save
 //! Long soak (#[ignore]): WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m13_crossday_save -- --ignored
@@ -449,9 +447,8 @@ fn run_cross_day(target: i32, tag: &str) -> CrossDay {
     assert_eq!(g2.vm.vars.get(7), money, "money changed across reload");
     assert_eq!(vars800(&g2), vars, "800 normal variables changed across reload");
     // Picture continuity: the picture slots and every real image file survive the reload.
-    // Text / window-box pictures are re-encoded by the picture layer on load (kind name,
-    // default (1,1) window, leading font code) - a pre-existing limitation - so field-exact
-    // equality is not asserted; the byte fixed point below is the real fidelity guarantee.
+    // Text message-box dimensions are now preserved too; the byte fixed point below
+    // (S1 == S2) proves the whole picture layer round-trips without a second-cycle repair.
     assert_eq!(pic_continuity(&g2), pics_cont, "picture slots / image files changed across reload");
     assert_eq!(g2.screen.iter().count(), pic_count, "picture count changed across reload");
     let (banks_n, nonzero) = assert_banks_preserved(&banks_before, &g2);
@@ -464,12 +461,12 @@ fn run_cross_day(target: i32, tag: &str) -> CrossDay {
     let s3 = out.join("S3.sav");
     g3.save_to(&s3).expect("save S3");
     let b3 = std::fs::read(&s3).expect("read S3");
+    assert_eq!(b2, b1, "the FIRST mid-scene save must already be a fixed point (S1 == S2)");
     assert_eq!(b3, b2, "the reload -> save fixed point must be stable (S2 == S3)");
 
     let p1 = wolf_save::SaveFile::parse(&b1).expect("parse S1");
     let p2 = wolf_save::SaveFile::parse(&b2).expect("parse S2");
     for id in 0..=6u32 {
-        if id == 4 { continue; }
         assert_eq!(p1.chunk_bytes(id), p2.chunk_bytes(id), "segment {id} changed between the first and second save");
     }
     let mut differ: Vec<i32> = Vec::new();
@@ -482,7 +479,7 @@ fn run_cross_day(target: i32, tag: &str) -> CrossDay {
             && r1.vars7_18 == r2.vars7_18;
         if !same { differ.push(r1.var1 as i32); }
     }
-    assert!(differ.is_empty() || differ.iter().all(|n| *n == 16001), "only picture 16001 may differ between S1 and S2, got {differ:?}");
+    assert!(differ.is_empty(), "the first mid-scene save must be a fixed point; pictures changed on reload -> save: {differ:?}");
 
     eprintln!(
         "{tag}: arrived day {arrival_day} at {:02}:{:02} wd={weekday} money={money} pics={pic_count} banks_preserved={banks_n} (nonzero {nonzero}) S1->S2 picture delta={differ:?} S2==S3=yes bytes={} elapsed={:?}",

@@ -219,11 +219,19 @@ pub fn picture_from_record(record: &SavePart5_1) -> Option<Picture> {
     picture.scale = v[9] as i32;
     let w = v[2] as i32;
     let h = v[3] as i32;
-    if record.var6 == 1 {
+    if record.var5 == 1 {
+        // A Text picture stores its message-box extent in [2]/[3]. Carry it in
+        // `window` so the renderer and hit-test see the real box, and so
+        // `picture_to_record` writes the same words back. Text has no sprite-sheet
+        // grid, so these words must never fall through to `split` (which is (1, 1)).
         if w > 1 && h > 1 {
             picture.window = Some((w, h));
         }
-    } else if record.var5 != 1 {
+    } else if record.var6 == 1 {
+        if w > 1 && h > 1 {
+            picture.window = Some((w, h));
+        }
+    } else {
         // For a file picture the same two words are the sprite-sheet grid: a standing
         // character is one PNG holding a whole wardrobe (6 x 2 for stand_imouto_paja2),
         // and [4] is the one-based cell to show. Retail save 92's 7 x 1 eye strip with
@@ -279,12 +287,24 @@ pub fn picture_to_record(picture: &Picture) -> SavePart5_1 {
     let v = &mut record.vars7_18;
     v[0] = picture.x as u32;
     v[1] = picture.y as u32;
-    let (columns, rows) = match picture.window {
-        Some((width, height)) => (width, height),
-        None => (
-            i32::try_from(picture.split.0).unwrap_or(1),
-            i32::try_from(picture.split.1).unwrap_or(1),
-        ),
+    let (columns, rows) = if picture.kind.is_text() {
+        // Text records keep the message-box extent in [2]/[3]. Use the live window
+        // when there is one; otherwise preserve the saved baseline words instead of
+        // falling back to `split`, which is always (1, 1) for text.
+        match picture.window {
+            Some((width, height)) => (width, height),
+            None => saved.map_or((1, 1), |s| {
+                (s.vars7_18[2] as i32, s.vars7_18[3] as i32)
+            }),
+        }
+    } else {
+        match picture.window {
+            Some((width, height)) => (width, height),
+            None => (
+                i32::try_from(picture.split.0).unwrap_or(1),
+                i32::try_from(picture.split.1).unwrap_or(1),
+            ),
+        }
     };
     v[2] = columns.max(0) as u32;
     v[3] = rows.max(0) as u32;
@@ -498,6 +518,31 @@ mod tests {
         assert_eq!(restored.x, 140);
         assert_eq!(restored.y, 7);
         assert_eq!(restored.anchor, 3);
+    }
+
+    #[test]
+    fn a_text_picture_keeps_its_message_box_words() {
+        // Picture 16001 is the live activity/message window. Its Text record stores the
+        // box extent in vars7_18[2]/[3]; a load -> save round trip must not replace those
+        // words with the text picture's (1, 1) sprite split.
+        let record = SavePart5_1 {
+            var1: 16001,
+            var4: 0,
+            var5: 1,
+            var6: 0,
+            vars7_18: [0, 0, 7680, 1200, 1, 255, 0, u32::MAX, 1, 100, 100, 0],
+            md1: b"hello\0".to_vec(),
+            ..SavePart5_1::default()
+        };
+        let picture = picture_from_record(&record).expect("text record");
+        assert_eq!(picture.kind, PictureKind::Text);
+        assert_eq!(picture.window, Some((7680, 1200)));
+        let written = picture_to_record(&picture);
+        assert_eq!(written.vars7_18[2], 7680, "message-box width must survive");
+        assert_eq!(written.vars7_18[3], 1200, "message-box height must survive");
+        assert_eq!(written.vars7_18, record.vars7_18, "the whole tail must be unchanged");
+        assert_eq!(written.var5, 1);
+        assert_eq!(written.var6, 0);
     }
 
     #[test]
