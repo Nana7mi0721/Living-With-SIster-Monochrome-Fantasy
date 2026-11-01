@@ -227,6 +227,9 @@ fn bookstore_menu_buys_both_skill_books() {
 fn persisted_book_purchase_lets_ce301_learn_the_skill() {
     let mut a = new_game();
     a.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    // Isolated single-event probe: clear the save's restored common-event self banks so
+    // the save's own progression state cannot gate the events driven below.
+    a.vm.clear_common_self();
     let (v276, v277, _) = buy_books(&mut a);
     assert!(v276 >= 1 && v277 >= 1, "books purchased: v276={v276} v277={v277}");
 
@@ -235,6 +238,7 @@ fn persisted_book_purchase_lets_ce301_learn_the_skill() {
 
     let mut b = new_game();
     b.load_save(&saved).expect("reload purchased save");
+    b.vm.clear_common_self();
     assert!(b.vm.vars.get(276) >= 1, "var276 persisted");
     assert!(b.vm.vars.get(277) >= 1, "var277 persisted");
     assert_eq!(b.vm.vars.get(326), 0, "skill not yet learned");
@@ -262,6 +266,9 @@ fn real_chain_reaches_ce328_but_early_returns_at_pc741() {
     // Step A: buy both books via the real bookstore menu, persist.
     let mut a = new_game();
     a.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    // Isolated single-event probe: clear the save's restored common-event self banks so
+    // the save's own progression state cannot gate the events driven below.
+    a.vm.clear_common_self();
     let (v276, v277, _) = buy_books(&mut a);
     assert!(v276 >= 1 && v277 >= 1, "books purchased");
     let saved = out_path("m11_hscene_books_t3.sav");
@@ -270,6 +277,7 @@ fn real_chain_reaches_ce328_but_early_returns_at_pc741() {
     // Step B: reload and learn the 騎乗位 skill through the real CE301 event.
     let mut b = new_game();
     b.load_save(&saved).expect("reload purchased save");
+    b.vm.clear_common_self();
     b.auto_advance = true;
     b.auto_choice = true;
     b.auto_choice_delay = 1;

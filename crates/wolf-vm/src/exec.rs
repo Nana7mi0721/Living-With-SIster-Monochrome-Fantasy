@@ -31,7 +31,7 @@
 //! 200,000 by default — roughly 6x the whole title closure). Hitting it just ends
 //! the frame early; the next frame resumes at the same `pc`.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use wolf_format::command::{Command, RouteCommand, Slot, Tail};
@@ -137,6 +137,11 @@ pub struct Instance {
     /// bank and retires the instance itself. Common events keep the default
     /// false and are reaped exactly as before.
     pub retain_after_finish: bool,
+    /// Whether this coroutine's common-event bank is folded back into [Vm::common_self]
+    /// when it ends. True for ordinary events (script `210` invocations and save-loaded
+    /// continuations); false for a `start_event_fresh` invocation, whose self state is
+    /// deliberately local to that one run (the rebuilt battle driver's CE241/CE242).
+    pub persistent_self: bool,
 }
 
 impl Instance {
@@ -155,6 +160,7 @@ impl Instance {
             loops: Vec::new(),
             return_to: None,
             retain_after_finish: false,
+            persistent_self: true,
         }
     }
 
@@ -806,6 +812,17 @@ pub struct Vm {
     pub started_events: BTreeSet<EventId>,
     /// Successful `start_event` calls, including restarts of the same id.
     pub started_event_total: u64,
+    /// Persistent per-event self-variable banks for common events.
+    ///
+    /// WOLF keeps a common event's CSelf0..CSelf99 in the save (Part3), owned by the
+    /// event rather than the coroutine that happens to be running it, so a value one
+    /// invocation writes is visible to the next. This map mirrors that storage: an
+    /// instance of a common event starts from the stored bank and its final bank is
+    /// written back when it ends. Retail CE251 (the daily hot-spring duel countdown,
+    /// self51 4->0 / self65) and CE452 (DLC chapter, self10 += 1) both depend on it.
+    common_self: HashMap<EventId, SelfVars>,
+    /// Events whose [Vm::common_self] bank changed since the last save.
+    common_self_dirty: BTreeSet<EventId>,
 }
 
 impl Vm {
@@ -825,6 +842,8 @@ impl Vm {
             transition: TransitionState::default(),
             started_events: BTreeSet::new(),
             started_event_total: 0,
+            common_self: HashMap::new(),
+            common_self_dirty: BTreeSet::new(),
         }
     }
 
@@ -862,16 +881,90 @@ impl Vm {
         self.instances.iter_mut().find(|i| i.id == id)
     }
 
-    /// Load an event into a fresh coroutine. Returns `None` when the id is unknown.
-    pub fn start_event(&mut self, event: EventId) -> Option<InstanceId> {
-        self.start_event_with(event, None)
+    /// Persistent self bank stored for a common event, if it has one yet.
+    #[must_use]
+    pub fn common_self(&self, event: EventId) -> Option<&SelfVars> {
+        self.common_self.get(&event)
     }
 
-    /// Same, with a return target.
+    /// Event ids whose stored self bank changed since the last save.
+    #[must_use]
+    pub fn common_self_dirty(&self) -> &BTreeSet<EventId> {
+        &self.common_self_dirty
+    }
+
+    /// Seed a stored common-event self bank without marking it dirty. A save load
+    /// uses this so a subsequent save that does not play reproduces Part3 exactly.
+    pub fn seed_common_self(&mut self, event: EventId, vars: SelfVars) {
+        self.common_self.insert(event, vars);
+    }
+
+    /// Forget which banks changed; called after a successful save has written them.
+    pub fn clear_common_self_dirty(&mut self) {
+        self.common_self_dirty.clear();
+    }
+
+    /// Drop every stored common-event self bank and dirty mark. A test fixture that drives
+    /// a synthetic subsystem (e.g. the rebuilt battle driver) from a retail save uses this
+    /// to start from a clean, save-independent self store; production code never calls it.
+    pub fn clear_common_self(&mut self) {
+        self.common_self.clear();
+        self.common_self_dirty.clear();
+    }
+
+
+    /// Fold a finished/stopped common-event bank into the persistent store.
+    ///
+    /// Only common-event banks are persistent; map-event pages own theirs through
+    /// [Instance::retain_after_finish] and must not be captured here.
+    fn store_common_self(&mut self, event: EventId, vars: &SelfVars) {
+        self.common_self.insert(event, vars.clone());
+        self.common_self_dirty.insert(event);
+    }
+
+    /// Load an event into a coroutine that resumes its persistent self bank. Returns
+    /// `None` when the id is unknown.
+    ///
+    /// A common event's self variables live in [Self::common_self] across invocations
+    /// (CE251's countdown, CE452's chapter counter) and are seeded from a save load.
+    /// This is the ordinary start path. Synthetic engine coroutines that must keep their
+    /// self state local to one run use [Self::start_event_fresh] instead.
+    pub fn start_event(&mut self, event: EventId) -> Option<InstanceId> {
+        self.start_event_impl(event, None, true)
+    }
+
+    /// Same, with a return target, resuming the event's persistent self bank.
     pub fn start_event_with(
         &mut self,
         event: EventId,
         return_to: Option<i32>,
+    ) -> Option<InstanceId> {
+        self.start_event_impl(event, return_to, true)
+    }
+
+    /// Like [Self::start_event], but resumes the event's persistent self bank.
+    ///
+    /// A restart that should continue where the previous invocation left off uses this.
+    pub fn start_event_resuming(&mut self, event: EventId) -> Option<InstanceId> {
+        self.start_event_impl(event, None, true)
+    }
+
+    /// Start an event with a brand-new self bank that is *not* read from, nor written
+    /// back to, [Self::common_self].
+    ///
+    /// Synthetic engine coroutines (the rebuilt battle driver's CE241/CE242, which no
+    /// script in the common-event data ever invokes via `210`) own their self state for
+    /// exactly one invocation. Starting them this way makes their per-round behaviour
+    /// bit-identical to the pre-persistence engine, independent of any saved bank.
+    pub fn start_event_fresh(&mut self, event: EventId) -> Option<InstanceId> {
+        self.start_event_impl(event, None, false)
+    }
+
+    fn start_event_impl(
+        &mut self,
+        event: EventId,
+        return_to: Option<i32>,
+        persistent_self: bool,
     ) -> Option<InstanceId> {
         let program = Arc::clone(self.programs.event(event)?);
         if self.instances.len() >= MAX_INSTANCES {
@@ -880,6 +973,15 @@ impl Vm {
         let id = self.next_id;
         self.next_id += 1;
         let mut inst = Instance::new(id, None, program);
+        inst.persistent_self = persistent_self;
+        // A common event resumes from its persistent CSelf bank, so a value the
+        // previous invocation wrote is visible now (CE251's countdown, CE452's
+        // chapter counter). A fresh start keeps the blank bank. Map pages never reach here.
+        if persistent_self && inst.program.self_base == crate::program::COMMON_SELF_BASE {
+            if let Some(bank) = self.common_self.get(&event) {
+                inst.self_vars = bank.clone();
+            }
+        }
         inst.return_to = return_to;
         self.instances.push(inst);
         self.started_events.insert(event);
@@ -980,6 +1082,22 @@ impl Vm {
                     self.instances[index].wait = WaitState::None;
                 }
             }
+        }
+        // A common event owns its CSelf bank across restarts, so persist the banks of
+        // every coroutine that is about to die. Automatic (run-condition) events are
+        // retired here rather than in reap_finished.
+        let ended: Vec<(EventId, SelfVars)> = self
+            .instances
+            .iter()
+            .filter(|instance| {
+                doomed.contains(&instance.id)
+                    && instance.persistent_self
+                    && instance.program.self_base == crate::program::COMMON_SELF_BASE
+            })
+            .map(|instance| (instance.event, instance.self_vars.clone()))
+            .collect();
+        for (event, vars) in ended {
+            self.store_common_self(event, &vars);
         }
         self.instances
             .retain(|instance| !doomed.contains(&instance.id));
@@ -1187,6 +1305,13 @@ impl Vm {
         let id = self.next_id;
         self.next_id += 1;
         let mut child = Instance::new(id, Some(self.instances[caller].id), program);
+        // The callee resumes from its persistent CSelf bank; the call arguments below
+        // then overwrite only the argument slots, exactly as the original engine does.
+        if child.program.self_base == crate::program::COMMON_SELF_BASE {
+            if let Some(bank) = self.common_self.get(&target) {
+                child.self_vars = bank.clone();
+            }
+        }
         // Arguments land in self variable group 6 (magic 1_600_000 + i), not in
         // group 0 - see magic::SELF_ARG_BASE for the measurement. Getting this
         // wrong is invisible on the title screen but wedges every story script
@@ -1233,6 +1358,11 @@ impl Vm {
                 continue;
             };
             let mut inst = self.instances.remove(pos);
+            // Capture the finished common event's bank before it is dropped so the
+            // next invocation of the same event starts from the final values.
+            if inst.persistent_self && inst.program.self_base == crate::program::COMMON_SELF_BASE {
+                self.store_common_self(inst.event, &inst.self_vars);
+            }
             let parent = inst.parent.and_then(|pid| {
                 let idx = self.instances.iter().position(|i| i.id == pid)?;
                 if self.instances[idx].wait == WaitState::Child(inst.id) {
@@ -3215,6 +3345,124 @@ mod tests {
         }
         assert_eq!(vm.vars.get(7), 42);
         assert_eq!(vm.vars.get(0), 0);
+    }
+
+    #[test]
+    fn common_event_self_vars_persist_across_invocations() {
+        // M13: a common event's self bank must survive from one invocation to
+        // the next. Each 210 / daily start used to build a fresh all-zero
+        // SelfVars, so a daily countdown (CE251 self51 4->3->2->1->0) never
+        // advanced. Here event 1 sets self slot 51 (flat index 651) to 4 and
+        // ends; a second start of the same event must see 4 again.
+        let counter = event(1, "counter", vec![cmd(121, &[1_600_051, 4, 0, 0], &[])]);
+        let other = event(2, "other", vec![]);
+        let mut vm = vm_with(vec![counter, other]);
+        let mut host = Recorder::default();
+
+        // start_event_resuming models the script's 210 call: it resumes (and writes back)
+        // the persistent bank. (Plain start_event also resumes by default; the explicit
+        // opt-out is start_event_fresh, exercised by the next test.)
+        vm.start_event_resuming(1).unwrap();
+        vm.step_frame(&mut host); // run 121, finish, reap, store the bank
+        assert_eq!(
+            vm.common_self(1).expect("event 1 bank stored").get(600 + 51),
+            4,
+            "self51 kept after the first invocation"
+        );
+        assert!(vm.common_self_dirty().contains(&1), "event 1 marked dirty");
+
+        // Second start of the SAME event must be seeded from the persisted bank.
+        vm.start_event_resuming(1).unwrap();
+        assert_eq!(
+            vm.instances()[0].self_vars.get(600 + 51),
+            4,
+            "self51 restored on the second start, not reset to 0"
+        );
+
+        // A different event must not see event 1's bank.
+        vm.start_event_resuming(2).unwrap();
+        let other_inst = vm.instances().iter().find(|i| i.event == 2).unwrap();
+        assert_eq!(
+            other_inst.self_vars.get(600 + 51),
+            0,
+            "self banks are per event"
+        );
+    }
+
+    #[test]
+    fn common_event_arguments_only_overwrite_argument_slots() {
+        // A 210 call seeds the callee from its persisted bank, then writes the
+        // passed arguments into the fixed argument slots (600+i / 605+s). It
+        // must NOT clobber the callee's other self variables. Seed the callee's
+        // bank with self51 = 77, then call it with one numeric argument (value
+        // 1234 for slot 0): self51 must stay 77 while slot 0 becomes 1234.
+        let callee = event(
+            2,
+            "callee",
+            vec![
+                cmd(121, &[2_000_000, 1_600_051, 0, 0], &[]), // var0 = self51
+                cmd(121, &[2_000_001, 1_600_000, 0, 0], &[]), // var1 = self0 (arg slot 0)
+            ],
+        );
+        // 0x0000_0001: one numeric argument, no strings, no return value. The
+        // value lives in the third word (1234).
+        let caller = event(
+            1,
+            "caller",
+            vec![cmd(210, &[500_002, 0x0000_0001, 1234, 0, 0], &[])],
+        );
+        let mut vm = vm_with(vec![callee, caller]);
+        let mut bank = crate::vars::SelfVars::new();
+        bank.set(600 + 51, 77);
+        vm.seed_common_self(2, bank);
+        let mut host = Recorder::default();
+
+        vm.start_event(1).unwrap();
+        for _ in 0..3 {
+            vm.step_frame(&mut host);
+        }
+        assert_eq!(vm.vars.get(0), 77, "self51 survived the call");
+        assert_eq!(vm.vars.get(1), 1234, "the argument landed in slot 0");
+        let stored = vm.common_self(2).expect("callee bank stored after reap");
+        assert_eq!(stored.get(600 + 51), 77, "self51 still 77 in the bank");
+        assert_eq!(stored.get(600), 1234, "arg slot 0 written back");
+    }
+
+    #[test]
+    fn start_event_fresh_ignores_and_never_writes_the_persistent_bank() {
+        // A synthetic engine coroutine (the battle driver's CE241/CE242) must behave
+        // exactly as before persistence existed: blank bank at entry, and its self
+        // state discarded at exit. Seed a persistent bank with self51 = 9; the fresh
+        // run should start at 0 and write self51 = 5, but common_self must stay 9 and
+        // must not be marked dirty.
+        let ev = event(
+            1,
+            "synthetic",
+            vec![cmd(121, &[1_600_051, 5, 0, 0], &[])], // self51 = 5
+        );
+        let mut vm = vm_with(vec![ev]);
+        let mut bank = crate::vars::SelfVars::new();
+        bank.set(600 + 51, 9);
+        vm.seed_common_self(1, bank);
+        assert!(vm.common_self_dirty().is_empty(), "seeding must not dirty");
+
+        let id = vm.start_event_fresh(1).expect("fresh start");
+        let inst = vm.instances().iter().find(|i| i.id == id).unwrap();
+        assert_eq!(
+            inst.self_vars.get(600 + 51),
+            0,
+            "fresh start ignores the persistent bank"
+        );
+
+        let mut host = Recorder::default();
+        vm.step_frame(&mut host);
+        // The run wrote self51 = 5 internally, but it must not reach the store.
+        let stored = vm.common_self(1).expect("seeded bank still present");
+        assert_eq!(stored.get(600 + 51), 9, "fresh run did not overwrite the bank");
+        assert!(
+            !vm.common_self_dirty().contains(&1),
+            "fresh run did not mark the event dirty"
+        );
     }
 
     #[test]

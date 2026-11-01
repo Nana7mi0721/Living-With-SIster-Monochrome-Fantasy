@@ -119,6 +119,9 @@ fn drive(schedule: &[i32]) -> Trace {
     assert!(!schedule.is_empty(), "schedule must not be empty");
     let mut game = Game::new(data_root()).expect("Game::new");
     game.load_save(&save01()).expect("load SaveData01");
+    // Synthetic battle-driver fixture: clear the retail save's common-event self banks so
+    // the multi-round driver is exercised from a clean, save-independent self store.
+    game.vm.clear_common_self();
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;

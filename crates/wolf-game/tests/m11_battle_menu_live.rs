@@ -115,6 +115,9 @@ fn build_fixture(game: &mut Game) -> usize {
 fn open_fixture_game() -> Game {
     let mut game = Game::new(data_root()).unwrap();
     game.load_save(&save01()).unwrap();
+    // Synthetic battle-driver fixture: clear the retail save's common-event self banks so
+    // the live-menu → CE242 round flow is exercised from a clean, save-independent store.
+    game.vm.clear_common_self();
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;

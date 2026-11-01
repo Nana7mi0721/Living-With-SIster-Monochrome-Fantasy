@@ -450,7 +450,16 @@ fn day_five_work_rolls_into_the_weekend_and_day_seven_menu() {
         }
     }
     game.key_bits = 0;
-    assert_eq!(greetings, 2, "day5 opens with the two 早上好 greetings");
+    // The morning 早上好 choice prompts belong to CE251's one-time announcement block,
+    // gated by self65 (self1600065).  Before the M13 common-event self persistence fix
+    // every invocation reset self65 to 0, so that one-time scene replayed each day and
+    // day5 saw two greeting prompts.  With self now persisting, the announcement is
+    // consumed on the first morning it fires and does not recur, so day5 opens directly
+    // on the workday row with no leftover greeting prompt.
+    assert_eq!(
+        greetings, 0,
+        "the one-time CE251 greeting/announcement must not replay on day5"
+    );
     assert_eq!(game.vm.vars.get(4), 8, "greetings leave the clock at 08:30");
 
     spend_day_choosing_row(&mut game, 5);

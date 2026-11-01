@@ -174,6 +174,9 @@ fn real_night_menu_sets_var304_and_calls_ce328() {
 fn real_ce301_skill_event_sets_var326_given_books() {
     let mut g = Game::new(data_root()).expect("open game");
     g.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    // Isolated single-event probe: clear restored common-event self banks so the
+    // save's own progression state cannot gate CE301 driven directly below.
+    g.vm.clear_common_self();
     assert_eq!(g.vm.vars.get(326), 0, "SaveData01 ships var326==0");
     g.vm.vars.set(276, 1);
     g.vm.vars.set(277, 1);
@@ -268,6 +271,7 @@ fn bookstore_gate_pins_var326_unreachable_from_shipped_saves() {
 fn full_chain_still_does_not_reach_ce402() {
     let mut g = Game::new(data_root()).expect("open game");
     g.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    g.vm.clear_common_self();
     g.auto_advance = true;
     g.auto_choice = true;
     g.auto_choice_delay = 1;

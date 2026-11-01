@@ -95,6 +95,38 @@ pub fn apply(game: &mut Game, save: &SaveFile) -> LoadedSave {
     }
     loaded.normal_vars = normal.len();
 
+    // Common-event self banks: Part3 stores CSelf0..CSelf99 per event id, and retail
+    // keeps them across invocations (CE251's daily countdown, CE452's chapter counter).
+    // Seed the VM's persistent store so a restarted event resumes from the saved bank.
+    // Loading must NOT mark anything dirty, or a load-then-save would rewrite Part3 and
+    // break the byte-for-byte round trip.
+    const COMMON_EVENT_GROUPS: u32 = 550;
+    const SELF_NUMBERS: usize = 100;
+    const SELF_STRINGS: usize = 5;
+    for event in 0..COMMON_EVENT_GROUPS {
+        let mut bank = wolf_vm::vars::SelfVars::new();
+        let mut any = false;
+        for slot in 0..SELF_NUMBERS {
+            if let Some(value) = save.part3.self_var(event, slot) {
+                if value != 0 {
+                    bank.set(wolf_vm::program::COMMON_SELF_BASE + slot, value);
+                    any = true;
+                }
+            }
+        }
+        for slot in 0..SELF_STRINGS {
+            if let Some(text) = save.part3.self_string(event, slot) {
+                if !text.is_empty() {
+                    bank.set_str(wolf_vm::program::COMMON_SELF_BASE + 5 + slot, text);
+                    any = true;
+                }
+            }
+        }
+        if any {
+            game.vm.seed_common_self(event, bank);
+        }
+    }
+
     // The variable database travels inside the save. Character creation writes the
     // player name into CDataBase type 0 row 12, and the HUD reads it back through
     // opcode 250, so a load must overlay it before the first frame is drawn.

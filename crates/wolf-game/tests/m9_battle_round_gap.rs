@@ -608,7 +608,10 @@ fn natural_day_four_battle_runs_genuine_multi_round_and_settles() {
         vec![0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 0],
         "2000350 exact trajectory: four command rounds (0->1->2 x3 then 0->1->0 settle)"
     );
-    assert_eq!(settle, 1516, "CE244 settles on the exact deterministic frame");
+    // Frame indices shift 134 frames earlier than the pre-M13 baseline because persisted
+    // common-event self (CE251 etc.) advances the day-flow clock; the phase trajectory,
+    // round count and pools above are unchanged.
+    assert_eq!(settle, 1382, "CE244 settles on the exact deterministic frame");
     let command_rounds = main_phases.iter().filter(|v| **v == 1).count();
     let action_phases = main_phases.iter().filter(|v| **v == 2).count();
     assert_eq!(command_rounds, 4, "exactly four command rounds");
@@ -623,7 +626,7 @@ fn natural_day_four_battle_runs_genuine_multi_round_and_settles() {
     assert_eq!(trace.ce243_frames, 294, "CE243 enemy-action live-frame count");
     assert_eq!(
         trace.ce243_first_frame,
-        Some(775),
+        Some(641),
         "CE243 first observed frame"
     );
     assert_eq!(

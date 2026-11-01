@@ -150,11 +150,17 @@ fn retail_mid_h_save_resumes_the_full_layer_stack() {
     }
 
     // The save is a genuine mid-H snapshot: the late-night stage index lives in var62 and is
-    // 1 (base menu), while the act selector var137 sits at its h_s10 stage (8). var364 == 1
-    // is the dispatcher gate the retail frame had closed - see the second test.
+    // 1 (base menu), while the act selector var137 sits at its h_s10 stage (8).
+    //
+    // var364 is written by CE335's "チュートリアル" (tutorial) block, which only runs while
+    // CE335 self20 == 0.  SaveData08 ships a restored CE335 self bank with self20 != 0
+    // (the H scene's real progress state), so the tutorial block is correctly skipped and
+    // var364 stays 0 while the full H layer stack still renders.  Before the M13
+    // common-event self fix every invocation started from all-zero self, replaying the
+    // tutorial block and forcing var364 to 1 - the old assertion here encoded that bug.
     assert_eq!(game.vm.vars.get(62), 1, "late-night stage index var62");
     assert_eq!(game.vm.vars.get(137), 8, "H act selector var137");
-    assert_eq!(game.vm.vars.get(364), 1, "dispatcher gate var364");
+    assert_eq!(game.vm.vars.get(364), 0, "tutorial gate from restored CE335 self20");
 
     // No deadlock: the engine keeps making progress and never warns while it idles on the H
     // scene. A stuck coroutine would freeze the instruction counter.
@@ -184,8 +190,9 @@ fn real_mouse_clicks_advance_the_late_night_stage_index() {
         game.frame();
     }
 
-    // Event 11 "■深夜UI判定" page 0 requires var364 == 0 to run; the retail save was captured
-    // with the dispatcher gate closed (var364 == 1). This is the only injected precondition.
+    // Event 11 "■深夜UI判定" page 0 requires var364 == 0 to run.  The retail save resumes
+    // with the CE335 tutorial already completed (self20 != 0), so var364 is already 0; set
+    // it explicitly anyway to keep this test independent of that detail.
     game.vm.vars.set(364, 0);
     for _ in 0..15 {
         game.frame();

@@ -390,9 +390,12 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
 
     // --- 1c-bis. CE333's body replay at this exact save state. The wipe call is a
     //         same-frame nested child, so replay it through the host entry (the same
-    //         `start_event` the other H tests use) and assert its drawn side effect:
-    //         it rewrites picture 3208 from hscene/pose_09.png to DLC_data/pose_10.png
-    //         and picture 4100 from word_effect62.png to word_effect102.png. ---
+    //         `start_event` the other H tests use).  With the M13 common-self fix the
+    //         saved CE333 self bank is restored (self0=2, self10=512, self11=306 for
+    //         SaveData08), so the replay is idempotent on the drawn slots: picture 3208
+    //         stays DLC_data/pose_10.png and picture 4100 stays hword/word_effect62.png
+    //         (the value SaveData08's Part5 snapshot actually ships).  Before the fix an
+    //         all-zero self bank made this replay wrongly reroll 4100 to word_effect102. ---
     {
         let Some(mut ce333) = open_resumed() else { return; };
         for _ in 0..60 { ce333.frame(); }
@@ -410,8 +413,8 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
             "CE333 must redraw pose slot 3208 (was {before_3208:?})"
         );
         assert!(
-            ce333.screen.get(4100).map(|p| p.file.as_str()) == Some("hword/word_effect102.png"),
-            "CE333 must redraw hword slot 4100 (was {before_4100:?})"
+            ce333.screen.get(4100).map(|p| p.file.as_str()) == Some("hword/word_effect62.png"),
+            "CE333 replay keeps the saved hword slot 4100 (was {before_4100:?})"
         );
         assert_eq!(ce333.stats.warnings, 0, "the CE333 body must not warn");
         println!(
@@ -487,7 +490,15 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
             "CE28 must reach its low-stamina branch at pc638, max pc {}",
             anal_max[0]
         );
-        assert_eq!(anal.vm.vars.get(100), 0, "SaveData08 carries v100 = 0 (< the pc124 >= 12 gate)");
+        // v100 starts at 0 in SaveData08 (Part2) but CE337 深夜自動低下, driven by the
+        // restored H self bank (self10/self11), decrements it to -1 during the run.  It
+        // is still far below the pc124 >= 12 gate, and the abort branch asserted below
+        // (no v111, no var460) is unchanged; the pre-M13 all-zero self left it at 0.
+        assert!(
+            anal.vm.vars.get(100) < 12,
+            "v100 must stay below the pc124 >= 12 gate, got {}",
+            anal.vm.vars.get(100)
+        );
         assert_eq!(anal.vm.vars.get(111), 0, "the low-stamina branch never gains v111");
         assert_eq!(anal.vm.vars.get(460), 0, "the anal abort branch never raises var460");
         assert_eq!(anal.stats.warnings, 0, "the anal abort branch must not warn");

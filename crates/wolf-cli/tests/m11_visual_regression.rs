@@ -180,18 +180,18 @@ const BASELINES: [Baseline; 5] = [
         ],
         expect_header: "  entry     : save file work/retail_backup/Save/SaveData08.sav",
         frames: 60,
-        peak_coroutines: 9,
+        peak_coroutines: 7,
         pictures_live: 86,
-        textured_quads: 258,
+        textured_quads: 257,
         text_pictures: 17,
         choice_open: false,
         choice_options: 0,
-        atlas_images: 43,
+        atlas_images: 42,
         text_items: 17,
         text_glyphs: 59,
         text_lines: 17,
-        nonblack: 527264,
-        messages: 7,
+        nonblack: 527568,
+        messages: 0,
         choices: 0,
     },
 ];
@@ -309,6 +309,11 @@ fn capture_scene(baseline: &'static Baseline) -> Option<Metrics> {
 
     let mut command = Command::new(env!("CARGO_BIN_EXE_wolf-cli"));
     command.current_dir(repo_root());
+    // The visual baselines are captured with the game's own fonts.  An inherited
+    // WOLF_GAME_DIR (e.g. a bare save directory used by the wolf-save tests) has no
+    // TTF, which would silently drop all text and change every metric; pin the font
+    // source so these pixel-stability fixtures stay independent of that env var.
+    command.env_remove("WOLF_GAME_DIR");
     command.arg("--root").arg(&root);
     for arg in baseline.args {
         command.arg(arg);

@@ -9,8 +9,9 @@
 //! it and the scene never returns to the map or deadlocks.
 //!
 //! Real entry: load the retail mid-H save work/retail_backup/Save/SaveData08.sav, resume
-//! SampleMapA's automatic pages while skipping the opening autorun (event 0). The only injected
-//! precondition is the UI dispatcher gate var364 = 0 (the save was taken with it closed);
+//! SampleMapA's automatic pages while skipping the opening autorun (event 0). The save resumes
+//! with the CE335 tutorial already completed (self20 != 0), so the UI dispatcher gate var364 is
+//! 0; individual tests still force it where they need a specific dispatch branch.
 //! var61/var62/var137 are all produced by synthetic mouse input flowing through the real
 //! opcode-124 host reads (hover field 8, fresh-left-press engine field 7).
 //!
@@ -349,21 +350,16 @@ fn stage_index_is_advanced_by_clicks_not_by_time() {
     for _ in 0..60 {
         game.frame();
     }
-    // With the retail gate still closed (var364 == 1), the dispatcher is inert: idling does not
-    // move the stage index, no matter how many frames pass.
-    assert_eq!(game.vm.vars.get(364), 1);
-    for _ in 0..180 {
-        game.frame();
-    }
+    // The retail save resumes with the CE335 tutorial already completed (self20 != 0), so
+    // the UI dispatcher gate var364 is open (0), not closed.  Before the M13 common-self
+    // fix every load reset CE335 self to zero, replayed the tutorial and forced var364=1.
     assert_eq!(
-        game.vm.vars.get(62),
-        1,
-        "the stage index must not advance on its own while the dispatcher gate is closed"
+        game.vm.vars.get(364),
+        0,
+        "restored CE335 self20 skips the tutorial, so the dispatcher gate is open"
     );
-
-    // Open the gate but inject no click: still static, proving the advance is input-driven.
-    game.vm.vars.set(364, 0);
-    for _ in 0..120 {
+    // Even with the gate open, idling never moves the stage index: the advance is input-driven.
+    for _ in 0..300 {
         game.frame();
     }
     assert_eq!(

@@ -65,6 +65,9 @@ fn save01() -> PathBuf {
 fn open_battle(wiring: bool) -> Game {
     let mut game = Game::new(data_root()).expect("Game::new");
     game.load_save(&save01()).expect("load SaveData01");
+    // Synthetic battle fixture: clear the save's restored common-event self banks so they
+    // cannot perturb the deterministic command/pool behaviour driven below.
+    game.vm.clear_common_self();
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;
@@ -74,7 +77,7 @@ fn open_battle(wiring: bool) -> Game {
         .set_text(wolf_game::db::Container::CData, 5, 16, 0, "┗ 状態リスト");
     let _ = game.start_engine_events();
     game.set_battle_wiring(wiring);
-    let _ = game.start_event(253);
+    let _ = game.vm.start_event_fresh(253);
     game
 }
 
@@ -118,7 +121,7 @@ fn run_command(cmd: i32) -> CmdRun {
     let mut v343 = 0;
     if active {
         pre = pools(&game);
-        if let Some(id) = game.vm.start_event(242) {
+        if let Some(id) = game.vm.start_event_fresh(242) {
             if let Some(inst) = game.vm.instance_mut(id) {
                 inst.self_vars.set(SELF_ARG_BASE, cmd);
             }

@@ -575,6 +575,10 @@ fn build_fixture(game: &mut Game) -> usize {
 fn open_fixture_game() -> Game {
     let mut game = Game::new(data_root()).unwrap();
     game.load_save(&retail_save("SaveData01.sav")).unwrap();
+    // Synthetic battle-driver fixture: the retail save's common-event self banks are
+    // irrelevant here and, once restored, perturb the deterministic multi-round queue.
+    // Start from a clean self store so the driver is exercised on its own merits.
+    game.vm.clear_common_self();
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;
@@ -608,7 +612,13 @@ fn two_member_queue_dispatches_distinct_bodies_under_auto_drive() {
     game.vm.vars.set(445, 1);
     game.vm.vars.set(446, 4000);
     assert!(game.battle_wiring_auto_armed(), "auto-arm default ON");
-    assert!(game.start_event(253), "CE253 battle must start");
+    // CE253 is a synthetic battle-driver probe here, not a save-fidelity round trip:
+    // start it fresh so any persisted self bank in SaveData01 cannot perturb the
+    // deterministic multi-round queue this test asserts on.
+    assert!(
+        game.vm.start_event_fresh(253).is_some(),
+        "CE253 battle must start"
+    );
 
     let mut recs: Vec<(i32, i32)> = Vec::new(); // per-round (max pc reached, arg0 command index)
     let mut pool_pre: Vec<[i32; 4]> = Vec::new();

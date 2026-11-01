@@ -405,7 +405,10 @@ impl BattleWiring {
 
     /// Start CE242 once with the given command index as `self1600000`.
     fn start_command(&mut self, vm: &mut Vm, command: i32) -> Option<u32> {
-        if let Some(id) = vm.start_event(EVENT_COMMAND_PHASE) {
+        // CE242 is synthetic: no script in the 550 common events issues 210 500242, so
+        // its self state is per-invocation. `start_event_fresh` gives it a blank bank and
+        // forbids writing it back, so a previous round cannot leak through M13 persistence.
+        if let Some(id) = vm.start_event_fresh(EVENT_COMMAND_PHASE) {
             if let Some(inst) = vm.instance_mut(id) {
                 inst.self_vars.set(SELF_ARG_BASE, command);
             }
@@ -523,7 +526,9 @@ impl BattleWiring {
         // 2. Action phase has finished (350 == 2, no round event alive): run the REAL
         //    turn-start event, which resets 2000350 = 0 at pc628.
         if phase == 2 && !c241 && !c242 && !c243 {
-            if let Some(_id) = vm.start_event(EVENT_TURN_START) {
+            // CE241 is likewise synthetic (no script issues 210 500241); start it fresh so
+            // its per-invocation bank is never read from or written to the persistent store.
+            if vm.start_event_fresh(EVENT_TURN_START).is_some() {
                 self.turn_starts = self.turn_starts.saturating_add(1);
                 return Some(EVENT_TURN_START);
             }

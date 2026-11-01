@@ -75,7 +75,7 @@ Scene rationale:
   battle frame. The report proves the real chain: coro 14 event 253 pc 192 waits
   Child(232), and coro 232 event 239 pc 13 waits Frames(1).
 - h_overlay: loading retail SaveData08.sav and running 60 frames captures an
-  in-game H overlay frame (43 atlas images, 34.0% atlas fill).
+  in-game H overlay frame (42 atlas images, 34.0% atlas fill).
 
 ## Committed baselines
 
@@ -87,7 +87,7 @@ Table 1 - geometry and population counts.
 | map_idle | MapData/SampleMapA.mps 64x36 tiles = 1024x576, 3 layers, 40 events | 1200 | 12 | 49 | 27661 | 33 | 29 | 33/76/33 |
 | day_command | common event 251 | 120 | 6 | 9 | 4 | 3 | 2 | 3/13/3 |
 | battle | common event 253 | 1200 | 7 | 49 | 958 | 30 | 17 | 30/52/30 |
-| h_overlay | save file work/retail_backup/Save/SaveData08.sav | 60 | 9 | 86 | 258 | 17 | 43 | 17/59/17 |
+| h_overlay | save file work/retail_backup/Save/SaveData08.sav | 60 | 7 | 86 | 257 | 17 | 42 | 17/59/17 |
 
 Table 2 - pixel result and engine counters. Instruction, picture-op, sound and db
 counts are recorded for diagnosis but are not asserted, because a benign engine
@@ -99,9 +99,44 @@ change can move them without changing the picture.
 | map_idle | 544405 / 589824 | 92.3% | 8.3% | 86261 | 4038 | 8 | 989 | 39 | 5 | 0 |
 | day_command | 552254 / 589824 | 93.6% | 3.6% | 9372 | 187 | 0 | 666 | 4 | 0 | 0 |
 | battle | 522838 / 589824 | 88.6% | 8.4% | 34080 | 485 | 5 | 825 | 26 | 1 | 0 |
-| h_overlay | 527264 / 589824 | 89.4% | 34.0% | 2453 | 75 | 0 | 90 | 7 | 0 | 0 |
+| h_overlay | 527568 / 589824 | 89.4% | 34.0% | 1062 | 45 | 0 | 0 | 0 | 0 | 0 |
 
 Every scene reports choice none open and zero warnings.
+
+### h_overlay baseline update (M13 common-event self restore, anchored 2026-11-01)
+
+The h_overlay baseline was re-pinned when the M13 common-event self-variable
+persistence fix began restoring each event's CSelf bank from SaveData08's Part3 on
+load. The re-pinned frame is the **faithful** one: it reproduces exactly the picture
+table the save itself stored in Part5.
+
+Evidence (SaveData08.sav Part5 records):
+
+- pic 3208 = "hscene/pose_09.png" at (176, 464) — the re-pinned frame renders
+  pose_09 at (176, 464); the old zero-self baseline rendered "DLC_data/pose_10.png"
+  (wrong, the saved record is pose_09).
+- pic 4100 = "hword/word_effect62.png" at (530, 315), opacity 0 — the re-pinned
+  frame renders exactly this (invisible); the old baseline rendered
+  "hword/word_effect102.png" at (213, 132) with opacity 0.41, i.e. an onomatopoeia
+  the save does not show.
+
+So the old baseline (peak 9, quads 258, atlas 43, messages 7, non-black 527264,
+pose_10 / word_effect102 alpha 0.41) encoded the pre-fix bug where common-event self
+variables were reset to zero on load. The corrected values are peak 7, quads 257,
+atlas 42, messages 0, non-black 527568. Text/picture counters (86 pictures,
+17 text pictures, 17/59/17 text items/glyphs/lines), frames 60, choice none and
+warnings 0 are unchanged. If this baseline ever moves again, first diff the frame's
+picture table against SaveData08 Part5 rather than trusting the counters.
+
+### Fixture environment isolation
+
+`capture_scene` in `crates/wolf-cli/tests/m11_visual_regression.rs` now calls
+`command.env_remove("WOLF_GAME_DIR")` before spawning `wolf-cli`.  The baselines are
+captured with the game's own fonts; when another in-process test has set
+`WOLF_GAME_DIR` to a bare save directory with no TTF, the child inherits it and all
+text silently disappears (`text_items` 0, a smaller non-black count), which was the
+real cause of the earlier day_command / battle / map_idle mismatches — not the
+self-variable fix.
 
 Reference PNG artifacts from this machine (work/out is gitignored):
 
@@ -111,7 +146,7 @@ Reference PNG artifacts from this machine (work/out is gitignored):
 | map_idle | work/out/m11_visual_map_idle.png | 399757 | 87a67c1d1e1382fbe6548daf2746c800 |
 | day_command | work/out/m11_visual_day_command.png | 488291 | dbc48c329ba451826a2d7a8bd4eb835a |
 | battle | work/out/m11_visual_battle.png | 243901 | 99ecfd364378ec8c99bdfa3a81dbffec |
-| h_overlay | work/out/m11_visual_h_overlay.png | 445880 | 21ba32e4a6fb51e9134c94fd9200cf99 |
+| h_overlay | work/out/m11_visual_h_overlay.png | 448437 | 4ab78cf2e5efaa3dcc89f20321c271f0 |
 
 The test writes the full capture report beside each image as
 work/out/m11_visual_<scene>.log, which makes a failure easy to inspect without

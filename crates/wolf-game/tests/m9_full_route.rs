@@ -621,7 +621,7 @@ fn the_continuous_new_game_route_reaches_day_five_0830() {
     // (verified 5x, identical milestone/trace lines), so pin the exact battle figures.
     assert_eq!(
         trace.battle_active_frame,
-        Some(707),
+        Some(573),
         "2000340 rises on the exact deterministic frame"
     );
     assert_eq!(

@@ -8,10 +8,11 @@
 //! (text, spritesheet, window, mirrored and zero-scale records) -- and checks each one
 //! after a load into a fresh `Game`.
 //!
-//! The remaining tests pin the deliberate gaps documented in
+//! The remaining tests cover these behaviours and the deliberate gaps documented in
 //! docs/research/M10_SAVE_COMPLETENESS.md:
 //!
-//! * a common event's self variables are written to Part3 but never restored;
+//! * a common event's self variables are written to Part3 *and* restored, so they
+//!   persist across separate invocations of the same event (M13 common-self fix);
 //! * a picture hidden with `150 Hide` has no bit in Part5 and reloads visible;
 //! * the map, tile map and leader placement have no snapshot in this template path;
 //! * a system variable outside the Sys3/Sys4 pair has no save region at all;
@@ -331,7 +332,7 @@ fn every_serialized_field_round_trips() {
 }
 
 #[test]
-fn common_event_self_variables_are_written_but_not_restored() {
+fn common_event_self_variables_are_written_and_restored() {
     let Some(mut game) = open_game() else { return };
 
     assert!(game.start_event(244), "CE244 is a real common event");
@@ -367,26 +368,60 @@ fn common_event_self_variables_are_written_but_not_restored() {
         "Part3 does store a live common event's self string"
     );
 
-    // A fresh load has no instances (Game::new does not boot events) and load_into never
-    // rebuilds the self-variable group, so starting the event again sees the default.
+    // A fresh load must restore the bank from Part3 into the persistent store, so a
+    // restarted event starts from the saved values instead of a blank bank (the M13
+    // common-self fix; this used to be the documented gap).
     let mut reloaded = open_game().expect("fresh game for the reload");
     savegame::load_into(&mut reloaded, &out).expect("load the written save");
-    assert!(reloaded.start_event(244));
-    let id = reloaded
+    assert!(reloaded.vm.start_event_resuming(244).is_some());
+    let first = reloaded
         .vm
         .instances()
         .iter()
         .find(|instance| instance.event == 244)
         .map(|instance| instance.id)
         .expect("the restarted CE244 instance");
-    let instance = reloaded.vm.instance_mut(id).expect("the CE244 instance");
-    assert_eq!(
-        instance
-            .self_vars
-            .get(wolf_vm::program::COMMON_SELF_BASE + 3),
-        0,
-        "documented gap: the saved common-event self variable is not restored"
+    {
+        let instance = reloaded.vm.instance_mut(first).expect("the CE244 instance");
+        assert_eq!(
+            instance.self_vars.get(wolf_vm::program::COMMON_SELF_BASE + 3),
+            1234,
+            "the saved common-event self variable is restored from Part3"
+        );
+        assert_eq!(
+            instance.self_vars.get_str(wolf_vm::program::COMMON_SELF_BASE + 5),
+            "held",
+            "the saved common-event self string is restored from Part3"
+        );
+    }
+
+    // Cross-invocation persistence: retiring this coroutine folds its bank back into the
+    // store, so an immediate restart of the same event starts from those values, not 0.
+    assert!(
+        reloaded.vm.stop_instance(first),
+        "stop_instance retires the CE244 coroutine"
     );
+    assert!(reloaded.vm.start_event_resuming(244).is_some());
+    let second = reloaded
+        .vm
+        .instances()
+        .iter()
+        .find(|instance| instance.event == 244)
+        .map(|instance| instance.id)
+        .expect("the restarted CE244 instance");
+    {
+        let instance = reloaded.vm.instance_mut(second).expect("the CE244 instance");
+        assert_eq!(
+            instance.self_vars.get(wolf_vm::program::COMMON_SELF_BASE + 3),
+            1234,
+            "a common event's self variable persists across invocations"
+        );
+        assert_eq!(
+            instance.self_vars.get_str(wolf_vm::program::COMMON_SELF_BASE + 5),
+            "held",
+            "a common event's self string persists across invocations"
+        );
+    }
 
     let _ = std::fs::remove_dir_all(&dir);
 }

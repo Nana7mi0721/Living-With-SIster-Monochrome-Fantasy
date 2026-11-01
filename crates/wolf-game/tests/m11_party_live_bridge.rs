@@ -128,6 +128,9 @@ fn build_fixture(game: &mut Game) -> usize {
 fn open_fixture_game() -> Game {
     let mut game = Game::new(data_root()).unwrap();
     game.load_save(&save01()).unwrap();
+    // Synthetic battle fixture: clear the save's restored common-event self banks so
+    // they cannot perturb the deterministic command-round count driven below.
+    game.vm.clear_common_self();
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;
@@ -185,7 +188,10 @@ fn drive_bridge(queue: &[i32]) -> (Vec<RoundObs>, (i32, i32), u64, u64, u64) {
     game.set_battle_menu_command_queue(queue.to_vec());
     game.vm.vars.set(445, 1);
     game.vm.vars.set(446, 4000);
-    assert!(game.start_event(253), "CE253 battle must start");
+    assert!(
+        game.vm.start_event_fresh(253).is_some(),
+        "CE253 battle must start"
+    );
 
     let mut rounds: Vec<RoundObs> = Vec::new();
     let mut current: Option<RoundObs> = None;

@@ -546,19 +546,34 @@ impl Game {
         for index in 0..800 {
             let _ = part3.set_normal_var(index, self.vm.vars.get(index));
         }
+        // Every common event whose persistent self bank is current in memory: those the
+        // VM marked dirty plus every common event still running (a live coroutine holds
+        // the freshest bank). A load-then-save that does not play leaves the dirty set
+        // empty and no common coroutine live, so Part3 stays byte-for-byte identical.
+        let mut self_events: std::collections::BTreeSet<u32> =
+            self.vm.common_self_dirty().iter().copied().collect();
         for instance in self.vm.instances() {
-            if instance.program.self_base != wolf_vm::program::COMMON_SELF_BASE {
-                continue;
+            if instance.program.self_base == wolf_vm::program::COMMON_SELF_BASE {
+                self_events.insert(instance.event);
             }
-            let event = instance.event;
+        }
+        for event in self_events {
+            let bank: Option<wolf_vm::vars::SelfVars> = self
+                .vm
+                .instances()
+                .iter()
+                .find(|i| {
+                    i.event == event && i.program.self_base == wolf_vm::program::COMMON_SELF_BASE
+                })
+                .map(|i| i.self_vars.clone())
+                .or_else(|| self.vm.common_self(event).cloned());
+            let Some(bank) = bank else { continue };
             for slot in 0..100 {
-                let value = instance.self_vars.get(instance.program.self_base + slot);
+                let value = bank.get(wolf_vm::program::COMMON_SELF_BASE + slot);
                 let _ = part3.set_self_var(event, slot, value);
             }
             for slot in 0..5 {
-                let text = instance
-                    .self_vars
-                    .get_str(instance.program.self_base + 5 + slot);
+                let text = bank.get_str(wolf_vm::program::COMMON_SELF_BASE + 5 + slot);
                 let _ = part3.set_self_string(event, slot, text);
             }
         }
@@ -594,6 +609,8 @@ impl Game {
         std::fs::write(path, &bytes)
             .map_err(|err| format!("220 SaveLoad: cannot write {}: {err}", path.display()))?;
         self.base_save = Some(save);
+        // The banks just written are now on disk; nothing is pending until next change.
+        self.vm.clear_common_self_dirty();
         Ok(bytes.len())
     }
 
