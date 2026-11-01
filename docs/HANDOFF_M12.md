@@ -14,6 +14,7 @@ M0–M11 保持可交付；M11 round 3 已完成四项剩余边界，并全部�
 - **打包与帧预算**：新增独立 `wolf-package` 校验/组装工具（4087 文件、约 1.53 GB VALID）与 `FrameBudgetReport`（debug 600 帧 p50 5.6µs / max 102.6µs）。
 - **零售范围审计**：确认本作是纯鼠标点触式；方向键行走/碰撞/contact/ActionKey、地图触发 3/4、相机滚动/281、201 路线播放、远景视差都是引擎通用能力，零售不使用。存档/读档/回标题/退出/截图存档/相册/DLC 则全部有真实调用点。详见 `docs/research/M12_RETAIL_SCOPE.md`。
 - **M12 round 1（task-101..103）**：战斗取消/返回/连续确认验收通过（取消不登记，后续确认仍登记两行并启动 2 次 CE157）；SampleMapA 6 个 confirm 页审计收口（5 个空页选择器 + 1 个 `self0==99` 调试页，事件格不是点击命中区）；8 个零售存档经 `Game::load_save → save_to` **整文件逐字节一致**（Part5 未建模 bank/文本 md1/淡入/纵向缩放全部保留）。
+- **M12 day6（task-104）**：day5 工作日 → 周六 09:30 → CE310 休日五按钮菜单 → 三个活动时段 → 18:30 晚餐/就寝 → 周日 09:30 再次出现同一休日菜单；全程无时间/日程注入，`frames=11247 instructions=580912`、warnings=0（`M12_DAY6_WEEKEND.md`）。
 
 ## 2. M11 round 3 交付与证据（task-97..100）
 
@@ -34,12 +35,12 @@ M0–M11 保持可交付；M11 round 3 已完成四项剩余边界，并全部�
 ## 4. 验证门禁（本批集成后）
 
 ```bash
-WOLF_DATA_ROOT=work/all cargo test -q --workspace --no-fail-fast -j 2   # 131 test result / 810 passed / 0 failed / 1 ignored
+WOLF_DATA_ROOT=work/all cargo test -q --workspace --no-fail-fast -j 2   # 132 test result / 811 passed / 0 failed / 1 ignored
 ./target/debug/wolf-cli.exe verify --root work/all                      # PASS 70 / pending 0
 cargo build -q -p wolf-cli                                             # EXIT 0
 ```
 
-本批集成实测：`cargo test --workspace` EXIT 0，131 个 test-result 块，810 passed / 0 failed / 1 ignored（唯一 warning 来自永久 scratch `_scratch_cdata.rs` 未用变量）；`verify` = PASS 70 / pending 0；`wolf-cli` 单测与回归全绿。
+本批集成实测：`cargo test --workspace` EXIT 0，132 个 test-result 块，811 passed / 0 failed / 1 ignored（唯一 warning 来自永久 scratch `_scratch_cdata.rs` 未用变量）；`verify` = PASS 70 / pending 0；`wolf-cli` 单测与回归全绿。
 
 ## 5. 零售范围审计结论（M12）
 
@@ -75,7 +76,7 @@ cargo build -q -p wolf-cli                                             # EXIT 0
 3. **视觉像素**：锚点 5/6 的零售像素 diff、关键场景截图 diff（仍需零售对照截图）。
 4. **音频人工听感**：31 首 loop 的 seam/音量/延迟（需人工）。
 5. ~~**存档逐段全量对照**~~：M12 task-103 已达成 `Game` 层 load→save 整文件逐字节一致（8/8 存档，`M12_SAVE_FULL_COMPARE.md`）；未建模的音调/效果 bank 只保留、不模拟。
-6. **日程/多日自然推进**（若还有未覆盖边界；当前自然推进到 day5 08:30）。
+6. ~~**日程/多日自然推进（day5→day7）**~~：M12 task-104 已完成 day5 工作日 → day6 周六 09:30（CE310 休日菜单）→ 周日 09:30 同一菜单（`M12_DAY6_WEEKEND.md`）。day8 之后的循环仍可按同一测试继续扩展。
 7. **工具/保真（非游戏流程）**：PRNG 单 tick 完全重放、`wolf-package` 发布流水线、release 帧预算——按需做，不算内容缺口。
 
 ## 6. 关键源码位置
@@ -93,6 +94,7 @@ cargo build -q -p wolf-cli                                             # EXIT 0
 | `crates/wolf-game/tests/m12_battle_cancel.rs` | 取消/返回/连续确认 2 测 |
 | `crates/wolf-game/tests/m12_confirm_pages.rs` | confirm 页/命中审计 3 测 |
 | `crates/wolf-game/tests/m12_save_full_compare.rs` | 零售存档整文件逐字节 2 测 |
+| `crates/wolf-game/tests/m12_day6_weekend.rs` | day5→day6/7 周末日程 1 测 |
 | `crates/wolf-game/src/picture.rs` | `Picture::saved_record` 写入基线 |
 | `crates/wolf-game/src/savegame.rs` | Part5 活字段覆盖 + 未建模 bank 保留 |
 | `crates/wolf-vm/tests/prng_clock_seed.rs` | 时钟种子 5 测 |
@@ -102,16 +104,17 @@ cargo build -q -p wolf-cli                                             # EXIT 0
 
 1. **不要再扩展引擎通用能力**：行走/碰撞/8 向/contact/ActionKey、触发 3/4、相机/281/201/远景视差均不是零售内容；现有实现保留即可。
 2. 还原度优先：锚点 5/6 零售像素 diff、关键场景截图 diff；31 首 loop 人工听感。
-3. 日程/多日自然推进：从 day5 08:30 继续到 day6/7，若零售流程支持；补跨天存档一致性。
+3. 日程继续：day7 周日活动/跨天到 day8+；补跨天存档一致性（当前已验证到 day7 09:30 菜单）。
 4. 工具按需：PRNG 单 tick 重放、`wolf-package` 发布流水线、release 帧预算——不作为内容缺口。
 5. 每个新里程碑完成时按 `AGENT.md` §5 收口：HANDOFF、BASELINE、PLAN、README、research 索引同步。
 
-## 8. M12 round 1 交付（task-101..103）
+## 8. M12 round 1 + day6 交付（task-101..104）
 
 | 任务 | 交付 / 证据 | 结论 |
 | --- | --- | --- |
 | task-101 战斗取消/返回/连续确认 | `crates/wolf-game/tests/m12_battle_cancel.rs`（2 测）；`docs/research/M12_BATTLE_CANCEL.md` | 无生产改动。真实 CE188→CE191→CE192→CE65 链：CE191 窗口取消（-100）重开且不登记；CE192 窗口取消退出（`self1600099=-1`）且不写行/不启动 CE157；之后确认仍得到 `command_rows=[(1,0,26),(2,1,25)]`、`ce157_starts=2`、warnings=0，全程无 wiring/queue 注入。 |
 | task-102 confirm 页命中审计 | `crates/wolf-game/tests/m12_confirm_pages.rs`（3 测）；`docs/research/M12_CONFIRM_PAGES.md`；`docs/MAP_AUDIT.md` §9 更新 | ev11/14/18/21/22 的 confirm 页 0 条真实命令，只在 `v302==1` 时作为最高页停掉 parallel 页；ev24 p6 有 251 条命令但门控 `self0==99`，全库 550 CE + 9 地图无任何写 `magic 1_000_000` 的脚本，零售不可达。事件格像素上只有整屏背景层（ev21 另有 sub button 107），点击命中区是 124 图片矩形，不是事件格。 |
+| task-104 day5→day6/7 周末日程 | `crates/wolf-game/tests/m12_day6_weekend.rs`（1 测）；`docs/research/M12_DAY6_WEEKEND.md` | 无生产改动。day5 工作日行 → 18:30 就寝 → 周六 09:30；CE310 休日五按钮（外出/自主锻炼/处理积攒的家务/努力打工/悠然自得，1201/1203/1209 在 y=200/250/400）；自主锻炼→12:00、悠然自得→15:00、再→17:00，晚餐 18:30，就寝→周日 09:30 再出现同一菜单。`frames=11247 instructions=580912 warnings=0`，连续 3 次一致。 |
 | task-103 存档逐段全量对照 | `crates/wolf-game/src/picture.rs`、`crates/wolf-game/src/savegame.rs`；`crates/wolf-game/tests/m12_save_full_compare.rs`（2 测）；`docs/research/M12_SAVE_FULL_COMPARE.md` | `Picture::saved_record` 作为写入基线；`picture_to_record` 只覆盖活字段，保留未建模 bank、文本 md1、上次淡入长度、纵向缩放。8/8 零售存档 `load_save → save_to` **整文件逐字节一致**（SaveData01 366146 … SaveData08 395566）；移动图片后新位置写入且未建模 bank 保留。 |
 
 ### 8.1 关键修正
@@ -120,4 +123,5 @@ cargo build -q -p wolf-cli                                             # EXIT 0
 2. **文本图片的 md1 不能无条件重编码**：解码只近似组合字体/间距转义，重编码会改长度；文本未变时复用原字节流。
 3. **画面纵向缩放独立于横向**：图片 6233（行动条）与 SaveData08 的 1996/1998 使用 62×100 / −100×100；统一缩放写回会把 `v[10]` 改坏。
 4. **confirm 页不是点击目标**：五个空页只是页优先级开关；第六个是 `self0==99` 调试页，全库无写入。
-5. **取消语义分两层**：CE191 的取消重开同一窗口（`1600015 == -100` 继续循环）；CE192 的取消退出（`self1600099 = -1` + BreakEvent）。两者都不登记指令。
+5. **周末起床时间不是 08:30**：周六 09:30；周日 09:00 起床、09:30 菜单。休日按钮是固定图片（1201/1203/1209 在 y=200/250/400），不是工作日菜单的 `230+50*row` 公式。
+6. **取消语义分两层**：CE191 的取消重开同一窗口（`1600015 == -100` 继续循环）；CE192 的取消退出（`self1600099 = -1` + BreakEvent）。两者都不登记指令。

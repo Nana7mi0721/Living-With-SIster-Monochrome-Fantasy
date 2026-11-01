@@ -1,7 +1,7 @@
 # 文档总索引（docs/README.md）
 
 > 本文件是仓库文档的唯一总入口。**新增、移动、归档文档时，必须同步更新本索引。**
-> 当前里程碑：**M0–M11 已完成；M12 进行中（零售范围审计 + round 1 已完成）**；最新交接：[`HANDOFF_M12.md`](HANDOFF_M12.md)。当前路线图：[`../PLAN.md`](../PLAN.md)。
+> 当前里程碑：**M0–M11 已完成；M12 进行中（零售范围审计 + round 1 + day6 周末日程已完成）**；最新交接：[`HANDOFF_M12.md`](HANDOFF_M12.md)。当前路线图：[`../PLAN.md`](../PLAN.md)。
 
 ## 0. 先读什么
 
@@ -27,7 +27,7 @@
 | 文档 | 状态 | 用途 |
 | --- | --- | --- |
 | [`NEW_SESSION_START.md`](NEW_SESSION_START.md) | 现行 | 新会话启动提示，可直接复制给下一个 agent |
-| [`HANDOFF_M12.md`](HANDOFF_M12.md) | 现行 | 最新里程碑交接（M11 round 3：自然帧 H、真实战斗菜单、PRNG 时钟种子、打包/帧预算；M12 零售范围审计 + round 1：战斗取消、confirm 页命中、存档逐字节） |
+| [`HANDOFF_M12.md`](HANDOFF_M12.md) | 现行 | 最新里程碑交接（M11 round 3：自然帧 H、真实战斗菜单、PRNG 时钟种子、打包/帧预算；M12 零售范围审计 + round 1：战斗取消、confirm 页命中、存档逐字节 + day6 周末日程） |
 | [`../PLAN.md`](../PLAN.md) | 现行 | 当前路线图（M0–M12 汇总与剩余项） |
 | [`../AGENT.md`](../AGENT.md) | 现行 | Lead 与子代理协作约定（并行、写范围、验收、清理） |
 
@@ -95,7 +95,7 @@
 
 ## 6. 研究记录
 
-所有一次性调查、测试底稿与跨里程碑研究在 [`research/README.md`](research/README.md) 按 M6–M12 分组索引；M11 的 round 2/round 3、M12 零售范围审计与 round 1（战斗取消/confirm 页/存档逐字节）均已登记。研究文档不是当前指令；与 HANDOFF/规格冲突时，以现行代码与 HANDOFF 为准。
+所有一次性调查、测试底稿与跨里程碑研究在 [`research/README.md`](research/README.md) 按 M6–M12 分组索引；M11 的 round 2/round 3、M12 零售范围审计、round 1（战斗取消/confirm 页/存档逐字节）与 day6 周末日程均已登记。研究文档不是当前指令；与 HANDOFF/规格冲突时，以现行代码与 HANDOFF 为准。
 
 ## 7. 归档
 
