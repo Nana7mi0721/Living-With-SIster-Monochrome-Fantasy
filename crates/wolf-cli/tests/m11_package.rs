@@ -156,6 +156,11 @@ fn assemble_and_check_round_trip_the_manifest() {
     let temp = TempDir::new("assemble");
     let root = temp.path().join("root");
     make_synthetic_root(&root, true);
+    // A real data root carries the .wolf build archives beside the unpacked tree;
+    // packaging must skip them or it doubles the payload with unreachable bytes.
+    write_file(&root.join("BasicData.wolf"), b"synthetic archive");
+    let font = temp.path().join("Lolita.ttf");
+    write_file(&font, b"synthetic font");
     let exe = temp.path().join("wolf-cli-source.exe");
     write_file(&exe, b"MZ synthetic executable");
     let runtime = temp.path().join("vcruntime140.dll");
@@ -172,6 +177,8 @@ fn assemble_and_check_round_trip_the_manifest() {
         out.to_str().expect("utf8 path"),
         "--runtime",
         runtime.to_str().expect("utf8 path"),
+        "--font",
+        font.to_str().expect("utf8 path"),
     ]);
     let text = combined(&output);
     assert!(output.status.success(), "assemble failed:\n{text}");
@@ -183,6 +190,8 @@ fn assemble_and_check_round_trip_the_manifest() {
     assert!(manifest.contains("data/BasicData/Game.dat"), "{manifest}");
     assert!(manifest.contains("wolf-cli.exe"), "{manifest}");
     assert!(manifest.contains("vcruntime140.dll"), "{manifest}");
+    assert!(manifest.contains("data/Fonts/Lolita.ttf"), "{manifest}");
+    assert!(!manifest.contains(".wolf"), "archives must not be packaged: {manifest}");
 
     let check = run_package(&["check", "--package", out.to_str().expect("utf8 path")]);
     let check_text = combined(&check);
@@ -200,6 +209,8 @@ fn assemble_and_check_round_trip_the_manifest() {
         out2.to_str().expect("utf8 path"),
         "--runtime",
         runtime.to_str().expect("utf8 path"),
+        "--font",
+        font.to_str().expect("utf8 path"),
     ]);
     assert!(output2.status.success(), "{}", combined(&output2));
     let manifest2 = fs::read_to_string(out2.join("manifest.json")).expect("manifest2");

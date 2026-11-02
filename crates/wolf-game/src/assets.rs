@@ -222,6 +222,26 @@ impl Assets {
         self.cache.is_empty()
     }
 
+    /// Bytes of decoded RGBA currently resident in the cache.
+    ///
+    /// The cache is deliberately unbounded, matching DxLib's handle cache: a picture
+    /// decoded once stays resident until the title screen clears it. This accessor
+    /// makes the resident set observable so the release performance audit can report
+    /// the measured footprint instead of guessing.
+    #[must_use]
+    pub fn cache_bytes(&self) -> u64 {
+        self.cache
+            .values()
+            .map(|image| image.rgba.len() as u64)
+            .sum()
+    }
+
+    /// `(decoded images, resident RGBA bytes)`, one call for the play-loop summary.
+    #[must_use]
+    pub fn cache_stats(&self) -> (usize, u64) {
+        (self.cache.len(), self.cache_bytes())
+    }
+
     /// Drops every decoded image. Called when returning to the title.
     pub fn clear(&mut self) {
         self.cache.clear();

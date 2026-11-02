@@ -42,6 +42,7 @@ pub fn run(
     frames: Option<u64>,
     entry: crate::Entry<'_>,
 ) -> std::process::ExitCode {
+    let launched_at = Instant::now();
     let mut game = match Game::new(root) {
         Ok(game) => game,
         Err(err) => {
@@ -53,6 +54,10 @@ pub fn run(
         game.enable_audio();
     }
     crate::install_font_metrics(&mut game, root);
+    println!(
+        "startup: data loaded in {:.0} ms",
+        launched_at.elapsed().as_secs_f64() * 1000.0
+    );
     // The same entry-point rules `capture` uses: default boot (the TitleMap autorun
     // event and its three splashes), --menu-only for common event 42, --map-run for a
     // map script, --event for one common event, --load-save for a save file.
@@ -116,6 +121,9 @@ pub fn run(
         next_frame: Instant::now(),
         fps_frames: 0,
         fps_since: Instant::now(),
+        launched_at,
+        window_ready: None,
+        step_times: Vec::new(),
     };
     if let Err(err) = event_loop.run_app(&mut app) {
         eprintln!("event loop failed: {err}");
@@ -127,6 +135,14 @@ pub fn run(
         app.game.stats.instructions,
         app.game.stats.pictures,
         app.game.stats.warnings
+    );
+    let (images, bytes) = app.game.asset_cache_stats();
+    let (p50, p95, max, mean) = step_summary(&app.step_times);
+    println!(
+        "perf: total {:.0} ms | startup window {:.0} ms | step p50 {p50:.2} ms, p95 {p95:.2} ms, max {max:.2} ms, mean {mean:.2} ms | assets {images} image(s), {:.1} MiB",
+        app.launched_at.elapsed().as_secs_f64() * 1000.0,
+        app.window_ready.unwrap_or_default().as_secs_f64() * 1000.0,
+        bytes as f64 / (1024.0 * 1024.0)
     );
     if !app.game.diagnostics.is_empty() {
         println!("diagnostics seen while playing:");
@@ -156,6 +172,12 @@ struct App {
     next_frame: Instant,
     fps_frames: u32,
     fps_since: Instant,
+    /// When the process began loading data, for the startup/perf summary.
+    launched_at: Instant,
+    /// Time from launch to the first presentable frame, once the renderer exists.
+    window_ready: Option<Duration>,
+    /// Wall time of each `step()` (script + atlas rebuild), in frame order.
+    step_times: Vec<Duration>,
 }
 
 impl App {
@@ -372,6 +394,11 @@ impl ApplicationHandler for App {
         renderer.draw_text(&items);
         self.window = Some(window);
         self.renderer = Some(renderer);
+        self.window_ready = Some(self.launched_at.elapsed());
+        println!(
+            "startup: window ready in {:.0} ms",
+            self.window_ready.unwrap_or_default().as_secs_f64() * 1000.0
+        );
         self.next_frame = Instant::now() + FRAME_TIME;
     }
 
@@ -452,7 +479,9 @@ impl ApplicationHandler for App {
             if behind > FRAME_TIME * 4 {
                 self.next_frame = now + FRAME_TIME;
             }
+            let started = Instant::now();
             self.step();
+            self.step_times.push(started.elapsed());
             if self
                 .frame_limit
                 .is_some_and(|limit| self.game.stats.frames >= limit)
@@ -490,6 +519,21 @@ impl ApplicationHandler for App {
 /// The renderer blits with the largest whole integer scale and centres the result, so the
 /// inverse is `(pos - offset) / scale`. A position on the black bar maps to a negative
 /// game coordinate, which is also how the engine reports "outside the screen".
+/// p50/p95/max/mean of the measured `step()` times, in milliseconds.
+fn step_summary(samples: &[Duration]) -> (f64, f64, f64, f64) {
+    if samples.is_empty() {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+    let mut ms: Vec<f64> = samples.iter().map(|d| d.as_secs_f64() * 1000.0).collect();
+    ms.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let percentile = |p: f64| {
+        let index = ((ms.len() - 1) as f64 * p).round() as usize;
+        ms[index]
+    };
+    let mean = ms.iter().sum::<f64>() / ms.len() as f64;
+    (percentile(0.50), percentile(0.95), *ms.last().unwrap_or(&0.0), mean)
+}
+
 fn game_point(window: &Window, x: f64, y: f64) -> [i32; 2] {
     let size = window.inner_size();
     let scaler = Scaler::new(size.width.max(1), size.height.max(1));

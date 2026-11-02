@@ -222,6 +222,8 @@ pub enum GameError {
     Format(wolf_format::Error),
     /// The title event does not exist in this build.
     MissingEvent(u32),
+    /// The directory passed as a data root lacks required WOLF layout entries.
+    DataRoot(crate::data_root::DataRootError),
 }
 
 impl fmt::Display for GameError {
@@ -230,6 +232,7 @@ impl fmt::Display for GameError {
             Self::Io { path, source } => write!(f, "cannot read {}: {source}", path.display()),
             Self::Format(err) => write!(f, "malformed game data: {err}"),
             Self::MissingEvent(id) => write!(f, "common event {id} is not in this build"),
+            Self::DataRoot(err) => write!(f, "{err}"),
         }
     }
 }
@@ -240,6 +243,7 @@ impl std::error::Error for GameError {
             Self::Io { source, .. } => Some(source),
             Self::Format(err) => Some(err),
             Self::MissingEvent(_) => None,
+            Self::DataRoot(_) => None,
         }
     }
 }
@@ -357,6 +361,7 @@ impl Game {
     /// them no event can run at all.
     pub fn new(root: impl Into<PathBuf>) -> Result<Self, GameError> {
         let root = root.into();
+        crate::data_root::check_layout(&root).map_err(GameError::DataRoot)?;
         let basic = if root.join("BasicData").is_dir() {
             root.join("BasicData")
         } else {
@@ -510,6 +515,14 @@ impl Game {
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// `(decoded images, resident RGBA bytes)` in the asset cache.
+    ///
+    /// Exposed for the release performance summary; gameplay never reads it.
+    #[must_use]
+    pub fn asset_cache_stats(&self) -> (usize, u64) {
+        self.assets.cache_stats()
     }
 
     /// Turns on real audio output (M4). Safe on a machine with no device -- the engine
@@ -2651,7 +2664,7 @@ mod tests {
             Ok(_) => panic!("loading from a bogus root must fail"),
             Err(err) => err,
         };
-        assert!(matches!(err, GameError::Io { .. }), "unexpected: {err}");
+        assert!(matches!(err, GameError::DataRoot(_)), "unexpected: {err}");
     }
 
     #[test]

@@ -36,6 +36,14 @@ const MANIFEST_NAME: &str = "manifest.json";
 const MANIFEST_FORMAT: u32 = 1;
 const PACKAGE_DATA_DIR: &str = "data";
 
+/// Fonts the renderer knows how to use, in the same preference order as wolf-cli.
+const FONT_NAMES: &[&str] = &[
+    "Lolita.ttf",
+    "07yasashi.ttf",
+    "GenJyuuGothicXPB.ttf",
+    "MSGOTHIC.TTF",
+];
+
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -49,15 +57,17 @@ fn main() -> ExitCode {
 fn usage() -> &'static str {
     "usage:
   wolf-package validate [--root PATH]
-  wolf-package assemble --root PATH --exe PATH --out DIR [--runtime FILE ...]
+  wolf-package assemble --root PATH --exe PATH --out DIR [--runtime FILE ...] [--font FILE ...]
   wolf-package check --package DIR
   wolf-package --check DIR
   wolf-package bench [--root PATH] [--save FILE] [--event ID] [--frames N] [--warmup N]
 
 PATH defaults to WOLF_DATA_ROOT, then work/all. N defaults to 600 frames
-after 60 warm-up frames. assemble copies the whole data root under data/ and
-copies the executable to wolf-cli.exe; adjacent .dll files are not guessed,
-pass each one with --runtime. No GUI and no network access are used."
+after 60 warm-up frames. assemble copies the data root under data/ but skips
+.wolf source archives (the runtime reads the unpacked tree), copies the
+executable to wolf-cli.exe, and copies fonts to data/Fonts/ (auto-detected from
+WOLF_GAME_DIR when --font is omitted). Adjacent .dll files are not guessed, pass
+each one with --runtime. No GUI and no network access are used."
 }
 
 fn run() -> Result<(), String> {
@@ -80,6 +90,7 @@ fn run() -> Result<(), String> {
     let mut exe = None;
     let mut out = PathBuf::from("work/out/package");
     let mut runtimes = Vec::new();
+    let mut fonts = Vec::new();
     let mut save = None;
     let mut event = 188u32;
     let mut frames = 600usize;
@@ -99,6 +110,9 @@ fn run() -> Result<(), String> {
             }
             "--runtime" => {
                 runtimes.push(PathBuf::from(value(&raw, &mut i, "--runtime")?));
+            }
+            "--font" => {
+                fonts.push(PathBuf::from(value(&raw, &mut i, "--font")?));
             }
             "--package" => {
                 package = Some(PathBuf::from(value(&raw, &mut i, "--package")?));
@@ -135,7 +149,7 @@ fn run() -> Result<(), String> {
 
     match command.as_str() {
         "validate" => run_validate(&root),
-        "assemble" => run_assemble(&root, exe.as_deref(), &out, &runtimes),
+        "assemble" => run_assemble(&root, exe.as_deref(), &out, &runtimes, &fonts),
         "check" => {
             let package = package.ok_or_else(|| "check needs --package DIR".to_string())?;
             run_check(&package)
@@ -252,6 +266,11 @@ fn tree_stats(root: &Path) -> io::Result<(u64, u64)> {
             count += child_count;
             bytes += child_bytes;
         } else if kind.is_file() {
+            // A package carries the unpacked tree; the .wolf archives are build inputs
+            // and would otherwise add ~0.9 GB of unreachable duplicate data.
+            if is_source_archive(&entry.path()) {
+                continue;
+            }
             count += 1;
             bytes += entry.metadata()?.len();
         }
@@ -345,6 +364,7 @@ fn run_assemble(
     exe: Option<&Path>,
     out: &Path,
     runtimes: &[PathBuf],
+    fonts: &[PathBuf],
 ) -> Result<(), String> {
     let report =
         validate_root(root).map_err(|error| format!("cannot inspect {root:?}: {error}"))?;
@@ -389,6 +409,23 @@ fn run_assemble(
         copy_file(runtime, &dest)?;
     }
     copy_tree(root, &out.join(PACKAGE_DATA_DIR))?;
+    // A release package must be able to draw the Chinese patch text. The original
+    // game keeps its TTFs beside Game.exe, so mirror them into data/Fonts/ where
+    // wolf-cli's find_font looks first. Missing fonts are not fatal: art-only tools
+    // and synthetic package tests legitimately have none.
+    let font_sources = resolve_fonts(root, fonts);
+    if font_sources.is_empty() {
+        println!("font: none found (text will not render; pass --font FILE to include one)");
+    } else {
+        for source in &font_sources {
+            let name = source
+                .file_name()
+                .ok_or_else(|| format!("font has no file name: {}", source.display()))?;
+            let dest = out.join(PACKAGE_DATA_DIR).join("Fonts").join(name);
+            copy_file(source, &dest)?;
+            println!("font: {} -> {}", source.display(), dest.display());
+        }
+    }
     let entries = collect_manifest_entries(out)?;
     let manifest = Manifest {
         format: MANIFEST_FORMAT,
@@ -423,6 +460,36 @@ fn default_exe() -> Result<PathBuf, String> {
     }
 }
 
+/// True for the compressed source archives that sit beside the unpacked tree.
+fn is_source_archive(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("wolf"))
+}
+
+/// Explicit `--font` paths win; otherwise mirror the fonts next to the game exe.
+///
+/// `WOLF_GAME_DIR` is where wolf-cli already looks for the retail fonts, so reusing
+/// it keeps the packer and the runtime from having two different font conventions.
+fn resolve_fonts(root: &Path, explicit: &[PathBuf]) -> Vec<PathBuf> {
+    if !explicit.is_empty() {
+        return explicit.to_vec();
+    }
+    let mut found = Vec::new();
+    if let Some(game_dir) = std::env::var_os("WOLF_GAME_DIR") {
+        let dir = PathBuf::from(game_dir);
+        for name in FONT_NAMES {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                found.push(candidate);
+            }
+        }
+    }
+    // A root that already carries Fonts/ is copied by copy_tree; no second copy needed.
+    let _ = root;
+    found
+}
+
 fn copy_file(from: &Path, to: &Path) -> Result<(), String> {
     if let Some(parent) = to.parent() {
         fs::create_dir_all(parent)
@@ -445,6 +512,9 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
         if kind.is_dir() {
             copy_tree(&source, &dest)?;
         } else if kind.is_file() {
+            if is_source_archive(&source) {
+                continue;
+            }
             copy_file(&source, &dest)?;
         }
     }

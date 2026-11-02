@@ -24,6 +24,7 @@ pub mod assets;
 pub mod atlas;
 pub mod auto_events;
 pub mod choice;
+pub mod data_root;
 pub mod db;
 pub mod fontmetrics;
 pub mod frame_budget;
