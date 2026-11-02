@@ -3,7 +3,7 @@
 > 仓库：`E:\Study\github program\imoto life`
 > 阅读顺序：本文件（M13 最新）→ `docs/README.md` → `PLAN.md`；`HANDOFF_M12.md` 及更早已标历史归档。
 > 数据根 `work/all`；零售存档 `work/retail_backup/Save`（SaveData01..08 + System.sav）。
-> 本批提交（master，已 push）：`7c3b728` common-event self 持久修复；`1826edd` 内容矩阵/DLC/主线探针；`ba608f6` 跨天存读/H 阈值/NG+/随机事件 + op111 语义更正；`dcd513a` Text picture 存读修复。
+> 本批提交（master，已 push）：`7c3b728` common-event self 持久修复；`1826edd` 内容矩阵/DLC/主线探针；`ba608f6` 跨天存读/H 阈值/NG+/随机事件 + op111 语义更正；`dcd513a` Text picture 存读修复；`a8d98c8` 九结局其余/条件注入事件/H 端到端/DLC EP26-36；`7044649` 读档 auto-events prime + h_overlay 基线 + P1-E 复测。
 
 ## 1. 一句话现状
 
