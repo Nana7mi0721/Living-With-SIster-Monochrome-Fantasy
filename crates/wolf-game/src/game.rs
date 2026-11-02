@@ -286,6 +286,8 @@ pub struct Game {
     pub stats: GameStats,
     /// Deduplicated diagnostics, keyed by message, valued by hit count.
     pub diagnostics: BTreeMap<String, u64>,
+    /// How many 101 message strings the optional text overlay replaced on load.
+    pub text_overlay_applied: usize,
     /// Queued answers for choice prompts (front is delivered first).
     pub replies: std::collections::VecDeque<ChoiceReply>,
     /// When true, messages dismiss immediately.
@@ -360,7 +362,19 @@ impl Game {
         } else {
             root.clone()
         };
-        let events = read_events(&basic.join("CommonEvent.dat"))?;
+        let mut events = read_events(&basic.join("CommonEvent.dat"))?;
+        // Optional fan-translation overlay (work/translation/gen_override.py). It
+        // rewrites only 101 message strings, keyed by (event id, slot pc), before the
+        // programs are compiled, so the VM and renderer see the translated text while
+        // every other command stays untouched. Applied only when the env var is set,
+        // so the default path is byte-for-byte the shipped data.
+        let mut text_overlay_applied = 0usize;
+        let mut overlay_error: Option<String> = None;
+        match crate::translation::load_from_env() {
+            Ok(Some(overlay)) => text_overlay_applied = overlay.apply(&mut events),
+            Ok(None) => {}
+            Err(err) => overlay_error = Some(format!("text overlay: {err}")),
+        }
         let programs = ProgramSet::from_common_events(&events);
         // Common event 63 multiplies every message-window measurement by the
         // coordinate scale, which is one 32nd of the screen width and one 24th of
@@ -385,6 +399,9 @@ impl Game {
         // shape, not a script warning, so `stats.warnings` stays untouched.
         let save_path = root.join("Save").join("System.sav");
         let mut diagnostics = BTreeMap::new();
+        if let Some(note) = overlay_error {
+            diagnostics.insert(note, 1);
+        }
         let base_save = match crate::savegame::read_save(&save_path) {
             Ok(mut save) => {
                 // A template that parses but carries no variable types cannot store a
@@ -463,6 +480,7 @@ impl Game {
             choices: None,
             stats: GameStats::default(),
             diagnostics,
+            text_overlay_applied,
             replies: std::collections::VecDeque::new(),
             auto_advance: false,
             auto_choice: false,

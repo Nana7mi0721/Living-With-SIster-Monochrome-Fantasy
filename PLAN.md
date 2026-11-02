@@ -112,8 +112,9 @@
 ### P3 — 中文双轨（新，草案）
 
 - 目标：保留官方（校对后）+ 彼梦精翻两套中文；台词默认彼梦、UI/贴图术语回填官方 canonical；图源取清晰版。方案见 [docs/research/TRANSLATION_DUAL_TRACK.md](docs/research/TRANSLATION_DUAL_TRACK.md)。
-- 语料已抽取到 `work/translation/`（17089 主台词、123 名字、414 UI 图、glossary），尚未改源码。
-- 已验收样本：CE280 官方↔彼梦 1:1 对齐（并证实官方笔误“再买一点”→“慢一点”）。
+- 语料已抽取到 `work/translation/`（17089 主台词、123 名字、414 UI 图、glossary）。
+- 状态（2026-11-02）：策略 A 已落地。`tools/translation/{pipeline.py,gen_override.py}` 产出运行时覆盖表；`wolf_game::translation` 在 `Game::new` 按 `(event id, slot pc)` 覆盖 `101 Message` 文本；`wolf-cli --text-overlay` 生效。当前 7496 行 / 61 事件（约 62% 台词），其余 DLC/相册事件回落官方中文。详见 TRANSLATION_DUAL_TRACK 附录 C。
+- 已验收样本：CE280 官方↔彼梦 1:1 对齐（官方笔误“再买一点”→“慢一点”已由彼梦纠正）；CE313/418 已做 A/B 文本切换实测。
 
 ## 5. 里程碑完成的定义（Definition of Done）
 

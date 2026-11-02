@@ -227,6 +227,14 @@ fn main() -> ExitCode {
             // Turn on real audio output (M4). Every runner honours it; the engine degrades
             // to a silent null backend when the machine has no device, so it is safe on CI.
             "--audio" => AUDIO.store(true, std::sync::atomic::Ordering::Relaxed),
+            // Optional fan-translation text overlay (work/translation/gen_override.py).
+            // Sets the env var every Game/run path reads, so one flag covers capture,
+            // play and run --event. Without it the shipped Chinese is drawn unchanged.
+            "--text-overlay" => {
+                if let Some(path) = args.next() {
+                    std::env::set_var(wolf_game::translation::ENV, path);
+                }
+            }
             // A/B switch for the run_condition == 2 scheduler (docs/ENGINE_EVENTS.md
             // section 2.2). `off` reproduces the pre-scheduler behaviour byte for byte;
             // the default is on.
@@ -1440,7 +1448,7 @@ fn run_event(root: &Path, id: u32, frames: usize, trace: bool, answer: Option<us
     println!("  data root : {}", root.display());
     println!();
 
-    let events =
+    let mut events =
         match read(&basic.join("CommonEvent.dat")).map(|bytes| CommonEventData::parse(&bytes)) {
             Some(Ok(events)) => events,
             Some(Err(err)) => {
@@ -1452,6 +1460,10 @@ fn run_event(root: &Path, id: u32, frames: usize, trace: bool, answer: Option<us
                 return ExitCode::FAILURE;
             }
         };
+    if let Ok(Some(overlay)) = wolf_game::translation::load_from_env() {
+        let replaced = overlay.apply(&mut events);
+        println!("  text overlay: {replaced} message(s) replaced");
+    }
 
     let programs = ProgramSet::from_common_events(&events);
     let program = match programs.event(id) {

@@ -38,6 +38,7 @@ pub mod textpic;
 pub mod tilemap;
 pub mod tint;
 pub mod transition;
+pub mod translation;
 pub mod window;
 
 pub use assets::{AssetError, Assets, ImageData};

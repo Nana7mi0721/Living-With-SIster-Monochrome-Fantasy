@@ -109,3 +109,25 @@ TU = {
 2. 对 414 个 UI 贴图跑 image_plan：先做质量度量（分辨率/压缩），再人工抽查两版文字是否不同。
 3. 用 CE280 这种“逐句 1:1”事件做黄金样本，验证 align→select→normalize→emit 全链。
 4. 决定默认策略（建议 A+C，保留 B 开关），再扩到全 550 CE。
+
+## 附录 C：策略 A 已落地（运行时文本覆盖，2026-11-02）
+
+用户 m00966「默认使用A」后，align→select→normalize→emit 全链已实现并跑通 550 个 CE，
+脚本收进 [tools/translation/](../../tools/translation/README.md)（pipeline.py + gen_override.py）。
+
+- 产物：work/translation/final/ 下 wolf_text_AB.jsonl / final_text.jsonl /
+  summary_by_event.tsv / review_lowconf.tsv / REPORT_A_PIPELINE.md，以及运行时表
+  wolf_override.tsv（event<TAB>pc<TAB>text）。
+- 统计：550 CE 中 119 个含台词共 12027 行；彼梦采纳 7677 行（63.8%），官方回落 4350 行
+  （多为彼梦移植没有的 DLC/相册事件 CE452/522-527/446/447/461/465）。在彼梦确有对应事件的
+  7818 行里采纳率 98.2%。DP 对齐 7576 对，sim>=0.35 的 7483 对（98.8%）。
+- 运行时接入：wolf-game 新增 translation.rs（TextOverlay，按 (event id, slot pc) 覆盖 101
+  Message 字符串）；Game::new 在编译程序集前应用；wolf-cli 新增 --text-overlay 旗标
+  （同时设 WOLF_TEXT_OVERLAY 环境变量，capture/play/run 全生效）。未设置时零影响。
+- 安全：gen_override 只写“彼梦胜出且正文无任何反斜杠转义码”的行（剥 \N<名> / \N[名] 后），
+  带变量的行保留官方；官方行首 \E 描边补回。当前覆盖 7496 行 / 61 事件（约 62% 台词）。
+- 测试：translation.rs 单测（解析/反转义）+ tests/translation_overlay.rs（真实数据上改写
+  280/8 与忽略越界行）；A/B 实测 CE313、CE418 的 101 文本已切换为彼梦译文。
+- review_lowconf.tsv 的 91 行是 **dp 中 sim<0.35 已回落官方** 的行（安全），非误配输出；
+  count 事件里 sim 偏低的少数行（如 CE248）经查多为官方残留日文，彼梦中文反而更完整，保留彼梦。
+- 尚待：DLC/相册事件（4350 行）只能官方；带变量的台词若要彼梦化需要 MV↔WOLF 转义语法映射表。
