@@ -124,10 +124,41 @@ TU = {
 - 运行时接入：wolf-game 新增 translation.rs（TextOverlay，按 (event id, slot pc) 覆盖 101
   Message 字符串）；Game::new 在编译程序集前应用；wolf-cli 新增 --text-overlay 旗标
   （同时设 WOLF_TEXT_OVERLAY 环境变量，capture/play/run 全生效）。未设置时零影响。
-- 安全：gen_override 只写“彼梦胜出且正文无任何反斜杠转义码”的行（剥 \N<名> / \N[名] 后），
-  带变量的行保留官方；官方行首 \E 描边补回。当前覆盖 7496 行 / 61 事件（约 62% 台词）。
 - 测试：translation.rs 单测（解析/反转义）+ tests/translation_overlay.rs（真实数据上改写
-  280/8 与忽略越界行）；A/B 实测 CE313、CE418 的 101 文本已切换为彼梦译文。
+  280/8、忽略越界行、逐行 tokenise 覆盖表确认无未知转义）；A/B 实测 CE313、CE418 的 101
+  文本已切换为彼梦译文。
 - review_lowconf.tsv 的 91 行是 **dp 中 sim<0.35 已回落官方** 的行（安全），非误配输出；
   count 事件里 sim 偏低的少数行（如 CE248）经查多为官方残留日文，彼梦中文反而更完整，保留彼梦。
-- 尚待：DLC/相册事件（4350 行）只能官方；带变量的台词若要彼梦化需要 MV↔WOLF 转义语法映射表。
+- 2026-11-02 追加（任务 2：MV↔WOLF 转义映射）：gen_override.py 现在把彼梦行的 \C/\c/\V/\v/
+  \{/\}/\_ 映射到 WOLF 语法（颜色/变量用官方同一行的同类 token 回填，字号/描边前缀补回），
+  逐行 tokenise 校验无残留未知码。180 个原先因带转义被跳过的行已采纳；覆盖 7657 行 / 64
+  事件。20 个含 <L>/<C>/<R> 对齐标签的“标题+正文”槽位仍回落官方，避免替换后丢标题/对齐。
+  未知转义为 0（tests/translation_overlay.rs 有全表回归）。
+- 尚待：官方兜底 4350 行已逐行审计（附录 D），其中彼梦无同号事件/相册/DLC 只能官方；
+  45 行假名是引擎内部错误串，不影响正常游玩。
+
+## 附录 D：官方兜底逐行审计（任务 1）
+
+脚本 [tools/translation/audit_fallback.py](../../tools/translation/audit_fallback.py) 读取
+wolf_text_AB.jsonl + summary_by_event.tsv，输出：
+
+- work/translation/final/official_fallback_audit.tsv：每个仍有官方行的事件一行
+  （event / title / method / category / official_lines / kana_lines / avg_sim / sample）
+- work/translation/final/official_only.tsv：全部 4350 行官方文本（event / pc / official_zh）
+
+4350 行 / 77 个事件的分类：
+
+| category | 事件数 | 含义 |
+|---|---|---|
+| mv_no_text | 42 | 彼梦移植没有同号事件（系统工具事件、DLC/相册等） |
+| aligned_unmatched_lines | 22 | 已对齐事件，但 MV 缺这少数几行（WOLF 多出的 BADEND/UI 行） |
+| dlc_absent | 5 | 标题含 DLC 的剧情事件（CE452/446/447 等） |
+| mv_id_collision | 4 | 同号但事件不同（CE526/461/527/465），对齐风险已由 pipeline 整事件回落 |
+| album_absent | 4 | 相册显示事件（CE522-527 的一部分） |
+
+最大头：CE452 DLC 剧情 1461 行、CE526 相册 433、CE461 411、CE525 299、CE523 253、
+CE308 186、CE527 178、CE524 166、CE465 160、CE522 122。官方正文本身已是完整中文；
+4350 行中只有 45 行含假名，全部是引擎内部错误串（事件 74/102/106/107/113/118/122/123/
+124/137/141/143 等，如“装備箇所が8以下です”），正常游玩不会显示。glossary_canonical
+对官方行的可替换命中为 0。结论：这 4350 行不是对齐失败，而是彼梦语料确实没有这些内容；
+除人工补译 DLC/相册外，保持官方中文即可。

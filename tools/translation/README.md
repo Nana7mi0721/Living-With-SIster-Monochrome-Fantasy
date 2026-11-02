@@ -41,12 +41,32 @@ Rust 侧入口是 wolf_game::translation::TextOverlay：Game::new 在编译程�
 按 (event id, slot pc) 替换 101 Message 的字符串，其余指令、变量引用与转义码
 原样保留。未设置 WOLF_TEXT_OVERLAY 时行为与原始数据逐字节一致。
 
-## 安全规则（为什么只写“纯文本”行）
+## 转义映射规则（MV -> WOLF）
 
-gen_override.py 只采纳**彼梦胜出且正文不含任何反斜杠转义码**的行（先剥掉 MV 的
-\N<名> / \N[名] 说话人标签）。带 \c[]、\v[] 等变量的行保留官方中文，
-因为把 MV 的转义语法猜着映射到 WOLF 的语法会静默改变显示内容。官方行开头的
-\E（描边）会补回到译文前，保持字重一致。
+gen_override.py 先剥掉 MV 的 \N<名> / \N[名] 说话人标签，再把 MV 转义翻译到 WOLF 语法：
 
-覆盖表当前规模：7496 行 / 61 个事件（约占全部 12027 条台词的 62%）；剩余 4350 行
-为彼梦移植没有的 DLC/相册事件，回落官方中文。
+- \C[n] / \c[n] -> \c[n]；若官方同一行在这段用不同色号，以官方色号为准（用官方行的
+  同类 token 队列按顺序回填，避免 MV 的调色板与 WOLF 不一致）。
+- \V[n] / \v[n] -> 官方的同类变量转义（如 \cself[8]）；官方没有时写 \v[n]。
+- \{ / \} -> 官方行的字号转义（如 \f[32]）；\_ -> 半角空格，\_C[n] -> \C[n]。
+- \. / \^ / \! 原样保留（WOLF 支持）。
+- 官方行首的样式前缀（\E 描边、\f[n] 字号）整体补回到译文前。已知转义码表来自
+  crates/wolf-format/src/messagetext.rs 的 tokeniser；扫描时按最长已知码匹配，否则
+  \E 会把后面的 ASCII 正文吞成未知码。
+
+无法安全映射的行回落官方。含 <L>/<C>/<R> 对齐标签的 20 行也回落官方：这些槽位通常
+是“标题 + 正文”的多行帮助文本，MV 译文会合并成一段，替换会丢标题/对齐。
+
+覆盖表当前规模：7657 行 / 64 个事件；其中 180 行是带转义的行，0 行残留未知转义
+（tests/translation_overlay.rs 逐行 tokenise 校验）。其余 4350 行官方中文的行见
+official_fallback_audit.tsv（按事件分类）与 official_only.tsv（逐行）。
+
+## 官方兜底审计
+
+    python tools/translation/audit_fallback.py
+
+产出 work/translation/final/official_fallback_audit.tsv（每个仍有官方行的事件：标题、
+method、category、official_lines、kana_lines、avg_sim、样例行）和 official_only.tsv
+（全部官方回落行的 event/pc/official_zh）。category 区分 mv_no_text（彼梦无同号事件，
+含 DLC/相册）、mv_id_collision（同号不同事件）、aligned_unmatched_lines（已对齐事件里
+MV 缺的少数行）、dlc_absent、album_absent。45 行含假名的是引擎内部错误串，不是正文。

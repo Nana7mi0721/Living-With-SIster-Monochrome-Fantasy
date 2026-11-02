@@ -206,4 +206,4 @@ cargo build -q -p wolf-cli                                             # EXIT 0
 
 - 恢复后先读：本文件 §9 → `PLAN.md` §4.5 → `docs/NEW_SESSION_START.md`。
 - `docs/research/GUIDE_CONTENT_CROSSWALK.md` 是**未提交的用户资料**，只用于找内容入口；不要把它当规格，也不要提交它。
-- `docs/UNVERIFIED.md` 有两处过期账：opcode 111 值操作数已在 `crates/wolf-vm/src/exec.rs:2232` 走 `eval_num`；H-ANC-1 的锚点已由 `crates/wolf-game/tests/m11_anchor_pixels.rs` 覆盖。下一阶段收口时一并清理。
+- `docs/UNVERIFIED.md` 的两处过期账已于 2026-11-02 清理：opcode 111 值操作数现已走 `eval_num`（`crates/wolf-vm/src/exec.rs:2362`，commit 3bbbb12，`crates/wolf-vm/tests/opcode_111_semantics.rs` 5 测全过）；H-ANC-1 的锚点已由 `crates/wolf-game/tests/m11_anchor_pixels.rs` 覆盖。

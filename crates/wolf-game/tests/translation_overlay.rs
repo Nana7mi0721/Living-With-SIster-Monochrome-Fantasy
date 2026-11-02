@@ -55,3 +55,83 @@ fn rows_that_do_not_match_a_101_slot_are_ignored() {
     let overlay = TextOverlay::parse("9999\t0\tno such event\n280\t99999\tout of range\n");
     assert_eq!(overlay.apply(&mut events), 0);
 }
+
+fn unescape(field: &str) -> String {
+    let mut out = String::with_capacity(field.len());
+    let mut chars = field.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some(other) => out.push(other),
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
+/// The whole generated table must apply to the real data without a single
+/// dropped row; a mismatch means we wrote an event/pc pair that has no 101
+/// message, and that translation would silently never reach the screen.
+#[test]
+fn every_generated_overlay_row_applies_to_a_real_message() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../work/translation/final/wolf_override.tsv");
+    let Ok(body) = std::fs::read_to_string(&path) else {
+        eprintln!("skip: no generated overlay at {}", path.display());
+        return;
+    };
+    let Some(root) = data_root() else {
+        eprintln!("skip: no extracted data root");
+        return;
+    };
+    let bytes = std::fs::read(root.join("BasicData/CommonEvent.dat")).expect("CommonEvent.dat");
+    let mut events = CommonEventData::parse(&bytes).expect("parse");
+    let overlay = TextOverlay::parse(&body);
+    assert!(overlay.len() > 7000, "expected the full generated table, got {}", overlay.len());
+    assert_eq!(
+        overlay.apply(&mut events),
+        overlay.len(),
+        "every override row must land on an existing 101 message"
+    );
+}
+
+/// Every generated override row must be made only of WOLF's own escapes: the
+/// tokeniser leaves an unknown escape as literal text, which would reach the
+/// screen. This is the end-to-end guard for the MV -> WOLF mapping.
+#[test]
+fn every_generated_overlay_row_tokenises_without_literal_escapes() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../work/translation/final/wolf_override.tsv");
+    let Ok(body) = std::fs::read_to_string(&path) else {
+        eprintln!("skip: no generated overlay at {}", path.display());
+        return;
+    };
+    let mut checked = 0usize;
+    for (lineno, line) in body.lines().enumerate() {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut cols = line.splitn(3, '\t');
+        let (_event, _pc, raw) = (cols.next(), cols.next(), cols.next());
+        let Some(raw) = raw else {
+            panic!("line {}: not event<TAB>pc<TAB>text", lineno + 1);
+        };
+        let text = unescape(raw);
+        for token in wolf_format::messagetext::tokenize(&text) {
+            if let wolf_format::messagetext::TextToken::Text(fragment) = token {
+                assert!(
+                    !fragment.contains('\\'),
+                    "line {}: literal escape leaked into text: {fragment:?}\n{text}",
+                    lineno + 1
+                );
+            }
+        }
+        checked += 1;
+    }
+    assert!(checked > 7000, "expected the full generated table, checked {checked}");
+}
