@@ -11,6 +11,10 @@ description = "Command-line tools for the imoto-life WOLF RPG Editor reimplement
 name = "wolf-cli"
 path = "src/main.rs"
 
+[[bin]]
+name = "wolf-layout"
+path = "src/bin/wolf-layout.rs"
+
 [dependencies]
 wolf-format = { workspace = true }
 wolf-vm = { workspace = true }

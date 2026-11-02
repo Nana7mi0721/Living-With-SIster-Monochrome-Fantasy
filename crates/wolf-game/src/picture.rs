@@ -1468,8 +1468,22 @@ impl Picture {
         // the columns; hit-testing only needs the same rectangle, which is why this method
         // deliberately ignores the sign after taking the absolute value.
         let scale = self.scale.unsigned_abs() as f32 / SCALE_ONE as f32;
+        // Window graphics take their HEIGHT from the window box, not from the 150 percent
+        // slot. Retail proves it: across all eight SaveData01..08 part5 tables the only
+        // records whose horizontal and vertical factors differ are window pictures
+        // (6233 <SQUARE> 150x14 and SaveData08's 1993/1996/1997/1998 <SQUARE>/<GRADX>), and
+        // in every one of them the vertical factor is 100 while the horizontal factor
+        // carries the gauge ratio (6233 = 62x100 for 75/120 AP). So a gauge stretches only
+        // along x; a file/text picture still scales uniformly.
+        let height_scale = if self.kind.is_window() { 1.0 } else { scale };
         let (sx, sy) = self.effect_scale();
-        let placed = place(self.anchor, self.x, self.y, w * scale * sx, h * scale * sy);
+        let placed = place(
+            self.anchor,
+            self.x,
+            self.y,
+            w * scale * sx,
+            h * height_scale * sy,
+        );
         self.transform(placed)
     }
 
@@ -2286,6 +2300,28 @@ mod tests {
         ));
         let quads = screen.quads(|_| Some((40, 20)));
         assert_eq!(quads[0].dst, [5.0, 6.0, 100.0, 50.0]);
+    }
+
+    #[test]
+    fn a_window_gauge_scales_x_only_so_the_fill_spans_the_full_bar_height() {
+        // Retail SaveData01 records the action-bar fill 6233 as <SQUARE> 150x14 at
+        // (480,15) with scale 62x100 for 75/120 AP. The width carries the ratio; the
+        // height must stay the window's own 14 pixels, or the white fill stops short of
+        // the bottom of the frame (the bug the user saw). A <SQUARE> is a real drawing,
+        // so it draws through Screen::quads exactly like a sprite.
+        let mut screen = Screen::new();
+        screen.apply(&cmd(
+            6233,
+            3,
+            PictureAction::Draw,
+            "<SQUARE>",
+            "",
+            &[0, 150, 14, 1, 255, 480, 15, 62, 0],
+        ));
+        let quads = screen.quads(|_| None);
+        assert_eq!(quads.len(), 1);
+        // 150 * 62% = 93 wide; height is the full box, 14 (NOT 14 * 62%).
+        assert_eq!(quads[0].dst, [480.0, 15.0, 93.0, 14.0]);
     }
 
     #[test]

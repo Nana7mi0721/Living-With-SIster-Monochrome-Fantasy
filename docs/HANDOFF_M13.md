@@ -68,6 +68,14 @@ WOLF_GAME_DIR=work/retail_backup WOLF_DATA_ROOT=work/all cargo test -q --workspa
 - **P1-E 修复后复测**：8 零售档 1–7 全指标改善（全帧 SSIM +0.010~0.011、PSNR +1.1~1.5 dB、场景 SSIM +0.012~0.013）；第 8 档全帧小幅波动 0.9245→0.9190，但场景区改善 0.9461→0.9479，变差仅在 HUD（+1 glyph），无场景回归；眼睛层已消失（sd01 眼弧暗像素 23.30%→16.10%）。见 `M13_P1E_AUTOMATED_AUDIT.md` §11 与 `work/out/m13_p1e_after`。
 - **全量**：`144 test-result 块 / 863 passed / 0 failed / 14 ignored / EXIT 0`；`wolf-cli verify --root work/all`（不带 env）= **PASS 70 / pending 0 / EXIT 0**。
 
+## 6.3 第四批（bug 修复）：行动力条白色填充没有铺满纵向
+
+- **症状**：加载 SaveData01（75/120 AP）后 HUD 行动力条 6233 的白色填充只有 11/15 行高，底部露出一条灰底（用户截图 `work/out/m13_p1e_after/cmp_hud_retail_old_new.png` 中栏）。
+- **根因**：零售 8 个存档 part5 中，图片 6233 是窗口类 `<SQUARE>` 150×14，横向缩放=AP 比例（62）、**纵向恒 100**；`Picture` 只有一个 `scale`，`destination` 把 62% 同时用于两轴，于是高度也被压到 62%。
+- **修复**：`crates/wolf-game/src/picture.rs::Picture::destination` —— 窗口类图片（`kind.is_window()`，含 `<SQUARE>/<GRADX>/<CIRCLE>` 等 sysgraphic）的 `height_scale=1.0`，高度取窗口框；文件/文本图片仍等比。
+- **验证**：新增单测 `a_window_gauge_scales_x_only_so_the_fill_spans_the_full_bar_height`（6233 62×100→93×14）；逐列像素：零售 W=15/G=0、修复前 W=11/G=4、修复后 W=15/G=0；8 存档 `load→save` 仍逐字节一致（`m12_save_full_compare` 2 passed）；`wolf-game --lib` 239 passed、`m11_visual_regression` 5 passed（无基线漂移）。
+- **顺带产出**：新增 `wolf-cli` 子命令 `wolf-layout`（`crates/wolf-cli/src/bin/wolf-layout.rs`）导出任意公共/地图事件的 `150/101` 绘制表，把 HUD 布局从「肉眼核对」改成「读数据」；底稿 `docs/research/UI_LAYOUT.md`（含 CE216/217/226 布局表与「窗口类仅横向缩放」规则）。
+
 ## 7. 约束与未跟踪
 
 - 不提交：3 个永久 scratch（`crates/wolf-format/examples/opscan.rs`、`tests/_scratch_cdata.rs`、`tests/_scratch_event.rs`）；用户资料 `docs/攻略文档/`、`妹相隨 Ver3.CT`、`游戏示例图片/`。

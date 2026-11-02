@@ -195,7 +195,7 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 | [`M12_DAY6_WEEKEND.md`](M12_DAY6_WEEKEND.md) | M12 task-104 — day5 工作日 → 周六 09:30 CE310 休日五按钮 → 12:00/15:00/17:00 三个活动时段 → 周日 09:30 同一菜单；无时间/日程注入 |
 | [`M12_MULTIDAY_SOAK.md`](M12_MULTIDAY_SOAK.md) | M12 task-105 — 通用驱动连续 30 天到 day31、90 天到 day97（含剧情跳天）；11/27 个战斗日；修复 parented CE239 auto-arm |
 
-### M13（15 篇）
+### M13（16 篇）
 
 内容一致自动化验收三批：首批主线结局/DLC/随机事件/H 阈值/NG+/跨天存读/op111 更正；第二批九结局、条件注入事件、H 端到端与 DLC EP26–36 结案；第三批 AutoEvents 读档伪启动修复、DLC 眼睛层闭环与 P1-E 修复后复测。
 
@@ -216,6 +216,7 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 | [`M13_AUTO_EVENTS_SCOPE.md`](M13_AUTO_EVENTS_SCOPE.md) | 读档伪启动 run_condition==2 事件根因；prime_latched 修复范围、m7_hauto 语义裁决与残余风险 |
 | [`M13_DLC_EYE_OVERLAY.md`](M13_DLC_EYE_OVERLAY.md) | 加载存档多画 dlc_imouto01_eye.png 的诊断：事件 506 被 auto_events 读档伪造边沿启动，非存档/ z 序问题 |
 | [`M13_P1E_AUTOMATED_AUDIT.md`](M13_P1E_AUTOMATED_AUDIT.md) | P1-E 自动化审计：8 零售帧 SSIM/PSNR/MAE、锚点/音频/视觉回归；§11 task-22 修复后复测（眼睛层闭环、1–7 档改善） |
+| [`UI_LAYOUT.md`](UI_LAYOUT.md) | UI 布局逆向：WOLF UI 由脚本数据驱动、无需 Ghidra 逆引擎；新增 `wolf-layout` 导出逐画面 150/101 排布；CE216/217/226 布局表 + 窗口类图片仅横向缩放规则（行动力条 6233=62×100 修复依据） |
 
 ## 状态约定
 

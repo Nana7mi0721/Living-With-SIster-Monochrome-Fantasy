@@ -1,7 +1,7 @@
 # 文档总索引（docs/README.md）
 
 > 本文件是仓库文档的唯一总入口。**新增、移动、归档文档时，必须同步更新本索引。**
-> 当前里程碑：**M0–M12 已完成；M13 内容一致自动化验收三批完成（九结局/条件注入事件/DLC EP26–36/H 端到端/读档伪启动修复；全量 863 passed / 0 failed / 14 ignored）**；像素 H2–H4 与音频 H5 人工项仍待用户。最新交接：[`HANDOFF_M13.md`](HANDOFF_M13.md)。当前路线图：[`../PLAN.md`](../PLAN.md)。
+> 当前里程碑：**M0–M12 已完成；M13 内容一致自动化验收三批完成（九结局/条件注入事件/DLC EP26–36/H 端到端/读档伪启动修复），并修复行动力条纵向缩放 bug、新增 `wolf-layout` 布局导出工具（全量 864 passed / 0 failed / 14 ignored，`verify` PASS 70/0）**；像素 H2–H4 与音频 H5 人工项仍待用户。最新交接：[`HANDOFF_M13.md`](HANDOFF_M13.md)。当前路线图：[`../PLAN.md`](../PLAN.md)。
 
 ## 0. 先读什么
 
