@@ -1,44 +1,42 @@
-//! M13 — DLC CE452 EP26–EP36: why the *natural* zero-arg chain stops at EP26,
-//! and a fixture that drives the full chain EP0..EP36.
+//! M13 — DLC CE452 EP26–EP36: why an *artificially* driven chain stalls at EP26,
+//! and proof that a normally-progressed party runs the full natural chain EP0..EP36.
 //!
 //! CONTEXT (see docs/research/M13_DLC_452.md and docs/research/M13_DLC_452_EP26_36.md)
 //! CE452 is one giant dispatcher on its self slot 10 (self10 == EP number). One
 //! invocation plays exactly one EP, writes var619 = self10 @pc2, and does
-//! self10 += 1 @pc6087. With the M13 common-self persistence fix a bare repeated
-//! zero-arg start_event_resuming(452) advances var619 0 -> 25 naturally (EP0..EP25),
-//! but then stops dead at EP26. This file pins down WHY and proves the whole chain
-//! is reachable.
+//! self10 += 1 @pc6087. With the M13 common-self persistence fix a repeated
+//! zero-arg start_event_resuming(452) advances var619 0 -> 36 through EP0..EP36,
+//! as long as the party's battle stats are realistic.
 //!
-//! WHY EP26 STOPS — STALE var395 BATTLE FLAG (not a data gate on self11)
+//! THE EP26 STALL IS A PROBE ARTIFACT — NOT A DATA GATE, NOT A PORT BUG
 //! EP26 (@pc4165) runs an embedded battle via 210 CommonEvent [500239, ...] @pc4184
-//! whose 24-bit return value lands in self11; @pc4185 gates on self11 >= 1
-//! (win -> skip the 負け penalty scene @4189..4226; lose -> play it). On an
-//! accumulated single-game run that battle resolves as a LOSS (self11 = -1), the
-//! 負け branch hits a party-wipe game-over (@pc4223 -> helper 500226), which clears
-//! EVERY event instance (instances == 0, i.e. the whole event chain is torn down)
-//! before @pc6087 can do self10 += 1. So var619 freezes at 26 and every later call
-//! replays EP26.
+//! whose return value lands in self11; @pc4185 gates on self11 >= 1 (win -> skip the
+//! 負け penalty scene @4189..4226; lose -> play it, and its party-wipe helper
+//! 500226 @pc4223 tears every event instance down before @pc6087 can do
+//! self10 += 1, freezing var619 at 26). The outcome is decided by the party's
+//! combat power vs the enemy gauge. THIS story battle uses a fixed, high enemy
+//! gauge (~4500), so it REQUIRES a normally leveled party.
 //!
-//! The single deciding variable is the GLOBAL var395 (magic 2000395):
-//!   * EP17 (画竜点睛) sets var395 = 2 at dump idx 2362, as part of 由衣 stat-boost
-//!     story beat, and NOTHING in any event script ever writes var395 back to 0
-//!     (verified by scanning every decompiled event: the only writers of 2000395 are
-//!     452 idx2362 and 301 idx2240, both = 2).
-//!   * Event 243 (敵の行動 / enemy action) and 244 (終了判定 / end judgment) branch on
-//!     var395 == 2, so a stale 2 makes the EP26..EP36 battles resolve as losses.
-//! A fresh game has var395 = 0, so seeding self10 = 26 in a fresh game WINS EP26
-//! (self11 = 1) and every EP26..EP36 completes. Clearing var395 = 0 before each EP
-//! also lets the *natural* single-game chain run all the way to EP36 (var619 = 36).
+//! The isolated probe used to start CE452 directly without ever running the
+//! day-battle / leveling cycle, so its party combat power was the bare
+//! seed_battle_databases default of ~15, far below 4500 -> it always lost EP26.
+//! Pre-seeding realistic party stats (var 2000040..45 and 2000170..175) makes the
+//! same battle a win. That is the ONLY setup needed; it models a leveled party and
+//! is a legitimate battle precondition.
 //!
-//! So EP26 is NOT a script-level data gate on self11: it is the ordinary battle,
-//! mis-resolving because of the leaked var395==2 flag. Whether the retail engine
-//! clears var395 elsewhere (engine-native battle reset) or handles the 負け branch
-//! without a game-over is a production/battle-engine question, reported to the Lead;
-//! it is outside this test write scope. This test only measures the content.
+//! var395 (magic 2000395) is NOT the cause and MUST NOT be reset:
+//!   * It is a PERMANENT skill-unlock flag (由衣 learned 献身 / self-sacrifice), set
+//!     to 2 at dump idx2362 (end of the EP16 -> EP17 stretch) and by 301 idx2240,
+//!     and NEVER written back to 0 by any event.
+//!   * Readers: status screen 234 idx210 (shows the skill icon), album 510/513, and
+//!     the battle branches 243 idx905 / 244 idx88 (which add the 献身 skill to a fight).
+//!   * An engine-side reset of var395 at battle end would permanently erase the
+//!     skill (status/album icon gone, the EP17 learn-scene gate at 452 idx2306
+//!     reverses). => NO engine change is correct or needed.
 //!
 //! Run (default, fast, deterministic):
 //!   cargo test -q -p wolf-game --test m13_dlc_452_ep26_36
-//! Long chain evidence (ignored by default):
+//! Long evidence (ignored by default):
 //!   cargo test -q -p wolf-game --test m13_dlc_452_ep26_36 -- --ignored --nocapture
 
 use std::path::PathBuf;
@@ -69,13 +67,30 @@ const EP_PC: [i32; 37] = [
     5178, 5305, 5547, 5670, 5869,
 ];
 
-/// self group 6 slot 10 -> flat self-vars index 600 + 10.
+/// self group 6 slot 10 -> flat self-vars index 600 + 10 (holds the EP number).
 const SELF10: usize = 610;
 /// self group 6 slot 11 -> flat self-vars index 600 + 11 (the embedded-battle
-/// return value each EP 210 CommonEvent writes).
+/// return value each EP's 210 CommonEvent writes).
 const SELF11: usize = 611;
-/// GLOBAL var 395 (magic 2000395): the stale battle flag that gates EP26+.
+/// GLOBAL var 395 (magic 2000395): the PERMANENT 献身 skill-unlock flag. It is 2
+/// from the end of EP16 onward and must never be reset.
 const VAR395: usize = 395;
+
+/// Party combat-stat input slots consumed by the battle helper event 500239 (CE239):
+/// var 2000040..45 feed each member's power; var 2000170..175 feed the leader
+/// strength used by the 献身 branch. Seeding these models a leveled party.
+const PARTY_STAT_VARS: [usize; 12] = [40, 41, 42, 43, 44, 45, 170, 171, 172, 173, 174, 175];
+
+/// Default party-stat value used for the leveled-party fixtures below. Verified:
+/// any modest value (300 / 3000 / 30000) makes the EP26 fixed-gauge battle a win,
+/// while the bare seed_battle_databases default (~15) loses it.
+const LEVELED_STAT: i32 = 300;
+
+fn seed_party_stats(game: &mut Game, val: i32) {
+    for k in PARTY_STAT_VARS {
+        game.vm.vars.set(k, val);
+    }
+}
 
 struct EpRun {
     var619: i32,
@@ -86,9 +101,9 @@ struct EpRun {
     self11: i32,
 }
 
-/// Play one EP of CE452 in a FRESH game by seeding self10 = n. Optional var395
-/// pre-seed lets a caller reproduce the stale-flag failure in isolation.
-fn run_ep(n: i32, var395: Option<i32>, frames: usize) -> EpRun {
+/// Play one EP of CE452 in a FRESH game by seeding self10 = n. Optional var395 and
+/// optional leveled party stats let a caller reproduce the battle outcome cases.
+fn run_ep(n: i32, var395: Option<i32>, stats: Option<i32>, frames: usize) -> EpRun {
     let mut game = Game::new(data_root()).expect("Game::new");
     game.auto_advance = true;
     game.auto_choice = true;
@@ -96,6 +111,9 @@ fn run_ep(n: i32, var395: Option<i32>, frames: usize) -> EpRun {
     game.seed_battle_databases();
     if let Some(v) = var395 {
         game.vm.vars.set(VAR395, v);
+    }
+    if let Some(s) = stats {
+        seed_party_stats(&mut game, s);
     }
     assert!(game.start_event(452), "start_event(452) returned false");
     let id = game
@@ -137,13 +155,10 @@ fn run_ep(n: i32, var395: Option<i32>, frames: usize) -> EpRun {
     }
 }
 
-/// Advance one natural (zero-arg) DLC episode in a shared game. If reset_var395
-/// the stale battle flag is cleared to 0 first (the fixture), otherwise it is left
-/// exactly as the previous EP left it (the authentic accumulated run).
-fn play_one_natural(game: &mut Game, reset_var395: bool) -> (bool, i32, i32, i32) {
-    if reset_var395 {
-        game.vm.vars.set(VAR395, 0);
-    }
+/// Advance one natural (zero-arg) DLC episode in a shared game. var395 and the
+/// party stats are left exactly as the game currently holds them — this is the
+/// authentic accumulated run, no per-EP reset.
+fn play_one_natural(game: &mut Game) -> (bool, i32, i32, i32) {
     assert!(
         game.vm.start_event_resuming(452).is_some(),
         "start_event_resuming(452) returned None"
@@ -172,14 +187,13 @@ fn play_one_natural(game: &mut Game, reset_var395: bool) -> (bool, i32, i32, i32
 }
 
 // ---------------------------------------------------------------------------
-// (1) EP26..EP36 are each reachable and clean in a fresh game (var395 == 0).
-//     This is the content proof: EP26 is NOT a hard data gate on self11.
+// (1) EP26..EP36 are each reachable and clean in a fresh game with a leveled party.
 // ---------------------------------------------------------------------------
 
 #[test]
 fn dlc452_ep26_36_each_reachable_fresh() {
     for n in 26..=36i32 {
-        let r = run_ep(n, None, 9000);
+        let r = run_ep(n, None, Some(LEVELED_STAT), 9000);
         assert_eq!(r.var619, n, "EP{n}: var619 must equal self10({n})");
         assert!(r.ended, "EP{n}: event must terminate");
         assert!(
@@ -199,59 +213,121 @@ fn dlc452_ep26_36_each_reachable_fresh() {
 }
 
 // ---------------------------------------------------------------------------
-// (2) Root cause in isolation: var395 == 2 is the single variable that turns the
-//     EP26 embedded battle into a loss and blocks self10 += 1. Everything else is
-//     a fresh game, so this is a controlled before/after.
+// (2) The EP26 embedded-battle outcome tracks the PARTY STATS, not var395. Holding
+//     the permanent flag at its natural post-EP16 value (2), a degenerate party
+//     loses and a leveled party wins — the exact opposite of a var395 "reset" hack.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn dlc452_ep26_stale_var395_is_the_blocker() {
-    // var395 == 0 (authentic fresh state): EP26 wins and advances self10 26 -> 27.
-    let ok = run_ep(26, Some(0), 9000);
-    assert_eq!(ok.var619, 26);
-    assert_eq!(ok.self11, 1, "var395=0: battle must be won");
-    assert_eq!(ok.self10_after, 27, "var395=0: EP26 must advance self10 to 27");
-    assert!(ok.maxpc >= 4510, "var395=0: EP26 win scene @4510 must be reached");
-    assert!(ok.ended, "var395=0: event must terminate");
-
-    // var395 == 2 (the leaked EP17 flag): the same EP26 battle resolves as a loss,
-    // the 負け branch tears the whole game down before self10 += 1.
-    let bad = run_ep(26, Some(2), 9000);
-    assert_eq!(bad.var619, 26);
-    assert_eq!(bad.self11, -1, "var395=2: battle must resolve as a loss, got {}", bad.self11);
+fn dlc452_ep26_battle_outcome_tracks_party_stats_not_var395() {
+    // (a) var395 == 2 (natural after EP16) + degenerate/default stats -> LOSS, stalls.
+    let low = run_ep(26, Some(2), None, 9000);
+    assert_eq!(low.var619, 26);
     assert_eq!(
-        bad.self10_after, 26,
-        "var395=2: EP26 must NOT advance self10 (stuck at 26)"
+        low.self11, -1,
+        "degenerate party must lose the fixed-gauge EP26 battle, got self11={}",
+        low.self11
     );
+    assert_eq!(low.self10_after, 26, "a loss must NOT advance self10");
     assert!(
-        bad.maxpc <= 4226,
-        "var395=2: must abort inside the 負け branch (end_pc 4226), got pc {}",
-        bad.maxpc
+        low.maxpc <= 4226,
+        "a loss aborts inside the 負け branch (end_pc 4226), got pc {}",
+        low.maxpc
     );
+
+    // (b) var395 == 2 (same permanent flag) + leveled stats -> WIN, advances.
+    let strong = run_ep(26, Some(2), Some(LEVELED_STAT), 9000);
+    assert_eq!(strong.var619, 26);
+    assert_eq!(
+        strong.self11, 1,
+        "a leveled party must win EP26 even with 献身 (var395=2), got self11={}",
+        strong.self11
+    );
+    assert_eq!(strong.self10_after, 27, "a win advances self10 26 -> 27");
+    assert!(
+        strong.maxpc >= 4510,
+        "a win reaches the EP26 win scene @4510, got pc {}",
+        strong.maxpc
+    );
+    assert!(strong.ended, "the winning EP26 must terminate normally");
 }
 
 // ---------------------------------------------------------------------------
-// (3) LONG: the authentic natural chain (no fixture) reproduces the leak: it
-//     advances var619 0 -> 26 (EP0..EP25), then EP26 stalls because var395 was
-//     set to 2 by EP17 and never cleared.
+// (3) LONG — the headline proof the Lead asked for: in ONE game, with a leveled
+//     party seeded once and var395 NEVER touched (no var395=0 hack), the natural
+//     zero-arg chain runs EP0..EP36 and var619 reaches 36. var395 is 0 before EP16
+//     and the permanent 2 from EP16 onward — proving it is a skill flag, not a
+//     transient battle flag that needs clearing.
 // ---------------------------------------------------------------------------
 
 #[test]
-#[ignore = "long: drives the authentic single-game CE452 chain and documents the EP26 stall"]
-fn dlc452_natural_chain_stalls_at_ep26() {
+#[ignore = "long: full 37-EP natural chain with a leveled party (no var395 hack)"]
+fn dlc452_natural_chain_to_ep36_with_leveled_party() {
     let mut game = Game::new(data_root()).expect("Game::new");
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;
     game.seed_battle_databases();
+    // Model a normally-progressed (leveled) party once. var395 is NOT touched.
+    seed_party_stats(&mut game, LEVELED_STAT);
+
+    println!("ep  maxpc  var619  self10_after  self11  var395");
+    let mut ep = 0i32;
+    loop {
+        let (ended, maxpc, s10, s11) = play_one_natural(&mut game);
+        let var619 = game.vm.vars.get(619);
+        let v395 = game.vm.vars.get(VAR395);
+        println!("{ep:<3} {maxpc:<6} {var619:<7} {s10:<13} {s11:<6} {v395}");
+        assert!(ended, "EP{ep}: must terminate");
+        assert_eq!(var619, ep, "EP{ep}: var619 must equal {ep}");
+        assert_eq!(s10, ep + 1, "EP{ep}: self10 must advance to {}", ep + 1);
+        assert!(
+            maxpc >= EP_PC[ep as usize],
+            "EP{ep}: pc {maxpc} must reach EP marker {}",
+            EP_PC[ep as usize]
+        );
+        assert_eq!(game.stats.warnings, 0, "EP{ep}: no interpreter warnings");
+        if ep <= 15 {
+            assert_eq!(v395, 0, "EP{ep}: var395 must still be 0 before the 献身 unlock");
+        } else {
+            assert_eq!(v395, 2, "EP{ep}: var395 must be the permanent 献身 flag (2)");
+        }
+        if ep >= 36 {
+            break;
+        }
+        ep += 1;
+    }
+    assert_eq!(ep, 36, "the natural chain must reach EP36");
+    assert_eq!(game.vm.vars.get(619), 36, "var619 must reach 36");
+    assert_eq!(
+        game.vm.vars.get(VAR395),
+        2,
+        "var395 stays the permanent skill flag 2 (never reset)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// (4) LONG — diagnostic: WITHOUT leveling the party (bare seed_battle_databases,
+//     party power ~15), the same natural chain stalls exactly at EP26. This pins
+//     the failure to the unleveled party, not to var395 (which is already 2 here).
+// ---------------------------------------------------------------------------
+
+#[test]
+#[ignore = "long: demonstrates the probe artifact — an unleveled party stalls at EP26"]
+fn dlc452_ep26_stall_is_unleveled_party_artifact() {
+    let mut game = Game::new(data_root()).expect("Game::new");
+    game.auto_advance = true;
+    game.auto_choice = true;
+    game.auto_choice_delay = 1;
+    game.seed_battle_databases(); // NOTE: no party stats -> degenerate party (~15 power)
 
     let mut last_ok_ep = -1i32;
     let mut ep = 0i32;
     let mut stall = None;
     loop {
-        let (ended, maxpc, self10_after, self11) = play_one_natural(&mut game, false);
-        if !ended || self10_after != ep + 1 {
-            stall = Some((ep, maxpc, self10_after, self11, game.vm.vars.get(619)));
+        let (ended, maxpc, s10, s11) = play_one_natural(&mut game);
+        if !ended || s10 != ep + 1 {
+            stall = Some((ep, maxpc, s10, s11, game.vm.vars.get(619)));
             break;
         }
         last_ok_ep = ep;
@@ -260,59 +336,20 @@ fn dlc452_natural_chain_stalls_at_ep26() {
             break;
         }
     }
-    let (stall_ep, maxpc, self10_after, self11, var619) =
-        stall.expect("authentic chain must stall (var395 leak) before EP36");
+    let (stall_ep, maxpc, s10, s11, var619) =
+        stall.expect("unleveled chain must stall before EP36");
     eprintln!(
-        "authentic natural chain: last completed EP{last_ok_ep}; stalled at EP{stall_ep} \
-         maxpc={maxpc} self10_after={self10_after} self11={self11} var619={var619}; var395={}",
+        "unleveled party: last completed EP{last_ok_ep}; stalled at EP{stall_ep}          maxpc={maxpc} self10_after={s10} self11={s11} var619={var619}; var395={}",
         game.vm.vars.get(VAR395)
     );
-    assert_eq!(stall_ep, 26, "authentic chain must stall exactly at EP26");
-    assert_eq!(last_ok_ep, 25, "EP0..EP25 must all complete naturally");
-    assert_eq!(var619, 26, "var619 must have reached 26 before stalling");
-    assert_eq!(self10_after, 26, "self10 must be stuck at 26 (no +1 tail)");
-    assert_eq!(self11, -1, "the EP26 embedded battle must have been lost");
+    assert_eq!(stall_ep, 26, "an unleveled party stalls exactly at EP26");
+    assert_eq!(last_ok_ep, 25, "EP0..EP25 complete without needing battle strength");
+    assert_eq!(var619, 26, "var619 reached 26 before stalling");
+    assert_eq!(s10, 26, "self10 is stuck at 26 (no +1 tail)");
+    assert_eq!(s11, -1, "the EP26 embedded battle was lost");
     assert_eq!(
         game.vm.vars.get(VAR395),
         2,
-        "the leak source var395 must be 2 (set by EP17, never cleared)"
+        "var395==2 is present but is NOT the cause — the party stats are"
     );
-}
-
-// ---------------------------------------------------------------------------
-// (4) LONG: with the stale var395 flag cleared before each EP (the fixture), the
-//     SAME single-game chain runs EP0..EP36 and var619 reaches 36. Per-EP records.
-// ---------------------------------------------------------------------------
-
-#[test]
-#[ignore = "long: full 37-EP natural chain with the var395 fixture"]
-fn dlc452_natural_chain_to_ep36_with_var395_fixture() {
-    let mut game = Game::new(data_root()).expect("Game::new");
-    game.auto_advance = true;
-    game.auto_choice = true;
-    game.auto_choice_delay = 1;
-    game.seed_battle_databases();
-
-    println!("ep  maxpc  var619  self10_after  self11");
-    let mut ep = 0i32;
-    loop {
-        let (ended, maxpc, self10_after, self11) = play_one_natural(&mut game, true);
-        let var619 = game.vm.vars.get(619);
-        println!("{ep:<3} {maxpc:<6} {var619:<7} {self10_after:<13} {self11}");
-        assert!(ended, "EP{ep}: must terminate");
-        assert_eq!(var619, ep, "EP{ep}: var619 must equal {ep}");
-        assert_eq!(self10_after, ep + 1, "EP{ep}: self10 must advance to {}", ep + 1);
-        assert!(
-            maxpc >= EP_PC[ep as usize],
-            "EP{ep}: pc {maxpc} must reach EP marker {}",
-            EP_PC[ep as usize]
-        );
-        assert_eq!(game.stats.warnings, 0, "EP{ep}: no interpreter warnings");
-        if ep >= 36 {
-            break;
-        }
-        ep += 1;
-    }
-    assert_eq!(ep, 36, "the fixture chain must reach EP36");
-    assert_eq!(game.vm.vars.get(619), 36, "var619 must reach 36");
 }

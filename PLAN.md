@@ -89,8 +89,8 @@
 - 已修复 common-event self 跨调用持久 bug（`7c3b728`）与 Text picture 存读尺寸丢失（`dcd513a`）。
 - 已验收：主线 SaveData01/08 无注入通关（stage28→29，var492=1）、逃亡 END、DLC CE452（自然 var619 0→25；注入 EP0–36 全通）、111 随机事件抽样（25/115，dead=0）、H 阈值矩阵（37 门边界）、NG+ 继承（CE436/SampleMapA）、跨天存读与 8/8 槽 round-trip。
 - 全量：836 passed / 0 failed / 10 ignored；verify PASS 70/0。
-- 剩余：九结局其余条目、条件注入 17 项逐条、像素/音频人工验收、DLC EP26–36 自然门。详见 `docs/HANDOFF_M13.md` §6。
-- **第二批（task-13..16）**：九结局其余 7 条、17 条件注入随机事件、H 端到端、DLC var395 根因均已完成（全量 860 passed / 0 failed / 14 ignored；verify PASS）。var395 引擎修复由 task-18 跟进；像素/音频仍需人工。
+- 剩余：像素/音频人工验收（P1-E）。详见 `docs/HANDOFF_M13.md` §6。
+- **第二批（task-13..18）**：九结局其余 7 条、17 条件注入随机事件、H 端到端、DLC EP26–36 结案均已完成（全量 860 passed / 0 failed / 14 ignored；verify PASS）。DLC 结案结论：var395 是永久献身技能标志不可重置，EP26 卡点为探针缺已升级队伍属性，预置后自然链 EP0→36/var619=36；像素/音频仍需人工。
 
 ### P1 — 内容完整性
 

@@ -197,14 +197,14 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 
 ### M13（12 篇）
 
-内容一致首批验收：主线结局/DLC/随机事件/H 阈值/NG+/跨天存读/op111 更正，以及第二批九结局、条件注入事件、H 端到端与 DLC var395 根因。
+内容一致首批验收：主线结局/DLC/随机事件/H 阈值/NG+/跨天存读/op111 更正，以及第二批九结局、条件注入事件、H 端到端与 DLC EP26–36 结案。
 
 | 文档 | 内容 |
 | --- | --- |
 | [`M13_MAINLINE_ENDINGS.md`](M13_MAINLINE_ENDINGS.md) | 无注入通关 SaveData01/08 day90→95（stage28→29,var492=1）与逃亡 END |
 | [`M13_ALL_ENDINGS.md`](M13_ALL_ENDINGS.md) | 其余 7 结局逐条：妊娠/兵役/返家/病亡症状链/暗影/魔界/农民/爆炸；14 默认+2 ignored |
 | [`M13_DLC_452.md`](M13_DLC_452.md) | CE452 EP0–36 注入全通、自然 var619 0→25 |
-| [`M13_DLC_452_EP26_36.md`](M13_DLC_452_EP26_36.md) | EP26 卡点根因=var395 从 EP17 泄漏；var395=0 夹具全链 EP0→36 |
+| [`M13_DLC_452_EP26_36.md`](M13_DLC_452_EP26_36.md) | task-18 结案：var395 为永久献身技能标志（不可重置）；EP26 卡点=探针缺已升级队伍属性；预置属性后自然链 EP0→36、var619=36 |
 | [`M13_CONTENT_MATRIX.md`](M13_CONTENT_MATRIX.md) | 115 随机事件、H 门、战斗、物品、结局坐标矩阵 |
 | [`M13_CROSSWALK_UNRESOLVED.md`](M13_CROSSWALK_UNRESOLVED.md) | 攻略 ↔ 脚本未决项 #78 结案等 |
 | [`M13_RANDOM_EVENTS.md`](M13_RANDOM_EVENTS.md) | 111 事件自然 97/条件注入 17/不可达 1；25 事件抽样 |

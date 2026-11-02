@@ -42,20 +42,20 @@ WOLF_GAME_DIR=work/retail_backup WOLF_DATA_ROOT=work/all cargo test -q --workspa
 
 > 环境注意：不 pin `WOLF_GAME_DIR=work/retail_backup` 时，`wolf-save` 的 `every_save_parses_with_the_measured_shape` 与 `typed.rs` 两条会因用户 Steam 安装档已被游玩更新（386830B vs 366146B）而红，与本项目代码无关。
 
-## 6. 剩余（未验收/未做）
+## 6. 首批遗留（第二批闭环见 §6.1；仅人工项仍开放）
 
-1. **九结局**：已测 逃亡、正常通关（含 stage28→29 贺词）；妹妹爆炸/怀孕/病亡/暗影/魔界/农民/参军等仅脚本定位，未逐条自动化驱动。
-2. **条件注入型随机事件 17 项**：部分经 pc 跳转抽样 + 门控静态校验，未逐条参数化注入。
-3. **P1-E**：锚点 5/6 与关键场景零售像素 diff、31 首 loop 人耳验收（需人工/截图）。
-4. **DLC EP26–EP36 自然推进**：CE452 内 self11 等数据门阻挡，注入已证全通；是否需夹具补门待定。
-5. 文档收口：`PLAN.md`/README 的 M13 段、`docs/research/README.md` 登记、`docs/BASELINE.json` 证据键（本文件已列证据）。
+1. **九结局**：已测 逃亡、正常通关；其余 7 条已由 §6.1 的 `m13_all_endings.rs` 闭环。
+2. **条件注入型随机事件 17 项**：已由 §6.1 的 `m13_random_events_injected.rs` 闭环。
+3. **P1-E**：锚点 5/6 与关键场景零售像素 diff、31 首 loop 人耳验收（需人工/截图）——仍开放。
+4. **DLC EP26–EP36**：已结案（task-18）。不是移植缺口：var395 是永久「献身」技能标志（不可重置）；EP26 卡住是隔离探针缺“已升级队伍”战斗属性所致，预置真实战斗属性后同一局自然链 EP0→36 全通、var619=36。
+5. 文档收口：`PLAN.md`/README 的 M13 段、`docs/research/README.md` 登记、`docs/BASELINE.json` 证据键均已更新。
 
 ## 6.1 第二批验收（本轮完成）
 
 - 九结局其余 7 条：`m13_all_endings.rs`（14 默认 + 2 ignored 全绿），覆盖妊娠/兵役/返家/病亡症状链/暗影/魔界/农民/爆炸；`M13_ALL_ENDINGS.md`。
 - 17 项条件注入随机事件：`m13_random_events_injected.rs`（3 测试全绿：16 DLC 事件点 + 特4 海豹 + 15 门三元组）；`M13_RANDOM_EVENTS_INJECTED.md`。
 - H 端到端：`m13_h_endtoend.rs`（5 测试全绿：周末/厕所/浴室/CE335/餐厅）；餐厅门更正为 CE326@801–805 `var424≥3 ∧ var18≥100 ∧ var16≥1`；`M13_H_ENDTOEND.md`。
-- DLC EP26–36：`m13_dlc_452_ep26_36.rs`（2 默认+2 ignored）；根因=var395 从 EP17 泄漏、战斗 243/244 判负，var395=0 夹具下 EP0→36 全通；`M13_DLC_452_EP26_36.md`；引擎修复由 task-18 跟进。
+- DLC EP26–36（task-18 结案）：`m13_dlc_452_ep26_36.rs`（2 默认+2 ignored）；**不是移植缺口，未改生产 src**。var395 是永久「由衣献身」技能解锁标志，绝不能在战斗结束重置；EP26 卡住是隔离探针未预置“已升级队伍”战斗属性的假象（默认战力~15 vs 敌槽~4500）。一次性预置 `var2000040..45/2000170..175=300`、var395 全程不清洗后，同一局自然链 EP0→EP36 全通、var619=36（diagnostic 未升级队伍卡 EP26 maxpc=4224）。`M13_DLC_452_EP26_36.md`。
 - 全量：`860 passed / 0 failed / 14 ignored`；`wolf-cli verify` PASS（64 项匹配 baseline + 1 项 dxarchive pending，退出 0）。
 
 ## 7. 约束与未跟踪
