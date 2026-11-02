@@ -173,6 +173,15 @@ pub fn apply(game: &mut Game, save: &SaveFile) -> LoadedSave {
     }
     loaded.pictures = game.screen.len();
 
+    // A load restores the ordinary variables but not the auto-event scheduler's
+    // latched state. Without re-seeding it, the first `frame()` would treat every
+    // `run_condition == 2` event whose restored condition already holds as a
+    // false -> true edge and start it (event 506 draws the DLC eye overlay -6 on
+    // top of the loaded scene). Prime the latched map from the loaded truth values
+    // so the running set mirrors the snapshot; real 0 -> 1 transitions still fire.
+    // See docs/research/M13_AUTO_EVENTS_SCOPE.md.
+    game.auto_events.prime_latched(&game.vm);
+
     loaded
 }
 

@@ -128,6 +128,9 @@ fn build_fixture(game: &mut Game) -> usize {
 fn open_fixture_game() -> Game {
     let mut game = Game::new(data_root()).unwrap();
     game.load_save(&save01()).unwrap();
+    // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
+    // so its intended deterministic sequence is preserved.
+    game.vm.rng.set_event_seed(9);
     // Synthetic battle fixture: clear the save's restored common-event self banks so
     // they cannot perturb the deterministic command-round count driven below.
     game.vm.clear_common_self();

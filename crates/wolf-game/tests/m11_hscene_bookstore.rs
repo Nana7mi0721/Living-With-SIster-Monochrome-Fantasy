@@ -377,6 +377,9 @@ fn gate_graph_pins_bookstore_and_ce328_deep_branch() {
 fn synthetic_var326_two_path_drives_ce402_to_ce410() {
     let mut g = new_game();
     g.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
+    // so its intended deterministic sequence is preserved.
+    g.vm.rng.set_event_seed(6);
     for (k, v) in [
         (157, 13),
         (104, 0),

@@ -62,6 +62,9 @@ struct BattleRun {
 fn run_battle_with_schedule(schedule: Vec<i32>) -> BattleRun {
     let mut game = Game::new(data_root()).expect("Game::new");
     game.load_save(&save01()).expect("load SaveData01");
+    // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
+    // so its intended deterministic sequence is preserved.
+    game.vm.rng.set_event_seed(2);
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;
@@ -127,6 +130,9 @@ fn run_battle_with_schedule(schedule: Vec<i32>) -> BattleRun {
 fn drive_real_menu_to_code(target_code: i32) -> (Option<i32>, i32, i32, i32, bool, i32, u64) {
     let mut game = Game::new(data_root()).expect("Game::new");
     game.load_save(&save01()).expect("load SaveData01");
+    // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
+    // so its intended deterministic sequence is preserved.
+    game.vm.rng.set_event_seed(2);
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;

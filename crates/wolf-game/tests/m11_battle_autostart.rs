@@ -583,6 +583,9 @@ fn open_fixture_game() -> Game {
     game.auto_choice = true;
     game.auto_choice_delay = 1;
     build_fixture(&mut game);
+    // read-load fix removes the old spurious 506 coroutine; pin event RNG so this
+    // fixture's intended four-round queue sequence is deterministic (seed 9 keeps 4 rounds).
+    game.vm.rng.set_event_seed(9);
     game
 }
 
@@ -704,6 +707,9 @@ fn explicit_disable_overrides_auto_arm() {
     game.auto_choice_delay = 1;
     let seeded = game.seed_battle_databases();
     assert!(seeded > 0);
+    // read-load fix removes the old spurious 506 coroutine; pin event RNG so CE253's
+    // random 工作 branch deterministically reaches the resident battle (seed 2 does).
+    game.vm.rng.set_event_seed(2);
     game.databases
         .set_text(Container::CData, 5, 16, 0, "┗ 状態リスト");
     let _ = game.start_engine_events();

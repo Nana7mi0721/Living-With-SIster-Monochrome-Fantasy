@@ -195,9 +195,9 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 | [`M12_DAY6_WEEKEND.md`](M12_DAY6_WEEKEND.md) | M12 task-104 — day5 工作日 → 周六 09:30 CE310 休日五按钮 → 12:00/15:00/17:00 三个活动时段 → 周日 09:30 同一菜单；无时间/日程注入 |
 | [`M12_MULTIDAY_SOAK.md`](M12_MULTIDAY_SOAK.md) | M12 task-105 — 通用驱动连续 30 天到 day31、90 天到 day97（含剧情跳天）；11/27 个战斗日；修复 parented CE239 auto-arm |
 
-### M13（12 篇）
+### M13（15 篇）
 
-内容一致首批验收：主线结局/DLC/随机事件/H 阈值/NG+/跨天存读/op111 更正，以及第二批九结局、条件注入事件、H 端到端与 DLC EP26–36 结案。
+内容一致自动化验收三批：首批主线结局/DLC/随机事件/H 阈值/NG+/跨天存读/op111 更正；第二批九结局、条件注入事件、H 端到端与 DLC EP26–36 结案；第三批 AutoEvents 读档伪启动修复、DLC 眼睛层闭环与 P1-E 修复后复测。
 
 | 文档 | 内容 |
 | --- | --- |
@@ -213,6 +213,9 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 | [`M13_H_ENDTOEND.md`](M13_H_ENDTOEND.md) | 周末/厕所/浴室/CE335/餐厅 H 端到端；餐厅门更正 CE326@801–805 |
 | [`M13_NGPLUS.md`](M13_NGPLUS.md) | CE436 点数表与 SampleMapA 继承菜单 |
 | [`M13_CROSSDAY_SAVE.md`](M13_CROSSDAY_SAVE.md) | 8/8 存档 load→save 字节幂等、跨天存读 |
+| [`M13_AUTO_EVENTS_SCOPE.md`](M13_AUTO_EVENTS_SCOPE.md) | 读档伪启动 run_condition==2 事件根因；prime_latched 修复范围、m7_hauto 语义裁决与残余风险 |
+| [`M13_DLC_EYE_OVERLAY.md`](M13_DLC_EYE_OVERLAY.md) | 加载存档多画 dlc_imouto01_eye.png 的诊断：事件 506 被 auto_events 读档伪造边沿启动，非存档/ z 序问题 |
+| [`M13_P1E_AUTOMATED_AUDIT.md`](M13_P1E_AUTOMATED_AUDIT.md) | P1-E 自动化审计：8 零售帧 SSIM/PSNR/MAE、锚点/音频/视觉回归；§11 task-22 修复后复测（眼睛层闭环、1–7 档改善） |
 
 ## 状态约定
 
@@ -220,6 +223,6 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 - **M10 文档**：对应 M10 已收口的实现与重基线；其中 `M10_OPCODE_111_PLAN.md`、`M10_BATTLE_EXPECTATIONS.md` 是计划/期望推导，最终以 `M10_OPCODE_111_LANDING.md` 与 HEAD 测试为准。
 - **M11 文档**：M11 第一批/round 1/round 2/round 3 的验收底稿；结论以 `docs/HANDOFF_M12.md`（round 3）与 `docs/HANDOFF_M11.md`（round 2）及 HEAD 测试为准（第一批/round 1 亦见 HANDOFF_M10 §8/§9）。
 - **M12 文档**：零售范围审计 + round 1/day6/multi-day soak 底稿；结论以 `docs/HANDOFF_M12.md` §5/§8 与 HEAD 代码/数据/测试为准。
-- **M13 文档**：内容一致首批验收与第二批底稿；结论以 `docs/HANDOFF_M13.md` 与 HEAD 代码/测试为准。
+- **M13 文档**：内容一致自动化三批底稿（首批/第二批/第三批 prime 修复与 P1-E 复测）；结论以 `docs/HANDOFF_M13.md` 与 HEAD 代码/测试为准。
 - **GUIDE_CONTENT_CROSSWALK**：外部攻略索引，不是规格；攻略为玩家观测，数值/天数/译名均需回 `work/full` 脚本核对。攻略 PDF 留在 `docs/攻略文档/`（用户资料，未跟踪）。
 - **M7_BACKLOG / M8_BACKLOG**：历史计划，已被后续 M9/M10 交接取代；只用于了解当时的缺口清单。

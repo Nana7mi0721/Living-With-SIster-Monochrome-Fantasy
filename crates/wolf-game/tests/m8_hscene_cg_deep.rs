@@ -208,6 +208,9 @@ fn open_synth_bare() -> Option<Game> {
     }
     let mut game = Game::new(data_root()).ok()?;
     game.load_save(&path).ok()?;
+    // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
+    // so its intended deterministic sequence is preserved.
+    game.vm.rng.set_event_seed(21);
     Some(game)
 }
 

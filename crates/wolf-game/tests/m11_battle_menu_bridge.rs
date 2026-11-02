@@ -79,6 +79,9 @@ fn pools(game: &Game) -> [i32; 4] {
 fn real_menu_registers_only_row_one_and_never_advances_input_position() {
     let mut game = Game::new(data_root()).expect("Game::new");
     game.load_save(&save01()).expect("load SaveData01");
+    // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
+    // so its intended deterministic sequence is preserved.
+    game.vm.rng.set_event_seed(2);
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;
@@ -162,6 +165,9 @@ fn real_menu_registers_only_row_one_and_never_advances_input_position() {
 fn successive_command_indexes_run_distinct_ce242_bodies_and_settle() {
     let mut game = Game::new(data_root()).expect("Game::new");
     game.load_save(&save01()).expect("load SaveData01");
+    // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
+    // so its intended deterministic sequence is preserved.
+    game.vm.rng.set_event_seed(2);
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;

@@ -179,18 +179,24 @@ const BASELINES: [Baseline; 5] = [
             "60",
         ],
         expect_header: "  entry     : save file work/retail_backup/Save/SaveData08.sav",
+        // task-22 (AutoEvents::prime_latched): loading a save no longer fabricates a
+        // run_condition==2 edge, so the 7 spurious auto-start coroutines (including the
+        // 506 DLC eye overlay at z=-6) are gone. Baseline re-recorded AFTER the fix.
+        // Verified deterministic: two consecutive captures produce byte-identical PNGs.
+        // Old (pre-fix) values for reference: peak 7 / live 86 / quads 257 / atlas 42 /
+        // glyphs 59 / nonblack 527568.
         frames: 60,
-        peak_coroutines: 7,
-        pictures_live: 86,
-        textured_quads: 257,
+        peak_coroutines: 0,
+        pictures_live: 84,
+        textured_quads: 254,
         text_pictures: 17,
         choice_open: false,
         choice_options: 0,
-        atlas_images: 42,
+        atlas_images: 39,
         text_items: 17,
-        text_glyphs: 59,
+        text_glyphs: 60,
         text_lines: 17,
-        nonblack: 527568,
+        nonblack: 527714,
         messages: 0,
         choices: 0,
     },

@@ -521,6 +521,9 @@ fn synthetic_deep_gate_drives_ce402_to_ce410_proving_state_is_the_only_blocker()
 
     let mut game = Game::new(data_root()).expect("Game::new");
     game.load_save(&path).expect("reload synthetic save");
+    // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
+    // so its intended deterministic sequence is preserved.
+    game.vm.rng.set_event_seed(6);
     let (max402, saw410, warnings) = drive_started(&mut game, 402, 1500);
     assert_eq!(warnings, 0, "synthetic CE402 run has no engine warnings");
     assert!(max402 >= 300, "synthetic CE402 runs its deep body (max pc {max402} of 512)");

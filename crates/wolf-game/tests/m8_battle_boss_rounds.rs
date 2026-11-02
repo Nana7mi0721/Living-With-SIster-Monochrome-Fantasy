@@ -58,6 +58,9 @@ fn save01() -> PathBuf {
 fn open_boss_battle(round_loop: bool) -> Game {
     let mut game = Game::new(data_root()).expect("Game::new");
     game.load_save(&save01()).expect("load SaveData01");
+    // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
+    // so its intended deterministic sequence is preserved.
+    game.vm.rng.set_event_seed(2);
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 1;

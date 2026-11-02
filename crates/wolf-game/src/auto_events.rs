@@ -143,6 +143,27 @@ impl AutoEvents {
         self.enabled
     }
 
+    /// Seeds the latched state from the current variable values without starting
+    /// or stopping anything, and without changing `enabled`.
+    ///
+    /// Called after a save load. A load restores the ordinary variables to their
+    /// saved values, but leaves this scheduler's `latched` map empty. On the first
+    /// `frame()`, `sync` would then read every condition that already holds as a
+    /// fresh false -> true edge and start its event — replaying edges that only
+    /// "appeared" because the variables were restored. Event 506
+    /// (`妹トイレ前まばたき`, the DLC eye overlay) is the visible symptom. Priming
+    /// records the loaded truth values so those events stay dormant until a real
+    /// 0 -> 1 transition, which still starts them normally.
+    ///
+    /// See docs/research/M13_AUTO_EVENTS_SCOPE.md.
+    pub fn prime_latched(&mut self, vm: &Vm) {
+        for event in &self.events {
+            let now = condition_value(vm, event.variable)
+                .map_or(false, |left| condition_met(event.operator, left, event.value));
+            self.latched.insert(event.id, now);
+        }
+    }
+
     /// The tracked events, for diagnostics and tests.
     #[must_use]
     pub fn events(&self) -> &[AutoEvent] {
@@ -329,5 +350,32 @@ mod tests {
         vm.vars.set(160, 0);
         let report = auto.sync(&mut vm);
         assert_eq!(report.started, 1);
+    }
+
+    #[test]
+    fn prime_latched_seeds_loaded_truth_without_starting_and_keeps_the_edge() {
+        let Some((data, _)) = have_data() else { return };
+        let programs = ProgramSet::from_common_events(&data);
+        let mut vm = Vm::new(programs);
+        let mut auto = AutoEvents::from_common_events(&data);
+        // A fresh game: event 38's condition (v160 <= 2, v160 = 0) already holds.
+        // Priming must record that without starting anything.
+        auto.prime_latched(&vm);
+        let report = auto.sync(&mut vm);
+        assert_eq!(report.started, 0, "priming must not fabricate an edge");
+        assert_eq!(report.stopped, 0);
+        assert!(!vm.instances().iter().any(|instance| instance.event == 38));
+        assert!(auto.enabled(), "priming must not touch enabled");
+        // With the condition now false, priming-then-sync still does nothing.
+        vm.vars.set(160, 3);
+        auto.prime_latched(&vm);
+        let report = auto.sync(&mut vm);
+        assert_eq!(report.started, 0);
+        assert!(!vm.instances().iter().any(|instance| instance.event == 38));
+        // A genuine false -> true edge must still start it after priming.
+        vm.vars.set(160, 0);
+        let report = auto.sync(&mut vm);
+        assert_eq!(report.started, 1, "a real edge still starts after priming");
+        assert!(vm.instances().iter().any(|instance| instance.event == 38));
     }
 }

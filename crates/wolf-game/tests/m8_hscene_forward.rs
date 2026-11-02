@@ -173,6 +173,9 @@ fn open_resumed() -> Option<Game> {
         eprintln!("skip: load_save failed: {error}");
         return None;
     }
+    // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
+    // so its intended deterministic sequence is preserved.
+    game.vm.rng.set_event_seed(2);
     let map = load_sample_map();
     game.start_engine_events();
     game.start_pages(&map, Some(0));
@@ -746,6 +749,9 @@ fn save_game() -> Option<Game> {
         eprintln!("skip: load_save failed: {error}");
         return None;
     }
+    // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
+    // so its intended deterministic sequence is preserved.
+    game.vm.rng.set_event_seed(2);
     game.auto_advance = true;
     game.start_engine_events();
     Some(game)

@@ -91,6 +91,7 @@
 - 全量：836 passed / 0 failed / 10 ignored；verify PASS 70/0。
 - 剩余：像素/音频人工验收（P1-E）。详见 `docs/HANDOFF_M13.md` §6。
 - **第二批（task-13..18）**：九结局其余 7 条、17 条件注入随机事件、H 端到端、DLC EP26–36 结案均已完成（全量 860 passed / 0 failed / 14 ignored；verify PASS）。DLC 结案结论：var395 是永久献身技能标志不可重置，EP26 卡点为探针缺已升级队伍属性，预置后自然链 EP0→36/var619=36；像素/音频仍需人工。
+- **第三批（task-19..23）**：P1-E 可自动化审计、DLC 眼睛层根因定位、**读档伪启动修复**（`AutoEvents::prime_latched`，读档不再伪造 run==2 边沿、不再多画 506 眼睛层 -6）、h_overlay 视觉基线重录、P1-E 修复后复测；全量 **863 passed / 0 failed / 14 ignored**，`wolf-cli verify` **PASS 70/0**。P1-E 机器部分闭环（1–7 档全指标改善，第 8 档仅 HUD +1 glyph 波动、场景区改善），仅剩 H2–H5 人工（锚点零售像素核对、HUD 抗锯齿、28 首 loop 人耳）。详见 `docs/HANDOFF_M13.md` §6.2。
 
 ### P1 — 内容完整性
 

@@ -1,4 +1,4 @@
-# M13 交接：内容一致首批验收（2026-11-01 标准）
+# M13 交接：内容一致三批验收（2026-11-01 标准）
 
 > 仓库：`E:\Study\github program\imoto life`
 > 阅读顺序：本文件（M13 最新）→ `docs/README.md` → `PLAN.md`；`HANDOFF_M12.md` 及更早已标历史归档。
@@ -7,7 +7,7 @@
 
 ## 1. 一句话现状
 
-M13 的首批内容一致验收已完成：**common-event self 跨调用持久 bug 修复后，两张最远零售档（SaveData01/08 day90）可无注入自然通关**（stage28 決着→stage29 旅路，var492=1、warnings=0）；DLC CE452、111 随机事件抽样、H 阈值矩阵、NG+ 继承、跨天存读/8 槽 round-trip 均有可执行测试与证据；另修 Text picture 消息窗尺寸存读丢失。仍有“9 个结局中的其余结局、条件注入 17 项逐条、像素/音频人工验收”等未做（见 §6）。
+M13 的自动化内容一致验收三批已完成：首批修 **common-event self 跨调用持久 bug**（SaveData01/08 day90 可无注入自然通关，stage28→29、var492=1、warnings=0）与 Text picture 消息窗尺寸存读丢失；第二批补齐九结局其余、17 项条件注入随机事件、H 端到端、DLC EP26–36 结案；第三批定位并修复**读档伪造 run_condition==2 边沿**（AutoEvents::prime_latched，读档多画 DLC 眼睛层闭环）、重录 h_overlay 视觉基线并完成 P1-E 修复后复测。全量 144 块 / **863 passed / 0 failed / 14 ignored**，`wolf-cli verify` **PASS 70/0**。仅剩像素 H2–H4 与 28 首 loop 人耳 H5 人工验收待用户（见 §6）。
 
 ## 2. 本批交付（均新增测试 + 研究底稿）
 
@@ -36,17 +36,18 @@ M13 的首批内容一致验收已完成：**common-event self 跨调用持久 b
 
 ```bash
 WOLF_GAME_DIR=work/retail_backup WOLF_DATA_ROOT=work/all cargo test -q --workspace --no-fail-fast
-# 139 test-result 块 / 836 passed / 0 failed / 10 ignored / EXIT 0
-./target/debug/wolf-cli.exe verify --root work/all   # PASS 70 / pending 0
+# 144 test-result 块 / 863 passed / 0 failed / 14 ignored / EXIT 0
+./target/debug/wolf-cli.exe verify --root work/all   # PASS 70 check(s) / pending 0 / EXIT 0
 ```
 
 > 环境注意：不 pin `WOLF_GAME_DIR=work/retail_backup` 时，`wolf-save` 的 `every_save_parses_with_the_measured_shape` 与 `typed.rs` 两条会因用户 Steam 安装档已被游玩更新（386830B vs 366146B）而红，与本项目代码无关。
+> verify 注意：不带 `WOLF_GAME_DIR` 时检查 `dxarchive.*`，结果为 PASS 70 / pending 0；带 `WOLF_GAME_DIR=work/retail_backup` 时 dxarchive 不可见，报 64 matched + 1 pending（dxarchive.header），两者均 EXIT 0。门禁以不带 env 的 **70/0** 为准。
 
 ## 6. 首批遗留（第二批闭环见 §6.1；仅人工项仍开放）
 
 1. **九结局**：已测 逃亡、正常通关；其余 7 条已由 §6.1 的 `m13_all_endings.rs` 闭环。
 2. **条件注入型随机事件 17 项**：已由 §6.1 的 `m13_random_events_injected.rs` 闭环。
-3. **P1-E**：锚点 5/6 与关键场景零售像素 diff、31 首 loop 人耳验收（需人工/截图）——仍开放。
+3. **P1-E**：机器部分已闭环（8 张零售帧 SSIM/PSNR/MAE、锚点 5/6、31 首 loop 分档、h_overlay 基线重录）；仅剩人工 H2–H5（锚点零售像素核对、HUD 抗锯齿验收、28 首 loop 人耳）——待用户。
 4. **DLC EP26–EP36**：已结案（task-18）。不是移植缺口：var395 是永久「献身」技能标志（不可重置）；EP26 卡住是隔离探针缺“已升级队伍”战斗属性所致，预置真实战斗属性后同一局自然链 EP0→36 全通、var619=36。
 5. 文档收口：`PLAN.md`/README 的 M13 段、`docs/research/README.md` 登记、`docs/BASELINE.json` 证据键均已更新。
 
@@ -57,6 +58,15 @@ WOLF_GAME_DIR=work/retail_backup WOLF_DATA_ROOT=work/all cargo test -q --workspa
 - H 端到端：`m13_h_endtoend.rs`（5 测试全绿：周末/厕所/浴室/CE335/餐厅）；餐厅门更正为 CE326@801–805 `var424≥3 ∧ var18≥100 ∧ var16≥1`；`M13_H_ENDTOEND.md`。
 - DLC EP26–36（task-18 结案）：`m13_dlc_452_ep26_36.rs`（2 默认+2 ignored）；**不是移植缺口，未改生产 src**。var395 是永久「由衣献身」技能解锁标志，绝不能在战斗结束重置；EP26 卡住是隔离探针未预置“已升级队伍”战斗属性的假象（默认战力~15 vs 敌槽~4500）。一次性预置 `var2000040..45/2000170..175=300`、var395 全程不清洗后，同一局自然链 EP0→EP36 全通、var619=36（diagnostic 未升级队伍卡 EP26 maxpc=4224）。`M13_DLC_452_EP26_36.md`。
 - 全量：`860 passed / 0 failed / 14 ignored`；`wolf-cli verify` PASS（64 项匹配 baseline + 1 项 dxarchive pending，退出 0）。
+
+## 6.2 第三批验收（本轮完成：读档伪启动修复 + 视觉基线 + P1-E 复测）
+
+- **根因**：读档 `savegame::apply` 恢复变量/DB/picture 时未同步 `auto_events.latched`；首帧 sync 把当时为真的 `run_condition==2` 事件伪造成 false→true 边沿启动。8/8 零售档 part3 row_words[610]==1，事件 506（妹トイレ前まばたき）随即画 `DLC_data/dlc_imouto01_eye.png` @ z=-6，而零售同帧无此层。
+- **修复**：`crates/wolf-game/src/auto_events.rs` 新增 `pub fn prime_latched(&mut self, vm: &Vm)`：按当前真值预置 `latched`，不 start/stop、不改 enabled；`crates/wolf-game/src/savegame.rs::apply` 在 part5 picture 重建后调用。读档运行态由 SavePart5 快照呈现，不再伪造边沿。
+- **测试**：新增 `crates/wolf-game/tests/m13_auto_events_load.rs`（load SaveData01/08 后无 506 实例、无 pic -6；HUD `pic 6000` 保留；fresh boot event38 仍启动；2 passed）；`m7_hauto_events` 按裁决 (A) 改为“读档不伪启动 + gate 0→1 才调度”语义（2 passed）；15 个 RNG 敏感 fixture 仅在测试内 `set_event_seed(N)` 固定种子、断言零改动（18 target 0 failed）；`crates/wolf-vm/src/rng.rs` 零改动。
+- **视觉基线**：`crates/wolf-cli/tests/m11_visual_regression.rs` 的 h_overlay 基线按修复后重录（peak 7→0、live 86→84、quads 257→254、atlas 42→39、glyphs 59→60、nonblack 527568→527714；两次 capture PNG sha256 一致）；仅改 h_overlay，其余 4 基线未动；5 passed。
+- **P1-E 修复后复测**：8 零售档 1–7 全指标改善（全帧 SSIM +0.010~0.011、PSNR +1.1~1.5 dB、场景 SSIM +0.012~0.013）；第 8 档全帧小幅波动 0.9245→0.9190，但场景区改善 0.9461→0.9479，变差仅在 HUD（+1 glyph），无场景回归；眼睛层已消失（sd01 眼弧暗像素 23.30%→16.10%）。见 `M13_P1E_AUTOMATED_AUDIT.md` §11 与 `work/out/m13_p1e_after`。
+- **全量**：`144 test-result 块 / 863 passed / 0 failed / 14 ignored / EXIT 0`；`wolf-cli verify --root work/all`（不带 env）= **PASS 70 / pending 0 / EXIT 0**。
 
 ## 7. 约束与未跟踪
 
