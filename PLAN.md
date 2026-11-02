@@ -90,6 +90,7 @@
 - 已验收：主线 SaveData01/08 无注入通关（stage28→29，var492=1）、逃亡 END、DLC CE452（自然 var619 0→25；注入 EP0–36 全通）、111 随机事件抽样（25/115，dead=0）、H 阈值矩阵（37 门边界）、NG+ 继承（CE436/SampleMapA）、跨天存读与 8/8 槽 round-trip。
 - 全量：836 passed / 0 failed / 10 ignored；verify PASS 70/0。
 - 剩余：九结局其余条目、条件注入 17 项逐条、像素/音频人工验收、DLC EP26–36 自然门。详见 `docs/HANDOFF_M13.md` §6。
+- **第二批（task-13..16）**：九结局其余 7 条、17 条件注入随机事件、H 端到端、DLC var395 根因均已完成（全量 860 passed / 0 failed / 14 ignored；verify PASS）。var395 引擎修复由 task-18 跟进；像素/音频仍需人工。
 
 ### P1 — 内容完整性
 

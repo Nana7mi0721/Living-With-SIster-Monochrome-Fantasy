@@ -50,6 +50,14 @@ WOLF_GAME_DIR=work/retail_backup WOLF_DATA_ROOT=work/all cargo test -q --workspa
 4. **DLC EP26–EP36 自然推进**：CE452 内 self11 等数据门阻挡，注入已证全通；是否需夹具补门待定。
 5. 文档收口：`PLAN.md`/README 的 M13 段、`docs/research/README.md` 登记、`docs/BASELINE.json` 证据键（本文件已列证据）。
 
+## 6.1 第二批验收（本轮完成）
+
+- 九结局其余 7 条：`m13_all_endings.rs`（14 默认 + 2 ignored 全绿），覆盖妊娠/兵役/返家/病亡症状链/暗影/魔界/农民/爆炸；`M13_ALL_ENDINGS.md`。
+- 17 项条件注入随机事件：`m13_random_events_injected.rs`（3 测试全绿：16 DLC 事件点 + 特4 海豹 + 15 门三元组）；`M13_RANDOM_EVENTS_INJECTED.md`。
+- H 端到端：`m13_h_endtoend.rs`（5 测试全绿：周末/厕所/浴室/CE335/餐厅）；餐厅门更正为 CE326@801–805 `var424≥3 ∧ var18≥100 ∧ var16≥1`；`M13_H_ENDTOEND.md`。
+- DLC EP26–36：`m13_dlc_452_ep26_36.rs`（2 默认+2 ignored）；根因=var395 从 EP17 泄漏、战斗 243/244 判负，var395=0 夹具下 EP0→36 全通；`M13_DLC_452_EP26_36.md`；引擎修复由 task-18 跟进。
+- 全量：`860 passed / 0 failed / 14 ignored`；`wolf-cli verify` PASS（64 项匹配 baseline + 1 项 dxarchive pending，退出 0）。
+
 ## 7. 约束与未跟踪
 
 - 不提交：3 个永久 scratch（`crates/wolf-format/examples/opscan.rs`、`tests/_scratch_cdata.rs`、`tests/_scratch_event.rs`）；用户资料 `docs/攻略文档/`、`妹相隨 Ver3.CT`、`游戏示例图片/`。

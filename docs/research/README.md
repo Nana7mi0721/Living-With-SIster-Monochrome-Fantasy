@@ -1,11 +1,11 @@
 # 研究文档索引（docs/research/README.md）
 
-> 本目录保存**一次性调查、探针结果与验收底稿**。它们不是当前指令；结论以对应的 `docs/HANDOFF_M12.md`、技术规格和现行代码/测试为准。
+> 本目录保存**一次性调查、探针结果与验收底稿**。它们不是当前指令；结论以对应的 `docs/HANDOFF_M13.md`、技术规格和现行代码/测试为准。
 > 新增研究文档时：文件名用 `Mx_主题.md`（或 `主题.md`），写清测量 HEAD/数据根/复现命令，并登记到本表。
 
 ## 推荐入口（想快速了解某个结论）
 
-- 最新综合：[`../HANDOFF_M12.md`](../HANDOFF_M12.md)
+- 最新综合：[`../HANDOFF_M13.md`](../HANDOFF_M13.md)
 - 完整路线：[`M9_FULL_ROUTE.md`](M9_FULL_ROUTE.md)（标题→day5 08:30）
 - opcode 111 落地：[`M10_OPCODE_111_LANDING.md`](M10_OPCODE_111_LANDING.md)、[`M10_REBASELINE_REVIEW.md`](M10_REBASELINE_REVIEW.md)
 - 战斗/H/地图边界：[`M9_BATTLE_ROUND_GAP.md`](M9_BATTLE_ROUND_GAP.md)、[`M9_BATTLE_LIVE_BRIDGE.md`](M9_BATTLE_LIVE_BRIDGE.md)、[`M9_HSCENE_LOOP.md`](M9_HSCENE_LOOP.md)
@@ -195,11 +195,31 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 | [`M12_DAY6_WEEKEND.md`](M12_DAY6_WEEKEND.md) | M12 task-104 — day5 工作日 → 周六 09:30 CE310 休日五按钮 → 12:00/15:00/17:00 三个活动时段 → 周日 09:30 同一菜单；无时间/日程注入 |
 | [`M12_MULTIDAY_SOAK.md`](M12_MULTIDAY_SOAK.md) | M12 task-105 — 通用驱动连续 30 天到 day31、90 天到 day97（含剧情跳天）；11/27 个战斗日；修复 parented CE239 auto-arm |
 
+### M13（12 篇）
+
+内容一致首批验收：主线结局/DLC/随机事件/H 阈值/NG+/跨天存读/op111 更正，以及第二批九结局、条件注入事件、H 端到端与 DLC var395 根因。
+
+| 文档 | 内容 |
+| --- | --- |
+| [`M13_MAINLINE_ENDINGS.md`](M13_MAINLINE_ENDINGS.md) | 无注入通关 SaveData01/08 day90→95（stage28→29,var492=1）与逃亡 END |
+| [`M13_ALL_ENDINGS.md`](M13_ALL_ENDINGS.md) | 其余 7 结局逐条：妊娠/兵役/返家/病亡症状链/暗影/魔界/农民/爆炸；14 默认+2 ignored |
+| [`M13_DLC_452.md`](M13_DLC_452.md) | CE452 EP0–36 注入全通、自然 var619 0→25 |
+| [`M13_DLC_452_EP26_36.md`](M13_DLC_452_EP26_36.md) | EP26 卡点根因=var395 从 EP17 泄漏；var395=0 夹具全链 EP0→36 |
+| [`M13_CONTENT_MATRIX.md`](M13_CONTENT_MATRIX.md) | 115 随机事件、H 门、战斗、物品、结局坐标矩阵 |
+| [`M13_CROSSWALK_UNRESOLVED.md`](M13_CROSSWALK_UNRESOLVED.md) | 攻略 ↔ 脚本未决项 #78 结案等 |
+| [`M13_RANDOM_EVENTS.md`](M13_RANDOM_EVENTS.md) | 111 事件自然 97/条件注入 17/不可达 1；25 事件抽样 |
+| [`M13_RANDOM_EVENTS_INJECTED.md`](M13_RANDOM_EVENTS_INJECTED.md) | 17 条件注入逐条：18 事件点+15 门三元组全绿 |
+| [`M13_H_THRESHOLDS.md`](M13_H_THRESHOLDS.md) | 37 条 H 门字节锁定、op111 有序分档更正 |
+| [`M13_H_ENDTOEND.md`](M13_H_ENDTOEND.md) | 周末/厕所/浴室/CE335/餐厅 H 端到端；餐厅门更正 CE326@801–805 |
+| [`M13_NGPLUS.md`](M13_NGPLUS.md) | CE436 点数表与 SampleMapA 继承菜单 |
+| [`M13_CROSSDAY_SAVE.md`](M13_CROSSDAY_SAVE.md) | 8/8 存档 load→save 字节幂等、跨天存读 |
+
 ## 状态约定
 
 - **M6–M9 文档**：历史记录，可能描述当时的 blocker；如果与现行实现冲突，以现行代码/测试和 HANDOFF 为准。
 - **M10 文档**：对应 M10 已收口的实现与重基线；其中 `M10_OPCODE_111_PLAN.md`、`M10_BATTLE_EXPECTATIONS.md` 是计划/期望推导，最终以 `M10_OPCODE_111_LANDING.md` 与 HEAD 测试为准。
 - **M11 文档**：M11 第一批/round 1/round 2/round 3 的验收底稿；结论以 `docs/HANDOFF_M12.md`（round 3）与 `docs/HANDOFF_M11.md`（round 2）及 HEAD 测试为准（第一批/round 1 亦见 HANDOFF_M10 §8/§9）。
 - **M12 文档**：零售范围审计 + round 1/day6/multi-day soak 底稿；结论以 `docs/HANDOFF_M12.md` §5/§8 与 HEAD 代码/数据/测试为准。
+- **M13 文档**：内容一致首批验收与第二批底稿；结论以 `docs/HANDOFF_M13.md` 与 HEAD 代码/测试为准。
 - **GUIDE_CONTENT_CROSSWALK**：外部攻略索引，不是规格；攻略为玩家观测，数值/天数/译名均需回 `work/full` 脚本核对。攻略 PDF 留在 `docs/攻略文档/`（用户资料，未跟踪）。
 - **M7_BACKLOG / M8_BACKLOG**：历史计划，已被后续 M9/M10 交接取代；只用于了解当时的缺口清单。
