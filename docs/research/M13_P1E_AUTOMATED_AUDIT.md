@@ -181,6 +181,7 @@ pic -6    File at (0, 0) alpha 1.00 scale 100 ... file "DLC_data/dlc_imouto01_ey
 ## 6. 无法机器闭环 → 人工剩余清单（精确、可执行）
 
 > 以下每条都给出“看/听什么、在哪、合格标准”。这是 P1-E 真正剩下的工作。
+> 人工操作包：`work/out/h25_review/index.html`（H4 八张 2× 对照、H2/H3 预期几何、H5 28 段接缝试听；说明见同目录 `README.md`）。验收结果记录到 [`M13_MANUAL_ACCEPTANCE.md`](M13_MANUAL_ACCEPTANCE.md)。
 
 ### H1. 额外图层 `dlc_imouto01_eye.png`（画面内容差异，最高优先）
 - 现象：我们加载任意存档都会在 z=-6 多画一层“眼睛条”，零售 8 张预览都没有。
