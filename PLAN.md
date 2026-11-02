@@ -106,8 +106,14 @@
 
 6. 视觉像素对照：锚点 5/6 几何已固定（task-82，`M11_ANCHOR_PIXELS.md`）；CN 窗口皮肤右缘已证为 data-only 且无 1024 宽溢出（task-87，`M11_WINDOW_EDGE.md`）。剩余零售像素 diff、关键场景截图 diff。
 7. 音频人工听感验收：已产出 31 首 loop 验收档案与分层（task-84，`M11_AUDIO_ACCEPTANCE.md`），并有逐曲阈值固定、两次 decode 位相同的回归（task-88，`M11_AUDIO_LOOP_REGRESSION.md`）；剩余 BGM 循环点/SE 音量延迟的人工确认。
-8. 打包/性能（工具，非游戏流程）：`wolf-package`（validate/assemble/check/bench）与 `FrameBudgetReport` 已落地（task-100，`M11_PACKAGING.md`）；剩余 Windows 发布包接线、启动数据目录自动校验、release 性能与资源缓存，可按需做。
+8. 打包/性能（工具，非游戏流程）：`wolf-package`（validate/assemble/check/bench）与 `FrameBudgetReport` 已落地（task-100，`M11_PACKAGING.md`）；剩余 Windows 发布包接线、启动数据目录自动校验、release 性能与资源缓存，可按需做。**验收要求（用户 m00888）：发布版实际游玩性能须 ≥ 原版（含启动耗时与资源缓存），并随包修复已知 bug（见 `docs/UNVERIFIED.md` 残余）。**
 9. 文档：每个新里程碑完成时按 §5 收口。
+
+### P3 — 中文双轨（新，草案）
+
+- 目标：保留官方（校对后）+ 彼梦精翻两套中文；台词默认彼梦、UI/贴图术语回填官方 canonical；图源取清晰版。方案见 [docs/research/TRANSLATION_DUAL_TRACK.md](docs/research/TRANSLATION_DUAL_TRACK.md)。
+- 语料已抽取到 `work/translation/`（17089 主台词、123 名字、414 UI 图、glossary），尚未改源码。
+- 已验收样本：CE280 官方↔彼梦 1:1 对齐（并证实官方笔误“再买一点”→“慢一点”）。
 
 ## 5. 里程碑完成的定义（Definition of Done）
 

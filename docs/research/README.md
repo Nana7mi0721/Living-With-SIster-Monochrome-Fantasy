@@ -218,6 +218,12 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 | [`M13_P1E_AUTOMATED_AUDIT.md`](M13_P1E_AUTOMATED_AUDIT.md) | P1-E 自动化审计：8 零售帧 SSIM/PSNR/MAE、锚点/音频/视觉回归；§11 task-22 修复后复测（眼睛层闭环、1–7 档改善） |
 | [`UI_LAYOUT.md`](UI_LAYOUT.md) | UI 布局逆向：WOLF UI 由脚本数据驱动、无需 Ghidra 逆引擎；新增 `wolf-layout` 导出逐画面 150/101 排布；CE216/217/226 布局表 + 窗口类图片仅横向缩放规则（行动力条 6233=62×100 修复依据） |
 
+### 翻译（1 篇）
+
+| 文档 | 内容 |
+| --- | --- |
+| [`TRANSLATION_DUAL_TRACK.md`](TRANSLATION_DUAL_TRACK.md) | 中文双轨方案：官方校对轨+彼梦精翻轨，术语规范化、贴图源选择、#78/事件47 语料复核 |
+
 ## 状态约定
 
 - **M6–M9 文档**：历史记录，可能描述当时的 blocker；如果与现行实现冲突，以现行代码/测试和 HANDOFF 为准。
