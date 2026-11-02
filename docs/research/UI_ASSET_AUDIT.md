@@ -82,3 +82,17 @@
 - 判断：**Steam「校验完整性并下载补丁」把 CN Patch v5 + Cosplay DLC 覆盖进 Data 的内容回滚成了基础版**（DLC 立绘被写成透明占位、少一张地图、事件被裁）。完整版内容仍在 `work/all_prepatch`（项目从 M0 起一直用它验收，863 tests 全绿）。
 - 措施：已把 work/all 还原为完整版（`work/all`=完整 1.5 G，`work/all_base_steamverify`=当前安装的裸基础版 534 M 留档）；wolf-cli verify --root work/all 恢复 **PASS 70 / 0**。
 - 给用户的行动建议：需要**重新运行安装目录里的 `CN Patch v5 with Cosplay DLC.exe`** 恢复游戏内 DLC/中文补丁资源，才能恢复你昨天在玩时的完整内容；否则在 Steam 里会看到 DLC 图空白。移植项目基准保持完整版不变。
+### 6.1 结论（用户重装最新神乐补丁后，2026-11-02 晚）
+
+用户按提示重跑了 Kagura 官网最新「妹相随」补丁+DLC 后，当前安装 `Data/*.wolf` 已与项目完整版 **逐项一致**，不再有透明占位/缺图/缺图：
+
+| 项 | 重装补丁后的当前安装 | 项目 work/all（完整版） |
+| --- | --- | --- |
+| BasicData.wolf | 1,278,855 B；CommonEvent.dat 5,532,175 B | 同 |
+| DLC_data.wolf | 154,450,763 B；633 项；0 张 <200B 占位（453 PNG 全真图） | 同 |
+| cg.wolf | 123,375,407 B；596 项 | 同 |
+| MapData | 9 张含 Dungeon.mps | 同 |
+| Picture.wolf | 25,041,363 B；539 项 | 同 |
+| .wolf mtime | 2024-12-21（补丁文件日期） | — |
+
+→ **§3/§6 的「当前安装是基础版」只是 Steam 校验后的短暂中间态；重装最新补丁已恢复完整版，与 work/all 完全相同。数据根保持 work/all 不动即可（verify PASS 70/0）。** 不再需要任何数据根迁移。
