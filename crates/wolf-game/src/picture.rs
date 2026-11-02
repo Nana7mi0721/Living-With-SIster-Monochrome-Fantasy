@@ -1658,6 +1658,13 @@ where
         let index = (pattern - 1) as u32;
         let column = index % columns;
         let row = index / columns;
+        // A pattern past the last row is exactly what retail calls "Pattern number is too
+        // large!" and then aborts on. That dialog is what the user hit at day 100 with the
+        // pre-v6 DLC data, where common event 506 asked for pattern 3 of a two-frame
+        // dlc_imouto01_eye.png; the v6 patch now ships three frames, so the shipped data is
+        // consistent again. The port must never abort mid-frame, so an out-of-range cell
+        // degrades to the sheet's first cell - same picture, just the neutral frame, never a
+        // read past the texture. See a_sprite_sheet_draw_clamps_like_retail_ce506_eyes.
         if row >= rows {
             return Some(([0, 0, cell_w, cell_h], (cell_w, cell_h)));
         }
@@ -2894,6 +2901,51 @@ mod effect_tests {
         });
         let cell = quads.iter().find(|quad| quad.number == 91).expect("picture 91");
         assert_eq!(cell.src, [0, 0, 400, 650]);
+    }
+
+    /// The CE506 eye strip is a 3x1 sheet of open/half/closed eyes; a cell past the last row
+    /// must fall back to the first (open) cell instead of aborting.
+    ///
+    /// Retail aborts with "Pattern number is too large!" on that shape - the user hit exactly
+    /// that at day 100 under the pre-v6 two-frame DLC image, which the v6 patch grew to three
+    /// frames so the shipped data is consistent. The port never aborts, so this locks the
+    /// graceful clamp and the whole-screen-layer placement of picture -6 at once.
+    #[test]
+    fn a_sprite_sheet_draw_clamps_like_retail_ce506_eyes() {
+        let file = "DLC_data/dlc_imouto01_eye.png";
+        let mut screen = Screen::new();
+        for (number, pattern) in [(101, 1u32), (102, 2), (103, 3)] {
+            let mut picture = Picture::new(number);
+            picture.file = file.to_owned();
+            picture.split = (3, 1);
+            picture.pattern_index = pattern;
+            screen.insert(picture);
+        }
+        // CE506 draws picture -6 as a whole-screen layer; the cell maths is identical.
+        let mut eye = Picture::new(-6);
+        eye.file = file.to_owned();
+        eye.split = (3, 1);
+        eye.pattern_index = 2;
+        screen.insert(eye);
+
+        let quads = screen.quads(|name| (name == file).then_some((1536u32, 576u32)));
+        for (number, expect_x) in [(101, 0u32), (102, 512), (103, 1024), (-6, 512)] {
+            let cell = quads.iter().find(|q| q.number == number).expect("eye frame");
+            assert_eq!(cell.src, [expect_x, 0, 512, 576], "picture {number}");
+        }
+        let layer = quads.iter().find(|q| q.number == -6).expect("screen eye");
+        assert_eq!(layer.dst, [0.0, 0.0, 1024.0, 576.0], "screen layer fills the frame");
+
+        // One frame past a shorter sheet (the pre-v6 two-frame art under a 3x1 grid) still
+        // clamps to the first cell, so a stale file can never be read out of bounds.
+        let mut stale = Picture::new(104);
+        stale.file = file.to_owned();
+        stale.split = (3, 1);
+        stale.pattern_index = 4;
+        screen.insert(stale);
+        let quads = screen.quads(|name| (name == file).then_some((1024u32, 576u32)));
+        let cell = quads.iter().find(|q| q.number == 104).expect("stale frame");
+        assert_eq!(cell.src, [0, 0, 341, 576]);
     }
 
     /// A `150` draw carries the same grid in its slots 1..3.

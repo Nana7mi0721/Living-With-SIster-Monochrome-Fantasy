@@ -96,3 +96,23 @@
 | .wolf mtime | 2024-12-21（补丁文件日期） | — |
 
 → **§3/§6 的「当前安装是基础版」只是 Steam 校验后的短暂中间态；重装最新补丁已恢复完整版，与 work/all 完全相同。数据根保持 work/all 不动即可（verify PASS 70/0）。** 不再需要任何数据根迁移。
+
+
+## 7. CE506「Pattern number is too large」根因与处置（2026-11-02 晚，任务 B）
+
+用户选择 B：**顺手修掉 CE506 眼睛层越界 pattern（原版 bug），不动其它数据**。核查结论如下。
+
+### 7.1 零售弹窗的真正成因
+- 零售 `Game_ErrorLog.txt` 的报错是 `> ID-6 Pattern 3(Max2)`：图片 ID 6（`dlc_imouto01_eye.png`，CE506 用 -6 画的眼睛层）当时只有 **2 格**，而 CE506 的 blink 序列走到 **pattern 3** → 越界 → 原版弹窗并中断。
+- 即当时的 DLC 眼睛图是 **2 帧**（1024×576），CE506 却按 3 格用。这是**数据/版本**问题，不是渲染逻辑问题。
+
+### 7.2 现数据（work/all = 重装补丁后的完整版）已自洽
+- `work/all/DLC_data/dlc_imouto01_eye.png` = **1536×576，3 帧**（每帧 512 宽：帧1 双眼睁 / 帧2 半睁 / 帧3 闭眼横线；见 work/out/eye_contact.png）。
+- CE506 的 op150 序列（pc 3/14/16/18/20）依次 **pattern = 1/2/3/2/1**、`split(WINDOW_W,WINDOW_H)=(3,1)` —— 与 3 帧美术**完全一致**，不再越界。
+- → 用户 day100 的弹窗是 **pre-v6 数据（2 帧眼睛图）造成的旧假象**；重装最新补丁后眼睛图变 3 帧，CE506 从数据层面被修好，无需改 CE506 指令。（注：§3 表格里「补丁版 CE506 清成 1 条指令」指的是 Steam 校验后的**短暂基础版中间态**，已被 §6.1 重装完整版覆盖。）
+
+### 7.3 移植端本来就免疫，并已加回归测试锁定
+- 端口**没有任何** "Pattern number is too large" 判定/中止路径（grep 全仓仅文档注释提及）。`picture_frame`（crates/wolf-game/src/picture.rs:1641）对超出 `columns*rows` 的格**静默回退首格**（`if row >= rows { return 首格; }`），永不 panic/越界；全屏层（number<0）再由 `quads` 的 screen-layer 分支拉伸到 1024×576。
+- 新增回归测试 `picture::effect_tests::a_sprite_sheet_draw_clamps_like_retail_ce506_eyes`：锁定 3×1 眼睛条 pattern 1/2/3 分别取 [0/512/1024] 格、picture -6 作为全屏层铺满 1024×576、以及「2 帧旧图 + 3×1 网格 + pattern 4」越界时回退首格不越界。
+- 结论：**CE506 无需改数据；移植端不会复刻该原版崩溃**。若将来任何 sprite sheet 声明格数与实际帧数不符，端口只会退化到首格，不会中断。
+
