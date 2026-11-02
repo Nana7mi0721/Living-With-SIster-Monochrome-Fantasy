@@ -28,10 +28,11 @@
 //! self variables persist across separate start_event invocations: self10 now
 //! accumulates 0->1->... and var619 advances naturally instead of resetting to 0.
 //! `dlc452_self10_persists_across_calls` proves it without injecting self10: it
-//! carries var619 through EP0..EP25 (0->25). Past EP26 the script gates on other
-//! DLC state (e.g. self11) that a fresh game does not have, so a bare repeated
-//! zero-arg call alone cannot reach EP36 - a data-control-flow property, separate
-//! from the self-vars reset bug this fix removes.
+//! carries var619 through EP0..EP25 (0->25). EP26 contains an embedded story
+//! battle with a fixed high enemy gauge; this bare probe never levels the party,
+//! so it loses, the event chain is torn down before `self10 += 1`, and var619
+//! stays 26. That is a battle precondition of the probe, not a data gate (see
+//! M13_DLC_452_EP26_36.md); a leveled party runs EP0..EP36 naturally.
 //!
 //! Run: cargo test -q -p wolf-game --test m13_dlc_452.
 //! Full 37-EP sweep (ignored by default):
@@ -344,10 +345,10 @@ fn dlc452_self10_persists_across_calls() {
 
         if self10_after != ep + 1 {
             // This EP's body ended the event before reaching the trailing
-            // `self10 += 1` (CE452 dump idx 5760). That is a property of CE452's
-            // own control flow (later EPs gate on additional DLC state such as
-            // self11), NOT the self-vars reset bug: persistence is already proven
-            // by start_self10 == ep at the top of every call.
+            // `self10 += 1` (CE452 dump idx 5760). In this bare probe that is the
+            // EP26 embedded story battle being lost because the party was never
+            // leveled (fixed enemy gauge ~4500), NOT the self-vars reset bug and
+            // NOT a data gate: persistence is already proven by start_self10 == ep.
             eprintln!(
                 "CE452 natural accumulation stops after EP{ep}: self10 stayed {self10_after} \
                  (EP body ended before the self10 += 1 tail)"
