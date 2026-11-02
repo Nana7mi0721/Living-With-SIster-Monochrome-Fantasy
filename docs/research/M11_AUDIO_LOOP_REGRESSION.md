@@ -3,6 +3,7 @@
 Shared task `task-88`. Companion to `docs/research/M11_AUDIO_ACCEPTANCE.md` (task-84 dossier) and
 the executable `crates/wolf-audio/tests/m11_audio_loop_regression.rs`.
 Status: **DONE / green**. Data root `work/all` (override `WOLF_AUDIO_ROOT`). No playback code change.
+Human audition: **2026-11-02 完成**（28 首逐条勾选 clean；3 首 D 档免听，见 §8）。
 
 ## 1. Why this exists
 
@@ -132,37 +133,37 @@ Contents: tracks grouped by tier with metric values + flags, and the human audit
 
 | track | tier | listened (Y/N) | verdict (clean/click/loudness/gap) | date / by |
 |---|:--:|:--:|---|---|
-| `BGM/Acoustic_High_Collar.ogg` | A |  |  |  |
-| `BGM/Across_-Battle_Results-.ogg` | C |  |  |  |
-| `BGM/Be_yourself.ogg` | C |  |  |  |
-| `BGM/Die_Letzte_Revolution.ogg` | A |  |  |  |
-| `BGM/InstaVista.ogg` | A |  |  |  |
-| `BGM/Killer_Roll.ogg` | C |  |  |  |
-| `BGM/Migratory_Birds.ogg` | D |  |  |  |
-| `BGM/Our_Construction.ogg` | A |  |  |  |
-| `BGM/RAIN_&_Co.ogg` | A |  |  |  |
-| `BGM/Sunshine!.ogg` | A |  |  |  |
-| `BGM/Tenseness.ogg` | A |  |  |  |
-| `BGM/The_End_of_Destruction.ogg` | A |  |  |  |
-| `BGM/We_are_Going.ogg` | B |  |  |  |
-| `BGM/ango.ogg` | D |  |  |  |
-| `BGM/autumncome.ogg` | A |  |  |  |
-| `BGM/centennial_loop.ogg` | A |  |  |  |
-| `BGM/destiny.ogg` | A |  |  |  |
-| `BGM/line.ogg` | C |  |  |  |
-| `BGM/madoromu2.ogg` | C |  |  |  |
-| `BGM/morning.ogg` | C |  |  |  |
-| `BGM/nemesis_loop.ogg` | A |  |  |  |
-| `BGM/okiraku.ogg` | C |  |  |  |
-| `BGM/p_egg_loop.ogg` | C |  |  |  |
-| `BGM/soul_engage_loop.ogg` | A |  |  |  |
-| `BGM/straightcontrast.ogg` | A |  |  |  |
-| `BGM/waste_loop.ogg` | A |  |  |  |
-| `BGM/windletter.ogg` | A |  |  |  |
-| `DLC_data/03 2NEONS.ogg` | C |  |  |  |
-| `DLC_data/bgm01.ogg` | A |  |  |  |
-| `DLC_data/bgm02.ogg` | C |  |  |  |
-| `DLC_data/bgm03.ogg` | D |  |  |  |
+| `BGM/Acoustic_High_Collar.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/Across_-Battle_Results-.ogg` | C | Y | clean | 2026-11-02 / 用户 |
+| `BGM/Be_yourself.ogg` | C | Y | clean | 2026-11-02 / 用户 |
+| `BGM/Die_Letzte_Revolution.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/InstaVista.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/Killer_Roll.ogg` | C | Y | clean | 2026-11-02 / 用户 |
+| `BGM/Migratory_Birds.ogg` | D | — | 免听 | — |
+| `BGM/Our_Construction.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/RAIN_&_Co.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/Sunshine!.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/Tenseness.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/The_End_of_Destruction.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/We_are_Going.ogg` | B | Y | clean | 2026-11-02 / 用户 |
+| `BGM/ango.ogg` | D | — | 免听 | — |
+| `BGM/autumncome.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/centennial_loop.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/destiny.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/line.ogg` | C | Y | clean | 2026-11-02 / 用户 |
+| `BGM/madoromu2.ogg` | C | Y | clean | 2026-11-02 / 用户 |
+| `BGM/morning.ogg` | C | Y | clean | 2026-11-02 / 用户 |
+| `BGM/nemesis_loop.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/okiraku.ogg` | C | Y | clean | 2026-11-02 / 用户 |
+| `BGM/p_egg_loop.ogg` | C | Y | clean | 2026-11-02 / 用户 |
+| `BGM/soul_engage_loop.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/straightcontrast.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/waste_loop.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `BGM/windletter.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `DLC_data/03 2NEONS.ogg` | C | Y | clean | 2026-11-02 / 用户 |
+| `DLC_data/bgm01.ogg` | A | Y | clean | 2026-11-02 / 用户 |
+| `DLC_data/bgm02.ogg` | C | Y | clean | 2026-11-02 / 用户 |
+| `DLC_data/bgm03.ogg` | D | — | 免听 | — |
 
 ## 9. How to update a loop baseline (when a change is intentional)
 

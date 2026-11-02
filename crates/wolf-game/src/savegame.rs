@@ -402,7 +402,10 @@ fn encode_escape(chars: &[char]) -> Option<(usize, Vec<u8>)> {
         if end == 3 || chars.get(end) != Some(&']') {
             return None;
         }
-        let code = if kind == 'c' && value == 0 { 0x0f } else { value + 14 };
+        // Palette index n is stored as n + 14. Index 0 is 0x0e, a perfectly valid
+        // payload byte, so it must not be remapped: 0x0f is palette entry 1 (the blue
+        // weekday), not 0. Retail SaveData01 picture 6210 stores 0x0f for \c[1]周六.
+        let code = value + 14;
         if !(1..=255).contains(&code) {
             return None;
         }
@@ -475,7 +478,7 @@ pub fn decode_picture_text(bytes: &[u8]) -> String {
             6 => {
                 if payload.first() == Some(&2) {
                     if let Some(code) = payload.get(3) {
-                        let index = if *code == 0x0f { 0 } else { *code as i32 - 14 };
+                        let index = *code as i32 - 14;
                         if (0..=30).contains(&index) {
                             out.push_str(&format!("\\c[{index}]"));
                         }
@@ -582,12 +585,26 @@ mod tests {
 
     #[test]
     fn a_saved_text_picture_decodes_colour_outline_and_multiple_runs() {
-        // SaveData01 picture 6210: \c[0] \f[18] 周六.
+        // SaveData01 picture 6210: \c[1] \f[18] 周六. 0x0f is index 1, not 0.
         let bytes = [
             0x01, 0x06, 0x02, 0x0e, 0x0e, 0x0f, 0x01, 0x01, 0x05, 0x03, 0x0e, 0x20, 0x01, 0xe5,
             0x91, 0xa8, 0xe5, 0x85, 0xad, 0x00,
         ];
-        assert_eq!(decode_picture_text(&bytes), "\\c[0]\\f[18]周六");
+        assert_eq!(decode_picture_text(&bytes), "\\c[1]\\f[18]周六");
+    }
+
+    #[test]
+    fn colour_palette_indices_encode_as_index_plus_fourteen() {
+        let text = "\\c[0]\\c[1]\\c[2]";
+        let bytes = encode_picture_text(text);
+        for (index, code) in [(0u8, 0x0eu8), (1, 0x0f), (2, 0x10)] {
+            let escape = [1, 6, 2, 0x0e, 0x0e, code, 1];
+            assert!(
+                bytes.windows(escape.len()).any(|window| window == escape),
+                r"\c[{index}] must encode its palette entry as {code:#04x}"
+            );
+        }
+        assert_eq!(decode_picture_text(&bytes), text);
     }
 
     #[test]

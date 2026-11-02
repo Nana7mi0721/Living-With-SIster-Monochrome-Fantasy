@@ -28,9 +28,9 @@ use std::borrow::Cow;
 
 use glyphon::cosmic_text::Align;
 use glyphon::{
-    fontdb, Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping,
-    SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer as GlyphonTextRenderer, Viewport,
-    Wrap,
+    fontdb, Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution,
+    Shaping, SwashCache, TextArea, TextAtlas, TextBounds,
+    TextRenderer as GlyphonTextRenderer, Viewport, Wrap,
 };
 use wgpu::{Device, MultisampleState, Queue, RenderPass, TextureFormat};
 
@@ -496,7 +496,20 @@ impl TextRenderer {
         screen_size: [u32; 2],
     ) -> Self {
         let cache = Cache::new(device);
-        let mut atlas = TextAtlas::new(device, queue, &cache, target_format);
+        // glyphon's default `ColorMode::Accurate` converts every font colour from sRGB
+        // to linear before writing it. That is correct only when the target is an sRGB
+        // texture. The game draws into a plain `Rgba8Unorm` framebuffer precisely so
+        // that palette bytes are blended exactly as DxLib did (see `FRAME_FORMAT`), so
+        // the default mode would silently darken every `\c[n]` colour: the Saturday
+        // blue [140,175,255] came out as [67,109,255]. `ColorMode::Web` keeps the sRGB
+        // value as-is for a linear/UNORM target, which is what this pipeline needs.
+        let color_mode = if target_format.is_srgb() {
+            ColorMode::Accurate
+        } else {
+            ColorMode::Web
+        };
+        let mut atlas =
+            TextAtlas::with_color_mode(device, queue, &cache, target_format, color_mode);
         let glyphs =
             GlyphonTextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
         let mut viewport = Viewport::new(device, &cache);
@@ -1039,6 +1052,26 @@ mod tests {
             "red body should cover the same area"
         );
         assert!(solid_red > 10, "no fully covered glyph pixels: {solid_red}");
+    }
+
+    /// A mid-tone palette colour must land at its own sRGB bytes on the UNORM
+    /// framebuffer. glyphon's default accurate mode would convert it to linear and
+    /// store that as bytes, so [140,175,255] (the blue weekday) came out as
+    /// [67,109,255]; the text pass must use ColorMode::Web for this target.
+    #[test]
+    fn body_colour_keeps_its_srgb_value_on_a_unorm_target() {
+        let Some(mut renderer) = offscreen() else {
+            return;
+        };
+        let want = [140u8, 175, 255];
+        renderer.draw_text(&[TextItem::new("M", BODY_RECT, 96.0).with_colour(want)]);
+        renderer.present();
+        let pixels = renderer.capture_rgba().expect("offscreen capture");
+        let solid = count_pixels(&pixels, |p| p == [want[0], want[1], want[2], 255]);
+        assert!(
+            solid > 10,
+            "mid-tone colour was not preserved: {solid} exact pixels (expected sRGB bytes)"
+        );
     }
 
     /// `\E` must add coverage outside the glyphs and must not disturb the body
