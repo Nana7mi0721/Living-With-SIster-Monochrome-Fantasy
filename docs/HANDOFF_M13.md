@@ -7,7 +7,7 @@
 
 ## 1. 一句话现状
 
-M13 的自动化内容一致验收三批已完成：首批修 **common-event self 跨调用持久 bug**（SaveData01/08 day90 可无注入自然通关，stage28→29、var492=1、warnings=0）与 Text picture 消息窗尺寸存读丢失；第二批补齐九结局其余、17 项条件注入随机事件、H 端到端、DLC EP26–36 结案；第三批定位并修复**读档伪造 run_condition==2 边沿**（AutoEvents::prime_latched，读档多画 DLC 眼睛层闭环）、重录 h_overlay 视觉基线并完成 P1-E 修复后复测。全量 144 块 / **863 passed / 0 failed / 14 ignored**，`wolf-cli verify` **PASS 70/0**。仅剩像素 H2–H4 与 28 首 loop 人耳 H5 人工验收待用户（见 §6）。
+M13 的自动化内容一致验收三批已完成：首批修 **common-event self 跨调用持久 bug**（SaveData01/08 day90 可无注入自然通关，stage28→29、var492=1、warnings=0）与 Text picture 消息窗尺寸存读丢失；第二批补齐九结局其余、17 项条件注入随机事件、H 端到端、DLC EP26–36 结案；第三批定位并修复**读档伪造 run_condition==2 边沿**（AutoEvents::prime_latched，读档多画 DLC 眼睛层闭环）、重录 h_overlay 视觉基线并完成 P1-E 修复后复测。全量 144 块 / **863 passed / 0 failed / 14 ignored**，`wolf-cli verify` **PASS 70/0**。后续 HUD 调色板/文字基线修复后全量 **146 块 / 874 passed / 0 failed / 14 ignored**，`verify` **PASS 70/0**；H2–H5 人工验收已由用户全部通过（2026-11-02，见 §6 与 `docs/research/M13_MANUAL_ACCEPTANCE.md`）。
 
 ## 2. 本批交付（均新增测试 + 研究底稿）
 
