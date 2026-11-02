@@ -78,6 +78,8 @@ HUD 换色来自 SysDatabase type12 的调色板：`c[0]` 白 `[255,255,255]`、
 `\c[0]`→0x0e、`\c[1]`→0x0f、`\c[2]`→0x10；0x0f **不是** `\c[0]` 的特例。
 渲染端目标为 `Rgba8Unorm`，glyphon 必须用 `ColorMode::Web`（默认 Accurate 会把 sRGB 转 linear 而变暗）。
 
+**文字基线**：DxLib 比 cosmic-text 的默认行盒高 2px，因此 `text.rs` 对所有文本统一 `BASELINE_NUDGE_Y=-2`。同一文本图里混排字号时（如 `\f[18]90\f[14]日`、`\f[24] \v[7] \f[14]G`）零售按**同一基线**对齐小字，`textpic.rs::baseline_offset` 让较小 run 下移 `(最大字号-本 run 字号)+1` px；HUD 实测 `日` 与 `G` 的 bbox 与零售逐像素同高（`G` 为 19..30）。
+
 `CE226 ■行動力変動`：文本 6290 在 (590,35) 弹出 `\E+/-\cself[0]` 的 AP 增减提示。
 
 ## 5. 从布局反推出的渲染规则（正是行动力条 bug 的根因）

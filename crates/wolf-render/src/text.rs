@@ -61,6 +61,16 @@ pub const MAX_SIZE_PX: f32 = 256.0;
 /// would clip that picture to a single pixel.
 pub const AUTO_BOX_THRESHOLD: f32 = 2.0;
 
+/// Vertical nudge applied to every text run so its baseline matches DxLib.
+///
+/// WOLF/DxLib places the glyph baseline two pixels higher than cosmic-text's
+/// default line box for the same picture rectangle. Measured against the retail
+/// HUD (`work/retail_backup/Save/save1.jpg`): every run (day, time, weekday,
+/// action label, AP, libido, energy, money) best-aligns at `dy = -2`; without it
+/// the whole HUD sits two pixels low. The scissor still starts at the picture
+/// box, and ordinary boxes leave enough headroom for the two-pixel lift.
+const BASELINE_NUDGE_Y: f32 = -2.0;
+
 /// Locale handed to cosmic-text.
 ///
 /// WHY zh-CN: Han unification makes the same code point pick different glyph
@@ -713,6 +723,7 @@ impl TextRenderer {
             self.stats.items += 1;
             self.buffers.push(buffer);
             let body = self.buffers.len() - 1;
+            let top = bx.top + BASELINE_NUDGE_Y;
 
             // Outline: four copies of the *same* shaped text at ring offsets,
             // queued before the body. Reusing one buffer is what keeps this
@@ -732,7 +743,7 @@ impl TextRenderer {
                     self.placed.push(Placed {
                         buffer: index,
                         left: bx.left + dx,
-                        top: bx.top + dy,
+                        top: top + dy,
                         clip,
                         alpha,
                     });
@@ -742,7 +753,7 @@ impl TextRenderer {
             self.placed.push(Placed {
                 buffer: body,
                 left: bx.left,
-                top: bx.top,
+                top,
                 clip: bx.clip,
                 alpha,
             });

@@ -103,6 +103,8 @@ change can move them without changing the picture.
 
 Every scene reports choice none open and zero warnings.
 
+**2026-11-02 文字基线对齐后重录**：`crates/wolf-render/src/text.rs` 统一 `BASELINE_NUDGE_Y=-2`，`crates/wolf-game/src/textpic.rs` 让同一文本图内的较小字号按 `(最大字号-本字号)+1px` 下移对齐基线。受影响的非黑像素只差几个抗锯齿边缘：`map_idle 544405→544394`、`battle 524412→524409`、`h_overlay 527714→527713`；`title` 与 `day_command` 不变。5 个视觉回归在重录后全部通过。
+
 ### h_overlay baseline update (M13 common-event self restore, anchored 2026-11-01)
 
 The h_overlay baseline was re-pinned when the M13 common-event self-variable

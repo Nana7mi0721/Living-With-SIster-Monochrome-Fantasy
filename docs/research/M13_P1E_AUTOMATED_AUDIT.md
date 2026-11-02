@@ -157,6 +157,8 @@ pic -6    File at (0, 0) alpha 1.00 scale 100 ... file "DLC_data/dlc_imouto01_ey
 
 > 注意：脚本里 `battle` 的基线帧数是 **600**（M11 task-95 起），而旧文档 `docs/research/M11_VISUAL_REGRESSION.md` 里写的 1200 已过时——以测试文件 `crates/wolf-cli/tests/m11_visual_regression.rs` 为准。
 
+> 2026-11-02 HUD 文字基线对齐（`text.rs BASELINE_NUDGE_Y=-2` + `textpic.rs::baseline_offset`）后重录：非黑像素 `map_idle 544405→544394`、`battle 524412→524409`、`h_overlay(SaveData08 f60, 修复后基线) 527714→527713`，title/day_command 不变；5 项视觉回归仍全过。
+
 ---
 
 ## 5. 31 首 loop 音频机审（不替代人耳）

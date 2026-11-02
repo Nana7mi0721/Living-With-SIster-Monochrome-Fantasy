@@ -141,7 +141,12 @@ pub struct Run {
     pub text: String,
     /// Left edge in picture-local pixels.
     pub x: f32,
-    /// Top edge of this line's box in picture-local pixels.
+    /// Top edge of this run's text area in picture-local pixels.
+    ///
+    /// For a uniform-size line this is the line box top. A run smaller than the
+    /// line's tallest font is pushed down by [baseline_offset] so the two runs
+    /// share a baseline, which is what DxLib does for mixed-size HUD labels
+    /// (the day label and the money suffix are the visible cases).
     pub y: f32,
     /// Font size for this run.
     pub font_px: f32,
@@ -274,9 +279,15 @@ pub fn layout_with(
             .tail_from
             .unwrap_or(line.chunks.len())
             .min(line.chunks.len());
+        let max_font = line_max_font(ctx, line);
         let mut cursor = left;
         for chunk in &line.chunks[..split] {
-            runs.push(run_of(chunk, cursor, top, false));
+            runs.push(run_of(
+                chunk,
+                cursor,
+                top + baseline_offset(max_font, chunk.style.font_px),
+                false,
+            ));
             cursor += width_of(&chunk.text, chunk.style.font_px, advance);
         }
         if split < line.chunks.len() {
@@ -286,7 +297,12 @@ pub fn layout_with(
                 .sum();
             cursor = left + block_w - tail;
             for chunk in &line.chunks[split..] {
-                runs.push(run_of(chunk, cursor, top, true));
+                runs.push(run_of(
+                    chunk,
+                    cursor,
+                    top + baseline_offset(max_font, chunk.style.font_px),
+                    true,
+                ));
                 cursor += width_of(&chunk.text, chunk.style.font_px, advance);
             }
         }
@@ -608,17 +624,37 @@ fn width_of(text: &str, font_px: f32, advance: Advance<'_>) -> f32 {
 /// two different baselines. An empty line still occupies one default pitch, which is
 /// what `\n`-only text pictures rely on.
 fn line_pitch(ctx: &Ctx<'_>, line: &Line) -> f32 {
+    line_max_font(ctx, line) * DEFAULT_LINE_PITCH_RATIO
+}
+
+/// Tallest font on one line, or the default size for an empty line.
+fn line_max_font(ctx: &Ctx<'_>, line: &Line) -> f32 {
     let font_px = line
         .chunks
         .iter()
         .map(|chunk| chunk.style.font_px)
         .fold(0.0_f32, f32::max);
-    let font_px = if font_px > 0.0 {
+    if font_px > 0.0 {
         font_px
     } else {
         ctx.default_font_px.max(MIN_FONT_PX)
-    };
-    font_px * DEFAULT_LINE_PITCH_RATIO
+    }
+}
+
+/// How far a smaller run drops so it shares the tallest font's baseline.
+///
+/// WOLF/DxLib lines mix sizes inside one text picture (`\f[18]90\f[14]日`,
+/// `\f[24] \v[7] \f[14]G`). Retail keeps the runs on one baseline: the
+/// 14 px suffix sits `(tallest - own) + 1` px below the 18/24 px digits. That
+/// `+1` is DxLib's integer line rounding, measured on save1.jpg; omitting it
+/// leaves the suffix one pixel high.
+fn baseline_offset(max_font_px: f32, font_px: f32) -> f32 {
+    let drop = (max_font_px - font_px).max(0.0);
+    if drop > 0.01 {
+        drop + 1.0
+    } else {
+        0.0
+    }
 }
 
 /// Top-left corner of a block of `(w, h)` whose anchor sits on `(x, y)`.
@@ -828,6 +864,21 @@ mod tests {
         assert_eq!(runs[1].text, "B");
         assert!(approx(runs[1].font_px, 20.0));
         assert!(approx(runs[1].x, 5.0));
+    }
+
+    #[test]
+    fn smaller_run_shares_the_tallest_baseline() {
+        // The two HUD shapes measured against save1.jpg: day is
+        // 18 px digits + 14 px suffix; money is 24 px digits + 14 px suffix.
+        let day = layout(r"\f[18]90\f[14]日", 0.0, 10.0, 0, &bare());
+        assert_eq!(day.len(), 2);
+        assert!(approx(day[0].y, 10.0));
+        assert!(approx(day[1].y, 15.0)); // 10 + (18 - 14) + 1
+
+        let money = layout(r"\f[24] \v[7] \f[14]G", 0.0, 7.0, 0, &bare());
+        assert_eq!(money.len(), 2);
+        assert!(approx(money[0].y, 7.0));
+        assert!(approx(money[1].y, 18.0)); // 7 + (24 - 14) + 1
     }
 
     #[test]
