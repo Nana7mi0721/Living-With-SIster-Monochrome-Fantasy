@@ -3,6 +3,7 @@
 *.pdb
 *.exe
 /work/
+/release/
 /.recon/
 /_wolfref/
 /_tmp_*.py
