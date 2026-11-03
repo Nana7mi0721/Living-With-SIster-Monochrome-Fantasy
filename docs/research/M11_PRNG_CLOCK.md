@@ -9,6 +9,11 @@ This document records the disassembly evidence, the exact seed and draw
 formulas, the test vectors, and the branches that cannot be proven without a
 live retail process.
 
+Production wiring (2026-11-03): `wolf-cli play` seeds the event RNG from the
+local clock through `wolf_vm::rng::resolve_session_event_seed`; `WOLF_EVENT_SEED`
+overrides it for replay, and library constructors remain fixed. See
+`docs/research/M9_PRNG_SEED.md` for the implementation and tests.
+
 ## 1. Artifact and address map
 
 - Binary: work/runcopy/Game.exe

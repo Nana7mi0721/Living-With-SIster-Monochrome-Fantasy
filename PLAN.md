@@ -55,7 +55,7 @@
 
 ### P0 — 确定性与真实流程
 
-1. **战斗自然路线确定性（已完成，task-79）**：`started_events` 已是 `BTreeSet`（有序，非 HashSet），实例为 `Vec`，HashMap 仅键查表；自然 day4 路线已逐字节复现（5 次重跑一致：4 回合、v352=1），#11/#12 已改为定值断言（见 `docs/research/M11_BATTLE_DETERMINISM.md`）。PRNG 零售时钟种子来源与无 folding 已由 task-99 反汇编证实（`M11_PRNG_CLOCK.md`）；剩余仅是零状态重读导致“单 tick 完全重放”不可证。
+1. **战斗自然路线确定性（已完成，task-79）**：`started_events` 已是 `BTreeSet`（有序，非 HashSet），实例为 `Vec`，HashMap 仅键查表；自然 day4 路线已逐字节复现（5 次重跑一致：4 回合、v352=1），#11/#12 已改为定值断言（见 `docs/research/M11_BATTLE_DETERMINISM.md`）。PRNG 零售时钟种子来源与无 folding 已由 task-99 反汇编证实（`M11_PRNG_CLOCK.md`）；交互 `wolf-cli play` 已按本地时钟播种（`resolve_session_event_seed`，`WOLF_EVENT_SEED` 可回放零售 tick），剩余仅是零状态首 tick 重读导致该种子的单 tick 重放例外（见 `docs/UNVERIFIED.md` H-PRNG-1）。
 2. **真实多命令菜单桥接（真实菜单已通，task-85/89/93/95/98/101）**：`battle_wiring.rs` 实现 CE157 确认采集、`set_menu_command_queue`，`Game::set_battle_menu_command_queue` 为应用层入口。task-89 推翻“CE157 cursor VM bug”：物理 cursor 是 CData type18 row73；task-93 用 2 成员 fixture 注册 15 行并驱动 4 个不同 CE242 body；task-95 默认 auto-arm 让自然 day4 战斗自行结算；task-98 harvester 改读 committed CData type14 并移到 `drive` 判断之前，真实 2 成员菜单无需注入即注册 2 行、驱动 3 个 CE242 body；task-101 完成取消/返回/连续确认验收（`M12_BATTLE_CANCEL.md`）。剩余只有目标选择/左右切换的逐项 UI 验收（可选）；3–4 人队伍不是零售内容。
 
 ### M12 round 1（task-101..103，已完成）

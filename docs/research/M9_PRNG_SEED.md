@@ -1,17 +1,19 @@
 # M9 W5-a - Production event-RNG seed hook and deterministic replay
 
 Status: implemented in crates/wolf-vm/src/rng.rs, proof in
-crates/wolf-vm/tests/prng_seed.rs. Default behaviour is unchanged.
+crates/wolf-vm/tests/prng_seed.rs (10/10). Interactive `wolf-cli play` now seeds
+from the local clock; the library default is unchanged.
 
 ## Problem
 
 The retail WOLF build self-seeds the opcode 0x6000 event RNG from the clock at
 startup, so two retail runs of the same save with the same input can diverge.
-This port replaced that with a fixed seed: EVENT_SEED = 1 (park-miller MINSTD,
+The library uses a fixed seed by default: EVENT_SEED = 1 (park-miller MINSTD,
 state = state * 16807 % 0x7FFFFFFF, reject while the state exceeds 2,000,000,000,
-reseed on zero). That makes the port deterministic but leaves a residual parity
-gap: a retail run cannot be reproduced bit for bit until the retail clock seed
-for that run is known and can be supplied.
+reseed on zero). That keeps tests and diagnostic commands deterministic.
+Interactive `wolf-cli play` seeds from the local clock, so normal play gets a
+fresh stream each launch; `WOLF_EVENT_SEED` restores an explicit seed for
+byte-for-byte replay.
 
 ## Added API (crates/wolf-vm/src/rng.rs)
 
@@ -24,6 +26,11 @@ All additions are additive; no existing signature or default changed.
     whitespace, non-numeric, negative, overflow) returns EVENT_SEED (1), so the
     default build is unchanged. A valid u32 is trimmed and then zero-normalised
     exactly like from_event_seed: 0 becomes EVENT_RESEED (1).
+- pub fn resolve_session_event_seed(raw: Option<&str>, clock_ticks: u32) -> u32
+  - Production policy for an interactive front end. Some(raw) returns
+    resolve_event_seed(raw); None returns seed_from_clock_ticks(clock_ticks) with
+    zero normalised to EVENT_RESEED. Pure: it reads neither the environment nor
+    the clock, which keeps it directly testable.
 - pub fn event_seed_from_env() -> u32
   - Reads WOLF_EVENT_SEED and returns resolve_event_seed of it. This is the only
     place the process environment is consulted.
@@ -53,6 +60,25 @@ same save plus the same input plus the same seed replays the same event stream.
 Two generators built from the same seed produce identical next_event_draw() and
 range(a,b) sequences (verified for 1000 steps in the test).
 
+## Production wiring (2026-11-03)
+
+`crates/wolf-cli/src/play.rs` installs the session seed after `Game::new(root)`
+succeeds and before any boot/load-save event runs:
+
+    let seed_override = std::env::var(EVENT_SEED_ENV).ok();
+    let clock_ticks = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_millis() as u32);
+    let event_seed = resolve_session_event_seed(seed_override.as_deref(), clock_ticks);
+    game.vm.rng.set_event_seed(event_seed);
+
+It logs `startup: event RNG seed <seed> (clock|WOLF_EVENT_SEED)`. The 32-bit
+milliseconds-since-epoch value is a portable stand-in for GetTickCount; because
+`seed_from_clock_ticks` is identity folding, only the 32-bit tick value matters
+to the stream, not the epoch offset. Real runs: two launches produced seeds
+2675025206 and 2675026572; `WOLF_EVENT_SEED=24680` produced 24680 with source
+WOLF_EVENT_SEED.
+
 ## Guarantees proven by crates/wolf-vm/tests/prng_seed.rs
 
 1. absent_or_invalid_seed_keeps_the_fixed_default - None, "", "   ", "abc",
@@ -79,23 +105,27 @@ range(a,b) sequences (verified for 1000 steps in the test).
    "not-a-number" -> EVENT_SEED. The test restores the environment.
 8. zero_width_range_still_consumes_one_draw - range(7,7) returns 7 and still
    advances the draw counter by one; reversed bounds normalise to low = min.
+9. production_policy_uses_the_clock_when_no_override_is_supplied - None with
+   clock 4321 gives 4321; a large tick is preserved; zero clock gives
+   EVENT_RESEED; equal ticks give equal streams and different ticks differ.
+10. production_policy_prefers_an_explicit_seed_over_the_clock - Some("24680")
+    wins over any clock including 1 and u32::MAX; Some("0") gives EVENT_RESEED;
+    Some("not-a-number") gives EVENT_SEED rather than falling back to the clock.
 
-## Exact residual retail clock-seed parity gap
+## Optional retail-run parity check
 
-What is still missing for bit-exact parity with a real retail run:
+Production seeding is no longer a gap: `wolf-cli play` seeds from the local
+clock and `WOLF_EVENT_SEED` replays an explicit tick. What remains is only an
+optional verification against one specific retail run:
 
-- The retail binary seeds the event RNG from a clock value at startup. Which
-  clock (GetTickCount, time(), QueryPerformanceCounter) and exactly how that raw
-  value is folded into the seed is not documented in the shipped data or the
-  reverse-engineering notes, and this port does not capture it.
-- This port fixes EVENT_SEED = 1 by default and only lets a caller inject a seed
-  via WOLF_EVENT_SEED / from_event_seed_env(). If the retail clock seed for a
-  run is captured by instrumenting the retail binary (or derived from a retail
-  save that recorded it), supplying that number reproduces the run. Without that
-  captured number, retail and port streams will differ from the first event draw.
-- Zero handling is assumed: this port maps a zero seed to EVENT_RESEED (1).
-  Whether retail does the same on a zero clock seed is unverified.
-
-So: the hook removes the port's rigidity and makes same-seed replay provable,
-but the retail clock read itself is still an open capture task, not a solved
-seed.
+- `docs/research/M11_PRNG_CLOCK.md` establishes that the retail binary calls
+  GetTickCount at RVA 0x35847 and stores the raw DWORD into the event state at
+  VA 0x011b17f0 (RVA 0x35852); a zero state re-reads the clock. So the clock
+  source is known, not merely assumed.
+- To align bit for bit with a particular retail run, capture that run's raw
+  GetTickCount and pass it as `WOLF_EVENT_SEED=<tick>`. Without that captured
+  number, streams still differ from the first event draw, which is expected
+  because the clock differs; this is a verification convenience, not a
+  functional defect in the port.
+- Zero handling is still assumed: this port maps a zero seed to EVENT_RESEED
+  (1). Whether retail does the same on a zero clock tick remains unverified.

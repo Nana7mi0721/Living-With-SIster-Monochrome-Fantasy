@@ -7,11 +7,12 @@ applies the pinned modulo law from RVA 0xaf7c0. The MSVC C LCG is kept only for
 the Game.dat static-table stream (`next_raw`), matching §3's finding that it is
 not the event source. No commit/push; the Lead integrates.
 
-Residual (not closed by this task): the retail event generator self-seeds from
-the clock, so byte-for-byte parity with a real run needs that run's clock seed;
-this build uses a fixed default seed (`EVENT_SEED = 1`) for determinism. Same
-save + same input replay parity against the retail binary therefore remains
-unproven; see §6.
+Production clock wiring landed later (2026-11-03): interactive `wolf-cli play`
+seeds from the local clock through `resolve_session_event_seed`; the library
+keeps `EVENT_SEED = 1` for deterministic tests and diagnostics, and
+`WOLF_EVENT_SEED` replays a captured tick. See `docs/research/M9_PRNG_SEED.md`.
+Byte-for-byte parity with one specific retail run still needs that run's
+GetTickCount, an optional check rather than a functional gap; see §6.
 
 ## 1. Verdict
 
@@ -160,12 +161,14 @@ and data-file decryption. Re-deriving the packed Game.dat confirms the
    (`while state > 2_000_000_000: multiply again`) and a zero-state reseed.
    `next_event_draw() -> u32` returns the state. Seeds:
 
-   * `EVENT_SEED = 1` — the default, the canonical MINSTD anchor. The retail
-     generator has no seed constant (it reads the clock), so this is a
-     determinism choice, pinned by tests.
+   * `EVENT_SEED = 1` — the library default, the canonical MINSTD anchor. The
+     retail generator has no seed constant (it reads the clock), so this keeps
+     tests and diagnostics deterministic; interactive `wolf-cli play` seeds
+     from the clock instead.
    * `EVENT_RESEED = 1` — what a zero state becomes. State 0 is an LCG fixed
-     point, so it is never kept. The real clock reseed is a future production
-     hook.
+     point, so it is never kept; this is the chosen stand-in for the retail
+     zero-state clock reread. Production wiring lives in `wolf-cli play` via
+     `resolve_session_event_seed` (2026-11-03).
    * `from_event_seed(seed)` / `set_event_seed(seed)` reseed only this stream;
      `from_seeds(msvc, event)` seeds both. `new()` = MSVC `DEFAULT_SEED =
      22227` + event `EVENT_SEED = 1`.
@@ -249,14 +252,15 @@ WOLF_DATA_ROOT='E:/Study/github program/imoto life/work/full' \
 
 Remaining work (exact parity):
 
-1. **Clock seed.** Retail self-seeds RVA 0x35810 from the clock. This build
-   fixes the seed at 1 so replays are deterministic. For retail parity, capture
-   the first draw/seed of a run (debugger breakpoint at 0x35810 or a
-   save-time value) and add a production seed hook; the generator/range law
-   need no change.
-2. **Same-save replay parity.** With the clock seed unknown, "same save + same
-   input" cannot be compared bit-for-bit against retail yet. The draw sequence
-   and reduction are now exact; only the seed source differs.
+1. **Clock seed — production wiring closed (2026-11-03).** Interactive
+   `wolf-cli play` seeds from the local clock via
+   `resolve_session_event_seed`; `WOLF_EVENT_SEED` injects a captured retail
+   tick. The library keeps seed 1 so tests/diagnostics replay deterministically.
+   The generator/range law needed no change.
+2. **Same-save replay parity.** Same save + same event seed now replays exactly.
+   To compare bit-for-bit with one particular retail run, capture that run's raw
+   GetTickCount (RVA 0x35847) and pass it as `WOLF_EVENT_SEED`; without it the
+   clocks differ by construction. Zero-tick behaviour is still assumed.
 3. **Static-table story.** The MSVC stream's actual seed state for this Game.dat
    is recoverable (`0xe765b62e`); `random_a`/`random_b` are encoded draws, not
    seeds. `from_game` still accepts them for API stability but should not be

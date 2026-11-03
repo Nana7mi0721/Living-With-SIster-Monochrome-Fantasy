@@ -14,12 +14,12 @@
 
 | 分组 | 条目 | 说明 |
 | --- | --- | --- |
-| **仍开放** | H-PIC-1、H-KEY-2、H-PRNG-1、H-ASSET-1 | 低风险视觉 / 键码 / 确定性 / 数据笔误；无发布阻断 |
+| **仍开放** | H-PIC-1、H-KEY-2、H-ASSET-1 | 低风险视觉 / 键码 / 数据笔误；无发布阻断 |
 | **已实现，仅剩证据或表示缺口** | H-PIC-2、H-ANC-1 | 槽位与锚点几何已落地并通过测试；仍缺「纵向缩放表示」或「5/6 锚点单独零售像素」 |
-| **已解除** | H-WIN-1、H-MENU-1、H-124、opcode 111 | 已由像素对照 / 数据几何 / 回归测试锁定 |
-| **清单外真残余** | CE159/CE162、CE333、character_state、PRNG 时钟、音频 | 见文末「其它真残余」 |
+| **已解除** | H-WIN-1、H-MENU-1、H-124、H-PRNG-1、opcode 111 | 已由像素对照 / 数据几何 / 回归测试锁定 |
+| **清单外真残余** | CE159/CE162、CE333、character_state、音频 | 见文末「其它真残余」 |
 
-统计：原 9 条中 **3 条已解除**（H-WIN-1、H-MENU-1、H-124），**2 条已实现但仅剩证据/表示缺口**（H-PIC-2、H-ANC-1），**4 条仍开放**（H-PIC-1、H-KEY-2、H-PRNG-1、H-ASSET-1）。另有 opcode 111 等旧账已在后续证据中解除，列在文末「已纠正的过时否定」。
+统计：原 9 条中 **4 条已解除**（H-WIN-1、H-MENU-1、H-124、H-PRNG-1），**2 条已实现但仅剩证据/表示缺口**（H-PIC-2、H-ANC-1），**3 条仍开放**（H-PIC-1、H-KEY-2、H-ASSET-1）。另有 opcode 111 等旧账已在后续证据中解除，列在文末「已纠正的过时否定」。
 
 ---
 
@@ -53,18 +53,6 @@
 2. **未命名的键码 13 / 14 / 20 / 100 / 300** —— 出现在比较里，本作没有注释能说明它们的来源（鼠标键？手柄？滚轮？）。目前已按「永不返回」处理（端口不会产生这些码），一旦有脚本依赖它们就会走进 else 分支。
 
 **怎么证实**：原版实机按 F 系列的 info 键或直接在标题菜单试上下+決定，比对光标行为；或反编译 `Game.exe` 里读取 `GetKeyState` / DirectInput 的那一小段。
-
----
-
-### H-PRNG-1 随机数流
-
-**假说**：`121` 的 `0x6000` 算子 = `rand(min,max)`（闭区间）。**这一条已经证实**（1,101 处，见 `docs/OPCODE_SPEC.md` §3.2）；这里登记的是它的**实现**不确定性。
-
-**实现（M8 W5-a）**：`121` 的 `0x6000` 随机分支已按反编译结果落地（`docs/research/M8_PRNG_RANGE.md` §1-2）。引擎在 RVA `0xaf7c0` 调用 RVA `0x35810` 的 **Park-Miller MINSTD**（`state = state*16807 % 0x7FFFFFFF`，超过 2,000,000,000 再乘一次，为 0 则重播种），取 31 位状态后用 `low + draw % (abs(b-a)+1)`（32 位回绕）归约；每次调用（含零宽区间）消耗一次抽样。`crates/wolf-vm/src/rng.rs` 新增 `next_event_draw()` / `from_event_seed()` / `set_event_seed()`，`range()` 改用该事件流与上述模运算律；M7 的 MSVC C 运行时 LCG（`next_raw()`，`state*0x343FD+0x269EC3 mod 2^32`）**只用于 Game.dat 静态表/解密流**，已被 M8 §3 证实不是事件发生器。默认事件种子为固定值 `EVENT_SEED=1`（零售用时钟自播种；零状态重播种为固定 `EVENT_RESEED=1`），以便回放确定。`cargo test -q -p wolf-vm` 全绿（unit 91 / rng_retail 15）。
-
-**残余未验证**：零售事件发生器以时钟自播种，本移植用固定种子 → **同一存档 + 同一输入能否与原版逐位对齐仍未证**（缺一次实机运行的时钟种子）；抽样算法与归约律本身已是反编译证实。见 `docs/research/M8_PRNG_RANGE.md` §6。
-
-**怎么证实**：在原版运行时于 RVA `0x35810` 下断点或读首次状态，取出该次运行的种子；用同一种子 + 同一存档/输入驱动本移植并逐帧对比输出。
 
 ---
 
@@ -175,6 +163,26 @@ code 7 在本作零站点，按左上回退。
 
 ---
 
+### H-PRNG-1 随机数流与生产播种（已解除 ✅ 2026-11-03）
+
+**结论**：`121` 的 `0x6000` 算子 = `rand(min,max)` 闭区间，已由反编译与 1,101 个站点证实；零售事件发生器的**时钟自播种**也已接入生产 `wolf-cli play`，不再是缺口。
+
+**算法**：引擎在 RVA `0xaf7c0` 调用 RVA `0x35810` 的 **Park-Miller MINSTD**（`state = state*16807 % 0x7FFFFFFF`，超过 2,000,000,000 再乘一次，为 0 则重播种），取 31 位状态后用 `low + draw % (abs(b-a)+1)`（32 位回绕）归约；每次调用（含零宽区间）消耗一次抽样。`crates/wolf-vm/src/rng.rs` 的 `next_event_draw()` / `from_event_seed()` / `set_event_seed()` 与 `range()` 已按此实现；M7 的 MSVC C 运行时 LCG（`next_raw()`，`state*0x343FD+0x269EC3 mod 2^32`）只用于 Game.dat 静态表/解密流，已被 M8 §3 证实不是事件发生器。
+
+**生产播种（2026-11-03）**：
+- `crates/wolf-vm/src/rng.rs` 新增纯策略 `resolve_session_event_seed(raw: Option<&str>, clock_ticks: u32) -> u32`：有 `WOLF_EVENT_SEED` 时走 `resolve_event_seed`（trim、零归一化）；无覆盖时用 `seed_from_clock_ticks(clock_ticks)` 并归一化零值为 `EVENT_RESEED`。
+- `crates/wolf-cli/src/play.rs` 在 `Game::new(root)` 成功之后、任何 boot/load_save 之前，用 `SystemTime::now().duration_since(UNIX_EPOCH).as_millis() as u32` 作为 clock tick，调用上述策略并 `game.vm.rng.set_event_seed(seed)`；启动打印 `startup: event RNG seed <seed> (clock|WOLF_EVENT_SEED)`。
+- 库内 `WolfRng::new()` / `from_seed()` / `Game::new` 仍默认固定 `EVENT_SEED=1`，保证既有测试向量与诊断命令（`dump` / `capture` / `run_event` / `run_map_event`）确定；只有交互式 `play` 改用时时钟，`WOLF_EVENT_SEED=<tick>` 可把零售抓到的 tick 注入回放。
+
+**证据**：
+- `crates/wolf-vm/tests/prng_seed.rs` 10 测全过（含 `production_policy_uses_the_clock_when_no_override_is_supplied` 与 `production_policy_prefers_an_explicit_seed_over_the_clock`）；`cargo test -p wolf-vm --test prng_seed` 10 passed / 0 failed，覆盖无覆盖用时钟、同 tick 同流/不同 tick 不同流、零 tick 归一化、显式 seed 优先、非法 seed 回退固定种子。
+- 实跑 `wolf-cli play --root work/all --boot --until 2` 两次：seed `2675025206` / `2675026572`（来源 clock），均 3 frames / 667 instructions / 7 pictures / 0 warnings；`WOLF_EVENT_SEED=24680` 时 seed `24680`（来源 WOLF_EVENT_SEED）。
+- 抽样算法与归约律已由 `crates/wolf-vm/tests/rng_retail.rs` 15 测与 `docs/research/M8_PRNG_RANGE.md` 锁定。
+
+**残余（可选验证，不是功能缺口）**：若要和**某一次具体零售运行**逐位对齐，仍需该次运行 RVA `0x35847` 的 `GetTickCount` 原值；拿到后以 `WOLF_EVENT_SEED=<tick>` 注入即可。当前未做零售侧自动抓取 tick，属验证便利性，不是生产随机性缺陷。
+
+---
+
 ### opcode 111 值操作数引用（已解除 ✅）
 
 `crates/wolf-vm/src/exec.rs` 的 `let value = eval_num(arg(cmd, 2 + 3 * i), inst, vars);` 已把值操作数走 `eval_num`（commit `3bbbb12`）；`crates/wolf-vm/tests/opcode_111_semantics.rs` 5 测全过。旧记录称「仍按字面量比较、1 测 `#[ignore]`」的账目**已过时**。
@@ -188,7 +196,7 @@ code 7 在本作零站点，按左上回退。
 - **CE159/CE162 目标选择执行侧分发（开放）**：目标*生成*已修（ENEMY_COUNT 单元 CData type18 row69 col0=1；CE190 pc36 / CE162 pc12 读取；`crates/wolf-game/tests/m7_battle_target_scheduler.rs` 6 测、`crates/wolf-game/tests/m7_battle_target.rs` 3 测），但 `CE188` 指令线从未生成 `CE159`（技能選択実行），`CE162` 唯一真实调用者是 CE159 `pc247`；`crates/wolf-game/tests/m7_battle_target_flow.rs` 仅为 zz 调试探针，非绿色验收。
 - **CE333 H-scene 坏结局不可达（状态缺失）**：入口 `CE246 pc1943` 需 `var157==13`（全库无字面量 13，只有 {1,2,16}），且坏结局需 `v23==0`，而零售 `v23={9,9,10,6,6,9,8,9}` 全 ≥6；强设 v23=0 触发爆炸。CE346 cutin 可达（`crates/wolf-game/tests/m7_hscene_deep.rs`），坏结局不可达（`crates/wolf-game/tests/m7_hmode_state.rs`）。
 - **character_state 限制（非缺陷）**：`crates/wolf-game/tests/m8_character_state.rs` 3 测 —— 对地图事件与队长(-2) 已返回真实坐标，但无移动模型、身高 field4 恒 0、`-1` / `-3..-7` 返回 None、屏幕偏移靠推断。
-- **PRNG 时钟种子回放位对齐（确定性）**：算式已反编译落地（`crates/wolf-vm/tests/rng_retail.rs` 15 测），残余 = 零售以时钟自播种、移植用固定 `EVENT_SEED=1`，同存档 + 同输入的逐位对齐未证。详见 H-PRNG-1。
+- **PRNG 单次零售运行逐位对齐（可选验证）**：本移植 `wolf-cli play` 已按本地时钟自播种（见「已解除 H-PRNG-1」），算式由 `crates/wolf-vm/tests/rng_retail.rs` 15 测锁定；只剩「与某一次具体零售运行逐位一致」需要该次 `GetTickCount` 原值，属可选验证，不是功能缺口。
 - **音频**：无自动化比对，需人耳核对（M8_BACKLOG G10）。
 
 ---

@@ -99,3 +99,11 @@ WOLF_GAME_DIR=work/retail_backup WOLF_DATA_ROOT=work/all cargo test -q --workspa
 
 - 全量结果：**146 test-result 块 / 878 passed / 0 failed / 14 ignored / EXIT 0**（`work/out/p2_final_test.log`）；`wolf-cli verify --root work/all` = **PASS 70 / pending 0 / EXIT 0**（`work/out/p2_verify.log`）；`wolf-package check --package work/out/package_p2_release` = **PACKAGE OK / 4070 files verified**。
 - 未完成/需人工：零售真正首帧的仪器化对比；H2–H5 像素/音频人耳（既有清单）。
+
+## 10. H-PRNG-1 生产时钟播种（2026-11-03）
+
+- **结论**：H-PRNG-1 从「仍开放」解除。零售事件 RNG 在 RVA 0x35847 调 GetTickCount、0x35852 直接写 state VA 0x011b17f0（无 folding，零状态重读时钟），已由 M11_PRNG_CLOCK 证实；此前只缺生产接线。交互 `wolf-cli play` 现在在 `Game::new` 成功后、boot/load 前用本地时钟毫秒低 32 位播种。
+- **实现**：`crates/wolf-vm/src/rng.rs` 新增纯函数 `resolve_session_event_seed(raw: Option<&str>, clock_ticks: u32) -> u32`：`Some` 走 `resolve_event_seed`（`WOLF_EVENT_SEED` 回放），`None` 走 `seed_from_clock_ticks` 并把 0 归一化为 `EVENT_RESEED`。`crates/wolf-cli/src/play.rs` 调用 `game.vm.rng.set_event_seed(event_seed)` 并打印 `startup: event RNG seed <seed> (clock|WOLF_EVENT_SEED)`。库内 `WolfRng::new` / `Game::new` 与诊断命令仍固定 `EVENT_SEED=1`，既有测试向量不变。
+- **测试**：`crates/wolf-vm/tests/prng_seed.rs` 10 测（原 8 + 生产策略 2）：无覆盖用时钟、同 tick 同流/不同 tick 不同流、零 tick 归一化、显式 seed 优先、非法值回退。实跑 `wolf-cli play --root work/all --boot --until 2` 两次 seed 2675025206 / 2675026572（clock），`WOLF_EVENT_SEED=24680` 得 24680（WOLF_EVENT_SEED），均 0 warnings。全量 `cargo test --workspace`：**146 test-result 块 / 880 passed / 0 failed / 14 ignored / EXIT 0**（`work/out/h_prng1_workspace_test.log`）。
+- **残留**：与某一次具体零售运行逐位对齐仍需该次 GetTickCount 原值（用 `WOLF_EVENT_SEED=<tick>` 注入），是可选验证，不是功能缺口；零 tick 的零售行为仍为假设。
+- **文档**：`docs/UNVERIFIED.md` 统计变为 4 解除 / 2 证据缺口 / 3 开放；`docs/research/M9_PRNG_SEED.md` 增 Production wiring；`docs/research/M11_PRNG_CLOCK.md`、`docs/BASELINE.json` 已同步。

@@ -1,18 +1,20 @@
 //! Deterministic replay proof for the production event-RNG seed hook.
 //!
 //! The event RNG (opcode 0x6000) is a Park-Miller MINSTD generator seeded by
-//! EVENT_SEED=1 in a default build. Retail self-seeds it from the clock; this
-//! port keeps a fixed default and adds an opt-in WOLF_EVENT_SEED hook so a
-//! captured clock seed can be supplied at runtime without changing the default
-//! sequence. These tests pin that contract:
-//!   1. absent/invalid seed -> fixed EVENT_SEED (default behaviour unchanged),
-//!   2. a supplied seed is recorded and reproduces the same stream every time,
-//!   3. the event stream is independent of the MSVC static-table stream.
+//! EVENT_SEED=1 in deterministic library/diagnostic builds. Retail self-seeds it
+//! from GetTickCount, and wolf-cli play now does the same, while an explicit
+//! WOLF_EVENT_SEED still wins for a captured-tick replay. These tests pin the
+//! contract:
+//!   1. library constructors stay fixed at EVENT_SEED,
+//!   2. the production policy uses a supplied seed, else the clock tick,
+//!   3. supplied seeds replay the identical stream and distinct ticks diverge,
+//!   4. the event stream is independent of the MSVC static-table stream.
 
 use std::sync::Mutex;
 
 use wolf_vm::rng::{
-    event_seed_from_env, resolve_event_seed, WolfRng, EVENT_RESEED, EVENT_SEED, EVENT_SEED_ENV,
+    event_seed_from_env, resolve_event_seed, resolve_session_event_seed, WolfRng, EVENT_RESEED,
+    EVENT_SEED, EVENT_SEED_ENV,
 };
 
 /// Serialises the one test that mutates the process environment.
@@ -36,6 +38,46 @@ fn absent_or_invalid_seed_keeps_the_fixed_default() {
     assert_eq!(WolfRng::new().event_seed(), EVENT_SEED);
     assert_eq!(
         WolfRng::from_event_seed(EVENT_SEED).event_seed(),
+        EVENT_SEED
+    );
+}
+
+#[test]
+fn production_policy_uses_the_clock_when_no_override_is_supplied() {
+    // The retail first seed is the raw GetTickCount DWORD. With no override the
+    // production policy must therefore use that tick, not the fixed EVENT_SEED.
+    assert_eq!(resolve_session_event_seed(None, 4_321), 4_321);
+    assert_eq!(
+        resolve_session_event_seed(None, 2_000_000_000),
+        2_000_000_000
+    );
+    // A zero tick is a fixed point, so it normalises to EVENT_RESEED.
+    assert_eq!(resolve_session_event_seed(None, 0), EVENT_RESEED);
+
+    // Same tick -> identical stream; different ticks -> different stream.
+    let mut a = WolfRng::from_event_seed(resolve_session_event_seed(None, 111_111));
+    let mut b = WolfRng::from_event_seed(resolve_session_event_seed(None, 111_111));
+    let mut c = WolfRng::from_event_seed(resolve_session_event_seed(None, 222_222));
+    let seq_a: Vec<u32> = (0..16).map(|_| a.next_event_draw()).collect();
+    let seq_b: Vec<u32> = (0..16).map(|_| b.next_event_draw()).collect();
+    let seq_c: Vec<u32> = (0..16).map(|_| c.next_event_draw()).collect();
+    assert_eq!(
+        seq_a, seq_b,
+        "the same captured tick must replay identically"
+    );
+    assert_ne!(seq_a, seq_c, "different clock ticks must diverge");
+}
+
+#[test]
+fn production_policy_prefers_an_explicit_seed_over_the_clock() {
+    // A replay must not be disturbed by whichever clock tick the host happens to
+    // have: WOLF_EVENT_SEED wins over every clock value.
+    assert_eq!(resolve_session_event_seed(Some("24680"), 1), 24_680);
+    assert_eq!(resolve_session_event_seed(Some("24680"), u32::MAX), 24_680);
+    assert_eq!(resolve_session_event_seed(Some("0"), 777), EVENT_RESEED);
+    // Present-but-invalid remains the deliberate fixed fallback, never the clock.
+    assert_eq!(
+        resolve_session_event_seed(Some("not-a-number"), 777),
         EVENT_SEED
     );
 }

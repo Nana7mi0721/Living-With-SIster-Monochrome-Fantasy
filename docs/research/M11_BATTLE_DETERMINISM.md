@@ -93,9 +93,9 @@ ce241 live ~258 frames   ce243 live ~294 frames   warnings=0
 
 ## 4. 残留 / 未覆盖
 
-- **H-PRNG-1（零售时钟种子重放等价性）仍待证**：本证明覆盖「当前构建以固定 `EVENT_SEED=1` 重跑确定」，
-  不代表能逐位复刻**零售主机时钟播种**的某次具体运行。这属于 `docs/research/M9_PRNG_SEED.md` 的独立议题，
-  与本次「确定性锁定」不冲突（`WOLF_EVENT_SEED` 钩子是后续接入点）。
+- **H-PRNG-1 已生产接线（2026-11-03）**：本证明覆盖「库/测试以固定 `EVENT_SEED=1` 重跑确定」；
+  交互 `wolf-cli play` 现按本地时钟播种，`WOLF_EVENT_SEED` 可注入零售 tick 回放。要逐位复刻**某一次具体零售运行**
+  仍需该次 GetTickCount，属可选验证，不是功能缺口；详见 `docs/research/M9_PRNG_SEED.md`。
 - 本证明为**单机、单平台、单构建**下的进程间确定性；跨平台浮点/字体度量等渲染差异不影响 RNG/事件顺序。
 
 ## 5. 变更文件

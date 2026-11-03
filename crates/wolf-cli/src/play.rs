@@ -28,6 +28,7 @@ use winit::window::{Window, WindowId};
 use wolf_game::atlas::{Atlas, TextQuad};
 use wolf_game::{choice, key, Game};
 use wolf_render::{Renderer, Scaler, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
+use wolf_vm::rng::{resolve_session_event_seed, EVENT_SEED_ENV};
 
 /// One frame at 60 Hz.
 const FRAME_TIME: Duration = Duration::from_micros(16_667);
@@ -50,6 +51,24 @@ pub fn run(
             return std::process::ExitCode::FAILURE;
         }
     };
+    // Retail seeds the event PRNG from GetTickCount at startup, so two launches
+    // do not produce the same random sequence. The library keeps a fixed seed
+    // for deterministic tests; only the interactive front end opts into the
+    // clock. WOLF_EVENT_SEED still wins so a captured retail tick can be replayed.
+    let seed_override = std::env::var(EVENT_SEED_ENV).ok();
+    let clock_ticks = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_millis() as u32);
+    let event_seed = resolve_session_event_seed(seed_override.as_deref(), clock_ticks);
+    game.vm.rng.set_event_seed(event_seed);
+    println!(
+        "startup: event RNG seed {event_seed} ({})",
+        if seed_override.is_some() {
+            EVENT_SEED_ENV
+        } else {
+            "clock"
+        }
+    );
     if crate::AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
         game.enable_audio();
     }

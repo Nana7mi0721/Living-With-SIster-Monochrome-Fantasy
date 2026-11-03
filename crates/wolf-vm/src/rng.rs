@@ -21,9 +21,12 @@
 //!    retail seed is the raw 32-bit tick count: RVA 0x35847 calls
 //!    KERNEL32!GetTickCount and RVA 0x35852 stores EAX into the Park-Miller
 //!    state with no folding (proven in docs/research/M11_PRNG_CLOCK.md).
-//!    For determinism this build keeps `EVENT_SEED` as the default and
-//!    reseeds a zero state to `EVENT_RESEED` instead of the clock; a captured
-//!    retail tick can be injected with `WolfRng::from_clock_ticks`.
+//!    The library keeps `EVENT_SEED` as its default so tests and diagnostic
+//!    commands are deterministic. The interactive front end (`wolf-cli play`)
+//!    seeds the event generator from the local clock at startup, matching
+//!    retail; `WOLF_EVENT_SEED` overrides that for a captured-tick replay. A
+//!    zero state is still normalised to `EVENT_RESEED` because a captured tick
+//!    of zero cannot be re-read from a live clock.
 //!
 //! 2. The **static-table / crypto stream** (the MSVC C-runtime LCG).
 //!
@@ -313,6 +316,23 @@ pub fn resolve_event_seed(raw: Option<&str>) -> u32 {
 #[must_use]
 pub fn event_seed_from_env() -> u32 {
     resolve_event_seed(std::env::var(EVENT_SEED_ENV).ok().as_deref())
+}
+
+/// Resolve the event seed for an interactive session: a supplied
+/// `WOLF_EVENT_SEED` wins so a captured retail tick can be replayed, otherwise
+/// the local clock tick is used exactly as the retail `GetTickCount` seed would
+/// be (identity folding, zero normalised to `EVENT_RESEED`).
+///
+/// This is kept pure so the policy is testable without touching the process
+/// environment or sleeping for a real clock tick. `wolf-cli play` computes
+/// `clock_ticks` from `SystemTime` and installs the result with
+/// `WolfRng::set_event_seed`; the library constructors stay deterministic.
+#[must_use]
+pub fn resolve_session_event_seed(raw: Option<&str>, clock_ticks: u32) -> u32 {
+    match raw {
+        Some(_) => resolve_event_seed(raw),
+        None => normalise_event_seed(seed_from_clock_ticks(clock_ticks)),
+    }
 }
 
 #[cfg(test)]
