@@ -172,6 +172,18 @@ pub fn run(
     std::process::ExitCode::SUCCESS
 }
 
+/// The taskbar/title-bar icon, decoded from the same PNG the release icon is generated
+/// from. Windows already picks up the embedded exe icon for Explorer; setting it on the
+/// window as well keeps the title bar and taskbar consistent when the game is running.
+fn window_icon() -> Option<winit::window::Icon> {
+    const PNG: &[u8] = include_bytes!("../assets/charicon.png");
+    let image = image::load_from_memory_with_format(PNG, image::ImageFormat::Png)
+        .ok()?
+        .to_rgba8();
+    let (width, height) = image.dimensions();
+    winit::window::Icon::from_rgba(image.into_raw(), width, height).ok()
+}
+
 struct App {
     game: Game,
     atlas: Atlas,
@@ -373,7 +385,8 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let attributes = Window::default_attributes()
             .with_title("imoto-life | title screen")
-            .with_inner_size(PhysicalSize::new(1920u32, 1080u32));
+            .with_inner_size(PhysicalSize::new(1920u32, 1080u32))
+            .with_window_icon(window_icon());
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),
             Err(err) => {
