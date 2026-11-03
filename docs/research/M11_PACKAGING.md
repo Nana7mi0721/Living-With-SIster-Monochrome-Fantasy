@@ -98,6 +98,18 @@ Real release assembly (2026-11-03):
     font: .../MSGOTHIC.TTF -> ...
     ASSEMBLED: 4070 files, 814703960 bytes, output = work/out/package_p2_release
 
+### Program icon
+
+`crates/wolf-cli/build.rs` embeds `crates/wolf-cli/assets/wolf-cli.ico` into the
+`wolf-cli` binary with the Windows SDK's `rc.exe` (a one-line `1 ICON "..."` resource).
+The ICO is generated from the game's own `Data/SystemFile/charicon.png` at eight sizes
+(16/24/32/48/64/128/200/256). `rc.exe` is discovered through `RC`, `PATH`,
+`WindowsSdkDir`, then `Windows Kits\10\bin\<version>\<arch>\rc.exe`; if none is
+found the build only warns and still succeeds. The same PNG is decoded at runtime in
+`crates/wolf-cli/src/play.rs::window_icon()` and passed to winit so the title bar and
+taskbar match Explorer's exe icon. The latest package (2026-11-03, double-click launch +
+icon) is `release/`: **4067 files / 813,818,915 bytes**, `wolf-package check` PASS.
+
 ### manifest.json
 
 The manifest object is defined at line 532; Manifest::to_json starts at line 544.

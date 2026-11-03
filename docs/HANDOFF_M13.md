@@ -118,8 +118,10 @@ WOLF_GAME_DIR=work/retail_backup WOLF_DATA_ROOT=work/all cargo test -q --workspa
 
 ## 12. 最新发布包（2026-11-03 重建）
 
-- **位置**：仓库根 `release/`（已加入 `.gitignore`，commit `4c5f85a`）；包内为 `wolf-cli.exe`、`data/`、`data/Fonts/`（Lolita / 07yasashi / GenJyuuGothicXPB / MSGOTHIC）与 `manifest.json`。
-- **规模**：**4067 files / 813,573,667 bytes**（data 4062 files / 771,585,007 bytes + 4 fonts + exe）；`wolf-package check --package release` = **PACKAGE OK / 4067 files verified**。
-- **与 §8 的差异**：本次从 `work/all` 组装时排除了 `work/all/Save` 下 3 个测试跑出的存档（避免把测试进度打进发布包），因此比 §8 少 3 个文件、小 1,130,293 bytes；建包后 `work/all/Save` 已原样恢复。
-- **冒烟**：包内 `./wolf-cli.exe play --root data --boot --until 300` = **300 frames / 9393 instructions / 10 pictures / 0 warnings / EXIT 0**；启动 data 89 ms、window created 141 ms、window ready 947 ms、step p50 0.51 ms / p95 0.88 ms；220 SaveLoad 仅打印“absents; using synthesized new-game template”（预期，不进入 warnings）。
-- **构建**：release 二进制放在仓库外 `E:/cargo-target/imoto/release`，避免重新生成仓库内 `target/`；重建日志 `work/out/rebuild_release_build.log`、`work/out/rebuild_release_assemble_clean.log`、`work/out/rebuild_release_check_clean.log`、`work/out/rebuild_release_smoke_clean.log`。
+- **位置**：仓库根 `release/`（已加入 `.gitignore`，commit `4c5f85a`）；包内为 `wolf-cli.exe`、`data/`、`data/Fonts/`（Lolita / 07yasashi / GenJyuuGothicXPB / MSGOTHIC）与 `manifest.json`。直接双击 `wolf-cli.exe` 会识别同目录 `data/` 并启动 play（无 command 即 play）。
+- **规模**：**4067 files / 813,818,915 bytes**（data 4062 files / 771,585,007 bytes + 4 fonts + exe 12,183,040 bytes）；`wolf-package check --package release` = **PACKAGE OK / 4067 files verified**。
+- **启动程序图标**：`crates/wolf-cli/build.rs` 用 Windows SDK `rc.exe` 把 `crates/wolf-cli/assets/wolf-cli.ico`（由 `work/game/Data/SystemFile/charicon.png` 生成，含 16/24/32/48/64/128/200/256 八档）编进 `wolf-cli.exe`；`crates/wolf-cli/src/play.rs::window_icon()` 同时把同一 PNG 解码为 winit 窗口图标，标题栏/任务栏一致。`rc.exe` 不在 PATH 时依次找 `RC`、`PATH`、`WindowsSdkDir`、`Windows Kits\10\bin\<ver>\<arch>`，都没有只告警不阻断。已用 `ExtractAssociatedIcon` 从包内 exe 抽图核对（32x32 可见）。
+- **与 §8 的差异**：本次从 `work/all` 组装时排除了 `work/all/Save` 下 3 个测试跑出的存档（避免把测试进度打进发布包），比 §8 少 3 个文件；exe 为双击启动+图标版，比上一版 exe（11,944,448 bytes）大 238,592 bytes。建包后 `work/all/Save` 已原样恢复。
+- **冒烟**：包内 `./wolf-cli.exe --until 300`（无 command，等同双击）= **300 frames / 9393 instructions / 10 pictures / 0 warnings / EXIT 0**；启动 data 82 ms、window created 138 ms、window ready 891 ms、step p50 0.45 ms / p95 0.72 ms；220 SaveLoad 仅打印“absents; using synthesized new-game template”（预期，不进入 warnings）；烟测只生成空 `data/Save` 目录，已删除，manifest 无 Save。
+- **构建**：release 二进制放在仓库外 `E:/cargo-target/imoto/release`，避免重新生成仓库内 `target/`；重建日志 `work/out/icon_release_build.log`、`work/out/icon_release_assemble.log`、`work/out/icon_release_check.log`、`work/out/icon_release_smoke.log`。
+- **本轮门禁**：`cargo test --workspace` = **146 test-result blocks / 882 passed / 0 failed / 14 ignored / EXIT 0**（`work/out/icon_workspace_test.log`）；`wolf-cli verify --root work/all` = **PASS 70 / pending 0 / EXIT 0**（`work/out/icon_verify.log`）。

@@ -106,7 +106,7 @@
 
 6. 视觉像素对照：锚点 5/6 几何已固定（task-82，`M11_ANCHOR_PIXELS.md`）；CN 窗口皮肤右缘已证为 data-only 且无 1024 宽溢出（task-87，`M11_WINDOW_EDGE.md`）。剩余零售像素 diff、关键场景截图 diff。
 7. 音频人工听感验收：已产出 31 首 loop 验收档案与分层（task-84，`M11_AUDIO_ACCEPTANCE.md`），并有逐曲阈值固定、两次 decode 位相同的回归（task-88，`M11_AUDIO_LOOP_REGRESSION.md`）；剩余 BGM 循环点/SE 音量延迟的人工确认。
-8. 打包/性能（工具，非游戏流程）：`wolf-package`（validate/assemble/check/bench）与 `FrameBudgetReport` 已落地（task-100）；P2 发布包与性能核对已完成（2026-11-03，详见 `docs/research/M11_PACKAGING.md`）：真实 `work/all` 组装 **4070 files / 814,703,960 bytes**、`check` **PACKAGE OK**（修复非 ASCII manifest 路径解析 bug）；`Game::new` 启动即校验数据根；asset cache 统计接入 play；release bench **p50 1.5µs / p95 2.8µs / warnings=0**；窗口可见 ~251ms（零售 165–480ms），首帧 warm ~0.87–0.9s（wgpu adapter/swapchain 初始化为主，未找到低风险优化）；全量 **878 passed / 0 failed / 14 ignored**、`wolf-cli verify` **PASS 70/0**。**验收要求（用户 m00888）：发布版实际游玩性能须 ≥ 原版（含启动耗时与资源缓存），并随包修复已知 bug（见 `docs/UNVERIFIED.md` 残余）。**
+8. 打包/性能（工具，非游戏流程）：`wolf-package`（validate/assemble/check/bench）与 `FrameBudgetReport` 已落地（task-100）；P2 发布包与性能核对已完成（2026-11-03，详见 `docs/research/M11_PACKAGING.md`）：真实 `work/all` 组装 **4070 files / 814,703,960 bytes**、`check` **PACKAGE OK**（修复非 ASCII manifest 路径解析 bug）；最新 `release/` 包 **4067 files / 813,818,915 bytes**（可直接双击 `wolf-cli.exe` 启动，带 charicon 程序图标，exe 12,183,040 bytes），`check` **PASS**；`Game::new` 启动即校验数据根；asset cache 统计接入 play；release bench **p50 1.5µs / p95 2.8µs / warnings=0**；窗口可见 ~251ms（零售 165–480ms），首帧 warm ~0.87–0.9s（wgpu adapter/swapchain 初始化为主，未找到低风险优化）；全量 **878 passed / 0 failed / 14 ignored**、`wolf-cli verify` **PASS 70/0**。**验收要求（用户 m00888）：发布版实际游玩性能须 ≥ 原版（含启动耗时与资源缓存），并随包修复已知 bug（见 `docs/UNVERIFIED.md` 残余）。**
 9. 文档：每个新里程碑完成时按 §5 收口。
 
 ### P3 — 中文双轨（新，草案）
