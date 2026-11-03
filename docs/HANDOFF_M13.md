@@ -107,3 +107,11 @@ WOLF_GAME_DIR=work/retail_backup WOLF_DATA_ROOT=work/all cargo test -q --workspa
 - **测试**：`crates/wolf-vm/tests/prng_seed.rs` 10 测（原 8 + 生产策略 2）：无覆盖用时钟、同 tick 同流/不同 tick 不同流、零 tick 归一化、显式 seed 优先、非法值回退。实跑 `wolf-cli play --root work/all --boot --until 2` 两次 seed 2675025206 / 2675026572（clock），`WOLF_EVENT_SEED=24680` 得 24680（WOLF_EVENT_SEED），均 0 warnings。全量 `cargo test --workspace`：**146 test-result 块 / 880 passed / 0 failed / 14 ignored / EXIT 0**（`work/out/h_prng1_workspace_test.log`）。
 - **残留**：与某一次具体零售运行逐位对齐仍需该次 GetTickCount 原值（用 `WOLF_EVENT_SEED=<tick>` 注入），是可选验证，不是功能缺口；零 tick 的零售行为仍为假设。
 - **文档**：`docs/UNVERIFIED.md` 统计变为 4 解除 / 2 证据缺口 / 3 开放；`docs/research/M9_PRNG_SEED.md` 增 Production wiring；`docs/research/M11_PRNG_CLOCK.md`、`docs/BASELINE.json` 已同步。
+
+## 11. 磁盘清理（2026-11-03）
+
+- **触发**：P2/H-PRNG 收口后按 `AGENT.md` §6.2 做一次全盘体检与瘦身。
+- **前后**：`du -sb .` 从 19,780,431,973 B（约 19 GB）降到清理后约 3.7 GB，释放约 15 GB。
+- **删除**：`target/`（`cargo clean`，48,648 files / 11.6 GiB）；`tools/smoke/target` 与 `tools/wgpusmoke/target`（约 2.0 GB）；`work/out` 中不再被文档/测试引用的中间截图、日志、临时 patch、旧发布包（共 1.81 GB，保留 282 个被引用的关键截图/日志/夹具，80.1 MB）；`work/mtout` 临时探针可执行文件（6.7 MB）。
+- **保留**：`work/all`（约 1.5 GB）、`work/all_base_steamverify`（534 MB，独立裸安装留档；已逐文件核对，与 `work/all` 非重复：2,395 同、164 缺失、1,506 不同）、`work/full`（468 MB）、`work/imouto`（343 MB）、`work/retail_backup`（4.2 MB）。`work/out/package_p2_release` 已删除，可用 `wolf-package assemble` 重建。
+- **状态**：清理后 `git status` 仍只有 3 个永久 scratch 与用户资料（`docs/攻略文档/`、`妹相隨 Ver3.CT`、`游戏示例图片/`）；未删除任何已跟踪文件或用户资料。
