@@ -314,7 +314,14 @@ fn main() -> ExitCode {
         }
     }
 
-    let root = root.unwrap_or_else(default_root);
+    // A packaged release puts its data root in `data/` beside `wolf-cli.exe`.
+    // With no command, treat a double-click as "play" instead of printing help.
+    let packaged_root = if command.is_none() && root.is_none() {
+        detect_packaged_root()
+    } else {
+        None
+    };
+    let root = root.unwrap_or_else(|| packaged_root.clone().unwrap_or_else(default_root));
     match command.as_deref() {
         Some("verify") => run_verify(&root),
         Some("precompile") => run_precompile(&root),
@@ -446,10 +453,19 @@ fn main() -> ExitCode {
             print_help();
             ExitCode::from(2)
         }
-        None => {
-            print_help();
-            ExitCode::from(2)
-        }
+        None => match packaged_root {
+            Some(root) => {
+                println!(
+                    "wolf-cli: no command; packaged data root {}; starting play",
+                    root.display()
+                );
+                play::run(&root, frame_limit, Entry::Boot)
+            }
+            None => {
+                print_help();
+                ExitCode::from(2)
+            }
+        },
     }
 }
 
@@ -465,6 +481,7 @@ fn print_help() {
     );
     println!("                                   [--boot | --menu-only]");
     println!("    wolf-cli [--root <DIR>] play [--until <N>] [--map-run <NAME> --event <ID>]");
+    println!("    wolf-cli                     (in a release package: starts play)");
     println!("                                   [--event <ID> | --load-save <FILE>]");
     println!("    wolf-cli [--root <DIR>] list [--filter <TEXT>]");
     println!();
@@ -602,7 +619,48 @@ fn default_root() -> PathBuf {
             return PathBuf::from(value);
         }
     }
+    // The packaged layout: `wolf-cli.exe` and `data/` in the same directory.
+    if let Some(root) = packaged_root_from_exe() {
+        return root;
+    }
     PathBuf::from("work/full")
+}
+
+/// Data root shipped beside the executable, if this is a release package.
+fn detect_packaged_root() -> Option<PathBuf> {
+    if let Ok(value) = std::env::var("WOLF_DATA_ROOT") {
+        if !value.is_empty() {
+            let candidate = PathBuf::from(value);
+            if candidate.join("BasicData").is_dir() {
+                return Some(candidate);
+            }
+        }
+    }
+    packaged_root_from_exe()
+}
+
+fn packaged_root_from_exe() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let cwd = std::env::current_dir().ok()?;
+    find_packaged_root(&exe, &cwd)
+}
+
+/// Pure part of package detection, split out so it is testable without launching.
+fn find_packaged_root(exe: &Path, cwd: &Path) -> Option<PathBuf> {
+    let mut bases: Vec<&Path> = Vec::new();
+    if let Some(parent) = exe.parent() {
+        bases.push(parent);
+    }
+    bases.push(cwd);
+    for base in bases {
+        for name in ["data", "Data"] {
+            let candidate = base.join(name);
+            if candidate.join("BasicData").is_dir() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 fn run_verify(root: &Path) -> ExitCode {
@@ -3165,7 +3223,10 @@ fn run_map_event(
 
 #[cfg(test)]
 mod tests {
-    use super::{key_bits_for_frame, parse_key_frame, resolve_capture_entry, CaptureEntry};
+    use super::{
+        find_packaged_root, key_bits_for_frame, parse_key_frame, resolve_capture_entry,
+        CaptureEntry,
+    };
     use std::path::{Path, PathBuf};
 
     /// `capture --event 239` used to fall through to `Entry::Boot` because `boot`
@@ -3274,5 +3335,25 @@ mod tests {
             resolve_capture_entry(Some(Path::new("save.sav")), None, None, false, false),
             CaptureEntry::Save(path)
         );
+    }
+
+    #[test]
+    fn packaged_root_is_data_beside_the_exe() {
+        let base =
+            std::env::temp_dir().join(format!("wolf-cli-package-detect-{}", std::process::id()));
+        let exe = base.join("release").join("wolf-cli.exe");
+        let data = exe.parent().unwrap().join("data");
+        std::fs::create_dir_all(data.join("BasicData")).unwrap();
+        assert_eq!(find_packaged_root(&exe, &base), Some(data));
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn packaged_root_absent_without_data_layout() {
+        let base = std::env::temp_dir().join(format!("wolf-cli-no-package-{}", std::process::id()));
+        let exe = base.join("release").join("wolf-cli.exe");
+        std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+        assert_eq!(find_packaged_root(&exe, &base), None);
+        std::fs::remove_dir_all(&base).unwrap();
     }
 }
