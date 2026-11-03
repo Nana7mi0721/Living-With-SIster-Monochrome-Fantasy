@@ -115,3 +115,11 @@ WOLF_GAME_DIR=work/retail_backup WOLF_DATA_ROOT=work/all cargo test -q --workspa
 - **删除**：`target/`（`cargo clean`，48,648 files / 11.6 GiB）；`tools/smoke/target` 与 `tools/wgpusmoke/target`（约 2.0 GB）；`work/out` 中不再被文档/测试引用的中间截图、日志、临时 patch、旧发布包（共 1.81 GB，保留 282 个被引用的关键截图/日志/夹具，80.1 MB）；`work/mtout` 临时探针可执行文件（6.7 MB）。
 - **保留**：`work/all`（约 1.5 GB）、`work/all_base_steamverify`（534 MB，独立裸安装留档；已逐文件核对，与 `work/all` 非重复：2,395 同、164 缺失、1,506 不同）、`work/full`（468 MB）、`work/imouto`（343 MB）、`work/retail_backup`（4.2 MB）。`work/out/package_p2_release` 已删除，可用 `wolf-package assemble` 重建。
 - **状态**：清理后 `git status` 仍只有 3 个永久 scratch 与用户资料（`docs/攻略文档/`、`妹相隨 Ver3.CT`、`游戏示例图片/`）；未删除任何已跟踪文件或用户资料。
+
+## 12. 最新发布包（2026-11-03 重建）
+
+- **位置**：仓库根 `release/`（已加入 `.gitignore`，commit `4c5f85a`）；包内为 `wolf-cli.exe`、`data/`、`data/Fonts/`（Lolita / 07yasashi / GenJyuuGothicXPB / MSGOTHIC）与 `manifest.json`。
+- **规模**：**4067 files / 813,573,667 bytes**（data 4062 files / 771,585,007 bytes + 4 fonts + exe）；`wolf-package check --package release` = **PACKAGE OK / 4067 files verified**。
+- **与 §8 的差异**：本次从 `work/all` 组装时排除了 `work/all/Save` 下 3 个测试跑出的存档（避免把测试进度打进发布包），因此比 §8 少 3 个文件、小 1,130,293 bytes；建包后 `work/all/Save` 已原样恢复。
+- **冒烟**：包内 `./wolf-cli.exe play --root data --boot --until 300` = **300 frames / 9393 instructions / 10 pictures / 0 warnings / EXIT 0**；启动 data 89 ms、window created 141 ms、window ready 947 ms、step p50 0.51 ms / p95 0.88 ms；220 SaveLoad 仅打印“absents; using synthesized new-game template”（预期，不进入 warnings）。
+- **构建**：release 二进制放在仓库外 `E:/cargo-target/imoto/release`，避免重新生成仓库内 `target/`；重建日志 `work/out/rebuild_release_build.log`、`work/out/rebuild_release_assemble_clean.log`、`work/out/rebuild_release_check_clean.log`、`work/out/rebuild_release_smoke_clean.log`。

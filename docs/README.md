@@ -1,7 +1,7 @@
 # 文档总索引（docs/README.md）
 
 > 本文件是仓库文档的唯一总入口。**新增、移动、归档文档时，必须同步更新本索引。**
-> 当前里程碑：**M0–M12 已完成；M13 内容一致自动化验收三批完成（九结局/条件注入事件/DLC EP26–36/H 端到端/读档伪启动修复），并修复行动力条纵向缩放、HUD 调色板/文字基线 bug、新增 `wolf-layout` 布局导出工具（全量 874 passed / 0 failed / 14 ignored，`verify` PASS 70/0）**；H2–H5 人工验收已由用户全部通过（2026-11-02）。**P2 打包与性能第一轮已收口（2026-11-03）：真实发布包 4070 files / 814,703,960 bytes，`wolf-package check` PASS；启动数据根校验、asset cache 统计、release bench 与启动拆解已接入，P2 后全量 878 passed / 0 failed / 14 ignored、`verify` PASS 70/0，详见 [`research/M11_PACKAGING.md`](research/M11_PACKAGING.md) 与 [`HANDOFF_M13.md`](HANDOFF_M13.md) §8–9。H-PRNG-1 已解除（2026-11-03）：交互 `wolf-cli play` 按本地时钟播种，`WOLF_EVENT_SEED` 可回放零售 tick，库默认仍固定；最新全量 880 passed / 0 failed / 14 ignored，见 [`UNVERIFIED.md`](UNVERIFIED.md) 与 [`research/M9_PRNG_SEED.md`](research/M9_PRNG_SEED.md)。** 最新交接：[`HANDOFF_M13.md`](HANDOFF_M13.md)。当前路线图：[`../PLAN.md`](../PLAN.md)。
+> 当前里程碑：**M0–M12 已完成；M13 内容一致自动化验收三批完成（九结局/条件注入事件/DLC EP26–36/H 端到端/读档伪启动修复），并修复行动力条纵向缩放、HUD 调色板/文字基线 bug、新增 `wolf-layout` 布局导出工具（全量 874 passed / 0 failed / 14 ignored，`verify` PASS 70/0）**；H2–H5 人工验收已由用户全部通过（2026-11-02）。**P2 打包与性能第一轮已收口（2026-11-03）：最新重建发布包 `release/` 4067 files / 813,573,667 bytes，`wolf-package check` PASS；启动数据根校验、asset cache 统计、release bench 与启动拆解已接入，P2 后全量 878 passed / 0 failed / 14 ignored、`verify` PASS 70/0，详见 [`research/M11_PACKAGING.md`](research/M11_PACKAGING.md) 与 [`HANDOFF_M13.md`](HANDOFF_M13.md) §8–9。H-PRNG-1 已解除（2026-11-03）：交互 `wolf-cli play` 按本地时钟播种，`WOLF_EVENT_SEED` 可回放零售 tick，库默认仍固定；最新全量 880 passed / 0 failed / 14 ignored，见 [`UNVERIFIED.md`](UNVERIFIED.md) 与 [`research/M9_PRNG_SEED.md`](research/M9_PRNG_SEED.md)。** 最新交接：[`HANDOFF_M13.md`](HANDOFF_M13.md)。当前路线图：[`../PLAN.md`](../PLAN.md)。
 
 ## 0. 先读什么
 
