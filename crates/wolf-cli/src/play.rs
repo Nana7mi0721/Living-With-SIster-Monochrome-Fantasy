@@ -363,6 +363,10 @@ impl ApplicationHandler for App {
                 return;
             }
         };
+        println!(
+            "startup: window created in {:.0} ms",
+            self.launched_at.elapsed().as_secs_f64() * 1000.0
+        );
         // Render the first frame before the window is even shown, so the user never sees
         // an empty (black) frame before the title art appears.
         self.step();
@@ -374,12 +378,20 @@ impl ApplicationHandler for App {
                 return;
             }
         };
+        println!(
+            "startup: renderer ready in {:.0} ms",
+            self.launched_at.elapsed().as_secs_f64() * 1000.0
+        );
         let info = renderer.adapter_info();
         println!(
             "play: {} ({:?}, backend {:?}) | {}x{} logical",
             info.name, info.device_type, info.backend, LOGICAL_W, LOGICAL_H
         );
         self.upload_if_needed(&mut renderer);
+        println!(
+            "startup: assets uploaded in {:.0} ms",
+            self.launched_at.elapsed().as_secs_f64() * 1000.0
+        );
         // The original game keeps its TTFs next to Game.exe, and the font covers the
         // Chinese patch text that the bitmap font would render as boxes.
         match crate::find_font(self.game.root()) {
@@ -389,6 +401,10 @@ impl ApplicationHandler for App {
             },
             None => eprintln!("no font found; text will not be drawn"),
         }
+        println!(
+            "startup: font loaded in {:.0} ms",
+            self.launched_at.elapsed().as_secs_f64() * 1000.0
+        );
         renderer.draw(&self.sprites);
         let items = self.build_text_items();
         renderer.draw_text(&items);

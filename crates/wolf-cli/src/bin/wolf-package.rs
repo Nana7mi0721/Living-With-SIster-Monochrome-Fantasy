@@ -977,14 +977,31 @@ impl<'a> JsonParser<'a> {
     }
 
     fn string(&mut self) -> Result<String, String> {
+        fn flush(pending: &mut Vec<u8>, out: &mut String) -> Result<(), String> {
+            if !pending.is_empty() {
+                let text = std::str::from_utf8(pending)
+                    .map_err(|_| "invalid UTF-8 in JSON string".to_string())?;
+                out.push_str(text);
+                pending.clear();
+            }
+            Ok(())
+        }
+
         if self.bump() != Some(b'"') {
             return Err(format!("expected string at offset {}", self.position));
         }
         let mut out = String::new();
+        let mut pending: Vec<u8> = Vec::new();
         while let Some(byte) = self.bump() {
             match byte {
-                b'"' => return Ok(out),
+                b'"' => {
+                    flush(&mut pending, &mut out)?;
+                    return Ok(out);
+                }
                 b'\\' => {
+                    // Escapes append a decoded character, so flush the raw UTF-8
+                    // run accumulated before the escape first.
+                    flush(&mut pending, &mut out)?;
                     let escaped = self
                         .bump()
                         .ok_or_else(|| "unfinished JSON escape".to_string())?;
@@ -1017,7 +1034,7 @@ impl<'a> JsonParser<'a> {
                 byte if byte < 0x20 => {
                     return Err("control byte in JSON string".to_string());
                 }
-                byte => out.push(byte as char),
+                byte => pending.push(byte),
             }
         }
         Err("unterminated JSON string".to_string())
@@ -1240,5 +1257,27 @@ mod tests {
         assert_eq!(parsed.entries.len(), 1);
         assert_eq!(parsed.entries[0].path, "data/BasicData/Game.dat");
         assert_eq!(parsed.entries[0].bytes, 123);
+    }
+
+    #[test]
+    fn manifest_json_round_trips_non_ascii_paths() {
+        let path = "data/SystemFile/くしゃくしゃ.png";
+        let manifest = Manifest {
+            format: MANIFEST_FORMAT,
+            tool: "wolf-package".to_string(),
+            data_root: "data".to_string(),
+            entries: vec![ManifestEntry {
+                path: path.to_string(),
+                bytes: 9,
+                sha256: "ab".repeat(32),
+            }],
+        };
+        let json = manifest.to_json();
+        assert!(
+            json.contains(path),
+            "manifest should keep raw UTF-8: {json}"
+        );
+        let parsed = Manifest::from_json(&json).expect("parse");
+        assert_eq!(parsed.entries[0].path, path);
     }
 }

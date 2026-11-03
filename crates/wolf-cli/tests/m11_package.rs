@@ -99,6 +99,12 @@ fn make_synthetic_root(root: &Path, complete: bool) {
         &root.join("SystemFile/TestWindow.png"),
         b"synthetic graphic",
     );
+    // Retail data carries Japanese file names throughout; the manifest parser must
+    // preserve them byte-for-byte or check reports every such file as missing + extra.
+    write_file(
+        &root.join("SystemFile/くしゃくしゃ.png"),
+        b"synthetic non-ascii graphic",
+    );
 }
 
 fn run_package(args: &[&str]) -> Output {
@@ -191,7 +197,14 @@ fn assemble_and_check_round_trip_the_manifest() {
     assert!(manifest.contains("wolf-cli.exe"), "{manifest}");
     assert!(manifest.contains("vcruntime140.dll"), "{manifest}");
     assert!(manifest.contains("data/Fonts/Lolita.ttf"), "{manifest}");
-    assert!(!manifest.contains(".wolf"), "archives must not be packaged: {manifest}");
+    assert!(
+        manifest.contains("data/SystemFile/くしゃくしゃ.png"),
+        "non-ASCII path must survive manifest serialization: {manifest}"
+    );
+    assert!(
+        !manifest.contains(".wolf"),
+        "archives must not be packaged: {manifest}"
+    );
 
     let check = run_package(&["check", "--package", out.to_str().expect("utf8 path")]);
     let check_text = combined(&check);

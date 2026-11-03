@@ -179,7 +179,7 @@ M11 第四批（task-97..100）的验收底稿；见 `../HANDOFF_M12.md`。
 | --- | --- |
 | [`M11_BATTLE_MENU_LIVE.md`](M11_BATTLE_MENU_LIVE.md) | M11 task-98 — 真实 2 成员菜单 CData type14 → CE157 → CE242 三 body |
 | [`M11_HSCENE_NATURAL.md`](M11_HSCENE_NATURAL.md) | M11 task-97 — 默认预算自然帧 CE328→CE402/CE410 与 save+event 截图 |
-| [`M11_PACKAGING.md`](M11_PACKAGING.md) | M11 task-100 — wolf-package 校验/组装与 FrameBudgetReport |
+| [`M11_PACKAGING.md`](M11_PACKAGING.md) | M11 task-100 + P2 收口 — wolf-package 校验/组装/check、启动数据根校验、FrameBudgetReport、release 打包与启动性能实测 |
 | [`M11_PRNG_CLOCK.md`](M11_PRNG_CLOCK.md) | M11 task-99 — 零售 GetTickCount 播种与零状态重读边界 |
 
 ### M12（6 篇）

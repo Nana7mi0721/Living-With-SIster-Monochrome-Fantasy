@@ -80,3 +80,22 @@ WOLF_GAME_DIR=work/retail_backup WOLF_DATA_ROOT=work/all cargo test -q --workspa
 
 - 不提交：3 个永久 scratch（`crates/wolf-format/examples/opscan.rs`、`tests/_scratch_cdata.rs`、`tests/_scratch_event.rs`）；用户资料 `docs/攻略文档/`、`妹相隨 Ver3.CT`、`游戏示例图片/`。
 - 提交信息用 `git commit -F work/_commit_*.txt`；临时文件写 `work/out`。
+
+## 8. P2 打包与性能（2026-11-03，第一轮实现 + 收口）
+
+- **交付**：`crates/wolf-game/src/data_root.rs` 启动数据根校验（`Game::new` 立即 `check_layout`，`GameError::DataRoot` 明确错误）；`assets.rs` 新增 `cache_bytes()` / `cache_stats()`，`play` 退出打印 `assets N image(s), X MiB`；`wolf-package assemble` 新增 `--font`（`WOLF_GAME_DIR` 自动取 Lolita/07yasashi/GenJyuuGothicXPB/MSGOTHIC），并跳过 `.wolf` 源归档；`play.rs` 输出 data/window/renderer/assets/font/window ready 六段启动拆解与 step p50/p95/max/mean。
+- **发布包**：真实 `work/all` 组装 **4070 files / 814,703,960 bytes**（data 4065 files / 772,716,836 bytes + 4 fonts），`wolf-package check` **PACKAGE OK / 4070 files verified**；包内 `./wolf-cli.exe play --root data --boot --until 300` 冒烟通过（0 warnings，exit 0，字体自包含）。
+- **修 bug**：`crates/wolf-cli/src/bin/wolf-package.rs:979` 手写 JSON 字符串解析器 `byte as char` 把 UTF-8 多字节按 Latin-1 解码，导致含日文/中文文件名的 manifest 路径 mojibake；真实包曾报 `MISSING (30)`/`EXTRA (30)`。改为 `Vec<u8>` 累积 + `std::str::from_utf8` 解码，转义前 flush；新增 `manifest_json_round_trips_non_ascii_paths` 与 m11 合成根 `data/SystemFile/くしゃくしゃ.png` 回归。
+- **性能实测**：release bench（work/all, SaveData01, CE188, 600f）`p50=1.5µs p95=2.8µs max=86.4µs warnings=0`；打包版 warm 启动 `data 97–114ms / window 147–181ms / window ready 872–877ms`。EnumWindows 外测：零售首窗口 165–480ms（标题恒 `Starting up, initializing system`），我方游戏窗口 ~251ms 可见；零售真正首帧不可观测，因此只声称窗口可见同量级，首帧 warm ~0.87–0.9s 如实记录（瓶颈 wgpu adapter ~276ms + swapchain configure ~192ms，临时 profiling 已移除）。
+- **测试**：`cargo test -p wolf-cli --bin wolf-package --test m11_package` = 3 unit + 4 m11 passed；全量 **146 块 / 878 passed / 0 failed / 14 ignored / EXIT 0**（日志 `work/out/p2_final_test.log`），`wolf-cli verify --root work/all` = **PASS 70 / pending 0 / EXIT 0**。
+- **文档**：`docs/research/M11_PACKAGING.md` 已按 release 数据重写；`PLAN.md` P2 #8 已更新。
+
+## 9. P2 收口门禁
+
+```bash
+WOLF_GAME_DIR=work/retail_backup WOLF_DATA_ROOT=work/all cargo test -q --workspace --no-fail-fast
+./target/debug/wolf-cli.exe verify --root work/all   # 目标 PASS 70 / pending 0
+```
+
+- 全量结果：**146 test-result 块 / 878 passed / 0 failed / 14 ignored / EXIT 0**（`work/out/p2_final_test.log`）；`wolf-cli verify --root work/all` = **PASS 70 / pending 0 / EXIT 0**（`work/out/p2_verify.log`）；`wolf-package check --package work/out/package_p2_release` = **PACKAGE OK / 4070 files verified**。
+- 未完成/需人工：零售真正首帧的仪器化对比；H2–H5 像素/音频人耳（既有清单）。
