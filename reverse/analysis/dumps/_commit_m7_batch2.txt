@@ -1,0 +1,44 @@
+M7: land the battle/H/UI second batch (local integration)
+
+Integrates the worktree batch built on top of 1d36ebe. All evidence below
+reproduces with `cargo test -q --workspace` (green) and `wolf-cli verify`
+(PASS 70, pending 0).
+
+Battle
+- src/battle_seed.rs + Game::seed_battle_databases: the CData cells a fresh
+  game never initialises (leader stats, command slots 47..54, item/weapon
+  stock, party/enemy counts).
+- src/battle_wiring.rs + Game::set_battle_wiring: rebuilt engine wiring that
+  starts CE242 on the 2000340 battle-active edge (the shipped graph has no
+  210 500242 edge; the module documents the honesty contract).
+- tests: m7_battle_playable (real CE253 -> CE239 -> CE244 settles,
+  2000350 0->1->0->2->0, 2000352=1, 2000343=1, warnings 0), m7_battle_full,
+  m7_battle_seed, m7_battle_menu_text, m7_battle_target,
+  m7_battle_target_flow, m7_battle_target_scheduler, m7_ce244_direct,
+  m7_day4_playable, m7_day5_schedule.
+- docs/research/M7_BATTLE_{PLAYABLE,FULL,SEED,MENU_DB,TARGET_*,ROUND}.md,
+  M7_CE244_DIRECT.md, M7_DAY4_PLAYABLE.md, M7_DAY5_SCHEDULE.md.
+
+H scenes
+- picture.rs: a Move with an empty animation tail and a real opacity change
+  now uses raw slot 2 as the fade length, so hword/word_effect glyphs reach
+  alpha > 0 instead of teleporting to opacity 0 in the draw frame.
+- tests: m7_hword_visible, m7_hscene_playable, m7_hscene_deep,
+  m7_hscene_entry, m7_hmode_state, m7_hauto_events; docs M7_HWORD_VISIBLE,
+  M7_HSCENE_PLAYABLE/DEEP/ENTRY, M7_HMODE_STATE, M7_HAUTO_EVENTS.
+
+Host/DB/save/map
+- opcode 250 string writes keep string operands (wolf-vm exec.rs) and
+  db.rs routes numeric/text writes by field kind; picture_state field 5,
+  engine_state fields 11/12/17 answered as documented; savegame Part4
+  template fix; tilemap/map-edge notes.
+- tests: opcode_111_semantics, opcode_124_long, opcode_250_string,
+  m7_host_state, m7_save_parts, m7_window_skin, m7_map_edge,
+  m7_new_game_entry, m7_day4_playable, m7_battle_menu_text.
+- docs/research/M7_BACKLOG.md, M8_BACKLOG.md (planning), M7_* notes.
+
+Also refreshes docs/UNVERIFIED.md (H-124, H-MENU-1, H-PRNG-1, H-PIC-1) and
+adds M8_BACKLOG.md as the consolidated remaining-work list.
+
+Scratch files (opscan.rs, _scratch_cdata.rs, _scratch_event.rs,
+_m6_actor_probe.rs) and docs/gpt调研/ are intentionally not committed.

@@ -1,0 +1,14 @@
+feat(i18n): map MV escape codes; audit official fallback; verify opcode111
+
+- gen_override.py: longest-known-code tokenizer (fixes E swallowing BADEND),
+  MV -> WOLF escape mapping (colors/vars/font/outline), skip <L>/<C>/<R> layout
+  slots; override now 7657 rows / 64 events (180 escaped rows adopted).
+- translation_overlay tests: all generated rows tokenise without literal escapes
+  and every row applies to a real 101 message.
+- audit_fallback.py + official_fallback_audit.tsv/official_only.tsv: 4350
+  official-fallback lines across 77 events, classified; 45 kana lines are
+  internal engine error strings.
+- docs: dual-track appendix C/D updated; UNVERIFIED + HANDOFF_M12 stale
+  opcode111 accounts cleaned (landed in exec.rs:2362, commit 3bbbb12).
+- verify: cargo test --workspace 871 passed / 0 failed / 14 ignored;
+  wolf-cli verify --root work/all PASS 70 / 0 pending.

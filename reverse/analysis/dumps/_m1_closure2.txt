@@ -1,0 +1,216 @@
+=== closure from TitleMap map event 2 (game entry) ===
+nodes: 62   slots: 11205   non-empty instrs: 9843   distinct opcodes: 38
+
+  c14   slots=40   real=32   calls=['c128', 'c129', 'c130', 'c131', 'c132']  ○各種メニュー呼出
+  c42   slots=135  real=107  calls=['c14']  オリジナルタイトル画面Ａ
+  c49   slots=119  real=93   calls=[]  X[共]システムSE再生
+  c50   slots=40   real=36   calls=[]  X[共]アイテム増減
+  c51   slots=40   real=36   calls=[]  X[共]武器増減
+  c52   slots=41   real=37   calls=[]  X[共]防具増減
+  c54   slots=28   real=25   calls=[]  X[共]アイテム所持数取得
+  c55   slots=28   real=25   calls=[]  X[共]武器所持数取得
+  c56   slots=28   real=25   calls=[]  X[共]防具所持数取得
+  c59   slots=48   real=40   calls=[]  X[共]ウェイト(キー押しで中断)
+  c60   slots=28   real=23   calls=[]  X[共]ウェイト2(キー押しで加速)
+  c64   slots=865  real=766  calls=[]  X[共]万能ウィンドウ描画処理
+  c65   slots=243  real=214  calls=['c49', 'c64']  X[共]万能ウィンドウ選択実行
+  c66   slots=27   real=25   calls=[]  X[共]万能ウィンドウ説明欄変更
+  c67   slots=42   real=38   calls=[]  X[共]全体エフェクト実行
+  c70   slots=686  real=582  calls=['c105', 'c122', 'c123', 'c124', 'c74']  X[移]パラメータ増減
+  c71   slots=71   real=59   calls=[]  X[移]パラメータ取得
+  c74   slots=206  real=184  calls=['c70']  X[移]レベルアップ処理
+  c75   slots=339  real=291  calls=['c100']  X[移]状態付与/消去
+  c88   slots=308  real=286  calls=['c89']  X[移]メニュー描画
+  c89   slots=122  real=106  calls=[]  X┗[移]メニューコマンド算出
+  c90   slots=545  real=502  calls=[]  X[移]キャラクター欄描画
+  c91   slots=66   real=63   calls=[]  X[移]キャラクタ—欄_座標算出
+  c92   slots=43   real=35   calls=['c105', 'c90', 'c91']  X[移]キャラ欄_全員描画
+  c93   slots=752  real=684  calls=['c106', 'c122', 'c123', 'c124', 'c64']  X[移]装備画面描画
+  c94   slots=698  real=614  calls=[]  X[移]セーブ·ロード画面描画
+  c95   slots=750  real=682  calls=[]  X[移]システム画面描画
+  c96   slots=163  real=147  calls=[]  X[移]ダメ—ジ·回復ポップアップ
+  c97   slots=46   real=42   calls=['c105', 'c90', 'c91', 'c96']  X[移]指定キャラHP/SP回復表示
+  c98   slots=34   real=32   calls=['c105', 'c90', 'c91', 'c96']  X[移]指定キャラ状態付与表示
+  c99   slots=131  real=119  calls=[]  X[移]残りアイテム数表示
+  c100  slots=116  real=107  calls=[]  X[移]ミニウィンドウ表示
+  c101  slots=95   real=89   calls=[]  X[移]メニュー時文章表示
+  c102  slots=283  real=268  calls=[]  X[移]上部ステータス描画
+  c105  slots=30   real=23   calls=[]  X[移]選択位置主人公ID取得
+  c106  slots=47   real=35   calls=[]  X[移]選択箇所装備コード取得
+  c107  slots=47   real=35   calls=[]  X[移]選択箇所装備コード設定
+  c108  slots=118  real=100  calls=['c49', 'c90']  X[移]キャラクタ—欄_選択実行
+  c109  slots=403  real=343  calls=['c101', 'c105', 'c106', 'c112', 'c113', 'c114', 'c122', 'c123', 'c124', 'c49', 'c59', 'c64', 'c65', 'c66', 'c93']  X[移]装備欄_選択実行
+  c110  slots=212  real=184  calls=[]  X[移]アイテム一覧算出
+  c111  slots=131  real=113  calls=['c54']  X[移]技能一覧算出
+  c112  slots=214  real=182  calls=[]  X[移]装備一覧算出
+  c113  slots=86   real=73   calls=['c106', 'c107']  X[移]装備装着·解除
+  c114  slots=106  real=91   calls=[]  X[移]装備パラメ—タ差分算出
+  c115  slots=30   real=24   calls=[]  X[移]キーリピート設定
+  c116  slots=25   real=21   calls=[]  X[移]記憶キー位置取得
+  c117  slots=18   real=15   calls=[]  X[移]記憶キー位置設定
+  c118  slots=284  real=244  calls=['c105', 'c108', 'c119', 'c120', 'c122', 'c123', 'c124', 'c49', 'c70', 'c75', 'c90', 'c92', 'c97', 'c99']  X[移]アイテム使用効果処理
+  c119  slots=394  real=338  calls=['c100', 'c101', 'c105', 'c108', 'c121', 'c122', 'c123', 'c124', 'c49', 'c70', 'c75', 'c90', 'c92', 'c97', 'c98']  X[移]技能使用効果処理
+  c120  slots=130  real=108  calls=['c101', 'c50', 'c51', 'c52', 'c54', 'c55', 'c56']  X[移]アイテム使用_消費処理
+  c121  slots=70   real=61   calls=['c101', 'c50', 'c54', 'c70', 'c71']  X[移]技能使用_消費処理
+  c122  slots=45   real=43   calls=[]  X[移]一時ステ計算<初期化>
+  c123  slots=110  real=96   calls=[]  X[移]一時ステ計算<装備補正>
+  c124  slots=53   real=49   calls=[]  X[移]一時ステ計算<状態補正>
+  c128  slots=72   real=66   calls=['c110', 'c116', 'c117', 'c118', 'c64', 'c65', 'c92', 'c99']  X┣[移]アイテム欄実行
+  c129  slots=109  real=99   calls=['c100', 'c102', 'c105', 'c108', 'c111', 'c116', 'c117', 'c119', 'c64', 'c65', 'c90', 'c92']  X┣[移]技能欄実行
+  c130  slots=71   real=64   calls=['c105', 'c108', 'c109', 'c112', 'c114', 'c49', 'c90', 'c92', 'c93']  X┣[移]装備欄実行
+  c131  slots=338  real=293  calls=['c101', 'c436', 'c49', 'c60', 'c67', 'c88', 'c92', 'c94']  X┣[移]セーブ欄実行
+  c132  slots=573  real=475  calls=['c101', 'c115', 'c49', 'c95']  X┗[移]システム欄実行
+  c436  slots=109  real=88   calls=[]  引き継ぎPチェック
+  c549  slots=65   real=57   calls=[]  forSteam[caution]
+  m2    slots=109  real=109  calls=['c42', 'c549']  新タイトル用イベント
+
+opcode frequency (n, #events):
+  103   n=2266  events=61
+  121   n=1983  events=54
+  401   n=1007  events=61
+  250   n=966   events=56
+  499   n=700   events=60
+  111   n=691   events=61
+  150   n=526   events=17
+  300   n=348   events=22
+  498   n=207   events=36
+  179   n=196   events=34
+  122   n=185   events=21
+  290   n=128   events=11
+  172   n=109   events=37
+  420   n=98    events=22
+  213   n=69    events=12
+  180   n=64    events=17
+  123   n=41    events=13
+  106   n=36    events=17
+  221   n=34    events=4
+  212   n=30    events=12
+  171   n=27    events=12
+  99    n=22    events=14
+  124   n=19    events=10
+  101   n=18    events=10
+  112   n=15    events=11
+  170   n=12    events=8
+  176   n=12    events=6
+  210   n=8     events=6
+  140   n=7     events=5
+  222   n=4     events=1
+  220   n=4     events=2
+  270   n=3     events=1
+  1000  n=2     events=1
+  211   n=2     events=2
+  102   n=1     events=1
+  130   n=1     events=1
+  175   n=1     events=1
+  107   n=1     events=1
+
+PLAN list missing from closure: []
+closure opcodes not in PLAN : [101, 107, 112, 122, 124, 176, 211, 220, 221, 222, 290, 1000]
+
+=== closure from common event 42 alone ===
+nodes: 60   slots: 11031   non-empty instrs: 9677   distinct opcodes: 38
+
+  c14   slots=40   real=32   calls=['c128', 'c129', 'c130', 'c131', 'c132']  ○各種メニュー呼出
+  c42   slots=135  real=107  calls=['c14']  オリジナルタイトル画面Ａ
+  c49   slots=119  real=93   calls=[]  X[共]システムSE再生
+  c50   slots=40   real=36   calls=[]  X[共]アイテム増減
+  c51   slots=40   real=36   calls=[]  X[共]武器増減
+  c52   slots=41   real=37   calls=[]  X[共]防具増減
+  c54   slots=28   real=25   calls=[]  X[共]アイテム所持数取得
+  c55   slots=28   real=25   calls=[]  X[共]武器所持数取得
+  c56   slots=28   real=25   calls=[]  X[共]防具所持数取得
+  c59   slots=48   real=40   calls=[]  X[共]ウェイト(キー押しで中断)
+  c60   slots=28   real=23   calls=[]  X[共]ウェイト2(キー押しで加速)
+  c64   slots=865  real=766  calls=[]  X[共]万能ウィンドウ描画処理
+  c65   slots=243  real=214  calls=['c49', 'c64']  X[共]万能ウィンドウ選択実行
+  c66   slots=27   real=25   calls=[]  X[共]万能ウィンドウ説明欄変更
+  c67   slots=42   real=38   calls=[]  X[共]全体エフェクト実行
+  c70   slots=686  real=582  calls=['c105', 'c122', 'c123', 'c124', 'c74']  X[移]パラメータ増減
+  c71   slots=71   real=59   calls=[]  X[移]パラメータ取得
+  c74   slots=206  real=184  calls=['c70']  X[移]レベルアップ処理
+  c75   slots=339  real=291  calls=['c100']  X[移]状態付与/消去
+  c88   slots=308  real=286  calls=['c89']  X[移]メニュー描画
+  c89   slots=122  real=106  calls=[]  X┗[移]メニューコマンド算出
+  c90   slots=545  real=502  calls=[]  X[移]キャラクター欄描画
+  c91   slots=66   real=63   calls=[]  X[移]キャラクタ—欄_座標算出
+  c92   slots=43   real=35   calls=['c105', 'c90', 'c91']  X[移]キャラ欄_全員描画
+  c93   slots=752  real=684  calls=['c106', 'c122', 'c123', 'c124', 'c64']  X[移]装備画面描画
+  c94   slots=698  real=614  calls=[]  X[移]セーブ·ロード画面描画
+  c95   slots=750  real=682  calls=[]  X[移]システム画面描画
+  c96   slots=163  real=147  calls=[]  X[移]ダメ—ジ·回復ポップアップ
+  c97   slots=46   real=42   calls=['c105', 'c90', 'c91', 'c96']  X[移]指定キャラHP/SP回復表示
+  c98   slots=34   real=32   calls=['c105', 'c90', 'c91', 'c96']  X[移]指定キャラ状態付与表示
+  c99   slots=131  real=119  calls=[]  X[移]残りアイテム数表示
+  c100  slots=116  real=107  calls=[]  X[移]ミニウィンドウ表示
+  c101  slots=95   real=89   calls=[]  X[移]メニュー時文章表示
+  c102  slots=283  real=268  calls=[]  X[移]上部ステータス描画
+  c105  slots=30   real=23   calls=[]  X[移]選択位置主人公ID取得
+  c106  slots=47   real=35   calls=[]  X[移]選択箇所装備コード取得
+  c107  slots=47   real=35   calls=[]  X[移]選択箇所装備コード設定
+  c108  slots=118  real=100  calls=['c49', 'c90']  X[移]キャラクタ—欄_選択実行
+  c109  slots=403  real=343  calls=['c101', 'c105', 'c106', 'c112', 'c113', 'c114', 'c122', 'c123', 'c124', 'c49', 'c59', 'c64', 'c65', 'c66', 'c93']  X[移]装備欄_選択実行
+  c110  slots=212  real=184  calls=[]  X[移]アイテム一覧算出
+  c111  slots=131  real=113  calls=['c54']  X[移]技能一覧算出
+  c112  slots=214  real=182  calls=[]  X[移]装備一覧算出
+  c113  slots=86   real=73   calls=['c106', 'c107']  X[移]装備装着·解除
+  c114  slots=106  real=91   calls=[]  X[移]装備パラメ—タ差分算出
+  c115  slots=30   real=24   calls=[]  X[移]キーリピート設定
+  c116  slots=25   real=21   calls=[]  X[移]記憶キー位置取得
+  c117  slots=18   real=15   calls=[]  X[移]記憶キー位置設定
+  c118  slots=284  real=244  calls=['c105', 'c108', 'c119', 'c120', 'c122', 'c123', 'c124', 'c49', 'c70', 'c75', 'c90', 'c92', 'c97', 'c99']  X[移]アイテム使用効果処理
+  c119  slots=394  real=338  calls=['c100', 'c101', 'c105', 'c108', 'c121', 'c122', 'c123', 'c124', 'c49', 'c70', 'c75', 'c90', 'c92', 'c97', 'c98']  X[移]技能使用効果処理
+  c120  slots=130  real=108  calls=['c101', 'c50', 'c51', 'c52', 'c54', 'c55', 'c56']  X[移]アイテム使用_消費処理
+  c121  slots=70   real=61   calls=['c101', 'c50', 'c54', 'c70', 'c71']  X[移]技能使用_消費処理
+  c122  slots=45   real=43   calls=[]  X[移]一時ステ計算<初期化>
+  c123  slots=110  real=96   calls=[]  X[移]一時ステ計算<装備補正>
+  c124  slots=53   real=49   calls=[]  X[移]一時ステ計算<状態補正>
+  c128  slots=72   real=66   calls=['c110', 'c116', 'c117', 'c118', 'c64', 'c65', 'c92', 'c99']  X┣[移]アイテム欄実行
+  c129  slots=109  real=99   calls=['c100', 'c102', 'c105', 'c108', 'c111', 'c116', 'c117', 'c119', 'c64', 'c65', 'c90', 'c92']  X┣[移]技能欄実行
+  c130  slots=71   real=64   calls=['c105', 'c108', 'c109', 'c112', 'c114', 'c49', 'c90', 'c92', 'c93']  X┣[移]装備欄実行
+  c131  slots=338  real=293  calls=['c101', 'c436', 'c49', 'c60', 'c67', 'c88', 'c92', 'c94']  X┣[移]セーブ欄実行
+  c132  slots=573  real=475  calls=['c101', 'c115', 'c49', 'c95']  X┗[移]システム欄実行
+  c436  slots=109  real=88   calls=[]  引き継ぎPチェック
+
+opcode frequency (n, #events):
+  103   n=2217  events=59
+  121   n=1971  events=52
+  401   n=994   events=59
+  250   n=966   events=56
+  499   n=697   events=59
+  111   n=681   events=59
+  150   n=513   events=15
+  300   n=348   events=22
+  498   n=203   events=35
+  179   n=191   events=32
+  122   n=181   events=20
+  290   n=127   events=10
+  172   n=109   events=37
+  420   n=97    events=21
+  213   n=66    events=11
+  180   n=47    events=15
+  106   n=36    events=17
+  123   n=36    events=11
+  212   n=29    events=11
+  171   n=24    events=11
+  99    n=22    events=14
+  124   n=19    events=10
+  101   n=18    events=10
+  112   n=15    events=11
+  221   n=15    events=3
+  170   n=12    events=8
+  176   n=12    events=6
+  140   n=6     events=4
+  210   n=6     events=5
+  222   n=4     events=1
+  220   n=4     events=2
+  270   n=3     events=1
+  1000  n=2     events=1
+  211   n=2     events=2
+  102   n=1     events=1
+  130   n=1     events=1
+  175   n=1     events=1
+  107   n=1     events=1
+
+PLAN list missing from closure: []
+closure opcodes not in PLAN : [101, 107, 112, 122, 124, 176, 211, 220, 221, 222, 290, 1000]
+

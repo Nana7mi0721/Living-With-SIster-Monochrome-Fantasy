@@ -1,0 +1,9 @@
+M11 round 3: natural H frames, live battle menu, PRNG clock seed, packaging
+
+- wolf-cli: add CaptureEntry::SaveWithEvent so --load-save combines with --event; run_capture seeds the saved game then starts engine events and the requested event
+- battle_wiring/game: harvest committed CData type14 rows before the drive gate, so a real two-member menu registers rows and drives three CE242 bodies without injected queues
+- wolf-vm/rng: record the retail GetTickCount seed path (no folding) and add WolfRng::from_clock_ticks
+- wolf-game/frame_budget: add FrameBudgetReport percentile measurement
+- wolf-cli/wolf-package: add standalone validate/assemble/check/bench packaging tool with streaming SHA-256 manifest
+- tests: m11_hscene_ce328_natural, m11_battle_menu_live, prng_clock_seed, m11_package
+- docs: add HANDOFF_M12 and four M11 round-3 research notes; refresh BASELINE, README, NEW_SESSION_START, PLAN and research indexes

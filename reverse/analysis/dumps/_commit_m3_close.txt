@@ -1,0 +1,18 @@
+M3 close: row-past-count DB semantics, battle slice C unreachable proof, doc closure
+
+- crates/wolf-game/src/db.rs: add has_runtime_row_count(container, db_type).
+- crates/wolf-game/src/game.rs: Game::database answers a row a runtime 250 set_row_count
+  dropped with the engine's empty cell (0 / ""), counted in the new
+  GameStats.database_row_out_of_range, instead of leaving exec.rs:2039 to keep the stale
+  value. Gated on a *runtime* count, so a row past the file's own height with no shrink
+  (e.g. CData (5,16,0)) still reports unanswered (label-drift signal).
+- crates/wolf-game/src/game.rs: update the row-count resize test to expect the empty
+  answers (numeric and string destinations) and database_row_out_of_range == 2.
+- docs/BASELINE.json battle_slice: slice_c_entry_proof (CE65 real-menu route is
+  data-unreachable), decision (option A; option B not implemented), database_row_semantics.
+- docs/HANDOFF_M3.md: M3 closed; CE242/243 kept as an unwired legacy subsystem; the
+  cleared-temporary-table read semantics recorded; 125 AutoInput / 221 LoadGame residual
+  notes corrected against the code.
+- docs/ARCHITECTURE.md: M4 acceptance row is the 140 Sound opcode (argc 4/6/7, negative
+  arg[0] = stop/fade); 179 is LoopTimes, not an SE opcode.
+- docs/HSCENE.md: P1/P2 solved, section 4.5 250 largely closed.

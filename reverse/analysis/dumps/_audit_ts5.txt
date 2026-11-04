@@ -1,0 +1,51 @@
+tileset5 title='海岸ダンジョン' base='MapChip/map_parts01.png'
+nonempty autos 12
+'b_02�b������_at�㥨02.png'      in_disk=False
+'b_04�Iؑ�C_at�㥨.png'           in_disk=False
+'b_05砂漠_at01水.png'             in_disk=True
+'b_07���ƥ��at�㥨.png'           in_disk=False
+'b_06�i���u��_at01.png'        in_disk=False
+'b_06�i���u��_at02.png'        in_disk=False
+'b_07���ƥ��t01.png'            in_disk=False
+'b_at���.png'                  in_disk=False
+'d_t�I�.png'                   in_disk=False
+'b_06�i���u��_at03.png'        in_disk=False
+'[A]Dirt1_pipo.png'            in_disk=True
+'[A]Grass2_pipo.png'           in_disk=True
+
+--- disk MapChip files matching b_ or base
+  [A]Water1_Cave1_pipo.png
+  [A]Water1_Cave2_pipo.png
+  [A]Water1_Cave3_pipo.png
+  [A]Water1_Cave4_pipo.png
+  [A]Water1_Cave5_pipo.png
+  [A]Water1_pipo.png
+  [A]Water2_Cave1_pipo.png
+  [A]Water2_Cave2_pipo.png
+  [A]Water2_Cave3_pipo.png
+  [A]Water2_Cave4_pipo.png
+  [A]Water2_Cave5_pipo.png
+  [A]Water2_pipo.png
+  [A]Water3_Cave1_pipo.png
+  [A]Water3_Cave2_pipo.png
+  [A]Water3_Cave3_pipo.png
+  [A]Water3_Cave4_pipo.png
+  [A]Water3_Cave5_pipo.png
+  [A]Water3_pipo.png
+  [A]Water4_pipo.png
+  [A]Water5_pipo.png
+  [A]Water6_pipo.png
+  [A]Water7_pipo.png
+  [A]WaterFall1_pipo.png
+  [A]WaterFall2_pipo.png
+  [A]WaterFall3_pipo.png
+  b_02高山_at水02.png
+  b_04荒地_at水.png
+  b_04荒地_t00.png
+  b_05砂漠_at01水.png
+  b_06海岸_at01.png
+  b_06海岸_at02.png
+  b_06海岸_at03.png
+  b_07洞窟_at水.png
+  b_07洞窟_t01.png
+  b_at滝.png

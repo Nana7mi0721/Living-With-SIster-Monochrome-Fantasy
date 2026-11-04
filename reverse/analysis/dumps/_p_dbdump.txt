@@ -1,0 +1,36 @@
+TYPE 0 name='マップ設定' keys=['data', 'description', 'fields', 'name'] fields=8 rows=50
+TYPE 1 name='BGMリスト' keys=['data', 'description', 'fields', 'name'] fields=4 rows=16
+TYPE 2 name='BGSリスト' keys=['data', 'description', 'fields', 'name'] fields=4 rows=6
+TYPE 3 name='SEリスト' keys=['data', 'description', 'fields', 'name'] fields=4 rows=20
+TYPE 4 name='文字列変数名' keys=['data', 'description', 'fields', 'name'] fields=0 rows=30
+TYPE 5 name='システム文字列' keys=['data', 'description', 'fields', 'name'] fields=0 rows=80
+TYPE 6 name='システム変数名' keys=['data', 'description', 'fields', 'name'] fields=0 rows=150
+TYPE 7 name='位置設定リスト' keys=['data', 'description', 'fields', 'name'] fields=3 rows=10
+TYPE 8 name='キャラクター画像' keys=['data', 'description', 'fields', 'name'] fields=1 rows=300
+TYPE 9 name='キャラ影グラフィック名' keys=['data', 'description', 'fields', 'name'] fields=1 rows=6
+TYPE 10 name='ウィンドウ画像' keys=['data', 'description', 'fields', 'name'] fields=2 rows=3
+TYPE 11 name='トランジションタイプ' keys=['data', 'description', 'fields', 'name'] fields=1 rows=1
+TYPE 12 name='文字色' keys=['data', 'description', 'fields', 'name'] fields=3 rows=30
+TYPE 13 name='遠景画像' keys=['data', 'description', 'fields', 'name'] fields=4 rows=80
+TYPE 14 name='通常変数名' keys=['data', 'description', 'fields', 'name'] fields=0 rows=800
+TYPE 15 name='予備変数1' keys=['data', 'description', 'fields', 'name'] fields=0 rows=4
+TYPE 16 name='予備変数2' keys=['data', 'description', 'fields', 'name'] fields=0 rows=7
+TYPE 17 name='予備変数3' keys=['data', 'description', 'fields', 'name'] fields=0 rows=4
+TYPE 18 name='予備変数4' keys=['data', 'description', 'fields', 'name'] fields=0 rows=1
+TYPE 19 name='予備変数5' keys=['data', 'description', 'fields', 'name'] fields=0 rows=1
+TYPE 20 name='予備変数6' keys=['data', 'description', 'fields', 'name'] fields=0 rows=1
+TYPE 21 name='予備変数7' keys=['data', 'description', 'fields', 'name'] fields=0 rows=6
+TYPE 22 name='予備変数8' keys=['data', 'description', 'fields', 'name'] fields=0 rows=1
+TYPE 23 name='予備変数9' keys=['data', 'description', 'fields', 'name'] fields=0 rows=10
+TYPE 24 name='顔グラフィック名' keys=['data', 'description', 'fields', 'name'] fields=1 rows=12
+TYPE 25 name='' keys=['data', 'description', 'fields', 'name'] fields=1 rows=1
+TYPE 26 name='' keys=['data', 'description', 'fields', 'name'] fields=1 rows=1
+TYPE 27 name='' keys=['data', 'description', 'fields', 'name'] fields=1 rows=1
+
+{"name": "マップ設定", "description": "読み込みたい\r\nマップファイル名と、\r\nBGM·BGSを設定\r\n\r\nメインウィンドウの\r\n「マップ設定」で設定すると、\r\nここに反映されます。\r\n", "fields": [{"name": "マップファイル名", "stringArgs": ["MapData"]}, {"name": "BGM番号(リスト読込)", "stringArgs": ["無し", "イベントに任せる", "ﾌｧｲﾙ名で指定"]}, {"name": "BGS番号(リスト読込)", "stringArgs": ["無し", "イベントに任せる", "ﾌｧｲﾙ名で指定"]}, {"name": "ル—プ:1横2縦3両方", "stringArgs": ["ループ無し", "横のみループ", "縦のみループ", "縦横ループ"]}, {"name": "遠景番号", "stringArgs": ["<なし>", "<変化なし>", "ﾌｧｲﾙ名で指定"]}, {"name": "BGMﾌｧｲﾙ名[BGM番号=-3]"}, {"name": "BGSﾌｧｲﾙ名[BGS番号=-3]"}, {"name": "遠景ﾌｧｲﾙ名[遠景番号=-3]"}], "data": [{"name": "タイトル", "data": [{"name": "マップファイル名", "value": "MapData/TitleMap.mps"}, {"name": "BGM番号(リスト読込)", "value": 4294967295}, {"name": "BGS番号(リスト読込)", "value": 4294967295}, {"name": "ル—プ:1横2縦3両方", "value": 0}, {"name": "遠景番号", "value": 4294967295}, {"name": "BGMﾌｧｲﾙ名[BGM番号=-3]", "value": ""}, {"name": "BGSﾌｧｲﾙ名[BGS番号=-3]", "value": ""}, {"name": "遠景ﾌｧｲﾙ名[遠景番号=-3]", "value": ""}]}, {"name": "自宅1", "data": [{"name": "マップファイル名", "value": "MapData/SampleMapA.mps"}, {"name": "BGM番号(リスト読込)", "value": 4294967294}, {"name": "BGS番号(リスト読込)", "value": 4294967295}, {"name": "ル—プ:1横2縦3両方", "value": 0}, {"name": "遠景番号", "value": 2}, {"name": "BGMﾌｧｲﾙ名[BGM番号=-3]", "value": ""}, {"name": "BGSﾌｧｲﾙ名[BGS番号=-3]", "value": ""}, {"name": "遠景ﾌｧｲﾙ名[遠景番号=-3]", "value": ""}]}, {"name": "クマヘ", "data": [{"name": "マップファイル名", "value": "MapData/SampleMapA_1.mps"}, {"name": "BGM番号(リスト読込)", "value": 4294967294}, {"name": "BGS番号(リスト読込)", "valu
+
+{"name": "システム変数名", "description": "システム変数として\r\n読み込める内容の\r\nラベルを貼るための\r\nもの。\r\n\r\n※作者以外は\r\n　いじる必要なし", "fields": [], "data": [{"name": "顔ｸﾞﾗﾌｨｯｸ番号", "data": []}, {"name": "ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ X座標", "data": []}, {"name": "ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ Y座標", "data": []}, {"name": "選択肢ｳｨﾝﾄﾞｳ X座標", "data": []}, {"name": "選択肢ｳｨﾝﾄﾞｳ Y座標", "data": []}, {"name": "ﾎﾟｰｽﾞｶｰｿﾙX (Sys1に足した位置)", "data": []}, {"name": "ﾎﾟｰｽﾞｶｰｿﾙY (Sys2に足した位置)", "data": []}, {"name": "選択肢次回初期位置(0,1,2...)", "data": []}, {"name": "基本フォントサイズ", "data": []}, {"name": "ﾒｯｾｰｼﾞ速度( X 文字/秒)", "data": []}, {"name": "ﾒｯｾｰｼﾞ表示ｳｪｲﾄ(X ﾌﾚｰﾑ)", "data": []}, {"name": "ﾋﾟｸﾁｬ文字速度( X 文字/秒)", "data": []}, {"name": "ﾒｯｾｰｼﾞ表示中？(1=ON)", "data": []}, {"name": "ｲﾍﾞﾝﾄ実行中？(1=ON)", "data": []}, {"name": "選択肢ｳｨﾝﾄﾞｳ表示する?(1=ON)", "data": []}, {"name": "方向ｷｰﾘﾋﾟｰﾄ初ｳｪｲﾄ(ﾌﾚｰﾑ数指定)
+
+{"name": "文字色", "description": "10番～13番は\r\nキーボード入力時の\r\n色指定となるので\r\n名前をいじらないように\r\n\r\n14番以降は使用可", "fields": [{"name": "赤(0-255)"}, {"name": "緑(0-255)"}, {"name": "青(0-255)"}], "data": [{"name": "デフォルト色", "data": [{"name": "赤(0-255)", "value": 255}, {"name": "緑(0-255)", "value": 255}, {"name": "青(0-255)", "value": 255}]}, {"name": "青色", "data": [{"name": "赤(0-255)", "value": 140}, {"name": "緑(0-255)", "value": 175}, {"name": "青(0-255)", "value": 255}]}, {"name": "赤色", "data": [{"name": "赤(0-255)", "value": 210}, {"name": "緑(0-255)", "value": 130}, {"name": "青(0-255)", "value": 130}]}, {"name": "緑色", "data": [{"name": "赤(0-255)", "value": 180}, {"name": "緑(0-255)", "value": 255}, {"name": "青(0-255)", "value": 180}]}, {"name": "茶色", "data": [{"name": "赤(0-255)", "value": 90}, {"name": "緑(0-255)", "value": 40}, {"name": "青(0-255)", "value": 0}]}, {"name": "赤色濃", "data": [{"name": "赤(0-255)
+
+{"name": "顔グラフィック名", "description": "", "fields": [{"name": "顔画像ファイル", "stringArgs": [""]}], "data": [{"name": "ウィンドウ表示なし", "data": [{"name": "顔画像ファイル", "value": ""}]}, {"name": "ウィンドウのみ", "data": [{"name": "顔画像ファイル", "value": ""}]}, {"name": "妹（制服）", "data": [{"name": "顔画像ファイル", "value": "Picture/face01.png"}]}, {"name": "妹（部屋義）", "data": [{"name": "顔画像ファイル", "value": "Picture/face02.png"}]}, {"name": "ナルミ", "data": [{"name": "顔画像ファイル", "value": "DLC_data/member_20_s.png"}]}, {"name": "", "data": [{"name": "顔画像ファイル", "value": ""}]}, {"name": "", "data": [{"name": "顔画像ファイル", "value": ""}]}, {"name": "", "data": [{"name": "顔画像ファイル", "value": ""}]}, {"name": "", "data": [{"name": "顔画像ファイル", "value": ""}]}, {"name": "", "data": [{"name": "顔画像ファイル", "value": ""}]}, {"name": "", "data": [{"name": "顔画像ファイル", "value": ""}]}, {"name": "", "data": [{"name": "顔画像ファイル", "value": ""}]}]}

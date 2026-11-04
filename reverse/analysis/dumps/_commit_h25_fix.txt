@@ -1,0 +1,3 @@
+docs(m13): correct H3 sample asset to the captured CE245 frame
+
+- The existing m9 frame hovers SD_menu_013.png, one of seven 482x225 reaction icons; describe the group instead of naming SD_menu_010 as the sample.

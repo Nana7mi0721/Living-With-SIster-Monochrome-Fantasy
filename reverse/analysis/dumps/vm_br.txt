@@ -1,0 +1,73 @@
+struct stats: [('close_orphan', 123), ('closed_ok', 11238)]
+
+mismatches: [((111, 401), 17382), ((111, 420), 3245), ((102, 401), 1010), (('401_id_gt_count', 102), 495), ((401, 'no_open_at_same_indent'), 163), ((102, 421), 153), ((420, 'no_open_at_same_indent'), 34)]
+
+bad=197
+
+
+### 401 id distribution vs parent cond count
+
+  parent=102 cond_count=1 -> 401 id=2  n=157
+
+  parent=102 cond_count=2 -> 401 id=2  n=268
+
+  parent=102 cond_count=2 -> 401 id=3  n=187
+
+  parent=102 cond_count=3 -> 401 id=2  n=31
+
+  parent=102 cond_count=3 -> 401 id=3  n=14
+
+  parent=102 cond_count=3 -> 401 id=4  n=5
+
+  parent=102 cond_count=4 -> 401 id=2  n=9
+
+  parent=102 cond_count=4 -> 401 id=3  n=3
+
+  parent=102 cond_count=4 -> 401 id=4  n=1
+
+  parent=102 cond_count=4 -> 401 id=5  n=1
+
+  parent=102 cond_count=5 -> 401 id=2  n=9
+
+  parent=102 cond_count=5 -> 401 id=3  n=2
+
+  parent=102 cond_count=5 -> 401 id=4  n=2
+
+  parent=102 cond_count=5 -> 401 id=5  n=2
+
+  parent=102 cond_count=5 -> 401 id=6  n=2
+
+  parent=102 cond_count=6 -> 401 id=2  n=11
+
+  parent=102 cond_count=6 -> 401 id=3  n=1
+
+  parent=102 cond_count=6 -> 401 id=4  n=1
+
+  parent=102 cond_count=6 -> 401 id=5  n=1
+
+  parent=102 cond_count=7 -> 401 id=2  n=3
+
+  parent=102 cond_count=8 -> 401 id=2  n=7
+
+  parent=111 cond_count=1 -> 401 id=1  n=6752
+
+  parent=111 cond_count=1 -> 401 id=2  n=3
+
+  parent=111 cond_count=1 -> 401 id=3  n=2
+
+  parent=111 cond_count=1 -> 401 id=4  n=1
+
+  parent=111 cond_count=2 -> 401 id=1  n=1570
+
+  parent=111 cond_count=2 -> 401 id=2  n=1114
+
+  parent=111 cond_count=3 -> 401 id=1  n=2259
+
+  parent=111 cond_count=3 -> 401 id=2  n=1761
+
+  parent=111 cond_count=3 -> 401 id=3  n=1645
+
+  ... total keys 34
+
+
+### 420/421 parent kinds: [((102, 421), 1), ((111, 420), 1)]

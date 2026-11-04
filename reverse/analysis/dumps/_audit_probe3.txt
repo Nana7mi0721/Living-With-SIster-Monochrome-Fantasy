@@ -1,0 +1,33 @@
+type <class 'dict'> keys ['title', 'tileset', 'w', 'h', 'empty', 'nev', 'pages', 'cmds', 'ok', 'footer', 'tail', 'codes', 'events']
+{"title": "なし", "tileset": 4, "w": 53, "h": 30, "empty": false, "nev": 1, "pages": 1, "cmds": 133, "ok": true, "footer": "0x66", "tail": 1, "codes": {"103": 35, "111": 7, "401": 10, "150": 6, "0": 14, "499": 7, "180": 5, "122": 4, "221": 19, "121": 11, "420": 1, "179": 1, "498": 2, "210": 2, "290": 1, "170": 1, "123": 2, "213": 3, "212": 1, "140": 1}, "events": [{"id": 2, "name": "新タイトル用イベント", "x": 24, "y": 9, "npg": 1, "trig": [1], "cmds": [{"code": 103, "ints": [], "strs": ["―――――――――――――――――――――――――――――――"], "bd": 0}, {"code": 103, "ints": [], "strs": ["【初めてWOLF RPGエディターを起動した、あなたへのメッセージ】"],
+n strings 44
+/title 'なし'
+   l1u8 fail
+/footer '0x66'
+   l1u8: '0x66'
+/events/0/name '新タイトル用イベント'
+   l1u8 fail
+/events/0/cmds/0/strs/0 '―――――――――――――――――――――――――――――――'
+   l1u8 fail
+/events/0/cmds/1/strs/0 '【初めてWOLF RPGエディターを起動した、あなたへのメッセージ】'
+   l1u8 fail
+/events/0/cmds/3/strs/0 '\u3000このイベントは、タイトル画面を演出するための処理です。'
+   l1u8 fail
+/events/0/cmds/4/strs/0 '\u3000最初は、もっと中身が分かりやすい「サンプルマップＡ」のイベントを'
+   l1u8 fail
+/events/0/cmds/5/strs/0 '\u3000見ることをおすすめします。\u3000まずは編集マップを切り替えましょう。'
+   l1u8 fail
+/events/0/cmds/7/strs/0 '\u3000編集マップを切り替える方法は、メインウィンドウ上部のアイコン、'
+   l1u8 fail
+/events/0/cmds/8/strs/0 '\u3000右端から3番目にある「ＭＡＰ」と書かれたアイコンをクリックし、'
+   l1u8 fail
+/events/0/cmds/9/strs/0 '\u3000出てきたウィンドウ内の「1：サンプルマップＡ」をクリックしてみてください。'
+   l1u8 fail
+/events/0/cmds/10/strs/0 '\u3000（クリックした瞬間、このウィンドウは消えてしまいますのでご注意を）'
+   l1u8 fail
+/events/0/cmds/12/strs/0 '\u3000それでは、あなたの楽しいゲーム制作ライフをお祈りしています！'
+   l1u8 fail
+/events/0/cmds/13/strs/0 '\u3000分からないことがあれば、以下のパーフェクトガイドへどうぞ！'
+   l1u8 fail
+/events/0/cmds/14/strs/0 'http://www.silversecond.com/WolfRPGEditor/Guide/'
+   l1u8: 'http://www.silversecond.com/WolfRPGEditor/Guide/'

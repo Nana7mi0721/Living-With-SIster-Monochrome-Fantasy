@@ -1,0 +1,8 @@
+M3: implement negative database column semantics
+
+Column -1 reads answer the first empty row of the addressed type (CE58
+skill and CE143 armour placement), and column -2 writes clear every field
+of one row (CE75 full recovery and the battle copy events).  Negative
+columns are never clamped onto a real field; an unmodelled negative
+column now answers empty with a diagnostic instead of reading field 0.
+SysDatabase numeric reads also answer through Databases::num.

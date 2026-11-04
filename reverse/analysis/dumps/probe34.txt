@@ -1,0 +1,26 @@
+Map002.json: 5 events ids=[0, 1, 3, 4, 5]
+   ev id=0 name='マップ表示' pages=1
+   ev id=1 name='光エフェクト' pages=1
+   ev id=3 name='爆弾' pages=2
+Map003.json: 2 events ids=[0, 1]
+   ev id=0 name='画像消去' pages=1
+   ev id=1 name='ニューゲーム処理' pages=1
+Map031.json: 1 events ids=[0]
+   ev id=0 name='ロード時の自動処理' pages=1
+SampleMapA.json: 40 events ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+   ev id=0 name='ニューゲーム処理' pages=1
+   ev id=1 name='妹クリック判定（夜' pages=3
+   ev id=2 name='妹クリック判定' pages=2
+SampleMapA_1.json: 12 events ids=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+   ev id=1 name='クリック範囲設定' pages=1
+   ev id=2 name='カーソル重なり判定' pages=1
+   ev id=3 name='基本メニュー実行処理' pages=1
+SampleMapB.json: 6 events ids=[0, 1, 2, 3, 4, 5]
+   ev id=0 name='敵エンカウントEV' pages=1
+   ev id=1 name='市松模様解説男' pages=1
+   ev id=2 name='Aへの場所移動' pages=1
+TitleMap.json: 1 events ids=[2]
+   ev id=2 name='新タイトル用イベント' pages=1
+Dungeon.mps: 40x30 ec=5 ids=[0, 1, 2, 3, 4]
+Map002.mps: 100x30 ec=5 ids=[0, 1, 3, 4, 5]
+Map003.mps: 70x170 ec=2 ids=[0, 1]

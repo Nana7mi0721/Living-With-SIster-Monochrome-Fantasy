@@ -1,0 +1,2 @@
+H ids [217, 333, 338, 340, 341, 342, 343, 346, 350, 351, 353, 354, 357, 358, 365, 367, 371, 372, 374, 407, 410, 445]
+maps: ['Dungeon.mps', 'Map002.mps', 'Map003.mps', 'Map024.mps', 'Map031.mps', 'SampleMapA.mps', 'SampleMapA_1.mps', 'SampleMapB.mps', 'TitleMap.mps']

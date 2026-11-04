@@ -1,0 +1,17 @@
+live assets total 608156264 B
+  BGM                     223256712   36.7%
+  DLC_data                145655256   24.0%
+  cg                      112713046   18.5%
+  1.4.0                    31866936    5.2%
+  Picture                  24047869    4.0%
+  hscene                   21477607    3.5%
+  BattleEffect             21434351    3.5%
+  SE                       16789197    2.8%
+
+duplicate content among live assets: 0 redundant files / 0 B
+
+== font & html references in all strings ==
+  [('Download.html', 1)]
+  map-side: []
+
+== real install (E:/SteamLibrary/.../Living With SIster Monochrome Fantasy) ==

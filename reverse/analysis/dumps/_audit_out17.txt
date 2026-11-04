@@ -1,0 +1,353 @@
+== 342 missing: live vs dead source, by dir ==
+  Picture          total 191   live-sourced 187   dead-only   4
+  CharaChip        total 132   live-sourced 132   dead-only   0
+  MapChip          total   9   live-sourced   9   dead-only   0
+  cg               total   2   live-sourced   2   dead-only   0
+  BGM              total   2   live-sourced   2   dead-only   0
+  <<GET_FILE_EXIST>>. total   1   live-sourced   1   dead-only   0
+  ..               total   1   live-sourced   1   dead-only   0
+  Save             total   1   live-sourced   1   dead-only   0
+  save             total   1   live-sourced   1   dead-only   0
+  Data             total   1   live-sourced   1   dead-only   0
+  SC1.jpg          total   1   live-sourced   1   dead-only   0
+  TOTAL 342  live-sourced 338  dead-only 4
+
+== live-sourced missing, full list ==
+  ../save/save/cself[30].jpg   <- common ev131#80; common ev131#110; common ev131#140
+  <<GET_FILE_EXIST>>./save/save/cself[30].jpg   <- common ev131#74; common ev131#104; common ev131#134
+  BGM/Battle01_Juno.mid   <- db type17[システム設定] row0
+  BGM/kana.mp3   <- sysdb type1[BGMリスト] row5
+  CharaChip/Nereis001.png   <- sysdb type8[キャラクター画像] row45
+  CharaChip/Nereis002.png   <- sysdb type8[キャラクター画像] row46
+  CharaChip/atk10_l.png   <- sysdb type8[キャラクター画像] row79
+  CharaChip/atk10_r.png   <- sysdb type8[キャラクター画像] row22; sysdb type8[キャラクター画像] row50
+  CharaChip/atk11_l.png   <- sysdb type8[キャラクター画像] row80
+  CharaChip/atk11_r.png   <- sysdb type8[キャラクター画像] row23
+  CharaChip/atk12_l.png   <- sysdb type8[キャラクター画像] row81
+  CharaChip/atk13_l.png   <- sysdb type8[キャラクター画像] row82
+  CharaChip/atk13_r.png   <- sysdb type8[キャラクター画像] row51
+  CharaChip/atk14_l.png   <- sysdb type8[キャラクター画像] row83
+  CharaChip/atk14_r.png   <- sysdb type8[キャラクター画像] row52
+  CharaChip/atk15_l.png   <- sysdb type8[キャラクター画像] row84
+  CharaChip/atk15_r.png   <- sysdb type8[キャラクター画像] row53
+  CharaChip/atk16_l.png   <- sysdb type8[キャラクター画像] row85
+  CharaChip/atk16_r.png   <- sysdb type8[キャラクター画像] row54
+  CharaChip/atk17_l.png   <- sysdb type8[キャラクター画像] row86
+  CharaChip/atk17_r.png   <- sysdb type8[キャラクター画像] row55
+  CharaChip/atk18_l.png   <- sysdb type8[キャラクター画像] row87
+  CharaChip/atk18_r.png   <- sysdb type8[キャラクター画像] row56
+  CharaChip/atk19_l.png   <- sysdb type8[キャラクター画像] row88
+  CharaChip/atk19_r.png   <- sysdb type8[キャラクター画像] row57
+  CharaChip/atk1_l.png   <- sysdb type8[キャラクター画像] row70
+  CharaChip/atk1_r.png   <- sysdb type8[キャラクター画像] row13
+  CharaChip/atk20_l.png   <- sysdb type8[キャラクター画像] row89
+  CharaChip/atk20_r.png   <- sysdb type8[キャラクター画像] row58
+  CharaChip/atk21_l.png   <- sysdb type8[キャラクター画像] row90
+  CharaChip/atk21_r.png   <- sysdb type8[キャラクター画像] row59
+  CharaChip/atk22_l.png   <- sysdb type8[キャラクター画像] row91
+  CharaChip/atk22_r.png   <- sysdb type8[キャラクター画像] row60
+  CharaChip/atk2_l.png   <- sysdb type8[キャラクター画像] row71
+  CharaChip/atk2_r.png   <- sysdb type8[キャラクター画像] row14
+  CharaChip/atk3_l.png   <- sysdb type8[キャラクター画像] row72
+  CharaChip/atk3_r.png   <- sysdb type8[キャラクター画像] row15
+  CharaChip/atk4_l.png   <- sysdb type8[キャラクター画像] row73
+  CharaChip/atk4_r.png   <- sysdb type8[キャラクター画像] row16
+  CharaChip/atk5_l.png   <- sysdb type8[キャラクター画像] row74
+  CharaChip/atk5_r.png   <- sysdb type8[キャラクター画像] row17
+  CharaChip/atk6_l.png   <- sysdb type8[キャラクター画像] row75
+  CharaChip/atk6_r.png   <- sysdb type8[キャラクター画像] row18
+  CharaChip/atk7_l.png   <- sysdb type8[キャラクター画像] row76
+  CharaChip/atk7_r.png   <- sysdb type8[キャラクター画像] row19
+  CharaChip/atk8_l.png   <- sysdb type8[キャラクター画像] row77
+  CharaChip/atk8_r.png   <- sysdb type8[キャラクター画像] row20
+  CharaChip/atk9_l.png   <- sysdb type8[キャラクター画像] row78; sysdb type8[キャラクター画像] row92
+  CharaChip/atk9_r.png   <- sysdb type8[キャラクター画像] row21; sysdb type8[キャラクター画像] row61
+  CharaChip/chibi_kiri.png   <- sysdb type8[キャラクター画像] row4
+  CharaChip/chimera01.png   <- sysdb type8[キャラクター画像] row216
+  CharaChip/chimera01_atk1.png   <- sysdb type8[キャラクター画像] row208
+  CharaChip/chimera01_atk1r.png   <- sysdb type8[キャラクター画像] row200
+  CharaChip/chimera01_atk2.png   <- sysdb type8[キャラクター画像] row209
+  CharaChip/chimera01_atk2r.png   <- sysdb type8[キャラクター画像] row201
+  CharaChip/chimera01_atk3.png   <- sysdb type8[キャラクター画像] row210
+  CharaChip/chimera01_atk3r.png   <- sysdb type8[キャラクター画像] row202
+  CharaChip/chimera01_atk4.png   <- sysdb type8[キャラクター画像] row211
+  CharaChip/chimera01_atk4r.png   <- sysdb type8[キャラクター画像] row203
+  CharaChip/chimera01_atk5.png   <- sysdb type8[キャラクター画像] row212
+  CharaChip/chimera01_atk5r.png   <- sysdb type8[キャラクター画像] row204
+  CharaChip/chimera01_atk6.png   <- sysdb type8[キャラクター画像] row213
+  CharaChip/chimera01_atk6r.png   <- sysdb type8[キャラクター画像] row205
+  CharaChip/chimera01_atk7.png   <- sysdb type8[キャラクター画像] row214
+  CharaChip/chimera01_atk7r.png   <- sysdb type8[キャラクター画像] row206
+  CharaChip/chimera01_atk8.png   <- sysdb type8[キャラクター画像] row215
+  CharaChip/chimera01_atk8r.png   <- sysdb type8[キャラクター画像] row207
+  CharaChip/chimera01_mgc1.png   <- sysdb type8[キャラクター画像] row217
+  CharaChip/d_atk10_l.png   <- sysdb type8[キャラクター画像] row139
+  CharaChip/d_atk10_r.png   <- sysdb type8[キャラクター画像] row111
+  CharaChip/d_atk11_l.png   <- sysdb type8[キャラクター画像] row140
+  CharaChip/d_atk11_r.png   <- sysdb type8[キャラクター画像] row112
+  CharaChip/d_atk12_l.png   <- sysdb type8[キャラクター画像] row141
+  CharaChip/d_atk12_r.png   <- sysdb type8[キャラクター画像] row113
+  CharaChip/d_atk13_l.png   <- sysdb type8[キャラクター画像] row142
+  CharaChip/d_atk13_r.png   <- sysdb type8[キャラクター画像] row114
+  CharaChip/d_atk14_l.png   <- sysdb type8[キャラクター画像] row143
+  CharaChip/d_atk14_r.png   <- sysdb type8[キャラクター画像] row108; sysdb type8[キャラクター画像] row115
+  CharaChip/d_atk15_l.png   <- sysdb type8[キャラクター画像] row144
+  CharaChip/d_atk15_r.png   <- sysdb type8[キャラクター画像] row116
+  CharaChip/d_atk16_l.png   <- sysdb type8[キャラクター画像] row145
+  CharaChip/d_atk16_r.png   <- sysdb type8[キャラクター画像] row117
+  CharaChip/d_atk17_l.png   <- sysdb type8[キャラクター画像] row146
+  CharaChip/d_atk17_r.png   <- sysdb type8[キャラクター画像] row118
+  CharaChip/d_atk18_l.png   <- sysdb type8[キャラクター画像] row147
+  CharaChip/d_atk18_r.png   <- sysdb type8[キャラクター画像] row119
+  CharaChip/d_atk19_l.png   <- sysdb type8[キャラクター画像] row148
+  CharaChip/d_atk19_r.png   <- sysdb type8[キャラクター画像] row120
+  CharaChip/d_atk1_l.png   <- sysdb type8[キャラクター画像] row130
+  CharaChip/d_atk1_r.png   <- sysdb type8[キャラクター画像] row102
+  CharaChip/d_atk20_l.png   <- sysdb type8[キャラクター画像] row149
+  CharaChip/d_atk20_r.png   <- sysdb type8[キャラクター画像] row121
+  CharaChip/d_atk21_l.png   <- sysdb type8[キャラクター画像] row150
+  CharaChip/d_atk22_l.png   <- sysdb type8[キャラクター画像] row151
+  CharaChip/d_atk22_r.png   <- sysdb type8[キャラクター画像] row123
+  CharaChip/d_atk23_l.png   <- sysdb type8[キャラクター画像] row152
+  CharaChip/d_atk23_r.png   <- sysdb type8[キャラクター画像] row122; sysdb type8[キャラクター画像] row124
+  CharaChip/d_atk2_l.png   <- sysdb type8[キャラクター画像] row131
+  CharaChip/d_atk2_r.png   <- sysdb type8[キャラクター画像] row103
+  CharaChip/d_atk3_l.png   <- sysdb type8[キャラクター画像] row132
+  CharaChip/d_atk3_r.png   <- sysdb type8[キャラクター画像] row104
+  CharaChip/d_atk4_l.png   <- sysdb type8[キャラクター画像] row133
+  CharaChip/d_atk4_r.png   <- sysdb type8[キャラクター画像] row105
+  CharaChip/d_atk5_l.png   <- sysdb type8[キャラクター画像] row134
+  CharaChip/d_atk5_r.png   <- sysdb type8[キャラクター画像] row106
+  CharaChip/d_atk6_l.png   <- sysdb type8[キャラクター画像] row135
+  CharaChip/d_atk6_r.png   <- sysdb type8[キャラクター画像] row107
+  CharaChip/d_atk7_l.png   <- sysdb type8[キャラクター画像] row136
+  CharaChip/d_atk8_l.png   <- sysdb type8[キャラクター画像] row137
+  CharaChip/d_atk8_r.png   <- sysdb type8[キャラクター画像] row109
+  CharaChip/d_atk9_l.png   <- sysdb type8[キャラクター画像] row138
+  CharaChip/d_atk9_r.png   <- sysdb type8[キャラクター画像] row110
+  CharaChip/dwn1_r_TX.png   <- sysdb type8[キャラクター画像] row24
+  CharaChip/dwn2_r.png   <- sysdb type8[キャラクター画像] row25
+  CharaChip/dwn3_r.png   <- sysdb type8[キャラクター画像] row26
+  CharaChip/dwn4_r.png   <- sysdb type8[キャラクター画像] row27
+  CharaChip/golem.png   <- sysdb type8[キャラクター画像] row29
+  CharaChip/golem_atk1.png   <- sysdb type8[キャラクター画像] row30
+  CharaChip/golem_atk2.png   <- sysdb type8[キャラクター画像] row31
+  CharaChip/hero1_l_TX.png   <- sysdb type8[キャラクター画像] row12
+  CharaChip/hero1_r_TX.png   <- sysdb type8[キャラクター画像] row11
+  CharaChip/hero2_r_TX.png   <- sysdb type8[キャラクター画像] row48
+  CharaChip/hero3_r_TX.png   <- sysdb type8[キャラクター画像] row47
+  CharaChip/hero_dagger_l_TX.png   <- sysdb type8[キャラクター画像] row101
+  CharaChip/hero_dagger_r_TX.png   <- sysdb type8[キャラクター画像] row100
+  CharaChip/kiri2TX.png   <- sysdb type8[キャラクター画像] row2
+  CharaChip/kiri3TX.png   <- sysdb type8[キャラクター画像] row3
+  CharaChip/kiri_attack01.png   <- sysdb type8[キャラクター画像] row5
+  CharaChip/kiri_attack02.png   <- sysdb type8[キャラクター画像] row6
+  CharaChip/kiri_attack03.png   <- sysdb type8[キャラクター画像] row7
+  CharaChip/plant_tentacle.png   <- sysdb type8[キャラクター画像] row9
+  CharaChip/riko2.png   <- sysdb type8[キャラクター画像] row34
+  CharaChip/riko2_r_TX.png   <- sysdb type8[キャラクター画像] row35
+  CharaChip/riko_h1.png   <- sysdb type8[キャラクター画像] row32
+  CharaChip/riko_r_TX.png   <- sysdb type8[キャラクター画像] row33
+  CharaChip/slime1.png   <- sysdb type8[キャラクター画像] row8
+  Data/SC1.jpg   <- common ev452#3174; common ev452#3188; common ev452#3249
+  MapChip/b_02�b������_at�㥨02.png   <- tileset tileset5 auto
+  MapChip/b_04�Iؑ�C_at�㥨.png   <- tileset tileset5 auto
+  MapChip/b_06�i���u��_at01.png   <- tileset tileset5 auto
+  MapChip/b_06�i���u��_at02.png   <- tileset tileset5 auto
+  MapChip/b_06�i���u��_at03.png   <- tileset tileset5 auto
+  MapChip/b_07���ƥ��at�㥨.png   <- tileset tileset5 auto
+  MapChip/b_07���ƥ��t01.png   <- tileset tileset5 auto
+  MapChip/b_at���.png   <- tileset tileset5 auto
+  MapChip/d_t�I�.png   <- tileset tileset5 auto
+  Picture/battle_icon_end.png   <- map SampleMapA_1.json ev8#200; map SampleMapA_1.json ev8#252; map SampleMapA_1.mps ev8
+  Picture/bg_battle01.jpg   <- sysdb type13[遠景画像] row28
+  Picture/bg_battle02.jpg   <- sysdb type13[遠景画像] row34
+  Picture/bg_battle03.jpg   <- sysdb type13[遠景画像] row35
+  Picture/bg_battle04.jpg   <- sysdb type13[遠景画像] row37
+  Picture/bg_dungeon1.jpg   <- sysdb type13[遠景画像] row36
+  Picture/bg_forest04.jpg   <- sysdb type13[遠景画像] row4
+  Picture/bg_forest05.jpg   <- sysdb type13[遠景画像] row5
+  Picture/bg_forest06.jpg   <- sysdb type13[遠景画像] row6
+  Picture/bg_forest07.jpg   <- sysdb type13[遠景画像] row7
+  Picture/bg_forest08.jpg   <- sysdb type13[遠景画像] row8
+  Picture/bg_forest09.jpg   <- sysdb type13[遠景画像] row9
+  Picture/bg_forest10.jpg   <- sysdb type13[遠景画像] row10
+  Picture/bg_forest11.jpg   <- sysdb type13[遠景画像] row11
+  Picture/bg_forest12.jpg   <- sysdb type13[遠景画像] row12
+  Picture/bg_forest13.jpg   <- sysdb type13[遠景画像] row13
+  Picture/bg_forest14.jpg   <- sysdb type13[遠景画像] row14
+  Picture/bg_forest15.jpg   <- sysdb type13[遠景画像] row15
+  Picture/bg_forest16.jpg   <- sysdb type13[遠景画像] row16
+  Picture/bg_forest17.jpg   <- sysdb type13[遠景画像] row17
+  Picture/bg_forest18.jpg   <- sysdb type13[遠景画像] row18
+  Picture/bg_forest19.jpg   <- sysdb type13[遠景画像] row19
+  Picture/bg_map1.png   <- sysdb type13[遠景画像] row25
+  Picture/bg_map10.jpg   <- sysdb type13[遠景画像] row38
+  Picture/bg_map11.jpg   <- sysdb type13[遠景画像] row39
+  Picture/bg_map12.jpg   <- sysdb type13[遠景画像] row40
+  Picture/bg_map13.jpg   <- sysdb type13[遠景画像] row41
+  Picture/bg_map14.jpg   <- sysdb type13[遠景画像] row42
+  Picture/bg_map15.jpg   <- sysdb type13[遠景画像] row46
+  Picture/bg_map2.jpg   <- sysdb type13[遠景画像] row23
+  Picture/bg_map3.jpg   <- sysdb type13[遠景画像] row24
+  Picture/bg_map30.jpg   <- sysdb type13[遠景画像] row45
+  Picture/bg_map3_effect.png   <- map Map031.json ev0#55; map Map031.mps ev0
+  Picture/bg_map4.jpg   <- sysdb type13[遠景画像] row27
+  Picture/bg_map4_top.png   <- map Map031.json ev0#58; map Map031.mps ev0
+  Picture/bg_map5.jpg   <- sysdb type13[遠景画像] row30
+  Picture/bg_map6.jpg   <- sysdb type13[遠景画像] row29
+  Picture/bg_map7.jpg   <- sysdb type13[遠景画像] row31
+  Picture/bg_map8.jpg   <- sysdb type13[遠景画像] row32
+  Picture/bg_map9.jpg   <- sysdb type13[遠景画像] row33
+  Picture/bg_prolog02.jpg   <- sysdb type13[遠景画像] row22
+  Picture/bg_village01.jpg   <- sysdb type13[遠景画像] row21
+  Picture/chart01_report.png   <- map SampleMapA_1.json ev7#31; map SampleMapA_1.json ev7#31; map SampleMapA_1.mps ev7
+  Picture/chart02.png   <- map SampleMapA_1.json ev7#677; map SampleMapA_1.json ev7#654; map SampleMapA_1.mps ev7
+  Picture/chart02_report.png   <- map SampleMapA_1.json ev7#46; map SampleMapA_1.json ev7#46; map SampleMapA_1.mps ev7
+  Picture/chart03.png   <- map SampleMapA_1.json ev7#683; map SampleMapA_1.json ev7#660; map SampleMapA_1.mps ev7
+  Picture/chart03_report.png   <- map SampleMapA_1.json ev7#74; map SampleMapA_1.json ev7#74; map SampleMapA_1.mps ev7
+  Picture/chart04.png   <- map SampleMapA_1.json ev7#689; map SampleMapA_1.json ev7#666; map SampleMapA_1.mps ev7
+  Picture/chart04_report.png   <- map SampleMapA_1.json ev7#109; map SampleMapA_1.json ev7#107; map SampleMapA_1.mps ev7
+  Picture/chart05.png   <- map SampleMapA_1.json ev7#697; map SampleMapA_1.json ev7#674; map SampleMapA_1.mps ev7
+  Picture/chart05_report.png   <- map SampleMapA_1.json ev7#144; map SampleMapA_1.json ev7#140; map SampleMapA_1.mps ev7
+  Picture/chart06.png   <- map SampleMapA_1.json ev7#703; map SampleMapA_1.json ev7#680; map SampleMapA_1.mps ev7
+  Picture/chart06_report.png   <- map SampleMapA_1.json ev7#179; map SampleMapA_1.json ev7#173; map SampleMapA_1.mps ev7
+  Picture/chart07.png   <- map SampleMapA_1.json ev7#709; map SampleMapA_1.json ev7#686; map SampleMapA_1.mps ev7
+  Picture/chart07_report.png   <- map SampleMapA_1.json ev7#211; map SampleMapA_1.json ev7#204; map SampleMapA_1.mps ev7
+  Picture/chart08.png   <- map SampleMapA_1.json ev7#717; map SampleMapA_1.json ev7#694; map SampleMapA_1.mps ev7
+  Picture/chart08_report.png   <- map SampleMapA_1.json ev7#246; map SampleMapA_1.json ev7#237; map SampleMapA_1.mps ev7
+  Picture/chart09.png   <- map SampleMapA_1.json ev7#723; map SampleMapA_1.json ev7#700; map SampleMapA_1.mps ev7
+  Picture/chart09_report.png   <- map SampleMapA_1.json ev7#281; map SampleMapA_1.json ev7#270; map SampleMapA_1.mps ev7
+  Picture/chart10.png   <- map SampleMapA_1.json ev7#729; map SampleMapA_1.json ev7#706; map SampleMapA_1.mps ev7
+  Picture/chart10_report.png   <- map SampleMapA_1.json ev7#316; map SampleMapA_1.json ev7#303; map SampleMapA_1.mps ev7
+  Picture/chart11.png   <- map SampleMapA_1.json ev7#737; map SampleMapA_1.json ev7#714; map SampleMapA_1.mps ev7
+  Picture/chart11_report.png   <- map SampleMapA_1.json ev7#345; map SampleMapA_1.json ev7#332; map SampleMapA_1.mps ev7
+  Picture/chart12.png   <- map SampleMapA_1.json ev7#749; map SampleMapA_1.json ev7#726; map SampleMapA_1.mps ev7
+  Picture/chart12_report.png   <- map SampleMapA_1.json ev7#419; map SampleMapA_1.json ev7#404; map SampleMapA_1.mps ev7
+  Picture/chart13.png   <- map SampleMapA_1.json ev7#743; map SampleMapA_1.json ev7#720; map SampleMapA_1.mps ev7
+  Picture/chart13_report.png   <- map SampleMapA_1.json ev7#377; map SampleMapA_1.json ev7#363; map SampleMapA_1.mps ev7
+  Picture/chart14.png   <- map SampleMapA_1.json ev7#760; map SampleMapA_1.json ev7#737; map SampleMapA_1.mps ev7
+  Picture/chart14_report.png   <- map SampleMapA_1.json ev7#469; map SampleMapA_1.json ev7#452; map SampleMapA_1.mps ev7
+  Picture/chart15.png   <- map SampleMapA_1.json ev7#766; map SampleMapA_1.json ev7#743; map SampleMapA_1.mps ev7
+  Picture/chart15_report.png   <- map SampleMapA_1.json ev7#509; map SampleMapA_1.json ev7#490; map SampleMapA_1.mps ev7
+  Picture/chart16.png   <- map SampleMapA_1.json ev7#772; map SampleMapA_1.json ev7#749; map SampleMapA_1.mps ev7
+  Picture/chart16_report.png   <- map SampleMapA_1.json ev7#549; map SampleMapA_1.json ev7#528; map SampleMapA_1.mps ev7
+  Picture/chart17.png   <- map SampleMapA_1.json ev7#780; map SampleMapA_1.json ev7#757; map SampleMapA_1.mps ev7
+  Picture/chart17_report.png   <- map SampleMapA_1.json ev7#584; map SampleMapA_1.json ev7#561; map SampleMapA_1.mps ev7
+  Picture/chart18_report.png   <- map SampleMapA_1.json ev7#623; map SampleMapA_1.json ev7#600; map SampleMapA_1.mps ev7
+  Picture/d_bg.jpg   <- sysdb type13[遠景画像] row43
+  Picture/forest_entrance01.png   <- sysdb type13[遠景画像] row3
+  Picture/hant_map01.jpg   <- sysdb type13[遠景画像] row44
+  Picture/quest_result.png   <- map SampleMapA_1.json ev4#50; map SampleMapA_1.json ev4#207; map SampleMapA_1.json ev4#364
+  Picture/quest_result2.png   <- map SampleMapA_1.json ev4#59; map SampleMapA_1.json ev4#216; map SampleMapA_1.json ev4#373
+  Picture/skill01.png   <- map SampleMapA_1.json ev7#1346; map SampleMapA_1.mps ev7
+  Picture/skill01_report.png   <- map SampleMapA_1.json ev7#31; map SampleMapA_1.mps ev7
+  Picture/skill02.png   <- map SampleMapA_1.json ev7#1351; map SampleMapA_1.mps ev7
+  Picture/skill02_report.png   <- map SampleMapA_1.json ev7#57; map SampleMapA_1.mps ev7
+  Picture/skill03.png   <- map SampleMapA_1.json ev7#1356; map SampleMapA_1.mps ev7
+  Picture/skill03_report.png   <- map SampleMapA_1.json ev7#86; map SampleMapA_1.mps ev7
+  Picture/skill04.png   <- map SampleMapA_1.json ev7#1363; map SampleMapA_1.mps ev7
+  Picture/skill04_report.png   <- map SampleMapA_1.json ev7#115; map SampleMapA_1.mps ev7
+  Picture/skill05.png   <- map SampleMapA_1.json ev7#1368; map SampleMapA_1.mps ev7
+  Picture/skill05_report.png   <- map SampleMapA_1.json ev7#144; map SampleMapA_1.mps ev7
+  Picture/skill06.png   <- map SampleMapA_1.json ev7#1375; map SampleMapA_1.mps ev7
+  Picture/skill06_report.png   <- map SampleMapA_1.json ev7#173; map SampleMapA_1.mps ev7
+  Picture/skill07.png   <- map SampleMapA_1.json ev7#1379; map SampleMapA_1.mps ev7
+  Picture/skill07_report.png   <- map SampleMapA_1.json ev7#202; map SampleMapA_1.mps ev7
+  Picture/skill08.png   <- map SampleMapA_1.json ev7#1388; map SampleMapA_1.mps ev7
+  Picture/skill08_report.png   <- map SampleMapA_1.json ev7#231; map SampleMapA_1.mps ev7
+  Picture/skill09.png   <- map SampleMapA_1.json ev7#1395; map SampleMapA_1.mps ev7
+  Picture/skill09_report.png   <- map SampleMapA_1.json ev7#264; map SampleMapA_1.mps ev7
+  Picture/skill10.png   <- map SampleMapA_1.json ev7#1399; map SampleMapA_1.mps ev7
+  Picture/skill10_report.png   <- map SampleMapA_1.json ev7#293; map SampleMapA_1.mps ev7
+  Picture/skill11.png   <- map SampleMapA_1.json ev7#1406; map SampleMapA_1.mps ev7
+  Picture/skill11_report.png   <- map SampleMapA_1.json ev7#322; map SampleMapA_1.mps ev7
+  Picture/skill12.png   <- map SampleMapA_1.json ev7#1413; map SampleMapA_1.mps ev7
+  Picture/skill12_report.png   <- map SampleMapA_1.json ev7#347; map SampleMapA_1.mps ev7
+  Picture/skill13.png   <- map SampleMapA_1.json ev7#1418; map SampleMapA_1.mps ev7
+  Picture/skill13_report.png   <- map SampleMapA_1.json ev7#376; map SampleMapA_1.mps ev7
+  Picture/skill14.png   <- map SampleMapA_1.json ev7#1423; map SampleMapA_1.mps ev7
+  Picture/skill14_report.png   <- map SampleMapA_1.json ev7#409; map SampleMapA_1.mps ev7
+  Picture/skill15.png   <- map SampleMapA_1.json ev7#1430; map SampleMapA_1.mps ev7
+  Picture/skill15_report.png   <- map SampleMapA_1.json ev7#442; map SampleMapA_1.mps ev7
+  Picture/skill16.png   <- map SampleMapA_1.json ev7#1435; map SampleMapA_1.mps ev7
+  Picture/skill16_report.png   <- map SampleMapA_1.json ev7#467; map SampleMapA_1.mps ev7
+  Picture/skill17.png   <- map SampleMapA_1.json ev7#1440; map SampleMapA_1.mps ev7
+  Picture/skill17_report.png   <- map SampleMapA_1.json ev7#496; map SampleMapA_1.mps ev7
+  Picture/skill18.png   <- map SampleMapA_1.json ev7#1447; map SampleMapA_1.mps ev7
+  Picture/skill18_report.png   <- map SampleMapA_1.json ev7#525; map SampleMapA_1.mps ev7
+  Picture/skill19.png   <- map SampleMapA_1.json ev7#1454; map SampleMapA_1.mps ev7
+  Picture/skill19_report.png   <- map SampleMapA_1.json ev7#558; map SampleMapA_1.mps ev7
+  Picture/skill20.png   <- map SampleMapA_1.json ev7#1461; map SampleMapA_1.mps ev7
+  Picture/skill20_report.png   <- map SampleMapA_1.json ev7#587; map SampleMapA_1.mps ev7
+  Picture/skill21.png   <- map SampleMapA_1.json ev7#1468; map SampleMapA_1.mps ev7
+  Picture/skill21_report.png   <- map SampleMapA_1.json ev7#616; map SampleMapA_1.mps ev7
+  Picture/skill22.png   <- map SampleMapA_1.json ev7#1473; map SampleMapA_1.mps ev7
+  Picture/skill22_report.png   <- map SampleMapA_1.json ev7#645; map SampleMapA_1.mps ev7
+  Picture/skill23.png   <- map SampleMapA_1.json ev7#1480; map SampleMapA_1.mps ev7
+  Picture/skill23_report.png   <- map SampleMapA_1.json ev7#674; map SampleMapA_1.mps ev7
+  Picture/skill24.png   <- map SampleMapA_1.json ev7#1484; map SampleMapA_1.mps ev7
+  Picture/skill24_report.png   <- map SampleMapA_1.json ev7#699; map SampleMapA_1.mps ev7
+  Picture/skill25.png   <- map SampleMapA_1.json ev7#1493; map SampleMapA_1.mps ev7
+  Picture/skill25_report.png   <- map SampleMapA_1.json ev7#728; map SampleMapA_1.mps ev7
+  Picture/skill26.png   <- map SampleMapA_1.json ev7#1498; map SampleMapA_1.mps ev7
+  Picture/skill26_report.png   <- map SampleMapA_1.json ev7#761; map SampleMapA_1.mps ev7
+  Picture/skill27.png   <- map SampleMapA_1.json ev7#1505; map SampleMapA_1.mps ev7
+  Picture/skill27_report.png   <- map SampleMapA_1.json ev7#794; map SampleMapA_1.mps ev7
+  Picture/skill28.png   <- map SampleMapA_1.json ev7#1509; map SampleMapA_1.mps ev7
+  Picture/skill28_report.png   <- map SampleMapA_1.json ev7#819; map SampleMapA_1.mps ev7
+  Picture/skill29.png   <- map SampleMapA_1.json ev7#1513; map SampleMapA_1.mps ev7
+  Picture/skill29_report.png   <- map SampleMapA_1.json ev7#848; map SampleMapA_1.mps ev7
+  Picture/skill30.png   <- map SampleMapA_1.json ev7#1671; map SampleMapA_1.mps ev7
+  Picture/skill30_report.png   <- map SampleMapA_1.json ev7#877; map SampleMapA_1.mps ev7
+  Picture/skill40_report.png   <- map SampleMapA_1.json ev7#912; map SampleMapA_1.mps ev7
+  Picture/skill41.png   <- map SampleMapA_1.json ev7#1524; map SampleMapA_1.mps ev7
+  Picture/skill41_report.png   <- map SampleMapA_1.json ev7#931; map SampleMapA_1.mps ev7
+  Picture/skill42.png   <- map SampleMapA_1.json ev7#1528; map SampleMapA_1.mps ev7
+  Picture/skill42_report.png   <- map SampleMapA_1.json ev7#950; map SampleMapA_1.mps ev7
+  Picture/skill43.png   <- map SampleMapA_1.json ev7#1532; map SampleMapA_1.mps ev7
+  Picture/skill50_report.png   <- map SampleMapA_1.json ev7#981; map SampleMapA_1.mps ev7
+  Picture/skill51.png   <- map SampleMapA_1.json ev7#1542; map SampleMapA_1.mps ev7
+  Picture/skill51_report.png   <- map SampleMapA_1.json ev7#1000; map SampleMapA_1.mps ev7
+  Picture/skill52.png   <- map SampleMapA_1.json ev7#1547; map SampleMapA_1.mps ev7
+  Picture/skill52_report.png   <- map SampleMapA_1.json ev7#1019; map SampleMapA_1.mps ev7
+  Picture/skill53.png   <- map SampleMapA_1.json ev7#1552; map SampleMapA_1.mps ev7
+  Picture/skill53_report.png   <- map SampleMapA_1.json ev7#1040; map SampleMapA_1.mps ev7
+  Picture/skill54.png   <- map SampleMapA_1.json ev7#1559; map SampleMapA_1.mps ev7
+  Picture/skill54_report.png   <- map SampleMapA_1.json ev7#1059; map SampleMapA_1.mps ev7
+  Picture/skill55.png   <- map SampleMapA_1.json ev7#1564; map SampleMapA_1.json ev7#1567; map SampleMapA_1.mps ev7
+  Picture/skill60_report.png   <- map SampleMapA_1.json ev7#1092; map SampleMapA_1.mps ev7
+  Picture/skill61.png   <- map SampleMapA_1.json ev7#1584; map SampleMapA_1.mps ev7
+  Picture/skill61_report.png   <- map SampleMapA_1.json ev7#1111; map SampleMapA_1.mps ev7
+  Picture/skill62.png   <- map SampleMapA_1.json ev7#1589; map SampleMapA_1.mps ev7
+  Picture/skill62_report.png   <- map SampleMapA_1.json ev7#1130; map SampleMapA_1.mps ev7
+  Picture/skill63.png   <- map SampleMapA_1.json ev7#1594; map SampleMapA_1.mps ev7
+  Picture/skill63_report.png   <- map SampleMapA_1.json ev7#1151; map SampleMapA_1.mps ev7
+  Picture/skill64.png   <- map SampleMapA_1.json ev7#1601; map SampleMapA_1.mps ev7
+  Picture/skill64_report.png   <- map SampleMapA_1.json ev7#1170; map SampleMapA_1.mps ev7
+  Picture/skill65.png   <- map SampleMapA_1.json ev7#1606; map SampleMapA_1.json ev7#1609; map SampleMapA_1.mps ev7
+  Picture/skill70_report.png   <- map SampleMapA_1.json ev7#1203; map SampleMapA_1.mps ev7
+  Picture/skill71.png   <- map SampleMapA_1.json ev7#1628; map SampleMapA_1.mps ev7
+  Picture/skill71_report.png   <- map SampleMapA_1.json ev7#1222; map SampleMapA_1.mps ev7
+  Picture/skill72.png   <- map SampleMapA_1.json ev7#1633; map SampleMapA_1.mps ev7
+  Picture/skill72_report.png   <- map SampleMapA_1.json ev7#1241; map SampleMapA_1.mps ev7
+  Picture/skill73.png   <- map SampleMapA_1.json ev7#1638; map SampleMapA_1.mps ev7
+  Picture/skill73_report.png   <- map SampleMapA_1.json ev7#1262; map SampleMapA_1.mps ev7
+  Picture/skill74.png   <- map SampleMapA_1.json ev7#1645; map SampleMapA_1.mps ev7
+  Picture/skill74_report.png   <- map SampleMapA_1.json ev7#1281; map SampleMapA_1.mps ev7
+  Picture/skill75.png   <- map SampleMapA_1.json ev7#1650; map SampleMapA_1.json ev7#1653; map SampleMapA_1.mps ev7
+  Picture/testmap.jpg   <- sysdb type13[遠景画像] row70
+  Picture/word_effect30.png   <- common ev354#67
+  Picture/word_effect36.png   <- common ev354#72
+  Picture/word_effect55.png   <- common ev354#206
+  Picture/word_effect56.png   <- common ev354#241
+  Picture/word_effect57.png   <- common ev354#230
+  Picture/word_effect58.png   <- common ev354#211
+  Picture/word_effect59.png   <- common ev354#222; common ev354#249
+  Picture/worldmap.jpg   <- sysdb type13[遠景画像] row20
+  Picture/worldmap01.jpg   <- sysdb type13[遠景画像] row26
+  SC1.jpg   <- common ev452#3176; common ev452#3190; common ev452#3251
+  Save/save/cself[12].jpg   <- common ev131#223; common ev131#225
+  cg/bg01.jpg   <- sysdb type13[遠景画像] row0
+  cg/event_14_06.jpg   <- common ev380#760
+  save/save1.jpg   <- common ev435#1

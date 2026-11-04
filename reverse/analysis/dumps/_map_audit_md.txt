@@ -1,0 +1,186 @@
+@@TABLE TitleMap.mps
+| ev | name | page | trigger | cond slot 0 | cond slot 1 | cond slot 2 | cond slot 3 | cmds | boot-active |
+| --: | :--- | --: | :--- | :--- | :--- | :--- | :--- | --: | :--: |
+| 2 | 新タイトル用イベント | 0 | autorun | - | - | - | - | 133 | yes |
+
+@@PREC TitleMap.mps
+(no multi-page events)
+
+@@TABLE SampleMapA.mps
+| ev | name | page | trigger | cond slot 0 | cond slot 1 | cond slot 2 | cond slot 3 | cmds | boot-active |
+| --: | :--- | --: | :--- | :--- | :--- | :--- | :--- | --: | :--: |
+| 0 | ニューゲーム処理 | 0 | autorun | self0==0 | - | - | - | 846 | yes |
+| 1 | 妹クリック判定（夜 | 0 | parallel | v69==1 | v25==0 | v26==0 | v302==0 | 113 |  |
+| 1 | 妹クリック判定（夜 | 1 | parallel | v65==1 | v25==0 | v26==0 | v340==0 | 17 |  |
+| 1 | 妹クリック判定（夜 | 2 | parallel | v64==1 | v25==0 | v26==0 | v302==0 | 17 |  |
+| 2 | 妹クリック判定 | 0 | parallel | v65==1 | - | - | - | 15 |  |
+| 2 | 妹クリック判定 | 1 | parallel | v64==1 | v167==0 | - | - | 15 |  |
+| 3 | ロード後の処理 | 0 | autorun | v302==2 | - | - | - | 65 |  |
+| 3 | ロード後の処理 | 1 | autorun | v302==2 | v65==1 | - | - | 48 |  |
+| 4 | メニュー処理 | 0 | autorun | v68==1 | v69==1 | v62==0 | - | 342 |  |
+| 4 | メニュー処理 | 1 | autorun | v298==1 | - | - | - | 28 |  |
+| 4 | メニュー処理 | 2 | parallel | v67>=1 | v302==0 | v464==0 | - | 66 |  |
+| 4 | メニュー処理 | 3 | parallel | v57>=1 | v302==0 | v464==0 | - | 66 |  |
+| 4 | メニュー処理 | 4 | parallel | v63==1 | v62==0 | v464==0 | v60==0 | 116 |  |
+| 5 | デバック用 | 0 | parallel | self0==9 | self100006==957 | - | - | 387 |  |
+| 6 | スキル取得関係 | 0 | parallel | v26==1 | v615==0 | - | - | 1167 |  |
+| 6 | スキル取得関係 | 1 | parallel | v26==1 | v295==2 | - | - | 1053 |  |
+| 7 | 戦判定表示 | 0 | parallel | v340>=1 | v350==0 | v343==0 | v35==0 | 359 |  |
+| 8 | 戦クリック処理 | 0 | parallel | v340==1 | v350==0 | v35<=0 | - | 683 |  |
+| 8 | 戦クリック処理 | 1 | autorun | self100009==1 | - | - | - | 3 |  |
+| 8 | 戦クリック処理 | 2 | autorun | self100009==2 | - | - | - | 3 |  |
+| 8 | 戦クリック処理 | 3 | autorun | self100009==3 | - | - | - | 3 |  |
+| 8 | 戦クリック処理 | 4 | autorun | self100009==4 | - | - | - | 3 |  |
+| 8 | 戦クリック処理 | 5 | autorun | self100009==5 | - | - | - | 3 |  |
+| 8 | 戦クリック処理 | 6 | autorun | self100009==6 | - | - | - | 3 |  |
+| 8 | 戦クリック処理 | 7 | autorun | self100009==7 | - | - | - | 3 |  |
+| 8 | 戦クリック処理 | 8 | autorun | self100009==8 | - | - | - | 5 |  |
+| 9 | ■深夜UI表示1 | 0 | parallel | v62==1 | v140==0 | v164==0 | v364==0 | 611 |  |
+| 9 | ■深夜UI表示1 | 1 | parallel | v62==2 | - | - | - | 236 |  |
+| 9 | ■深夜UI表示1 | 2 | parallel | v62==3 | - | - | - | 185 |  |
+| 9 | ■深夜UI表示1 | 3 | parallel | v62==4 | - | - | - | 141 |  |
+| 9 | ■深夜UI表示1 | 4 | parallel | v62==5 | - | - | - | 287 |  |
+| 9 | ■深夜UI表示1 | 5 | parallel | v62==6 | - | - | - | 91 |  |
+| 9 | ■深夜UI表示1 | 6 | parallel | v62==7 | - | - | - | 208 |  |
+| 9 | ■深夜UI表示1 | 7 | parallel | v62==8 | - | - | - | 128 |  |
+| 9 | ■深夜UI表示1 | 8 | parallel | v62==9 | - | - | - | 197 |  |
+| 9 | ■深夜UI表示1 | 9 | parallel | v62==10 | - | - | - | 256 |  |
+| 10 | ■深夜UI表示2 | 0 | parallel | v62==11 | - | - | - | 290 |  |
+| 10 | ■深夜UI表示2 | 1 | parallel | v62==12 | - | - | - | 90 |  |
+| 10 | ■深夜UI表示2 | 2 | parallel | v62==13 | - | - | - | 89 |  |
+| 10 | ■深夜UI表示2 | 3 | parallel | v62==14 | - | - | - | 86 |  |
+| 10 | ■深夜UI表示2 | 4 | parallel | v62==15 | - | - | - | 88 |  |
+| 10 | ■深夜UI表示2 | 5 | parallel | v62==16 | - | - | - | 87 |  |
+| 11 | ■深夜UI判定 | 0 | parallel | v62>=1 | v168==0 | v364==0 | - | 2613 |  |
+| 11 | ■深夜UI判定 | 1 | confirm | v302==1 | - | - | - | 1 |  |
+| 12 | ゲームオーバー | 0 | parallel | v298==1 | - | - | - | 8 |  |
+| 13 | デバック用だよ | 0 | parallel | - | - | - | - | 2 | yes |
+| 14 | ■深夜UI処理 | 0 | parallel | v62>=1 | - | - | - | 143 |  |
+| 14 | ■深夜UI処理 | 1 | confirm | v302==1 | - | - | - | 1 |  |
+| 15 | サブメニュー処理 | 0 | parallel | v9==0 | v67==0 | v63==0 | v57==0 | 295 | yes |
+| 15 | サブメニュー処理 | 1 | parallel | v9==0 | v67==2 | v63==0 | - | 268 |  |
+| 15 | サブメニュー処理 | 2 | parallel | v9==0 | v57==2 | v63==0 | - | 268 |  |
+| 15 | サブメニュー処理 | 3 | parallel | v62>=1 | v60==0 | - | - | 45 |  |
+| 16 | ■お触り判定設定 | 0 | parallel | v62>=1 | - | - | - | 493 |  |
+| 17 | カーソル変更 | 0 | parallel | v62>=1 | - | - | - | 189 |  |
+| 18 | ■■処理さわる右 | 0 | parallel | v62>=1 | v61!=32 | v61!=33 | - | 1781 |  |
+| 18 | ■■処理さわる右 | 1 | confirm | v302==1 | - | - | - | 1 |  |
+| 19 | □深夜表情の表示 | 0 | parallel | v165>=1 | v125==0 | v126==0 | v166==0 | 982 |  |
+| 20 | ■■深夜処理衣服 | 0 | parallel | v62>=1 | - | - | - | 2003 |  |
+| 21 | ■■処理さわる左 | 0 | parallel | v62>=1 | v364==0 | - | - | 1484 |  |
+| 21 | ■■処理さわる左 | 1 | confirm | v302==1 | - | - | - | 1 |  |
+| 22 | ■中央クリック処理 | 0 | parallel | v62>=1 | v60==0 | v138<=99 | v139==0 | 2631 |  |
+| 22 | ■中央クリック処理 | 1 | parallel | v62>=1 | v60==6 | v139==0 | - | 275 |  |
+| 22 | ■中央クリック処理 | 2 | parallel | v62>=1 | v124==1 | v139==0 | - | 327 |  |
+| 22 | ■中央クリック処理 | 3 | confirm | v302==1 | - | - | - | 1 |  |
+| 23 | ■例外処理監視 | 0 | parallel | v64>=1 | v60==0 | v302==0 | - | 123 |  |
+| 24 | ■例外処理実行 | 0 | autorun | v60==2 | v60!=1 | v124==0 | - | 152 |  |
+| 24 | ■例外処理実行 | 1 | autorun | v60==3 | v60!=1 | v124==0 | - | 712 |  |
+| 24 | ■例外処理実行 | 2 | autorun | v60==5 | v124==0 | v460==0 | - | 192 |  |
+| 24 | ■例外処理実行 | 3 | autorun | v60==6 | - | - | - | 24 |  |
+| 24 | ■例外処理実行 | 4 | autorun | v60==4 | v60!=1 | v124==0 | - | 266 |  |
+| 24 | ■例外処理実行 | 5 | autorun | v60==4 | v437!=1 | v124>=1 | - | 158 |  |
+| 24 | ■例外処理実行 | 6 | confirm | v60==4 | v60!=1 | v124>=1 | self0==99 | 251 |  |
+| 25 | 深夜終了処理 | 0 | parallel | v140==0 | v60==0 | v364==0 | v123==0 | 34 | yes |
+| 25 | 深夜終了処理 | 1 | parallel | v123==1 | v437==0 | v469==0 | - | 26 |  |
+| 25 | 深夜終了処理 | 2 | parallel | v123==1 | v437==0 | v139==1 | v469==1 | 26 |  |
+| 26 | ■■挿入浅い | 0 | parallel | v62>=1 | - | - | - | 1507 |  |
+| 27 | ■■挿入深い | 0 | parallel | v62>=1 | - | - | - | 2314 |  |
+| 28 | ■■挿入アナル | 0 | parallel | v62>=1 | - | - | - | 1864 |  |
+| 29 | パンツアイコン表示 | 0 | parallel | v439==0 | v69==1 | v295==0 | v627==0 | 18 |  |
+| 30 | 攻撃メータ処理 | 0 | parallel | v305>=1 | - | - | - | 51 |  |
+| 30 | 攻撃メータ処理 | 1 | parallel | v306>=1 | - | - | - | 50 |  |
+| 31 | 深夜セーブ表示 | 0 | parallel | v62==1 | v127==1 | - | - | 2 |  |
+| 31 | 深夜セーブ表示 | 1 | parallel | v62==1 | v110==1 | - | - | 2 |  |
+| 31 | 深夜セーブ表示 | 2 | parallel | v62==1 | v110==0 | v127==0 | - | 2 |  |
+| 31 | 深夜セーブ表示 | 3 | parallel | v62==1 | v124==1 | - | - | 2 |  |
+| 32 | パンツ詳細表示監視 | 0 | parallel | v439==1 | - | - | - | 156 |  |
+| 33 | 挿入抜く | 0 | parallel | v460==1 | - | - | - | 336 |  |
+| 34 | スピーカー表示 | 0 | parallel | v69==1 | v62==0 | - | - | 50 |  |
+| 35 | 音量調整 | 0 | parallel | v69==1 | v464==0 | - | - | 48 |  |
+| 36 | 射精クリック | 0 | parallel | v124==1 | - | - | - | 17 |  |
+| 37 | 射精処理監視 | 0 | parallel | v64>=1 | v60==0 | v302==0 | v437==0 | 40 |  |
+| 38 | 自動射精実行処理 | 0 | parallel | v437==1 | - | - | - | 64 |  |
+| 39 | ■■尻コキ | 0 | parallel | v62>=1 | - | - | - | 285 |  |
+
+@@PREC SampleMapA.mps
+- ev1 `妹クリック判定（夜` - 3 pages / 5184 enumerated assignments - wins per page (p0:33, p1:44, p2:48) - live [0, 1, 2] - p0 can never win when p1 also matches; p0 can never win when p2 also matches; p1 can never win when p2 also matches
+- ev2 `妹クリック判定` - 2 pages / 48 enumerated assignments - wins per page (p0:11, p1:4) - live [0, 1] - p0 can never win when p1 also matches
+- ev3 `ロード後の処理` - 2 pages / 20 enumerated assignments - wins per page (p0:3, p1:1) - live [0, 1] - p0 can never win when p1 also matches
+- ev4 `メニュー処理` - 5 pages / 331776 enumerated assignments - wins per page (p0:4644, p1:75456, p2:8960, p3:17920, p4:3072) - live [0, 1, 2, 3, 4] - p0 can never win when p1 also matches; p0 can never win when p2 also matches; p0 can never win when p3 also matches; p0 can never win when p4 also matches; p1 can never win when p2 also matches; p1 can never win when p3 also matches; p1 can never win when p4 also matches; p2 can never win when p3 also matches; p2 can never win when p4 also matches; p3 can never win when p4 also matches
+- ev6 `スキル取得関係` - 2 pages / 60 enumerated assignments - wins per page (p0:4, p1:3) - live [0, 1] - p0 can never win when p1 also matches
+- ev8 `戦クリック処理` - 9 pages / 396 enumerated assignments - wins per page (p0:6, p1:36, p2:36, p3:36, p4:36, p5:36, p6:36, p7:36, p8:36) - live [0, 1, 2, 3, 4, 5, 6, 7, 8] - p0 can never win when p1 also matches; p0 can never win when p2 also matches; p0 can never win when p3 also matches; p0 can never win when p4 also matches; p0 can never win when p5 also matches; p0 can never win when p6 also matches; p0 can never win when p7 also matches; p0 can never win when p8 also matches
+- ev9 `■深夜UI表示1` - 10 pages / 351 enumerated assignments - wins per page (p0:1, p1:27, p2:27, p3:27, p4:27, p5:27, p6:27, p7:27, p8:27, p9:27) - live [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] - no page is dominated by a higher one
+- ev10 `■深夜UI表示2` - 6 pages / 10 enumerated assignments - wins per page (p0:1, p1:1, p2:1, p3:1, p4:1, p5:1) - live [0, 1, 2, 3, 4, 5] - no page is dominated by a higher one
+- ev11 `■深夜UI判定` - 2 pages / 144 enumerated assignments - wins per page (p0:6, p1:36) - live [0, 1] - p0 can never win when p1 also matches
+- ev14 `■深夜UI処理` - 2 pages / 16 enumerated assignments - wins per page (p0:6, p1:4) - live [0, 1] - p0 can never win when p1 also matches
+- ev15 `サブメニュー処理` - 4 pages / 2700 enumerated assignments - wins per page (p0:10, p1:40, p2:50, p3:450) - live [0, 1, 2, 3] - p0 can never win when p3 also matches; p1 can never win when p2 also matches; p1 can never win when p3 also matches; p2 can never win when p3 also matches
+- ev18 `■■処理さわる右` - 2 pages / 96 enumerated assignments - wins per page (p0:24, p1:24) - live [0, 1] - p0 can never win when p1 also matches
+- ev21 `■■処理さわる左` - 2 pages / 48 enumerated assignments - wins per page (p0:6, p1:12) - live [0, 1] - p0 can never win when p1 also matches
+- ev22 `■中央クリック処理` - 4 pages / 5760 enumerated assignments - wins per page (p0:72, p1:90, p2:180, p3:1440) - live [0, 1, 2, 3] - p0 can never win when p2 also matches; p0 can never win when p3 also matches; p1 can never win when p2 also matches; p1 can never win when p3 also matches; p2 can never win when p3 also matches
+- ev24 `■例外処理実行` - 7 pages / 2160 enumerated assignments - wins per page (p0:60, p1:60, p2:20, p3:240, p4:60, p5:72, p6:24) - live [0, 1, 2, 3, 4, 5, 6] - p5 can never win when p6 also matches
+- ev25 `深夜終了処理` - 3 pages / 5184 enumerated assignments - wins per page (p0:48, p1:108, p2:27) - live [0, 1, 2] - no page is dominated by a higher one
+- ev30 `攻撃メータ処理` - 2 pages / 16 enumerated assignments - wins per page (p0:4, p1:8) - live [0, 1] - p0 can never win when p1 also matches
+- ev31 `深夜セーブ表示` - 4 pages / 256 enumerated assignments - wins per page (p0:9, p1:12, p2:3, p3:16) - live [0, 1, 2, 3] - p0 can never win when p1 also matches; p0 can never win when p3 also matches; p1 can never win when p3 also matches; p2 can never win when p3 also matches
+
+@@TABLE SampleMapA_1.mps
+| ev | name | page | trigger | cond slot 0 | cond slot 1 | cond slot 2 | cond slot 3 | cmds | boot-active |
+| --: | :--- | --: | :--- | :--- | :--- | :--- | :--- | --: | :--: |
+| 1 | クリック範囲設定 | 0 | parallel | - | - | - | - | 68 | yes |
+| 2 | カーソル重なり判定 | 0 | parallel | v9==0 | - | - | - | 176 | yes |
+| 3 | 基本メニュー実行処理 | 0 | parallel | - | - | - | - | 109 | yes |
+| 4 | 会話メニュー処理 | 0 | autorun | v30==1 | v48==0 | - | - | 487 |  |
+| 4 | 会話メニュー処理 | 1 | autorun | v49==1 | - | - | - | 139 |  |
+| 5 | カード選択処理 | 0 | parallel | v46==2 | - | - | - | 162 |  |
+| 5 | カード選択処理 | 1 | parallel | v46==1 | - | - | - | 6 |  |
+| 6 | セーブアイコン | 0 | parallel | v3==1 | - | - | - | 7 |  |
+| 7 | スキル詳細表示 | 0 | parallel | v14==1 | - | - | - | 1708 |  |
+| 7 | スキル詳細表示 | 1 | parallel | v14==2 | - | - | - | 812 |  |
+| 7 | スキル詳細表示 | 2 | parallel | v14==2 | v155==1 | - | - | 789 |  |
+| 8 | 戦闘カード選択処理 | 0 | parallel | v61==2 | - | - | - | 316 |  |
+| 8 | 戦闘カード選択処理 | 1 | parallel | v61==1 | - | - | - | 6 |  |
+| 9 | 敵の行動表示 | 0 | parallel | v170==2 | - | - | - | 292 |  |
+| 10 | バフ関連表示 | 0 | parallel | v170==2 | - | - | - | 92 |  |
+| 11 | 戦闘カード説明 | 0 | parallel | v170==2 | - | - | - | 575 |  |
+| 12 | ゲームオーバー | 0 | parallel | v298==1 | - | - | - | 8 |  |
+
+@@PREC SampleMapA_1.mps
+- ev4 `会話メニュー処理` - 2 pages / 48 enumerated assignments - wins per page (p0:3, p1:12) - live [0, 1] - p0 can never win when p1 also matches
+- ev5 `カード選択処理` - 2 pages / 5 enumerated assignments - wins per page (p0:1, p1:1) - live [0, 1] - no page is dominated by a higher one
+- ev7 `スキル詳細表示` - 3 pages / 20 enumerated assignments - wins per page (p0:4, p1:3, p2:1) - live [0, 1, 2] - p1 can never win when p2 also matches
+- ev8 `戦闘カード選択処理` - 2 pages / 5 enumerated assignments - wins per page (p0:1, p1:1) - live [0, 1] - no page is dominated by a higher one
+
+@@TABLE Map003.mps
+| ev | name | page | trigger | cond slot 0 | cond slot 1 | cond slot 2 | cond slot 3 | cmds | boot-active |
+| --: | :--- | --: | :--- | :--- | :--- | :--- | :--- | --: | :--: |
+| 0 | 画像消去 | 0 | autorun | v0==1 | - | - | - | 2 |  |
+| 1 | ニューゲーム処理 | 0 | autorun | - | - | - | - | 43 | yes |
+
+@@PREC Map003.mps
+(no multi-page events)
+
+@@TABLE Map024.mps
+| ev | name | page | trigger | cond slot 0 | cond slot 1 | cond slot 2 | cond slot 3 | cmds | boot-active |
+| --: | :--- | --: | :--- | :--- | :--- | :--- | :--- | --: | :--: |
+| 0 | 画像消去 | 0 | autorun | v0==1 | - | - | - | 3 |  |
+
+@@PREC Map024.mps
+(no multi-page events)
+
+@@TABLE Map031.mps
+| ev | name | page | trigger | cond slot 0 | cond slot 1 | cond slot 2 | cond slot 3 | cmds | boot-active |
+| --: | :--- | --: | :--- | :--- | :--- | :--- | :--- | --: | :--: |
+| 0 | ロード時の自動処理 | 0 | autorun | - | - | - | - | 63 | yes |
+
+@@PREC Map031.mps
+(no multi-page events)
+
+@@TABLE SampleMapB.mps
+| ev | name | page | trigger | cond slot 0 | cond slot 1 | cond slot 2 | cond slot 3 | cmds | boot-active |
+| --: | :--- | --: | :--- | :--- | :--- | :--- | :--- | --: | :--: |
+| 0 | 敵エンカウントEV | 0 | touch | - | - | - | - | 2 | yes |
+| 1 | 市松模様解説男 | 0 | confirm | - | - | - | - | 5 | yes |
+| 2 | Aへの場所移動 | 0 | touch | - | - | - | - | 4 | yes |
+| 3 | お店 | 0 | confirm | - | - | - | - | 9 | yes |
+| 4 | コモン解説 | 0 | confirm | - | - | - | - | 4 | yes |
+| 5 | 回復所 | 0 | confirm | - | - | - | - | 12 | yes |

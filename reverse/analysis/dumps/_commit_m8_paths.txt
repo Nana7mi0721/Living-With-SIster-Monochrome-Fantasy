@@ -1,0 +1,11 @@
+M8 tests: resolve a relative WOLF_DATA_ROOT against the repo root
+
+m7_host_state and m7_hscene_deep used PathBuf::from(value) directly, so the
+documented `WOLF_DATA_ROOT=work/all` invocation made them skip (host_state) or
+panic on a missing path (hscene_deep) because the test cwd is the crate
+directory. They now join a relative override onto the repository root, matching
+every other integration test.
+
+Evidence:
+  WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m7_host_state
+  WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m7_hscene_deep

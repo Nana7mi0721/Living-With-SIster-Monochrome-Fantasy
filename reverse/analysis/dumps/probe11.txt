@@ -1,0 +1,15 @@
+save files: 8
+  SaveData01.sav 887eb2b64e455543005f2378457f1f791b4e2d28192d01e2a0bfe39dbaea9c8f
+  SaveData02.sav f123fab16154555900880500442a26167f2a0a51192902e5a6bee698b9ec988e
+  SaveData03.sav 0b537186251c5572004a381d6e644c655e4a5d3e192d04e4a6b8e69bbdef9f89
+  SaveData04.sav 8e63ecb0514a550a000c510c370f7d060f772949192d07e7a5bbe099bbeb9c8f
+  SaveData05.sav b8793a0a4b2a5510001231382a7c09337f3e4b72192f03e4a7bbe19fbbea9f8f
+  SaveData06.sav 7b01e001565e554f00273a3e3f7d0a23116c3065192f01e6a0b9e69cbeef9a8f
+  SaveData07.sav 8671b9c959195558000e3b6d417e043e586b3339192a04e6a4bce59bbaef9f8f
+  SaveData08.sav 8d0bd8642049556e009442423445681d7f790e63192804e1a2bde698bfea9e8f
+common prefix length across saves=0 bytes: 
+save len=366146 overall entropy=3.821
+block entropy min=2.999 max=5.413 first8=[4.62, 4.5, 4.5, 4.5, 4.5, 4.5, 5.15, 3.4]
+xor(encryption_key) first 64: df32f4e41e371a627077180b705737414b0e05004c6b568ed59bc0a892d7cbc3aaeace9ef0b294b185968ab9c9afd9a4b3a8b2fff489ce91c6b2b9d7cce6abee
+ascii runs in xor result: ['pW7AK', "'t)9w3*)<UF,.", 'DUlU!"7']
+ascii runs in raw save: []

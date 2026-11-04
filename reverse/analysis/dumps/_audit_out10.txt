@@ -1,0 +1,72 @@
+
+== cg/ending12.jpg ==
+   common ev522#473 150
+
+== cg/event01.jpg ==
+   common ev523#66 150
+
+== hscene/ : 300 files ==
+  hscene/header_bar.jpg
+     common ev216#0 150
+  hscene/h_bg_002b.png
+     common ev323#299 150
+     common ev323#411 150
+     common ev323#777 150
+     common ev323#1161 150
+     common ev323#1345 150
+     common ev323#1483 150
+  hscene/h_bg_002.png
+     common ev333#4 150
+     common ev333#13 150
+     common ev333#25 150
+  hscene/h_frame.png
+     common ev333#12 150
+     common ev333#24 150
+     common ev403#2 150
+     common ev412#2 150
+  hscene/h_bg_001.jpg
+     common ev333#32 150
+     common ev333#170 150
+     common ev333#308 150
+     common ev333#428 150
+     common ev333#542 150
+     common ev333#914 150
+
+== hword/ : 103 files ==
+  hword/word_effect17.png
+     common ev349#62 150
+     common ev349#91 150
+     common ev349#152 150
+     common ev349#213 150
+     common ev350#462 150
+     common ev350#506 150
+  hword/word_effect32.png
+     common ev349#67 150
+     common ev350#880 150
+     common ev350#1012 150
+     common ev352#169 150
+     common ev352#336 150
+  hword/word_effect63.png
+     common ev349#72 150
+     common ev349#133 150
+     common ev349#184 150
+     common ev350#1207 150
+     common ev352#559 150
+     common ev352#664 150
+  hword/word_effect05.png
+     common ev349#81 150
+     common ev349#105 150
+     common ev349#142 150
+     common ev349#166 150
+     common ev349#470 150
+     common ev349#573 150
+  hword/word_effect07.png
+     common ev349#86 150
+     common ev349#147 150
+     common ev349#203 150
+     common ev350#447 150
+     common ev350#466 150
+     common ev350#761 150
+
+== 130 teleport map ids in common events: [(-1, 1)]
+== 130 in map events: [(('Map002.mps', -2), 4), (('Dungeon.mps', -1), 1), (('Map003.mps', -1), 1), (('Map031.mps', -1), 1), (('SampleMapB.mps', -1), 1)]

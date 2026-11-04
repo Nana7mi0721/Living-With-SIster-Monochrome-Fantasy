@@ -1,0 +1,13 @@
+tests: resolve a relative WOLF_RETAIL_SAVE_DIR against the repo root
+
+Integration tests run with cwd = the crate directory, so the same override that
+already works for WOLF_DATA_ROOT (5538bd7) silently skipped in m7_save_parts and
+save_roundtrip: `WOLF_RETAIL_SAVE_DIR=work/retail_backup/Save` was read relative
+to crates/wolf-game, found nothing, and both tests printed "skipping: no retail
+Save directory" while reporting ok.
+
+Both now resolve a relative value against the repo root like WOLF_DATA_ROOT does.
+Observed: with WOLF_DATA_ROOT=work/all WOLF_RETAIL_SAVE_DIR=work/retail_backup/Save
+m7_save_parts prints "round-tripped 8 retail save(s); 8 had a Part4 distinct from
+System.sav" and save_roundtrip prints "game-level round-tripped 8 save file(s)";
+with absolute paths the results are unchanged.

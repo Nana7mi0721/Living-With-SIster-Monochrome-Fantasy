@@ -1,0 +1,14 @@
+docs: record the CData-seeded template save and the relative retail-save path
+
+HANDOFF_M8: W4-b now states that the synthesized template carries the static
+CData variable database (and that a System.sav parsing with type_count 0 is
+filled in), the evidence table gains the follow-up commit and the path fix,
+§5 item 6 is restated (SysDatabase/DataBase excluded by design, a row past the
+static height needs a 250 row-count write), the source map points at
+db::template_vardb, and the workspace run line reflects 80 test binaries.
+
+M8_BACKLOG: W4-b records the vardb seeding; gap G11 is closed.
+BASELINE.json: m8_workstreams.template_save/remaining updated (4-line diff,
+indent and CRLF preserved).
+NEW_SESSION_START: M8's completed list includes the event RNG and the CData
+vardb, so a new session does not re-open finished work.

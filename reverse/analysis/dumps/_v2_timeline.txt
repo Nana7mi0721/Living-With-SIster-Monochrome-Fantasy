@@ -1,0 +1,230 @@
+=== f=0
+  pictures  : 0 live -> 0 textured quad(s), 0 text picture(s)
+  rendered  : 1024x576, 0/589824 non-black pixel(s) = 0.0%
+  stats     : 0 instruction(s), 0 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=20
+  pictures  : 1 live -> 1 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+  rendered  : 1024x576, 0/589824 non-black pixel(s) = 0.0%
+  stats     : 97 instruction(s), 1 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=40
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     11 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 49809/589824 non-black pixel(s) = 8.4%
+  stats     : 99 instruction(s), 2 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=60
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     11 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 49809/589824 non-black pixel(s) = 8.4%
+  stats     : 99 instruction(s), 2 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=80
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     11 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 49809/589824 non-black pixel(s) = 8.4%
+  stats     : 184 instruction(s), 2 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=100
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     11 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 49809/589824 non-black pixel(s) = 8.4%
+  stats     : 284 instruction(s), 2 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=120
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     11 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 49809/589824 non-black pixel(s) = 8.4%
+  stats     : 384 instruction(s), 2 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=140
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     11 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 49809/589824 non-black pixel(s) = 8.4%
+  stats     : 484 instruction(s), 2 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=160
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     11 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 49809/589824 non-black pixel(s) = 8.4%
+  stats     : 584 instruction(s), 2 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=180
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     11 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 49809/589824 non-black pixel(s) = 8.4%
+  stats     : 684 instruction(s), 2 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=200
+  pictures  : 1 live -> 1 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+  rendered  : 1024x576, 0/589824 non-black pixel(s) = 0.0%
+  stats     : 704 instruction(s), 3 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=220
+  pictures  : 1 live -> 1 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+  rendered  : 1024x576, 0/589824 non-black pixel(s) = 0.0%
+  stats     : 706 instruction(s), 3 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=240
+  pictures  : 1 live -> 1 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+  rendered  : 1024x576, 0/589824 non-black pixel(s) = 0.0%
+  stats     : 706 instruction(s), 3 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=260
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     12 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 91682/589824 non-black pixel(s) = 15.5%
+  stats     : 708 instruction(s), 4 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=280
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     12 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 91682/589824 non-black pixel(s) = 15.5%
+  stats     : 743 instruction(s), 4 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=300
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     12 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 91682/589824 non-black pixel(s) = 15.5%
+  stats     : 843 instruction(s), 4 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=320
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     12 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 91682/589824 non-black pixel(s) = 15.5%
+  stats     : 943 instruction(s), 4 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=340
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     12 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 91682/589824 non-black pixel(s) = 15.5%
+  stats     : 1043 instruction(s), 4 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=360
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     12 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 91682/589824 non-black pixel(s) = 15.5%
+  stats     : 1143 instruction(s), 4 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=380
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     12 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+  rendered  : 1024x576, 91682/589824 non-black pixel(s) = 15.5%
+  stats     : 1243 instruction(s), 4 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=400
+  pictures  : 1 live -> 1 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+  rendered  : 1024x576, 0/589824 non-black pixel(s) = 0.0%
+  stats     : 1313 instruction(s), 5 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=420
+  pictures  : 1 live -> 1 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+  rendered  : 1024x576, 0/589824 non-black pixel(s) = 0.0%
+  stats     : 1313 instruction(s), 5 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=440
+  pictures  : 1 live -> 1 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+  rendered  : 1024x576, 0/589824 non-black pixel(s) = 0.0%
+  stats     : 1317 instruction(s), 5 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=460
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     13 at [0,0,1003,564] uv [0.500,0.000,0.990,0.275]
+  rendered  : 1024x576, 105039/589824 non-black pixel(s) = 17.8%
+  stats     : 1319 instruction(s), 6 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=480
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     13 at [0,0,1003,564] uv [0.500,0.000,0.990,0.275]
+  rendered  : 1024x576, 105039/589824 non-black pixel(s) = 17.8%
+  stats     : 1319 instruction(s), 6 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=500
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     13 at [0,0,1003,564] uv [0.500,0.000,0.990,0.275]
+  rendered  : 1024x576, 105039/589824 non-black pixel(s) = 17.8%
+  stats     : 1404 instruction(s), 6 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=520
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     13 at [0,0,1003,564] uv [0.500,0.000,0.990,0.275]
+  rendered  : 1024x576, 105039/589824 non-black pixel(s) = 17.8%
+  stats     : 1504 instruction(s), 6 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=540
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     13 at [0,0,1003,564] uv [0.500,0.000,0.990,0.275]
+  rendered  : 1024x576, 105039/589824 non-black pixel(s) = 17.8%
+  stats     : 1604 instruction(s), 6 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=560
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     13 at [0,0,1003,564] uv [0.500,0.000,0.990,0.275]
+  rendered  : 1024x576, 105039/589824 non-black pixel(s) = 17.8%
+  stats     : 1704 instruction(s), 6 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=580
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     13 at [0,0,1003,564] uv [0.500,0.000,0.990,0.275]
+  rendered  : 1024x576, 105039/589824 non-black pixel(s) = 17.8%
+  stats     : 1804 instruction(s), 6 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=600
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     13 at [0,0,1003,564] uv [0.500,0.000,0.990,0.275]
+  rendered  : 1024x576, 105039/589824 non-black pixel(s) = 17.8%
+  stats     : 1904 instruction(s), 6 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=620
+  pictures  : 1 live -> 1 textured quad(s), 0 text picture(s)
+    quad pic     10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+  rendered  : 1024x576, 0/589824 non-black pixel(s) = 0.0%
+  stats     : 1924 instruction(s), 7 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=640
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic  12000 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic  12001 at [512,520,606,35] uv [0.500,0.000,0.796,0.017]
+  rendered  : 1024x576, 538659/589824 non-black pixel(s) = 91.3%
+  stats     : 1941 instruction(s), 10 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=660
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic  12000 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic  12001 at [512,520,606,35] uv [0.500,0.000,0.796,0.017]
+  rendered  : 1024x576, 538659/589824 non-black pixel(s) = 91.3%
+  stats     : 1973 instruction(s), 10 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=680
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic  12000 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic  12001 at [512,520,606,35] uv [0.500,0.000,0.796,0.017]
+  rendered  : 1024x576, 538659/589824 non-black pixel(s) = 91.3%
+  stats     : 2093 instruction(s), 10 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=700
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic  12000 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic  12001 at [512,520,606,35] uv [0.500,0.000,0.796,0.017]
+  rendered  : 1024x576, 538659/589824 non-black pixel(s) = 91.3%
+  stats     : 2213 instruction(s), 10 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=720
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic  12000 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic  12001 at [512,520,606,35] uv [0.500,0.000,0.796,0.017]
+  rendered  : 1024x576, 538659/589824 non-black pixel(s) = 91.3%
+  stats     : 2333 instruction(s), 10 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=740
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic  12000 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic  12001 at [512,520,606,35] uv [0.500,0.000,0.796,0.017]
+  rendered  : 1024x576, 538659/589824 non-black pixel(s) = 91.3%
+  stats     : 2453 instruction(s), 10 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=760
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic  12000 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic  12001 at [512,520,606,35] uv [0.500,0.000,0.796,0.017]
+  rendered  : 1024x576, 538659/589824 non-black pixel(s) = 91.3%
+  stats     : 2573 instruction(s), 10 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)
+=== f=780
+  pictures  : 2 live -> 2 textured quad(s), 0 text picture(s)
+    quad pic  12000 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic  12001 at [512,520,606,35] uv [0.500,0.000,0.796,0.017]
+  rendered  : 1024x576, 538659/589824 non-black pixel(s) = 91.3%
+  stats     : 2693 instruction(s), 10 picture op(s), 0 sound(s), 0 db access(es), 0 warning(s)

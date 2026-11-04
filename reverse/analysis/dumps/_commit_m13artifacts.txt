@@ -1,0 +1,8 @@
+test/docs(m13): content matrix, DLC CE452 and mainline ending probes
+
+- docs/research/M13_CONTENT_MATRIX.md: 111 random events + H gate matrix + battle,
+  items, skills, CG inventory (backed by op111 dumps).
+- docs/research/M13_CROSSWALK_UNRESOLVED.md: guide crosswalk confirmation, incl. #78.
+- docs/research/M13_DLC_452.md, M13_MAINLINE_ENDINGS.md: probe results.
+- crates/wolf-game/tests/m13_dlc_452.rs, m13_mainline_endings.rs: default fast
+  probes plus #[ignore] long matrices.

@@ -1,0 +1,4 @@
+docs: record charicon icon and double-click release launch
+
+Update the release size to 4067 files / 813,818,915 bytes, document the
+icon build/runtime path and the latest 882-test and verify gates.

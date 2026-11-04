@@ -1,0 +1,10 @@
+docs: M2 slice acceptance baseline + BASELINE.json picture/message/db keys
+
+BASELINE.json gains picture_erase (2,835 erase sites: 1,798 short, 85 stray, 952 ranged),
+picture_actions (16,716 commands with the full action and type histograms), message_window
+(skin, frame rect 32/396/960/168, origin 64/412, font 20, pitch 26, wrap 928, cursor 576/556),
+opening_slice (both steady states measured) and database_layer.
+
+docs/M2_SLICE.md records the four 150 semantics corrections (ranged erase, hide, move keeps its
+anchor, type 1/4 name a string variable), the message geometry, the engine-coroutine dependency
+on common event 63, what PLAN.md got wrong, and the still-unverified list.

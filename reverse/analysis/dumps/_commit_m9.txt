@@ -1,0 +1,15 @@
+M9: anchors, H-scene loop, battle rounds, movement and trigger core
+
+- picture: seven WOLF anchor codes, sprite-cell/fade slots, anchor-aware hover,
+  negative-scale horizontal mirroring; window nine-slice regression.
+- H scene: real exit chain and full loop to next morning, CG unlock through
+  var460/ev33 and CE333 atlas run.
+- battle: CE242 arg0 corrected to command index 1..8, per-index party pools,
+  opt-in multi-round CE241 driver, live CE65 selection bridge; shipped
+  multi-input menu pinned as unreachable.
+- map: terrain passability, leader movement with bounds/tile/event blocking,
+  action-key and player-touch trigger dispatch; full title-to-day5 route.
+- rng: deterministic WOLF_EVENT_SEED production hook; audio inventory and
+  strict narrow RIFF PCM fallback.
+- docs: M9 handoff, baseline m9_workstreams, UNVERIFIED audit, M10 opcode 111
+  phased plan (patch parked under work/out, exec.rs unchanged).

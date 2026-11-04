@@ -1,0 +1,11 @@
+events total = 550
+217 call sites = 568 across 52 events
+delta histogram = [(1, 14), (2, 27), (3, 8), (4, 3), (5, 14), (10, 186), (15, 308), (20, 1), (30, 2), (60, 5)]
+top 217 callers = [(452, 97), (301, 63), (252, 35), (305, 27), (340, 27), (247, 26), (310, 25), (461, 22)]
+writes hour(2000004): sites=27 events=11 -> [(328, 9), (305, 6), (217, 2), (317, 2), (405, 2), (257, 1)]
+writes minute(2000005): sites=26 events=11 -> [(328, 8), (305, 6), (217, 2), (317, 2), (405, 2), (257, 1)]
+writes weekday(2000006): sites=10 events=4 -> [(305, 5), (217, 2), (329, 2), (310, 1)]
+writes flag8(2000008): sites=2 events=1 -> [(217, 2)]
+picture 6211 drawn by 1 events: [217]
+picture 6200 drawn by 1 events: [217]
+picture 6210 drawn by 1 events: [217]

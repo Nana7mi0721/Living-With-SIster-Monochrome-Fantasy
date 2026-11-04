@@ -1,0 +1,10 @@
+M6: natural night menu input test
+
+- add crates/wolf-game/tests/m6_night_menu.rs: at the day2 19:30 bedroom
+  hover picture 120 + Decide -> var68=1 and CE245 opens with its picture
+  buttons; clicking 今天先休息吧 raises the 是/算了 confirm prompt. The
+  stale first-dinner tip gate var295 is documented and normalized to 0.
+- record the test and the remaining CE328 pre-pc700 abort in
+  docs/HANDOFF_M4.md and docs/BASELINE.json.
+
+cargo test -q -p wolf-game --test m6_night_menu -> 2 passed.

@@ -1,0 +1,2921 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+<HEAD>
+<META http-equiv="Content-Type" content="text/html; charset=Shift_JIS">
+<META name="GENERATOR" content="IBM WebSphere Studio Homepage Builder Version 7.0.1.0 for Windows">
+<META http-equiv="Content-Style-Type" content="text/css">
+<TITLE>YADOT-WOLF 特殊文字</TITLE>
+<meta name="robots" content="nofollow">
+<STYLE type="text/css">
+<!--
+ A { text-decoration: none ;}
+-->
+</STYLE>
+<BASE target="">
+<BASE target="g/page.htm">
+<LINK rel="stylesheet" href="g/page.css" type="text/css">
+</HEAD>
+<BODY style="font-family: ＭＳ ゴシック" bgcolor="#000e3c" text="#ffffff" link="#00ff00" vlink="#00ff00" background="../../../page/back-g_w.png" alink="#00ff00">
+<CENTER>
+<TABLE border="0">
+  <TBODY>
+    <TR>
+      <TD><FONT color="#00ffff"><A name="top">ＷＯＬＦ ＲＰＧエディター(ウディタ)[3.600]／イベントコマンド</A></FONT><A href="../../" target="_top">【サイトトップへ戻る】</A><BR>
+      <FONT size="+2" color="#ffff00">■特殊文字</FONT><BR>
+      （更新：2025/05/24）<BR>
+      <BR>
+      <BR>
+      「特殊文字」について解説します。<BR>
+      <BR>
+      <BR>
+      <TABLE cellpadding="5">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000099" align="center">ショートカット</TD>
+          </TR>
+          <TR>
+            <TD bgcolor="#000000">
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD><FONT size="+1"><A href="#nani" target="_self">■｢特殊文字｣とは？</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#ichiran_hensuu" target="_self">■特殊文字一覧：変数(数値・文字列)代入</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#ichiran_seisitu" target="_self">■特殊文字一覧：文字の性質変化</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#ichiran_seigyo" target="_self">■特殊文字一覧：文字表示の制御</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#ichiran_mei" target="_self">■特殊文字一覧：項目名で使用</A></FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <TABLE cellpadding="5">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#004000" align="center">特殊文字のショートカット</TD>
+          </TR>
+          <TR>
+            <TD bgcolor="#000000">
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD valign="top">
+                  <TABLE border="0" cellpadding="3" bgcolor="#000037">
+                    <TBODY>
+                      <TR>
+                        <TD bgcolor="#0000c8" align="center" nowrap height="24">変数(数値・文字列)</TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="マップイベントのセルフ変数を表示" href="#hen_self" target="_self">\self[変数番号]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="コモンイベントのセルフ変数を表示" href="#hen_cself" target="_self">\cself[変数番号]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="通常変数を表示" href="#hen_tuujou" target="_self">\v[変数番号]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="予備変数を表示" href="#hen_yobi" target="_self">\v予備番号[変数番号]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="文字列変数を表示" href="#hen_s" target="_self">\s[変数番号]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="システム変数を表示" href="#hen_sys" target="_self">\sys[変数番号]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="システム文字列を表示" href="#hen_syss" target="_self">\sysS[変数番号]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD nowrap><FONT size="+1"><A title="可変データベースを表示" href="#hen_cdb" target="_self">\cdb[タイプ:データ:項目]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="システムデータベースを表示" href="#hen_sdb" target="_self">\sdb[タイプ:データ:項目]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="ユーザーデータベースを表示" href="#hen_udb" target="_self">\udb[タイプ:データ:項目]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD nowrap><FONT size="+1"><A title="可変データベースを表示" href="#hen_xy" target="_self">\xy[番号:X:Y]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD nowrap><FONT size="+1"><A title="可変データベースを表示" href="#hen_xyn" target="_self">\xyN[名前:X:Y]</A></FONT></TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  </TD>
+                  <TD valign="top">
+                  <TABLE border="0" cellpadding="3" bgcolor="#410000">
+                    <TBODY>
+                      <TR>
+                        <TD bgcolor="#a00000" height="24" nowrap>文字の性質変化</TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="フォントサイズを設定" href="#henka_f" target="_self">\f[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="フォントサイズを増減" href="#henka_f2" target="_self">\f+[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="底辺位置を設定" href="#henka_m" target="_self">\m[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="文字色を変更" href="#henka_c" target="_self">\c[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="文字の影色を変更" href="#henka_cs" target="_self">\cS[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="文字の周りにフチを付ける" href="#henka_e_n" target="_self">\E</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="文字の周りにフチを付けない" href="#henka_e_n" target="_self">\N</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="文字の周りにフチを付ける＋太さ設定" href="#henka_we" target="_self">\wE[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="フチの色を設定" href="#henka_ce" target="_self">\cE[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="フチの色を設定" href="#henka_fr" target="_self">\fR[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="フチの色を設定" href="#henka_cr" target="_self">\cR[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="文字の表示間隔を詰める" href="#henka_-" target="_self">\-[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="表示フォントを変更" href="#henka_font" target="_self">\font[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="アンチエイリアスを付ける" href="#henka_a" target="_self">\A+</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="アンチエイリアスを付けない" href="#henka_a" target="_self">\A-</A></FONT></TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  </TD>
+                  <TD valign="top">
+                  <TABLE border="0" cellpadding="3" bgcolor="#141400">
+                    <TBODY>
+                      <TR>
+                        <TD colspan="3" bgcolor="#5a5a00" align="center" height="24">文字表示の制御</TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="半角の「\」を表示" href="#seigyo_en" target="_self">\\</A></FONT></TD>
+                        <TD></TD>
+                        <TD><FONT size="+1"><A title="文字の表示速度を設定" href="#seigyo_sp" target="_self">\sp[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="キー入力待ちを設定" href="#seigyo_key" target="_self">\!</A></FONT></TD>
+                        <TD></TD>
+                        <TD><FONT size="+1"><A title="改行時の行間を設定" href="#seigyo_space" target="_self">\space[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="「０.２５秒」のウェイト" href="#seigyo_w" target="_self">\.</A></FONT></TD>
+                        <TD></TD>
+                        <TD nowrap><FONT size="+1"><A title="ルビを付ける" href="#seigyo_r" target="_self">\r[文字,ルビ]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="キー待ち無しで文章ウィンドウを閉じる" href="#seigyo_machi_nasi" target="_self">\^</A></FONT></TD>
+                        <TD></TD>
+                        <TD><FONT size="+1"><A title="アイコンを表示" href="#seigyo_i" target="_self">\i[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="瞬間表示を設定" href="#seigyo_shunkan" target="_self">\&gt;</A></FONT></TD>
+                        <TD></TD>
+                        <TD><FONT size="+1"><A title="アイコンを表示＋くっきり＆ガタガタ" href="#seigyo_i" target="_self">\iS[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="瞬間表示を解除" href="#seigyo_shunkan" target="_self">\&lt;</A></FONT></TD>
+                        <TD></TD>
+                        <TD><FONT size="+1"><A title="画像を表示" href="#seigyo_img" target="_self">\img[アドレス]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="次の行のＸ表示位置を設定" href="#seigyo_bx" target="_self">\bx[数値]</A></FONT></TD>
+                        <TD></TD>
+                        <TD><FONT size="+1"><A title="画像を表示＋くっきり＆ガタガタ" href="#seigyo_img" target="_self">\imgS[アドレス]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="次のＸ表示位置のスペース量を設定" href="#seigyo_mx_my" target="_self">\mx[数値]</A></FONT></TD>
+                        <TD></TD>
+                        <TD><FONT size="+1"><A title="画像の表示倍率を変更" href="#seigyo_isize" target="_self">\isize[数値]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="次のＹ表示位置のスペース量を設定" href="#seigyo_mx_my" target="_self">\my[数値]</A></FONT></TD>
+                        <TD></TD>
+                        <TD><FONT size="+1"><A title="表示位置を左寄せに設定" href="#seigyo_se" target="_self">\se[アドレス]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="次のＸ表示位置を左から何ピクセル目で設定" href="#seigyo_ax_ay" target="_self">\ax[数値]</A></FONT></TD>
+                        <TD></TD>
+                        <TD><FONT size="+1"><A title="表示位置を左寄せに設定" href="#seigyo_l_c_r" target="_self">&lt;L&gt;</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="次のＹ表示位置を上から何ピクセル目で設定" href="#seigyo_ax_ay" target="_self">\ay[数値]</A></FONT></TD>
+                        <TD></TD>
+                        <TD><FONT size="+1"><A title="表示位置を中央表示に設定" href="#seigyo_l_c_r" target="_self">&lt;C&gt;</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD nowrap></TD>
+                        <TD></TD>
+                        <TD><FONT size="+1"><A title="表示位置を右寄せに設定" href="#seigyo_l_c_r" target="_self">&lt;R&gt;</A></FONT></TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  </TD>
+                  <TD valign="top">
+                  <TABLE border="0" cellpadding="3" bgcolor="#000037">
+                    <TBODY>
+                      <TR>
+                        <TD bgcolor="#780078" align="center" height="24">項目名で使用</TD>
+                      </TR>
+                      <TR>
+                        <TD nowrap><FONT size="+1"><A title="システムデータベースの指定項目名を設定" href="#koumoku_sdb" target="_self">\sdb[タイプ:データ:項目]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="ユーザーデータベースの指定項目名を設定" href="#koumoku_udb" target="_self">\udb[タイプ:データ:項目]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="可変データベースの指定項目名を設定" href="#koumoku_cdb" target="_self">\cdb[タイプ:データ:項目]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="システムデータベースのデータ名を項目名に設定" href="#koumoku_sdb2" target="_self">\sdb[タイプ:データ]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="ユーザーデータベースのデータ名を項目名に設定" href="#koumoku_udb2" target="_self">\udb[タイプ:データ]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><FONT size="+1"><A title="可変データベースのデータ名を項目名に設定" href="#koumoku_cdb2" target="_self">\cdb[タイプ:データ]</A></FONT></TD>
+                      </TR>
+                      <TR>
+                        <TD><A title="設定した項目番号＋「\d[数値]」＝表示される番号" href="#koumoku_d" target="_self">\d[数値]</A></TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  </TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <HR>
+      <A name="nani">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■｢特殊文字｣とは？</FONT><BR>
+      <BR>
+      <FONT color="#ffff00">特殊文字</FONT>は文章を表示する時に、文字の大きさを変えたり、変数の値を表示したりする時に使います。<BR>
+      <BR>
+      <FONT color="#00ffff">▼文字の大きさを１文字ずつ変えた場合の表示例</FONT><BR>
+      <IMG src="../../03_hen/0005_hen_sys0-34/sys008_2.png" width="640" height="480" border="0"><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#a0dcff">イベントコマンド【文章の表示】</FONT>以外でも<FONT color="#a0dcff">【選択肢】</FONT>や<FONT color="#a0dcff">【ピクチャ】</FONT>の文字列の設定。<BR>
+      またデバッグウィンドウに変数の値を表示する時にも使います。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      特殊文字の設定は<FONT color="#00ffff">一時的なもの</FONT>であり、例えば…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■文章:\f[20]あいうえお<BR>
+      ■文章:かきくけこ</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った設定の場合、最初の<FONT color="#a0dcff">【文章の表示】</FONT>では<FONT color="#00ffff">フォントサイズ[20]</FONT>で表示されますが、<BR>
+      次の<FONT color="#a0dcff">【文章の表示】</FONT>では元のフォントサイズになります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      特殊文字は<FONT color="#ffff00">半角英数</FONT>で設定してください。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <FONT color="#00ffff">全角文字では機能しません。</FONT><BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      またアルファベットの<FONT color="#ffff00">大文字・小文字</FONT>も正しく設定しないと機能しません。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">特殊文字の内容</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">正しい設定</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">間違った設定</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">フォントサイズを「10」に変更</TD>
+            <TD valign="top" align="center"><FONT color="#ffff00">\f[10]</FONT></TD>
+            <TD align="center"><FONT color="#ff96ff">\F[10]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">フチ付きで文字列を表示</TD>
+            <TD valign="top" align="center"><FONT color="#ffff00">\E</FONT></TD>
+            <TD align="center"><FONT color="#ff96ff">\e</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">システム文字列[0]の値を表示</TD>
+            <TD valign="top" align="center"><FONT color="#ffff00">\sysS[0]</FONT></TD>
+            <TD align="center"><FONT color="#ff96ff">\syss[0]<BR>
+            \SYSS[0]</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      文章を入力する欄の中で<FONT color="#00ffff">右クリック</FONT>を押す事で、<FONT color="#ffff00">特殊文字の設定ができるメニュー画面</FONT>が表示されます。<BR>
+      <BR>
+      <IMG src="012.png" width="592" height="335" border="0"><BR>
+      <BR>
+      特殊文字の説明に関しては、<BR>
+      当ページの他にウディタの公式サイトの説明書にある「<FONT color="#00ffff">特殊文字一覧</FONT>」でも確認する事ができます。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="https://www.silversecond.com/WolfRPGEditor/Help/" target="_blank">【ウディタの公式サイトにある説明書を開く】</A><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      当ページにある表示見本画像は、ゲーム画面のサイズ「<FONT color="#00ffff">640×480</FONT>」、フォントのサイズ「<FONT color="#00ffff">24</FONT>」で作成したものです。<BR>
+      <BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■文章:あいうえお\nかきくけこ</FONT><BR>
+            <BR>
+            <IMG src="200.png" width="600" height="140" border="0"></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="ichiran_hensuu">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■特殊文字一覧：変数(数値・文字列)代入</FONT><BR>
+      <BR>
+      変数の値を表示する時に使う特殊文字の一覧です。<BR>
+      <BR>
+      左側の「<FONT color="#00ffff">変数番号</FONT>」や「<FONT color="#00ffff">タイプ</FONT>」などと書かれた部分は<FONT color="#ffff00">半角数字</FONT>で設定してください。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">特殊文字</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT size="+2" color="#ffff00"><A name="hen_self">\self[変数番号]</A></FONT></TD>
+            <TD>表示設定を実行した<FONT color="#00ffff">マップイベント</FONT>のセルフ変数を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>マップイベントから呼び出したコモンイベントの中で実行すると、<BR>
+            呼び出し元のセルフ変数が表示されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>マップイベントから呼び出していないコモンイベントの中で実行した場合は…<BR>
+            <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+                  <TD bgcolor="#00003c"><FONT color="#ffa0ff">1000000－設定した変数番号＝表示される数値</FONT></TD>
+                </TR>
+        </TBODY>
+      </TABLE>
+            の値が表示されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼デバッグ文にセルフ変数[5]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\self[5]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="hen_cself">\cself[変数番号]</A></FONT></TD>
+            <TD>表示設定を実行した<FONT color="#00ffff">コモンイベント</FONT>のセルフ変数を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>マップイベントで実行すると数値変数の場合は「<FONT color="#ff96ff">0</FONT>」。<BR>
+            文字列変数の場合は「<FONT color="#ff96ff">&lt;&lt;ERROR&gt;&gt;</FONT>」が表示されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼デバッグ文にセルフ変数[12]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\cself[12]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="hen_tuujou">\v[変数番号]</A></FONT></TD>
+            <TD><FONT color="#ffc83c">システムＤＢ[14:通常変数名]</FONT>の値を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼デバッグ文に通常変数[4]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\v[4]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="hen_yobi">\v予備番号[変数番号]</A></FONT></TD>
+            <TD><FONT color="#ffc83c">システムＤＢ[15:予備変数1]～[23:予備変数9]</FONT>の値を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼デバッグ文に予備変数3の[8]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\v3[8]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="hen_s">\s[変数番号]</A></FONT></TD>
+            <TD><FONT color="#ffc83c">システムＤＢ[4:文字列変数名]</FONT>の文字列を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼デバッグ文に文字列変数[9]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\s[9]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="hen_sys">\sys[変数番号]</A></FONT></TD>
+            <TD><FONT color="#ffc83c">システムＤＢ[6:システム変数名]</FONT>の値を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼デバッグ文にシステム変数[0]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\sys[0]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="hen_syss">\sysS[変数番号]</A></FONT></TD>
+            <TD><FONT color="#ffc83c">システムＤＢ[5:システム文字列]</FONT>の文字列を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>最後に設定する「S」は<FONT color="#ffff00">大文字</FONT>にしてください。<BR>
+            「<FONT color="#00ffff">\syss[変数番号]</FONT>」の設定では表示されません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼デバッグ文にシステム変数[10]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\sysS[10]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="hen_cdb">\cdb[タイプ:データ:項目]</A></FONT></TD>
+            <TD><FONT color="#ffa0a0">可変ＤＢ</FONT>の情報を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼デバッグ文に可変ＤＢ[6:パーティー情報]のデータ[0]の<BR>
+            　項目[1:メンバー1]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\cdb[6:0:1]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">\cdb[0:12]</FONT>」などと設定すると、<BR>
+            可変ＤＢ[0:主人公ステータス]のデータ[12]の<BR>
+            データ名（ウルファール）を表示します。<BR>
+            <BR>
+            また「<FONT color="#ffff00">\cdb[0]</FONT>」などと設定すると、<BR>
+            可変ＤＢ[0]のタイプ名（主人公ステータス）を表示します。<BR>
+            <BR>
+            <FONT color="#00ffff">※下記の「<FONT color="#ffff00">\sdb</FONT>」「<FONT color="#ffff00">\udb</FONT>」も同じ仕様です。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="hen_sdb">\sdb[タイプ:データ:項目]</A></FONT></TD>
+            <TD><FONT color="#ffc83c">システムＤＢ</FONT>の情報を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼デバッグ文にシステムＤＢ[1:BGMリスト]のデータ[2]の<BR>
+            　項目[0:ファイル名]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\sdb[1:2:0]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="hen_udb">\udb[タイプ:データ:項目]</A></FONT></TD>
+            <TD><FONT color="#00d2ff">ユーザーＤＢ</FONT>の情報を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼デバッグ文にユーザーＤＢ[2:アイテム]のデータ[0]の<BR>
+            　項目[19:販売価格 [0=売れない]]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\udb[2:0:19]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="hen_xy">\xy[番号:X:Y]</A></FONT></TD>
+            <TD>番号で設定したＸＹ配列の情報を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼ＸＹ配列番号[3]、Ｘ[5]、Ｙ[9]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\xy[3:5:9]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">\xy[0:5]</FONT>」などと設定すると、<BR>
+            配列番号[0]のＸ列[5]にある全てＹ列の数値が表示されます。<BR>
+            <BR>
+            また「<FONT color="#ffff00">\xy[0]</FONT>」などと設定すると、<BR>
+            配列番号[0]にある全てＸ列Ｙ列の数値が表示されます。<BR>
+            <BR>
+            <FONT color="#00ffff">※下記の「<FONT color="#ffff00">\xyN</FONT>」も同じ仕様です。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="hen_xyn">\xyN[名前:X:Y]</A></FONT></TD>
+            <TD>名前で設定したＸＹ配列の情報を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼ＸＹ配列名[マップ情報]、Ｘ[5]、Ｙ[9]を表示する場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:\xyN[マップ情報:5:9]</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT size="+2" color="#00ffff">▼使用例</FONT><BR>
+      <BR>
+      現在の時刻を表示する場合は…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">システム変数[80:現在の[時]]<BR>
+            システム変数[81:現在の[分]]<BR>
+            システム変数[82:現在の[秒]]</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      を利用して以下のように設定します。<BR>
+      <BR>
+      <FONT color="#00ffff">▼設定例</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="../../03_hen/0000_hensuu/c030.txt" target="_blank">【イベントコード表示】</A><BR>
+            <BR>
+            <FONT color="#ffff00">■文章:現在は「\sys[80]時\sys[81]分\sys[82]秒」だよ。</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼イベント実行時が「20時34分8秒」だった時</FONT><BR>
+      <IMG src="../../03_hen/0000_hensuu/032.png" width="640" height="480" border="0"><BR>
+      <BR>
+      <HR width="55%">
+      <BR>
+      変数の中に変数を設定する…<BR>
+      <TABLE border="0" bgcolor="#000000" cellpadding="12">
+              <TBODY>
+                <TR>
+                  <TD><FONT color="#ffff00">\cdb[0:\v[0]:0]</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った設定も可能です。<BR>
+      <BR>
+      例えば、パーティの先頭にいるキャラ名を表示する場合は、<BR>
+      <FONT color="#ffa0a0">可変ＤＢ</FONT>の情報を表示する特殊文字「<FONT color="#00ffff">\cdb[A:B:C]</FONT>」を<FONT color="#ff96ff">二重</FONT>に設定して表示します。<BR>
+      <BR>
+      <FONT color="#00ffff">▼設定例</FONT><BR>
+      <TABLE border="0" bgcolor="#000000" cellpadding="12">
+              <TBODY>
+                <TR>
+                  <TD><FONT color="#ffff00">■文章:\cdb[0:\cdb[6:0:1]:0]さん、こんにちわ！</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="55%">
+      <BR>
+      <FONT color="#ff96ff" size="+2">▼補足</FONT><BR>
+      <BR>
+      <FONT color="#ffff00">\cdb[6:0:1]</FONT>は<FONT color="#ffa0a0">可変ＤＢ[6:パーティー情報]</FONT>にあるパーティの１人目の主人公の番号を呼び出す設定です。<BR>
+      <BR>
+      <FONT color="#ffff00">\cdb[0:X:0]</FONT>は<FONT color="#ffa0a0">可変ＤＢ[0:主人公ステータス]</FONT>の主人公の名前を呼び出す設定であり、<BR>
+      真ん中の「X」と表示した部分には、呼び出す主人公の番号を設定します。<BR>
+      <BR>
+      そのため、<FONT color="#ffff00">\cdb[0:\cdb[6:0:1]:0]</FONT>の設定を行うと…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">\cdb[<FONT color="#00ffff">主人公ステータス</FONT>:<FONT color="#00ffff">パーティの先頭の主人公の番号</FONT>:<FONT color="#00ffff">キャラ名</FONT>]</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った感じの設定になり、パーティの先頭にいる主人公の名前が表示されます。<BR>
+      <BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD align="center" bgcolor="#000099" height="20">パーティの先頭が「ウルファール」の場合</TD>
+            <TD></TD>
+            <TD align="center" bgcolor="#a00000">パーティの先頭が「夕一」の場合</TD>
+          </TR>
+          <TR>
+            <TD><IMG src="../../03_hen/0000_hensuu/030.png" width="320" height="240" border="0"></TD>
+            <TD></TD>
+            <TD><IMG src="../../03_hen/0000_hensuu/031.png" width="320" height="240" border="0"></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      ウディタの説明書には、以下の補足が書かれています。<BR>
+      <BR>
+      <TABLE cellpadding="15" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD>代入特殊文字には<FONT color="#ffa0a0">優先順位</FONT>があり、それに従えば入れ子構造にすることも可能です。<BR>
+            <BR>特殊文字の優先順位は…<BR>
+            <TABLE cellpadding="12">
+                    <TBODY>
+                      <TR>
+                  <TD bgcolor="#002846"><FONT color="#ffff00">通常変数\v ＜ 予備変数\v? ＜ セルフ変数\self ＜ コモンセルフ\cself ＜ システム変数\sys<BR>
+                  ＜ ユーザDB \udb ＜ 可変DB\cdb ＜ システムDB \sdb ＜ 文字列変数\s ＜ システム文字列\sysS</FONT></TD>
+                </TR>
+                    </TBODY>
+                  </TABLE>
+            の順になっており、各特殊文字の[ ]内には、<BR>
+                  それより順位の低い特殊文字を記述することができます。<BR>
+            <BR>たとえば、<FONT color="#00ffff">\cself[\v[12]]</FONT> （\v＜\cself）なら、<BR>
+                  \v[12]番のコモンセルフを正常に呼び出すことができます。<BR>しかし、逆の<FONT color="#00ffff">\v[\cself[2]]</FONT>は、\vより\cselfの方が順位が高いので、正常に処理されません。<BR>
+            <BR>
+            <BR>優先順位の都合上、DB読み込み用特殊文字に関しては、<BR>
+                  変数読み込み文字を使って「<FONT color="#00ffff">\udb[3:\v[4]:\self[1]]</FONT>」という風に入れても機能します。 <BR>
+            <BR>
+            ただし、<FONT color="#00ffff">\udb[\cdb[1:1:1]:2:3]</FONT>（※\udb＜\cdbなのにcdbが内側に入っている）という具合に、<BR>
+            <FONT color="#ffa0a0">DB読み込み用文字の内部に優先順位の高いDB読み込み用文字を入れると動作が不安定になります</FONT>ので<BR>
+            注意してください。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="ichiran_seisitu">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■特殊文字一覧：文字の性質変化</FONT><BR>
+      <BR>
+      文字の表示方法に関する設定の一覧です。<BR>
+      <BR>
+      <FONT color="#00ffff">数値</FONT>の設定は<FONT color="#ffff00">半角数字</FONT>で設定してください。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">特殊文字</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="5" valign="top"><FONT size="+2" color="#ffff00"><A name="henka_f">\f[数値]</A></FONT></TD>
+            <TD>フォントサイズを変更します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>基本となるフォントサイズは、<FONT color="#00ffff">システム変数[8]</FONT>で設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../03_hen/0005_hen_sys0-34/index.htm#sys008" target="_blank">【システム変数[8]の説明を見る】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>ウディタの基本システムを使用している場合は、<BR>
+            ゲーム画面のサイズによって<FONT color="#00ffff">システム変数[8]</FONT>の初期値が変わります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">\f[数値]</FONT>」を使ってフォントサイズを変えて、<BR>
+            同じ文章表示内で元のフォントサイズに戻す場合は、<BR>
+            <FONT color="#00ffff">システム変数[8]</FONT>の値を呼び出す形で「<FONT color="#ffff00">\f[\sys[8]]</FONT>」を設定してください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼「う」と「く」のフォントサイズを変える設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あい<FONT color="#ffff00">\f[48]</FONT>う<FONT color="#ffff00">\f[\sys[8]]</FONT>えお<BR>
+            かき<FONT color="#ffff00">\f[64]</FONT>く<FONT color="#ffff00">\f[\sys[8]]</FONT>けこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0" bgcolor="#000000" cellpadding="3">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="201.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="4" valign="top"><FONT size="+2" color="#ffff00"><A name="henka_f2">\f+[数値]</A></FONT></TD>
+            <TD>フォントサイズを増減します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>例えばフォントサイズが「24」の時に「<FONT color="#00ffff">\f+[10]</FONT>」を実行すると、<BR>
+            フォントサイズが「34」になります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            さらに「<FONT color="#00ffff">\f+[10]</FONT>」を実行すると、フォントサイズが「44」になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">\f+[<FONT color="#ffff00">-10</FONT>]</FONT>」と設定すればフォントサイズを小さくする事もできます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼１文字ごとにフォントサイズを４ずつ増やす設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あ<FONT color="#ffff00">\f+[4]</FONT>い<FONT color="#ffff00">\f+[4]</FONT>う<FONT color="#ffff00">\f+[4]</FONT>え<FONT color="#ffff00">\f+[4]</FONT>お</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="201_1.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="4" valign="top"><FONT size="+2" color="#ffff00"><A name="henka_m">\m[数値]</A></FONT></TD>
+            <TD>文字を表示する底辺の位置を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>文章の表示では、文章の途中でフォントサイズが変わると、<BR>
+            最も大きかったフォントサイズに合わせて底辺の位置が下がります。<BR>
+            <BR>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">[24]\f[48][48]\f[30][30]\f[16][16]\f[72][72]\f[36][36]</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="202_1.png" width="600" height="140" border="0"><BR>
+            <BR>
+            <HR width="80%" size="1">
+            <BR>
+            この「<FONT color="#00ffff">\m[数値]</FONT>」を使うと、底辺の位置を指定する事ができ、<BR>
+            小さなフォントサイズでも最初から指定した底辺の位置で表示されるようになります。<BR>
+            <BR>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">\m[72]</FONT><FONT color="#00ffff">[24]\f[48][48]\f[30][30]\f[16][16]\f[72][72]\f[36][36]</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="202_3.png" width="600" height="140" border="0"><BR>
+            <BR>
+            <HR width="80%" size="1">
+            <BR>
+            指定した底辺の位置より大きいフォントサイズを表示した場合は、<BR>
+            底辺の位置が更新されます。<BR>
+            <BR>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">\m[48]</FONT><FONT color="#00ffff">[24]\f[48][48]\f[30][30]\f[16][16]\f[72][72]\f[36][36]</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="202_2.png" width="600" height="140" border="0"><BR>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>この「<FONT color="#00ffff">\m[数値]</FONT>」が有効になるのは、<FONT color="#ffff00">設定した行のみ</FONT>です。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            改行すると「<FONT color="#ffff00">\m[0]</FONT>」に戻ります。<BR>
+            <BR>
+            <FONT color="#ffa0a0">▼以下の場合は１行目の底辺のみが揃います</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">\m[48]</FONT><FONT color="#00ffff">あい\f[48]う\f[\sys[8]]えお<BR>
+                  かき\f[48]く\f[\sys[8]]けこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="202_4.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>文章の途中に設定して、下がった底辺の位置を上げる事もできます。<BR>
+            <BR>
+            <FONT color="#ffa0a0">▼「け」のあとに底辺の位置をリセットした時の設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あい\f[48]う\f[\sys[8]]えお<BR>
+            かき\f[48]く\f[\sys[8]]け<FONT color="#ffff00">\m[0]</FONT>こ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="202.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="henka_c">\c[数値]</A></FONT></TD>
+            <TD>表示する文字の色を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>文字の色は<FONT color="#ffc83c">システムＤＢ[12:文字色]</FONT>で設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../03_hen/1100_db_sys/index.htm#12mojishoku" target="_blank">【システムＤＢ[12]の説明を見る】</A><BR>
+            <BR>「<FONT color="#00ffff">\c[数値]</FONT>」の数値には、<FONT color="#ffc83c">システムＤＢ[12:文字色]</FONT>の<FONT color="#ffff00">データＩＤ</FONT>を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼２文字ごとに[色0]→[色1]→[色2]→[色3]→[色0]と変化させる設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あい<FONT color="#ffff00">\c[1]</FONT>うえ<FONT color="#ffff00">\c[2]</FONT>おか<FONT color="#ffff00">\c[3]</FONT>きく<FONT color="#ffff00">\c[0]</FONT>けこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="203.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="henka_cs">\cS[数値]</A></FONT></TD>
+            <TD>フォントの影色を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>文字の色は<FONT color="#ffc83c">システムＤＢ[12:文字色]</FONT>で設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../03_hen/1100_db_sys/index.htm#12mojishoku" target="_blank">【システムＤＢ[12]の説明を見る】</A><BR>
+            <BR>「<FONT color="#00ffff">\cS[数値]</FONT>」の数値には、<FONT color="#ffc83c">システムＤＢ[12:文字色]</FONT>の<FONT color="#ffff00">データＩＤ</FONT>を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼２文字ごとに[標準(黒)]→[色0]→[色1]→[色2]→[色3]と変化させる設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あい<FONT color="#ffff00">\cS[0]</FONT>うえ<FONT color="#ffff00">\cS[1]</FONT>おか<FONT color="#ffff00">\cS[2]</FONT>きく<FONT color="#ffff00">\cS[3]</FONT>けこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="203ce.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="3" valign="top"><FONT size="+2" color="#ffff00"><A name="henka_e_n">\E</A></FONT><FONT color="#ffff00"><BR>
+            </FONT><FONT size="+2" color="#ffff00">\N</FONT></TD>
+            <TD>「<FONT color="#ffff00">\E</FONT>」は文字の周りにフチ(＝エッジ(Edge))を付けます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">\N</FONT>」は特殊文字「<FONT color="#00ffff">\E</FONT>」「<FONT color="#00ffff">\wE</FONT>」でフチ有りにした状態を元に戻します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼「うえおかき」だけにフチ有りにする設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あい<FONT color="#ffff00">\E</FONT>うえおかき<FONT color="#ffff00">\N</FONT>くけこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="204.png" width="266" height="40" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="2" valign="top"><FONT size="+2" color="#ffff00"><A name="henka_we">\wE[数値]</A></FONT></TD>
+            <TD>「<FONT color="#ffff00">\wE</FONT>」は文字の周りにフチを付け、さらに太さ「1～5」も設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼２文字ごとに徐々にフチを太くする設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff"><FONT color="#ffff00">\wE[1]</FONT>あい<FONT color="#ffff00">\wE[2]</FONT>うえ<FONT color="#ffff00">\wE[3]</FONT>おか<FONT color="#ffff00">\wE[4]</FONT>きく<FONT color="#ffff00">\wE[5]</FONT>けこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="204we.png" width="321" height="45" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="5" valign="top"><FONT size="+2" color="#ffff00"><A name="henka_ce">\cE[数値]</A></FONT></TD>
+            <TD>「<FONT color="#ffff00">\cE</FONT>」は文字の周りに付けるフチの色を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>フチの色は<FONT color="#ffc83c">システムＤＢ[12:文字色]</FONT>で設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../03_hen/1100_db_sys/index.htm#12mojishoku" target="_blank">【システムＤＢ[12]の説明を見る】</A><BR>
+            <BR>「<FONT color="#00ffff">\cE[数値]</FONT>」の数値には、<FONT color="#ffc83c">システムＤＢ[12:文字色]</FONT>の<FONT color="#ffff00">データＩＤ</FONT>を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>フチを付けるには「<FONT color="#00ffff">\E</FONT>」か「<FONT color="#00ffff">\wE</FONT>」の設定が必要です。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">\cE[-1]</FONT>」を設定すると標準の黒に戻せます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼２文字ごとに[標準(黒)]→[色0]→[色1]→[色2]→[色3]と変化させ、<BR>
+            　２行目は２文字ごとに徐々にフチを太くする設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\Eあい<FONT color="#ffff00">\cE[0]</FONT>うえ<FONT color="#ffff00">\cE[1]</FONT>おか<FONT color="#ffff00">\cE[2]</FONT>きく<FONT color="#ffff00">\cE[3]</FONT>けこ<BR>
+            <FONT color="#ffff00">\cE[-1]</FONT>あい\wE[2]<FONT color="#ffff00">\cE[0]</FONT>うえ\wE[3]<FONT color="#ffff00">\cE[1]</FONT>おか\wE[4]<FONT color="#ffff00">\cE[2]</FONT>きく\wE[5]<FONT color="#ffff00">\cE[3]</FONT>けこ</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="204ce.png" width="316" height="70" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="5" valign="top"><FONT size="+2" color="#ffff00"><A name="henka_fr">\fR[数値]</A></FONT></TD>
+            <TD>ルビのフォントサイズを変更します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>基本となるルビのフォントサイズは、<FONT color="#00ffff">システム変数[23]</FONT>で設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../03_hen/0005_hen_sys0-34/index.htm#sys023" target="_blank">【システム変数[23]の説明を見る】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>ウディタの基本システムを使用している場合は、<BR>
+            ゲーム画面のサイズによって<FONT color="#00ffff">システム変数[23]</FONT>の初期値が変わります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">\fR[数値]</FONT>」を使ってルビのフォントサイズを変えて、<BR>
+            同じ文章表示内で元のフォントサイズに戻す場合は、<BR>
+            <FONT color="#00ffff">システム変数[23]</FONT>の値を呼び出す形で「<FONT color="#ffff00">\fR[\sys[23]]</FONT>」を設定してください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼ルビのフォントサイズを変える設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\r[あいうえお,サイズ10]<BR>
+<BR>
+                  <FONT color="#ffff00">\fR[16]</FONT>\r[あいうえお,サイズ16]</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0" bgcolor="#000000" cellpadding="3">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="208.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="3" valign="top"><FONT size="+2" color="#ffff00"><A name="henka_cr">\cR[数値]</A></FONT></TD>
+            <TD>ルビの色を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>初期設定のルビの色は<FONT color="#ffc83c">システムＤＢ[12:文字色]</FONT>で設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../03_hen/1100_db_sys/index.htm#12mojishoku" target="_blank">【システムＤＢ[12]の説明を見る】</A><BR>
+            <BR>「<FONT color="#00ffff">\cR[数値]</FONT>」の数値には、<FONT color="#ffc83c">システムＤＢ[12:文字色]</FONT>の<FONT color="#ffff00">データＩＤ</FONT>を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼基本色→[色1]→[色2]と変化させる設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\r[あいうえお,基本色] <FONT color="#ffff00">\cR[1]</FONT>\r[かきくけこ,「1」の色] <FONT color="#ffff00">\cR[2]</FONT>\r[さしすせそ,「2」の色]</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="209.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="3" valign="top"><FONT size="+2" color="#ffff00"><A name="henka_-">\-[数値]</A></FONT></TD>
+            <TD>設定した数値(ピクセル単位)の分だけ、文字の表示間隔を詰めます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            マイナス値の場合は、文字の表示間隔が広がります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼「うえお」の文字間隔を「9ピクセル」詰めて、<BR>
+            　「くけこ」の文字間隔を「9ピクセル」広げます。<BR>
+            　なお「かき」の部分は元の文字間隔（0ピクセル）に戻しています。</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あい<FONT color="#ffff00">\-[9]</FONT>うえお<BR>
+            <FONT color="#ffff00">\-[0]</FONT>かき<FONT color="#ffff00">\-[-9]</FONT>くけこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="205.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>文字の表示間隔の初期設定は、「<FONT color="#00ffff">ゲームの基本設定</FONT>」にて行います。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../01_shoshin/1500_game_set/index.htm#gamen_moji_kankaku" target="_blank">【ゲームの基本設定の文章表示（文字列ピクチャ）微調整を確認する】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="henka_font">\font[数値]</A></FONT></TD>
+            <TD>フォントを変える時に使います。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>変更するフォントの種類は事前に「<FONT color="#00ffff">ゲームの基本設定</FONT>」に設定してください。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../01_shoshin/1500_game_set/index.htm#gamen_font" target="_blank">【ゲームの基本設定の使用フォントの設定画面を確認する】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD align="center"><FONT size="-1" color="#00ffff">ゲームの基本設定の[使用フォント]の項目名</FONT></TD>
+                  <TD align="center"><FONT size="-1" color="#00ffff">\font[数値]に設定する値</FONT></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD align="center">基本</TD>
+                  <TD align="center">0</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD align="center">サブ１</TD>
+                  <TD align="center">1</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD align="center">サブ２</TD>
+                  <TD align="center">2</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD align="center">サブ３</TD>
+                  <TD align="center">3</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼フォントサイズ「56」「１行目＝Meiryo」「２行目＝ＭＳ 明朝」の設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\f[56]あいうえお<BR>
+                  <FONT color="#ffff00">\font[1]</FONT>かきくけこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="206.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="5"><FONT size="+2" color="#ffff00"><A name="henka_a">\A+</A></FONT><FONT color="#ffff00"><BR>
+            </FONT><FONT size="+2" color="#ffff00">\A-</FONT></TD>
+            <TD>「\A+」はアンチエイリアスを付与し、文字の表示をなめらかにします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「\A-」はアンチエイリアスを解除します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>アンチエイリアスを付けると、文字の周りが半透明になって背景と重なり、<BR>
+                  なめらかな文字の表示になります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#3c0000">
+                  <TD align="center"><FONT color="#ffff00">アンチエイリアス有り</FONT></TD>
+                  <TD align="center"><IMG src="207_1.png" width="258" height="112" border="0"></TD>
+                </TR>
+                <TR bgcolor="#3c0000">
+                  <TD align="center"><FONT color="#ffff00">アンチエイリアス無し</FONT></TD>
+                  <TD align="center"><IMG src="207_2.png" width="258" height="112" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <BR>
+            <HR width="80%" size="1">
+            <BR>
+            但し使用するフォントや表示する文字のサイズによっては、<BR>
+            アンチエイリアス有りだと文字が見えにくくなる場合があります。<BR>
+            <BR>
+            <FONT color="#ffa0a0">▼ゲーム画面[640×480][ＭＳ 明朝][フォントサイズ：16]</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="207_3.png" width="147" height="176" border="0"><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            上段の「アンチエイリアス有り」の方も「白色」になっていますが、<BR>
+            半透明の部分が多すぎて、白色が目立たない状態になっています。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>アンチエイリアスを<FONT color="#ffff00">標準で付けるか付けないか</FONT>は、<BR>
+            「<FONT color="#00ffff">ゲームの基本設定</FONT>」で設定してください。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../01_shoshin/1500_game_set/index.htm#gamen_font_a" target="_blank">【ゲームの基本設定のフォントのアンチエイリアスの設定画面を確認する】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼フォント「ＭＳ 明朝」、フォントサイズ「56」、<BR>
+            　「１行目＝有り」「２行目＝無し」の設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\f[56]<FONT color="#ffff00">\A+</FONT>あいうえお<BR>
+                  <FONT color="#ffff00">\A-</FONT>あいうえお</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="207.png" width="600" height="140" border="0"></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="ichiran_seigyo">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■特殊文字一覧：文字表示の制御</FONT><BR>
+      <BR>
+      文字の表示に関する補助機能の一覧です。<BR>
+      <BR>
+      <FONT color="#00ffff">数値</FONT>の設定は<FONT color="#ffff00">半角数字</FONT>で設定してください。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">特殊文字</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="4" valign="top"><FONT size="+2" color="#ffff00"><A name="seigyo_en">\\</A></FONT></TD>
+            <TD>半角の「\」を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>通常は「\」の１文字を設定しても問題なく「\」が表示されますが、<BR>
+            文字列によっては<FONT color="#00ffff">「特殊文字」と誤認する場合</FONT>があり、<BR>
+            確実に表示させる場合は「\\」で設定した方が良いでしょう。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>例えば…<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">■文章:敵の画像は[Data\EnemyGraphic]にあります。</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            の設定を実行すると…<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="301.png" width="600" height="140" border="0"><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            と言ったように「\E」の部分が<FONT color="#ffff00">特殊文字(フチ付き)</FONT>と処理されてしまいます。<BR>
+            <BR>
+            このような場合は…<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">■文章:敵の画像は[Data<FONT color="#ffff00">\\</FONT>EnemyGraphic]にあります。</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            を設定する事で、「\」を特殊文字として処理しないようにする事ができます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>なお、ファイルを読み込む設定でフォルダー位置を指定する時には、<BR>
+            通常は「\」ではなく「/」（<FONT color="#00ffff">Data<FONT color="#ffff00">/</FONT>EnemyGraphic</FONT>）を使います。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="4" valign="top"><FONT size="+2" color="#ffff00"><A name="seigyo_key">\!</A></FONT></TD>
+            <TD>文章の表示途中で「キー入力待ち」を設定する時に使います。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あいうえお<FONT color="#ffff00">\!</FONT>かきくけこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            この場合は、「あいうえお」まで表示されてキー待ちになります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            そしてキーを押すと続きの「かきくけこ」が表示されて、<BR>
+            従来のキー待ちになり、キーを押すと文章ウィンドウが閉じます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#a0dcff">【選択肢】</FONT>に設定しても効果はありません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#a0dcff">【ピクチャ】</FONT>の文字列に設定した場合は、<BR>
+            「\!」のあとに設定された文字が表示されません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="seigyo_w">\.</A></FONT></TD>
+            <TD>「0.25秒」のウェイトを発生させます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼途中で１秒間のウェイトを設定</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あいうえお<FONT color="#ffff00">\.\.\.\.</FONT>かきくけこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            「\.」が１個で「0.25秒のウェイト」なので、<BR>
+            「\.」を４個設定して「1.00秒のウェイト」にしています。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT size="+2" color="#ffff00"><A name="seigyo_machi_nasi">\^</A></FONT></TD>
+            <TD>キー待ち無しで文章ウィンドウを閉じます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>設定場所は文頭でも文末でもどこでも問題ありません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">\^</FONT>」を設定した場合、全ての文章を表示した瞬間に文章ウィンドウが閉じます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            そのため、文末にウェイトの特殊文字「<FONT color="#00ffff">\.</FONT>」を設定したり、<BR>
+            特殊文字「<FONT color="#00ffff">\sp[数値]</FONT>」で１文字ごとの表示時間を遅くしたりして、<BR>
+            プレイヤーが文章を読む時間を確保した方が良いでしょう。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#a0dcff">【選択肢】</FONT>や<FONT color="#a0dcff">【ピクチャ】</FONT>の文字列に設定しても効果はありません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="seigyo_shunkan">\&gt;</A></FONT><FONT color="#ffff00"><BR>
+            </FONT><FONT size="+2" color="#ffff00">\&lt;</FONT></TD>
+            <TD>「\&gt;」は文章を瞬間表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「\&lt;」は「\&gt;」の設定で瞬間表示になった状態を元に戻します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>瞬間表示の状態でもウェイトの特殊文字「<FONT color="#00ffff">\.</FONT>」は機能します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="seigyo_bx">\bx[数値]</A></FONT></TD>
+            <TD>次の行以降のＸ開始位置を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>この設定は<FONT color="#ffff00">次の行からのＸ開始位置</FONT>が変わる設定なので、<BR>
+            １行目に設定した場合は２行目以降のＸ開始位置が変わります。<BR>
+            <BR>
+            １行目のＸ開始位置を変えたい時には「<FONT color="#00ffff">\mx[数値]</FONT>」を使ってください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼「１行目＝Ｘ0」「２行目＝Ｘ50」｢３行目＝Ｘ50｣「４行目＝Ｘ0」にする設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あいうえお<FONT color="#ffff00">\bx[50]</FONT><BR>
+                  かきくけこ<BR>
+                  さしすせそ<FONT color="#ffff00">\bx[0]</FONT><BR>
+たちつてと</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="305.png" width="600" height="140" border="0"><BR>
+            <BR>
+            <HR width="80%">
+            <BR>「<FONT color="#ffff00">\bx[数値]</FONT>」の設定位置は、前の行ならどこに設定しても問題ありません。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            例えば下記のような設定を行っても、上図のように表示されます。
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff"><FONT color="#ffff00">\bx[50]</FONT>あいうえお<BR>
+                  かきくけこ<BR>
+                  さしす<FONT color="#ffff00">\bx[0]</FONT>せそ<BR>
+たちつてと</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="seigyo_mx_my">\mx[数値]</A></FONT><BR>
+            <FONT size="+2" color="#ffff00">\my[数値]</FONT></TD>
+            <TD>「<FONT color="#00ffff">\mx[数値]</FONT>」は、次に表示する文字の横位置をずらします。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            プラス値は右へ移動、マイナス値は左へ移動します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            改行すると左端からの表示に戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">\my[数値]</FONT>」は、次に表示する文字の縦位置をずらします。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            プラス値は下へ移動、マイナス値は上へ移動します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼｢い｣と｢う｣、｢か｣と｢き｣、｢く｣と｢け｣の間を右に「30ピクセル」空け、<BR>
+            　｢え｣と｢お｣、｢き｣と｢く｣、｢け｣と｢こ｣の間を下に「25ピクセル」空けます。</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あい<FONT color="#ffff00">\mx[30]</FONT>うえ<FONT color="#ffff00">\my[25]</FONT>お<BR>
+                  か<FONT color="#ffff00">\mx[30]</FONT>き<FONT color="#ffff00">\my[25]</FONT>く<FONT color="#ffff00">\mx[30]</FONT>け<FONT color="#ffff00">\my[25]</FONT>こ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="306.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="5"><FONT size="+2" color="#ffff00"><A name="seigyo_ax_ay">\ax[数値]</A></FONT><BR>
+            <FONT size="+2" color="#ffff00">\ay[数値]</FONT></TD>
+            <TD>「<FONT color="#00ffff">\ax[数値]</FONT>」は、次に表示する文字の横位置を<FONT color="#00ffff">行頭</FONT>を基点に設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            プラス値は右、マイナス値は左。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            改行すると左端からの表示に戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">\ay[数値]</FONT>」は、次に表示する文字の縦位置を<FONT color="#00ffff">１行目の頂点</FONT>を基点に設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            プラス値は下、マイナス値は上。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼「う」からの表示位置を行頭から「150ピクセル」に移動し、<BR>
+            　「き」からの表示位置を行頭から「50ピクセル」に移動し、<BR>
+            　「け」からの表示位置を行頭から「250ピクセル」に移動し、<BR>
+            　「お」の表示位置を１行目の頂点から「25ピクセル」に移動し、<BR>
+            　「こ」の表示位置を１行目の頂点から「35ピクセル」に移動します。</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あい<FONT color="#ffff00">\ax[150]</FONT>うえ<FONT color="#ffff00">\ay[25]</FONT>お<BR>
+                  か<FONT color="#ffff00">\ax[50]</FONT>きく<FONT color="#ffff00">\ax[250]</FONT>け<FONT color="#ffff00">\ay[35]</FONT>こ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="307.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">\mx[数値]\my[数値]</FONT>と<FONT color="#ffff00">\ax[数値]\ay[数値]</FONT>との違いは、<BR>
+            <FONT color="#00ffff">\mx[数値]\my[数値]</FONT>は次に入力する文字の表示位置を基点に変更するのに対し、<BR>
+            <FONT color="#ffff00">\ax[数値]\ay[数値]</FONT>は常に左端や上端を基点に表示位置を変更します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            そのため「<FONT color="#00ffff">\mx[0]\my[0]</FONT>」を設定しても表示位置は変わりませんが、<BR>
+            「<FONT color="#ffff00">\ax[0]\ay[0]</FONT>」を設定すると、次の文字は１行目の１文字目の所に表示されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>ゲーム画面のサイズが<FONT color="#00ffff">[320×240[x2]]</FONT>の場合は、<BR>
+            <FONT color="#ffff00">\bx[数値]、\mx[数値]、\mx[数値]、\ax[数値]、\ay[数値]</FONT>の設定値は、<BR>
+            <FONT color="#00ffff">[640×480]</FONT>の画面サイズで設定してください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT size="+2" color="#ffff00"><A name="seigyo_sp">\sp[数値]</A></FONT></TD>
+            <TD>文字の表示速度を変えます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>数値は１秒間に表示する文字数を設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            「<FONT color="#00ffff">\sp[1]</FONT>」を設定すると１秒間に１文字を表示し、<BR>
+            「<FONT color="#00ffff">\sp[10]</FONT>」を設定すると１秒間に１０文字を表示します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            「<FONT color="#00ffff">\sp[0]</FONT>」の場合は瞬間表示になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>通常の文字の表示速度は<FONT color="#00ffff">システム変数[9]</FONT>で設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../03_hen/0005_hen_sys0-34/index.htm#sys009" target="_blank">【システム変数[9]の説明を見る】</A><BR>
+            <BR>
+            なお、<FONT color="#00ffff">システム変数[9]</FONT>の初期値は「<FONT color="#ffff00">500(1秒間に500文字)</FONT>」になっています。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">\sp[数値]</FONT>」で速度を変えたあとに元の表示速度に戻したい時には、<BR>
+            「<FONT color="#ffff00">\sp[\sys[9]]</FONT>」を設定してください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="seigyo_space">\space[数値]</A></FONT></TD>
+            <TD>改行時の行間を設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#1e0000">
+                  <TD valign="top"><FONT color="#ffff00">あいうえお<BR>
+                  かきくけこ<BR>
+                  さしすせそ</FONT></TD>
+                  <TD valign="top"><FONT color="#9bcdff">\space[20]</FONT><FONT color="#ffff00">あいうえお<BR>
+                  かきくけこ<BR>
+                  さしすせそ</FONT></TD>
+                  <TD><FONT color="#9bcdff">\space[40]</FONT><FONT color="#ffff00">あいうえお<BR>
+                  かきくけこ<BR>
+                  さしすせそ</FONT></TD>
+                </TR>
+                <TR bgcolor="#1e0000">
+                  <TD valign="top"><IMG src="309_1.png" width="170" height="140" border="0"></TD>
+                  <TD valign="top"><IMG src="309_2.png" width="170" height="140" border="0"></TD>
+                  <TD><IMG src="309_3.png" width="170" height="140" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>改行の行間の初期設定は、「<FONT color="#00ffff">ゲームの基本設定</FONT>」にて行います。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../01_shoshin/1500_game_set/index.htm#gamen_moji_kankaku" target="_blank">【ゲームの基本設定の文章表示（文字列ピクチャ）微調整を確認する】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="5"><FONT size="+2" color="#ffff00"><A name="seigyo_r">\r[文字,ルビ内容]</A></FONT></TD>
+            <TD>文字の上にルビを付けて表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>ルビのフォントサイズは、<FONT color="#00ffff">システム変数[23]</FONT>に設定してしてください。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../03_hen/0005_hen_sys0-34/index.htm#sys023" target="_blank">【システム変数[23]の説明を見る】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>ルビの文字の色は、<BR>
+            <FONT color="#ffc83c">システムＤＢ[12:文字色]</FONT>の<FONT color="#ffff00">データＩＤ[12:[Sys]ルビ用文字色]</FONT>で設定してください。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../03_hen/1100_db_sys/index.htm#12mojishoku" target="_blank">【システムＤＢ[12:文字色]の説明を見る】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>普通にルビを表示すると、上の枠とルビが重なったり、<BR>
+            １行目の文字と２行目のルビが重なってしまう事があります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="310_1.png" width="600" height="140" border="0"><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            このような場合は、縦の表示位置を変える特殊文字「<FONT color="#00ffff">\my[数値]</FONT>」を使って、<BR>
+            ルビを表示するスペースを確保すると良いでしょう。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\my[4]</FONT><FONT color="#ffff00">\r[あいうえお,アイウエオ]<BR>
+                  <FONT color="#00ffff">\my[4]</FONT>\r[かきくけこ,カキクケコ]</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="310_2.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>なお、ルビ文字の横の表示間隔は自動的に調整されます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\my[4]<FONT color="#ffff00">\r[Wolf RRG Editor,ウディタ]</FONT>を<FONT color="#ffff00">\r[使用,しよう]</FONT>しています。</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="310_3.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="8"><FONT size="+2" color="#ffff00"><A name="seigyo_i">\i[数値]<BR>\iS[数値]</A></FONT></TD>
+            <TD><FONT color="#00ffff">フォルダー[Data]→[BasicData]</FONT>の中に入っているアイコン画像を呼び出します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>アイコンの番号は「000～999」と「1000～9999」の間で設定できます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">フォルダー[Data]→[BasicData]</FONT>の中に入れるアイコンの画像ファイル名は、<BR>
+            ３桁以下の場合は「<FONT color="#ffff00">icon003</FONT>」や「<FONT color="#ffff00">icon3</FONT>」などと<FONT color="#ffff00">３桁以下</FONT>で設定してください。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            「<FONT color="#ffff00">icon0003</FONT>」などと４桁で設定すると、アイコンが表示できません。<BR>
+            <BR>
+            ４桁のアイコンの場合は、普通に「<FONT color="#ffff00">icon1234</FONT>」などと４桁で設定してください。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">※４桁の設定はあとから追加されたため、このような少々複雑な仕様になっています。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">\i[\v[2]]</FONT>」と言った感じに変数の値で番号を指定する事もできます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>指定した番号のアイコンファイルが無かった場合は、<BR>
+            エラーなどは表示されず、そのまま次の文字が表示されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼アイコン121番を呼び出す設定例</FONT><FONT color="#b4ff64">（アイコン画像は200％に拡大加工しています）</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">「<FONT color="#ffff00">\i[121]</FONT>カギ」を手に入れた。</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="311_1.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00d2ff">ユーザーＤＢ[2:アイテム][3:武器][4:防具]</FONT>にある名前の設定を<BR>
+            例えば「<FONT color="#00ffff">ダガー</FONT>」から「<FONT color="#ffff00">\i[0]ダガー</FONT>」に変える事で、<BR>
+            アイテム画面や装備画面、お店の画面にアイコンの画像を表示する事ができます。<BR>
+            <BR>
+            <FONT color="#ffa0a0">▼アイコンの表示例</FONT><FONT color="#b4ff64">（アイコンの画像を200％に拡大加工しています）</FONT><BR>
+            <IMG src="311_2.png" width="640" height="480" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><A href="../../01_shoshin/1500_game_set/index.htm" target="_blank">ゲームの基本設定</A>にある「<FONT color="#00ffff">ピクチャ拡大縮小時の描画方法</FONT>」の設定にて<BR>
+            「<FONT color="#ffff00">なめらか＆ぼんやり</FONT>」にしている場合、<BR>「<FONT color="#00ffff">\i[数値]</FONT>」の方は拡大縮小で「<FONT color="#ffff00">なめらか＆ぼんやり</FONT>」になりますが、<BR>
+            「<FONT color="#00ffff">\iS[数値]</FONT>」の場合は「<FONT color="#ffff00">くっきり＆ガタガタ</FONT>」になります。<BR>
+            <BR>
+            <FONT color="#ffa0a0">▼ゲームの基本設定の「<FONT color="#ffa0a0">ピクチャ拡大縮小時の描画方法</FONT>」で「なめらか＆ぼんやり」、<BR>
+            　「\isize[数値]」で400％拡大、アイコン122番を呼び出す設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\isize[400]<FONT color="#ffff00">\i[122]</FONT> カギを手に入れた。<BR>
+                  <FONT color="#ffff00">\iS[122]</FONT> カギを手に入れた。</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="311_3.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="7"><FONT size="+2" color="#ffff00"><A name="seigyo_img">\img[アドレス]</A><BR>
+            \imgS[アドレス]</FONT></TD>
+            <TD>指定した画像を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>アイコンを表示する「<FONT color="#00ffff">\i[数値]</FONT>」とは異なり、<BR>
+            <FONT color="#ffff00">[Picture]</FONT>や<FONT color="#ffff00">[EnemyGraphic]</FONT>などの好きなフォルダーから画像が呼び出せます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>指定したファイルが無い場合は、エラーが表示されるので注意してください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">ポスターが貼ってある。</FONT><BR>
+                  <FONT color="#ffff00">\img[Picture/ウルファールポスター.png]</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="312_1.png" width="600" height="140" border="0"><BR>
+            <BR>
+            <HR width="80%">
+            <BR>
+            画像の表示は、文字の表示と同じ仕様で表示されます。<BR>
+            <BR>
+            <FONT color="#ffa0a0">▼大きな文字を表示した時と同じように表示されます</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">ポスター<FONT color="#ffff00">\img[Picture/ウルファールポスター.png]</FONT>が貼ってある。</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="312_2.png" width="600" height="140" border="0"><BR>
+            <BR>
+            <HR width="80%">
+            <BR>
+            <FONT color="#ffa0a0">▼特殊文字「\m[数値]」を使って底辺を揃えた場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+                  <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ff96ff">\m[102]</FONT><FONT color="#00ffff">ポスター<FONT color="#ffff00">\img[Picture/ウルファールポスター.png]</FONT>が貼ってある。</FONT></TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="312_3.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#a0dcff">【選択肢】</FONT>に設定する事で、画像を選択する選択肢にする事ができます。<BR>
+            <BR>
+            <FONT color="#ffa0a0">▼設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■変数操作: Sys4:選択肢ｳｨﾝﾄﾞｳ Y座標 = 74 + 0<BR>
+                  ■文章選択肢:/ 【1】&lt;C&gt;\img[EnemyGraphic/GD_Goblin(Green).png]<BR>
+                  　　　　　　 / 【2】&lt;C&gt;\img[EnemyGraphic/GD_Golem(Stone).png]<BR>
+                  　　　　　　 / 【3】&lt;C&gt;\img[EnemyGraphic/GD_Basilisk(Red).png]<BR>
+-◇選択肢：【1】 &lt;C&gt;\img[EnemyGraphic/GD_Goblin(Green).png] の場合↓<BR>
+ |■<BR>
+-◇選択肢：【2】 &lt;C&gt;\img[EnemyGraphic/GD_Golem(Stone).png] の場合↓<BR>
+ |■<BR>
+-◇選択肢：【3】 &lt;C&gt;\img[EnemyGraphic/GD_Basilisk(Red).png] の場合↓<BR>
+ |■<BR>
+◇分岐終了◇<BR>
+</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="313_5.png" width="320" height="240" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><A href="../../01_shoshin/1500_game_set/index.htm" target="_blank">ゲームの基本設定</A>にある「<FONT color="#00ffff">ピクチャ拡大縮小時の描画方法</FONT>」の設定にて<BR>
+            「<FONT color="#ffff00">なめらか＆ぼんやり</FONT>」にしている場合、<BR>「<FONT color="#00ffff">\img[アドレス]</FONT>」の方は拡大縮小で「<FONT color="#ffff00">なめらか＆ぼんやり</FONT>」になりますが、<BR>
+            「<FONT color="#00ffff">\imgS[アドレス]</FONT>」の場合は「<FONT color="#ffff00">くっきり＆ガタガタ</FONT>」になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>アドレスを設定する所に隠しコードを設定する事で、特殊な画像の表示が可能です。<BR>
+            <BR>
+            <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD><FONT color="#00ffff" size="+2">■分割表示</FONT><BR>
+                  <BR>
+                  <TABLE cellspacing="2" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\img[<FONT color="#ffff00">&lt;DIV/X6/Y4/8&gt;</FONT>CharaChip/Special_Wolfarl.png]</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+                  <BR>
+                  上記の場合、横６、縦４に分割し、パターン８の画像を表示します。<BR>
+                  <BR>
+                  <IMG src="313_6.png" width="168" height="160" border="0"></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD><FONT size="+2" color="#00ffff">■部分切り出し</FONT><BR>
+                  <BR>
+                  <TABLE cellspacing="2" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\img[<FONT color="#ffff00">&lt;CUT/X80-240/Y60-180&gt;</FONT>SystemFile/TitleGraphic.png]</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+                  <BR>
+                  上記の場合、横80～240、縦60～180の範囲を切り出して表示します。<BR>
+                  <BR>
+                  <IMG src="02_1000_211.png" width="320" height="240" border="0"></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD><FONT size="+2" color="#00ffff">■アニメアイコン</FONT><BR>
+                  <BR>
+                  <TABLE cellspacing="2" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\img[<FONT color="#ffff00">&lt;ANIME/X6/Y4/12&gt;</FONT>CharaChip/Special_Wolfarl.png]</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+                  <BR>
+                  上記の場合、横６、縦４に分割し、<BR>
+                  １２フレームごとに切り替えて表示します。</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="seigyo_isize">\isize[数値]</A></FONT></TD>
+            <TD>数値にパーセントとなる数値を設定し、<BR>
+            アイコンを表示する「<FONT color="#00ffff">\i[数値]</FONT>」「<FONT color="#00ffff">\iS[数値]</FONT>」や<BR>
+            画像を表示する「<FONT color="#00ffff">\img[アドレス]</FONT>」「<FONT color="#00ffff">\imgS[アドレス]</FONT>」の表示倍率を変えます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffa0a0">▼アイコン番号「0」を100％、200％、300％、400％、500％で表示する時の設定例</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">\i[0] <FONT color="#ffff00">\isize[200]<FONT color="#00ffff">\i[0]</FONT> \isize[300]<FONT color="#00ffff">\i[0]</FONT> \isize[400]<FONT color="#00ffff">\i[0]</FONT> \isize[500]</FONT>\i[0]</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="314_1.png" width="600" height="140" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT size="+2" color="#ffff00"><A name="seigyo_se">\se[アドレス]</A></FONT></TD>
+            <TD>ＳＥを演奏します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>指定したファイルが無い場合は、エラーが表示されるので注意してください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>アドレスは<FONT color="#00ffff">\s[0]</FONT>などの文字列変数や<FONT color="#00ffff">データベースの文字列</FONT>で設定する事ができます。<BR>
+            <BR>
+            <FONT color="#ffa0a0">▼システムＤＢ[3:SEリスト]のデータＩＤ[5]のＳＥを演奏</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あいうえお<FONT color="#ffff00">\se[\sdb[3:5:0]]</FONT>かきくけこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>ＳＥの演奏では、<BR>
+            <FONT color="#00ffff">１行目＝ファイルアドレス<BR>
+            ２行目＝音量<BR>
+            ３行目＝周波数</FONT><BR>
+            の設定が可能です。<BR>
+            <BR>
+            <FONT color="#ffa0a0">▼「音量＝40、周波数＝50」の設定</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">あいうえお<FONT color="#ffff00">\se[SystemFile/SE_Enter.ogg<BR>
+40<BR>
+                  50]</FONT>かきくけこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <BR>
+            文章の設定欄で改行を行うと、文章の設定が見づらくなるため、<BR>
+            ＳＥの設定は文字列変数を使って行った方が良いでしょう。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">■文字列操作：S0[[サンプル]一時文字列] = &quot;SystemFile/SE_Enter.ogg\n40\n50&quot;<BR>
+                  ■文章:あいうえお<FONT color="#ffff00">\se[\s[0]]</FONT>かきくけこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="seigyo_l_c_r">&lt;L&gt;</A></FONT><FONT color="#ffff00"><BR>
+            </FONT><FONT size="+2" color="#ffff00">&lt;C&gt;<BR>
+            &lt;R&gt;</FONT></TD>
+            <TD>行単位の表示位置を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>
+            <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD valign="top">&lt;L&gt;</TD>
+                  <TD>これ以降の行を左寄せで表示します。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top">&lt;C&gt;</TD>
+                  <TD>これ以降の行を中央に表示します。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top">&lt;R&gt;</TD>
+                  <TD>これ以降の行を右寄せで表示します。</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            「&lt;L&gt;」を設定しなくても初めから左寄せになっています。
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            「&lt;L&gt;」は前の行で「&lt;C&gt;」や「&lt;R&gt;」になっている設定を元に戻す時に使います。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>右寄せや中央の表示位置は、文字列の中で<FONT color="#ffff00">最も長い文字数の行</FONT>に合わせて調整されます。<BR>
+            <BR>
+            <HR width="80%">
+            <BR>
+            <FONT color="#ffa0a0">▼全角で最大５文字幅の場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">左寄せ表示<BR>
+                  <FONT color="#ffff00">&lt;C&gt;</FONT>中央表示<BR>
+                  <FONT color="#ffff00">&lt;R&gt;</FONT>右寄せ表示</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="313_1.png" width="600" height="140" border="0"><BR>
+            <BR>
+            <HR width="80%">
+            <BR>
+            <FONT color="#ffa0a0">▼全角で１２文字幅の行がある場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">■■■■■■■■■■■■<BR>
+                  左寄せ表示<BR>
+                  <FONT color="#ffff00">&lt;C&gt;</FONT>中央表示<BR>
+                  <FONT color="#ffff00">&lt;R&gt;</FONT>右寄せ表示</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="313_2.png" width="600" height="140" border="0"><BR>
+            <BR>
+            <HR width="80%">
+            <BR>
+            <FONT color="#ffa0a0">▼全角で２３文字幅の行がある場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">■■■■■■■■■■■■■■■■■■■■■■■<BR>
+                  左寄せ表示<BR>
+                  <FONT color="#ffff00">&lt;C&gt;</FONT>中央表示<BR>
+                  <FONT color="#ffff00">&lt;R&gt;</FONT>右寄せ表示</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="313_3.png" width="600" height="140" border="0"><BR>
+            <BR>
+            <HR width="80%">
+            <BR>
+            「全角２３文字の横幅」「４行全てを右寄せ表示」と言った場合は、<BR>
+            <FONT color="#ffff00">５行目</FONT>に透明な全角２３文字を設定すれば表示できます。<BR>
+            <BR>
+            <FONT color="#ffa0a0">▼瞬間表示の特殊文字「\&gt;」を使用して、５行目に全角２３文字を設定</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellspacing="2" cellpadding="8" bgcolor="#000028">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">&lt;R&gt;</FONT><FONT color="#00ffff">右寄せ表示１<BR>
+                  右寄せ表示２<BR>
+                  右寄せ表示３<BR>
+                  右寄せ表示４<BR>
+                  \&gt;　　　　　　　　　　　　　　　　　　　　　　　</FONT><FONT color="#ff96ff">←透明文字を設定</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="313_4.png" width="600" height="140" border="0"></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="ichiran_mei">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■特殊文字一覧：項目名で使用</FONT><BR>
+      <BR>
+      データベースの項目名で使用できる特殊文字を紹介します。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      以下は<FONT color="#ffa0a0">可変ＤＢ[0:主人公ステータス]</FONT>の<FONT color="#3cf096">データＩＤ[12:ウルファール]</FONT>の<FONT color="#00ffff">項目[0:キャラ名]</FONT>を呼び出す時の設定です。<BR>
+      <BR>
+      <IMG src="400_0.png" width="595" height="750" border="0"><BR>
+      　　　　　　　　　　　　　　　　<FONT size="+4" color="#00ffff">▼</FONT><BR>
+      <IMG src="400_1.png" width="784" height="748" border="0"><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">特殊文字</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="koumoku_sdb" target="_self">\sdb[タイプ:データ:項目]</A></FONT></TD>
+            <TD><FONT color="#ffc83c">システムＤＢ</FONT>の指定した項目に設定された情報を項目名にします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼システムＤＢ[1:BGMリスト]のデータ[4:戦闘BGM]の<BR>
+            　項目[0:ファイル名]を設定した場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">\sdb[1:4:0]</FONT> → 項目名「<FONT color="#ffff00">BGM/Battle01_Juno.mid</FONT>」と表示。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="koumoku_udb">\udb[タイプ:データ:項目]</A></FONT></TD>
+            <TD><FONT color="#00d2ff">ユーザーＤＢ</FONT>の指定した項目に設定された情報を項目名にします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼ユーザーＤＢ[3:武器]のデータ[8:ロングソード]の<BR>
+            　項目[1:武器の説明[2行まで可]]を設定した場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">\udb[3:8:1]</FONT> → 項目名「<FONT color="#ffff00">長剣。攻撃力が30上がる。</FONT>」と表示。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="koumoku_cdb">\cdb[タイプ:データ:項目]</A></FONT></TD>
+            <TD><FONT color="#ffa0a0">可変ＤＢ</FONT>の指定した項目に設定された情報を項目名にします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼可変ＤＢ[0:主人公ステータス]のデータ[14:夕一]の<BR>
+            　項目[1:肩書き]を設定した場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">\cdb[0:14:1]</FONT> → 項目名「<FONT color="#ffff00">ニワトリ</FONT>」と表示。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="koumoku_sdb2">\sdb[タイプ:データ]</A></FONT></TD>
+            <TD><FONT color="#ffc83c">システムＤＢ</FONT>の指定したデータ名を項目名にします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼システムＤＢ[6:システム変数名]の<BR>
+            　データ[23:ルビのフォントサイズ]を設定した場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">\sdb[6:23]</FONT> → 項目名「<FONT color="#ffff00">ルビのフォントサイズ</FONT>」と表示。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="koumoku_udb2">\udb[タイプ:データ]</A></FONT></TD>
+            <TD><FONT color="#00d2ff">ユーザーＤＢ</FONT>の指定したデータ名を項目名にします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼ユーザーＤＢ[6:システム変数名]の<BR>
+            　データ[23:ルビのフォントサイズ]を設定した場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">\udb[6:23]</FONT> → 項目名「<FONT color="#ffff00">ルビのフォントサイズ</FONT>」と表示。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#ffff00"><A name="koumoku_cdb2">\cdb[タイプ:データ]</A></FONT></TD>
+            <TD><FONT color="#ffa0a0">可変ＤＢ</FONT>の指定したデータ名を項目名にします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">▼可変ＤＢ[18:基本ｼｽﾃﾑ用変数]の<BR>
+            　データ[52:１ページセーブ数]を設定した場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">\cdb[18:52]</FONT> → 項目名「<FONT color="#ffff00">１ページセーブ数</FONT>」と表示。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT size="+2" color="#ffff00"><A name="koumoku_d">\d[数値]</A></FONT></TD>
+            <TD>
+            <TABLE cellpadding="10">
+              <TBODY>
+                <TR>
+                  <TD bgcolor="#000050"><FONT color="#ffc8a0" size="+1">設定した項目番号</FONT><FONT size="+1">＋</FONT><FONT color="#00ffff" size="+1">\dの数値</FONT><FONT size="+1">＝</FONT><FONT color="#ffff00" size="+1">項目名に表示される数値</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            この計算式で項目名に表示される数値が決まります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">項目名2</FONT>」に「<FONT color="#00ffff">\d[3]</FONT>」を設定した場合は、<BR>「<FONT color="#ffff00">項目名2＋\d[3]</FONT>」なので、項目名は「5」になります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellpadding="3">
+              <TBODY>
+                <TR>
+                  <TD bgcolor="#000099" align="center" height="20">タイプの設定の画面</TD>
+                  <TD></TD>
+                  <TD bgcolor="#660000" align="center">データベースの画面</TD>
+                </TR>
+                <TR>
+                  <TD><IMG src="407_1.png" width="260" height="370" border="0"></TD>
+                  <TD></TD>
+                  <TD valign="top"><IMG src="407_2.png" width="260" height="370" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <BR>
+            <HR width="80%">
+            <BR>
+            上記の設定で「<FONT color="#00ffff">項目名1：Ｂ</FONT>」を<FONT color="#ffa0a0">削除</FONT>した場合は、<BR>
+            「<FONT color="#ffff00">項目名2：\d[3]</FONT>」が「<FONT color="#ffff00">項目名1：\d[3]</FONT>」になります。<BR>
+            <BR>
+            そのため「<FONT color="#ffff00">項目名1＋\d[3]</FONT>」となって項目名は「4」になります。<BR>
+            <BR>
+            <TABLE cellpadding="3">
+              <TBODY>
+                <TR>
+                  <TD bgcolor="#000099" align="center" height="20">タイプの設定の画面</TD>
+                  <TD></TD>
+                  <TD bgcolor="#660000" align="center">データベースの画面</TD>
+                </TR>
+                <TR>
+                  <TD><IMG src="407_3.png" width="260" height="370" border="0"></TD>
+                  <TD></TD>
+                  <TD valign="top"><IMG src="407_4.png" width="260" height="370" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>実際に<FONT color="#ffa0a0">可変ＤＢ[4:┣ 状態耐性]</FONT>では「<FONT color="#ffff00">\d[数値]</FONT>」を使用しています。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellpadding="3">
+              <TBODY>
+                <TR>
+                  <TD bgcolor="#000099" align="center" height="20">タイプの設定の画面</TD>
+                  <TD></TD>
+                  <TD bgcolor="#660000" align="center">データベースの画面</TD>
+                </TR>
+                <TR>
+                  <TD><IMG src="407_5.png" width="260" height="370" border="0"></TD>
+                  <TD></TD>
+                  <TD valign="top"><IMG src="407_6.png" width="260" height="370" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <BR>
+            項目名が全て同じ「<FONT color="#00ffff">&lt;\udb[8:\d[0]]&gt;成功率%</FONT>」になっていますが、<BR>
+            「項目名<FONT color="#ffff00">0</FONT>」の場合は「<FONT color="#00ffff">&lt;\udb[8:<FONT color="#ffff00">0</FONT>]&gt;成功率%</FONT>」となり、<BR>
+            「項目名<FONT color="#ffff00">1</FONT>」の場合は「<FONT color="#00ffff">&lt;\udb[8:<FONT color="#ffff00">1</FONT>]&gt;成功率%</FONT>」となるため、<BR>
+            項目ごとに異なる状態名が表示されます。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <FONT size="+2" color="#ff96ff">▼項目名で使用する場合の注意点</FONT><BR>
+      <BR>
+      <FONT color="#00ffff">\udb[<FONT color="#ffff00">\cdb[1:1:1]</FONT>:2:3]</FONT>のようにデータベースの読み込みを二重に設定すると、<BR>
+      動作が不安定になるので設定しないでください。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <BR>
+      <FONT size="+2" color="#ffff00">◎関連ページ</FONT><BR>
+      <BR>
+      <A href="../0000_ibekoma_nani/" target="_top">◆「イベントコマンド」って何？</A><BR>
+      <A href="../0100_bunshou/" target="_top">┣◆文章の表示</A><BR>
+      <FONT color="#ffff00">┃┗◆特殊文字</FONT><BR>
+      <A href="../0200_sentakushi/" target="_top">┣◆選択肢</A><BR>
+      <A href="../0210_rei_sentakushi/" target="_top">┃┗◆【使用例】選択肢</A><BR>
+      <A href="../0300_hensuu/" target="_top">┣◆変数操作</A><BR>
+      <A href="../0301_enzansi/" target="_top">┃┗◆演算子について</A><BR>
+      <A href="../0400_db/" target="_top">┣◆ＤＢ操作</A><BR>
+      <A href="../0500_mojiretsu/" target="_top">┣◆文字列操作</A><BR>
+      <A href="../0510_rei_mojiretsu/" target="_top">┃┗◆【使用例】文字列操作</A><BR>
+      <A href="../0600_hensuu_plus/" target="_top">┣◆変数操作＋</A><BR>
+      <A href="../0601_xy/" target="_top">┃┣◆「Ｘ座標･Ｙ座標」と「画面Ｘ座標･画面Ｙ座標」の違い</A><BR>
+      <A href="../0610_rei_hensuu_plus_chara/" target="_top">┃┣◆【使用例】変数操作＋の｢キャラ｣と｢位置｣</A><BR>
+      <A href="../0611_rei_hensuu_plus_picture/" target="_top">┃┗◆【使用例】変数操作＋の｢ピクチャ｣と｢その他｣</A><BR>
+      <A href="../0700_jouken_hen/" target="_top">┣◆条件(数値)</A><BR>
+      <A href="../0800_jouken_moji/" target="_top">┣◆条件(文字列)</A><BR>
+      <A href="../0900_key/" target="_top">┣◆キー入力</A><BR>
+      <A href="../0910_rei_key/" target="_top">┃┗◆【使用例】キー入力</A><BR>
+      <A href="../1000_picture/" target="_top">┣◆ピクチャ</A><BR>
+      <A href="../1001_hyoujikeisiki/" target="_top">┃┗◆表示形式(通常･加算･減算･乗算)について</A><BR>
+      <A href="../1100_effect/" target="_top">┣◆エフェクト</A><BR>
+      <A href="../1101_effect_z/" target="_top">┃┣◆「Ｚオーダー」について</A><BR>
+      <A href="../1110_rei_effect/" target="_top">┃┗◆【使用例】エフェクト</A><BR>
+      <A href="../1200_sound/" target="_top">┣◆サウンド</A><BR>
+      <A href="../1300_save_load/" target="_top">┣◆セーブ･ロード操作</A><BR>
+      <A href="../1400_party/" target="_top">┣◆パーティ画像</A><BR>
+      <A href="../1500_chip/" target="_top">┣◆チップ処理</A><BR>
+      <A href="../1510_rei_chip/" target="_top">┃┗◆【使用例】チップ処理</A><BR>
+      <A href="../1600_bashoidou/" target="_top">┣◆場所移動</A><BR>
+      <A href="../1700_ev/" target="_top">┣◆イベント制御</A><BR>
+      <A href="../1701_ev_dousa/" target="_top">┃┣◆キャラクターの動作指定</A><BR>
+      <A href="../1710_rei_ev/" target="_top">┃┗◆【使用例】イベント制御</A><BR>
+      <A href="../1800_com/" target="_top">┣◆コモンイベント</A><BR>
+      <A href="../1900_dl/" target="_top">┣◆ダウンロード</A><BR>
+      <A href="../2000_pro/" target="_top">┗◆プロ版機能</A><BR>
+      　<A href="../2010_pro_hikisuu/" target="_top">┗◆起動時の引数について</A></TD>
+    </TR>
+  </TBODY>
+</TABLE>
+</CENTER>
+<DIV style="position: relative; top: 20px" align="center">
+<HR>
+<A href="../../" target="_top">YADOT-WOLFトップ</A>　　<A href="http://kkni.net/" target="_blank">気紛れな空間へ戻る</A>　　<A href="../../../page/mail.htm" target="_blank">メール</A><BR>
+　</DIV>
+</BODY>
+</HTML>

@@ -1,0 +1,8 @@
+M2: styled 101 messages, save picture table and variable database
+
+- message::layout_styled renders \f[n] font sizes, \c[n] palette colours, \E outlines and <C>/<R> alignment
+- Game::message_layout feeds the capture and play loops; one em of width slack stops cosmic-text wrapping the last glyph
+- savegame::part5_from_screen / picture_to_record write the live picture table back into SavePart5
+- Databases::write_into feeds runtime CDataBase cells into SaveFile::vardb before to_bytes_rebuilt
+- opcode 101 publishes the @n face id through Sys0 for the message-window coroutine
+- docs: SAVE_SPEC SavePart5 is the current picture table (not event state), BASELINE and M2_SLICE refreshed

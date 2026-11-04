@@ -1,0 +1,7 @@
+マップ設定 entries with a map file: 6
+   id=0 name=タイトル file=MapData/TitleMap.mps
+   id=1 name=自宅1 file=MapData/SampleMapA.mps
+   id=2 name=クマヘ file=MapData/SampleMapA_1.mps
+   id=3 name=ニューゲーム処理 file=MapData/Map003.mps
+   id=24 name=ロード処理 file=MapData/Map024.mps
+   id=31 name=セーブ file=MapData/Map031.mps

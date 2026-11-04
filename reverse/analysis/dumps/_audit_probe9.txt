@@ -1,0 +1,38 @@
+== 1 BGMリスト rows 16
+    {"name": "タウン", "data": [{"name": "ファイル名", "value": ""}, {"name": "再生音量[%] 標準100", "value": 80}, {"name": "再生周波数[%]", "value": 100}, {"name": "ループ開始位置(ms)/キ—±", "value": 0}]}
+    {"name": "スタッフロール", "data": [{"name": "ファイル名", "value": ""}, {"name": "再生音量[%] 標準100", "value": 100}, {"name": "再生周波数[%]", "value": 100}, {"name": "ループ開始位置(ms)/キ—±", "value": 0}]}
+    {"name": "タイトル曲", "data": [{"name": "ファイル名", "value": ""}, {"name": "再生音量[%] 標準100", "value": 80}, {"name": "再生周波数[%]", "value": 100}, {"name": "ループ開始位置(ms)/キ—±", "value": 0}]}
+    {"name": "戦闘BGM", "data": [{"name": "ファイル名", "value": ""}, {"name": "再生音量[%] 標準100", "value": 110}, {"name": "再生周波数[%]", "value": 100}, {"name": "ループ開始位置(ms)/キ—±", "value": 0}]}
+== 3 SEリスト rows 20
+    {"name": "[システム]決定音", "data": [{"name": "ファイル名", "value": "SystemFile/[SE]Enter.ogg"}, {"name": "再生音量[%]", "value": 90}, {"name": "再生周波数[%]", "value": 100}, {"name": "メモリ解放モード", "value": 0}]}
+    {"name": "[システム]カーソル移動", "data": [{"name": "ファイル名", "value": "SystemFile/[SE]Cursor.ogg"}, {"name": "再生音量[%]", "value": 50}, {"name": "再生周波数[%]", "value": 120}, {"name": "メモリ解放モード", "value": 0}]}
+    {"name": "[システム]キャンセル音", "data": [{"name": "ファイル名", "value": "SystemFile/[SE]Cancel.ogg"}, {"name": "再生音量[%]", "value": 80}, {"name": "再生周波数[%]", "value": 100}, {"name": "メモリ解放モード", "value": 0}]}
+    {"name": "[システム]回復音", "data": [{"name": "ファイル名", "value": "SE/Healing.wav"}, {"name": "再生音量[%]", "value": 30}, {"name": "再生周波数[%]", "value": 150}, {"name": "メモリ解放モード", "value": 0}]}
+== 8 キャラクター画像 rows 300
+    {"name": "※空データ", "data": [{"name": "読込ファイル名", "value": ""}]}
+    {"name": "キリマンジャロ歩く", "data": [{"name": "読込ファイル名", "value": ""}]}
+    {"name": "キリマンジャロ走る", "data": [{"name": "読込ファイル名", "value": "CharaChip/kiri2TX.png"}]}
+    {"name": "キリマンジャロ疲れる", "data": [{"name": "読込ファイル名", "value": "CharaChip/kiri3TX.png"}]}
+== 9 キャラ影グラフィック名 rows 6
+    {"name": "人間·通常サイズ影", "data": [{"name": "読込ファイル名", "value": "SystemFile/shadow64TX.png"}]}
+    {"name": "影なし", "data": [{"name": "読込ファイル名", "value": ""}]}
+    {"name": "", "data": [{"name": "読込ファイル名", "value": "SystemFile/shadow64TX.png"}]}
+    {"name": "", "data": [{"name": "読込ファイル名", "value": ""}]}
+== 10 ウィンドウ画像 rows 3
+    {"name": "○入力待ちポ—ズ画像", "data": [{"name": "画像ファイル名", "value": ""}, {"name": "縦分割数(一部のみ)", "value": 0}]}
+    {"name": "×選択肢ウィンドウ画像", "data": [{"name": "画像ファイル名", "value": "SystemFile/WindowBase.png"}, {"name": "縦分割数(一部のみ)", "value": 0}]}
+    {"name": "○選択肢カーソル指定", "data": [{"name": "画像ファイル名", "value": "SystemFile/CursorBase.png"}, {"name": "縦分割数(一部のみ)", "value": 1}]}
+== 13 遠景画像 rows 80
+    {"name": "自宅", "data": [{"name": "画像ファイル名", "value": "cg/bg01.jpg"}, {"name": "X移動速度", "value": 0}, {"name": "Y移動速度", "value": 0}, {"name": "マップと位置連動する？", "value": 1}]}
+    {"name": "草原", "data": [{"name": "画像ファイル名", "value": "cg/bg_07_guild_a.jpg"}, {"name": "X移動速度", "value": 0}, {"name": "Y移動速度", "value": 0}, {"name": "マップと位置連動する？", "value": 1}]}
+    {"name": "メイン", "data": [{"name": "画像ファイル名", "value": "cg/bg_01_home_d.jpg"}, {"name": "X移動速度", "value": 0}, {"name": "Y移動速度", "value": 0}, {"name": "マップと位置連動する？", "value": 1}]}
+    {"name": "森の入口", "data": [{"name": "画像ファイル名", "value": "Picture/forest_entrance01.png"}, {"name": "X移動速度", "value": 0}, {"name": "Y移動速度", "value": 0}, {"name": "マップと位置連動する？", "value": 1}]}
+== 24 顔グラフィック名 rows 12
+    {"name": "ウィンドウ表示なし", "data": [{"name": "顔画像ファイル", "value": ""}]}
+    {"name": "ウィンドウのみ", "data": [{"name": "顔画像ファイル", "value": ""}]}
+    {"name": "妹（制服）", "data": [{"name": "顔画像ファイル", "value": "Picture/face01.png"}]}
+    {"name": "妹（部屋義）", "data": [{"name": "顔画像ファイル", "value": "Picture/face02.png"}]}
+==DB 16 画像/音声設定 rows 1
+    {"name": "画像/音声基本設定", "data": [{"name": "ウィンドウ画像ファイル", "value": "SystemFile/WindowBase_amania.png"}, {"name": "カーソル画像ファイル", "value": "SystemFile/CursorBase.png"}, {"name": "メッセ—ジウィンドウ ベ—ス画像", "value": "SystemFile/WindowBase.png"}, {"name": "決定 効果音ファイル", "value": "SystemFile/[SE]Enter.ogg\r\n90\r\n100"}, {"name": "キャンセル 効果音ファイル", "value": "SystemFile/[SE]Cancel.ogg\r\n80\r\n100"}, {"name": "カーソル 効果音ファイル", "value": "SystemFile/[SE]Cursor.ogg\r\n50\r\n120"}, {"name": "ブザー 効果音ファイル", "value": "SystemFile/[SE]Buzzer.ogg\r\n60\r\n100"}, {"name": "装備時 効果音ファイル", "value": "SystemFile/[SE]Equip.ogg"}, {"name": "装備解除 効果音ファイル", "value": "SystemFile/[SE]Release.ogg"}, {"name": "メニュー開く 効果音ファイル", "value": "SystemFile/[SE]MenuOpen.ogg\r\n80\r\n108"}, {"name": "メニュー閉じ 効果音ファイル", "value": "SystemFile/[SE]Canc
+==DB 17 システム設定 rows 1
+    {"name": "システム基本設定", "data": [{"name": "アイテム最大所持数", "value": 300}, {"name": "最大HP·SP限界値", "value": 999}, {"name": "能力限界値", "value": 999}, {"name": "メニュー欄コマンド1", "value": 10}, {"name": "メニュー欄コマンド2", "value": 1}, {"name": "メニュー欄コマンド3", "value": 2}, {"name": "メニュー欄コマンド4", "value": 3}, {"name": "メニュー欄コマンド5", "value": 5}, {"name": "メニュー欄コマンド6", "value": 4}, {"name": "メニュー欄コマンド7", "value": 0}, {"name": "メニュー欄コマンド8", "value": 0}, {"name": "■特殊メニューA名称　　　　", "value": "商谈"}, {"name": "┗特殊メニューA呼出コモン", "value": 212}, {"name": "■特殊メニューB名称　　", "value": ""}, {"name": "┗特殊メニューB呼出コモン", "value": 4294967295}, {"name": "■特殊メニューC名称　　", "value": ""}, {"name": "┗特殊メニューC呼出コモン", "value": 4294967295}, {"name": "■特殊メニューD名称　　　", "value": ""}, {"name": "┗特殊メニューD呼出コモン", "value": 4294967295}, {"name": "ステータス状態の表示方法", "v

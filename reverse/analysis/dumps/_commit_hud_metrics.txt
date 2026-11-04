@@ -1,0 +1,18 @@
+M6: shape text-picture anchors with real font metrics
+
+Text-picture layout used a half-em advance, so right-aligned HUD text drifted
+about 4 px from the retail ink. Load the real Lolita.ttf advances instead:
+
+- crates/wolf-game/src/fontmetrics.rs: FontMetrics parses the TTF with
+  ttf-parser, caches per-character em advances, falls back to choice::advance_at
+  for uncovered glyphs and returns 0 for newlines.
+- Game gains font_metrics + set_font_metrics; Game::text_quads routes through
+  textpic::layout_with / measure_with when a font is installed.
+- CLI install_font_metrics feeds capture/dump/play from the same find_font bytes
+  the renderer already shapes with.
+
+Proof: pic 6200 (\f[24]18:30) right-aligned left edge moves from 80 to 83.69
+(retail ink 85) while capture --map-run Map003 --event 1 --frames 2400 stays
+92.1% non-black, 180674 instructions, 0 warnings. Tests: fontmetrics 3 unit
+tests + crates/wolf-game/tests/text_metrics.rs same-Game before/after assertion.
+Docs: HSCENE P3 resolved, M2 HUD row, HANDOFF_M4, BASELINE text_metrics.

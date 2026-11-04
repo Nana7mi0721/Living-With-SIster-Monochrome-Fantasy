@@ -1,0 +1,230 @@
+
+--- reverse callers of CE28 [◆バトルの発生] ---
+  total 0 sites
+
+--- reverse callers of CE188 [X◆戦闘処理] ---
+  CE28 [◆バトルの発生] pc0 code300
+  CE37 [◇ランダムエンカウント処理 ] pc53 code300
+  total 2 sites
+
+--- reverse callers of CE239 [■戦闘呼び出し] ---
+  CE253 [┣地域貢献] pc174 code210
+  CE253 [┣地域貢献] pc177 code210
+  CE253 [┣地域貢献] pc180 code210
+  CE253 [┣地域貢献] pc185 code210
+  CE253 [┣地域貢献] pc188 code210
+  CE253 [┣地域貢献] pc191 code210
+  CE256 [■討伐依頼] pc131 code210
+  CE256 [■討伐依頼] pc157 code210
+  CE256 [■討伐依頼] pc183 code210
+  CE256 [■討伐依頼] pc213 code210
+  CE256 [■討伐依頼] pc239 code210
+  CE256 [■討伐依頼] pc265 code210
+  CE256 [■討伐依頼] pc295 code210
+  CE256 [■討伐依頼] pc321 code210
+  CE256 [■討伐依頼] pc347 code210
+  CE256 [■討伐依頼] pc379 code210
+  CE256 [■討伐依頼] pc405 code210
+  CE256 [■討伐依頼] pc431 code210
+  CE256 [■討伐依頼] pc461 code210
+  CE256 [■討伐依頼] pc487 code210
+  CE256 [■討伐依頼] pc513 code210
+  CE256 [■討伐依頼] pc542 code210
+  CE258 [討伐イベント] pc664 code210
+  CE258 [討伐イベント] pc757 code210
+  CE258 [討伐イベント] pc760 code210
+  CE258 [討伐イベント] pc763 code210
+  CE258 [討伐イベント] pc768 code210
+  CE258 [討伐イベント] pc771 code210
+  CE258 [討伐イベント] pc774 code210
+  CE285 [■超大冒険] pc123 code210
+  CE286 [超大冒険イベント] pc519 code210
+  CE286 [超大冒険イベント] pc595 code210
+  CE286 [超大冒険イベント] pc598 code210
+  CE286 [超大冒険イベント] pc601 code210
+  CE286 [超大冒険イベント] pc606 code210
+  CE286 [超大冒険イベント] pc609 code210
+  CE286 [超大冒険イベント] pc665 code210
+  CE287 [■大討伐依頼] pc87 code210
+  CE287 [■大討伐依頼] pc113 code210
+  CE287 [■大討伐依頼] pc139 code210
+  CE287 [■大討伐依頼] pc167 code210
+  CE287 [■大討伐依頼] pc193 code210
+  CE289 [大討伐イベント] pc604 code210
+  CE289 [大討伐イベント] pc697 code210
+  CE289 [大討伐イベント] pc700 code210
+  CE289 [大討伐イベント] pc703 code210
+  CE289 [大討伐イベント] pc708 code210
+  CE289 [大討伐イベント] pc711 code210
+  CE289 [大討伐イベント] pc714 code210
+  CE297 [■大冒険] pc107 code210
+  CE297 [■大冒険] pc235 code210
+  CE297 [■大冒険] pc301 code210
+  CE297 [■大冒険] pc406 code210
+  CE297 [■大冒険] pc542 code210
+  CE298 [大冒険イベント] pc521 code210
+  CE298 [大冒険イベント] pc611 code210
+  CE298 [大冒険イベント] pc616 code210
+  CE298 [大冒険イベント] pc619 code210
+  CE298 [大冒険イベント] pc680 code210
+  CE301 [ランダムイベント] pc435 code210
+  CE301 [ランダムイベント] pc815 code210
+  CE301 [ランダムイベント] pc3702 code210
+  CE305 [メインシナリオ] pc139 code210
+  CE305 [メインシナリオ] pc417 code210
+  CE305 [メインシナリオ] pc430 code210
+  CE305 [メインシナリオ] pc470 code210
+  CE305 [メインシナリオ] pc617 code210
+  CE305 [メインシナリオ] pc970 code210
+  CE305 [メインシナリオ] pc1488 code210
+  CE305 [メインシナリオ] pc1797 code210
+  CE305 [メインシナリオ] pc1933 code210
+  CE305 [メインシナリオ] pc2206 code210
+  CE305 [メインシナリオ] pc2447 code210
+  CE305 [メインシナリオ] pc2662 code210
+  CE305 [メインシナリオ] pc2673 code210
+  CE305 [メインシナリオ] pc2882 code210
+  CE305 [メインシナリオ] pc2893 code210
+  CE305 [メインシナリオ] pc2911 code210
+  CE305 [メインシナリオ] pc2964 code210
+  CE305 [メインシナリオ] pc3091 code210
+  CE305 [メインシナリオ] pc3285 code210
+  CE424 [温泉イベント　前編] pc116 code210
+  CE425 [温泉イベント　後編] pc71 code210
+  CE425 [温泉イベント　後編] pc95 code210
+  CE425 [温泉イベント　後編] pc138 code210
+  CE426 [温泉イベント　討伐] pc111 code210
+  CE427 [温泉討伐イベント] pc349 code210
+  CE437 [アザラシ　討伐] pc105 code210
+  CE438 [アザラシイベント] pc343 code210
+  CE441 [討伐イベント] pc344 code210
+  CE446 [DLC最後の戦い] pc46 code210
+  CE446 [DLC最後の戦い] pc142 code210
+  CE448 [クマベアー討伐] pc168 code210
+  CE449 [デススコーンー討伐] pc139 code210
+  CE449 [デススコーンー討伐] pc143 code210
+  CE452 [■DLCストーリー] pc922 code210
+  CE452 [■DLCストーリー] pc4184 code210
+  CE452 [■DLCストーリー] pc5770 code210
+  CE452 [■DLCストーリー] pc6053 code210
+  CE458 [DLC地域貢献] pc129 code210
+  CE458 [DLC地域貢献] pc132 code210
+  CE458 [DLC地域貢献] pc135 code210
+  CE458 [DLC地域貢献] pc138 code210
+  CE461 [DLCランダムイベント夕方] pc572 code210
+  total 104 sites
+
+--- reverse callers of CE244 [┗終了判定] ---
+  CE239 [■戦闘呼び出し] pc795 code210
+  CE241 [┣ターン開始処理] pc136 code210
+  CE241 [┣ターン開始処理] pc224 code210
+  CE241 [┣ターン開始処理] pc253 code210
+  CE242 [┣コマンド処理] pc201 code210
+  CE242 [┣コマンド処理] pc302 code210
+  CE242 [┣コマンド処理] pc414 code210
+  CE242 [┣コマンド処理] pc555 code210
+  CE242 [┣コマンド処理] pc614 code210
+  CE242 [┣コマンド処理] pc746 code210
+  CE242 [┣コマンド処理] pc865 code210
+  CE242 [┣コマンド処理] pc943 code210
+  CE242 [┣コマンド処理] pc1047 code210
+  CE242 [┣コマンド処理] pc1124 code210
+  CE242 [┣コマンド処理] pc1184 code210
+  CE242 [┣コマンド処理] pc1393 code210
+  CE243 [┣敵の行動] pc8 code210
+  CE243 [┣敵の行動] pc857 code210
+  CE243 [┣敵の行動] pc862 code210
+  CE243 [┣敵の行動] pc979 code210
+  CE243 [┣敵の行動] pc985 code210
+  CE243 [┣敵の行動] pc1146 code210
+  total 22 sites
+
+--- reverse callers of CE195 [X┣◆１ターンの処理を実行] ---
+  CE188 [X◆戦闘処理] pc116 code300
+  total 1 sites
+
+--- reverse callers of CE197 [X┃┗◆１行動ループ] ---
+  CE165 [X[戦]┗単体処理] pc1104 code300
+  CE192 [X┃┣◆味方コマンド選択] pc242 code300
+  CE195 [X┣◆１ターンの処理を実行] pc31 code300
+  total 3 sites
+
+--- reverse callers of CE31 [◆[戦闘用]ダメージ処理] ---
+  total 0 sites
+
+--- reverse callers of CE172 [X[戦]敵/味方·勝敗判定] ---
+  CE188 [X◆戦闘処理] pc45 code300
+  CE188 [X◆戦闘処理] pc66 code300
+  CE188 [X◆戦闘処理] pc73 code300
+  CE188 [X◆戦闘処理] pc120 code300
+  CE188 [X◆戦闘処理] pc164 code300
+  CE197 [X┃┗◆１行動ループ] pc69 code300
+  CE197 [X┃┗◆１行動ループ] pc140 code300
+  CE197 [X┃┗◆１行動ループ] pc201 code300
+  total 8 sites
+
+--- reverse callers of CE171 [X[戦]敵撃破処理] ---
+  CE29 [◆[戦闘用]敵キャラの追加] pc27 code300
+  CE31 [◆[戦闘用]ダメージ処理] pc145 code300
+  CE139 [X[戦]状態更新] pc125 code300
+  CE165 [X[戦]┗単体処理] pc251 code300
+  CE165 [X[戦]┗単体処理] pc889 code300
+  CE165 [X[戦]┗単体処理] pc1002 code300
+  CE197 [X┃┗◆１行動ループ] pc67 code300
+  total 7 sites
+
+--- reverse callers of CE182 [X[戦]戦闘メッセージ表示] ---
+  CE30 [◆[戦闘用]メッセージ表示] pc3 code300
+  CE138 [X[戦]┗状態変化メッセ—ジ] pc21 code300
+  CE165 [X[戦]┗単体処理] pc338 code300
+  CE165 [X[戦]┗単体処理] pc1080 code300
+  CE173 [X[戦]┗ 残りターン数表示] pc8 code300
+  CE188 [X◆戦闘処理] pc223 code300
+  CE196 [X┃┣◆行動可能判定] pc124 code300
+  CE196 [X┃┣◆行動可能判定] pc132 code300
+  CE196 [X┃┣◆行動可能判定] pc261 code300
+  CE196 [X┃┣◆行動可能判定] pc273 code300
+  CE196 [X┃┣◆行動可能判定] pc282 code300
+  CE196 [X┃┣◆行動可能判定] pc303 code300
+  CE196 [X┃┣◆行動可能判定] pc323 code300
+  CE196 [X┃┣◆行動可能判定] pc338 code300
+  CE196 [X┃┣◆行動可能判定] pc361 code300
+  CE196 [X┃┣◆行動可能判定] pc388 code300
+  CE196 [X┃┣◆行動可能判定] pc398 code300
+  CE197 [X┃┗◆１行動ループ] pc63 code300
+  total 18 sites
+
+--- reverse callers of CE238 [バトルカットイン表示] ---
+  CE242 [┣コマンド処理] pc503 code210
+  CE242 [┣コマンド処理] pc644 code210
+  CE242 [┣コマンド処理] pc995 code210
+  CE242 [┣コマンド処理] pc1083 code210
+  CE242 [┣コマンド処理] pc1148 code210
+  CE242 [┣コマンド処理] pc1231 code210
+  CE243 [┣敵の行動] pc931 code210
+  CE243 [┣敵の行動] pc1205 code210
+  CE243 [┣敵の行動] pc1227 code210
+  CE243 [┣敵の行動] pc1247 code210
+  CE243 [┣敵の行動] pc1272 code210
+  CE243 [┣敵の行動] pc1295 code210
+  CE244 [┗終了判定] pc112 code210
+  CE426 [温泉イベント　討伐] pc375 code210
+  CE426 [温泉イベント　討伐] pc382 code210
+  CE446 [DLC最後の戦い] pc212 code210
+  CE452 [■DLCストーリー] pc5775 code210
+  CE522 [アルバムストーリー表示処理] pc350 code210
+  total 18 sites
+
+--- reverse callers of CE201 [X┗◆戦闘終了処理] ---
+  CE188 [X◆戦闘処理] pc177 code300
+  total 1 sites
+
+--- reverse callers of CE200 [X┣◆戦利品獲得処理] ---
+  CE188 [X◆戦闘処理] pc176 code300
+  total 1 sites
+
+--- reverse callers of CE199 [X┣◆主人公ＤＢ復元] ---
+  CE188 [X◆戦闘処理] pc175 code300
+  total 1 sites
+
+=== depth-0/depth-1 boundary: who calls CE28 (only CE28 -> 188) ===

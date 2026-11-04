@@ -1,0 +1,40 @@
+version_header=0x55 u8len=35
+  tile_size        16
+  dir_image        8
+  dir_move         8
+  guruguru         1
+  fps              60
+  shadow           0
+  midi_source      1
+  anim_patterns    3
+  move_width       0
+  move_hitbox      0
+  text_hpad        0
+  text_linespace   6
+  choice_linespace 14
+  unk              0
+  antialias        0
+  spd_event        4
+  spd_hero         9
+  lang             4
+  img_scale        0
+  inactive         1
+  syslang          1
+string_settings_len=13
+  game_title         '妹相随～黑白世界的缤纷冒险～'
+  serial             '0000-0000'
+  encryption_key     'WLFRPrO!p(;s5((8P@((UFWlu$#5(='
+  font_base          'LOLITA'
+  font_sub1          'LOLITA'
+  font_sub2          'LOLITA'
+  font_sub3          'LOLITA'
+  start_hero_graphic ''
+  subtitle           '+DLC v2.03'
+  pro_loadingpic     'SystemFile/logo.jpg'
+  pro_gauge          'SystemFile/logo2.jpg'
+  pro_title_loading  ''
+  pro_title_gameplay ''
+filesize=29272 actual=29273 unk3=0 u16len=22
+u16 raw: (38218, 2, 1, 4, 2, 8, 4, 16, 8, 32, 16, 64, 32, 128, 64, 325, 1024)
+screen_dimensions_w=1024 h=-1 wolf_version=0x0000
+remaining=28955 footer=0xc3

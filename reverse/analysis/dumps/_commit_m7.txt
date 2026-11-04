@@ -1,0 +1,19 @@
+M7: port the retail PRNG and pin the battle/H-scene slices
+
+- Replace the placeholder xorshift32 with the retail MSVC C LCG
+  (state * 0x343FD + 0x269EC3, (state >> 16) & 0x7fff, seed 22227) and add
+  rng_retail.rs vectors reproducing the canonical MSVC sequence.
+- Add m7_battle_round.rs: CE188 reaches CE143/CE144/CE192/CE157, type10
+  HP/maxHP copy is proven, and CE244 is structurally unreachable without a
+  data-level 2000350 seed.
+- Add m7_hscene_advance.rs: all 14 opcode-123 H-scene polls advance only on
+  real key_bits=OK, with retry/continue pc pairs recorded.
+- Add m7_choice_window.rs: the runtime choice overlay (event 246, six options
+  at 512,192) is now covered by a regression test.
+- Re-anchor M6 tests that pinned old xorshift coincidences: first day-command
+  label, 18:30->19:30 training clock, real sister-sprite pose, and day-level
+  multi-day assertions.
+- Update HANDOFF_M7 / NEW_SESSION_START / BASELINE / OPCODE_SPEC / UNVERIFIED
+  and the M7 research notes.
+
+cargo test -q --workspace: all green; wolf-cli verify: PASS 70/0.

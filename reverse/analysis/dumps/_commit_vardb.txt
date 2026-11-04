@@ -1,0 +1,35 @@
+M8 W4-b follow-up: seed the template save's variable database from CData
+
+A data root without Save/System.sav could already save, but its synthesized
+template carried an empty variable database: set_num refuses a type/row/field
+that is not in the database, so every runtime CData cell was counted unmodelled
+and the reload read the static .dat value instead of what the game wrote
+(m7_save_parts failed on work/all at CData (0,0,5): left 1, right 4242).
+
+wolf-save:
+- new_game_template_with_vardb(vardb) embeds a caller database as segment 6 and
+  refuses an inconsistent one (row_count vs rows, non-positional row index)
+  instead of writing a file that cannot be parsed back;
+- new_game_template() stays the empty-database wrapper.
+
+wolf-game:
+- Databases::template_vardb() exports one VariableType per static CData type:
+  m_unknown -2, m_dis = data_id_method, config = the raw position words
+  (1000+n numeric / 2000+n textual), every static row positional and fully
+  populated, text as the NUL-terminated MemData<DWORD> body. CData only, as
+  write_into already treats SysDatabase/DataBase.
+- Game::new's base_save fallback passes that database to the template, and a
+  System.sav that parses with type_count 0 (the file an earlier W4-b build
+  wrote) is filled from the same schema with one diagnostic. A retail save has
+  30 types and is untouched.
+
+Evidence:
+- WOLF_DATA_ROOT=work/all cargo test -p wolf-game --test m7_save_parts: 2 passed
+  (CData (0,0,5)=4242 and the text cell round-trip); with System.sav moved aside
+  the absent-file fallback path passes both m7_save_parts and m8_template_save.
+- WOLF_DATA_ROOT=work/full, and WOLF_GAME_DIR=work/retail_backup cargo test
+  -p wolf-save: 9/9 retail saves still rebuild byte-for-byte.
+- cargo test -p wolf-game --lib with WOLF_DATA_ROOT=work/all: 231 passed.
+- docs/research/M8_TEMPLATE_SAVE.md §2.1/§6 restated: the remaining limits are
+  SysDatabase/DataBase exclusion and rows past the static height without a 250
+  row-count write.

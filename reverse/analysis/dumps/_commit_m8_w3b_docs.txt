@@ -1,0 +1,11 @@
+M8 docs: record W3-b engine_state decompilation and the handoff
+
+- docs/HANDOFF_M8.md: M8 handoff (landed workstreams, evidence, boundaries,
+  verification commands, engineering constraints, next steps).
+- docs/UNVERIFIED.md H-124: the host-side residual is mostly resolved (11/12
+  implemented, 17 pinned, character_state real, picture field 5 = 0); only
+  field 13 (zero sites) still returns None.
+- M8_BACKLOG/BASELINE: W3-b DONE with the decompiled field table; remaining is
+  the Park-Miller event RNG and polish.
+- M8_CHARACTER_STATE.md: record the real merge commit instead of the worktree
+  branch name.

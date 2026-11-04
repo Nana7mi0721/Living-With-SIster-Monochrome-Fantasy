@@ -1,0 +1,57 @@
+=== 150 picture operations grouped by picture number ===
+
+#0  ops=550  trace lines 7..5947
+   actions: {'Draw': 2, 'Move': 548}
+   kinds  : {'0': 413, '2': 137}
+   file   : SystemGraphic/TitleGraphic.jpg  (x2)
+   distinct geometry states: 2
+     {'blend': 0, 'opacity': 255, 'scale': 100, 'window': [1, 1], 'x': 0, 'y': 0}  (x2, first at line 7, Draw)
+     {'x': 0, 'y': 0}  (x548, first at line 24, Move)
+
+#12004  ops=274  trace lines 48..5969
+   actions: {'Set': 137, 'Erase': 137}
+   kinds  : {'3': 274}
+   distinct geometry states: 0
+
+#12005  ops=274  trace lines 50..5971
+   actions: {'Set': 137, 'Draw': 137}
+   kinds  : {'3': 274}
+   file   : <TRI-RIGHT>  (x137)
+   distinct geometry states: 1
+     {'blend': 0, 'opacity': 255, 'scale': 100, 'x': 0, 'y': 0}  (x137, first at line 51, Draw)
+
+#12053  ops=1507  trace lines 31..5966
+   actions: {'Set': 137, 'Draw': 274, 'Move': 1096}
+   kinds  : {'3': 137, '2': 548, '0': 822}
+   text   : '\\f[0]0'  (x274)
+   distinct geometry states: 2
+     {'blend': 0, 'opacity': 255, 'scale': 100, 'window': [1, 1], 'x': 0, 'y': 0}  (x274, first at line 32, Draw)
+     {'x': 0, 'y': 0}  (x1096, first at line 34, Move)
+
+#12054  ops=274  trace lines 38..5959
+   actions: {'Set': 137, 'Erase': 137}
+   kinds  : {'0': 137, '2': 137}
+   distinct geometry states: 0
+
+#12500  ops=137  trace lines 28..5948
+   actions: {'Draw': 137}
+   kinds  : {'4': 137}
+   distinct geometry states: 1
+     {'blend': 0, 'opacity': 255, 'scale': 100, 'window': [300, 200], 'x': 855, 'y': 200}  (x137, first at line 28, Draw)
+
+#12501  ops=137  trace lines 29..5949
+   actions: {'Draw': 137}
+   kinds  : {'2': 137}
+   text   : '欢迎来到Ver2.0DLC！ 烦请注意 存档的第一栏 为自动存档所使用 第一栏已…'  (x137)
+   distinct geometry states: 1
+     {'blend': 0, 'opacity': 255, 'scale': 100, 'window': [1, 1], 'x': 715, 'y': 115}  (x137, first at line 29, Draw)
+
+#12502  ops=108  trace lines 130..5930
+   actions: {'Draw': 108}
+   kinds  : {'1': 108}
+   distinct geometry states: 1
+     {'blend': 0, 'opacity': 255, 'scale': 25, 'window': [1, 1], 'x': 855, 'y': 430}  (x108, first at line 130, Draw)
+
+=== distinct assets referenced by 150 instructions in the trace ===
+  <TRI-RIGHT>                                    x137
+  SystemGraphic/TitleGraphic.jpg                 x2

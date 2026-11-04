@@ -1,0 +1,9 @@
+docs: disambiguate Sys 104/105 and forbid camera overengineering
+
+Sys 104/105 are SysDatabase type 6 rows 104/105 (X/Y scroll values),
+engine-maintained camera outputs at magic 9000104/9000105, not opcodes.
+No script reads or writes them; the registered maps are screen-sized and
+have no page graphics, so camera [0,0] is correct and 130 is teleport,
+not movement. Record this in the M3 handoff and new-session prompt so the
+next agent does not add a player/camera centering model or prioritise
+map scrolling over the real rendering/battle gaps.

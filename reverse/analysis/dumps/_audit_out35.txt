@@ -1,0 +1,55 @@
+== 23 .wolf in work/all ==
+   248438212  BGM.wolf
+   154450763  DLC_data.wolf
+   123375407  cg.wolf
+   113360799  BattleEffect.wolf
+    33551305  1.4.0.wolf
+    25041363  Picture.wolf
+    21855423  SE.wolf
+    20948679  hscene.wolf
+     6170548  cutin.wolf
+     2860488  SystemGraphic.wolf
+     2659705  EnemyGraphic.wolf
+     1278855  BasicData.wolf
+      702136  MapChip.wolf
+      666343  SystemFile.wolf
+      525022  hword.wolf
+      303464  CharaChip.wolf
+      282740  Kagura.wolf
+      191824  scene.wolf
+      149609  Fog_BackGround.wolf
+      146824  MapData.wolf
+       57721  BalloonBase_CafeLatte.wolf
+       40681  word.wolf
+       19699  FIcon.wolf
+total 23 files / 757077610 B
+
+== install Data/ listing ==
+     2355728  07yasashi.ttf
+     2355728  07yasashisagoshitsukubo-rudo.ttf
+    11575152  08YuanRougoshitsukubo-rudo.ttf
+    11575152  08gothic.ttf
+    33551305  1.4.0.wolf
+   248438212  BGM.wolf
+       57721  BalloonBase_CafeLatte.wolf
+     1278855  BasicData.wolf
+   113360799  BattleEffect.wolf
+      303464  CharaChip.wolf
+   154450763  DLC_data.wolf
+     2659705  EnemyGraphic.wolf
+       19699  FIcon.wolf
+      149609  Fog_BackGround.wolf
+      282740  Kagura.wolf
+      702136  MapChip.wolf
+      146824  MapData.wolf
+    25041363  Picture.wolf
+    21855423  SE.wolf
+      666343  SystemFile.wolf
+     2860488  SystemGraphic.wolf
+   123375407  cg.wolf
+     6170548  cutin.wolf
+    20948679  hscene.wolf
+      525022  hword.wolf
+      191824  scene.wolf
+       40681  word.wolf
+Data/ files total 784939370 B

@@ -1,0 +1,19 @@
+picture ops replayed : 3261
+slots live at frame 200: 6
+quads emitted         : 4
+
+=== live slots at frame 200 (ascending = draw order) ===
+  #0       kind 0 ops=549  file=SystemGraphic/TitleGraphic.jpg             text=-                            x=0     y=0     scale=100  opacity=255 blend=0      window=[1, 1]
+  #12005   kind 3 ops=1    file=<TRI-RIGHT>                                text=-                            x=0     y=0     scale=100  opacity=255 blend=0      window=None
+  #12053   kind 2 ops=5    file=-                                          text=\f[0]0                       x=0     y=0     scale=100  opacity=255 blend=0      window=[1, 1]
+  #12500   kind 4 ops=1    file=-                                          text=-                            x=855   y=200   scale=100  opacity=255 blend=0      window=[300, 200]
+  #12501   kind 2 ops=1    file=-                                          text=欢迎来到Ver2.0DLC！ 烦请注意 存档的第一栏 为 x=715   y=115   scale=100  opacity=255 blend=0      window=[1, 1]
+  #12502   kind 1 ops=1    file=-                                          text=-                            x=855   y=430   scale=25   opacity=255 blend=0      window=[1, 1]
+
+=== quads (draw order) ===
+  #0       kind 0 src=[0, 0, 1024, 576] dst=[0.0, 0.0, 1024.0, 576.0] alpha=1.0 blend=0 file=SystemGraphic/TitleGraphic.jpg text=-
+  #12005   SKIPPED (missing asset): <TRI-RIGHT>
+  #12053   kind 2 src=[0, 0, 0, 0] dst=[0.0, 0.0, 1.0, 1.0] alpha=1.0 blend=0 file=- text=\f[0]0
+  #12500   kind 4 src=[0, 0, 0, 0] dst=[855.0, 200.0, 300.0, 200.0] alpha=1.0 blend=0 file=- text=-
+  #12501   kind 2 src=[0, 0, 0, 0] dst=[715.0, 115.0, 1.0, 1.0] alpha=1.0 blend=0 file=- text=欢迎来到Ver2.0DLC！ 烦请注意 存档的第一栏 为自动存档所使用 第一栏已
+  #12502   SKIPPED (missing asset): 

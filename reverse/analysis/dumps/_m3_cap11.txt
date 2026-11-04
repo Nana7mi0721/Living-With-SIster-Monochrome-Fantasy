@@ -1,0 +1,40 @@
+  entry     : map script SampleMapA event 11
+capture
+  data root : work/full
+  frames    : 240 (peak 3 coroutine(s))
+    coro 2   event 63     pc 67    wait Frames(1)
+    coro 3   event 0      pc 65    wait Choice { block: 1 }
+    coro 741 event 13     pc 0     wait None
+    coro 742 event 15     pc 0     wait None
+    coro 743 event 25     pc 0     wait None
+  pictures  : 2 live -> 10 textured quad(s), 4 text picture(s)
+    pic -1     File at (0, 36) alpha 1.00 scale 100 window None file "cg/blackscreen.jpg"
+    pic 999    WindowFile at (0, 0) alpha 0.00 scale 100 window Some((100, 50)) file "<SQUARE>"
+  choice    : HELD on prompt with 4 option(s) ["广阔的战场", "广袤的森林", "微风吹拂而过的麦田", "有人在等我的家"], cursor 0 at anchor (512, 192)
+            : engine rect [512.0, 192.0, 242.0, 148.0], 4 row(s)
+  sys8 font : 20 px (Sys8, used by every text path)
+  sys pads  : Sys20 0 Sys22 0 Sys26 0 Sys27 0
+  atlas     : 2 image(s), 13.2% of 2048x2048
+    quad pic     -1 at [0,0,1024,576] uv [0.000,0.000,0.500,0.264]
+    quad pic   -100 at [512,192,3,3] uv [0.500,0.000,0.501,0.001]
+    quad pic   -100 at [515,192,236,3] uv [0.501,0.000,0.507,0.001]
+    quad pic   -100 at [751,192,3,3] uv [0.507,0.000,0.509,0.001]
+    quad pic   -100 at [512,195,3,142] uv [0.500,0.001,0.501,0.007]
+    quad pic   -100 at [515,195,236,142] uv [0.501,0.001,0.507,0.007]
+    quad pic   -100 at [751,195,3,142] uv [0.507,0.001,0.509,0.007]
+    quad pic   -100 at [512,337,3,3] uv [0.500,0.007,0.501,0.009]
+    quad pic   -100 at [515,337,236,3] uv [0.501,0.007,0.507,0.009]
+    quad pic   -100 at [751,337,3,3] uv [0.507,0.007,0.509,0.009]
+    text pic   -100 at [526,206,214,30] ▶ 广阔的战场
+    text pic   -100 at [526,236,214,30]    广袤的森林
+    text pic   -100 at [526,266,214,30]    微风吹拂而过的麦田
+    text pic   -100 at [526,296,214,30]    有人在等我的家
+  font      : work/full\Fonts\Lolita.ttf
+  text      : 4 item(s), 37 glyph(s), 4 line(s), 0 substituted
+  rendered  : 1024x576, 35816/589824 non-black pixel(s) = 6.1%
+  wrote     : work/out/_m3_map11.png
+  auto      : 96 tracked run_condition==2 event(s), 0 running []
+  stats     : 12155 instruction(s), 360 picture op(s), 1 sound(s), 48 db access(es) (3 write, 3 label), 2 message(s), 1 choice(s), 0 warning(s)
+  diagnostics (2 distinct):
+         1x 201 SetMoveRoute: 1 command(s) not applied (no map layer yet)
+         1x 290 Effect: kind 10 for 0 frame(s) (7 args) not drawn yet

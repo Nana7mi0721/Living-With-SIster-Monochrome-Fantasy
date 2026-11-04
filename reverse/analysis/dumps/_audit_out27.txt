@@ -1,0 +1,10 @@
+scene files 327, hscene files 327
+basename overlap: 11
+scene-only sample: ['y_bg_001.jpg', 'y_bg_002.png', 'y_bg_002b.png', 'y_bg_003.jpg', 'y_bg_004.jpg', 'y_bg_005.png', 'y_bg_006.png', 'y_bg_007.png', 'y_bg_008.png', 'y_bg_009.png']
+hscene-only sample: ['h_bg_001.jpg', 'h_bg_002.png', 'h_bg_002b.png', 'h_bg_003.jpg', 'h_bg_004.jpg', 'h_bg_005.png', 'h_bg_006.png', 'h_bg_007.png', 'h_bg_008.png', 'h_bg_009.png']
+identical content pairs: 0
+  e.g. []
+
+word 119 hword 119 overlap 119
+word/hword identical content pairs: 0
+  e.g. []

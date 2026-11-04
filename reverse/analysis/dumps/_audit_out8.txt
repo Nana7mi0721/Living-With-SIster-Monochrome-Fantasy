@@ -1,0 +1,15 @@
+210 calls: literal 18458, non-literal 10
+   ev70 raw=1600010
+   ev127 raw=1600024
+   ev127 raw=1600024
+   ev127 raw=1600024
+   ev127 raw=1600024
+   ev165 raw=1600011
+   ev168 raw=1600048
+   ev183 raw=1600037
+   ev188 raw=1600030
+   ev197 raw=1600012
+300 calls: 1164, unresolved titles: 2
+   '▲┣[ズ—ム]イベント位置をズーム座標に' x4
+   '○◆マップをズーム' x4
+map events 210=2017 300=6

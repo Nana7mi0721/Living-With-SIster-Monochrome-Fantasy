@@ -1,0 +1,11 @@
+common stringArgs 71474 with FFFD 0
+map strs 8267 with FFFD 0
+MAPASSET Dungeon.mps 1 140 'SE/[Effect]Healing1_panop.ogg'
+MAPASSET Dungeon.mps 3 140 'SE/[System]Get3_wolf.ogg'
+MAPASSET Map002.mps 0 150 'Picture/map_Village01_top.png'
+MAPASSET Map002.mps 3 150 'Picture/explosion.png'
+MAPASSET Map002.mps 3 140 'SE/bomb1.mp3'
+MAPASSET Map002.mps 3 150 'Picture/explosion.png'
+MAPASSET Map002.mps 3 140 'SE/bomb1.mp3'
+MAPASSET Map002.mps 3 150 'Picture/explosion.png'
+map asset strings 1770

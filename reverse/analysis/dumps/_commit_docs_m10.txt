@@ -1,0 +1,8 @@
+docs: reorganize the project archive around M10
+
+- add docs/README.md as the single documentation index
+- archive the 2026-10-26 PLAN.md under docs/archive and add a current root PLAN.md
+- add docs/research/README.md indexing the research notes
+- update NEW_SESSION_START and HANDOFF_M10 reading order and links
+- add AGENT.md section 6 for documentation maintenance and post-milestone cleanup
+- ignore docs/gpt research and .claude in git

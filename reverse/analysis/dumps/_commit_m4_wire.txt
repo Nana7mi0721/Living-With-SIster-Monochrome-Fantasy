@@ -1,0 +1,14 @@
+M4: wire the audio engine into Game and add --audio
+
+- crates/wolf-game/Cargo.toml: depend on wolf-audio.
+- crates/wolf-game/src/game.rs: new `pub audio: Option<wolf_audio::Engine>` (None by
+  default so tests and headless captures stay device-free), `Game::enable_audio()`
+  installing `Engine::with_asset_root(self.root)`, and a `GameHost.audio` borrow so
+  `Host::sound` forwards each opcode-140 SoundCmd to `apply_sound_cmd` after recording it.
+- crates/wolf-cli/src/main.rs + play.rs: process-wide AUDIO flag set by `--audio`,
+  honoured by capture / capture --map / dump / play; help text updated.
+- crates/wolf-game/tests/audio_wiring.rs: pins silent-by-default, the recorder still
+  seeing opcode 140 with audio off, and enable_audio not panicking without a device.
+- docs/AUDIO.md section 6: marked DONE with the actual wiring.
+
+cargo test --workspace green; verify PASS 63.

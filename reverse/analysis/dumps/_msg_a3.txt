@@ -1,0 +1,15 @@
+docs: text-picture escapes - f[n] is a font size, not a face index
+
+The story HUD (M2_SLICE 2.3) renders with overlapping top-bar text and digits
+running off the right edge. Measured the cause: text drawn by 150's string
+arguments (kind 2 / kind 4) carries f[n] with values 6..64 - 48 and 64 cannot be
+face indices for a game with 12 faces - so f[n] is a font size there too, exactly
+as in message text. 1,206 picture strings carry it (1,147 kind 2, 59 kind 4) and
+our draw path still uses one size (Sys8) for all of them.
+
+- docs/TEXT_SPEC.md section 9: the size histogram, the picture-only escapes
+  (ax, ay, udb, cdb, space, <R>, -) that never appear in message text, and the
+  consequence for the HUD.
+- docs/BASELINE.json: text_picture_escapes key so the numbers cannot silently
+  drift.
+- docs/M2_SLICE.md 6.2: the HUD row now names the root cause instead of guessing.

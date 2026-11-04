@@ -1,0 +1,106 @@
+total refs distinct=3037  resolved=2695  missing=342
+
+== totals ==
+all files 4085 (data 4062 + archives 23)
+all bytes 1528662617 (data 771585007 + archives 757077610)
+referenced files 2695 bytes 608492970
+unreferenced data files 1367 bytes 163092037
+missing refs 342
+
+== per directory ==
+dir                       files          bytes    ref  unref       refbytes    ref%
+BGM                          49      248514721     40      9      223256712   89.8%
+DLC_data                    633      155203817    576     57      145913533   94.0%
+cg                          596      124237364    541     55      112713046   90.7%
+BattleEffect                 92      113672178     44     48       21434351   18.9%
+1.4.0                       199       33705094    181     18       31866936   94.5%
+Picture                     539       27000868    471     68       24120877   89.3%
+hscene                      327       22847281    300     27       21477607   94.0%
+SE                          273       22525701    121    152       16793665   74.6%
+cutin                       223        7151448    208     15        6664858   93.2%
+BasicData                   149        6383077      0    149              0    0.0%
+SystemGraphic                28        2861080      9     19        2679574   93.7%
+EnemyGraphic                118        2624945      0    118              0    0.0%
+MapData                       9        1225206      0      9              0    0.0%
+MapChip                     102         778669     54     48         528551   67.9%
+SystemFile                   32         702549     18     14         151062   21.5%
+scene                       327         677686      0    327              0    0.0%
+hword                       119         555617    103     16         477994   86.0%
+CharaChip                    91         327651      7     84          38661   11.8%
+Kagura                        4         283731      4      0         283731  100.0%
+Fog_BackGround               10         146048      0     10              0    0.0%
+BalloonBase_CafeLatte        13         127932      8      5          70510   55.1%
+FIcon                        10          21302     10      0          21302  100.0%
+word                        119          11042      0    119              0    0.0%
+
+== 30 biggest unreferenced ==
+    18952170  BattleEffect/kaenbeam.png
+    10713886  BattleEffect/pipo-btleffect162.png
+     9856806  BattleEffect/pipo-btleffect207_480.png
+     8193996  BattleEffect/pipo-btleffect191_640.png
+     6003966  BGM/sirorenga.mp3
+     5532175  BasicData/CommonEvent.dat
+     5457387  BGM/Our_Construction.ogg
+     5188385  BattleEffect/pipo-btleffect133.png
+     5091710  BattleEffect/pipo-btleffect144.png
+     5069232  BGM/InstaVista.ogg
+     5004303  BattleEffect/pipo-yaame.png
+     4498012  BattleEffect/wing_640.png
+     4322741  BGM/karuizawa-birds-1.mp3
+     3868795  BattleEffect/pipo-btleffect023.png
+     3456172  BattleEffect/pipo-btleffect192_640.png
+     3072119  BattleEffect/pipo-btleffect145.png
+     2750266  BattleEffect/pipo-btleffect190_640.png
+     2438364  BattleEffect/pipo-btleffect201_480.png
+     2402351  BattleEffect/pipo-btleffect157.png
+     2004113  BGM/summer.mp3
+     1940960  BGM/you_wind.mp3
+      976512  BattleEffect/pipo-btleffect132.png
+      947202  SE/hse_fukumomu.mp3
+      935949  BattleEffect/pipo-btleffect152.png
+      797933  MapData/SampleMapA.mps
+      627395  Picture/paja_body.png
+      569192  BattleEffect/pipo-btleffect160.png
+      565336  BattleEffect/pipo-btleffect030.png
+      486293  BattleEffect/pipo-btleffect034.png
+      462659  BattleEffect/pipo-btleffect031.png
+
+== 15 biggest referenced ==
+    22218222  BGM/ango.ogg  (common)
+    11702400  BGM/nekomimi.mp3  (common)
+    11607952  BGM/RAIN_&_Co.ogg  (common)
+    11516723  BGM/okiraku.ogg  (common)
+    10340339  BGM/Sunshine!.ogg  (common)
+    10202646  BGM/Killer_Roll.ogg  (common)
+     9993489  BGM/We_are_Going.ogg  (common)
+     9722294  DLC_data/bgm01.ogg  (common)
+     9281620  DLC_data/bgm02.ogg  (common)
+     9023964  DLC_data/bgm09.mp3  (common)
+     8887068  BGM/straightcontrast.ogg  (common)
+     8812472  BGM/madoromu2.ogg  (common)
+     8632962  BGM/destiny.ogg  (common)
+     8454473  BGM/The_End_of_Destruction.ogg  (common)
+     8367346  BGM/line.ogg  (common)
+
+== unreferenced bytes by dir ==
+BattleEffect                 48 files       92237827 bytes
+BGM                           9 files       25258009 bytes
+cg                           55 files       11524318 bytes
+DLC_data                     57 files        9290284 bytes
+BasicData                   149 files        6383077 bytes
+SE                          152 files        5732036 bytes
+Picture                      68 files        2879991 bytes
+EnemyGraphic                118 files        2624945 bytes
+1.4.0                        18 files        1838158 bytes
+hscene                       27 files        1369674 bytes
+MapData                       9 files        1225206 bytes
+scene                       327 files         677686 bytes
+SystemFile                   14 files         551487 bytes
+cutin                        15 files         486590 bytes
+CharaChip                    84 files         288990 bytes
+MapChip                      48 files         250118 bytes
+SystemGraphic                19 files         181506 bytes
+Fog_BackGround               10 files         146048 bytes
+hword                        16 files          77623 bytes
+BalloonBase_CafeLatte         5 files          57422 bytes
+word                        119 files          11042 bytes

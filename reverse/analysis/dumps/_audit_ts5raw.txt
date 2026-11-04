@@ -1,0 +1,17 @@
+file bytes 60786
+name repr 'MapChip/b_02�b������_at�㥨02.png'
+  utf8 bytes 4d6170436869702f625f3032efbfbd62efbfbdefbfbdefbfbdefbfbdefbfbdefbfbd5f6174efbfbde3a5a830322e706e67
+  found at -1
+name repr 'MapChip/b_04�Iؑ�C_at�㥨.png'
+  utf8 bytes 4d6170436869702f625f3034efbfbd49d891efbfbd435f6174efbfbde3a5a82e706e67
+  found at -1
+name repr 'MapChip/b_05砂漠_at01水.png'
+  utf8 bytes 4d6170436869702f625f3035e7a082e6bca05f61743031e6b0b42e706e67
+  found at 52132
+  seg 4d6170436869702f625f3035e7a082e6bca05f61743031e6b0b42e706e67
+    cp932 -> MapChip/b_05遐よｼ_at01豌ｴ.png
+    shift_jis fail
+    euc_jp fail
+name repr 'MapChip/b_07���ƥ��at�㥨.png'
+  utf8 bytes 4d6170436869702f625f3037efbfbdefbfbdefbfbdc6a5efbfbdefbfbd6174efbfbde3a5a82e706e67
+  found at -1

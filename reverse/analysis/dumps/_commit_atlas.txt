@@ -1,0 +1,15 @@
+M3: widen the atlas page and report packing failures
+
+ATLAS_SIZE 2048 -> 4096. A retail save stacks three 540x540 character
+layers over a 1024x576 background and a UI frame, which is 129% of a
+2048 page; those layers used to be dropped silently and the H-scene
+capture showed the face layers missing. 4096 is the largest page the
+wgpu spec floor guarantees.
+
+Every rejected image now becomes an AtlasMiss {Empty, TooLarge, Full,
+LoadFailed, CropFailed} with misses()/take_misses()/take_warnings(), so
+a missing picture can no longer look like a script that never drew it.
+
+SaveData08 H-scene capture: 31 -> 40 textured quads, 30 -> 39 atlas
+images, 73.3% -> 34.0% page fill, 89.4% non-black pixels unchanged.
+SampleMapA map capture unchanged at 94.0% non-black.

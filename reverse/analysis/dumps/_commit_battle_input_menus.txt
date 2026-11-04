@@ -1,0 +1,32 @@
+battle: prove CE65 real-menu route to CE242 is data-unreachable; add --watch-start
+
+Investigated the "enter CE242 from a real CE188/CE239 command-menu selection"
+goal from the M3 battle state-machine task.
+
+Findings (hard evidence):
+- Reverse call graph (opcode 210/211/300 fully resolved): CE239 has ZERO 300
+  name calls and 210/211 only to 500232/500231/500229/500264/500244 - it never
+  calls CE188 nor CE242/243. CE188's 300 targets exclude 242/243. CE242/243/240/241
+  have zero callers of any kind. CE242's only writer of 2000350=1 is its own pc14,
+  so nothing external can bootstrap the gate (self-bootstrap paradox).
+- Runtime: dump --event 239|188 --watch-start 242 --watch-start 243 creates no
+  CE242/CE243 instance across 4000/6000 frames; 2000350 and 2000352 stay 0.
+  Even the real CE188 menu (CE65) is blocked by 8 unresolved
+  CData (19,0..7,5) "万能ウィンドウ一時DB" reads, not only key input.
+
+=> "Menu-select into CE242" is data-level unreachable; CE242/243 are unwired
+legacy call_only subroutines sharing the self-1600000 command slot with the live
+CE191/CE192/CE65 line. The seeded round from commit 45eb7df remains the only way
+to exercise the 2000350 machine, and it is honest about its seeds.
+
+Changes:
+- crates/wolf-cli/src/main.rs: new --watch-start EVENT (repeatable, dump only)
+  prints the frame an event instance starts/stops, making short-lived runners
+  observable where --watch (pc-change only) misses intra-frame start/stop.
+- docs/BATTLE.md: new section 5.3.1 with the full proof, minimal-fix options
+  (A keep seeded harness / B reconstructed engine-level battle-phase runner),
+  and the note that CE240 runs under the run=2 scheduler; corrected the
+  speculative CE239 --300--> CE188 edge in section 1.2.
+- docs/HANDOFF_M3.md: item 3 bullet documenting the unreachability proof + tool.
+
+cargo test -q --workspace green.

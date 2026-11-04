@@ -1,0 +1,13 @@
+M2: pause cursor sprite, mouse choice rows, 210 string args, operator fix
+
+- wolf-vm: 210/300/211 string arguments land in CSelf5..8 (8,260 call sites);
+  121 0x3000 is division and 0x4000 is remainder (the WolfTL table had them swapped,
+  proved by CE48 pc30 / CE63 pc46 / CE48 pc172); 78 vm tests.
+- wolf-game: message.rs draws the engine pause cursor from SystemFile/Text_Pause.png
+  (six 17x15 frames, measured) and the origin nudge is rateY/10, so Sys1/Sys2 = (64,410)
+  now that the operator is right; choice rows are hit-tested for the mouse-first menus.
+- wolf-cli: capture and play both pack the cursor frame into the sprite pass.
+- docs: OPCODE_SPEC 3.2 corrected with the evidence, OPCODE_210_RETURN 8/9,
+  TOOLING 8 (retail frame capture via tools/wolfcap.ps1), two research reports.
+
+verify 63/63, precompile 19/19, workspace tests green, title frame 716 unchanged.

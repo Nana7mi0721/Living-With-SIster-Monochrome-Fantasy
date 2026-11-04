@@ -1,0 +1,7 @@
+M3: refresh BASELINE + HANDOFF for battle slice B fix and H-scene P1/P2
+
+BASELINE gains four sections: screen_tint_151, screen_transition_160_162,
+battle_slice (A pass / B label fix / C visuals), h_scene_p1_p2.
+HANDOFF_M3 section 5 item 4 records the P1/P2 landing (commit 684d711) and
+item 5 records the BASELINE refresh; top status now says M3 body complete.
+verify PASS 63/0, cargo test --workspace green.

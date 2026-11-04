@@ -1,0 +1,4 @@
+docs: finish the 130 target,x,y,map,options wording
+
+Follow-up to the code fix: HANDOFF_M3 line 86, HANDOFF_M4 line 53 and
+M2_SLICE line 496 still spoke of direction/negative map ids.

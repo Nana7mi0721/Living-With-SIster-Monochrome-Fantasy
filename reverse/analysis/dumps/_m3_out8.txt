@@ -1,0 +1,9 @@
+## H closure totals: 22 events, 15931 slots, 12609 instr, 23 opcodes
+401:2771, 121:2513, 150:2185, 111:1356, 499:1356, 180:543, 103:528, 210:464, 420:459, 213:164, 498:70, 179:62, 212:57, 172:32, 124:14, 123:14, 170:8, 171:4, 99:3, 125:3, 105:1, 104:1, 290:1
+
+## assets referenced by H closure
+distinct image paths 475, resolved 468, missing 7, bytes 28139542
+by dir: hscene 111 files 12227325 B, DLC_data 85 files 5941531 B, cutin 159 files 5272017 B, cg 24 files 4206581 B, hword 84 files 388336 B, 1.4.0 5 files 103752 B
+missing: Picture/word_effect30.png, Picture/word_effect36.png, Picture/word_effect55.png, Picture/word_effect56.png, Picture/word_effect57.png, Picture/word_effect58.png, Picture/word_effect59.png
+distinct sound paths 0 resolved 0 missing 0 bytes 0
+sound missing: 

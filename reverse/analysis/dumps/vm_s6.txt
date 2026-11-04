@@ -1,0 +1,92 @@
+=== op250: correlate arg3 with argc/arg4 magic/strmask
+  flags=332288   arg4_magic=True strmask=(0, 1, 0, 1) argc=5 strc=4 x611
+  flags=331776   arg4_magic=True strmask=(0, 1, 0, 1) argc=5 strc=4 x435
+  flags=69632    arg4_magic=True strmask=(0, 1, 0, 0) argc=5 strc=4 x411
+  flags=327680   arg4_magic=True strmask=(0, 1, 0, 1) argc=5 strc=4 x245
+  flags=65536    arg4_magic=True strmask=(0, 1, 0, 0) argc=5 strc=4 x166
+  flags=65536    arg4_magic=False strmask=(0, 1, 0, 0) argc=5 strc=4 x103
+  flags=332304   arg4_magic=True strmask=(0, 1, 0, 1) argc=5 strc=4 x83
+  flags=327680   arg4_magic=False strmask=(0, 1, 0, 1) argc=5 strc=4 x80
+  flags=327696   arg4_magic=True strmask=(0, 1, 0, 1) argc=5 strc=4 x51
+  flags=4608     arg4_magic=True strmask=(0, 0, 0, 0) argc=5 strc=4 x48
+  flags=70144    arg4_magic=True strmask=(0, 1, 0, 0) argc=5 strc=4 x43
+  flags=327776   arg4_magic=False strmask=(0, 1, 0, 1) argc=5 strc=4 x37
+  flags=200704   arg4_magic=True strmask=(0, 1, 1, 0) argc=5 strc=4 x34
+  flags=65552    arg4_magic=True strmask=(0, 1, 0, 0) argc=5 strc=4 x19
+  flags=327792   arg4_magic=True strmask=(0, 1, 0, 1) argc=5 strc=4 x17
+  flags=196608   arg4_magic=False strmask=(0, 1, 1, 0) argc=5 strc=4 x16
+  flags=65552    arg4_magic=False strmask=(0, 1, 0, 0) argc=5 strc=4 x13
+  flags=332336   arg4_magic=True strmask=(0, 1, 0, 1) argc=5 strc=4 x13
+  flags=65632    arg4_magic=False strmask=(0, 1, 0, 0) argc=5 strc=4 x12
+  flags=331792   arg4_magic=True strmask=(0, 1, 0, 1) argc=5 strc=4 x12
+  flags=327682   arg4_magic=NA   strmask=(1, 1, 0, 1) argc=4 strc=4 x12
+  flags=0        arg4_magic=True strmask=(0, 0, 0, 0) argc=5 strc=4 x10
+  flags=462848   arg4_magic=True strmask=(0, 1, 1, 1) argc=5 strc=4 x10
+  flags=327696   arg4_magic=False strmask=(0, 1, 0, 1) argc=5 strc=4 x8
+  flags=65648    arg4_magic=True strmask=(0, 1, 0, 0) argc=5 strc=4 x7
+
+=== op250: per-bit -> arg4_magic (argc=5 only)
+  bit4  set: arg4_magic {True: 220, False: 30}
+  bit5  set: arg4_magic {False: 56, True: 76}
+  bit6  set: arg4_magic {False: 60, True: 35}
+  bit8  set: arg4_magic {True: 7}
+  bit9  set: arg4_magic {True: 817}
+  bit12 set: arg4_magic {True: 1747}
+  bit16 set: arg4_magic {True: 2203, False: 289}
+  bit17 set: arg4_magic {True: 51, False: 20}
+  bit18 set: arg4_magic {True: 1505, False: 136}
+
+=== op140: arg0 x argc x strc x kind
+  arg0=-256       (0xFFFFFF00) argc=4 strc=0 kind=none  x79
+  arg0=-240       (0xFFFFFF10) argc=4 strc=0 kind=none  x59
+  arg0=-224       (0xFFFFFF20) argc=4 strc=0 kind=none  x2
+  arg0=-224       (0xFFFFFF20) argc=7 strc=0 kind=none  x2
+  arg0=16776976   (0x00FFFF10) argc=4 strc=0 kind=none  x5
+  arg0=16777216   (0x01000000) argc=4 strc=0 kind=none  x2
+  arg0=33554432   (0x02000000) argc=7 strc=1 kind=esc   x3
+  arg0=33554432   (0x02000000) argc=7 strc=1 kind=file  x228
+  arg0=33554448   (0x02000010) argc=7 strc=1 kind=file  x43
+  arg0=33554464   (0x02000020) argc=6 strc=1 kind=esc   x10
+  arg0=33554464   (0x02000020) argc=6 strc=1 kind=file  x650
+  arg0=33554464   (0x02000020) argc=7 strc=1 kind=file  x283
+  arg0=33554465   (0x02000021) argc=6 strc=1 kind=file  x1
+  arg0=33554467   (0x02000023) argc=6 strc=1 kind=file  x1
+
+=== op290: arg0>>4 x argc
+  [((0, 7), 9), ((1, 7), 13), ((2, 7), 126), ((3, 7), 211), ((4, 7), 49), ((5, 7), 65), ((7, 7), 25), ((8, 7), 34), ((9, 7), 100), ((10, 7), 8)]
+  low4: [(0, 640)]
+
+=== op112: (arg0,argc) x strc
+  [((1, 2, 4), 63), ((1, 3, 4), 4), ((2, 3, 4), 13), ((2, 4, 4), 1), ((3, 4, 4), 7), ((4, 5, 4), 1), ((17, 2, 4), 30), ((17, 3, 4), 1), ((20, 5, 4), 3)]
+  arg>>28: [(0, 74), (1, 54), (2, 5), (3, 36)]
+
+=== 220/221/222 full lists
+  ct220 ev38 pc7 ints=[0, 1600001] magic=[False, True]
+  ct220 ev131 pc233 ints=[0, 1600012] magic=[False, True]
+  ct220 ev131 pc268 ints=[1, 1600012] magic=[False, True]
+  ct220 ev223 pc59 ints=[0, 3000009] magic=[False, True]
+  ct220 ev426 pc326 ints=[0, 3000010] magic=[False, True]
+  ct220 ev435 pc6 ints=[0, 1600012] magic=[False, True]
+  ct220 ev436 pc96 ints=[0, 3000023] magic=[False, True]
+  ct220 ev436 pc105 ints=[0, 3000015] magic=[False, True]
+  ct221 ev48 pc209 ints=[1600020, 1600005, 2000000, 0] magic=[True, True, True, False]
+  ct221 ev94 pc254 ints=[1600059, 1600050, 9000024, 0] magic=[True, True, True, False]
+  ct221 ev94 pc289 ints=[1600060, 1600050, 9000029, 0] magic=[True, True, True, False]
+  ct221 ev94 pc335 ints=[1600011, 1600050, 1600062, 1] magic=[True, True, True, False]
+  ct221 ev94 pc345 ints=[1600006, 1600050, 1600064, 1] magic=[True, True, True, False]
+  ct221 ev94 pc348 ints=[1600007, 1600050, 1600064, 1] magic=[True, True, True, False]
+  ct221 ev94 pc349 ints=[1600093, 1600050, 2000160, 0] magic=[True, True, True, False]
+  ct221 ev94 pc352 ints=[1600061, 1600050, 2000160, 0] magic=[True, True, True, False]
+  ct221 ev94 pc353 ints=[1600065, 1600050, 2000006, 0] magic=[True, True, True, False]
+  ct221 ev94 pc381 ints=[1600068, 1600050, 2000004, 0] magic=[True, True, True, False]
+  ct221 ev94 pc415 ints=[1600094, 1600050, 2000558, 0] magic=[True, True, True, False]
+  ct221 ev94 pc427 ints=[1600094, 1600050, 2000492, 0] magic=[True, True, True, False]
+  ct221 ev94 pc453 ints=[1600094, 1600050, 2000533, 0] magic=[True, True, True, False]
+  ct221 ev94 pc503 ints=[1600095, 1600050, 2000216, 0] magic=[True, True, True, False]
+  ct221 ev131 pc251 ints=[1600013, 1600012, 9000024, 0] magic=[True, True, True, False]
+  ct221 ev436 pc100 ints=[2000550, 3000015, 2000550, 0] magic=[True, True, True, False]
+  ct222 ev131 pc230 ints=[1600012, 1600005, 2000000, 0] magic=[True, True, True, False]
+  ct222 ev131 pc231 ints=[2000531, 1600005, 2000626, 0] magic=[True, True, True, False]
+  ct222 ev131 pc232 ints=[1600012, 1600005, 2000546, 0] magic=[True, True, True, False]
+  ct222 ev131 pc261 ints=[2, 1600012, 2000302, 0] magic=[False, True, True, False]
+  ct222 ev435 pc5 ints=[1600012, 1600005, 2000000, 0] magic=[True, True, True, False]

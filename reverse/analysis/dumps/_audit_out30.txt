@@ -1,0 +1,15 @@
+boot+auto common: 214 ; map nodes: [('m', 'TitleMap.mps', 2)]
+boot+auto assets: 1442 files / 193707867 B
+   DLC_data                457   68176193
+   cg                      242   50263200
+   hscene                  239   19791095
+   BGM                       3   14643374
+   1.4.0                    83   12590262
+   Picture                 149   12473893
+   BattleEffect              5    5828444
+   cutin                   117    3857657
+   SE                       33    3054480
+   SystemGraphic             7    2253857
+   hword                   103     477994
+   Kagura                    3     281081
+   CharaChip                 1      16337

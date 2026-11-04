@@ -1,0 +1,11 @@
+M6: fix \cself picture text so CE251 day-command labels render
+
+wolf_vm::text::expand treated \cself[n] as the numeric self slot only,
+so CE251's morning day-command buttons (pc1487/1489/1491, text
+\f[20]\cself[5..7]) rendered a bare "0" even though the event had just
+stored 学习会/秘密特训 in the self string bank.
+
+parse_escape now prefers the self string slot and falls back to the
+numeric slot when no string is written (keeps \f[\cself[19]] font-size
+reads working). Added a unit test and extended the sleep-menu day-loop
+regression to assert picture 1201 draws a real label.

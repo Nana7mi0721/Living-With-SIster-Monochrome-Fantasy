@@ -1,0 +1,10 @@
+feat(i18n): runtime text overlay for the 彼梦 translation
+
+- add wolf_game::translation::TextOverlay: parse/load a (event,PC)->text
+  table and replace only 101 message strings before programs compile
+- wire WOLF_TEXT_OVERLAY into Game::new and the --text-overlay CLI flag,
+  so capture/play/run all honour it; unset = byte-identical shipped data
+- add tools/translation/{pipeline,gen_override}.py + README: 彼梦 MV text
+  is aligned per event, normalised against glossary_canonical.tsv, and
+  emitted as wolf_override.tsv (7496 lines / 61 events / ~62% of messages)
+- tests: 2 unit + 2 integration; full workspace 869 passed / 0 failed

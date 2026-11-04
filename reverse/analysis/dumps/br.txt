@@ -1,0 +1,38 @@
+common\0_○アイテム増減.json
+0 Comment None ['アイテム増加処理\r\r']
+1 CommonEventByName [0, 16777218, 1600000, 1600001, 1600001] ['X[共]アイテム増減']
+2 Comment None ['ここから下はメッセージ表示処理（セルフ2が1以上のときのみ）\r\r']
+3 VariableCondition [1, 1600002, 1, 1] None
+4 ChoiceCase [1] None
+5 Comment None ['入手メッセージがある場合、まず単位の名前を得る']
+6 VariableCondition [3, 1600002, 1, 2, 1600002, 2, 2, 1600002, 3, 2] None
+7 ChoiceCase [1] None
+8 SetString [1600009, 0] ['個']
+10 ChoiceCase [2] None
+11 SetString [1600009, 0] ['枚']
+13 ChoiceCase [3] None
+14 SetString [1600009, 0] ['本']
+17 VariableCondition [1, 1600002, 4, 2] None
+18 ChoiceCase [1] None
+19 SetString [1600009, 0] ['人']
+22 Comment None ['アイテム名を得る']
+23 Database [2, 1600000, 0, 332288, 1600008] ['', 'アイテム', '', 'アイテム名']
+24 VariableCondition [2, 1600002, 100, 1, 1600002, 1, 1] None
+25 ChoiceCase [1] None
+26 Comment None ['アイテムを入手した場合、個数なしで\u3000\u3000「薬草」を手に入れた。\u3000\u
+27 VariableCondition [2, 1600001, 1, 1, 1600001, 4294967295, 3] None
+28 ChoiceCase [1] None
+29 Comment None ['アイテムを入手した場合']
+30 Message None ['@1\n得到了「\\cself[8]」。']
+32 ChoiceCase [2] None
+33 Comment None ['アイテムが減った場合']
+34 Message None ['@1\n失去了「\\cself[8]」。']
+38 ChoiceCase [2] None
+39 VariableCondition [2, 1600001, 1, 1, 1600001, 4294967295, 3] None
+40 ChoiceCase [1] None
+41 Comment None ['アイテムを入手した場合、\u3000「薬草」を4個手に入れた。\u3000と出る']
+42 Message None ['@1\n「\\cself[8]」增加了\\cself[1]\\cself[9]。']
+44 ChoiceCase [2] None
+45 Comment None ['アイテムが減った場合、\u3000「薬草」を2個失った。\u3000と出る']
+46 SetVariable [1600001, 1600001, 0, 2048] None
+47 Message None ['@1\n「\\cself[8]」减少了\\cself[1]\\cself[9]。']

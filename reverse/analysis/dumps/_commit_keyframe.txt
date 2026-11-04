@@ -1,0 +1,10 @@
+M3: dump --key-frame / --watch; key injection reaches CE65
+
+- wolf-cli dump: accept --key-frame N:CODE (WOLF key code -> host bits, same
+  mapping capture already uses) and inject it on that frame, so a headless
+  probe can walk a 123-poll menu without a keyboard.
+- wolf-cli dump: new --watch EVENT prints each coroutine's pc whenever it moves,
+  so a probe can see exactly which poll a menu loop is blocked on.
+- docs: BATTLE/HANDOFF note that --key-frame 80:10 advances CE65 from pc 78 to
+  pc 132; a full battle round still needs repeated menu navigation plus a fix
+  for the missing equipment/enemy label columns in CDataBase.json.

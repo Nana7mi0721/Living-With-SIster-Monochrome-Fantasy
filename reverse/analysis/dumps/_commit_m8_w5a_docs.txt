@@ -1,0 +1,8 @@
+M8 docs: record the Park-Miller event RNG (W5-a DONE)
+
+- HANDOFF_M8: add the W5-a landing (dual streams, pinned modulo law, deterministic
+  EVENT_SEED, repaired sequence tests), its evidence row, and the residual
+  (byte parity needs a captured retail clock seed); next steps now only polish.
+- M8_BACKLOG: W5-a DONE with the generator/law resume; remaining is polish.
+- BASELINE m8_workstreams: prng entry + remaining list.
+- NEW_SESSION_START: remaining work no longer lists the RNG port.

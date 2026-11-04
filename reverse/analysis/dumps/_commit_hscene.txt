@@ -1,0 +1,9 @@
+M3: mark HSCENE P0 resolved (4096 atlas recovers face layers, key injection)
+
+docs/HSCENE.md 4.1: ATLAS_SIZE is already 4096 (atlas.rs:42) with miss/take_warnings
+diagnostics; recapture SaveData08 under --root work/all now 89.4% non-black with the
+face three layers (eyes/mouth/brows) and action layer present. Old screenshot was a
+blank face, new one is fully expressive.
+docs/HSCENE.md 4.2: --key-frame N:CODE already in capture and now in dump; bits_for_code
+crosses the CE65 pc78 123 poll. Defect table statuses updated.
+docs/HANDOFF_M3.md item 4: H-scene P0 both items closed; remaining P1/P2 listed.

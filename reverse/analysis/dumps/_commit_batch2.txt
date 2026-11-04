@@ -1,0 +1,8 @@
+M13 batch2: 九结局其余 + 条件注入事件 + H 端到端 + DLC EP26-36 根因
+
+- 新增测试：m13_all_endings（14+2 ignored）、m13_random_events_injected（3）、m13_h_endtoend（5）、m13_dlc_452_ep26_36（2+2 ignored）
+- 研究底稿：M13_ALL_ENDINGS / M13_RANDOM_EVENTS_INJECTED / M13_H_ENDTOEND / M13_DLC_452_EP26_36
+- DLC EP26-36 根因：var395 自 EP17 泄漏，战斗 243/244 误判负；var395=0 夹具下 EP0→36 全通
+- H 餐厅门更正：CE326@801-805 var424>=3 ∧ var18>=100 ∧ var16>=1
+- 文档收口：HANDOFF_M13 §6.1、PLAN §4.6、内容矩阵 §4.1、research README M13 索引
+- 目标测试 24 项新增全绿（14+2+5+3），无生产 src 改动

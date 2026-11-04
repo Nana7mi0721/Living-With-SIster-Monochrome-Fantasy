@@ -1,0 +1,188 @@
+=== op150 arg0 decomposition: value -> (type, low4, highpart=arg0 & ~0x7f) x count, argc set
+  arg0=0         0x000000 type=0 low4=0 hi7=0    x3740
+  arg0=4096      0x001000 type=0 low4=0 hi7=32   x2770
+  arg0=69377     0x010F01 type=0 low4=1 hi7=542  x1429
+  arg0=2         0x000002 type=0 low4=2 hi7=0    x1132
+  arg0=32        0x000020 type=2 low4=0 hi7=0    x1062
+  arg0=16777218  0x1000002 type=0 low4=2 hi7=131072 x877
+  arg0=65537     0x010001 type=0 low4=1 hi7=512  x803
+  arg0=4128      0x001020 type=2 low4=0 hi7=32   x568
+  arg0=4098      0x001002 type=0 low4=2 hi7=32   x485
+  arg0=1         0x000001 type=0 low4=1 hi7=0    x473
+  arg0=3149824   0x301000 type=0 low4=0 hi7=24608 x344
+  arg0=3145728   0x300000 type=0 low4=0 hi7=24576 x341
+  arg0=3153664   0x301F00 type=0 low4=0 hi7=24638 x207
+  arg0=4259841   0x410001 type=0 low4=1 hi7=33280 x201
+  arg0=3215360   0x311000 type=0 low4=0 hi7=25120 x190
+  arg0=819       0x000333 type=3 low4=3 hi7=6    x104
+  arg0=3840      0x000F00 type=0 low4=0 hi7=30   x95
+  arg0=4130      0x001022 type=2 low4=2 hi7=32   x94
+  arg0=12320     0x003020 type=2 low4=0 hi7=96   x90
+  arg0=4198145   0x400F01 type=0 low4=1 hi7=32798 x79
+  arg0=65536     0x010000 type=0 low4=0 hi7=512  x72
+  arg0=16842753  0x1010001 type=0 low4=1 hi7=131584 x72
+  arg0=7936      0x001F00 type=0 low4=0 hi7=62   x67
+  arg0=16416     0x004020 type=2 low4=0 hi7=128  x62
+  arg0=65568     0x010020 type=2 low4=0 hi7=512  x59
+  arg0=8192      0x002000 type=0 low4=0 hi7=64   x57
+  arg0=24576     0x006000 type=0 low4=0 hi7=192  x56
+  arg0=3211265   0x310001 type=0 low4=1 hi7=25088 x55
+  arg0=4259840   0x410000 type=0 low4=0 hi7=33280 x55
+  arg0=69634     0x011002 type=0 low4=2 hi7=544  x48
+  arg0=69665     0x011021 type=2 low4=1 hi7=544  x42
+  arg0=48        0x000030 type=3 low4=0 hi7=0    x40
+  arg0=3872      0x000F20 type=2 low4=0 hi7=30   x38
+  arg0=3         0x000003 type=0 low4=3 hi7=0    x37
+  arg0=16777219  0x1000003 type=0 low4=3 hi7=131072 x36
+  arg0=4112      0x001010 type=1 low4=0 hi7=32   x33
+  arg0=4352      0x001100 type=0 low4=0 hi7=34   x30
+  arg0=3145729   0x300001 type=0 low4=1 hi7=24576 x30
+  arg0=4194305   0x400001 type=0 low4=1 hi7=32768 x30
+  arg0=20975361  0x1400F01 type=0 low4=1 hi7=163870 x26
+  arg0=3145776   0x300030 type=3 low4=0 hi7=24576 x25
+  arg0=8224      0x002020 type=2 low4=0 hi7=64   x23
+  arg0=16777250  0x1000022 type=2 low4=2 hi7=131072 x23
+  arg0=4354      0x001102 type=0 low4=2 hi7=34   x22
+  arg0=64        0x000040 type=4 low4=0 hi7=0    x21
+  arg0=12322     0x003022 type=2 low4=2 hi7=96   x21
+  arg0=4263936   0x411000 type=0 low4=0 hi7=33312 x21
+  arg0=4144      0x001030 type=3 low4=0 hi7=32   x19
+  arg0=65538     0x010002 type=0 low4=2 hi7=512  x19
+  arg0=67        0x000043 type=4 low4=3 hi7=0    x17
+  arg0=21040897  0x1410F01 type=0 low4=1 hi7=164382 x17
+  arg0=7968      0x001F20 type=2 low4=0 hi7=62   x15
+  arg0=69378     0x010F02 type=0 low4=2 hi7=542  x15
+  arg0=816       0x000330 type=3 low4=0 hi7=6    x13
+  arg0=3170304   0x306000 type=0 low4=0 hi7=24768 x13
+  arg0=4160      0x001040 type=4 low4=0 hi7=32   x12
+  arg0=4400      0x001130 type=3 low4=0 hi7=34   x12
+  arg0=7984      0x001F30 type=3 low4=0 hi7=62   x12
+  arg0=16160     0x003F20 type=2 low4=0 hi7=126  x12
+  arg0=3215105   0x310F01 type=0 low4=1 hi7=25118 x12
+  arg0=16789538  0x1003022 type=2 low4=2 hi7=131168 x12
+  arg0=304       0x000130 type=3 low4=0 hi7=2    x11
+  arg0=4114      0x001012 type=1 low4=2 hi7=32   x11
+  arg0=65793     0x010101 type=0 low4=1 hi7=514  x10
+  arg0=16781314  0x1001002 type=0 low4=2 hi7=131104 x10
+  arg0=16781346  0x1001022 type=2 low4=2 hi7=131104 x10
+  arg0=16        0x000010 type=1 low4=0 hi7=0    x9
+  arg0=4260097   0x410101 type=0 low4=1 hi7=33282 x9
+  arg0=19988481  0x1310001 type=0 low4=1 hi7=156160 x9
+  arg0=320       0x000140 type=4 low4=0 hi7=2    x8
+  arg0=4416      0x001140 type=4 low4=0 hi7=34   x8
+  arg0=69699     0x011043 type=4 low4=3 hi7=544  x8
+  arg0=19        0x000013 type=1 low4=3 hi7=0    x7
+  arg0=3842      0x000F02 type=0 low4=2 hi7=30   x7
+  arg0=4131      0x001023 type=2 low4=3 hi7=32   x7
+  arg0=7938      0x001F02 type=0 low4=2 hi7=62   x7
+  arg0=20480     0x005000 type=0 low4=0 hi7=160  x7
+  arg0=69379     0x010F03 type=0 low4=3 hi7=542  x7
+  arg0=3145760   0x300020 type=2 low4=0 hi7=24576 x7
+  arg0=3150080   0x301100 type=0 low4=0 hi7=24610 x7
+  arg0=19922945  0x1300001 type=0 low4=1 hi7=155648 x7
+  arg0=21037057  0x1410001 type=0 low4=1 hi7=164352 x7
+  arg0=4163      0x001043 type=4 low4=3 hi7=32   x6
+  arg0=3145985   0x300101 type=0 low4=1 hi7=24578 x6
+  arg0=16793634  0x1004022 type=2 low4=2 hi7=131200 x6
+  arg0=16801794  0x1006002 type=0 low4=2 hi7=131264 x6
+  arg0=16842785  0x1010021 type=2 low4=1 hi7=131584 x6
+  arg0=34        0x000022 type=2 low4=2 hi7=0    x5
+  arg0=50        0x000032 type=3 low4=2 hi7=0    x5
+  arg0=3149840   0x301010 type=1 low4=0 hi7=24608 x5
+  arg0=3149872   0x301030 type=3 low4=0 hi7=24608 x5
+  arg0=20482     0x005002 type=0 low4=2 hi7=160  x4
+  arg0=69632     0x011000 type=0 low4=0 hi7=544  x4
+  arg0=4198177   0x400F21 type=2 low4=1 hi7=32798 x4
+  arg0=4263937   0x411001 type=0 low4=1 hi7=33312 x4
+  arg0=16777217  0x1000001 type=0 low4=1 hi7=131072 x4
+  arg0=16781059  0x1000F03 type=0 low4=3 hi7=131102 x4
+  arg0=16842754  0x1010002 type=0 low4=2 hi7=131584 x4
+  arg0=20971521  0x1400001 type=0 low4=1 hi7=163840 x4
+  arg0=4115      0x001013 type=1 low4=3 hi7=32   x3
+  arg0=3219201   0x311F01 type=0 low4=1 hi7=25150 x3
+  arg0=4263681   0x410F01 type=0 low4=1 hi7=33310 x3
+  arg0=4267808   0x411F20 type=2 low4=0 hi7=33342 x3
+  arg0=16843265  0x1010201 type=0 low4=1 hi7=131588 x3
+  arg0=33558547  0x2001013 type=1 low4=3 hi7=262176 x3
+  arg0=66        0x000042 type=4 low4=2 hi7=0    x2
+  arg0=257       0x000101 type=0 low4=1 hi7=2    x2
+  arg0=3843      0x000F03 type=0 low4=3 hi7=30   x2
+  arg0=4129      0x001021 type=2 low4=1 hi7=32   x2
+  arg0=4384      0x001120 type=2 low4=0 hi7=34   x2
+  arg0=4402      0x001132 type=3 low4=2 hi7=34   x2
+  arg0=8208      0x002010 type=1 low4=0 hi7=64   x2
+  arg0=8256      0x002040 type=4 low4=0 hi7=64   x2
+  arg0=16400     0x004010 type=1 low4=0 hi7=128  x2
+  arg0=69633     0x011001 type=0 low4=1 hi7=544  x2
+  arg0=3146032   0x300130 type=3 low4=0 hi7=24578 x2
+  arg0=3158064   0x303030 type=3 low4=0 hi7=24672 x2
+  arg0=4198176   0x400F20 type=2 low4=0 hi7=32798 x2
+  arg0=21044993  0x1411F01 type=0 low4=1 hi7=164414 x2
+  arg0=18        0x000012 type=1 low4=2 hi7=0    x1
+  arg0=51        0x000033 type=3 low4=3 hi7=0    x1
+  arg0=306       0x000132 type=3 low4=2 hi7=2    x1
+  arg0=322       0x000142 type=4 low4=2 hi7=2    x1
+  arg0=818       0x000332 type=3 low4=2 hi7=6    x1
+  arg0=3841      0x000F01 type=0 low4=1 hi7=30   x1
+  arg0=4097      0x001001 type=0 low4=1 hi7=32   x1
+  arg0=4368      0x001110 type=1 low4=0 hi7=34   x1
+  arg0=12352     0x003040 type=4 low4=0 hi7=96   x1
+  arg0=16448     0x004040 type=4 low4=0 hi7=128  x1
+  arg0=20243     0x004F13 type=1 low4=3 hi7=158  x1
+  arg0=69409     0x010F21 type=2 low4=1 hi7=542  x1
+  arg0=3145777   0x300031 type=3 low4=1 hi7=24576 x1
+  arg0=3149569   0x300F01 type=0 low4=1 hi7=24606 x1
+  arg0=3165968   0x304F10 type=1 low4=0 hi7=24734 x1
+  arg0=4194336   0x400020 type=2 low4=0 hi7=32768 x1
+  arg0=4194561   0x400101 type=0 low4=1 hi7=32770 x1
+  arg0=4214545   0x404F11 type=1 low4=1 hi7=32926 x1
+  arg0=4263745   0x410F41 type=4 low4=1 hi7=33310 x1
+  arg0=4280320   0x415000 type=0 low4=0 hi7=33440 x1
+  arg0=16777234  0x1000012 type=1 low4=2 hi7=131072 x1
+  arg0=16777538  0x1000142 type=4 low4=2 hi7=131074 x1
+  arg0=16777539  0x1000143 type=4 low4=3 hi7=131074 x1
+  arg0=16842786  0x1010022 type=2 low4=2 hi7=131584 x1
+  arg0=16847106  0x1011102 type=0 low4=2 hi7=131618 x1
+  arg0=21040961  0x1410F41 type=4 low4=1 hi7=164382 x1
+  arg0=33554464  0x2000020 type=2 low4=0 hi7=262144 x1
+  arg0=33554480  0x2000030 type=3 low4=0 hi7=262144 x1
+  arg0=33558544  0x2001010 type=1 low4=0 hi7=262176 x1
+  arg0=33558576  0x2001030 type=3 low4=0 hi7=262176 x1
+
+=== op150 cmd=3 samples
+  ev36 pc80 ints=[16777219, 1600021, 1600022] strs=[]
+  ev36 pc97 ints=[3, 1600021] strs=[]
+  ev36 pc120 ints=[3, 1600021] strs=[]
+  ev36 pc126 ints=[3, 1600021] strs=[]
+  ev36 pc132 ints=[3, 1600021] strs=[]
+  ev36 pc142 ints=[16777219, 1600021, 1600022] strs=[]
+  ev36 pc148 ints=[16777219, 1600021, 1600022] strs=[]
+  ev36 pc154 ints=[16777219, 1600021, 1600022] strs=[]
+  ev63 pc81 ints=[3, 1600020] strs=[]
+  ev63 pc101 ints=[3843, 1600020] strs=[]
+  ev63 pc114 ints=[16777219, 1600021, 1600022] strs=[]
+  ev63 pc130 ints=[20243, 1600021] strs=[]
+
+=== op150 cmd=1 samples with arg positions (look for animation: 14/15 args)
+  ev36 pc143 ints=[21037057, 1600021, 0, 0, 0, 1600003, -1000000, 0, 0, -1000000, -1000000, 0, 16777216, 0, 1600022] strs=[]
+  ev63 pc94 ints=[4198145, 1600020, 5, 0, 0, -1000000, -1000000, 1600030, 1600031, -1000000, -1000000, 0, 16777216, 3] strs=[]
+  ev63 pc103 ints=[4198145, 1600020, 4, 0, 0, -1000000, 255, 1600032, 1600033, -1000000, -1000000, 0, 16777216, 2] strs=[]
+  ev63 pc161 ints=[4198145, 1600021, 5, 0, 0, -1000000, 255, 1600042, 1600043, -1000000, -1000000, 0, 16777216, 3] strs=[]
+  ev63 pc162 ints=[4198145, 1600021, 5, 0, 0, -1000000, 255, 1600042, 1600043, -1000000, -1000000, 0, 16777216, 5] strs=[]
+  ev63 pc203 ints=[4198145, 1600020, 4, 0, 0, -1000000, 255, 1600032, 1600033, -1000000, -1000000, 0, 16777216, 2] strs=[]
+  ev64 pc93 ints=[69377, 1600021, 4, 0, 0, -1000000, 0, 0, 0, 0, -1000000, 0, 16777216, 2] strs=[]
+  ev64 pc94 ints=[69377, 1600021, 4, 0, 0, -1000000, 0, 0, 0, 0, -1000000, 0, 16777216, 4] strs=[]
+
+=== op150 argc=19 samples (2 of each cmd)
+  cmd0 ev63 pc131 ints=[3165968, 1600021, 0, 1, 1, -1000000, 255, 1600044, 1600045, 1600023, -1000000, 1600008, 16777216, 0, 0, 0, 0, 0, 1600024] strs=[]
+  cmd0 ev64 pc695 ints=[3145760, 1600021, 0, 1, 1, 1, 1600057, 1600041, 1600048, 1600049, 0, 0, 33554432, 0, 0, 1600053, 1600054, 1600055, 100] strs=['\\f[\\cself[19]]\\cself[7]\n\\ax[\\cself[12]]\n']
+  cmd0 ev90 pc207 ints=[3149840, 1600021, 0, 1, 1, 1, 255, 1600022, 1600023, 1600010, 0, 1600007, 33554432, 0, 0, 100, 100, 100, 1600011] strs=[]
+  cmd1 ev63 pc158 ints=[3149569, 1600021, 0, 0, 0, -1000000, 255, 1600044, 1600045, 1600023, -1000000, 0, 16777216, 0, 0, 0, 0, 0, 1600024] strs=[]
+  cmd1 ev64 pc98 ints=[3215105, 1600021, 5, 0, 0, -1000000, 0, 0, 0, 100, -1000000, 0, 16777216, 0, 0, 0, 0, 0, 0] strs=[]
+  cmd1 ev64 pc99 ints=[3215105, 1600021, 4, 0, 0, -1000000, 0, 0, 0, 100, -1000000, 0, 16777216, 2, 0, 0, 0, 0, 0] strs=[]
+
+=== op150 sentinel -1000000 per arg index (for argc>=11)
+  [((5,), 146), ((6,), 127), ((9,), 474), ((10,), 166)]
+
+=== op150: how often each arg index holds a magic number (>=1000000) for cmd=0 argc=11
+  [(3, 33), (4, 26), (5, 92), (7, 2449), (8, 2943)]

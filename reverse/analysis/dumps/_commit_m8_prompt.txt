@@ -1,0 +1,7 @@
+docs: point the new-session prompt at HANDOFF_M8
+
+- reading order now starts at docs/HANDOFF_M8.md
+- status paragraph records the M8 landings (battle settle -> day5 with no
+  injection, H forward chain, actor layer, template save, engine_state
+  decompilation) and the two remaining items (Park-Miller event RNG, polish)
+- notes that the M8 commits are local-only (origin/master may still be 1d36ebe)

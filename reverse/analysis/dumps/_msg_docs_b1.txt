@@ -1,0 +1,9 @@
+docs: M2 slice numbers after the operator fix; message origin 410; pause cursor sprite
+
+- BASELINE.json: opening_slice choice/message numbers re-measured after 69d7b9c,
+  message_window text_origin -> (64,410) and pause_cursor -> (576,554) with the
+  coordinate-scale derivation, new pause_cursor_sprite key, new opcode_121_operators key.
+- M2_SLICE.md: new section 3.8 (0x3000 is division, 0x4000 is remainder; the old
+  table made message.rs believe 412), the stale 'Sys2 = 412' correction replaced,
+  the message-window table gained the cursor sprite row and lost the /5 formula,
+  6.1 records that a 7-row message overflows the 168 px frame by 14 px.

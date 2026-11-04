@@ -1,0 +1,20 @@
+common dumps 550
+ids 0 549 count 550
+registered maps 6
+   ('タイトル', 'MapData/TitleMap.mps')
+   ('自宅1', 'MapData/SampleMapA.mps')
+   ('クマヘ', 'MapData/SampleMapA_1.mps')
+   ('ニューゲーム処理', 'MapData/Map003.mps')
+   ('ロード処理', 'MapData/Map024.mps')
+   ('セーブ', 'MapData/Map031.mps')
+1.4.0 refs in common: 378
+   (221, 13, '1.4.0/SD_basya.png')
+   (245, 204, '1.4.0/base_bottan.png')
+   (245, 208, '1.4.0/base_bottan.png')
+   (245, 210, '1.4.0/base_bottan.png')
+   (245, 212, '1.4.0/base_bottan.png')
+   (245, 216, '1.4.0/base_bottan.png')
+   (245, 223, '1.4.0/base_bottan.png')
+   (245, 236, '1.4.0/SD_menu_010.png')
+   (245, 271, '1.4.0/SD_menu_013.png')
+   (245, 275, '1.4.0/SD_menu_002.png')

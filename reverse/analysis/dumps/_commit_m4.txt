@@ -1,0 +1,28 @@
+M4: real audio backend (symphonia decode + cpal output + software mixer)
+
+crates/wolf-audio was a 3-line TODO; it is now a working M4 audio backend:
+
+- decode: ogg-vorbis / mp3 / wav -> interleaved f32 PCM via symphonia 0.6.1
+  (default-features = false; features flac, mp3, pcm, vorbis, ogg, wav, so the
+  build resolves fully offline). DecodedAudio reports sample_rate, channels,
+  frame count and duration, and reads Vorbis LOOPSTART/LOOPLENGTH tags.
+- mixer: 1 BGM voice + N concurrent SE voices, per-voice linear-interpolation
+  resampling, volume, loop wrap and fade-out; render(frames) is fully offline,
+  returns frames*channels samples clamped to [-1,1]. Loops are sample-continuous:
+  the fractional cursor wraps by (loop_end - loop_start) so no phase reset.
+- engine: cpal output stream, or a silent null backend when no device exists
+  (Engine::new never fails/panics). Public API: play_bgm / play_se / stop_bgm /
+  set_bgm_volume / set_se_volume, plus Engine::apply_sound_cmd(&SoundCmd) that
+  maps opcode 140 Sound to play/stop. resolve() finds paths under asset_root and
+  asset_root/Data with backslash normalisation.
+- tests (9, device-free): real ogg/mp3/wav decode, loop-tag read, render length,
+  SE sum clipping, seamless loop wrap, fade-to-silence, null-engine commands.
+  Asset-dependent tests skip gracefully when work/all is absent.
+
+docs/AUDIO.md documents the M4 plan, format inventory, loop semantics (tags are
+frame offsets; loop_end clamped to file length), crate + offline-dependency
+rationale, the Engine API, and the 3-line Game::sound wiring for the lead.
+
+Loop research: BGM loop points live in ogg Vorbis comments (26/49 BGM files
+tagged, all .ogg; mp3 BGM untagged). sys.txt BGMリスト loop-start(ms) is only a
+fallback for untagged tracks.

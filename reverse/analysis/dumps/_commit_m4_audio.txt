@@ -1,0 +1,18 @@
+M4: fix opcode 140 volume field from intArgs[4]; record audio acceptance
+
+The opcode 140 decoder read intArgs[1] as the volume, which is actually the
+BGM/BGS fade-in length (or SE start delay) in the retail format.  As a result
+fade-time-0 tracks were silenced and fade-time-10 tracks played at 10%.
+Verify the raw layout against wolfrpg-map-parser 0.4.1 sound_command:
+  [1] fade time / SE delay, [2] variable, [3] start time,
+  [4] volume, [5] tempo, [6] loop point (BGM/BGS).
+
+Now read the volume from intArgs[4] and preserve intArgs[1] as the fade
+length.  Unit tests pin both the SE and BGM paths.
+
+Acceptance:
+  * title BGM peak 0.087 -> 0.870, rms 0.0135 -> 0.1353
+  * bedroom peak 0.644, 8 sound commands with sane 40/70/200/50/75 volumes
+  * m4_probe on the real device: sample_rate 48000, channels 2, is_silent=false
+  * play --boot --audio --until 600: 0 warnings
+  * cargo test --workspace green; wolf-cli verify PASS 70/0

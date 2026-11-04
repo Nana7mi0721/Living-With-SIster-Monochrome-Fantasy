@@ -1,0 +1,199 @@
+=== per-event table (registered maps + control) ===
+
+## TitleMap.mps  53x30 tileset=4 tiles=1 layers=3 events=1 slots=133 title='なし'
+  ev2   '新タイトル用イベント'                 (24,9) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=autorun  conds=-                                        cmds=133    <-fresh
+
+## SampleMapA.mps  64x36 tileset=4 tiles=1 layers=3 events=40 slots=31083 title='なし'
+  ev0   'ニューゲーム処理'                   (30,0) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=autorun  conds=self0==0                                 cmds=846    <-fresh
+  ev1   '妹クリック判定（夜'                  (63,0) pages=3 live=[0, 1, 2] dead=[] fresh=None
+        p0  trig=parallel conds=v69==1 v25==0 v26==0 v302==0             cmds=113  
+        p1  trig=parallel conds=v65==1 v25==0 v26==0 v340==0             cmds=17   
+        p2  trig=parallel conds=v64==1 v25==0 v26==0 v302==0             cmds=17   
+  ev2   '妹クリック判定'                    (63,1) pages=2 live=[0, 1] dead=[] fresh=None
+        p0  trig=parallel conds=v65==1                                   cmds=15   
+        p1  trig=parallel conds=v64==1 v167==0                           cmds=15   
+  ev3   'ロード後の処理'                    (0,0) pages=2 live=[0, 1] dead=[] fresh=None
+        p0  trig=autorun  conds=v302==2                                  cmds=65   
+        p1  trig=autorun  conds=v302==2 v65==1                           cmds=48   
+  ev4   'メニュー処理'                     (30,3) pages=5 live=[0, 1, 2, 3, 4] dead=[] fresh=None
+        p0  trig=autorun  conds=v68==1 v69==1 v62==0                     cmds=342  
+        p1  trig=autorun  conds=v298==1                                  cmds=28   
+        p2  trig=parallel conds=v67>=1 v302==0 v464==0                   cmds=66   
+        p3  trig=parallel conds=v57>=1 v302==0 v464==0                   cmds=66   
+        p4  trig=parallel conds=v63==1 v62==0 v464==0 v60==0             cmds=116  
+  ev5   'デバック用'                      (63,33) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=self0==9 self100006==957                 cmds=387  
+  ev6   'スキル取得関係'                    (2,0) pages=2 live=[0, 1] dead=[] fresh=None
+        p0  trig=parallel conds=v26==1 v615==0                           cmds=1167 
+        p1  trig=parallel conds=v26==1 v295==2                           cmds=1053 
+  ev7   '戦判定表示'                      (63,3) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v340>=1 v350==0 v343==0 v35==0           cmds=359  
+  ev8   '戦クリック処理'                    (63,4) pages=9 live=[0, 1, 2, 3, 4, 5, 6, 7, 8] dead=[] fresh=None
+        p0  trig=parallel conds=v340==1 v350==0 v35<=0                   cmds=683  
+        p1  trig=autorun  conds=self100009==1                            cmds=3    
+        p2  trig=autorun  conds=self100009==2                            cmds=3    
+        p3  trig=autorun  conds=self100009==3                            cmds=3    
+        p4  trig=autorun  conds=self100009==4                            cmds=3    
+        p5  trig=autorun  conds=self100009==5                            cmds=3    
+        p6  trig=autorun  conds=self100009==6                            cmds=3    
+        p7  trig=autorun  conds=self100009==7                            cmds=3    
+        p8  trig=autorun  conds=self100009==8                            cmds=5    
+  ev9   '■深夜UI表示1'                   (0,35) pages=10 live=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] dead=[] fresh=None
+        p0  trig=parallel conds=v62==1 v140==0 v164==0 v364==0           cmds=611  
+        p1  trig=parallel conds=v62==2                                   cmds=236  
+        p2  trig=parallel conds=v62==3                                   cmds=185  
+        p3  trig=parallel conds=v62==4                                   cmds=141  
+        p4  trig=parallel conds=v62==5                                   cmds=287  
+        p5  trig=parallel conds=v62==6                                   cmds=91   
+        p6  trig=parallel conds=v62==7                                   cmds=208  
+        p7  trig=parallel conds=v62==8                                   cmds=128  
+        p8  trig=parallel conds=v62==9                                   cmds=197  
+        p9  trig=parallel conds=v62==10                                  cmds=256  
+  ev10  '■深夜UI表示2'                   (1,35) pages=6 live=[0, 1, 2, 3, 4, 5] dead=[] fresh=None
+        p0  trig=parallel conds=v62==11                                  cmds=290  
+        p1  trig=parallel conds=v62==12                                  cmds=90   
+        p2  trig=parallel conds=v62==13                                  cmds=89   
+        p3  trig=parallel conds=v62==14                                  cmds=86   
+        p4  trig=parallel conds=v62==15                                  cmds=88   
+        p5  trig=parallel conds=v62==16                                  cmds=87   
+  ev11  '■深夜UI判定'                    (3,35) pages=2 live=[0, 1] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1 v168==0 v364==0                   cmds=2613 
+        p1  trig=confirm  conds=v302==1                                  cmds=1    
+  ev12  'ゲームオーバー'                    (29,3) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v298==1                                  cmds=8    
+  ev13  'デバック用だよ'                    (63,35) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=parallel conds=-                                        cmds=2      <-fresh
+  ev14  '■深夜UI処理'                    (4,35) pages=2 live=[0, 1] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1                                   cmds=143  
+        p1  trig=confirm  conds=v302==1                                  cmds=1    
+  ev15  'サブメニュー処理'                   (1,0) pages=4 live=[0, 1, 2, 3] dead=[] fresh=0
+        p0  trig=parallel conds=v9==0 v67==0 v63==0 v57==0               cmds=295    <-fresh
+        p1  trig=parallel conds=v9==0 v67==2 v63==0                      cmds=268  
+        p2  trig=parallel conds=v9==0 v57==2 v63==0                      cmds=268  
+        p3  trig=parallel conds=v62>=1 v60==0                            cmds=45   
+  ev16  '■お触り判定設定'                   (6,35) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1                                   cmds=493  
+  ev17  'カーソル変更'                     (3,0) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1                                   cmds=189  
+  ev18  '■■処理さわる右'                   (0,33) pages=2 live=[0, 1] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1 v61!=32 v61!=33                   cmds=1781 
+        p1  trig=confirm  conds=v302==1                                  cmds=1    
+  ev19  '□深夜表情の表示'                   (0,31) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v165>=1 v125==0 v126==0 v166==0          cmds=982  
+  ev20  '■■深夜処理衣服'                   (1,33) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1                                   cmds=2003 
+  ev21  '■■処理さわる左'                   (2,33) pages=2 live=[0, 1] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1 v364==0                           cmds=1484 
+        p1  trig=confirm  conds=v302==1                                  cmds=1    
+  ev22  '■中央クリック処理'                  (7,35) pages=4 live=[0, 1, 2, 3] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1 v60==0 v138<=99 v139==0           cmds=2631 
+        p1  trig=parallel conds=v62>=1 v60==6 v139==0                    cmds=275  
+        p2  trig=parallel conds=v62>=1 v124==1 v139==0                   cmds=327  
+        p3  trig=confirm  conds=v302==1                                  cmds=1    
+  ev23  '■例外処理監視'                    (9,35) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v64>=1 v60==0 v302==0                    cmds=123  
+  ev24  '■例外処理実行'                    (10,35) pages=7 live=[0, 1, 2, 3, 4, 5, 6] dead=[] fresh=None
+        p0  trig=autorun  conds=v60==2 v60!=1 v124==0                    cmds=152  
+        p1  trig=autorun  conds=v60==3 v60!=1 v124==0                    cmds=712  
+        p2  trig=autorun  conds=v60==5 v124==0 v460==0                   cmds=192  
+        p3  trig=autorun  conds=v60==6                                   cmds=24   
+        p4  trig=autorun  conds=v60==4 v60!=1 v124==0                    cmds=266  
+        p5  trig=autorun  conds=v60==4 v437!=1 v124>=1                   cmds=158  
+        p6  trig=confirm  conds=v60==4 v60!=1 v124>=1 self0==99          cmds=251  
+  ev25  '深夜終了処理'                     (63,34) pages=3 live=[0, 1, 2] dead=[] fresh=0
+        p0  trig=parallel conds=v140==0 v60==0 v364==0 v123==0           cmds=34     <-fresh
+        p1  trig=parallel conds=v123==1 v437==0 v469==0                  cmds=26   
+        p2  trig=parallel conds=v123==1 v437==0 v139==1 v469==1          cmds=26   
+  ev26  '■■挿入浅い'                     (4,33) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1                                   cmds=1507 
+  ev27  '■■挿入深い'                     (5,33) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1                                   cmds=2314 
+  ev28  '■■挿入アナル'                    (6,33) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1                                   cmds=1864 
+  ev29  'パンツアイコン表示'                  (0,29) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v439==0 v69==1 v295==0 v627==0           cmds=18   
+  ev30  '攻撃メータ処理'                    (1,29) pages=2 live=[0, 1] dead=[] fresh=None
+        p0  trig=parallel conds=v305>=1                                  cmds=51   
+        p1  trig=parallel conds=v306>=1                                  cmds=50   
+  ev31  '深夜セーブ表示'                    (63,5) pages=4 live=[0, 1, 2, 3] dead=[] fresh=None
+        p0  trig=parallel conds=v62==1 v127==1                           cmds=2    
+        p1  trig=parallel conds=v62==1 v110==1                           cmds=2    
+        p2  trig=parallel conds=v62==1 v110==0 v127==0                   cmds=2    
+        p3  trig=parallel conds=v62==1 v124==1                           cmds=2    
+  ev32  'パンツ詳細表示監視'                  (2,29) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v439==1                                  cmds=156  
+  ev33  '挿入抜く'                       (1,31) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v460==1                                  cmds=336  
+  ev34  'スピーカー表示'                    (5,0) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v69==1 v62==0                            cmds=50   
+  ev35  '音量調整'                       (6,0) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v69==1 v464==0                           cmds=48   
+  ev36  '射精クリック'                     (7,0) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v124==1                                  cmds=17   
+  ev37  '射精処理監視'                     (11,35) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v64>=1 v60==0 v302==0 v437==0            cmds=40   
+  ev38  '自動射精実行処理'                   (12,35) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v437==1                                  cmds=64   
+  ev39  '■■尻コキ'                      (63,32) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v62>=1                                   cmds=285  
+
+## SampleMapA_1.mps  64x36 tileset=4 tiles=1 layers=3 events=12 slots=5752 title='なし'
+  ev1   'クリック範囲設定'                   (63,0) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=parallel conds=-                                        cmds=68     <-fresh
+  ev2   'カーソル重なり判定'                  (63,1) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=parallel conds=v9==0                                    cmds=176    <-fresh
+  ev3   '基本メニュー実行処理'                 (63,2) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=parallel conds=-                                        cmds=109    <-fresh
+  ev4   '会話メニュー処理'                   (30,3) pages=2 live=[0, 1] dead=[] fresh=None
+        p0  trig=autorun  conds=v30==1 v48==0                            cmds=487  
+        p1  trig=autorun  conds=v49==1                                   cmds=139  
+  ev5   'カード選択処理'                    (61,1) pages=2 live=[0, 1] dead=[] fresh=None
+        p0  trig=parallel conds=v46==2                                   cmds=162  
+        p1  trig=parallel conds=v46==1                                   cmds=6    
+  ev6   'セーブアイコン'                    (1,33) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v3==1                                    cmds=7    
+  ev7   'スキル詳細表示'                    (61,0) pages=3 live=[0, 1, 2] dead=[] fresh=None
+        p0  trig=parallel conds=v14==1                                   cmds=1708 
+        p1  trig=parallel conds=v14==2                                   cmds=812  
+        p2  trig=parallel conds=v14==2 v155==1                           cmds=789  
+  ev8   '戦闘カード選択処理'                  (61,2) pages=2 live=[0, 1] dead=[] fresh=None
+        p0  trig=parallel conds=v61==2                                   cmds=316  
+        p1  trig=parallel conds=v61==1                                   cmds=6    
+  ev9   '敵の行動表示'                     (1,31) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v170==2                                  cmds=292  
+  ev10  'バフ関連表示'                     (1,2) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v170==2                                  cmds=92   
+  ev11  '戦闘カード説明'                    (3,2) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v170==2                                  cmds=575  
+  ev12  'ゲームオーバー'                    (29,3) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=parallel conds=v298==1                                  cmds=8    
+
+## Map003.mps  70x170 tileset=4 tiles=1 layers=3 events=2 slots=45 title='なし'
+  ev0   '画像消去'                       (29,17) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=autorun  conds=v0==1                                    cmds=2    
+  ev1   'ニューゲーム処理'                   (30,17) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=autorun  conds=-                                        cmds=43     <-fresh
+
+## Map024.mps  53x30 tileset=4 tiles=0 layers=0 events=1 slots=3 title='なし'
+  ev0   '画像消去'                       (0,0) pages=1 live=[0] dead=[] fresh=None
+        p0  trig=autorun  conds=v0==1                                    cmds=3    
+
+## Map031.mps  53x30 tileset=0 tiles=0 layers=0 events=1 slots=63 title='なし'
+  ev0   'ロード時の自動処理'                  (15,8) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=autorun  conds=-                                        cmds=63     <-fresh
+
+## SampleMapB.mps  30x30 tileset=0 tiles=1 layers=3 events=6 slots=36 title='なし'
+  ev0   '敵エンカウントEV'                  (7,11) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=touch    conds=-                                        cmds=2      <-fresh
+  ev1   '市松模様解説男'                    (13,14) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=confirm  conds=-                                        cmds=5      <-fresh
+  ev2   'Aへの場所移動'                    (11,26) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=touch    conds=-                                        cmds=4      <-fresh
+  ev3   'お店'                         (19,13) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=confirm  conds=-                                        cmds=9      <-fresh
+  ev4   'コモン解説'                      (16,17) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=confirm  conds=-                                        cmds=4      <-fresh
+  ev5   '回復所'                        (21,13) pages=1 live=[0] dead=[] fresh=0
+        p0  trig=confirm  conds=-                                        cmds=12     <-fresh

@@ -1,0 +1,54 @@
+## TITLES + run_condition
+ev338  run=2 op=1 slots=201   title=深夜顔カットイン表示
+ev340  run=0 op=1 slots=3937  title=■Hカットイン実行処理みぎ
+ev341  run=0 op=1 slots=2046  title=■Hカットイン実行処理ひだり
+ev343  run=2 op=1 slots=859   title=■特殊カットイン
+ev346  run=0 op=1 slots=234   title=□Hカットイン実行処理昼
+ev350  run=2 op=1 slots=1567  title=文字エフェクトみぎ
+ev351  run=2 op=1 slots=1938  title=文字エフェクトひだり
+ev353  run=2 op=1 slots=359   title=文字エフェクト挿入中
+ev354  run=2 op=1 slots=267   title=文字エフェクト射精
+ev357  run=2 op=1 slots=311   title=文字エフェクトアイテム
+ev358  run=2 op=1 slots=149   title=文字エフェクト妹絶頂
+ev365  run=0 op=2 slots=113   title=■カットイン顔表示
+ev367  run=2 op=1 slots=54    title=┗カットイン瞬き
+ev372  run=0 op=2 slots=170   title=カットイン呼び出しトイレ
+ev407  run=0 op=2 slots=49    title=中だし溢れカットイン
+ev410  run=0 op=2 slots=248   title=騎乗位系カットイン
+ev445  run=0 op=2 slots=411   title=DLCイベントカットイン
+
+## all 300-by-name call sites -> resolved id
+distinct 300 names: 147
+ev338 name-in-300: no
+ev340 name-in-300: no
+ev341 name-in-300: no
+ev343 name-in-300: no
+ev346 name-in-300: no
+ev350 name-in-300: no
+ev351 name-in-300: no
+ev353 name-in-300: no
+ev354 name-in-300: no
+ev357 name-in-300: no
+ev358 name-in-300: no
+ev365 name-in-300: no
+ev367 name-in-300: no
+ev372 name-in-300: no
+ev407 name-in-300: no
+ev410 name-in-300: no
+ev445 name-in-300: no
+
+## 210 with non-literal / self-var args, resolved to targets?
+ce70   pc95    raw=1600010
+ce127  pc136   raw=1600024
+ce127  pc148   raw=1600024
+ce127  pc158   raw=1600024
+ce127  pc168   raw=1600024
+ce165  pc50    raw=1600011
+ce168  pc104   raw=1600048
+ce183  pc24    raw=1600037
+ce188  pc254   raw=1600030
+ce197  pc92    raw=1600012
+
+## which events have run=2 (auto) among ALL 550
+count=97
+[38, 43, 216, 217, 236, 237, 240, 272, 273, 274, 275, 296, 330, 334, 335, 337, 338, 339, 343, 347, 348, 349, 350, 351, 352, 353, 354, 355, 356, 357, 358, 362, 363, 366, 367, 368, 373, 375, 376, 378, 380, 381, 383, 385, 387, 389, 391, 393, 395, 397, 398, 400, 401, 404, 411, 413, 414, 416, 417, 422, 431, 432, 433, 434, 444, 467, 468, 469, 470, 473, 474, 476, 479, 481, 483, 485, 487, 490, 491, 493, 495, 498, 499, 501, 503, 506, 507, 509, 512, 514, 515, 516, 517, 518, 519, 520, 521]

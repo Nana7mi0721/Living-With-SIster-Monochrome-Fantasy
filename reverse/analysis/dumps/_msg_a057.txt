@@ -1,0 +1,4 @@
+docs: record the end-to-end save round trip
+
+- M2_SLICE 2.5: title -> new game -> save -> load test and picture fixes
+- BASELINE save_opcodes: end-to-end test, picture roundtrip law, official-readback caveat

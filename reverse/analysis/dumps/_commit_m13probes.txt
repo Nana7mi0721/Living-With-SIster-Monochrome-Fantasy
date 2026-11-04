@@ -1,0 +1,23 @@
+test/docs(m13): cross-day save, H thresholds, NG+, random events; correct op111 tier semantics
+
+New probes and research notes covering the rest of the M13 content-parity bar:
+
+- m13_crossday_save.rs / M13_CROSSDAY_SAVE.md: all 8 retail slots load->save->load->save
+  are byte-idempotent with full state continuity; fresh boot advances to day 4/11 and
+  save->reload->save converges to a byte fixed point; common-event self banks survive
+  reload (32/30 banks, nonzero>0).
+- m13_h_thresholds.rs / M13_H_THRESHOLDS.md: 37 gate commands locked byte-for-byte and
+  exercised at their boundaries on the runtime VM; CE318 trust gate really spawns CE360
+  at 100 and not at 99.
+- m13_ngplus.rs / M13_NGPLUS.md: CE436 inheritance points and the SampleMapA spend menu
+  are script-driven and work unmodified; var550 read from System.sav; production path OK.
+- m13_random_events.rs / M13_RANDOM_EVENTS.md: 25 events sampled across 12 pools with
+  warnings=0; full call-target scan 19624 checked, 0 dead, 8 dormant (CE270 dangling
+  op300, unreachable).
+- m13_mainline_endings.rs / M13_MAINLINE_ENDINGS.md: after 7c3b728 both furthest retail
+  slots (SaveData01/08 day90) finish naturally without injection: self51 4->3->2->1->0,
+  stage28->29, var492=1, warnings=0; stage30 proven a side event (carrot), not the finale.
+- Correct op111 semantics in M13_CONTENT_MATRIX.md / M13_CROSSWALK_UNRESOLVED.md:
+  a single multi-tuple op111 is an ordered first-true dispatch, not logical AND
+  (@338/@415 = 欲求不満>=2 case1 else 発情度>=75 case2; @1060 = 250/150/0 tiers);
+  nested single-condition 111s (CE310@159->161->163->165) remain equivalent to AND.

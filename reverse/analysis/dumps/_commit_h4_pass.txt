@@ -1,0 +1,4 @@
+docs(m13): record H2-H5 manual acceptance as all passed
+
+- H4 confirmed by user 2026-11-02 (HUD colour/baseline/date-money alignment)
+- refresh HANDOFF_M13, docs/README, PLAN status and automated-audit table

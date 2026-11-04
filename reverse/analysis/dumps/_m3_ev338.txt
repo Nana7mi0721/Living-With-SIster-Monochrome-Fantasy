@@ -1,0 +1,149 @@
+# ev338  深夜顔カットイン表示  run=2 op=1 slots=201
+pc0     op111   bd0  a=[1, 2000481, 1, 2] s=
+pc1     op401   bd0  a=[1] s=
+pc2     op172   bd1  a=[] s=
+pc4     op499   bd0  a=[] s=
+pc5     op121   bd0  a=[1600010, 40, 0, 0] s=
+pc6     op121   bd0  a=[1600011, 195, 0, 0] s=
+pc7     op121   bd0  a=[1600012, 215, 0, 0] s=
+pc8     op111   bd0  a=[2, 2000100, 10, 1, 2000100, 0, 1] s=
+pc9     op401   bd0  a=[1] s=
+pc10    op103   bd1  a=[] s=["眠っているとき"]
+pc11    op150   bd1  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_193.png"]
+pc13    op401   bd0  a=[2] s=
+pc14    op111   bd1  a=[17, 2000123, 1, 1] s=
+pc15    op401   bd1  a=[1] s=
+pc16    op103   bd2  a=[] s=["絶頂"]
+pc17    op150   bd2  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_156.png"]
+pc19    op420   bd1  a=[0] s=
+pc20    op111   bd2  a=[18, 2000114, 2, 1, 2000114, 1, 1] s=
+pc21    op401   bd2  a=[1] s=
+pc22    op103   bd3  a=[] s=["アナル挿入"]
+pc23    op150   bd3  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_155.png"]
+pc25    op401   bd2  a=[2] s=
+pc26    op103   bd3  a=[] s=["愛撫"]
+pc27    op150   bd3  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_153.png"]
+pc29    op420   bd2  a=[0] s=
+pc30    op111   bd3  a=[18, 2000098, 2, 1, 2000098, 1, 1] s=
+pc31    op401   bd3  a=[1] s=
+pc32    op103   bd4  a=[] s=["まんこ挿入フィニッシュ前"]
+pc33    op150   bd4  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_157.png"]
+pc35    op401   bd3  a=[2] s=
+pc36    op111   bd4  a=[17, 2000484, 1, 1] s=
+pc37    op401   bd4  a=[1] s=
+pc38    op103   bd5  a=[] s=["尻コキ"]
+pc39    op111   bd5  a=[17, 2000099, 1, 1] s=
+pc40    op401   bd5  a=[1] s=
+pc41    op111   bd6  a=[17, 2000102, 80, 1] s=
+pc42    op401   bd6  a=[1] s=
+pc43    op111   bd7  a=[17, 2000107, 50, 1] s=
+pc44    op401   bd7  a=[1] s=
+pc45    op150   bd8  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_154.png"]
+pc47    op420   bd7  a=[0] s=
+pc48    op150   bd8  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_153.png"]
+pc50    op499   bd7  a=[] s=
+pc52    op420   bd6  a=[0] s=
+pc53    op150   bd7  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_152.png"]
+pc55    op499   bd6  a=[] s=
+pc57    op420   bd5  a=[0] s=
+pc58    op150   bd6  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_174.png"]
+pc60    op499   bd5  a=[] s=
+pc62    op420   bd4  a=[0] s=
+pc63    op103   bd5  a=[] s=["まんこ挿入"]
+pc64    op150   bd5  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_154.png"]
+pc66    op499   bd4  a=[] s=
+pc68    op420   bd3  a=[0] s=
+pc69    op111   bd4  a=[17, 2000110, 1, 1] s=
+pc70    op401   bd4  a=[1] s=
+pc71    op103   bd5  a=[] s=["愛撫"]
+pc72    op150   bd5  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_153.png"]
+pc74    op420   bd4  a=[0] s=
+pc75    op111   bd5  a=[17, 2000127, 1, 1] s=
+pc76    op401   bd5  a=[1] s=
+pc77    op103   bd6  a=[] s=["愛撫"]
+pc78    op111   bd6  a=[17, 2000137, 7, 2] s=
+pc79    op401   bd6  a=[1] s=
+pc80    op150   bd7  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_135.png"]
+pc82    op420   bd6  a=[0] s=
+pc83    op150   bd7  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_153.png"]
+pc85    op499   bd6  a=[] s=
+pc87    op420   bd5  a=[0] s=
+pc88    op111   bd6  a=[2, 2000107, 50, 1, 2000107, 0, 1] s=
+pc89    op401   bd6  a=[1] s=
+pc90    op111   bd7  a=[18, 2000137, 7, 2, 2000137, 10, 2] s=
+pc91    op401   bd7  a=[1] s=
+pc92    op111   bd8  a=[17, 2000099, 1, 2] s=
+pc93    op401   bd8  a=[1] s=
+pc94    op150   bd9  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_136.png"]
+pc96    op420   bd8  a=[0] s=
+pc97    op111   bd9  a=[17, 2000124, 1, 2] s=
+pc98    op401   bd9  a=[1] s=
+pc99    op150   bd10 a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_132.png"]
+pc101   op420   bd9  a=[0] s=
+pc102   op150   bd10 a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_135.png"]
+pc104   op499   bd9  a=[] s=
+pc106   op499   bd8  a=[] s=
+pc108   op401   bd7  a=[2] s=
+pc109   op99    bd8  a=[0] s=
+pc110   op111   bd8  a=[17, 2000099, 1, 2] s=
+pc111   op401   bd8  a=[1] s=
+pc112   op150   bd9  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_136.png"]
+pc114   op420   bd8  a=[0] s=
+pc115   op111   bd9  a=[17, 2000124, 1, 2] s=
+pc116   op401   bd9  a=[1] s=
+pc117   op150   bd10 a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_137.png"]
+pc119   op420   bd9  a=[0] s=
+pc120   op150   bd10 a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_135.png"]
+pc122   op499   bd9  a=[] s=
+pc124   op499   bd8  a=[] s=
+pc126   op420   bd7  a=[0] s=
+pc127   op111   bd8  a=[3, 2000102, 90, 1, 2000102, 50, 1, 2000102, 0, 1] s=
+pc128   op401   bd8  a=[1] s=
+pc129   op103   bd9  a=[] s=["興奮"]
+pc130   op150   bd9  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_157.png"]
+pc132   op401   bd8  a=[2] s=
+pc133   op103   bd9  a=[] s=["感じる"]
+pc134   op150   bd9  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_154.png"]
+pc136   op401   bd8  a=[3] s=
+pc137   op103   bd9  a=[] s=["興奮"]
+pc138   op150   bd9  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_151.png"]
+pc140   op499   bd8  a=[] s=
+pc142   op499   bd7  a=[] s=
+pc144   op401   bd6  a=[2] s=
+pc145   op111   bd7  a=[18, 2000137, 7, 2, 2000137, 10, 2] s=
+pc146   op401   bd7  a=[1] s=
+pc147   op111   bd8  a=[17, 2000124, 1, 2] s=
+pc148   op401   bd8  a=[1] s=
+pc149   op150   bd9  a=[2, 8230, 0] s=
+pc151   op420   bd8  a=[0] s=
+pc152   op150   bd9  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_135.png"]
+pc154   op499   bd8  a=[] s=
+pc156   op401   bd7  a=[2] s=
+pc157   op111   bd8  a=[17, 2000099, 1, 2] s=
+pc158   op401   bd8  a=[1] s=
+pc159   op150   bd9  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_136.png"]
+pc161   op420   bd8  a=[0] s=
+pc162   op111   bd9  a=[17, 2000124, 1, 2] s=
+pc163   op401   bd9  a=[1] s=
+pc164   op150   bd10 a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_137.png"]
+pc166   op420   bd9  a=[0] s=
+pc167   op150   bd10 a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_135.png"]
+pc169   op499   bd9  a=[] s=
+pc171   op499   bd8  a=[] s=
+pc173   op420   bd7  a=[0] s=
+pc174   op111   bd8  a=[2, 2000102, 50, 1, 2000102, 0, 1] s=
+pc175   op401   bd8  a=[1] s=
+pc176   op103   bd9  a=[] s=["興奮"]
+pc177   op150   bd9  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_151.png"]
+pc179   op401   bd8  a=[2] s=
+pc180   op103   bd9  a=[] s=["通常"]
+pc181   op150   bd9  a=[0, 8230, 0, 1, 1, 1, 255, 5, 1600010, 100, 0] s=["cutin/cutin_174.png"]
+pc183   op499   bd8  a=[] s=
+pc185   op499   bd7  a=[] s=
+pc187   op499   bd6  a=[] s=
+pc189   op499   bd5  a=[] s=
+pc191   op499   bd4  a=[] s=
+pc193   op499   bd3  a=[] s=
+pc195   op499   bd2  a=[] s=
+pc197   op499   bd1  a=[] s=
+pc199   op499   bd0  a=[] s=

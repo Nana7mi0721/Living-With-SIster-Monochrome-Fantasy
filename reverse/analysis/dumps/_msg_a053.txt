@@ -1,0 +1,4 @@
+M2: new-game save/load round trip
+
+- savegame: keep empty FileString/WindowString slots and preserve scale 0
+- opening test: title path -> new game -> 1200 frames -> save -> reload

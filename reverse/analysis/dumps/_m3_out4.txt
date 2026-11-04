@@ -1,0 +1,21 @@
+## any-opcode references to 500<T> / 600<T> / <T> in int args
+ev338  refs=0 :: 
+ev340  refs=0 :: 
+ev341  refs=0 :: 
+ev343  refs=4 :: ce340 op210 pc711 arg[0]=500343; ce340 op210 pc1509 arg[0]=500343; ce341 op210 pc1227 arg[0]=500343; ce341 op210 pc1935 arg[0]=500343
+ev346  refs=20 :: ce246 op210 pc695 arg[0]=500346; ce246 op210 pc906 arg[0]=500346; ce246 op210 pc1477 arg[0]=500346; ce246 op210 pc1543 arg[0]=500346; ce246 op210 pc1598 arg[0]=500346; ce246 op210 pc1692 arg[0]=500346; ce246 op210 pc1799 arg[0]=500346; ce315 op210 pc1100 arg[0]=500346; ce315 op210 pc1103 arg[0]=500346; ce315 op210 pc1198 arg[0]=500346; ce315 op210 pc1207 arg[0]=500346; ce322 op210 pc1211 arg[0]=500346
+ev350  refs=0 :: 
+ev351  refs=0 :: 
+ev353  refs=0 :: 
+ev354  refs=0 :: 
+ev357  refs=0 :: 
+ev358  refs=0 :: 
+ev365  refs=548 :: ce322 op210 pc1117 arg[0]=500365; ce322 op210 pc1354 arg[0]=500365; ce322 op210 pc1379 arg[0]=500365; ce322 op210 pc1389 arg[0]=500365; ce323 op210 pc119 arg[0]=500365; ce323 op210 pc143 arg[0]=500365; ce323 op210 pc195 arg[0]=500365; ce323 op210 pc198 arg[0]=500365; ce323 op210 pc201 arg[0]=500365; ce323 op210 pc204 arg[0]=500365; ce323 op210 pc207 arg[0]=500365; ce323 op210 pc210 arg[0]=500365
+ev367  refs=0 :: 
+ev372  refs=44 :: ce323 op210 pc120 arg[0]=500372; ce323 op210 pc232 arg[0]=500372; ce323 op210 pc240 arg[0]=500372; ce323 op210 pc337 arg[0]=500372; ce323 op210 pc522 arg[0]=500372; ce323 op210 pc556 arg[0]=500372; ce323 op210 pc562 arg[0]=500372; ce323 op210 pc602 arg[0]=500372; ce323 op210 pc640 arg[0]=500372; ce323 op210 pc647 arg[0]=500372; ce323 op210 pc730 arg[0]=500372; ce323 op210 pc733 arg[0]=500372
+ev407  refs=15 :: ce347 op210 pc884 arg[0]=500407; ce347 op210 pc912 arg[0]=500407; ce347 op210 pc916 arg[0]=500407; ce347 op210 pc958 arg[0]=500407; ce347 op210 pc966 arg[0]=500407; ce347 op210 pc992 arg[0]=500407; ce347 op210 pc1013 arg[0]=500407; ce347 op210 pc1028 arg[0]=500407; ce347 op210 pc1069 arg[0]=500407; ce347 op210 pc1082 arg[0]=500407; ce402 op210 pc367 arg[0]=500407; ce402 op210 pc376 arg[0]=500407
+ev410  refs=10 :: ce402 op210 pc165 arg[0]=500410; ce402 op210 pc173 arg[0]=500410; ce402 op210 pc177 arg[0]=500410; ce402 op210 pc195 arg[0]=500410; ce402 op210 pc198 arg[0]=500410; ce402 op210 pc288 arg[0]=500410; ce402 op210 pc308 arg[0]=500410; ce402 op210 pc311 arg[0]=500410; ce402 op210 pc360 arg[0]=500410; ce402 op210 pc447 arg[0]=500410
+ev445  refs=358 :: ce278 op210 pc20 arg[0]=500445; ce278 op210 pc30 arg[0]=500445; ce278 op210 pc122 arg[0]=500445; ce278 op210 pc126 arg[0]=500445; ce278 op210 pc226 arg[0]=500445; ce278 op210 pc243 arg[0]=500445; ce278 op210 pc251 arg[0]=500445; ce278 op210 pc283 arg[0]=500445; ce278 op210 pc301 arg[0]=500445; ce278 op210 pc317 arg[0]=500445; ce278 op210 pc330 arg[0]=500445; ce278 op210 pc352 arg[0]=500445
+
+## opcode distribution of reference opcodes
+{210: 999}

@@ -1,0 +1,6 @@
+keys: ['boot', 'game', 'gcreach', 'dead', 'reg']
+  boot list 62 sample ["('c', 100)", "('c', 101)", "('c', 102)", "('c', 105)"]
+  game list 306 sample ["('c', 100)", "('c', 101)", "('c', 102)", "('c', 103)"]
+  gcreach list 249 sample [5, 14, 42, 49]
+  dead list 301 sample [0, 1, 2, 3]
+  reg dict 6 sample [('0', 'TitleMap.mps'), ('1', 'SampleMapA.mps')]

@@ -1,0 +1,6 @@
+M6: prove the first playable action in the bedroom
+
+- m6_mainline: clicking the 读书 icon at (884,240) runs the reading action
+  and floats 「对各种事的理解加深了。」; assert on the text picture
+- docs: HANDOFF_M4 §4.6 first-playable-action paragraph + gap ② resolved,
+  ARCHITECTURE M6 row, NEW_SESSION status, BASELINE m6_mainline.first_action

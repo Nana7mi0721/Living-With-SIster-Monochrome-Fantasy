@@ -1,0 +1,15 @@
+feat(rng): seed event RNG from local clock in interactive play (H-PRNG-1)
+
+- rng: add resolve_session_event_seed(raw, clock_ticks): an explicit
+  WOLF_EVENT_SEED wins, otherwise use the clock tick with zero normalised to
+  EVENT_RESEED. Library constructors stay fixed for deterministic tests and
+  diagnostic commands.
+- play: install the session seed after Game::new and before boot/load-save,
+  and log "startup: event RNG seed <seed> (clock|WOLF_EVENT_SEED)".
+- tests: prng_seed now 10/10, covering clock policy, same/different ticks,
+  zero normalisation and explicit-seed precedence.
+- docs: close H-PRNG-1 in UNVERIFIED; update M9/M11/M8 research notes,
+  BASELINE, HANDOFF §10, README and PLAN.
+
+cargo test --workspace: 146 blocks / 880 passed / 0 failed / 14 ignored.
+wolf-cli verify --root work/all: PASS 70 / pending 0.

@@ -1,0 +1,2056 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+<HEAD>
+<META http-equiv="Content-Type" content="text/html; charset=Shift_JIS">
+<META name="GENERATOR" content="IBM WebSphere Studio Homepage Builder Version 7.0.1.0 for Windows">
+<META http-equiv="Content-Style-Type" content="text/css">
+<TITLE>YADOT-WOLF 文章の表示</TITLE>
+<meta name="robots" content="nofollow">
+<STYLE type="text/css">
+<!--
+ A { text-decoration: none ;}
+-->
+</STYLE>
+<BASE target="">
+<BASE target="g/page.htm">
+<LINK rel="stylesheet" href="g/page.css" type="text/css">
+</HEAD>
+<BODY style="font-family: ＭＳ ゴシック" bgcolor="#000e3c" text="#ffffff" link="#00ff00" vlink="#00ff00" background="../../../page/back-g_w.png" alink="#00ff00">
+<CENTER>
+<TABLE border="0">
+  <TBODY>
+    <TR>
+      <TD><FONT color="#00ffff"><A name="top">ＷＯＬＦ ＲＰＧエディター(ウディタ)[3.716]／イベントコマンド</A></FONT><A href="../../" target="_top">【サイトトップへ戻る】</A><BR>
+      <FONT size="+2" color="#ffff00">■文章の表示</FONT><BR>
+      （更新：2026/08/04）<BR>
+      <BR>
+      <BR>
+      <FONT color="#a0dcff">イベントコマンド【文章の表示】</FONT>について解説します。<BR>
+      <BR>
+      <IMG src="001.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <TABLE cellpadding="5">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000099" align="center">ショートカット</TD>
+          </TR>
+          <TR>
+            <TD bgcolor="#000000">
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD><FONT size="+1"><A href="#nani" target="_self">■イベントコマンド【文章の表示】とは？</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#sys" target="_self">■システム変数・システム文字列の一覧</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#kinou" target="_self">■コメント文</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#kinou2" target="_self">■デバッグ文</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_nyuuryoku" target="_self">■設定画面の説明：文章入力欄</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_button" target="_self">■設定画面の説明：[文章入力][コメント文][デバッグ文][↑全消去]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_tabi" target="_self">■設定画面の説明：[2回改行で自動入力][入力のたびに消去]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_kao" target="_self">■設定画面の説明：顔番号確認(SysDB 24から読込/文字色確認(SysDB 12))</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_chuudan" target="_self">■設定画面の説明：[■文章の強制中断]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#d_kansi" target="_self">■設定画面の説明：[ValWatch]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#d_kansi2" target="_self">■設定画面の説明：[PictureWatch]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#d_kansi3" target="_self">■設定画面の説明：[MoveWatch]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#d_kansi4" target="_self">■設定画面の説明：[Performance]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#kao" target="_self">■顔グラフィックの表示</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><A href="#bun_ichi" target="_self"><FONT size="+1">■文章の表示位置の変更(システム変数[1～2])について</FONT></A></TD>
+                </TR>
+                <TR>
+                  <TD><A href="#font" target="_self"><FONT size="+1">■フォント「Meiryo」の文字の横幅について</FONT></A></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR>
+      <A name="nani">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■イベントコマンド【文章の表示】とは？</FONT><BR>
+      <BR>
+      <FONT color="#a0dcff">イベントコマンド【文章の表示】</FONT>は、文章を表示する時に使います。<BR>
+      <BR>
+      <IMG src="010.png" width="640" height="480" border="0"><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#ffff00">特殊文字</FONT>を使う事で、文字の表示サイズや色を変えたり、変数の値を表示したりする事ができます。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../0101_tokushumoji/" target="_blank">【特殊文字についての説明を見る】</A><BR>
+      <BR>
+      <FONT color="#00ffff">▼｢文字サイズ｣と｢文字の色｣を変更する特殊文字を使用した場合</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c010.txt" target="_blank">【イベントコード表示】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT size="+2" color="#ffa064">■マップイベント</FONT><BR>
+            <BR>
+            <FONT color="#00ffff">起動条件：</FONT>決定キーで実行<BR>
+            <FONT color="#00ffff">起動条件変数：</FONT>なし<BR>
+                  <BR>
+            <FONT color="#ffff00">■文章:<FONT color="#00ffff">\f[20]</FONT>お前は「<FONT color="#00ffff">\c[3]</FONT>ウルファール<FONT color="#00ffff">\c[0]</FONT>」だな！<BR>
+            ■</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <IMG src="012.png" width="640" height="480" border="0"><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#a0dcff">【文章の表示】</FONT>には、ゲーム画面上に文章を表示する設定の他に、<BR>
+      イベントコマンド表示欄にメモ書きを残す時に使う<FONT color="#ffff00">コメント文</FONT>の設定や、<BR>
+      デバッグウィンドウに文章を表示する<FONT color="#ffff00">デバッグ文</FONT>の設定などがあります。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      「コメント文」や「デバッグ文」については、後ほど説明します。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff" size="+2">■ピクチャによる文字列の表示について</FONT><BR>
+      <BR>
+      ゲーム画面上に文字列を表示する方法は<FONT color="#a0dcff">【文章の表示】</FONT>の他に、<FONT color="#ffff00">ピクチャを使って表示する方法</FONT>もあります。<BR>
+      <BR>
+      例えばメニュー画面や戦闘画面で表示される文字列は、全てピクチャで表示しており、<FONT color="#a0dcff">【文章の表示】</FONT>は使用しておりません。<BR>
+      <BR>
+      <FONT color="#00ffff">▼ここで表示されている文字列は全てピクチャで表示</FONT><BR>
+      <IMG src="018_0.png" width="640" height="480" border="0"><BR>
+      <BR>
+      ピクチャによる文字列の表示は、<FONT color="#ffff00">単にゲーム画面上に文字列を表示するだけ</FONT>であるため、<BR>
+      <FONT color="#a0dcff">【文章の表示】</FONT>のように、メッセージウィンドウが表示されたり、キー待ちカーソルが表示されたり、<BR>
+      顔グラフィックが表示されたりするような事はありません。<BR>
+      <BR>
+      一応メッセージウィンドウの表示、キー待ちの処理、顔グラフィックの表示などを<FONT color="#ffff00">独自のイベントで設定する事もできる</FONT>ので、<BR>
+      もしも<FONT color="#a0dcff">【文章の表示】</FONT>の表示仕様が気に入らない場合は、かなり手間はかかりますが、独自の文章の表示設定も可能です。<BR>
+      <BR>
+      <FONT color="#00ffff">▼ピクチャを使って独自の文章の表示設定を行っている一例（ＹＡＤＯ作品「<A href="../../../w/nia/index.htm" target="_blank">ニアとアインの冒険</A>」）</FONT><BR>
+      <IMG src="018_1.png" width="960" height="540" border="0"><BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="sys">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■システム変数・システム文字列の一覧</FONT><BR>
+      <BR>
+      <FONT color="#a0dcff">【文章の表示】</FONT>に関連する「システム変数」「システム文字列」の一覧です。<BR>
+      変数名をクリックすると詳細情報を見る事ができます。<BR>
+      <BR>
+      <A href="../../03_hen/0004_hen_sys/" target="_blank">【システム変数・システム文字列の説明ページを見る】</A><BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">システム変数</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0005_hen_sys0-34/index.htm#sys000" target="_blank">0:顔ｸﾞﾗﾌｨｯｸ番号</A></FONT></TD>
+            <TD>次に表示する文章の表示にて、顔グラフィックを表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="2" valign="top"><FONT size="+1"><A href="../../03_hen/0005_hen_sys0-34/index.htm#sys001" target="_blank">1:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ X座標<BR>
+            2:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ Y座標</A></FONT></TD>
+            <TD>メッセージウィンドウの表示位置を設定。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#a0dcff">【文章の表示】</FONT>が実行されると、<BR>
+            <A href="../../05_kihon/0063_msg/" target="_blank">コモンイベント[063:X[共]メッセージウィンドウ]</A>にて<BR>
+            表示位置の初期化が行われます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD rowspan="2" valign="top"><FONT size="+1"><A href="../../03_hen/0005_hen_sys0-34/index.htm#sys005" target="_blank">5:ﾎﾟｰｽﾞｶｰｿﾙX (-1=自動)<BR>
+            6:ﾎﾟｰｽﾞｶｰｿﾙY (-1=自動)</A></FONT></TD>
+            <TD>メッセージウィンドウの下部に表示される<BR>
+            キー待ちを知らせる[▼]の表示位置を設定。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#a0dcff">【文章の表示】</FONT>が実行されると、<BR>
+            <A href="../../05_kihon/0063_msg/" target="_blank">コモンイベント[063:X[共]メッセージウィンドウ]</A>にて<BR>
+            表示位置の初期化が行われます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0005_hen_sys0-34/index.htm#sys008" target="_blank">8:基本フォントサイズ</A></FONT></TD>
+            <TD><FONT color="#a0dcff">【文章の表示】【選択肢】【ピクチャ】</FONT>の文字列の表示にて<BR>
+            文字を表示する時のフォントサイズを設定。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0005_hen_sys0-34/index.htm#sys009" target="_blank">9:ﾒｯｾｰｼﾞ速度( X 文字/秒)</A></FONT></TD>
+            <TD><FONT color="#a0dcff">【文章の表示】</FONT>にて１秒間に何文字を表示するのかを設定。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0005_hen_sys0-34/index.htm#sys010" target="_blank">10:ﾒｯｾｰｼﾞ表示ｳｪｲﾄ(X ﾌﾚｰﾑ)</A></FONT></TD>
+            <TD><FONT color="#a0dcff">【文章の表示】</FONT>にて表示し始める時間を設定。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0005_hen_sys0-34/index.htm#sys012" target="_blank">12:文章の表示 実行中？(1=ON)</A></FONT></TD>
+            <TD>文章表示中は「1」になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0005_hen_sys0-34/index.htm#sys021" target="_blank">21:文字影付ける?(0=OFF,1以上=ON)]</A></FONT></TD>
+            <TD>「1」を設定すると文字表示に影が付きます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0005_hen_sys0-34/index.htm#sys023" target="_blank">23:ルビのフォントサイズ</A></FONT></TD>
+            <TD>ルビのフォントサイズを設定。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0006_hen_sys35-76/index.htm#sys035" target="_blank">73:文･選択肢のﾏｳｽ入力(1なら受付)</A></FONT></TD>
+            <TD>「1」を設定すると<FONT color="#a0dcff">【文章の表示】</FONT>のキー待ちや<BR>
+            <FONT color="#a0dcff">【選択肢】</FONT>の選択＆決定がマウスで操作できるようになります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0011_hen_sys121-/index.htm#sys125" target="_blank">125:フォント太さ(1～10)</A></FONT></TD>
+            <TD>フォントの太さを設定。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0011_hen_sys121-/index.htm#sys150" target="_blank">150:特殊文字変換を無効化[1=ON]</A></FONT></TD>
+            <TD>1＝特殊文字の変換を行わず、特殊文字のままにします。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">システム文字列</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0008_hen_syss/index.htm#syss025" target="_blank">25:[読]文章表示の内容</A></FONT></TD>
+            <TD><FONT color="#a0dcff">【文章の表示】</FONT>で最後に表示された文章内容を設定。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0008_hen_syss/index.htm#syss026" target="_blank">26:文章表示追加 先頭<BR>
+      27:文章表示追加 最後尾</A></FONT></TD>
+            <TD>文章を表示する際に、文章の最初と最後に指定した文字を表示する時に使用。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0012_hen_syss50-/index.htm#syss062" target="_blank">62：[P]基本フォント上書き<BR>
+            63：[P]サブ1フォント上書き<BR>
+            64：[P]サブ2フォント上書き<BR>
+            65：[P]サブ3フォント上書き</A></FONT></TD>
+            <TD valign="top"><FONT color="#ffff00">[プロ版のみ]</FONT><BR>
+            フォントの種類を変える時に使用。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="kinou">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■コメント文</FONT><BR>
+      <BR>
+      コメント文を使用すると、イベントコマンド表示欄に<FONT color="#ffff00">メモ書きを残す事</FONT>ができます。<BR>
+      <BR>
+      <IMG src="013.png" width="958" height="433" border="0"><BR>
+      <BR>
+      このコメント文は、ゲーム画面には表示されません。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      コメント文を設定する事で「<FONT color="#ffff00">ここの設定はどうゆう処理なのか</FONT>」を書き込む事ができ、<BR>
+      不具合が発生した時のデバッグ作業がやりやすくなります。<BR>
+      <BR>
+      特に複雑なイベント処理を作る時には、イベントの処理内容だけでなく、<BR>
+      セルフ変数の使い方やピクチャ番号の割り振り方などを書き込んでおく事で、<BR>
+      数か月後にイベントを修正する時に、スムーズな作業を行う事ができます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      コメント文はイベントコマンドの設定内容を見やすくするための「<FONT color="#ffff00">区切り</FONT>」として使う事もできます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼区切りの表示例</FONT><BR>
+      <IMG src="014.png" width="856" height="632" border="0"><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      コメント文のゲーム中の処理は、「<FONT color="#00ffff">これはコメント文なので何もしない→次の行へ移動</FONT>」と言った処理が実行されます。<BR>
+      <BR>
+      気にするレベルではありませんが、一応処理負担が発生し、コマンド処理数も増加します。<BR>
+      <BR>
+      ループ処理の中にコメント文を設定すると、ループの回数だけコマンド処理数が増加するため、<BR>
+      特にループ回数が多い場合は、あまりコメント文を設定するのはお勧めできません。<BR>
+      <BR>
+      <HR width="80%">
+      <A name="kinou_iro">　</A>　<BR>
+      コメント文は、表示する色を設定する事ができます。<BR>
+      <BR>
+      <TABLE cellpadding="6" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#00ffff">設定名</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">色の表示見本</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">通常コメント色</FONT></TD>
+            <TD bgcolor="#ffffff"><IMG src="016_0.png" width="160" height="15" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">赤コメント</FONT></TD>
+            <TD bgcolor="#ffffff"><IMG src="016_1.png" width="160" height="15" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">青コメント</FONT></TD>
+            <TD bgcolor="#ffffff"><IMG src="016_2.png" width="160" height="15" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">緑コメント</FONT></TD>
+            <TD bgcolor="#ffffff"><IMG src="016_3.png" width="160" height="15" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">ピンクコメント</FONT></TD>
+            <TD bgcolor="#ffffff"><IMG src="016_4.png" width="160" height="15" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">黄色コメント</FONT></TD>
+            <TD bgcolor="#ffffff"><IMG src="016_5.png" width="160" height="15" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">茶色コメント</FONT></TD>
+            <TD bgcolor="#ffffff"><IMG src="016_6.png" width="160" height="15" border="0"></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      なお、コメント文の色の設定は<FONT color="#00ffff">ウディタ[3.371]から追加された機能</FONT>であるため、<BR>
+      ウディタ[3.371]以前のバージョンのウディタ作品に<FONT color="#ffa0a0">[RED]</FONT>などの文字を設定しても、色は変わりません。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="kinou2">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■デバッグ文</FONT><BR>
+      <BR>
+      デバッグ文を設定すると、<FONT color="#ffff00">デバッグウィンドウに文章を表示する事</FONT>ができます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼メニュー画面を開いた時のデバッグ文の表示</FONT><BR>
+      <IMG src="015.png" width="924" height="512" border="0"><BR>
+      <BR>
+      このデバッグ文を使う事で、例えば何らかの初期化を行うイベントの中に「<FONT color="#00ffff">初期化を実行</FONT>」のデバッグ文を設定する事で、<BR>
+      初期化のイベント処理が正常に実行しているかどうかを確認する事ができます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      デバッグウィンドウは<FONT color="#ffff00">テストプレイの時しか表示されない</FONT>ため、<BR>
+      公開された作品にデバッグ文の設定が残った状態でも、ゲームプレイヤーはデバッグ文を見る事はできません。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      デバッグ文もコメント文と同様に<FONT color="#ffff00">コマンド処理数が増加します。</FONT><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      デバッグウィンドウに関しては、別ページに説明があります。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../../01_shoshin/1801_f3_f7_f8_f9/index.htm#f3" target="_blank">【デバッグウィンドウの説明を見る】</A><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff" size="+2">■変数の値をデバッグ文で表示する設定について</FONT><BR>
+      <BR>
+      変数の値は、デバッグウィンドウの上部にあるタブから確認する事ができます。<BR>
+      <BR>
+      <IMG src="015_1.png" width="283" height="512" border="0"><BR>
+      <BR>
+      タブから変数の値を確認する方法以外に、<BR>
+      <FONT color="#ffff00">デバッグ文で変数の値を表示する特殊文字を設定</FONT>して、変数の値を確認する方法もあります。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../0101_tokushumoji/index.htm#ichiran_hensuu" target="_blank">【変数の値を表示する特殊文字を確認】</A><BR>
+<BR>
+      <FONT color="#00ffff">▼システム変数[108:[読]現ﾌﾚｰﾑ開始からのｺﾏﾝﾄﾞ処理数]の値を表示する設定</FONT><BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#64ff64">■デバッグ文:\sys[108]</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      デバッグ文で変数の値を表示する方法は、事前にデバッグ文のイベントコマンドを設定する準備が必要ですが、<BR>
+      しかし以下のような利点があります。<BR>
+      <BR>
+      <TABLE border="0" cellpadding="10" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD nowrap><FONT color="#00ffff">●デバッグウィンドウの操作が無くても、<BR>
+                  　通常変数とセルフ変数などの異なる種類の変数の値を同時に確認する事ができる。<BR>
+                  　また変数の値を確認したあとに、デバッグ文の表示に戻す操作も必要ない。</FONT></TD>
+                </TR>
+                <TR>
+                  <TD></TD>
+                </TR>
+                <TR>
+                  <TD><FONT color="#00ffff">●「128行目の変数の値が見たい」や「Ａキーを押した時の変数の値が見たい」など、<BR>
+                  　指定した位置やタイミングの変数の値を確認する事ができる。</FONT></TD>
+                </TR>
+                <TR>
+                  <TD></TD>
+                </TR>
+                <TR>
+                  <TD nowrap><FONT color="#00ffff">●高速に変数の値が変化しても、その変化の過程を確認する事ができる。<BR>
+                  　またデバッグ文で表示した変数の値を[ログ保存]で保存する事もできる。</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      デバッグ文で複数の変数の値を表示すると、何の変数の値なのかが分かりにくくなるため、<BR>
+      変数の値を表示する時には、<FONT color="#ffff00">補足用の文字</FONT>も一緒に設定した方が良いでしょう。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#00ffff">補足用の文字なし</FONT></TD>
+            <TD><FONT color="#ffff00">■デバッグ文:\cself[10] \cself[11]\n\cself[12]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><IMG src="017_0.png" width="283" height="100" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT size="+2" color="#00ffff">補足用の文字あり</FONT></TD>
+            <TD><FONT color="#ffff00">■デバッグ文:<FONT color="#00ffff">x</FONT>\cself[10] <FONT color="#00ffff">y</FONT>\cself[11]\n<FONT color="#00ffff">&lt;12&gt;</FONT>\cself[12]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><IMG src="017_1.png" width="283" height="100" border="0"></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      このような補足用の文字を入れる一手間を入れるだけで、デバッグの作業効率が大幅に向上する事があります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff" size="+2">■必要な時だけデバッグ文を表示する</FONT><BR>
+      <BR>
+      デバッグ文を大量に設定したり、毎フレームごとにデバッグ文を表示するような設定を行うと、<BR>
+      もの凄い勢いでデバッグウィンドウの文章が流れていき、確認したいデバッグ文が確認しづらくなります。<BR>
+      また毎フレームごとにデバッグ文を表示すると、処理落ちが発生しやすくなります。<BR>
+      <BR>
+      たまに使う程度のデバッグ文は…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■回数付きループ [ 0 ]回<BR>
+            <FONT color="#64ff64">■デバッグ文:x\cself[10] y\cself[11]</FONT><BR>
+            ■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言ったように、回数付きループ「0回」に入れておき、<BR>
+      必要な時に右クリック→「<FONT color="#00ffff">この回数ループ1回→0回に変える(処理する)</FONT>」で「1回」に変えて表示させると良いでしょう。<BR>
+      <BR>
+      また…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■キー入力：CSelf10 [通常入力] ｷｰﾎﾞｰﾄﾞ(100～) [ｷｰｺｰﾄﾞ[130]のみ判定] ( Aｷｰ
+            )<BR>
+            ■条件分岐(数値): 【1】 CSelf10 が 1 以上<BR>
+-◇分岐： 【1】  [ CSelf10  が  1 以上  ]の場合↓<BR>
+            <FONT color="#64ff64">|■デバッグ文:\cself[20]</FONT><BR>
+            |■<BR>
+◇分岐終了◇<BR>
+</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言ったように、特定のキーを押し続けている時だけデバッグ文が表示されるようにしたり…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■条件分岐(数値): 【1】 CSelf20 が CSelf21 以外<BR>
+            -◇分岐： 【1】  [ CSelf20  が  CSelf21 以外  ]の場合↓<BR>
+            |■変数操作: CSelf21 = CSelf20 + 0<BR>
+            <FONT color="#64ff64">|■デバッグ文:\cself[20]</FONT><BR>
+            |■<BR>
+            ◇分岐終了◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言ったように、変数の値が変わった時に１回だけデバッグ文が表示されるようにする設定方法もあります。<BR>
+      <BR>
+      <BR>
+      なお、一時的に<FONT color="#ffff00">コメント文</FONT>に変えておき、必要な時にデバッグ文に変えて表示する方法もありますが、<BR>
+      コメント文は<FONT color="#00ffff">改行の設定ができない</FONT>ため、デバッグ文の中に改行がある場合は、<BR>
+      コメント文に変える方法では無く、回数付きループ「0回」に入れる方法が良いでしょう。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen">　</A>　<A name="gamen_nyuuryoku">　</A><BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：文章入力欄</FONT><BR>
+      <BR>
+      <IMG src="020_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      文章を入力する画面です。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      右クリックを押すとメニュー画面が表示され、文章のコピーや貼り付けの他に、<A href="../0101_tokushumoji/" target="_blank">特殊文字</A>の設定ができます。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../0101_tokushumoji/" target="_blank">【特殊文字の説明ページを開く】</A><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      １行に文字を入力し過ぎると、文章が<FONT color="#00ffff">メッセージウィンドウの外にはみ出してしまう事</FONT>があります。<BR>
+      <BR>
+      また顔グラフィックを表示する場合は、顔グラフィックと重ならないように１行の文字数を調整する必要があります。<BR>
+      <BR>
+      １行の適切な文字数に関しては、使用しているフォントや文字サイズによっても変わってくるため、<BR>
+      試しに長い文章を設定してみて、１行に何文字くらい設定する事ができるのかを確認した方が良いでしょう。<BR>
+      <BR>
+      <FONT color="#00ffff">▼２種類のフォントで表示した場合（１行目[ Meiryo ]、２行目[ Yu Gothic UI
+      ]）</FONT><BR>
+      <IMG src="020_1.png" width="640" height="480" border="0"><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      行数が<FONT color="#00ffff">５行以上</FONT>になると、メッセージウィンドウをはみ出してしまうため、<BR>
+      ５行以上になる場合は、以下のように２つに分けて設定してください。<BR>
+      <BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■文章:あいうえお\nかきくけこ\nさしすせそ\nたちつてと<BR>
+      ■文章:なにぬねの</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      特殊文字を使って変数の値を読み込む場合は、<FONT color="#00ffff">読み込む文字数を考慮して</FONT>文章を設定してください。<BR>
+      <BR>
+      例えば…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■文章:宝箱の中から「\s[0]」を取り出した。</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った設定では、<BR>
+      一見文章が短く設定されていて、問題が無いように見えますが、<BR>
+      <FONT color="#ff96ff">\s[0]（文字列変数[0]）</FONT>に長い文字列が保存されている場合は、<BR>
+      メッセージウィンドウをはみ出して表示してしまう可能性があります。<BR>
+      <BR>
+      <FONT color="#00ffff">▼<FONT color="#ff96ff">\s[0]</FONT>に「<FONT color="#ffff00">WOLF RPGエディター</FONT>」の文字列を保存した場合</FONT><BR>
+      <IMG src="020_2.png" width="640" height="480" border="0"><BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_button">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[文章入力][コメント文][デバッグ文][↑全消去]</FONT><BR>
+      <BR>
+      <IMG src="021_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      文章入力欄に設定された文章の設定方法を決定します。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">ボタン</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD align="center" valign="top"><FONT color="#ffff00">文章入力</FONT></TD>
+            <TD>メッセージウィンドウに文章を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD align="center" valign="top"><FONT color="#ffff00">コメント文</FONT></TD>
+            <TD>指定した色でイベントコマンド表示欄にメモを残します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD align="center" valign="top"><FONT color="#ffff00">デバッグ文</FONT></TD>
+            <TD>デバッグウィンドウに文章を表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD align="center" valign="top"><FONT color="#ffff00">↑全消去</FONT></TD>
+            <TD>デバッグウィンドウにある文章を全て消去します。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_tabi">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[2回改行で自動入力][入力のたびに消去]</FONT><BR>
+      <BR>
+      <IMG src="021_1.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center" rowspan="3" valign="top"><FONT color="#ffff00">2回改行で自動入力</FONT></TD>
+            <TD><FONT color="#ffff00">改行([Enter]キー)を２回連続で実行する</FONT>と、<BR>
+            <FONT color="#00ffff">[文章入力]</FONT>のボタンを押さなくても<FONT color="#a0dcff">【文章の表示】</FONT>の入力設定を完了する事ができます。<BR>
+            <BR>
+            また<FONT color="#00ffff">[Shift]キーを押しながら</FONT>改行を２回連続で実行すると、<BR>
+            設定されていた文字列は<FONT color="#a0dcff">【コメント文】</FONT>として設定されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>下図のように<FONT color="#ffff00">１行開けて</FONT>文章を設定する時に、<FONT color="#00ffff">改行を２回連続で実行してしまう</FONT>と、<BR>
+            ３行目の「かきくけこ」を入力する前に入力が完了してしまいます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="021_2.png" width="592" height="335" border="0"><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            もしも改行を２回連続で押しても、入力が終わらないようにする場合は、<BR>
+            <FONT color="#ffff00">[2回改行で自動入力]</FONT>を<FONT color="#00ffff">ＯＦＦ</FONT>にしてください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>なお、<FONT color="#ffff00">[2回改行で自動入力]</FONT>が<FONT color="#ff96ff">ＯＮ</FONT>の状態でも、１行目で改行を実行したあとに、<BR>
+            ２行目で<FONT color="#00ffff">空白の文字を入力してから改行</FONT>を実行する事で、自動入力を回避する事ができます。<BR>
+            <BR>
+            また以下のように、まずは２行目に３行目の文字列を設定し、<BR>
+            １行目の文末で改行を実行して２行目を空けても、自動入力を回避する事ができます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0" cellpadding="4">
+              <TBODY>
+                <TR>
+                  <TD bgcolor="#00003c" valign="top"><FONT color="#00ffff">あいうえお<BR>
+                  かきくけこ</FONT></TD>
+                  <TD><IMG src="../../page/ya_ao_6.png" width="31" height="31" border="0"></TD>
+                  <TD bgcolor="#00003c" valign="top"><FONT color="#00ffff">あいうえお<FONT color="#ffff00">&lt;改行&gt;</FONT><BR>
+                  かきくけこ</FONT></TD>
+                  <TD><IMG src="../../page/ya_ao_6.png" width="31" height="31" border="0"></TD>
+                  <TD bgcolor="#00003c" valign="top"><FONT color="#00ffff">あいうえお<BR>
+                  <BR>
+                  かきくけこ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD align="center" valign="top"><FONT color="#ffff00">入力のたびに消去</FONT></TD>
+            <TD>自動入力の実行時や<FONT color="#00ffff">[文章入力][コメント文][デバッグ文]</FONT>のボタンを押した時に、<BR>
+            <FONT color="#ffff00">[入力のたびに消去]</FONT>が<FONT color="#ff96ff">ＯＮ</FONT>の場合は、設定されていた文字列を消去します。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_kao">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：顔番号確認(SysDB 24から読込/文字色確認(SysDB 12))</FONT><BR>
+      <BR>
+      <IMG src="022_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <FONT color="#ffc83c">システムＤＢ[24:顔グラフィック名]</FONT>のデータ名と、<BR>
+      <FONT color="#ffc83c">システムＤＢ[12文字色]</FONT>のデータ名＆色見本が表示されます。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../../03_hen/1100_db_sys/index.htm#12mojishoku" target="_blank">【システムＤＢ[12文字色]の説明を見る】</A><BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../../03_hen/1100_db_sys/index.htm#24kao" target="_blank">【システムＤＢ[24:顔グラフィック名]の説明を見る】</A><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      顔グラフィックは<FONT color="#ffff00">データ名だけの表示</FONT>であり、<FONT color="#00ffff">画像の見本は表示されません。</FONT><BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_chuudan">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[■文章の強制中断]</FONT><BR>
+      <BR>
+      <IMG src="023_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      通常のメッセージウィンドウの表示では、決定キーなどを押さないとメッセージウィンドウが閉じませんが、<BR>
+      この設定を使うと<FONT color="#ffff00">強制的にメッセージウィンドウを閉じる事ができます。</FONT><BR>
+      <BR>
+      例えば周回プレイがある作品で、何度も同じシーンをプレイする事がある場合や、<BR>
+      制作者がテストプレイの時に、文章の表示を高速で飛ばしたい時など、文章の表示を強制的に消去したい時に使います。<BR>
+      <BR>
+      <FONT color="#00ffff">▼[Ａ]キーを押し続けている間は文章の表示を強制中断する設定例</FONT><BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><A href="c001.txt" target="_blank">【イベントコード表示】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT size="+2" color="#ffa064">■コモンイベント</FONT><BR>
+                  <BR>
+      <FONT color="#00ffff">起動条件：</FONT>並列実行（常時）<BR>
+            <BR>
+      <FONT color="#ffff00">■キー入力：CSelf10ｷｰﾎﾞｰﾄﾞ(100～) [ｷｰｺｰﾄﾞ[130]のみ判定] ( Aｷｰ )<BR>
+            ■条件分岐(数値): 【1】 CSelf10 が 130 と同じ<BR>
+-◇分岐： 【1】  [ CSelf10  が  130 と同じ  ]の場合↓<BR>
+ |■文章の強制中断<BR>
+ |■ウェイト：10 フレーム<BR>
+ |■<BR>
+                  ◇分岐終了◇<BR>
+                  ■</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="d_kansi">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[ValWatch]</FONT><BR>
+      <BR>
+      <IMG src="024_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <FONT color="#00ffff">[？]</FONT>で補足説明を見る事ができます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      デバッグ文で…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">ValWatch:ON=変数呼び出し値</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      を設定すると、指定した変数の値に変化があった時に、その変化がデバッグウィンドウに表示されます。<BR>
+      <BR>
+      <A href="../../03_hen/0009_hen_x/index.htm#ichiran" target="_blank">【変数呼び出し値の一覧を表示】</A><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">▼通常変数[0]を監視</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c_d000.txt" target="_blank">【イベントコード表示】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:ValWatch:ON=2000000</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼文字列変数[0]を監視</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c_d001.txt" target="_blank">【イベントコード表示】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:ValWatch:ON=3000000</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼表示例</FONT><BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT color="#00ffff">実行したイベントコマンド</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">デバッグウィンドウの表示</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">
+            <TABLE border="0" cellpadding="4">
+              <TBODY>
+                <TR>
+                  <TD><FONT color="#ffff00">■デバッグ文:ValWatch:ON=2000000<BR>
+            ■デバッグ文:ValWatch:ON=3000000<BR>
+            ■変数操作: V0[[サンプルゲーム]コック出現] = 5 + 0<BR>
+            ■文字列操作：S0[[サンプル]一時文字列] = &quot;あいうえお&quot;<BR>
+            ■変数操作: V0[[サンプルゲーム]コック出現] += 8 + 0<BR>
+            ■文字列操作：S0[[サンプル]一時文字列] += &quot;かきくけこ&quot;<BR>
+            ■</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+            <TD valign="top">
+            <TABLE border="0" cellpadding="4">
+              <TBODY>
+                <TR>
+                  <TD># 開始 変数監視=&gt; 2000000<BR>
+# 開始 変数監視=&gt; 3000000<BR>
+# ValWatch=&gt;  2000000 = 5<BR>
+      --&gt;[Map4/Ev0/P1/2行]<BR>
+# ValWatch=&gt;  3000000 = あいうえお<BR>
+     --&gt;[Map4/Ev0/P1/3行]<BR>
+# ValWatch=&gt;  2000000 = 13<BR>
+     --&gt;[Map4/Ev0/P1/4行]<BR>
+# ValWatch=&gt;  3000000 = あいうえおかきくけこ<BR>
+     --&gt;[Map4/Ev0/P1/5行]</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      「<FONT color="#ffff00">ValWatch:OFF</FONT>」を実行すると、ＯＮになったデバッグ表示をＯＦＦにする事ができます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼通常変数[0]の監視を終了</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c_d010.txt" target="_blank">【イベントコード表示】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:ValWatch:OFF=2000000</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼文字列変数[0]の監視を終了</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c_d011.txt" target="_blank">【イベントコード表示】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:ValWatch:OFF=3000000</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      ウディタの説明書には以下の事が書かれています。<BR>
+      <BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000" nowrap>※またこの機能を使うと「コモンイベントの高速化」がオフになるので、<BR>
+            　<FONT color="#ffa0a0">コモンイベントの処理時間が平均で「元の6倍以上」</FONT>になります。<BR>
+            　高負荷の状況をテストするのにも使えます。<BR>
+            　高速化「オフ」の状態でもEv処理時間が10ms以内におさまっていれば、他機種への移植もやりやすそうです。<BR>
+            <BR>
+            　→【注意!!】コモンイベント中のどこかに、1行でも「デバッグ文」の「ValWatch:」コマンドがあれば<BR>
+            　　　　　　　コモンイベントの高速化処理がオフにされるので注意してください。<BR>
+            　　　　　　　「0回ループ内」など絶対に実行されない場所にあってもです！<BR>
+            <BR>
+            ※<FONT color="#ffa0a0">【注意！　ValWatchで数値計算が狂う場合があります！】</FONT><BR>
+　ValWatchを使用中は、高速化が解除される影響で、コモンイベント内の変数操作などで数値が「2147483647」を超えると<BR>
+            　「-2147483648」に逆転してしまう現象がなくなり、<FONT color="#ffa0a0">常に数値が±20億以内におさめられるようになります。</FONT><BR>
+　±20億近くの値を使う計算を行っている場合や、あるいは計算ミスなどで知らない間に21億を超えたことによる<BR>
+            　数値の逆転が発生していた場合、<BR>
+            　<FONT color="#ffa0a0">ValWatch機能のON/OFFで　計算結果に差が発生してしまう場合</FONT>がございますのでご注意ください。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      監視対象の変数を大量に設定すると、デバッグ文が高速に流れて、デバッグ文の内容を確認しづらくなる問題が発生します。<BR>
+      <BR>
+      「<FONT color="#ffff00">どこで変数の値が変わっているのかが分からない</FONT>」などのトラブルが発生した時に、一時的に設定した方が良いでしょう。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff" size="+2">■「このイベント」のセルフ変数の表記について</FONT><BR>
+      <BR>
+      コモンイベント[215]にて…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#64ff64">■デバッグ文:ValWatch:ON=1600010</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      を設定した場合は…<BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#ffff00"># 開始 変数監視=&gt; 15021510<BR>
+      # ValWatch=&gt; 15021510 = 160<BR>
+            --&gt;[Map4/Ev0/P1/ｺﾓﾝ215/3行]</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った感じに、デバッグ文の表記は「1600010」ではなく、「15021510」になります。<BR>
+      <BR>
+      同様にマップイベント[2]にて…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#64ff64">■デバッグ文:ValWatch:ON=1100005</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      を設定した場合は…<BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#ffff00"># 開始 変数監視=&gt; 1000025<BR>
+      # ValWatch=&gt; 1000025 = 160<BR>
+     --&gt;[Map4/Ev2/P1/1行]</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った感じに、デバッグ文の表記は「1100005」ではなく、「1000025」になります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff" size="+2">■デバッグウィンドウや[Ｆ９]の画面について</FONT><BR>
+      <BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD valign="top"><FONT color="#00ffff">▼デバッグウィンドウの画面</FONT><BR>
+            <IMG src="024_1.png" width="287" height="480" border="0"></TD>
+            <TD></TD>
+            <TD valign="top"><FONT color="#00ffff">▼[Ｆ９]の画面</FONT><BR>
+            <IMG src="01_1801_f9_0.png" width="640" height="480" border="0"></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      変数の値を確認するだけでしたら、デバッグウィンドウや<FONT color="#00ffff">[Ｆ９]</FONT>の画面を使って確認すると良いでしょう。<BR>
+      <BR>
+      どこのイベントコマンドで変数の値が変化しているのかを調べたい時には、<FONT color="#ffff00">[ValWatch]</FONT>を使って調べてください。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="d_kansi2">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[PictureWatch]</FONT><BR>
+      <BR>
+      <IMG src="025_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <FONT color="#00ffff">[？]</FONT>で補足説明を見る事ができます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      デバッグ文で…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">PictureWatch:ON=ピクチャ番号</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      を設定すると、指定したピクチャが操作されたイベントコマンドの位置がデバッグウィンドウに表示されます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">▼ピクチャ[10000]を監視</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c_d100.txt" target="_blank">【イベントコード表示】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:PictureWatch:ON=10000</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      上記設定を実行した上でメニュー画面を開くと、以下のように表示されます。<BR>
+      <BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT color="#00ffff">デバッグウィンドウの表示</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">
+            <TABLE border="0" cellpadding="4">
+              <TBODY>
+                <TR>
+                  <TD># 開始 ﾋﾟｸﾁｬ番号監視 10000<BR>
+                  コマンドコード10 相談 0 --&gt;[ｺﾓﾝ89/96行]<BR>
+                  コマンドコード1 アイテム 1 --&gt;[ｺﾓﾝ89/96行]<BR>
+                  コマンドコード2 特殊技能 2 --&gt;[ｺﾓﾝ89/96行]<BR>
+                  コマンドコード3 装備 3 --&gt;[ｺﾓﾝ89/96行]<BR>
+                  コマンドコード5 システム 4 --&gt;[ｺﾓﾝ89/96行]<BR>
+                  コマンドコード4 セーブ 5 --&gt;[ｺﾓﾝ89/96行]<BR>
+                  # PictureWatch=&gt; 10000 &lt;Delay Reset&gt;<BR>
+                  --&gt;[ｺﾓﾝ88/118行]<BR>
+                  # PictureWatch=&gt; 10000 &lt;New&gt;<BR>
+                  --&gt;[ｺﾓﾝ88/124行]</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      「<FONT color="#ffff00">PictureWatch:OFF</FONT>」を実行すると、ＯＮになったデバッグ表示をＯＦＦにする事ができます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼ピクチャ[10000]の監視を終了</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c_d110.txt" target="_blank">【イベントコード表示】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:PictureWatch:OFF=10000</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      監視対象のピクチャを大量に設定すると、デバッグウィンドウが高速に流れて、デバッグ文の内容が確認しづらくなります。<BR>
+      <BR>
+      「<FONT color="#ffff00">どこでピクチャを操作しているのかが分からない</FONT>」などのトラブルが発生した時に、一時的に設定した方が良いでしょう。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff" size="+2">■[Ｆ７]の画面について</FONT><BR>
+      <BR>
+      テストプレイ中に<FONT color="#00ffff">[Ｆ７]</FONT>を押すと、ピクチャの詳細情報を見る事ができます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼[Ｆ７]の画面</FONT><BR>
+      <IMG src="01_1801_f7_0.png" width="640" height="480" border="0"><BR>
+      <BR>
+      <FONT color="#ffff00">[PictureWatch]</FONT>はどこのイベントコマンドで指定したピクチャが操作されているかを調べる時に使うものなので、<BR>
+      ピクチャの表示位置などが知りたい時には<FONT color="#00ffff">[Ｆ７]</FONT>の画面を使います。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="d_kansi3">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[MoveWatch]</FONT><BR>
+      <BR>
+      <IMG src="026_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <FONT color="#00ffff">[？]</FONT>で補足説明を見る事ができます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      デバッグ文で…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">MoveWatch:ON=キャラ番号</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      を設定すると、指定したキャラの<FONT color="#a0dcff">イベントコマンド【動作指定】</FONT>が実行した事がデバッグウィンドウに表示されます。<BR>
+      <BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">キャラ番号</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">対象となるキャラ</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">0以上</FONT></TD>
+            <TD>マップイベントのイベントＩＤを設定する事で、そのマップイベントが対象になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center" rowspan="2"><FONT color="#ffff00">-1</FONT></TD>
+            <TD><FONT color="#ffff00">[MoveWatch]</FONT>を実行したマップイベントが対象になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>マップイベントからコモンイベントを呼び出している場合は、<BR>
+      呼び出し元のマップイベントが対象になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-2</FONT></TD>
+            <TD>主人公（パーティの先頭にいるキャラ）</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-3</FONT></TD>
+            <TD>仲間１</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-4</FONT></TD>
+            <TD>仲間２</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-5</FONT></TD>
+            <TD>仲間３</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-6</FONT></TD>
+            <TD>仲間４</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-7</FONT></TD>
+            <TD>仲間５</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#a0dcff">【動作指定】</FONT>は、同じキャラを対象に複数の<FONT color="#a0dcff">【動作指定】</FONT>を同時に実行すると、正常に動作しない事があります。<BR>
+      <BR>
+      例えばアクションゲームにて、主人公が攻撃する時と主人公がダメージを受けた時の両方で<FONT color="#a0dcff">【動作指定】</FONT>を実行する場合、<BR>
+      攻撃とダメージの両方が同時に実行されると、主人公を対象に２つの<FONT color="#a0dcff">【動作指定】</FONT>が同時に実行される事になります。<BR>
+      <BR>
+      このようなシチュエーションはまだ分かりやすいですが、複雑な処理を実行した場合は、<BR>
+      同じキャラに対してどこで同時に<FONT color="#a0dcff">【動作指定】</FONT>を実行しているのかが分からなくなる事があります。<BR>
+      <BR>
+      そのような時にこの<FONT color="#ffff00">[MoveWatch]</FONT>を使う事で、<BR>
+      指定したキャラの<FONT color="#a0dcff">【動作指定】</FONT>がどこのイベントで実行されているのかを調べる事ができます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">▼主人公を監視</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c_d200.txt" target="_blank">【イベントコード表示】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:MoveWatch:ON=-2<BR>
+            ■動作指定：[ｽｷｯﾌﾟ]  主人公 / 右 / 右 / 右</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT color="#00ffff">デバッグウィンドウの表示</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">
+            <TABLE border="0" cellpadding="4">
+              <TBODY>
+                <TR>
+                  <TD># 開始 動作指定 監視=&gt; ID -2<BR>
+# MoveWatch=&gt; ID -2  [ 3 moves ]<BR>
+                  --&gt;[Map4/Ev2/P1/1行]</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      上記のデバッグ文を見ると…<BR>
+      <TABLE border="0" cellpadding="8" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD><FONT color="#00ffff">ID -2 ＝ 主人公</FONT></TD>
+                </TR>
+                <TR>
+                  <TD></TD>
+                </TR>
+                <TR>
+                  <TD><FONT color="#00ffff">3 moves ＝ 3個の動作設定</FONT></TD>
+                </TR>
+                <TR>
+                  <TD></TD>
+                </TR>
+                <TR>
+                  <TD><FONT color="#00ffff">Map4/Ev0/P1/1行 ＝ マップ[4]、マップイベント[0]、1ページ目、1行目で実行</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った事が分かります。<BR>
+      <BR>
+      実際にどんな動作が設定されているのかは、マップイベント[0]の1行目で確認する必要があります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      「<FONT color="#ffff00">MoveWatch:OFF</FONT>」を実行すると、ＯＮになったデバッグ表示をＯＦＦにする事ができます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼主人公の監視を終了</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c_d210.txt" target="_blank">【イベントコード表示】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■デバッグ文:MoveWatch:OFF=-2</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="d_kansi4">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[Performance]</FONT><BR>
+      <BR>
+      <IMG src="027_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <FONT color="#00ffff">[？]</FONT>で補足説明を見る事ができます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      デバッグ文で…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">PerformanceMonitor:ON:FRAME=1:TOP=10</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      を設定すると、処理時間が長いイベント順（処理負荷が大きいイベント順）にデバッグウィンドウに一覧が表示されます。<BR>
+      <BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT color="#00ffff">デバッグウィンドウの表示例</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">
+            <TABLE border="0" cellpadding="4">
+              <TBODY>
+                <TR>
+                  <TD>【パフォーマンスモニター(1ﾌﾚｰﾑ間隔)】<BR>
+                  ｺﾓﾝ63 [X[共]メッセージウィンドウ] 0.01 ms<BR>
+                  ｺﾓﾝ126 [X[移]歩行時_並列キー処理] 0.01 ms</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      また最後に出力した処理結果が、<A href="../../03_hen/0012_hen_syss50-/index.htm#syss082" target="_blank">システム文字列[SysS82:[読]ﾊﾟﾌｫｰﾏﾝｽﾓﾆﾀｰ最終出力文]</A>に保存されます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      設定する文字列を変える事で、表示方法などを変える事ができます。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">設定文字列</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">:ON<BR>
+            :ON2<BR>
+            :FORCE<BR>
+            :FORCE2<BR>
+            :OFF</FONT></TD>
+            <TD>ＯＮ/ＯＦＦを切り替えます。<BR>
+            <BR>
+            <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">:ON<BR>:FORCE</FONT></TD>
+                  <TD nowrap valign="top">処理結果をデバッグウィンドウへ表示し、<BR>
+                  <A href="../../03_hen/0012_hen_syss50-/index.htm#syss082" target="_blank">システム文字列[SysS82:[読]ﾊﾟﾌｫｰﾏﾝｽﾓﾆﾀｰ最終出力文]</A>にも保存します。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" nowrap><FONT color="#ffff00">:ON2<BR>:FORCE2</FONT></TD>
+                  <TD valign="top">処理結果をデバッグウィンドウには表示しませんが、<BR>
+                  <A href="../../03_hen/0012_hen_syss50-/index.htm#syss082" target="_blank">システム文字列[SysS82:[読]ﾊﾟﾌｫｰﾏﾝｽﾓﾆﾀｰ最終出力文]</A>には保存します。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">:OFF</FONT></TD>
+                  <TD valign="top">ＯＮにした設定をＯＦＦにする時に使用します。</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">:ON/:ON2</FONT>」と「<FONT color="#ffff00">:FORCE/:FORCE2</FONT>」の違いは、<BR>
+            「<FONT color="#ffa0a0">Game.exe</FONT>」からゲームを始めた時に、ＯＮになるかどうかです。<BR>
+            <BR>
+            <IMG src="016.png" width="72" height="66" border="0"><BR>
+            <BR>
+            <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" rowspan="2"><FONT color="#ffff00">:ON<BR>
+                  :ON2</FONT></TD>
+                  <TD nowrap valign="top">テストプレイでゲーム開始</TD>
+                  <TD nowrap valign="top">ＯＮになります。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD nowrap valign="top">「Game.exe」でゲーム開始</TD>
+                  <TD nowrap valign="top">ＯＮになりません。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" rowspan="2"><FONT color="#ffff00">:FORCE<BR>
+                  :FORCE2</FONT></TD>
+                  <TD nowrap valign="top">テストプレイでゲーム開始</TD>
+                  <TD nowrap valign="top">ＯＮになります。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD nowrap valign="top">「Game.exe」でゲーム開始</TD>
+                  <TD nowrap valign="top">ＯＮになります。</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">:FRAME=1</FONT></TD>
+            <TD>デバッグウィンドウに出力する間隔をフレーム単位で設定できます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">FRAME=5</FONT>」を設定した場合は、<BR>
+            ５フレームごとに５フレームの間にかかった処理時間の合計が出力されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">:TOP=10</FONT></TD>
+            <TD>デバッグウィンドウに出力するイベントの数が設定できます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">TOP=10</FONT>」を設定した場合は、処理時間が長い上位１０個のイベントが出力されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">:OVER=1.0</FONT></TD>
+            <TD>デバッグウィンドウに出力するイベントの処理時間の下限が設定できます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">:OVER=1.0</FONT>」を設定した場合は、「1.00 ms」以上のイベントのみが出力されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>なお「<FONT color="#ffff00">:OVER=1.0</FONT>」を設定した場合で、「1.00 ms」以上のイベントが何も無かった場合は、<BR>
+            デバッグウィンドウには何も表示されません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">:NO_TITLE</FONT></TD>
+            <TD nowrap>「<FONT color="#ffff00">:NO_TITLE</FONT>」を設定すると、<BR>
+            デバッグウィンドウに「<FONT color="#00ffff">【パフォーマンスモニター(1ﾌﾚｰﾑ間隔)】</FONT>」が表示されなくなります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3" nowrap><FONT color="#ffff00">:MICRO_SEC</FONT></TD>
+            <TD>「<FONT color="#ffff00">:MICRO_SEC</FONT>」を設定すると、<BR>
+            処理単位が「<FONT color="#00ffff">ms（ミリ秒）</FONT>」から「<FONT color="#ffff00">us（マイクロ秒（ミリ秒の1/1000））</FONT>」に変わり、<BR>
+            「<FONT color="#00ffff">0.23 ms</FONT>」の表示が「<FONT color="#ffff00">230 us</FONT>」などと変わります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">:MICRO_SEC</FONT>」の設定は、<FONT color="#ff96ff">文字列の最後</FONT>に設定してください。<BR>
+            以下のように途中に設定しても機能しません。<BR>
+            <TABLE border="0" bgcolor="#00003c" cellpadding="8">
+              <TBODY>
+                <TR>
+                  <TD><FONT color="#00ffff">PerformanceMonitor:ON:FRAME=1<FONT color="#ffff00">:MICRO_SEC</FONT>:TOP=10</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">:OVER=</FONT>」を設定する場合は「<FONT color="#ffff00">us</FONT>」単位で設定してください。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            例えば<FONT color="#00ffff">「1000 us」以上</FONT>を設定する場合は「<FONT color="#ffff00">:OVER=1000</FONT>」と設定してください。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      上記の設定を全て設定した場合は、以下のようになります。<BR>
+      <BR>
+      <FONT color="#00ffff">▼「ON」の設定</FONT><BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">「ms」単位</FONT></TD>
+            <TD><FONT color="#00ffff">■デバッグ文:PerformanceMonitor:ON:FRAME=1:TOP=10:OVER=1.0:NO_TITLE</FONT></TD>
+            <TD><A href="c027_0.txt" target="_blank">【イベントコード表示】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">「us」単位</FONT></TD>
+            <TD><FONT color="#00ffff">■デバッグ文:PerformanceMonitor:ON:FRAME=1:TOP=10:OVER=1000:NO_TITLE:MICRO_SEC</FONT></TD>
+            <TD><A href="c027_1.txt" target="_blank">【イベントコード表示】</A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼「FORCE」の設定</FONT><BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">「ms」単位</FONT></TD>
+            <TD><FONT color="#00ffff">■デバッグ文:PerformanceMonitor:FORCE:FRAME=1:TOP=10:OVER=1.0:NO_TITLE</FONT></TD>
+            <TD><A href="c027_2.txt" target="_blank">【イベントコード表示】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">「us」単位</FONT></TD>
+            <TD><FONT color="#00ffff">■デバッグ文:PerformanceMonitor:FORCE:FRAME=1:TOP=10:OVER=1000:NO_TITLE:MICRO_SEC</FONT></TD>
+            <TD><A href="c027_3.txt" target="_blank">【イベントコード表示】</A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼「OFF」の設定</FONT><BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">■デバッグ文:PerformanceMonitor:OFF</FONT></TD>
+            <TD><A href="c027_9.txt" target="_blank">【イベントコード表示】</A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      「<FONT color="#ffff00">:FRAME=1</FONT>」の設定だと、物凄い勢いでデバッグウィンドウの文字列が流れていくので、<BR>
+      「<FONT color="#ffff00">:FRAME=60</FONT>」くらいにした方が見やすいかもしれません。<BR>
+      <BR>
+      但し「<FONT color="#ffff00">:FRAME=60</FONT>」で「<FONT color="#ffff00">:TOP=10</FONT>」の設定では、６０フレームの間に１０個を超えるイベントが実行され、<BR>
+      見たいイベントの処理時間がデバッグウィンドウに表示されなくなる可能性があります。<BR>
+      その場合は「<FONT color="#ffff00">:TOP=20</FONT>」などと、表示できる数を増やしてください。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#a0e1ff">【イベントの挿入】</FONT>で同じイベントを３回呼び出して実行した場合は、３回の合計処理時間が表示されます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      処理時間が無いイベントは、実行中のイベントでもデバッグウィンドウには表示されません。<BR>
+      <BR>
+      そのため、例えばウェイト中で一時停止している場合や文章を表示してキー待ち状態である場合は、<BR>
+      処理時間が発生しないため、実行中のイベントでもデバッグウィンドウには表示されません。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#ffff00">[Performance]</FONT>を実行すると、<FONT color="#00ffff">全てのイベントの処理時間</FONT>が表示されます。<BR>
+      <BR>
+      もしも<FONT color="#ff96ff">特定のイベントの処理時間のみ</FONT>を表示したい場合は、以下のページのコモン素材をご利用ください。<BR>
+      <BR>
+      <A href="../../../w/ev_fuka_hojo/index.htm" target="_blank">【コモン素材「イベント負荷の監視の補助コモン」のページを開く】</A><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#ffff00">[Performance]</FONT>を使用すると、ゲーム全体の処理負担が大きくなるため、<BR>
+      特にゲーム作品を公開する時には、この機能をＯＦＦにしておいた方が良いでしょう。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff" size="+2">■[Performance]を使う必要がある作品とは</FONT><BR>
+      <BR>
+      <FONT color="#ffff00">[Performance]</FONT>を使う必要がある作品は、主に<FONT color="#ff96ff">大量のイベントコマンドを処理している作品</FONT>です。<BR>
+      <BR>
+      例えばシューティングゲームで、毎フレームごとに大量の弾丸の当たり判定を処理している場合は、<BR>
+      毎フレームごとに大量のイベントコマンドを処理する必要があります。<BR>
+      <BR>
+      このような時に<FONT color="#ffff00">[Performance]</FONT>を使って処理時間を計測し、出来る限り処理時間が短くなるようにイベントを設定すると、<BR>
+      処理落ちが軽減して、より多くのプレイヤーが快適にゲームをプレイする事が出来ます。<BR>
+      <BR>
+      また処理落ちが発生している場合で、どこに処理落ちの原因があるのかを調べる時にも<FONT color="#ffff00">[Performance]</FONT>を使います。<BR>
+      極端に処理時間がかかっているイベントを調べると、ループの設定に問題があるなど、何らかの問題が発見される事があります。<BR>
+      <BR>
+      一方、瞬間的にイベントの処理時間が長くなるような場面では、あまり<FONT color="#ffff00">[Performance]</FONT>を使う事はありません。<BR>
+      例えばＲＰＧの処理で、戦闘を開始する時には、瞬間的にイベントの処理時間が長くなりますが、<BR>
+      これはゲームプレイに支障をきたす程では無いので、無理に<FONT color="#ffff00">[Performance]</FONT>を使って処理負担を軽減する必要性は無いでしょう。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff" size="+2">■システム変数[108:[読]現ﾌﾚｰﾑ開始からのｺﾏﾝﾄﾞ処理数]との違い</FONT><BR>
+      <BR>
+      処理落ちを調べる時に使う機能に、<BR>
+      <A href="../../03_hen/0007_hen_sys77-/index.htm#sys118" target="_blank">システム変数[108:[読]現ﾌﾚｰﾑ開始からのｺﾏﾝﾄﾞ処理数]</A>（以下<A href="../../03_hen/0007_hen_sys77-/index.htm#sys118" target="_blank">Sys[108]</A>）があります。<BR>
+      <BR>
+      <A href="../../03_hen/0007_hen_sys77-/index.htm#sys118" target="_blank">Sys[108]</A>は<FONT color="#ffff00">１フレームで処理したイベントコマンドの数を調べる時</FONT>に使います。<BR>
+      <BR>
+      例えば…<BR>
+      <TABLE border="0" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#00ffff">■変数操作: このEvのSelf0 = 0 + 0</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      を実行すると、コマンド処理数が「＋1」となり…<BR>
+      <TABLE border="0" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#00ffff">■変数操作: このEvのSelf0 = 0 + 0<BR>
+            ■変数操作: このEvのSelf1 = 0 + 0<BR>
+            ■変数操作: このEvのSelf2 = 0 + 0</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      を実行すると、コマンド処理数が「＋3」になります。<BR>
+      <BR>
+      基本的にコマンド処理数が増えていくとイベントの処理時間も増えていくため、<BR>
+      「<FONT color="#00ffff">コマンド処理数が多い＝処理時間が長くなる</FONT>」となりますが、<BR>
+      <FONT color="#ffff00">処理するイベントコマンドによって処理時間の長さが異なる</FONT>ため、<BR>
+      コマンド処理数を調べても、正確な処理時間を調べる事はできません。<BR>
+      <BR>
+      例えば<FONT color="#a0e1ff">【変数操作】</FONT>の設定で…<BR>
+      <TABLE border="0" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#00ffff">■変数操作: このEvのSelf0 = 0 + 0</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と…<BR>
+      <TABLE border="0" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#00ffff">■変数操作: このEvのSelf0 = 角度[x10]←傾き X: 0 Y: 0</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      では、コマンド処理数の増加は共に「＋1」ですが、処理時間は角度設定の方が長くなります。<BR>
+      <BR>
+      他にも画像ファイルや音声ファイルを開いたり、ピクチャに対してぼかしのエフェクトを実行したりと、<BR>
+      画像関連や音声関連のイベントコマンドを多く実行すると、少ないコマンド処理数でも処理時間がかかる事があります。<BR>
+      <BR>
+      このようにコマンド処理数を調べただけでは処理時間が分からないため、処理時間を調べる時には<FONT color="#ffff00">[Performance]</FONT>を使います。<BR>
+      <BR>
+      もしも処理落ち対策を行う場合は…<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD><A href="../../03_hen/0007_hen_sys77-/index.htm#sys118" target="_blank">Sys[108]</A>を使って、出来る限り実行するイベントコマンドの数を減らす。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#ffff00">[Performance]</FONT>を使って、出来る限り処理時間がかかるイベントコマンドの実行を減らす。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言ったように、<A href="../../03_hen/0007_hen_sys77-/index.htm#sys118" target="_blank">Sys[108]</A>と<FONT color="#ffff00">[Performance]</FONT>の両方を使って、処理負担を減らす必要があります。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="kao">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■顔グラフィックの表示</FONT><BR>
+      <BR>
+      メッセージウィンドウに顔グラフィックを表示する設定方法を紹介します。<BR>
+      <BR>
+      <IMG src="011.png" width="640" height="480" border="0"><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      まず顔グラフィックの画像設定を<FONT color="#ffc83c">システムＤＢ[24:顔グラフィック名]</FONT>にて準備してください。<BR>
+      <BR>
+      <FONT color="#00ffff">▼データＩＤが顔グラフィックの設定番号になります。</FONT><BR>
+      <IMG src="03_1100_250.png" width="784" height="748" border="0"><BR>
+      <BR>
+      <FONT color="#3cf096">データＩＤ[0:ウィンドウなし][1:ウィンドウのみ]</FONT>はそのままにして、<FONT color="#ffff00">データＩＤ[2]以降</FONT>に設定してください。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      顔グラフィックの表示設定は「<FONT color="#00ffff">システム変数を使った方法</FONT>」と「<FONT color="#00ffff">特殊文字を使った方法</FONT>」の２種類があります。<BR>
+      <BR>
+      <TABLE cellpadding="16" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+2" color="#00ffff">■システム変数を使った方法</FONT><BR>
+      <BR>
+      <A href="../../03_hen/0005_hen_sys0-34/index.htm#sys000" target="_blank">システム変数[0:顔ｸﾞﾗﾌｨｯｸ番号]</A>を使った設定方法です。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      文章を表示する直前に設定してください。<BR>
+      <BR>
+      <FONT color="#00ffff">▼設定例</FONT><BR>
+            <TABLE border="0" cellpadding="12" bgcolor="#00003c">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■変数操作: Sys0:顔ｸﾞﾗﾌｨｯｸ番号 = 3 + 0<BR>
+      ■文章:夕一\n「やあ、ぼく\r[夕一,ゆういち]っていうんだ！</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+2" color="#00ffff">■特殊文字を使った方法</FONT><BR>
+      <BR>
+            文章設定の１行目に「<FONT color="#ffff00">@顔番号&lt;改行&gt;</FONT>」を設定する方法です。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <FONT color="#ff96ff">※全て半角文字で設定。</FONT><BR>
+      <BR>
+      <FONT color="#00ffff">▼設定例</FONT><BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#00003c">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■文章:@3\n夕一\n「やあ、ぼく\r[夕一,ゆういち]っていうんだ！</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼設定画面の状態</FONT><BR>
+      <IMG src="030.png" width="592" height="335" border="0"><BR>
+            <BR>
+            この方法では「<FONT color="#00ffff">@\self[0]</FONT>」と言ったような変数の値で顔番号を設定する事ができません。<BR>
+      <BR>
+      変数の値で顔番号を設定したい時には、<A href="../../03_hen/0005_hen_sys0-34/index.htm#sys000" target="_blank">システム変数[0:顔ｸﾞﾗﾌｨｯｸ番号]</A>を使ってください。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT size="+2" color="#ff96ff">★[システム変数を使った方法]と[特殊文字を使った方法]の共通補足</FONT><BR>
+      <BR>
+      文章の表示を続けて設定した場合は、同じ顔グラフィックが続けて表示されます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼システム変数の設定例</FONT><BR>
+      <TABLE border="0" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#ffff00">■変数操作: Sys0:顔ｸﾞﾗﾌｨｯｸ番号 = 3 + 0<BR>
+      ■文章:夕一\n「やあ、ぼく\r[夕一,ゆういち]っていうんだ！<BR>
+      ■文章:夕一\n「ぼく、おなかが減ってるんだ！\n  何か食べるものを買ってきてくれたら\n  仲間になってあげるよ！</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼特殊文字の設定例</FONT><BR>
+      <TABLE border="0" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#ffff00">■文章:@3\n夕一\n「やあ、ぼく\r[夕一,ゆういち]っていうんだ！<BR>
+      ■文章:夕一\n「ぼく、おなかが減ってるんだ！\n  何か食べるものを買ってきてくれたら\n  仲間になってあげるよ！</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      もしも<FONT color="#00ffff">[夕一]→[ウルファール]→[夕一]</FONT>と話す場合で、ウルファールの所は顔グラフィックを表示しない場合は、<BR>
+      「顔番号＝1」で顔グラフィックの表示をキャンセルする必要があります。<BR>
+      <BR>
+      <FONT color="#00ffff">▼システム変数の設定例</FONT><BR>
+      <TABLE border="0" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#00ffff">■変数操作: Sys0:顔ｸﾞﾗﾌｨｯｸ番号 = 3 + 0</FONT><FONT color="#ffff00"><BR>
+            ■文章:夕一\n「やあ、ぼく\r[夕一,ゆういち]っていうんだ！<BR>
+            <FONT color="#00ffff">■変数操作: Sys0:顔ｸﾞﾗﾌｨｯｸ番号 = 1 + 0</FONT><BR>
+            ■文章:ウルファール\n「私はウルファールですよ！<BR>
+            <FONT color="#00ffff">■変数操作: Sys0:顔ｸﾞﾗﾌｨｯｸ番号 = 3 + 0</FONT><BR>
+            ■文章:夕一\n「ぼく、おなかが減ってるんだ！\n  何か食べるものを買ってきてくれたら\n  仲間になってあげるよ！</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼特殊文字の設定例</FONT><BR>
+      <TABLE border="0" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#ffff00">■文章:<FONT color="#00ffff">@3</FONT>\n夕一\n「やあ、ぼく\r[夕一,ゆういち]っていうんだ！<BR>
+            ■文章:<FONT color="#00ffff">@1</FONT>\nウルファール\n「私はウルファールですよ！<BR>
+            ■文章:<FONT color="#00ffff">@3</FONT>\n夕一\n「ぼく、おなかが減ってるんだ！\n 何か食べるものを買ってきてくれたら\n
+            仲間になってあげるよ！</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      なお、１つ目の文章を表示して、３フレーム以上経つと、顔グラフィックの設定が初期化されます。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      そのため、３フレーム以上経ってから同じ顔グラフィックを表示する場合は、<BR>
+      もう一度顔グラフィックの表示設定を行う必要があります。<BR>
+      <BR>
+      <FONT color="#00ffff">▼システム変数の設定例</FONT><BR>
+      <TABLE border="0" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#00ffff">■変数操作: Sys0:顔ｸﾞﾗﾌｨｯｸ番号 = 3 + 0</FONT><FONT color="#ffff00"><BR>
+      ■文章:夕一\n「やあ、ぼく\r[夕一,ゆういち]っていうんだ！<BR>■ウェイト：10 フレーム<BR>
+            <FONT color="#00ffff">■変数操作: Sys0:顔ｸﾞﾗﾌｨｯｸ番号 = 3 + 0</FONT><BR>
+      ■文章:夕一\n「ぼく、おなかが減ってるんだ！\n  何か食べるものを買ってきてくれたら\n  仲間になってあげるよ！</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼特殊文字の設定例</FONT><BR>
+      <TABLE border="0" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#ffff00">■文章:<FONT color="#00ffff">@3</FONT>\n夕一\n「やあ、ぼく\r[夕一,ゆういち]っていうんだ！<BR>
+            ■ウェイト：10 フレーム<BR>
+            ■文章:<FONT color="#00ffff">@3</FONT>\n夕一\n「ぼく、おなかが減ってるんだ！\n 何か食べるものを買ってきてくれたら\n
+            仲間になってあげるよ！</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT size="+2" color="#ff96ff">★ゲーム画面の比率[16：9]の不具合について</FONT><BR>
+      <BR>
+      ゲーム画面の比率が<FONT color="#ffff00">[16：9]</FONT>の場合、顔グラフィックが<FONT color="#00ffff">横長に表示されてしまう不具合</FONT>があります。<BR>
+      <BR>
+      修正する場合は、<A href="../../05_kihon/0063_msg/" target="_blank">コモンイベント[063:X[共]メッセージウィンドウ]</A>の<FONT color="#c8ff64">160行目</FONT>の<FONT color="#a0dcff">【ピクチャ移動】</FONT>の設定を開き、<BR>
+      「拡大率：横」の設定を「1600023」から「1600024」に変えてください。<BR>
+      <BR>
+      <IMG src="031.png" width="498" height="471" border="0"><BR>
+      <BR>
+            <TABLE cellpadding="3">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000099" align="center" height="20">修正前</TD>
+                  <TD></TD>
+                  <TD bgcolor="#660000" align="center">修正後</TD>
+          </TR>
+          <TR>
+            <TD><IMG src="032.png" width="424" height="240" border="0"></TD>
+                  <TD></TD>
+                  <TD valign="top"><IMG src="033.png" width="424" height="240" border="0"></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="bun_ichi">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■文章の表示位置の変更(システム変数[1～2])について</FONT><BR>
+      <BR>
+      文章の表示位置を変えようと…<BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#ffff00">■変数操作: Sys2:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ Y座標 = 0 + 0<BR>
+            ■文章:\Eあいうえおかきくけこさしすせそ</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と設定しても、表示位置が変わらない問題が発生します。<BR>
+      <BR>
+      これは<A href="../../05_kihon/0063_msg/" target="_blank">コモンイベント[063:X[共]メッセージウィンドウ]</A>の<FONT color="#8cff8c">44～47行目</FONT>に原因があります。<BR>
+      <BR>
+      <FONT color="#00ffff">▼コモンイベント[063:X[共]メッセージウィンドウ]の44～47行目</FONT><BR>
+      <IMG src="100.png" width="856" height="632" border="0"><BR>
+      <BR>
+      この<FONT color="#8cff8c">44～47行目</FONT>では、文書ウィンドウを表示する度に毎回<FONT color="#ffff00">文章の表示位置の初期化</FONT>を実行しています。<BR>
+      <BR>
+      そのため…<BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><FONT color="#ffff00">■変数操作: Sys2:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ Y座標 = 0 + 0<BR>
+            ■文章:\Eあいうえおかきくけこさしすせそ</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      のような設定を行っても、表示位置が変わる事がありません。<BR>
+      <BR>
+      <FONT color="#8cff8c">44行目以降</FONT>にある設定は、表示位置の処理基設定を行っているので<FONT color="#00ffff">削除する事はできません。</FONT><BR>
+      そのため、もしも上記の設定が有効になるようにする場合は、<BR>
+      <FONT color="#8cff8c">44行目以降</FONT>にある設定を以下のように設定して、<FONT color="#ffff00">ゲーム開始時に１回だけ実行する</FONT>ように設定すると良いでしょう。<BR>
+      <BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c100.txt" target="_blank">【イベントコード表示（追加分のみ）】</A><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">|■条件分岐(数値): 【1】 Sys1:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ X座標 が CSelf60 以外<BR>
+            |-◇分岐： 【1】 [ Sys1:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ X座標 が CSelf60[改：sys1の値] 以外
+            ]の場合↓<BR>
+            ||■変数操作: Sys1:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ X座標 = 2 * CSelf88[座標倍率X(x10)]<BR>
+            ||■変数操作: Sys2:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ Y座標 = 17 * CSelf89[座標倍率Y(x10)]<BR>
+            <FONT color="#64ff64">||▼ Ver3.00修正 メッセージウィンドウY座標を微調整</FONT><BR>
+            ||■変数操作: Sys2:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ Y座標 += CSelf89[座標倍率Y(x10)] / 5<BR>
+            ||■変数操作: Sys3:選択肢ｳｨﾝﾄﾞｳ X座標 = 16 * CSelf88[座標倍率X(x10)]<BR>
+            <FONT color="#64ff64">||▼ Ver3.00修正 選択肢ウィンドウY座標を微調整</FONT><BR>
+            ||■変数操作: Sys4:選択肢ｳｨﾝﾄﾞｳ Y座標 = 7 * CSelf89[座標倍率Y(x10)]<BR>
+            ||■変数操作: Sys5:ﾎﾟｰｽﾞｶｰｿﾙX (Sys1に足した位置) = 16 * CSelf88[座標倍率X(x10)]<BR>
+            ||■変数操作: Sys6:ﾎﾟｰｽﾞｶｰｿﾙY (Sys2に足した位置) = 6 * CSelf89[座標倍率Y(x10)]<BR>
+            ||■変数操作: CSelf60 = Sys1:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ X座標 + 0<BR>
+            ||■<BR>
+            |◇分岐終了◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼上記設定に変更した後の状態</FONT><BR>
+      <IMG src="101.png" width="856" height="632" border="0"><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT size="+2" color="#ff96ff">★注意点</FONT><BR>
+      <BR>
+      <A href="../../03_hen/0005_hen_sys0-34/index.htm#sys001" target="_blank">システム変数[1:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ X座標][2:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ Y座標]</A>で表示位置が変わるのは<FONT color="#ffff00">文章の表示だけ</FONT>であり、<BR>
+      <A href="../../03_hen/0005_hen_sys0-34/index.htm#sys001" target="_blank">システム変数[1:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ X座標][2:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ Y座標]</A>で表示位置を変更しても、<BR>
+      ピクチャで表示しているメッセージウィンドウや顔グラフィックの表示位置は変わりません。<BR>
+      <BR>
+      <FONT color="#00ffff">▼システム変数[2:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ Y座標]を「0」にした時</FONT><BR>
+      <IMG src="102.png" width="640" height="480" border="0"><BR>
+      <BR>
+      もしも<A href="../../03_hen/0005_hen_sys0-34/index.htm#sys001" target="_blank">システム変数[1:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ X座標][2:ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ Y座標]</A>で表示位置を変えた時に、<BR>
+      メッセージウィンドウや顔グラフィックの表示位置も一緒に変わるようにしたい時には、<BR>
+      <A href="../../05_kihon/0063_msg/" target="_blank">コモンイベント[063:X[共]メッセージウィンドウ]</A>の<FONT color="#ffff00">改造設定</FONT>が必要です。<BR>
+      <BR>
+      <A href="../../05_kihon/2000_bun_window_idhi/index.htm" target="_blank">【メッセージウィンドウのＹ表示位置を変える方法を見る】</A><BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="font">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■フォント「Meiryo」の文字の横幅について</FONT><BR>
+      <BR>
+      文字の表示には「あいうえお１２３４５」などの全角文字と「abcde12345」などの半角文字があります。<BR>
+      <BR>
+      半角文字は「<FONT color="#00ffff">全角文字の半分の横幅</FONT>」と言ったイメージがあるかもしれませんが、<BR>
+      しかしウディタ[3.00]から基本フォントになった「<FONT color="#ffff00">Meiryo</FONT>」は<FONT color="#ffff00">半角文字の横幅が広い</FONT>と言った特徴があり、<BR>
+      ウディタ[3.00]以前の基本フォントだった「ＭＳ ゴシック」のような<FONT color="#00ffff">「半角２文字＝全角１文字」ではありません。</FONT><BR>
+      <BR>
+      <IMG src="../../01_shoshin/1500_game_set/034_3.png" width="600" height="140" border="0"><BR>
+      <BR>
+      変数の数値（半角文字）を最大８桁まで表示する場合は、<BR>
+      ウディタ[3.00]以前(ＭＳ ゴシック)なら「全角で４文字分」でしたが、<BR>
+      ウディタ[3.00]以降（Meiryo）では「全角５文字分」が必要になります。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <BR>
+      <FONT size="+2" color="#ffff00">◎関連ページ</FONT><BR>
+      <BR>
+      <A href="../0000_ibekoma_nani/" target="_top">◆「イベントコマンド」って何？</A><BR>
+      <FONT color="#ffff00">┣◆文章の表示</FONT><BR>
+      <A href="../0101_tokushumoji/" target="_top">┃┗◆特殊文字</A><BR>
+      <A href="../0200_sentakushi/" target="_top">┣◆選択肢</A><BR>
+      <A href="../0210_rei_sentakushi/" target="_top">┃┗◆【使用例】選択肢</A><BR>
+      <A href="../0300_hensuu/" target="_top">┣◆変数操作</A><BR>
+      <A href="../0301_enzansi/" target="_top">┃┗◆演算子について</A><BR>
+      <A href="../0400_db/" target="_top">┣◆ＤＢ操作</A><BR>
+      <A href="../0500_mojiretsu/" target="_top">┣◆文字列操作</A><BR>
+      <A href="../0510_rei_mojiretsu/" target="_top">┃┗◆【使用例】文字列操作</A><BR>
+      <A href="../0600_hensuu_plus/" target="_top">┣◆変数操作＋</A><BR>
+      <A href="../0601_xy/" target="_top">┃┣◆「Ｘ座標･Ｙ座標」と「画面Ｘ座標･画面Ｙ座標」の違い</A><BR>
+      <A href="../0610_rei_hensuu_plus_chara/" target="_top">┃┣◆【使用例】変数操作＋の｢キャラ｣と｢位置｣</A><BR>
+      <A href="../0611_rei_hensuu_plus_picture/" target="_top">┃┗◆【使用例】変数操作＋の｢ピクチャ｣と｢その他｣</A><BR>
+      <A href="../0700_jouken_hen/" target="_top">┣◆条件(数値)</A><BR>
+      <A href="../0800_jouken_moji/" target="_top">┣◆条件(文字列)</A><BR>
+      <A href="../0900_key/" target="_top">┣◆キー入力</A><BR>
+      <A href="../0910_rei_key/" target="_top">┃┗◆【使用例】キー入力</A><BR>
+      <A href="../1000_picture/" target="_top">┣◆ピクチャ</A><BR>
+      <A href="../1001_hyoujikeisiki/" target="_top">┃┗◆表示形式(通常･加算･減算･乗算)について</A><BR>
+      <A href="../1100_effect/" target="_top">┣◆エフェクト</A><BR>
+      <A href="../1101_effect_z/" target="_top">┃┣◆「Ｚオーダー」について</A><BR>
+      <A href="../1110_rei_effect/" target="_top">┃┗◆【使用例】エフェクト</A><BR>
+      <A href="../1200_sound/" target="_top">┣◆サウンド</A><BR>
+      <A href="../1300_save_load/" target="_top">┣◆セーブ･ロード操作</A><BR>
+      <A href="../1400_party/" target="_top">┣◆パーティ画像</A><BR>
+      <A href="../1500_chip/" target="_top">┣◆チップ処理</A><BR>
+      <A href="../1510_rei_chip/" target="_top">┃┗◆【使用例】チップ処理</A><BR>
+      <A href="../1600_bashoidou/" target="_top">┣◆場所移動</A><BR>
+      <A href="../1700_ev/" target="_top">┣◆イベント制御</A><BR>
+      <A href="../1701_ev_dousa/" target="_top">┃┣◆キャラクターの動作指定</A><BR>
+      <A href="../1710_rei_ev/" target="_top">┃┗◆【使用例】イベント制御</A><BR>
+      <A href="../1800_com/" target="_top">┣◆コモンイベント</A><BR>
+      <A href="../1900_dl/" target="_top">┣◆ダウンロード</A><BR>
+      <A href="../2000_pro/" target="_top">┗◆プロ版機能</A><BR>
+      　<A href="../2010_pro_hikisuu/" target="_top">┗◆起動時の引数について</A></TD>
+    </TR>
+  </TBODY>
+</TABLE>
+</CENTER>
+<DIV style="position: relative; top: 20px" align="center">
+<HR>
+<A href="../../" target="_top">YADOT-WOLFトップ</A>　　<A href="http://kkni.net/" target="_blank">気紛れな空間へ戻る</A>　　<A href="../../../page/mail.htm" target="_blank">メール</A><BR>
+　</DIV>
+</BODY>
+</HTML>

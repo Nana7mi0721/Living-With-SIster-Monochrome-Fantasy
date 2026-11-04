@@ -1,0 +1,4 @@
+M2: title menu new-game chain and map teleport docs
+
+- test: boot -> title -> confirm -> title menu -> new game -> opening prompt
+- docs: M2_SLICE 4.6 map teleport law, BASELINE map_teleport key

@@ -1,0 +1,11 @@
+M6: prove the day loop repeats into a third day
+
+The CE251 day command is not a one-day dead end: after the action the
+17:00 -> 19:30 dinner scene (CE326) plays out and the bedroom waits for
+the player again. Seed the sister-click flag a second time and the same
+three-way sleep prompt appears, CE329 rolls the clock to day 3 08:30
+Wednesday (var160=3, var6=2).
+
+Extend the existing integration test through the evening and the second
+sleep, asserting both prompts and the day-3 morning. Update HANDOFF_M4
+and BASELINE.json with the repeatable-loop evidence.

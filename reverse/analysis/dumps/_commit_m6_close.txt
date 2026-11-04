@@ -1,0 +1,16 @@
+M6: close the playable daily loop and pin the battle boundary
+
+- add real-game integration tests for the daytime sister click (ev1 page0),
+  the real battle line (CE188/CE192/CE65, CData type0 HP copy), the day-4
+  forced CE253/CE239 wall, and CE152 command availability vs CData type7
+- prove day1 -> day4 08:30 with three CE329 sleeps and two CE251 study days;
+  day 5 is unreachable in this build because day-4 morning is forced into the
+  battle subsystem, which is pinned as a data/script boundary (CE152 pc89..pc95,
+  empty item counts; CE244 is not called from CE188)
+- add docs/research M6_BATTLE_REAL, M6_BATTLE_COMMANDS, M6_SCHEDULE, EV1_DAY_CLICK
+  and the sequenced M7 backlog
+- add docs/HANDOFF_M6.md, point NEW_SESSION_START at it, refresh BASELINE
+- add AGENT.md: default to parallel subagents with disjoint write scopes and
+  keep integration/tests/commit with the Lead
+
+Tests: cargo test -q --workspace green; wolf-cli verify PASS 70 / pending 0.

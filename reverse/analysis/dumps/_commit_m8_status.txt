@@ -1,0 +1,7 @@
+M8 docs: record W3-a, W4-b, W4-c and the pinned PRNG law
+
+- M8_BACKLOG: W3-a/W4-b/W4-c marked DONE with their tests and limits; W5-a now
+  records the decompiled modulo law plus the Park-Miller finding (the law-only
+  prototype was reverted; the generator port is the follow-up).
+- BASELINE.json m8_workstreams: add map_actor, template_save and prng_range
+  entries and refresh the remaining list.

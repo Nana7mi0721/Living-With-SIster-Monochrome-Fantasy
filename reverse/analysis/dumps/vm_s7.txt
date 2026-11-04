@@ -1,0 +1,169 @@
+== op150 type=3 samples
+  ev67 pc23 ints=[51, 1600020] strs=[]
+  ev67 pc31 ints=[48, 1600020, 1600001, 1600025, 1600026, 1, 255, 0, 0, 100, 0, 0, 33554432, 0, 0, 0, 0, 0] strs=['<SQUARE>']
+  ev67 pc37 ints=[48, 1600020, 0, 1600025, 1600026, 1, 255, 0, 0, 100, 0, 0, 33554432, 0, 0, 80, 80, 80] strs=['<SQUARE>']
+  ev67 pc38 ints=[50, 1600020, 1600001] strs=[]
+  ev85 pc176 ints=[819, 1600021] strs=[]
+  ev85 pc179 ints=[816, 1600021, 10, 1600010, 1600011, 1, 255, 0, 0, 100, 0] strs=['<GRADY-779-111>']
+
+== op150 type=4 samples
+  ev63 pc90 ints=[4160, 1600020, 5, 1600038, 1600039, 1, 255, 1600032, 1600033, 100, 0, 1600009] strs=[]
+  ev64 pc79 ints=[67, 1600021] strs=[]
+  ev64 pc84 ints=[16777539, 1600020, 1600010] strs=[]
+  ev64 pc107 ints=[16777538, 1600020, 0, 0, 0, 1600010] strs=[]
+  ev64 pc164 ints=[66, 1600021, 0] strs=[]
+  ev64 pc166 ints=[66, 1600021, 0] strs=[]
+
+== op150 type=1 samples
+  ev36 pc192 ints=[16, 1600021, 0, 1600080, 1600081, 1, 255, 1600088, 1600089, 100, 0, 1600005] strs=[]
+  ev36 pc199 ints=[18, 1600021, 0] strs=[]
+  ev36 pc204 ints=[4112, 1600021, 0, 1600080, 1600081, 1600003, 0, 1600024, 1600025, 1600083, 0, 1600005] strs=[]
+  ev36 pc207 ints=[8208, 1600021, 0, 1600080, 1600081, 1600003, 0, 1600024, 1600025, 1600083, 0, 1600005] strs=[]
+  ev36 pc210 ints=[16400, 1600021, 0, 1600080, 1600081, 1600003, 0, 1600024, 1600025, 1600083, 0, 1600005] strs=[]
+  ev36 pc215 ints=[8208, 1600021, 0, 1600080, 1600081, 1600003, 0, 1600024, 1600025, 1600083, 0, 1600005] strs=[]
+
+== op176 with matching 498 context
+  ev25(▲特殊技能の有無取得) pc20 ind3
+     pc18   ind2  ct111  ints=[1, 1600021, -1, 3]
+     pc19   ind2  ct401  ints=[1]
+     pc20   ind3  ct176  ints=[]
+     pc21   ind3  ct0    ints=[]
+     pc22   ind2  ct499  ints=[]
+     pc23   ind2  ct103  ints=[]
+     pc24   ind2  ct111  ints=[1, 1600021, 1600010, 3]
+     pc25   ind2  ct401  ints=[1]
+     pc26   ind3  ct121  ints=[1600030, 1, 0, 0]
+     pc27   ind3  ct172  ints=[]
+
+  ev63(X[共]メッセージウィンドウ) pc63 ind2
+     pc61   ind1  ct401  ints=[1]
+     pc62   ind2  ct180  ints=[1]
+     pc63   ind2  ct176  ints=[]
+     pc64   ind2  ct0    ints=[]
+     pc65   ind1  ct499  ints=[]
+     pc66   ind1  ct180  ints=[1]
+     pc67   ind1  ct103  ints=[]
+     pc68   ind1  ct103  ints=[]
+     pc69   ind1  ct103  ints=[]
+     pc70   ind1  ct111  ints=[1, 9000012, 1, 2]
+
+  ev75(X[移]状態付与/消去) pc190 ind5
+     pc188  ind4  ct401  ints=[1]
+     pc189  ind5  ct103  ints=[]
+     pc190  ind5  ct176  ints=[]
+     pc191  ind5  ct0    ints=[]
+     pc192  ind4  ct499  ints=[]
+     pc193  ind4  ct0    ints=[]
+     pc194  ind3  ct499  ints=[]
+     pc195  ind3  ct250  ints=[2, 1600000, 1600011, 65536, 0]
+     pc196  ind3  ct0    ints=[]
+     pc197  ind2  ct498  ints=[]
+
+  ev109(X[移]装備欄_選択実行) pc66 ind4
+     pc64   ind4  ct180  ints=[30]
+     pc65   ind4  ct300  ints=[0, 4113, -1, 1600005]
+     pc66   ind4  ct176  ints=[]
+     pc67   ind4  ct0    ints=[]
+     pc68   ind3  ct499  ints=[]
+     pc69   ind3  ct0    ints=[]
+     pc70   ind2  ct499  ints=[]
+     pc71   ind2  ct250  ints=[19, 0, 1, 331776, 1600013]
+     pc72   ind2  ct300  ints=[0, 1, 0]
+     pc73   ind2  ct212  ints=[]
+
+  ev109(X[移]装備欄_選択実行) pc132 ind6
+     pc130  ind5  ct401  ints=[1]
+     pc131  ind6  ct103  ints=[]
+     pc132  ind6  ct176  ints=[]
+     pc133  ind6  ct0    ints=[]
+     pc134  ind5  ct499  ints=[]
+     pc135  ind5  ct300  ints=[0, 16777218, 1600035, 1600025, 1600026]
+     pc136  ind5  ct111  ints=[1, 1600010, 1600025, 5]
+     pc137  ind5  ct401  ints=[1]
+     pc138  ind6  ct111  ints=[1, 1600026, 20000, 1]
+     pc139  ind6  ct401  ints=[1]
+
+  ev109(X[移]装備欄_選択実行) pc213 ind5
+     pc211  ind5  ct300  ints=[0, 4113, -1, 1600005]
+     pc212  ind5  ct213  ints=[]
+     pc213  ind5  ct176  ints=[]
+     pc214  ind5  ct0    ints=[]
+     pc215  ind4  ct499  ints=[]
+     pc216  ind4  ct300  ints=[0, 1, 3]
+     pc217  ind4  ct179  ints=[1]
+     pc218  ind5  ct103  ints=[]
+     pc219  ind5  ct103  ints=[]
+     pc220  ind5  ct103  ints=[]
+
+== op170 with matching 498
+  ev25(▲特殊技能の有無取得) pc4 ind0
+     pc3    ind0  ct121  ints=[1600020, -1, 0, 0]
+     pc4    ind0  ct170  ints=[]
+     pc5    ind1  ct121  ints=[1600020, 2, 0, 256]
+     pc6    ind1  ct111  ints=[1, 1600020, 99, 0]
+     pc7    ind1  ct401  ints=[1]
+     pc8    ind2  ct171  ints=[]
+     pc9    ind2  ct0    ints=[]
+     pc10   ind1  ct499  ints=[]
+     pc11   ind1  ct250  ints=[1, 1600000, 1600020, 69632, 1600021]
+
+  ev31(◆[戦闘用]ダメージ処理) pc21 ind2
+     pc20   ind2  ct121  ints=[1600010, -1, 0, 0]
+     pc21   ind2  ct170  ints=[]
+     pc22   ind3  ct121  ints=[1600010, 1, 0, 256]
+     pc23   ind3  ct111  ints=[1, 1600010, 1600020, 1]
+     pc24   ind3  ct401  ints=[1]
+     pc25   ind4  ct172  ints=[]
+     pc26   ind4  ct0    ints=[]
+     pc27   ind3  ct499  ints=[]
+     pc28   ind3  ct300  ints=[0, 16777217, 1600010, 1600011]
+
+  ev31(◆[戦闘用]ダメージ処理) pc50 ind2
+     pc49   ind2  ct121  ints=[1600010, 9, 0, 0]
+     pc50   ind2  ct170  ints=[]
+     pc51   ind3  ct121  ints=[1600010, 1, 0, 256]
+     pc52   ind3  ct111  ints=[1, 1600010, 1600020, 1]
+     pc53   ind3  ct401  ints=[1]
+     pc54   ind4  ct172  ints=[]
+     pc55   ind4  ct0    ints=[]
+     pc56   ind3  ct499  ints=[]
+     pc57   ind3  ct300  ints=[0, 16777217, 1600010, 1600011]
+
+== op179 with matching 498
+  ev4(○回復·ダメージ処理) pc18 ind2
+     pc17   ind2  ct121  ints=[1600010, -1, 0, 0]
+     pc18   ind2  ct179  ints=[1600019]
+     pc19   ind3  ct121  ints=[1600010, 1, 0, 256]
+     pc20   ind3  ct103  ints=[]
+     pc21   ind3  ct300  ints=[0, 16777217, 1600010, 1600011]
+     pc22   ind3  ct103  ints=[]
+     pc23   ind3  ct212  ints=[]
+     pc24   ind3  ct111  ints=[1, 1600011, 0, 1]
+     pc25   ind3  ct401  ints=[1]
+
+  ev4(○回復·ダメージ処理) pc80 ind2
+     pc79   ind2  ct121  ints=[1600010, -1, 0, 0]
+     pc80   ind2  ct179  ints=[1600019]
+     pc81   ind3  ct121  ints=[1600010, 1, 0, 256]
+     pc82   ind3  ct103  ints=[]
+     pc83   ind3  ct300  ints=[0, 16777217, 1600010, 1600011]
+     pc84   ind3  ct103  ints=[]
+     pc85   ind3  ct212  ints=[]
+     pc86   ind3  ct103  ints=[]
+     pc87   ind3  ct111  ints=[1, 1600011, 0, 1]
+
+  ev4(○回復·ダメージ処理) pc141 ind2
+     pc140  ind2  ct121  ints=[1600010, -1, 0, 0]
+     pc141  ind2  ct179  ints=[1600019]
+     pc142  ind3  ct121  ints=[1600010, 1, 0, 256]
+     pc143  ind3  ct103  ints=[]
+     pc144  ind3  ct300  ints=[0, 16777217, 1600010, 1600011]
+     pc145  ind3  ct111  ints=[1, 1600001, 1600011, 2]
+     pc146  ind3  ct401  ints=[1]
+     pc147  ind4  ct103  ints=[]
+     pc148  ind4  ct213  ints=[]
+
+== op101 message: leading @n frequency
+  {'face': 20, 'no_face': 12007} total=12027
+== op101 strings with special chars census
+  [('\\E', 11964), ('\n', 3477), ('\\c[', 176), ('\\cself', 93), ('\\f[', 76), ('\\v[', 35), ('@', 20), ('\\^', 6), ('\\.', 5), ('\\sp[', 1)]

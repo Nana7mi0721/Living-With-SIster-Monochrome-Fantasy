@@ -1,0 +1,20 @@
+M8 W5-a follow-up: repair the m7 day-loop tests for the new event RNG
+
+The Park-Miller event stream changes which three CE251 day commands are drawn
+and whether the evening settles at 18:30 or 19:30.
+
+- m7_day4_playable / m7_day5_schedule: pick the first CE252 daytime task row
+  from the five drawn labels (地区贡献 routes into the battle), click the real
+  row position, and wait for the CE251/300/301/326/406 machinery to go idle
+  instead of pinning 19:30; assert the same day, hour >= 18, minute == 30.
+  The day-4 battle/sleep assertions are unchanged.
+- m7_hmode_state: the fresh day-2 baseline now selects a CE252 row the same
+  way and waits for the evening to settle; re-pin the four fresh values that
+  the draw changes (var7 2936->3029, var21 20->18, var28 103->105,
+  var137 3->1). The retail SaveData08 column is unchanged.
+
+Evidence:
+  WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m7_day4_playable
+  WOLF_DATA_ROOT=work/full cargo test -q -p wolf-game --test m7_day5_schedule
+  WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m7_hmode_state
+  (all green; warnings 0)

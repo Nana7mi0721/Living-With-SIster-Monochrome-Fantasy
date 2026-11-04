@@ -1,0 +1,7 @@
+M11: add the battle menu bridge and pin the round-1 boundaries
+
+- battle_wiring: harvest CE157 menu confirmations, queue commands, expose Game hook
+- H progression: prove var304 reachable, pin var326 bookstore gate and CE328 early return
+- window edge: resolve CE94 CN patch right edge as data-only (correct M9 arithmetic)
+- audio: add deterministic per-track loop regression with tiering
+- docs: HANDOFF_M10 §9, README/PLAN/BASELINE/NEW_SESSION_START status

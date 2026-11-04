@@ -1,0 +1,5 @@
+docs: add new-session bootstrap prompt
+
+A fresh session has no chat history; this file gives it the exact prompt,
+the six facts it needs, the verification commands, and the rule to update
+the handoff when the next milestone lands.

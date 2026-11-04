@@ -1,0 +1,7 @@
+feat(p2): validate data root at startup, add asset cache stats, package fonts and skip .wolf archives, report play perf
+
+- wolf-game::data_root checks required dirs/files before Game::new, with a clear DataRoot error instead of an opaque IO failure.
+- Assets::cache_bytes/cache_stats and Game::asset_cache_stats expose resident RGBA for the release perf summary.
+- wolf-package skips .wolf build archives (payload 1.53GB -> 0.77GB), copies fonts to data/Fonts/, and accepts --font.
+- wolf-cli play prints data-load/window-ready startup times, per-step p50/p95/max/mean, and asset cache size.
+- Tests: 146 blocks / 877 passed / 0 failed / 14 ignored; m11_package 4 passed.

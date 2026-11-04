@@ -1,0 +1,12 @@
+M6: fix night-page teardown and prove the natural sleep loop
+
+CE329 clears var69 at pc41 while it is still a descendant of the autorun
+page that owns its 210 CALL stack. The per-frame page re-selection used to
+stop that page and every descendant, so the day never rolled over. Defer
+deactivation (only when the page becomes None) while the page coroutine is
+blocked in WaitState::Child.
+
+New tests: the pure natural night menu -> sleep path reaches day 3 08:30
+with only var295 normalization; ev1 page2 is reached by a synthesised
+hover at its 120x80 hit box centre (140,340); the day loop repeats through
+day 4 08:30 with a midpoint save/reload.

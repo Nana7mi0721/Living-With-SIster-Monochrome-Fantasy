@@ -1,0 +1,454 @@
+{
+ "12500": [
+  {
+   "event": "c94",
+   "slot": 128,
+   "action": "Erase",
+   "kind": 0,
+   "head": 16777218,
+   "args": [
+    0,
+    0,
+    0,
+    12502
+   ],
+   "strs": []
+  },
+  {
+   "event": "c94",
+   "slot": 251,
+   "action": "Draw",
+   "kind": 4,
+   "head": 4160,
+   "args": [
+    0,
+    300,
+    200,
+    1,
+    255,
+    855,
+    200,
+    100,
+    0,
+    1600008,
+    33554432,
+    8,
+    0,
+    100,
+    100,
+    100
+   ],
+   "strs": []
+  },
+  {
+   "event": "c131",
+   "slot": 260,
+   "action": "Erase",
+   "kind": 0,
+   "head": 16777218,
+   "args": [
+    0,
+    0,
+    0,
+    12502
+   ],
+   "strs": []
+  },
+  {
+   "event": "c131",
+   "slot": 278,
+   "action": "Erase",
+   "kind": 0,
+   "head": 16777218,
+   "args": [
+    0,
+    0,
+    0,
+    12502
+   ],
+   "strs": []
+  }
+ ],
+ "12501": [
+  {
+   "event": "c94",
+   "slot": 252,
+   "action": "Draw",
+   "kind": 2,
+   "head": 32,
+   "args": [
+    0,
+    1,
+    1,
+    1,
+    255,
+    715,
+    115,
+    100,
+    0,
+    0,
+    33554432,
+    8,
+    0,
+    100,
+    100,
+    100
+   ],
+   "strs": [
+    "欢迎来到Ver2.0DLC！\n烦请注意\n存档的第一栏\n为自动存档所使用\n第一栏已有存档数据时，\n请先读取该存档，\n重新保存至合适的位置。"
+   ]
+  }
+ ],
+ "12502": [
+  {
+   "event": "c131",
+   "slot": 77,
+   "action": "Erase",
+   "kind": 1,
+   "head": 4114,
+   "args": [
+    0
+   ],
+   "strs": []
+  },
+  {
+   "event": "c131",
+   "slot": 81,
+   "action": "Draw",
+   "kind": 1,
+   "head": 4112,
+   "args": [
+    0,
+    1,
+    1,
+    1,
+    255,
+    855,
+    430,
+    25,
+    0,
+    3000005
+   ],
+   "strs": []
+  },
+  {
+   "event": "c131",
+   "slot": 107,
+   "action": "Erase",
+   "kind": 1,
+   "head": 4114,
+   "args": [
+    0
+   ],
+   "strs": []
+  },
+  {
+   "event": "c131",
+   "slot": 111,
+   "action": "Draw",
+   "kind": 1,
+   "head": 4112,
+   "args": [
+    0,
+    1,
+    1,
+    1,
+    255,
+    855,
+    430,
+    25,
+    0,
+    3000005
+   ],
+   "strs": []
+  },
+  {
+   "event": "c131",
+   "slot": 137,
+   "action": "Erase",
+   "kind": 1,
+   "head": 4114,
+   "args": [
+    0
+   ],
+   "strs": []
+  },
+  {
+   "event": "c131",
+   "slot": 141,
+   "action": "Draw",
+   "kind": 1,
+   "head": 4112,
+   "args": [
+    0,
+    1,
+    1,
+    1,
+    255,
+    855,
+    430,
+    25,
+    0,
+    3000005
+   ],
+   "strs": []
+  },
+  {
+   "event": "c131",
+   "slot": 167,
+   "action": "Erase",
+   "kind": 1,
+   "head": 4114,
+   "args": [
+    0
+   ],
+   "strs": []
+  },
+  {
+   "event": "c131",
+   "slot": 171,
+   "action": "Draw",
+   "kind": 1,
+   "head": 4112,
+   "args": [
+    0,
+    1,
+    1,
+    1,
+    255,
+    855,
+    430,
+    25,
+    0,
+    3000005
+   ],
+   "strs": []
+  }
+ ],
+ "11": [
+  {
+   "event": "c549",
+   "slot": 6,
+   "action": "Draw",
+   "kind": 0,
+   "head": 0,
+   "args": [
+    20,
+    1,
+    1,
+    1,
+    255,
+    0,
+    0,
+    100,
+    0
+   ],
+   "strs": [
+    "Kagura/Kagura.png"
+   ]
+  },
+  {
+   "event": "c549",
+   "slot": 20,
+   "action": "Erase",
+   "kind": 0,
+   "head": 2,
+   "args": [
+    20
+   ],
+   "strs": []
+  }
+ ],
+ "12": [
+  {
+   "event": "c549",
+   "slot": 24,
+   "action": "Draw",
+   "kind": 0,
+   "head": 0,
+   "args": [
+    20,
+    1,
+    1,
+    1,
+    255,
+    0,
+    0,
+    100,
+    0
+   ],
+   "strs": [
+    "Kagura/Disc.png"
+   ]
+  },
+  {
+   "event": "c549",
+   "slot": 38,
+   "action": "Erase",
+   "kind": 0,
+   "head": 2,
+   "args": [
+    20
+   ],
+   "strs": []
+  }
+ ],
+ "13": [
+  {
+   "event": "c549",
+   "slot": 44,
+   "action": "Draw",
+   "kind": 0,
+   "head": 0,
+   "args": [
+    20,
+    1,
+    1,
+    1,
+    255,
+    0,
+    0,
+    100,
+    0
+   ],
+   "strs": [
+    "Kagura/inusuku.png"
+   ]
+  },
+  {
+   "event": "c549",
+   "slot": 58,
+   "action": "Erase",
+   "kind": 0,
+   "head": 2,
+   "args": [
+    20
+   ],
+   "strs": []
+  }
+ ],
+ "10": [
+  {
+   "event": "c549",
+   "slot": 63,
+   "action": "Erase",
+   "kind": 0,
+   "head": 2,
+   "args": [
+    20
+   ],
+   "strs": []
+  },
+  {
+   "event": "m2",
+   "slot": 28,
+   "action": "Draw",
+   "kind": 0,
+   "head": 0,
+   "args": [
+    0,
+    1,
+    1,
+    1,
+    255,
+    0,
+    0,
+    100,
+    0
+   ],
+   "strs": [
+    "Kagura/bg.png"
+   ]
+  }
+ ],
+ "12000": [
+  {
+   "event": "m2",
+   "slot": 75,
+   "action": "Draw",
+   "kind": 0,
+   "head": 0,
+   "args": [
+    0,
+    1,
+    1,
+    1,
+    255,
+    0,
+    0,
+    100,
+    0
+   ],
+   "strs": [
+    "SystemGraphic/TitleGraphic.png"
+   ]
+  },
+  {
+   "event": "m2",
+   "slot": 77,
+   "action": "Draw",
+   "kind": 0,
+   "head": 0,
+   "args": [
+    0,
+    1,
+    1,
+    1,
+    255,
+    0,
+    0,
+    100,
+    0
+   ],
+   "strs": [
+    "Picture/title01.jpg"
+   ]
+  },
+  {
+   "event": "m2",
+   "slot": 95,
+   "action": "Erase",
+   "kind": 0,
+   "head": 2,
+   "args": [
+    30,
+    5
+   ],
+   "strs": []
+  }
+ ],
+ "12001": [
+  {
+   "event": "m2",
+   "slot": 78,
+   "action": "Draw",
+   "kind": 0,
+   "head": 4096,
+   "args": [
+    0,
+    1,
+    1,
+    1,
+    255,
+    512,
+    520,
+    100,
+    0
+   ],
+   "strs": [
+    "SystemFile/Button01.png"
+   ]
+  },
+  {
+   "event": "m2",
+   "slot": 94,
+   "action": "Erase",
+   "kind": 0,
+   "head": 4098,
+   "args": [
+    0
+   ],
+   "strs": []
+  }
+ ]
+}

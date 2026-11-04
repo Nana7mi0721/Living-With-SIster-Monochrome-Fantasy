@@ -1,0 +1,42 @@
+boot+auto closure common events: 214
+assets referenced by boot closure: 1442 files / 193707867 B
+  DLC_data              457   68176193
+  cg                    242   50263200
+  hscene                239   19791095
+  BGM                     3   14643374
+  1.4.0                  83   12590262
+  Picture               149   12473893
+  BattleEffect            5    5828444
+  cutin                 117    3857657
+  SE                     33    3054480
+  SystemGraphic           7    2253857
+  hword                 103     477994
+  Kagura                  3     281081
+  CharaChip               1      16337
+
+sample 25:
+  1.4.0/SD_basya.png
+  1.4.0/bg_36_ryokan6.jpg
+  1.4.0/cutin_220.png
+  1.4.0/cutin_221.png
+  1.4.0/cutin_222.png
+  1.4.0/v144_cg10_1.jpg
+  1.4.0/v144_cg11_1.jpg
+  1.4.0/v144_cg11_2.jpg
+  1.4.0/v144_cg11_3.jpg
+  1.4.0/v144_cg11_4.jpg
+  1.4.0/v144_cg12_1.jpg
+  1.4.0/v144_cg13_1.jpg
+  1.4.0/v144_cg16_1.jpg
+  1.4.0/v144_cg16_2.jpg
+  1.4.0/v144_cg16_3.jpg
+  1.4.0/v144_cg16_4.jpg
+  1.4.0/v144_cg16_5.jpg
+  1.4.0/v144_cg16_6.jpg
+  1.4.0/v144_cg16_7.jpg
+  1.4.0/v144_cg16_8.jpg
+  1.4.0/v144_cg17_1.jpg
+  1.4.0/v144_cg17_12.png
+  1.4.0/v144_cg17_2.jpg
+  1.4.0/v144_cg17_3.jpg
+  1.4.0/v144_cg17_4.jpg

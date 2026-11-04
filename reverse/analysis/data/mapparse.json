@@ -1,0 +1,56 @@
+{
+ "Dungeon.mps": {
+  "err": "AssertionError(('evhdr', '0x6f', 14452))",
+  "w": 40,
+  "h": 30,
+  "nev": 5
+ },
+ "Map002.mps": {
+  "err": "AssertionError(('evhdr', '0x6f', 36052))",
+  "w": 100,
+  "h": 30,
+  "nev": 5
+ },
+ "Map003.mps": {
+  "err": "AssertionError(('evhdr', '0x6f', 142852))",
+  "w": 70,
+  "h": 170,
+  "nev": 2
+ },
+ "Map024.mps": {
+  "err": "IndexError('index out of range')",
+  "w": 53,
+  "h": 30,
+  "nev": 1
+ },
+ "Map031.mps": {
+  "err": "IndexError('index out of range')",
+  "w": 53,
+  "h": 30,
+  "nev": 1
+ },
+ "SampleMapA.mps": {
+  "err": "AssertionError(('evhdr', '0x6f', 27700))",
+  "w": 64,
+  "h": 36,
+  "nev": 40
+ },
+ "SampleMapA_1.mps": {
+  "err": "AssertionError(('evhdr', '0x6f', 27700))",
+  "w": 64,
+  "h": 36,
+  "nev": 12
+ },
+ "SampleMapB.mps": {
+  "err": "AssertionError(('evhdr', '0x6f', 10852))",
+  "w": 30,
+  "h": 30,
+  "nev": 6
+ },
+ "TitleMap.mps": {
+  "err": "AssertionError(('evhdr', '0x6f', 19132))",
+  "w": 53,
+  "h": 30,
+  "nev": 1
+ }
+}

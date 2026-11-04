@@ -1,0 +1,34 @@
+M12 round 1: battle cancel, confirm-page audit, byte-identical retail saves
+
+Close three of the six remaining retail-flow/fidelity items from HANDOFF_M12.
+
+- battle menu input: add tests/m12_battle_cancel.rs. Real CE188 ->
+  CE191 -> CE192 -> CE65 with a two-member DB fixture and no wiring,
+  round-loop or command-queue injection. A cancel at the CE191 window
+  returns -100, reopens the same window and registers nothing; a cancel
+  at the CE192 command window exits via the self1600099 = -1 branch with
+  no CData type14 row and no CE157. A later two-member OK run still
+  writes [(1,0,26),(2,1,25)] and starts CE157 twice. No production code
+  change.
+- confirm pages: add tests/m12_confirm_pages.rs and close MAP_AUDIT
+  section 9 item 4. ev11/14/18/21 page 1 and ev22 page 3 are empty
+  page-selector stubs selected by v302 == 1 (they stop the parallel
+  page); ev24 page 6 has 251 commands but is gated on self0 == 99 and
+  no script in all 550 common events or 9 maps writes magic 1000000.
+  On SaveData01 the event tiles sit under the full-screen layers; the
+  click hitboxes are the 124 picture rectangles, not the event grid.
+- saves: Game::load_save -> Game::save_to now reproduces all eight
+  retail save files byte for byte. Picture keeps the loaded SavePart5_1
+  record as a write baseline and picture_to_record overwrites only the
+  live fields, preserving the unmodelled tone/effect/animation banks,
+  the text md1 byte stream, the last fade length and the vertical scale.
+  Add tests/m12_save_full_compare.rs (whole-file equality plus a moved
+  picture that keeps the banks).
+- docs: add M12_BATTLE_CANCEL, M12_CONFIRM_PAGES and
+  M12_SAVE_FULL_COMPARE; refresh HANDOFF_M12, PLAN, README,
+  NEW_SESSION_START, MAP_AUDIT, M10_SAVE_COMPLETENESS, BASELINE
+  (m12_round1) and both research indexes.
+
+Tests: WOLF_DATA_ROOT=work/all cargo test -q --workspace -> 131 blocks,
+810 passed, 0 failed, 1 ignored; wolf-cli verify --root work/all -> PASS
+70 / pending 0; cargo build -p wolf-cli -> EXIT 0.

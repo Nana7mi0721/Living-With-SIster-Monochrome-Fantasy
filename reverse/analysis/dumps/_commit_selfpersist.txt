@@ -1,0 +1,25 @@
+fix(vm): persist common-event self variables across invocations (M13)
+
+The VM started every common-event invocation from an all-zero self bank and only
+wrote CSelf to Part3 at save time, never restoring it, so per-event state such as
+CE251's daily countdown (self51/self65) and CE452's DLC chapter counter (self10)
+reset on every invocation. Mainline stage28/29 and the DLC chapters were therefore
+unreachable in organic play.
+
+- wolf-vm/exec.rs: add Vm.common_self (EventId -> SelfVars) and common_self_dirty;
+  seed a persistent common event's bank on start, fold it back on reap/stop and
+  mark dirty; add start_event_fresh for synthetic drivers that must not persist.
+- wolf-game/savegame.rs: restore Part3 CSelf0..99 / CSelf5..9 per event on load
+  without marking anything dirty (load->save must stay byte-identical).
+- wolf-game/game.rs: save_to writes dirty union still-live common banks to Part3
+  and clears the dirty set after writing.
+- wolf-game/battle_wiring.rs: synthetic CE241/CE242 drivers use start_event_fresh.
+- Adapt M7/M8/M9/M11/M12 tests whose expectations encoded the pre-fix zero-self
+  replay (verified against SaveData08 Part2/Part3/Part5); visual harness pins
+  WOLF_GAME_DIR so subprocess keeps its fonts and h_overlay is re-pinned to the
+  save-faithful frame (Part5: pose_09 / word_effect62 opacity 0).
+
+Verification: cargo test -q --workspace --no-fail-fast (WOLF_GAME_DIR=work/retail_backup
+WOLF_DATA_ROOT=work/all) = 822 passed / 0 failed / 6 ignored; m12 8/8 load->save
+byte-identical; wolf-cli verify PASS 70/0; natural mainline start_day91 drives
+stage10->28->29 with var492=1; DLC var619 0->25.

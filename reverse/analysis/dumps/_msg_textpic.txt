@@ -1,0 +1,18 @@
+M2: text picture layout - font sizes, anchors, colours, outlines
+
+- crates/wolf-game/src/textpic.rs (new, 988 lines, 25 tests): lays a
+  150 text picture out into style runs. \f[n] sets the run font size,
+  anchor bits 12..14 are top-left/centre/bottom-left/top-right/bottom-
+  right, <R> right-aligns a line, \c[n] indexes the SysDatabase 12
+  palette, \E adds the outline, and \v/\cself/\cdb/\udb expand.
+- Game::text_quads emits one atlas::TextQuad per run; TextQuad gained
+  font_px/colour/outline fields (0.0 = caller default Sys8) and off-
+  screen runs are culled with picture::on_screen.
+- CLI capture and play build a TextItem per quad style instead of one
+  default-size item per picture.
+- HUD checked against retail Save/save1.jpg (1024x576): pic 6200 is
+  anchor 3 at x=140 with ink 85..138, matching Lolita.ttf's 56.31 px
+  advance; the pic 6200/6210 overlap and the pic 6251 right-edge
+  overflow are gone. Story state: 12 quads, 33 text pictures, 92.7%.
+- docs/BASELINE.json gains a text_pictures key and refreshed story
+  numbers; docs/M2_SLICE.md gains section 3.9.

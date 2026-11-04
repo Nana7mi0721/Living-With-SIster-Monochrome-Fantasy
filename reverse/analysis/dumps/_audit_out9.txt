@@ -1,0 +1,61 @@
+registered maps: ['Map003', 'Map024', 'Map031', 'SampleMapA', 'SampleMapA_1', 'TitleMap']
+
+referenced & reachable (game closure): 2407 files / 588291280 B
+referenced ONLY by dead code: 288 files / 20201690 B
+check: 2407 + 288 = 2695 (expect 2695)
+
+== live-only refs by dir ==
+BGM                        40    223256712
+DLC_data                  566    144328368
+cg                        477    100697762
+1.4.0                     179     31857496
+Picture                   458     23923301
+BattleEffect               44     21434351
+SE                        120     16789197
+hscene                    211     15796852
+cutin                     203      6434803
+SystemGraphic               8      2678621
+MapChip                    54       528551
+Kagura                      4       283731
+SystemFile                 18       151062
+BalloonBase_CafeLatte       8        70510
+CharaChip                   7        38661
+FIcon                      10        21302
+
+== dead-only refs by dir ==
+cg                         64     12015284
+hscene                     89      5680755
+DLC_data                   10      1585165
+hword                     103       477994
+cutin                       5       230055
+Picture                    13       197576
+1.4.0                       2         9440
+SE                          1         4468
+SystemGraphic               1          953
+
+== 25 biggest dead-only refs ==
+      364940 DLC_data/dlc_command_bg_01b.jpg
+      303915 cg/ending12.jpg
+      300272 DLC_data/dlc_ending03.jpg
+      276909 DLC_data/dlc_imouto_botu1.jpg
+      276412 DLC_data/dlc_imouto_botu2.jpg
+      267750 cg/event01.jpg
+      258277 DLC_data/dlc_bg_019.jpg
+      255725 cg/event67_04.jpg
+      222827 cg/event_20_02.jpg
+      222780 cg/event_20_03.jpg
+      222537 cg/event_23_04.jpg
+      221092 cg/event_40_11.jpg
+      220900 cg/event_40_10.jpg
+      220701 cg/event_40_06.jpg
+      220491 cg/event_40_05.jpg
+      220268 cg/event_40_04.jpg
+      219641 cg/event_40_08.jpg
+      219489 cg/event_40_07.jpg
+      219168 cg/event_40_03.jpg
+      219088 cg/event_40_02.jpg
+      217914 cg/event02.jpg
+      213478 cg/event_42_03.jpg
+      213240 cg/event_42_06.jpg
+      212609 cg/event_42_02.jpg
+      211246 cg/event_42_04.jpg

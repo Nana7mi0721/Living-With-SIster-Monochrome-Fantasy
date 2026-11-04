@@ -1,0 +1,37 @@
+disk data files 4062 / 771585007 B
+sizes dict 3904 / 763976724 B
+in disk not in sizes: 158  (should be BasicData+MapData)
+
+dir                    files        bytes  live        liveB  dref      drefB never       neverB
+BGM                       49    248514721    40    223256712     0          0     9     25258009
+DLC_data                 633    155203817   575    145655256     1     258277    57      9290284
+cg                       596    124237364   541    112713046     0          0    55     11524318
+BattleEffect              92    113672178    44     21434351     0          0    48     92237827
+1.4.0                    199     33705094   181     31866936     0          0    18      1838158
+Picture                  539     27000868   468     24047869     3      73008    68      2879991
+hscene                   327     22847281   300     21477607     0          0    27      1369674
+SE                       273     22525701   120     16789197     1       4468   152      5732036
+cutin                    223      7151448   208      6664858     0          0    15       486590
+BasicData                149      6383077     0            0     0          0     0            0
+SystemGraphic             28      2861080     8      2678621     1        953    19       181506
+EnemyGraphic             118      2624945     0            0     0          0   118      2624945
+MapData                    9      1225206     0            0     0          0     0            0
+MapChip                  102       778669    54       528551     0          0    48       250118
+SystemFile                32       702549    18       151062     0          0    14       551487
+scene                    327       677686     0            0     0          0   327       677686
+hword                    119       555617   103       477994     0          0    16        77623
+CharaChip                 91       327651     7        38661     0          0    84       288990
+Kagura                     4       283731     4       283731     0          0     0            0
+Fog_BackGround            10       146048     0            0     0          0    10       146048
+BalloonBase_CafeLatte     13       127932     8        70510     0          0     5        57422
+FIcon                     10        21302    10        21302     0          0     0            0
+word                     119        11042     0            0     0          0   119        11042
+TOTAL                   4062    771585007  2689    608156264     6     336706  1209            0
+
+== .wolf archives ==
+23 archives / 757077610 B
+
+== shipping footprint if only live assets + data files ==
+live assets 608156264 + data files 7608283 = 615764547 B (587.2 MB)
+full unpacked 771585007 B (735.8 MB)
+savings vs unpacked: 155820460 B (20.2%)

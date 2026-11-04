@@ -1,0 +1,6 @@
+M8 docs: align the day-4 and battle-playable notes with W1-c
+
+- m6_week_loop: state explicitly that the day-5 wall is the wiring-OFF default;
+  the wiring-on acceptance run is m7_day4_playable.
+- docs/research/M7_BATTLE_PLAYABLE.md: record the new observed state sequence
+  ([0,1,0], immediate settlement) instead of the old 0->1->2->0 expectation.

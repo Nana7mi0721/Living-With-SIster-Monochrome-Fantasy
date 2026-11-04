@@ -1,0 +1,12 @@
+M10: land opcode 111 reference semantics and rebaseline battle tests
+
+- opcode 111 value operands now resolve through eval_num (variables/self refs)
+- compound() 0x600/0x700/0x800 now apply to the target current value
+  (fixes the CE172 dead==total false abort that masked latent battle state)
+- rebaseline the 12 affected wolf-game tests to the genuine multi-round
+  battle economy and clamped energy/H-mode values, with RNG-tolerant
+  structural assertions for the natural route
+- add M10 landing, first-divergence and independent-review notes
+
+Verified: cargo test -q --workspace --no-fail-fast (all green),
+wolf-cli verify PASS 70/0.

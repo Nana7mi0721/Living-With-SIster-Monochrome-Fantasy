@@ -1,0 +1,47 @@
+== Picture missing sources (top) ==
+  map SampleMapA_1.json ev7  x167
+  map SampleMapA_1.mps ev7  x167
+  sysdb type13  x45
+  common ev220  x14
+  map Map002.json ev3  x9
+  map Map002.mps ev3  x9
+  common ev354  x8
+  map Map002.json ev5  x6
+  map Map002.mps ev5  x6
+  map SampleMapA_1.json ev4  x6
+  map SampleMapA_1.mps ev4  x6
+  map Map031.json ev0  x2
+  map Map031.mps ev0  x2
+  map SampleMapA_1.json ev8  x2
+  map SampleMapA_1.mps ev8  x2
+
+== Picture missing sample 20 ==
+  count 191
+   Picture/attack_effect01.png <- map Map002.json ev5#15; map Map002.json ev5#40
+   Picture/battle_icon_end.png <- map SampleMapA_1.json ev8#200; map SampleMapA_1.json ev8#252
+   Picture/bg_battle01.jpg <- sysdb type13[遠景画像] row28
+   Picture/bg_battle02.jpg <- sysdb type13[遠景画像] row34
+   Picture/bg_battle03.jpg <- sysdb type13[遠景画像] row35
+   Picture/bg_battle04.jpg <- sysdb type13[遠景画像] row37
+   Picture/bg_dungeon1.jpg <- sysdb type13[遠景画像] row36
+   Picture/bg_forest04.jpg <- sysdb type13[遠景画像] row4
+   Picture/bg_forest05.jpg <- sysdb type13[遠景画像] row5
+   Picture/bg_forest06.jpg <- sysdb type13[遠景画像] row6
+   Picture/bg_forest07.jpg <- sysdb type13[遠景画像] row7
+   Picture/bg_forest08.jpg <- sysdb type13[遠景画像] row8
+   Picture/bg_forest09.jpg <- sysdb type13[遠景画像] row9
+   Picture/bg_forest10.jpg <- sysdb type13[遠景画像] row10
+   Picture/bg_forest11.jpg <- sysdb type13[遠景画像] row11
+   Picture/bg_forest12.jpg <- sysdb type13[遠景画像] row12
+   Picture/bg_forest13.jpg <- sysdb type13[遠景画像] row13
+   Picture/bg_forest14.jpg <- sysdb type13[遠景画像] row14
+   Picture/bg_forest15.jpg <- sysdb type13[遠景画像] row15
+   Picture/bg_forest16.jpg <- sysdb type13[遠景画像] row16
+   Picture/bg_forest17.jpg <- sysdb type13[遠景画像] row17
+   Picture/bg_forest18.jpg <- sysdb type13[遠景画像] row18
+   Picture/bg_forest19.jpg <- sysdb type13[遠景画像] row19
+   Picture/bg_map1.png <- sysdb type13[遠景画像] row25
+   Picture/bg_map10.jpg <- sysdb type13[遠景画像] row38
+
+== CharaChip on disk: 91 files ==
+  ['[Animal]Cat_pochi.png', '[Animal]Chameleon_Uroboros.png', '[Animal]Chicken.png', '[Animal]Cow_pochi.png', '[Animal]Crow1_pochi.png', '[Animal]Crow2_pochi.png', '[Animal]Dog1_pochi.png', '[Animal]Dog2_pochi.png', '[Animal]Dog_pochi.png', '[Animal]Fox_pochi.png', '[Animal]Goat_pochi.png', '[Animal]Halcyon_ipu.png', '[Animal]Horse_pochi.png', '[Animal]Owl_A_pochi.png', '[Animal]Owl_B_pochi.png', '[Animal]Parrot_tapis.png', '[Animal]Rabbit_pochiT.png', '[Animal]Sheep-a_pochi.png', '[Animal]Sheep-b_pochi.png', '[Animal]Wolf_pochi.png', '[Chara]Civilian_Child_A.png', '[Chara]Civilian_Child_B.png', '[Chara]Civilian_Female_A.png', '[Chara]Civilian_Female_B.png', '[Chara]Civilian_Female_C.png', '[Chara]Civilian_Male_A.png', '[Chara]Civilian_Male_B.png', '[Chara]Civilian_Male_C.png', '[Chara]Cook.png', '[Chara]Devil_USM.png', '[Chara]Doctor.png', '[Chara]Fighter1_USM.png', '[Chara]Fighter2_USM.png', '[Chara]Fighter3_USM.png', '[Chara]Girl1_USM.png', '[Chara]Hero1_USM.png', '[Chara]Hero2_USM.png', '[Chara]Hero3_USM.png', '[Chara]Hero4_USM.png', '[Chara]Pirate_USM.png', '[Chara]Priest1_USM.png', '[Chara]Priest2_USM.png', '[Chara]Samurai_USM.png', '[Chara]Thief1_USM.png', '[Chara]Witch1_USM.png', '[Chara]Wizard1_USM.png', '[MapParts]CampSet_Uroboros.png', '[MapParts]Ship_mel.png', '[Monster]Bat_pochi.png', '[Monster]Death_Uroboros.png', '[Monster]Dragon_A_pochi.png', '[Monster]Dragon_B_pochi.png', '[Monster]Dragon_Black_Uroboros.png', '[Monster]Dragon_Brown_Uroboros.png', '[Monster]Dragon_Green_Uroboros.png', '[Monster]Dragon_Red_Uroboros.png', '[Monster]Gargoyle_Black_Uroboros.png', '[Monster]Gargoyle_Red_Uroboros.png', '[Monster]Ghost_pochi.png', '[Monster]Goblin1_tapis.png', '[Monster]Goblin2_tapis.png', '[Monster]Golem2_pochi.png', '[Monster]Golem_pochi.png', '[Monster]Harypy_pochi.png', '[Monster]LizardMan_pochi.png', '[Monster]Mandrake_pochi.png', '[Monster]Minotaur_garugaru.png', '[Monster]MouseMan_garugaru.png', '[Monster]RabbitMan1_makiba.png', '[Monster]RabbitMan2_makiba.png', '[Monster]Skelton_pochi.png', '[Monster]Slime1_pochi.png', '[Monster]Slime2_pochi.png', '[Monster]TigerMan_garugaru.png', '[Monster]Werewolf_garugaru.png', '[Monster]Wolf_pochi.png', '[Monster]Zombie_pochi.png', '[Special]Edy.png', '[Special]Tiga.png', '[Special]Wolfarl.png', 'cursor.png', 'hand1.png', 'hand2.png', 'hand3.png', 'look.png', 'mushroom.png', 'pipo-emotion.png', 'point_area.png', 'point_arrow.png', 'point_move.png', 'talk.png']

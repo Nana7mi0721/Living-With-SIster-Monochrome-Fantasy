@@ -1,0 +1,192 @@
+{
+ "hist": {
+  "0": {
+   "number": 0,
+   "ops": 550,
+   "actions": {
+    "Draw": 2,
+    "Move": 548
+   },
+   "kinds": {
+    "0": 413,
+    "2": 137
+   },
+   "files": {
+    "SystemGraphic/TitleGraphic.jpg": 2
+   },
+   "texts": {},
+   "first_line": 7,
+   "last_line": 5947,
+   "states": {
+    "{\"blend\": 0, \"opacity\": 255, \"scale\": 100, \"window\": [1, 1], \"x\": 0, \"y\": 0}": {
+     "count": 2,
+     "first_line": 7,
+     "action": "Draw"
+    },
+    "{\"x\": 0, \"y\": 0}": {
+     "count": 548,
+     "first_line": 24,
+     "action": "Move"
+    }
+   }
+  },
+  "12500": {
+   "number": 12500,
+   "ops": 137,
+   "actions": {
+    "Draw": 137
+   },
+   "kinds": {
+    "4": 137
+   },
+   "files": {},
+   "texts": {},
+   "first_line": 28,
+   "last_line": 5948,
+   "states": {
+    "{\"blend\": 0, \"opacity\": 255, \"scale\": 100, \"window\": [300, 200], \"x\": 855, \"y\": 200}": {
+     "count": 137,
+     "first_line": 28,
+     "action": "Draw"
+    }
+   }
+  },
+  "12501": {
+   "number": 12501,
+   "ops": 137,
+   "actions": {
+    "Draw": 137
+   },
+   "kinds": {
+    "2": 137
+   },
+   "files": {},
+   "texts": {
+    "欢迎来到Ver2.0DLC！ 烦请注意 存档的第一栏 为自动存档所使用 第一栏已…": 137
+   },
+   "first_line": 29,
+   "last_line": 5949,
+   "states": {
+    "{\"blend\": 0, \"opacity\": 255, \"scale\": 100, \"window\": [1, 1], \"x\": 715, \"y\": 115}": {
+     "count": 137,
+     "first_line": 29,
+     "action": "Draw"
+    }
+   }
+  },
+  "12053": {
+   "number": 12053,
+   "ops": 1507,
+   "actions": {
+    "Set": 137,
+    "Draw": 274,
+    "Move": 1096
+   },
+   "kinds": {
+    "3": 137,
+    "2": 548,
+    "0": 822
+   },
+   "files": {},
+   "texts": {
+    "\\f[0]0": 274
+   },
+   "first_line": 31,
+   "last_line": 5966,
+   "states": {
+    "{\"blend\": 0, \"opacity\": 255, \"scale\": 100, \"window\": [1, 1], \"x\": 0, \"y\": 0}": {
+     "count": 274,
+     "first_line": 32,
+     "action": "Draw"
+    },
+    "{\"x\": 0, \"y\": 0}": {
+     "count": 1096,
+     "first_line": 34,
+     "action": "Move"
+    }
+   }
+  },
+  "12054": {
+   "number": 12054,
+   "ops": 274,
+   "actions": {
+    "Set": 137,
+    "Erase": 137
+   },
+   "kinds": {
+    "0": 137,
+    "2": 137
+   },
+   "files": {},
+   "texts": {},
+   "first_line": 38,
+   "last_line": 5959,
+   "states": {}
+  },
+  "12004": {
+   "number": 12004,
+   "ops": 274,
+   "actions": {
+    "Set": 137,
+    "Erase": 137
+   },
+   "kinds": {
+    "3": 274
+   },
+   "files": {},
+   "texts": {},
+   "first_line": 48,
+   "last_line": 5969,
+   "states": {}
+  },
+  "12005": {
+   "number": 12005,
+   "ops": 274,
+   "actions": {
+    "Set": 137,
+    "Draw": 137
+   },
+   "kinds": {
+    "3": 274
+   },
+   "files": {
+    "<TRI-RIGHT>": 137
+   },
+   "texts": {},
+   "first_line": 50,
+   "last_line": 5971,
+   "states": {
+    "{\"blend\": 0, \"opacity\": 255, \"scale\": 100, \"x\": 0, \"y\": 0}": {
+     "count": 137,
+     "first_line": 51,
+     "action": "Draw"
+    }
+   }
+  },
+  "12502": {
+   "number": 12502,
+   "ops": 108,
+   "actions": {
+    "Draw": 108
+   },
+   "kinds": {
+    "1": 108
+   },
+   "files": {},
+   "texts": {},
+   "first_line": 130,
+   "last_line": 5930,
+   "states": {
+    "{\"blend\": 0, \"opacity\": 255, \"scale\": 25, \"window\": [1, 1], \"x\": 855, \"y\": 430}": {
+     "count": 108,
+     "first_line": 130,
+     "action": "Draw"
+    }
+   }
+  }
+ },
+ "assets": {
+  "SystemGraphic/TitleGraphic.jpg": 2,
+  "<TRI-RIGHT>": 137
+ }
+}

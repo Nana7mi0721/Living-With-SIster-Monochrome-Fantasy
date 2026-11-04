@@ -1,0 +1,181 @@
+### op210 param_status correlation
+
+  sc=2 nc=3 rv=0  -> argc_extra=5 strc=3   n=7057
+
+  sc=0 nc=4 rv=0  -> argc_extra=4 strc=0   n=4709
+
+  sc=0 nc=1 rv=0  -> argc_extra=1 strc=0   n=2639
+
+  sc=0 nc=2 rv=0  -> argc_extra=2 strc=0   n=1405
+
+  sc=0 nc=5 rv=0  -> argc_extra=5 strc=0   n=1280
+
+  sc=0 nc=3 rv=0  -> argc_extra=3 strc=0   n=574
+
+  sc=0 nc=0 rv=0  -> argc_extra=0 strc=0   n=292
+
+  sc=1 nc=4 rv=0  -> argc_extra=5 strc=2   n=227
+
+  sc=2 nc=5 rv=0  -> argc_extra=7 strc=3   n=148
+
+  sc=0 nc=4 rv=1  -> argc_extra=5 strc=0   n=100
+
+  sc=0 nc=0 rv=1  -> argc_extra=1 strc=0   n=8
+
+  sc=1 nc=1 rv=0  -> argc_extra=2 strc=0   n=6
+
+  sc=1 nc=1 rv=0  -> argc_extra=2 strc=2   n=5
+
+  sc=1 nc=2 rv=0  -> argc_extra=3 strc=0   n=4
+
+  sc=2 nc=5 rv=0  -> argc_extra=7 strc=0   n=4
+
+  sc=1 nc=2 rv=1  -> argc_extra=4 strc=0   n=3
+
+  sc=0 nc=1 rv=1  -> argc_extra=2 strc=0   n=2
+
+  sc=1 nc=2 rv=1  -> argc_extra=4 strc=2   n=2
+
+### op211 param_status correlation
+
+  sc=0 nc=0 rv=0  -> argc_extra=0 strc=0   n=4
+
+### op300 param_status correlation
+
+  sc=0 nc=1 rv=0  -> argc_extra=1 strc=1   n=301
+
+  sc=0 nc=2 rv=0  -> argc_extra=2 strc=1   n=200
+
+  sc=0 nc=3 rv=0  -> argc_extra=3 strc=1   n=198
+
+  sc=0 nc=2 rv=1  -> argc_extra=3 strc=1   n=122
+
+  sc=0 nc=4 rv=0  -> argc_extra=4 strc=1   n=122
+
+  sc=0 nc=1 rv=1  -> argc_extra=2 strc=1   n=94
+
+  sc=0 nc=0 rv=0  -> argc_extra=0 strc=1   n=30
+
+  sc=1 nc=1 rv=0  -> argc_extra=2 strc=1   n=30
+
+  sc=0 nc=3 rv=1  -> argc_extra=4 strc=1   n=18
+
+  sc=1 nc=1 rv=0  -> argc_extra=2 strc=2   n=11
+
+  sc=0 nc=4 rv=1  -> argc_extra=5 strc=1   n=8
+
+  sc=3 nc=1 rv=0  -> argc_extra=4 strc=4   n=8
+
+  sc=1 nc=2 rv=1  -> argc_extra=4 strc=1   n=7
+
+  sc=1 nc=0 rv=1  -> argc_extra=2 strc=1   n=6
+
+  sc=1 nc=4 rv=1  -> argc_extra=6 strc=2   n=4
+
+  sc=0 nc=0 rv=1  -> argc_extra=1 strc=1   n=2
+
+  sc=1 nc=2 rv=0  -> argc_extra=3 strc=1   n=1
+
+  sc=1 nc=0 rv=0  -> argc_extra=1 strc=1   n=1
+
+
+### op111 operators
+
+  op=0    n=65    samples=[(25, '▲特殊技能の有無取得', 1600020, 99), (50, 'X[共]アイテム増減', 1600000, 9999), (51, 'X[共]武器増減', 1600000, 9999)]
+
+  op=1    n=4467  samples=[(0, '○アイテム増減', 1600002, 1), (0, '○アイテム増減', 1600002, 100), (0, '○アイテム増減', 1600002, 1)]
+
+  op=2    n=10711 samples=[(0, '○アイテム増減', 1600002, 1), (0, '○アイテム増減', 1600002, 2), (0, '○アイテム増減', 1600002, 3)]
+
+  op=3    n=1355  samples=[(0, '○アイテム増減', 1600001, -1), (0, '○アイテム増減', 1600001, -1), (1, '○武器増減', 1600001, -1)]
+
+  op=4    n=146   samples=[(9, '○状態異常変化', 1600001, 0), (9, '○状態異常変化', 1600001, 0), (9, '○状態異常変化', 1600001, 0)]
+
+  op=5    n=482   samples=[(24, '▲状態異常の取得', 1600030, 0), (24, '▲状態異常の取得', 1600030, 0), (59, 'X[共]ウェイト(キー押しで中断', 1600013, 0)]
+
+  op=6    n=112   samples=[(4, '○回復·ダメージ処理', 1600000, 4), (4, '○回復·ダメージ処理', 1600000, 1), (4, '○回復·ダメージ処理', 1600000, 2)]
+
+  op=17   n=8     samples=[(216, 'ステータスバー表示', 2000007, 1000000), (227, '■所持金変動', 2000007, 1000000), (244, '┗終了判定', 2000342, 1)]
+
+  op=18   n=23    samples=[(218, '■立ち絵表示', 1600002, 4), (218, '■立ち絵表示', 1600002, 7), (218, '■立ち絵表示', 1600002, 4)]
+
+  op=19   n=13    samples=[(242, '┣コマンド処理', 1600001, -1), (242, '┣コマンド処理', 1600001, -1), (242, '┣コマンド処理', 1600001, -1)]
+
+
+### op112 raw samples
+
+  ev=49(X[共]システムSE再生) ints=[1, 270035465] strs=['', '', '', '']
+
+  ev=63(X[共]メッセージウィンドウ) ints=[1, 270035464] strs=['', '', '', '']
+
+  ev=64(X[共]万能ウィンドウ描画処理) ints=[17, 1600006] strs=['', '', '', '']
+
+  ev=70(X[移]パラメータ増減) ints=[1, 1600007] strs=['', '', '', '']
+
+  ev=79(X[移]パーティー情報計算) ints=[17, 1600005] strs=['<<ERROR>>', '', '', '']
+
+  ev=80(X[移]パーティー画像再設定) ints=[1, 270035465] strs=['', '', '', '']
+
+  ev=85(X[移]┣ お店　描画) ints=[17, 1600007] strs=['', '', '', '']
+
+  ev=90(X[移]キャラクター欄描画) ints=[17, 270035463] strs=['', '', '', '']
+
+  ev=94(X[移]セーブ·ロード画面描画) ints=[1, 1600006] strs=['save1', '', '', '']
+
+  ev=94(X[移]セーブ·ロード画面描画) ints=[2, 270035463, 1600007] strs=['', '', '', '']
+
+  ev=100(X[移]ミニウィンドウ表示) ints=[1, 270035463] strs=['', '', '', '']
+
+  ev=118(X[移]アイテム使用効果処理) ints=[17, 270035465] strs=['', '', '', '']
+
+  ev=119(X[移]技能使用効果処理) ints=[17, 270035465] strs=['', '', '', '']
+
+  ev=120(X[移]アイテム使用_消費処理) ints=[1, 270035465] strs=['', '', '', '']
+
+  ev=121(X[移]技能使用_消費処理) ints=[1, 270035465] strs=['', '', '', '']
+
+
+### high-flag decode (0x10000000/0x20000000/0x30000000)
+
+  0x10000000: n=56 distinct=7  base_vals=[1, 257, 1600005, 1600006, 1600007, 1600008, 1600009]  where={(112, 1): 52, (126, 0): 4}
+
+  0x20000000: n=25 distinct=3  base_vals=[2, 1600006, 1600008]  where={(125, 0): 20, (112, 1): 4, (112, 2): 1}
+
+  0x30000000: n=34 distinct=4  base_vals=[1600005, 1600006, 1600007, 1600008]  where={(112, 1): 22, (112, 2): 6, (112, 3): 3, (112, 4): 3}
+
+
+### op121 arg[3] decomposition (low byte=modify op, bits12-15=AopB)
+
+  low byte: [(0, 17064), (1, 32), (2, 95), (4, 36), (8, 1), (16, 12), (32, 18)]
+
+  bits12-15: [(0, 14932), (1, 214), (2, 469), (3, 435), (4, 107), (6, 1101)]
+
+  other bits used: [(0, 17022), (65536, 236)]
+
+  top combos: [((0, 0), 14837), ((0, 6), 1101), ((0, 2), 466), ((0, 3), 372), ((0, 1), 181), ((0, 4), 107), ((2, 3), 63), ((4, 0), 34), ((1, 1), 29), ((2, 0), 28)]
+
+
+### op150 (arg0&0xf) command nibble vs argc
+
+  cmd=0 argc_dist={11: 8910, 12: 84, 13: 5, 18: 124, 19: 1149}
+
+  cmd=1 argc_dist={11: 2767, 13: 50, 14: 71, 15: 43, 18: 310, 19: 124}
+
+  cmd=2 argc_dist={3: 1798, 4: 85, 6: 952}
+
+  cmd=3 argc_dist={2: 203, 3: 41}
+
+
+### op150 type=((arg0>>4)&7) counts
+
+  [(0, 14106), (1, 82), (2, 2179), (3, 258), (4, 91)]
+
+
+### op150 -1000000 sentinel positions
+
+  [(5, 146), (6, 127), (9, 474), (10, 166)]
+
+
+### op210 arg[0] id-space
+
+  [('500000-599999', 18427), ('>=600000', 41)]

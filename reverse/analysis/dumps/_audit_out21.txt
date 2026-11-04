@@ -1,0 +1,32 @@
+dir                   imgs        bytes         pixels 2048 sheets
+cg                     541    112713046      352365632     84.0
+DLC_data               565     90513891      333779755     79.6
+hscene                 300     21477607      153742436     36.7
+Picture                468     24047869      106428266     25.4
+1.4.0                  181     31866936       95101455     22.7
+BattleEffect            44     21434351       47690229     11.4
+cutin                  208      6664858        8448000      2.0
+SystemGraphic            8      2678621        4718592      1.1
+Kagura                   4       283731        2335164      0.6
+MapChip                 54       528551         819968      0.2
+hword                  103       477994         345000      0.1
+CharaChip                7        38661         156096      0.0
+SystemFile               5        52956         120306      0.0
+FIcon                   10        21302          81920      0.0
+BalloonBase_CafeLatte     8        70510          16344      0.0
+
+images with a side > 2048: 116
+   9216x576   DLC_data/dlc_kasumi07_kuchi.png
+   9216x576   DLC_data/dlc_kasumi04_eye.png
+   8192x576   DLC_data/dlc_kasumi06_eye.png
+   8192x576   DLC_data/dlc_kasumi04_kuchi.png
+   8192x576   DLC_data/dlc_imouto10_kuchi.png
+   1536x7488  BattleEffect/warp_640.png
+   7168x576   DLC_data/dlc_kasumi06_kuchi.png
+   7168x576   DLC_data/dlc_kasumi05_eye.png
+   7168x576   DLC_data/dlc_imouto07_kuchi.png
+   1024x6500  cg/staff.png
+   6144x576   DLC_data/dlc_kasumi03_kuchi.png
+   6144x576   DLC_data/dlc_imouto15_kuchi.png
+
+total overs px: 284738784

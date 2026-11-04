@@ -1,0 +1,8 @@
+M6: verify a played bedroom scene survives save -> reload
+
+- m6_mainline: after 1500 frames and both icon actions, Game::save_to +
+  savegame::load_into must keep the visible picture layer, 800 normal
+  variables and playtime identical (text formatting and WindowString are
+  format-normalized, visually equal)
+- docs: HANDOFF_M4 live-save paragraph, ARCHITECTURE M6 row,
+  NEW_SESSION status, BASELINE m6_mainline.live_save_roundtrip

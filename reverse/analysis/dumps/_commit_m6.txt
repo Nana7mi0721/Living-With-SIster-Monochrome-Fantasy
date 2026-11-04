@@ -1,0 +1,13 @@
+M6 slice: prove the new-game story on the 108-coroutine background system
+
+- Map003 event 1 (the MapTree child hook with the [S] start marker) is the real
+  new-game entry: 130 teleports to SampleMapA (62,38) direction 1, then SampleMapA
+  event 0 draws the bedroom + HUD and runs the opening disclaimer.
+- Add Vm::started_events / started_event_total so a run can report how many of the
+  108 registered background coroutines it actually started.
+- CLI capture prints a `background:` summary; capture --map now starts the engine
+  events before the map pages so a map capture photographs the same live world.
+- New test crates/wolf-game/tests/m6_mainline.rs pins 900 frames of progress, no
+  warnings, all ENGINE_ALWAYS + 241 + 38 started.
+- Docs: HANDOFF_M4 section 4.5/4.6, ARCHITECTURE M6 row, BASELINE m6_mainline,
+  NEW_SESSION_START status.

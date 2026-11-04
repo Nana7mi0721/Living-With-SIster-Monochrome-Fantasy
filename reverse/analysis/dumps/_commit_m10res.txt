@@ -1,0 +1,11 @@
+M10 residual: save row-counts, map contacts, H deep cutin, audio audit
+
+- savegame: restore saved CData runtime row counts so a 250-grown table keeps
+  its row overlay after load; covered by m8_save_parts round-trip tests.
+- map: contact boxes (half-tile extensions), player start from hero teleport,
+  player-touch/event-touch trigger dispatch; m8_map_contacts 6 tests.
+- H: synthetic deep save opens CE402 body + CE410 cutin; CE246->CE346 executes
+  cutin without retail save mutation; m8_hscene_cg_deep/m8_hscene_cutin.
+- audio: kana.mp3 is a dead BGM registration (safe silence), loop-point audit
+  of all 31 ogg tags; m10_audio_residual data-driven tests.
+- docs: M10 residual writeups and map contacts evidence.

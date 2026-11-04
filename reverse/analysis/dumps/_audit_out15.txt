@@ -1,0 +1,67 @@
+dir                      files        bytes  live        liveB  dref      drefB never       neverB
+BGM                         49    248514721    40    223256712     0          0     9     25258009
+DLC_data                   633    155203817   575    145655256     1     258277    57      9290284
+cg                         596    124237364   541    112713046     0          0    55     11524318
+BattleEffect                92    113672178    44     21434351     0          0    48     92237827
+1.4.0                      199     33705094   181     31866936     0          0    18      1838158
+Picture                    539     27000868   468     24047869     3      73008    68      2879991
+hscene                     327     22847281   300     21477607     0          0    27      1369674
+SE                         273     22525701   120     16789197     1       4468   152      5732036
+cutin                      223      7151448   208      6664858     0          0    15       486590
+SystemGraphic               28      2861080     8      2678621     1        953    19       181506
+EnemyGraphic               118      2624945     0            0     0          0   118      2624945
+MapChip                    102       778669    54       528551     0          0    48       250118
+SystemFile                  32       702549    18       151062     0          0    14       551487
+scene                      327       677686     0            0     0          0   327       677686
+hword                      119       555617   103       477994     0          0    16        77623
+CharaChip                   91       327651     7        38661     0          0    84       288990
+Kagura                       4       283731     4       283731     0          0     0            0
+Fog_BackGround              10       146048     0            0     0          0    10       146048
+BalloonBase_CafeLatte       13       127932     8        70510     0          0     5        57422
+FIcon                       10        21302    10        21302     0          0     0            0
+word                       119        11042     0            0     0          0   119        11042
+BasicData                    0            0     0            0     0          0     0            0
+MapData                      0            0     0            0     0          0     0            0
+TOTAL                     3904    763976724  2689    608156264     6     336706  1209            0
+
+all top dirs: ['1.4.0', 'BGM', 'BalloonBase_CafeLatte', 'BasicData', 'BattleEffect', 'CharaChip', 'DLC_data', 'EnemyGraphic', 'FIcon', 'Fog_BackGround', 'Kagura', 'MapChip', 'MapData', 'Picture', 'SE', 'SystemFile', 'SystemGraphic', 'cg', 'cutin', 'hscene', 'hword', 'scene', 'word']
+
+== 30 biggest never-referenced ASSETS (excl BasicData/MapData) ==
+    18952170 BattleEffect/kaenbeam.png
+    10713886 BattleEffect/pipo-btleffect162.png
+     9856806 BattleEffect/pipo-btleffect207_480.png
+     8193996 BattleEffect/pipo-btleffect191_640.png
+     6003966 BGM/sirorenga.mp3
+     5457387 BGM/Our_Construction.ogg
+     5188385 BattleEffect/pipo-btleffect133.png
+     5091710 BattleEffect/pipo-btleffect144.png
+     5069232 BGM/InstaVista.ogg
+     5004303 BattleEffect/pipo-yaame.png
+     4498012 BattleEffect/wing_640.png
+     4322741 BGM/karuizawa-birds-1.mp3
+     3868795 BattleEffect/pipo-btleffect023.png
+     3456172 BattleEffect/pipo-btleffect192_640.png
+     3072119 BattleEffect/pipo-btleffect145.png
+     2750266 BattleEffect/pipo-btleffect190_640.png
+     2438364 BattleEffect/pipo-btleffect201_480.png
+     2402351 BattleEffect/pipo-btleffect157.png
+     2004113 BGM/summer.mp3
+     1940960 BGM/you_wind.mp3
+      976512 BattleEffect/pipo-btleffect132.png
+      947202 SE/hse_fukumomu.mp3
+      935949 BattleEffect/pipo-btleffect152.png
+      627395 Picture/paja_body.png
+      569192 BattleEffect/pipo-btleffect160.png
+      565336 BattleEffect/pipo-btleffect030.png
+      486293 BattleEffect/pipo-btleffect034.png
+      462659 BattleEffect/pipo-btleffect031.png
+      414148 cg/bg_18_home.png
+      410130 DLC_data/dlc_yui07_04.jpg
+
+== dead-code-only referenced (all 6) ==
+      258277 DLC_data/dlc_bg_019.jpg
+       28333 Picture/paja_eye2.png
+       22940 Picture/paja_mayu2.png
+       21735 Picture/paja_kuchi2.png
+        4468 SE/[System]Get3_wolf.ogg
+         953 SystemGraphic/Text_Pause.png

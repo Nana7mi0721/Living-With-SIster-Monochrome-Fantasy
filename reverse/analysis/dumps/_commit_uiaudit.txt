@@ -1,0 +1,20 @@
+docs(research): correct data-root conclusion after patch re-verify
+
+The current Steam install Data/*.wolf (mtime 2026-11-02 16:26) is the bare
+base game after Steam integrity-verify rolled back the CN Patch v5 + Cosplay
+DLC overlay, NOT the user's full game. Evidence (read directly from the v8
+archives with the Rust DxArchive reader, readlen==size):
+
+- DLC_data.wolf: 331/455 PNGs decode to fully transparent 96x96 placeholders
+  (72 MB) vs 155 MB of real art in the full data set.
+- cg.wolf: 448/596 files differ byte-for-byte; 32.7 MB vs 123 MB.
+- MapData: 8 maps, Dungeon.mps missing (full has 9).
+- CommonEvent.dat: 3,945,490 B vs 5,532,175 B (~7000 fewer ops).
+
+Reverted project data root to the full set (work/all, verified PASS 70/0);
+kept the bare install extraction at work/all_base_steamverify for reference.
+Recommendation: user should re-run 'CN Patch v5 with Cosplay DLC.exe' to
+restore in-game DLC/CN assets.
+
+Also records the UI/asset layout-vs-render audit (PASS) and asset-existence
+audit (140 original dead refs).

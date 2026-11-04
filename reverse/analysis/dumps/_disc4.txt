@@ -1,0 +1,3 @@
+BasicData\CommonEvent.dat age -> 4
+MapData\SampleMapA.mps book -> 1
+MapData\SampleMapA.mps age -> 3

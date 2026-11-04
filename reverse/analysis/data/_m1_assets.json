@@ -1,0 +1,33 @@
+[
+ {
+  "path": "SystemGraphic/TitleGraphic.jpg",
+  "sources": {
+   "150 file": 2
+  },
+  "hits": [
+   {
+    "root": "full",
+    "bytes": 358497,
+    "pixels": [
+     1024,
+     576
+    ]
+   },
+   {
+    "root": "alldata",
+    "bytes": 358497,
+    "pixels": [
+     1024,
+     576
+    ]
+   }
+  ]
+ },
+ {
+  "path": "<TRI-RIGHT>",
+  "sources": {
+   "150 file": 137
+  },
+  "hits": []
+ }
+]

@@ -1,0 +1,8 @@
+top keys ['types']
+n types 28
+0 {'name': 'str', 'description': 'str', 'fields': 'list', 'data': 'list'}
+1 {'name': 'str', 'description': 'str', 'fields': 'list', 'data': 'list'}
+2 {'name': 'str', 'description': 'str', 'fields': 'list', 'data': 'list'}
+3 {'name': 'str', 'description': 'str', 'fields': 'list', 'data': 'list'}
+4 {'name': 'str', 'description': 'str', 'fields': 'list', 'data': 'list'}
+5 {'name': 'str', 'description': 'str', 'fields': 'list', 'data': 'list'}
