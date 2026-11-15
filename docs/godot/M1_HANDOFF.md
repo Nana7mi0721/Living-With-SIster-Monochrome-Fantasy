@@ -75,12 +75,13 @@
 | 地图图层/点触 | `res://tests_gd/MapLayerTest.tscn` | `MAP_LAYER_TEST_OK checks=18`；三层 64×36、点击 (2,3)、Dungeon/SampleMapB 计数一致 |
 | 音频三轨 | `res://tests_gd/AudioManagerTest.tscn` | `AUDIO_MANAGER_TEST_OK checks=30`；BGM/BGS/SE 独立、循环点、快照恢复、WAV 循环点帧→采样换算 |
 | 时钟 | `res://tests/ClockTest.tscn` | `CLOCK_TEST_OK checks=11`；CE217 +130→13:70、跨午夜、周末标志 |
-| 图片状态/指针 | `res://tests_gd/PictureStateTest.tscn` | `PICTURE_STATE_TEST_OK checks=30`；124 的 hover/existence/x/y/scale/text、屏幕层命中、左键三态（2/1/0）、真实 CE217 HUD 显示 `8:30` |
+| 图片状态/指针 | `res://tests_gd/PictureStateTest.tscn` | `PICTURE_STATE_TEST_OK checks=37`；124 的 hover/existence/x/y/scale/text、屏幕层命中、左/右/中三态、真实 CE217 HUD 显示 `8:30` |
 | 白天工作菜单 | `res://tests_gd/DayMenuTest.tscn` | `DAY_MENU_TEST_OK checks=13 command=1 hour=18 minute=30 energy=0`；CE251 从 pc1022 走真实图片 hover/点击、自动确认与工作命令 |
 | 周末行动菜单 | `res://tests_gd/WeekendMenuTest.tscn` | `WEEKEND_MENU_TEST_OK checks=9 hour=15 energy=1`；CE310 点击“悠然自得”后休息分支结束事件、时钟推进、体力下降 |
 | 30 天日程 | `res://tests/SleepSoakTest.tscn` | `SLEEP_SOAK_TEST_OK days=30 checks=61`；真实 CE329→CE317 就寝链 |
 | core 存档夹具全等 | `res://tests/SessionParityTest.tscn` | `SESSION_PARITY_TEST_OK checks=9 frames=418 core=frozen`；与 `oracle/fixtures/session_core_save_state.json` 逐字段相等 |
 | 数据库 250 | `res://tests/Smoke.tscn` | `DATABASE_TEST_OK name/labels/sentinels/overlay/vm-250`；`.project` 标签漂移、哨兵、覆盖层与 VM 读写均过 |
+| 战斗命令切片 | `res://tests/Smoke.tscn` | `BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`；CE188 空库存无真实攻击行、有道具可选，均到 CE192 且不生成 CE244 |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
 ---
@@ -317,7 +318,16 @@
 - **接线**：`VmController` 新增 `DatabaseStore` 与 `Database(DbOp)`；`LoadPrograms` 从 `programs.json` 同目录加载 `database.json`，并从 `work/all/BasicData` 读三份 `.project`。`EventVm` 的 `250` 已把 `DbOp` 交给 host；数据库缺失只报错，不阻断程序加载。
 - **测试**：`DatabaseTest` 先直接断言导出名 `勇者先生`、CData 0/0/5=1、标签漂移、哨兵行/列、行数覆盖、清行、扩展行、文本保护与覆盖层；再用真实 `EventVm` 跑一条 `250` 程序，覆盖数值读、字符串读、带标签读、字符串写、数值写。输出 `DATABASE_TEST_OK name/labels/sentinels/overlay/vm-250`；`VmTest` 在 `TestMaxCallDepth` 后调用它，Smoke 门禁第 3 步同时断言 `SMOKE_OK` 与 `DATABASE_TEST_OK`。
 - **门禁**：headless `reports/gate_database.log` 与 `LWsmf_RENDER=1` `reports/gate_database_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30/30 全绿；含 `DATABASE_TEST_OK .../vm-250`、`ROUTE_DIFF_OK 73812/73812`、`PICTURE_STATE_TEST_OK checks=37`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`。
-- **边界**：只解析 `.project` 的 type/field 标签，不消费行名、说明、默认值等编辑器元数据；覆盖层不写回 `database.json`；战斗侧 `CE152/CE188` 尚未接到该宿主。
+- **边界**：只解析 `.project` 的 type/field 标签，不消费行名、说明、默认值等编辑器元数据；覆盖层不写回 `database.json`；战斗侧 `CE152/CE188` 的命令可用性切片已在该宿主上验证（§4.22），完整战斗回合仍未接。
+
+### 4.22 战斗命令可用性切片 CE188/CE152（已完成 2026-11-15）
+
+- **来源**：Rust `crates/wolf-game/tests/m6_battle_commands.rs`；C# 侧此前没有战斗实现，本切片先补 `CE188` 的命令菜单链。
+- **数据前置**：CE188 在空 VM 上因敌全灭直接结束；测试显式写 `CData 18/4/0=1`（队伍数）、`CData 18/69/0=1`（敌数）、`CData 0 row12 cols47..54=[3,4,6,7,0,0,0,0]`（命令槽）与 `CData 0 row12 cols20..28,9,10,4=[100,100,50,50,20,15,10,30,30,20,10,10]`（领队属性），seeded 线另写 `CData 7/0/0=1`（道具 0）。这些值在 Rust 测试里来自 `SaveData01`，C# 用数据库覆盖层直接播种。
+- **执行**：`godot/tests/BattleCommandTest.cs` 每条线新建 `VmController`、`LoadPrograms`、`Vm.Host=vm`、`StrictMode=false`，偶数帧 `CodeOk`/奇数帧 `CodeNone` 脉冲，`StartEvent(188)` 跑 200 帧；第 0..59 帧持续播种。逐帧记录是否出现 CE152/CE192/CE244 与是否有真实攻击行（CData 19 的 col1∈{26,25,30,29} 且 col2==1）。不能只看末态：CE192 会重写这些行。
+- **结果**：control 无可选真实攻击行，seeded 有；两条线都到 CE192，seeded 到 CE152，均不生成 CE244。输出 `BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`。
+- **门禁**：`VmTest` 在 `DatabaseTest` 后调用；`tools/godot_check.sh` 第 3 步追加 `BATTLE_COMMAND_TEST_OK`。headless `reports/gate_battle_command.log` 与 `LWsmf_RENDER=1` `reports/gate_battle_command_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30/30 全绿。
+- **边界**：只覆盖命令构建/可用性，不覆盖真实回合推进、目标选择、伤害/胜负、CE239/CE242/CE243；`CE188` 不调用 `CE244` 是结构边界；敌数/队伍数仍靠播种而非完整存档导入。
 
 ---
 
@@ -330,5 +340,6 @@
 5. **输入权限**：`123/126` 已按官方三态/设备分支实现并由两侧单测覆盖（§4.15，D-20）；表现层已按 §4.18 接线（D-23）；`123` mask 的逐位表与 `126` target 的具体键对应仍待编辑器差分，不阻塞本作。
 6. **故障恢复**：D-13 除锁档/诊断包外已支持显式「返回标题」重建标题安全点（§4.17）；返回标题时会清 `InputRouter` 指针/帧 latch，F9 读档故障进入模态（§4.18）；存档槽级安全点回滚留 M5。
 7. **原版 `.sav` 导入**：起始/结束字节与可选 checksum 严格校验、严格 UTF-8 + replacement 告警已落地（§4.20，D-25）；零售 8 槽 `SAVE_IMPORT_OK 8/8`；回写原版 `.sav` 仍不在 M3 范围。
-8. **数据库**：`250` 的三容器读写、`.project` 标签漂移、覆盖层与扩展行已落地并由 `DATABASE_TEST_OK .../vm-250` 覆盖（§4.21，D-26）；战斗 `CE152/CE188` 仍需接该宿主。
-9. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
+8. **数据库**：`250` 的三容器读写、`.project` 标签漂移、覆盖层与扩展行已落地并由 `DATABASE_TEST_OK .../vm-250` 覆盖（§4.21，D-26）；战斗 `CE152/CE188` 的命令可用性切片已由 §4.22 接到该宿主，完整战斗回合仍需。
+9. **战斗命令切片**：`CE188→CE152→CE192` 的空库存/有道具两条线已由 `BattleCommandTest` 覆盖（§4.22，D-27）；CE239/CE242 真实回合、目标选择、伤害与胜负仍未接。
+10. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

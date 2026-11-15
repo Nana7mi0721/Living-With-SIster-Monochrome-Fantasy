@@ -128,8 +128,9 @@ oracle/                    # Rust trace/夹具/对拍脚本；开发期
 - [x] M3 鼠标右键/中键三态（2026-11-15）：`0x3000` 的 field 8/9 补齐官方三态（0/1/2），`VmController` 三组 held/边沿同帧推进，`InputRouter` 分别记录右/中按压，故障返回标题一并复位；`PICTURE_STATE_TEST_OK checks=37`、`INPUT_ROUTER_TEST_OK`，30 步门禁 headless/windowed 双绿（§4.19，D-24）。
 - [x] M3 原版 `.sav` 导入严格校验（2026-11-15）：`LegacySaveImporter` 校验起始/结束字节，`rejectBadChecksum` 可选严格拒绝；`ReadMemDataString` 先严格 UTF-8，失败按 replacement 记 `encoding_warnings`，`ImportAll` 在非空时写 `reports/encoding_warnings.json`；`SAVE_IMPORT_OK 8/8`、`SAVE_IMPORT_VALIDATION_OK`，30 步门禁双绿（§4.20，D-25）。
 - [x] M3 `250` 数据库宿主（2026-11-15）：新增 `GameDatabase`，读 `database.json` 的 `cdata/database/system` 三容器与 `work/all/BasicData/*.project` 标签；脚本写走覆盖层，支持行数/清行/首空行/扩展行与 8 种写算子，数字写不覆盖文本。`VmController` 在 `LoadPrograms` 时加载并暴露 `DatabaseStore`，`EventVm` 的 `250` 委派 host。`DATABASE_TEST_OK .../vm-250`，30 步门禁双模式全绿（§4.21，D-26）。
+- [x] M3 战斗命令可用性切片（2026-11-15）：`CE188` 经 `CE152` 构建真实攻击命令列表；`BattleCommandTest` 用数据库覆盖层播种队伍/敌数/命令槽/领队属性，空库存时四条真实攻击行不可选，`CData 7/0/0=1` 后可选，两条线都到 CE192 且不生成 CE244。`BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`，30 步门禁双模式全绿（§4.22，D-27）。
 
-- 未完成边界：逐指令 Oracle 现有两条线——SampleMapA 事件 0 的 418 帧（2461 步）与整路线 1500 帧（73,812 步）；整路线只含标题菜单 1 次选择，没有 op101 消息，save/load 只做状态回路而不逐指令对拍；`wait` 与未建模的 130/160/290 转场不入 effects；MapChip 为引擎通用素材，正片未使用（D-21）；30 天 soak 只走就寝/日历链，白天 `CE251/CE310` 图片菜单已由 §4.16 端到端覆盖，但仍未从冷启动进入白天；旧表现层已退役（§4.13）；`123/126` 已按官方三态/设备分支实现（§4.15，D-20），但 `123` mask 的逐位表与 `126` target 的具体键/设备对应仍待编辑器二进制差分。
+- 未完成边界：逐指令 Oracle 现有两条线——SampleMapA 事件 0 的 418 帧（2461 步）与整路线 1500 帧（73,812 步）；整路线只含标题菜单 1 次选择，没有 op101 消息，save/load 只做状态回路而不逐指令对拍；`wait` 与未建模的 130/160/290 转场不入 effects；MapChip 为引擎通用素材，正片未使用（D-21）；30 天 soak 只走就寝/日历链，白天 `CE251/CE310` 图片菜单已由 §4.16 端到端覆盖，但仍未从冷启动进入白天；旧表现层已退役（§4.13）；`123/126` 已按官方三态/设备分支实现（§4.15，D-20），但 `123` mask 的逐位表与 `126` target 的具体键/设备对应仍待编辑器二进制差分；战斗侧只覆盖 CE188/CE152 的命令可用性，CE239/CE242 真实回合、目标选择与伤害胜负仍未接。
 
 ## 5. 测试与验收
 

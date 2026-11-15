@@ -35,6 +35,7 @@ public static class VmTest
         TestOpcode1000ProFeatureWait();
         TestMaxCallDepth();
         DatabaseTest.Run();
+        BattleCommandTest.Run();
 
         Console.WriteLine("[VmTest] ALL VM TESTS PASSED!");
     }
