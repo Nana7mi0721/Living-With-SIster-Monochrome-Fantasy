@@ -83,6 +83,7 @@
 | 数据库 250 | `res://tests/Smoke.tscn` | `DATABASE_TEST_OK name/labels/sentinels/overlay/vm-250`；`.project` 标签漂移、哨兵、覆盖层与 VM 读写均过 |
 | 战斗命令切片 | `res://tests/Smoke.tscn` | `BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`；CE188 空库存无真实攻击行、有道具可选，均到 CE192 且不生成 CE244 |
 | 自动事件 98 | `res://tests/Smoke.tscn` | `AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`；CE38/216/217/242 的边沿/resume/停止，`SessionParityTest` 断言 `AutoEventCount==98` |
+| 战斗 wiring | `res://tests/Smoke.tscn` | `BATTLE_WIRING_TEST_OK rounds=1 result=-1 ce242_pc=415`；CE239 真实回合经 CE242 命令、350/343/352 结算并返回 |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
 ---
@@ -337,7 +338,17 @@
 - **route Oracle 修正**：`crates/wolf-cli/src/route.rs` 原先只复刻消息/选择应答，从不同步自动事件；C# 接入后第 32 步即分叉（Rust `frame=2/event 2`，C# `frame=1/event 38`）。现在 `route.rs` 在 `vm.step_frame` 前调用 `auto_events.sync(&mut route.vm)`，与 `Game::frame` 的“先同步、后 step”一致，传动/start_pending 仍在 step 之后；Rust 夹具重生成后两侧都是 **73,814 步**，`ROUTE_DIFF_OK 73814/73814`。
 - **测试**：`AutoEventsTest` 用合成 38/216/217/43/242/244 程序覆盖 allow-list、边沿启动、resume 重放、条件回落停止与 `PrimeLatched`，输出 `AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`；`SessionParityTest` 断言 `AutoEventCount==98`，仍 `SESSION_PARITY_TEST_OK checks=10 frames=418 core=frozen`，冻结夹具已按新增 `CE38` 实例刷新。
 - **门禁**：`VmTest` 在 `DatabaseTest` 后调用 `AutoEventsTest`，`tools/godot_check.sh` 第 3 步追加 `AUTO_EVENTS_TEST_OK`；整路线夹具由 73,812 步更新为 73,814 步。30 步 headless `reports/gate_auto_wired2.log` 与 `LWsmf_RENDER=1` `reports/gate_auto_wired2_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，含 `AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`、`SESSION_PARITY_TEST_OK checks=10 frames=418 core=frozen`、`ROUTE_DIFF_OK 73814/73814`。
-- **边界**：自动事件只读普通变量条件，不覆盖 `raw_condition` 的其他分支；没有把 `battle_wiring`、标题菜单合成或引擎层 `CE271` 常驻事件一起接入；`CE38` 在标题阶段即可启动，与 Rust `Game::frame` 一致；完整战斗 `CE239/CE242` 与 H 场景仍未覆盖。
+- **边界**：自动事件只读普通变量条件，不覆盖 `raw_condition` 的其他分支；没有把标题菜单合成或引擎层 `CE271` 常驻事件一起接入；`CE38` 在标题阶段即可启动，与 Rust `Game::frame` 一致；完整战斗 `CE239/CE242` 已由 §4.24 接上 wiring，但 `CE253` 自然线、目标选择与 H 场景仍未覆盖。
+
+### 4.24 CE239/CE242 战斗 wiring（已完成 2026-11-15）
+
+- **来源**：Rust `crates/wolf-game/src/battle_wiring.rs` 与 `crates/wolf-game/tests/m7_battle_playable.rs`。Rust 的真实 day4 战斗由 `CE253` 调 `CE239`，需要 `seed_battle_databases`、`CData(5,16,0)` 标签、引擎协程与 `set_battle_wiring(true)`；C# 侧此前完全没有战斗调度。
+- **实现**：新增 `godot/core_cs/BattleWiring.cs`。`Tick` 先检测 `340` 的 rising edge，再收割 `CE157` 写入的 CData type14 rows1..8（col0 激活者、col3 技能，`<0` 跳过、按行去重），随后按 `drive = manualEnable ?? (autoArm && RealBattleRunning)` 决定是否驱动。单发模式要求 rising、`350==0`、`343==0`；多轮模式在 `343!=0` 停止，条件满足时启动 `CE242`，`350==2` 且无 `241/242/243` 时补 `CE241`，下一轮在 `350==0` 且无三者时启动。命令号先取菜单队列，否则循环 `[1,3]`。`RealBattleRunning` 以 `CE253` live 或 `CE239` 实例有 `ParentId` 判定。
+- **合成实例**：`EventVm` 新增 `CreateFreshInstance(eventId,parentId,returnTo)`，创建后 `Self.Restore(null,null)` 并登记；`PersistCommonSelf` 跳过这些一次性实例，保证合成 `CE241/CE242` 使用空白 `Self` 且不回写公共 Self。
+- **帧序**：`GameSession.AdvanceFrame` 的顺序是 `AutoEvents.Sync` → `BattleWiring.Tick(_vm.Vm, op => _vm.Database(op))` → `_vm.StepFrame()`，与 Rust `Game::frame` 的“自动事件、战斗接线、采样输入、VM step”一致；`IVmSession` 为此新增 `Database(DbOp)`。
+- **测试**：`BattleWiringTest` 用 26 个 battle seed（队伍/敌数、命令槽、领队属性、道具与初始武器）建 `VmController`，`SetEnabled(true)` + `SetRoundLoop(false)`，奇偶帧 OK/NONE 脉冲启动 `CE239`。运行中每次 `101` 消息等待自动 `DismissMessage`，直到 `343` 置位且 `CE239` 结束；`352` 会被结算清空，因此记录绝对值峰值而不是末态。结果 `BATTLE_WIRING_TEST_OK rounds=1 result=-1 ce242_pc=415`；`CE242` 的 pc 到 415，`350` 到 1，`352` 峰值 `±1`，`343` 置位。
+- **门禁**：`VmTest` 在 `BattleCommandTest` 后调用；`tools/godot_check.sh` 第 3 步追加 `BATTLE_WIRING_TEST_OK`。30 步 headless `reports/gate_battle_wiring.log` 与 `LWsmf_RENDER=1` `reports/gate_battle_wiring_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，整路线仍 `ROUTE_DIFF_OK 73814/73814`。
+- **边界**：只验证 `CE239` 直接入口的单轮结算，不覆盖 `CE253` 自然日线、目标选择窗 `CE159/CE162`、伤害公式矩阵、多人队伍与 H 场景；菜单命令队列/轮转 API 已实现但尚未由真实剧情驱动。
 
 ---
 
@@ -351,6 +362,7 @@
 6. **故障恢复**：D-13 除锁档/诊断包外已支持显式「返回标题」重建标题安全点（§4.17）；返回标题时会清 `InputRouter` 指针/帧 latch，F9 读档故障进入模态（§4.18）；存档槽级安全点回滚留 M5。
 7. **原版 `.sav` 导入**：起始/结束字节与可选 checksum 严格校验、严格 UTF-8 + replacement 告警已落地（§4.20，D-25）；零售 8 槽 `SAVE_IMPORT_OK 8/8`；回写原版 `.sav` 仍不在 M3 范围。
 8. **数据库**：`250` 的三容器读写、`.project` 标签漂移、覆盖层与扩展行已落地并由 `DATABASE_TEST_OK .../vm-250` 覆盖（§4.21，D-26）；战斗 `CE152/CE188` 的命令可用性切片已由 §4.22 接到该宿主，完整战斗回合仍需。
-9. **战斗命令切片**：`CE188→CE152→CE192` 的空库存/有道具两条线已由 `BattleCommandTest` 覆盖（§4.22，D-27）；CE239/CE242 真实回合、目标选择、伤害与胜负仍未接。
-10. **自动事件**：98 个并行事件已由 `AutoEvents` 调度并接入 `GameSession`，整路线同步后两侧均为 73,814 步（§4.23，D-28）；`battle_wiring` 与 HUD 读档重放之外的引擎接线仍未接。
-11. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
+9. **战斗命令切片**：`CE188→CE152→CE192` 的空库存/有道具两条线已由 `BattleCommandTest` 覆盖（§4.22，D-27）；真实回合已由 §4.24 接上 CE239/CE242，目标选择与伤害胜负仍未接。
+10. **自动事件**：98 个并行事件已由 `AutoEvents` 调度并接入 `GameSession`，整路线同步后两侧均为 73,814 步（§4.23，D-28）；HUD 读档重放之外的引擎接线仍未接。
+11. **战斗 wiring**：`CE239` 真实回合经 `CE242` 命令、`350/343/352` 结算并返回已由 `BattleWiringTest` 覆盖（§4.24，D-29）；`CE253` 自然日线、`CE159/CE162` 目标选择、伤害矩阵与 H 仍未接。
+12. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

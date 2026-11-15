@@ -31,6 +31,7 @@ public interface IVmSession
     void CancelChoice();
     void DismissMessage();
     void RestoreDialogue(string? message, string[] choices);
+    DbValue? Database(DbOp op);
 }
 
 /// <summary>
@@ -68,6 +69,7 @@ public sealed class GameSession
     private readonly string _savePath;
     private readonly Queue<PendingTeleport> _teleports = new();
     private AutoEvents? _autoEvents;
+    private readonly BattleWiring _battleWiring = new();
 
     private MapDefinition? _map;
     private MapRuntime? _mapRuntime;
@@ -101,6 +103,8 @@ public sealed class GameSession
     public bool MessageOpen => _messageOpen;
     /// <summary>Number of conditional common events tracked by the auto-event scheduler.</summary>
     public int AutoEventCount => EnsureAutoEvents().EventCount;
+    /// <summary>Rebuilt CE242 drive (crates/wolf-game/src/battle_wiring.rs).</summary>
+    public BattleWiring BattleWiring => _battleWiring;
     /// <summary>Direction/action bits currently denied by opcode 126 (D-20).</summary>
     public uint MovementDeny => _vm.MovementDeny;
     public uint BasicAllDeny => _vm.BasicAllDeny;
@@ -167,6 +171,7 @@ public sealed class GameSession
         // Rust Game::frame syncs conditional common events before the VM step, so a
         // newly-triggered event starts executing in this same frame.
         EnsureAutoEvents().Sync(_vm.Vm);
+        _battleWiring.Tick(_vm.Vm, op => _vm.Database(op));
         _vm.StepFrame();
         ApplyPending();
         UpdateMapHud(false);

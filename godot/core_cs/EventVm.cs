@@ -103,6 +103,7 @@ public sealed class EventVm
     }
     private int _nextInstanceId = 1;
     private readonly Dictionary<string, int> _titleToId = new(StringComparer.Ordinal);
+    private readonly HashSet<int> _freshInstanceIds = new();
 
     public void RegisterProgram(Program program)
     {
@@ -188,6 +189,20 @@ public sealed class EventVm
             return null;
         }
         return CreateInstance(prog, parentId, returnTo);
+    }
+
+    /// <summary>
+    /// Spawn a synthetic event with a blank self bank and no persistence write-back
+    /// (exec.rs start_event_fresh). CE241/CE242 have no script-issued 210 call, so their
+    /// per-invocation state must not leak through the common-event store.
+    /// </summary>
+    public Instance? CreateFreshInstance(int eventId, int? parentId = null, int? returnTo = null)
+    {
+        var instance = CreateInstance(eventId, parentId, returnTo);
+        if (instance == null) return null;
+        instance.Self.Restore(null, null);
+        _freshInstanceIds.Add(instance.Id);
+        return instance;
     }
 
     /// <summary>Decode the operand table shared by 210 and 300 (exec.rs call_arguments).</summary>
@@ -1271,6 +1286,9 @@ public sealed class EventVm
 
     private void PersistCommonSelf(Instance inst)
     {
+        // Fresh synthetic events never write their bank back; drop the marker here so the
+        // set cannot grow across generations.
+        if (_freshInstanceIds.Remove(inst.Id)) return;
         if (inst.Program.SelfBase == Program.CommonSelfBase)
         {
             CommonSelf[inst.EventId] = inst.Self.Clone();
