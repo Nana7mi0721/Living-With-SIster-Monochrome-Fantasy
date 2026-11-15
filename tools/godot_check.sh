@@ -33,6 +33,7 @@ echo "$out" | grep -q BATTLE_COMMAND_TEST_OK
 echo "$out" | grep -q BATTLE_WIRING_TEST_OK
 echo "$out" | grep -q BATTLE_TARGET_TEST_OK
 echo "$out" | grep -q BATTLE_SKILL_TARGET_TEST_OK
+echo "$out" | grep -q H_EVENT_GATE_TEST_OK
 
 echo "[4/30] save import test"
 out_save="$("$GODOT" --headless --path "$IMO/godot" res://tests/SaveImportTest.tscn 2>&1)"

@@ -86,6 +86,7 @@
 | 战斗 wiring | `res://tests/Smoke.tscn` | `BATTLE_WIRING_TEST_OK rounds=1 result=-1 ce242_pc=415`；CE239 真实回合经 CE242 命令、350/343/352 结算并返回 |
 | 战斗目标选择 | `res://tests/Smoke.tscn` | `BATTLE_TARGET_TEST_OK selected=1 control_pc=49 enemy_hp=100`；CE190/CE175 坐标倍率、CE162 选 0 并退出，无敌人时停 pc49/50 |
 | 技能目标入口 | `res://tests/Smoke.tscn` | `BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`；CE159 尾段场景/效果目标门、CE162 由 pc247 生成并选中退出，目标 0 不生成、敌数 0 停 pc49/50 |
+| H 阈值数据面 | `res://tests/Smoke.tscn` | `H_EVENT_GATE_TEST_OK gates=37 boundaries=59`；37 个 op111 真实载荷与 59 个阈值/多条件边界点，只验证数据面 |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
 ---
@@ -370,6 +371,14 @@
 - **门禁**：`VmTest` 在 `BattleTargetTest` 后调用；`tools/godot_check.sh` 第 3 步追加 `BATTLE_SKILL_TARGET_TEST_OK`。headless `reports/gate_skill_target.log` 与 `LWsmf_RENDER=1` `reports/gate_skill_target_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30/30；整路线仍 `ROUTE_DIFF_OK 73814/73814`。
 - **边界**：测试从 pc94 注入 CE159 尾段，不是 CE188 命令确认后的生产 dispatch；没有覆盖 CE157 菜单到 CE159 的真实选择、CE253 自然日线、伤害/胜负矩阵与 H 场景。`使用可能シーン` 的 1/2 语义来自本数据集实测（0 立即结束、1/2 放行、100 在 pc113 后结束），不等于全部零售脚本语义。
 
+### 4.27 H 阈值数据面（HEventGateTest）
+
+- **来源**：Rust `crates/wolf-game/tests/m13_h_thresholds.rs` 的 `gate_bytecode_conformance` 与 `gate_branch_boundary_semantics`；真实 H 门共 37 个（CE310 10、CE318 6、CE323 6、CE335 15）。
+- **测试**：新增 `HEventGateTest`。加载 `programs.json` 后逐条断言 37 个 `(event, pc, params)` 与 Rust 载荷一致（opcode 111、参数长度与每个 int）；单条件门按 `(Ints[0] & 0x0F) == 1` 识别，取 `value-1`（不匹配，first-true 为 -1）与 `value`（匹配 case0）两个边界；多条件门显式 31 点，`FirstTrueCase` 按 compare `0 >`、`1 >=`、`2 ==`、`3 <=`、`4 <`、`5 !=`、`6 &` 与 live store 求第一个真分支。
+- **结果**：`H_EVENT_GATE_TEST_OK gates=37 boundaries=59`；14 个单条件门 ×2 + 31 个多条件点 = 59。
+- **门禁**：`VmTest` 在 `BattleSkillTargetTest` 后调用；`tools/godot_check.sh` 第 3 步追加 `H_EVENT_GATE_TEST_OK`。headless `reports/gate_h_threshold.log` 与 `LWsmf_RENDER=1` `reports/gate_h_threshold_windowed.log` 均以 `GODOT_GATE_OK` 结束（shell exit 0），30/30；整路线仍 `ROUTE_DIFF_OK 73814/73814`。
+- **边界**：只验证 bytecode/data 面与 compare 分支语义，不执行 H 场景；CE318 信頼 100/99 到 CE360 的剧情生成、CE310/323/335 的实际调用仍未接。它是 H 场景的前置门数据回归，不是 H 完成。
+
 ---
 
 ## 5. 下一步（M2 入口）
@@ -385,6 +394,7 @@
 9. **战斗命令切片**：`CE188→CE152→CE192` 的空库存/有道具两条线已由 `BattleCommandTest` 覆盖（§4.22，D-27）；真实回合已由 §4.24 接上 CE239/CE242，目标选择与伤害胜负仍未接。
 10. **自动事件**：98 个并行事件已由 `AutoEvents` 调度并接入 `GameSession`，整路线同步后两侧均为 73,814 步（§4.23，D-28）；HUD 读档重放之外的引擎接线仍未接。
 11. **战斗 wiring**：`CE239` 真实回合经 `CE242` 命令、`350/343/352` 结算并返回已由 `BattleWiringTest` 覆盖（§4.24，D-29）；`CE253` 自然日线、真实 `CE159` 命令 dispatch、伤害矩阵与 H 仍未接。
-12. **技能目标入口**：`CE159` 尾段（场景 1/2、目标 10..12）到 `CE162` 的生成与选中退出已由 `BattleSkillTargetTest` 覆盖（§4.26，D-31）；入口仍从 pc94 注入，生产命令链未接。
 12. **战斗目标选择**：`CE190/CE175` 的敌人生成/坐标倍率与 `CE162` 的敌方索引 0 选择已由 `BattleTargetTest` 覆盖（§4.25，D-30）；`CE159` 技能选择执行入口、伤害/胜负矩阵仍未接。
-13. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
+13. **技能目标入口**：`CE159` 尾段（场景 1/2、目标 10..12）到 `CE162` 的生成与选中退出已由 `BattleSkillTargetTest` 覆盖（§4.26，D-31）；入口仍从 pc94 注入，生产命令链未接。
+14. **H 阈值**：37 个真实 op111 载荷与 59 个阈值/多条件边界已由 `HEventGateTest` 钉住（§4.27，D-32）；只到数据面，H 场景与 CE318→CE360 仍未接。
+15. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

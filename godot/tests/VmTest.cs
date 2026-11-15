@@ -40,6 +40,7 @@ public static class VmTest
         BattleWiringTest.Run();
         BattleTargetTest.Run();
         BattleSkillTargetTest.Run();
+        HEventGateTest.Run();
 
         Console.WriteLine("[VmTest] ALL VM TESTS PASSED!");
     }

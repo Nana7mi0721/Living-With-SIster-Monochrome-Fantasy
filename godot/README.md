@@ -13,10 +13,10 @@
 | `core_cs/` | C# 确定性核心：EventVM、WolfRng、ProgramLoader、MapRuntime、Terrain/MapTileData、SaveCodec、GameSession、GameClock、LegacySaveImporter、GameDatabase、AutoEvents、BattleWiring |
 | `presentation/` | C# 桥：VmController（IHost/IVmSession）、GameSessionController、TerrainBridge |
 | `presentation_gd/` | 生产表现层：GameRoot、PictureStage、MessageWindow、ChoiceWindow、InputRouter、AudioManager、MapLayer、UiSkin |
-| `tests/` | headless 测试（烟雾/自动事件/数据库 250/战斗命令切片/战斗目标选择/技能目标入口/存档导入/追踪差分/呈现/地图运行/存档往返/地图消息/路线 trace/地形/时钟/30 天 soak 等） |
+| `tests/` | headless 测试（烟雾/自动事件/数据库 250/战斗命令切片/战斗目标选择/技能目标入口/H 阈值/存档导入/追踪差分/呈现/地图运行/存档往返/地图消息/路线 trace/地形/时钟/30 天 soak 等） |
 | `tests_gd/` | GDScript 测试（GameRoot、InputRouter、PictureState、MapLayer、AudioManager、Day/Weekend Menu） |
 
-主场景是 `res://scenes/GameRoot.tscn`；旧的 `TitleScreen`、`ScreenHostView`、`MapView`、`AssetCatalog` 已退役。原版 `.sav` 导入在 `core_cs/LegacySaveImporter.cs` 内校验起始/结束字节，可选严格拒绝 checksum；严格 UTF-8 失败时 replacement 回退并记录 `reports/encoding_warnings.json`。`core_cs/GameDatabase.cs` 承载 `250` 的 CData/Data/Sys 读写与 `.project` 标签解析，`VmController.LoadPrograms` 时加载并暴露 `DatabaseStore`；`tests/BattleCommandTest.cs` 用覆盖层播种跑 `CE188/CE152` 的命令可用性切片。`core_cs/BattleWiring.cs` 接 `CE239/CE242` 真实回合：`340` rising、`CE157` 菜单命令、`CE242`/合成 `CE241` 与 `350/343/352` 结算，`tests/BattleWiringTest.cs` 启动 `CE239` 并等待结算返回；`tests/BattleTargetTest.cs` 用同一批 battle seed 验证 `CE190/CE175` 的敌人生成/坐标倍率与 `CE162` 的索引 0 选择；`tests/BattleSkillTargetTest.cs` 在覆盖层写 `Data 0/2/2=10`、`Data 0/2/6=1` 后从 pc94 驱动 `CE159`，经 pc110/115/244/247 启动 `CE162`，并检查目标 0 不生成、敌数 0 停 pc49/50。`core_cs/AutoEvents.cs` 跟踪 98 个并行事件（跳过标题菜单 43，allow-list 242/243），`GameSession` 在 VM step 前同步、读档后 `PrimeLatched`；`tests/AutoEventsTest.cs` 覆盖边沿/resume/停止。
+主场景是 `res://scenes/GameRoot.tscn`；旧的 `TitleScreen`、`ScreenHostView`、`MapView`、`AssetCatalog` 已退役。原版 `.sav` 导入在 `core_cs/LegacySaveImporter.cs` 内校验起始/结束字节，可选严格拒绝 checksum；严格 UTF-8 失败时 replacement 回退并记录 `reports/encoding_warnings.json`。`core_cs/GameDatabase.cs` 承载 `250` 的 CData/Data/Sys 读写与 `.project` 标签解析，`VmController.LoadPrograms` 时加载并暴露 `DatabaseStore`；`tests/BattleCommandTest.cs` 用覆盖层播种跑 `CE188/CE152` 的命令可用性切片。`core_cs/BattleWiring.cs` 接 `CE239/CE242` 真实回合：`340` rising、`CE157` 菜单命令、`CE242`/合成 `CE241` 与 `350/343/352` 结算，`tests/BattleWiringTest.cs` 启动 `CE239` 并等待结算返回；`tests/BattleTargetTest.cs` 用同一批 battle seed 验证 `CE190/CE175` 的敌人生成/坐标倍率与 `CE162` 的索引 0 选择；`tests/BattleSkillTargetTest.cs` 在覆盖层写 `Data 0/2/2=10`、`Data 0/2/6=1` 后从 pc94 驱动 `CE159`，经 pc110/115/244/247 启动 `CE162`，并检查目标 0 不生成、敌数 0 停 pc49/50。`tests/HEventGateTest.cs` 钉住 Rust `m13_h_thresholds.rs` 的 37 个真实 op111 载荷，单条件门测 `value-1`/`value`、多条件门 31 点按 compare 0..6 取 first-true（`H_EVENT_GATE_TEST_OK gates=37 boundaries=59`），只覆盖数据面。`core_cs/AutoEvents.cs` 跟踪 98 个并行事件（跳过标题菜单 43，allow-list 242/243），`GameSession` 在 VM step 前同步、读档后 `PrimeLatched`；`tests/AutoEventsTest.cs` 覆盖边沿/resume/停止。
 
 ## 操作
 
@@ -45,7 +45,7 @@ LWsmf_RENDER=1 bash tools/godot_check.sh   # 带窗口的截图/渲染分支
 "$GODOT" --headless --path godot res://tests/SaveLoadTest.tscn       # SAVE_LOAD_TEST_OK 98/98
 "$GODOT" --headless --path godot res://tests/MapMessageTest.tscn     # MAP_MESSAGE_TEST_OK 14/14
 "$GODOT" --headless --path godot res://tests/RouteTraceTest.tscn     # ROUTE_TRACE_TEST_OK steps=73814
-"$GODOT" --headless --path godot res://tests/Smoke.tscn             # SMOKE_OK + AUTO_EVENTS_TEST_OK + DATABASE_TEST_OK + BATTLE_COMMAND_TEST_OK + BATTLE_WIRING_TEST_OK + BATTLE_TARGET_TEST_OK + BATTLE_SKILL_TARGET_TEST_OK
+"$GODOT" --headless --path godot res://tests/Smoke.tscn             # SMOKE_OK + AUTO_EVENTS_TEST_OK + DATABASE_TEST_OK + BATTLE_COMMAND_TEST_OK + BATTLE_WIRING_TEST_OK + BATTLE_TARGET_TEST_OK + BATTLE_SKILL_TARGET_TEST_OK + H_EVENT_GATE_TEST_OK
 "$GODOT" --headless --path godot res://tests_gd/GameRootTest.tscn    # GAME_ROOT_TEST_OK
 "$GODOT" --headless --path godot res://tests_gd/PictureStateTest.tscn # PICTURE_STATE_TEST_OK checks=37
 "$GODOT" --headless --path godot res://tests_gd/DayMenuTest.tscn      # DAY_MENU_TEST_OK checks=13
@@ -62,4 +62,4 @@ LWsmf_RENDER=1 bash tools/godot_check.sh   # 带窗口的截图/渲染分支
 - `123/126` 已按官方三态/设备分支实现（D-20/§4.15）；`123` mask 逐位表与 `126` target 具体键仍待编辑器差分，不阻塞标量键码路径。
 - 商店/BGS 之外的 W4 音频三轨、BGS 循环点、音频存档已接；Rust oracle 侧尚未实现 BGS 混音轨。
 - 选择窗是居中回退（未用 Sys3/Sys4 锚点），消息控制码只清洗不排版。
-- 战斗只覆盖 `CE188/CE152` 命令可用性、`CE239/CE242` 直接入口单轮结算、`CE162` 直启目标选择与 `CE159` 尾段目标入口；`CE253` 自然日线、真实 `CE159` 命令 dispatch、伤害/胜负矩阵与 H 阈值仍未接。自动事件已接 98 个并行事件，标题菜单合成仍未接。
+- 战斗只覆盖 `CE188/CE152` 命令可用性、`CE239/CE242` 直接入口单轮结算、`CE162` 直启目标选择与 `CE159` 尾段目标入口；`CE253` 自然日线、真实 `CE159` 命令 dispatch、伤害/胜负矩阵仍未接；H 只到阈值数据面（§4.27），H 场景与 CE318→CE360 仍待。自动事件已接 98 个并行事件，标题菜单合成仍未接。
