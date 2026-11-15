@@ -59,13 +59,14 @@
 - 鼠标右键/中键三态（2026-11-15）：`0x3000` field 8/9 补齐官方三态（0/1/2），与左键分开维护；`InputRouter` 记录右/中按压，故障返回标题一并复位。`PICTURE_STATE_TEST_OK checks=37`、`INPUT_ROUTER_TEST_OK`（§4.19，D-24）。
 - 原版 `.sav` 导入严格校验（2026-11-15）：起始/结束字节必检，`rejectBadChecksum` 可选严格拒绝；严格 UTF-8 失败时 replacement 并记录 `encoding_warnings`，非空时写 `reports/encoding_warnings.json`。零售 8 槽 `SAVE_IMPORT_OK 8/8`、`SAVE_IMPORT_VALIDATION_OK`（§4.20，D-25）。
 - `250` 数据库宿主（2026-11-15）：`GameDatabase` 读 `database.json` 的 CData/Data/Sys 与 `work/all/BasicData/*.project` 标签，脚本写走覆盖层；`VmController` 加载并暴露 `DatabaseStore`，`EventVm` 的 `250` 委派 host。`DATABASE_TEST_OK .../vm-250`（§4.21，D-26）。
+- AutoEvents 调度器（2026-11-15）：`Program` 解析条件四元组，`AutoEvents` 跟踪 98 个并行事件（跳过 43，allow-list 242/243），`GameSession` 在 VM step 前同步、读档后 `PrimeLatched`；Rust `route.rs` 同序同步后整路线由 73,812 增至 **73,814** 步。`AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`（§4.23，D-28）。
 - 战斗命令切片（2026-11-15）：`CE188` 经 `CE152` 构建攻击命令；覆盖层播种队伍/敌数/命令槽/领队属性后，空库存的真实攻击行不可选，`CData 7/0/0=1` 后可选；均到 CE192 且不生成 CE244。`BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`（§4.22，D-27）。
 
-- 30 道门槛全绿（`GODOT_GATE_OK`，headless 与 `LWsmf_RENDER=1` 双模式）；`SAVE_LOAD_TEST_OK 98/98`、`SAVE_IMPORT_OK 8/8`、`SAVE_IMPORT_VALIDATION_OK`、`AUDIO_MANAGER_TEST_OK checks=30`、`CLOCK_TEST_OK checks=11`、`SLEEP_SOAK_TEST_OK days=30 checks=61`、`MAP_RUNTIME_TEST_OK 51/51`、`MAP_MESSAGE_TEST_OK 14/14`、`PICTURE_ROUNDTRIP_TEST_OK`、`TERRAIN_TEST_OK`、`MAP_LAYER_TEST_OK`、`SESSION_PARITY_TEST_OK checks=9`、`TRACE_DIFF_OK 2461/2461`、`ROUTE_DIFF_OK 73812/73812`、`PICTURE_STATE_TEST_OK checks=37`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`、`DATABASE_TEST_OK .../vm-250`、`BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`。详见 [`M1_HANDOFF.md`](M1_HANDOFF.md)。
+- 30 道门槛全绿（`GODOT_GATE_OK`，headless 与 `LWsmf_RENDER=1` 双模式）；`SAVE_LOAD_TEST_OK 98/98`、`SAVE_IMPORT_OK 8/8`、`SAVE_IMPORT_VALIDATION_OK`、`AUDIO_MANAGER_TEST_OK checks=30`、`CLOCK_TEST_OK checks=11`、`SLEEP_SOAK_TEST_OK days=30 checks=61`、`MAP_RUNTIME_TEST_OK 51/51`、`MAP_MESSAGE_TEST_OK 14/14`、`PICTURE_ROUNDTRIP_TEST_OK`、`TERRAIN_TEST_OK`、`MAP_LAYER_TEST_OK`、`SESSION_PARITY_TEST_OK checks=10`、`TRACE_DIFF_OK 2461/2461`、`ROUTE_DIFF_OK 73814/73814`、`PICTURE_STATE_TEST_OK checks=37`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`、`DATABASE_TEST_OK .../vm-250`、`BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`、`AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`。详见 [`M1_HANDOFF.md`](M1_HANDOFF.md)。
 
 **下一步（M2）**
 
-- 整段切片（标题→新游戏→map 1）已冻结成 1500 帧整路线 Oracle（73,812/73,812）；消息/选择只覆盖标题菜单 1 次，白天 101/102 与 save/load 的逐指令对拍仍待补。
+- 整段切片（标题→新游戏→map 1）已冻结成 1500 帧整路线 Oracle（73,814/73,814，含 AutoEvents）；消息/选择只覆盖标题菜单 1 次，白天 101/102 与 save/load 的逐指令对拍仍待补。
 - 白天 `CE251/CE310` 工作菜单的图片点击、确认与日程/体力推进已端到端覆盖（§4.16）；仍缺从冷启动进入白天的剧情夹具。`123/126` 已按官方三态/设备分支实现并接到表现层（逐位表待编辑器差分，见 §4.15/D-20、§4.18/D-23）；Faulted 已支持显式返回标题重建安全点（§4.17），存档槽级回退留 M5；原版 `.sav` 导入已做起始/结束字节、可选 checksum 与严格 UTF-8 告警（§4.20/D-25）；`250` 数据库宿主已落地（§4.21/D-26）；战斗的 CE188/CE152 命令可用性切片已接（§4.22/D-27），CE239/CE242 真实回合仍未接。
 
 ## 4. 当前唯一路线

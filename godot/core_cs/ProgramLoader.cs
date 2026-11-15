@@ -183,6 +183,15 @@ public static class ProgramLoader
         var prog = Program.FromSlots(id, title, slots);
         prog.ReturnValueId = retValId;
         prog.SelfBase = selfBase;
+        if (elem.TryGetProperty("run_condition_op_var_val", out var condition)
+            && condition.ValueKind == JsonValueKind.Array
+            && condition.GetArrayLength() >= 4)
+        {
+            prog.RunCondition = ReadInt32(condition[0]);
+            prog.ConditionOperator = ReadInt32(condition[1]);
+            prog.ConditionVariable = ReadInt32(condition[2]);
+            prog.ConditionValue = ReadInt32(condition[3]);
+        }
         return prog;
     }
 

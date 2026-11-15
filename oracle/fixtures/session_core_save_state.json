@@ -1,7 +1,7 @@
 {
   "schema": "lwsmf.save",
   "schema_version": 1,
-  "saved_at": "2026-11-14T16:12:49.5292517Z",
+  "saved_at": "",
   "play_frames": 418,
   "map_id": 1,
   "map_file": "SampleMapA_1.mps",
@@ -955,7 +955,7 @@
     {
       "id": 1,
       "active": 0,
-      "instance_id": 5,
+      "instance_id": 6,
       "runs": true,
       "starts": 1,
       "starts_on_page": 1,
@@ -970,7 +970,7 @@
     {
       "id": 2,
       "active": 0,
-      "instance_id": 6,
+      "instance_id": 7,
       "runs": true,
       "starts": 1,
       "starts_on_page": 1,
@@ -985,7 +985,7 @@
     {
       "id": 3,
       "active": 0,
-      "instance_id": 7,
+      "instance_id": 8,
       "runs": true,
       "starts": 1,
       "starts_on_page": 1,
@@ -1135,7 +1135,7 @@
   ],
   "instances": [
     {
-      "id": 5,
+      "id": 6,
       "parent_id": null,
       "event_id": 1,
       "pc": 0,
@@ -1156,7 +1156,7 @@
       }
     },
     {
-      "id": 6,
+      "id": 7,
       "parent_id": null,
       "event_id": 2,
       "pc": 0,
@@ -1177,7 +1177,7 @@
       }
     },
     {
-      "id": 7,
+      "id": 8,
       "parent_id": null,
       "event_id": 3,
       "pc": 0,
@@ -1199,5 +1199,6 @@
     }
   ],
   "pictures": [],
+  "audio": [],
   "dialogue": null
 }

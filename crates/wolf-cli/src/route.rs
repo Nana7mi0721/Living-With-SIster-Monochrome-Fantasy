@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use wolf_format as wf;
 use wolf_format::commonevent::CommonEventData;
+use wolf_game::auto_events::AutoEvents;
 use wolf_game::db::Databases;
 use wolf_game::map_runtime::MapRuntime;
 use wolf_vm::exec::EventId;
@@ -326,6 +327,7 @@ pub fn run_route(root: &Path, frames: usize) -> ExitCode {
     let mut vm = Vm::new(programs);
     vm.step_trace = Some(Vec::new());
     let mut route = Route::new(vm);
+    let mut auto_events = AutoEvents::from_common_events(&events);
 
     let Some(title) = load_title(root) else {
         eprintln!("  ! cannot load TitleMap.mps under {}", root.display());
@@ -348,7 +350,9 @@ pub fn run_route(root: &Path, frames: usize) -> ExitCode {
         }
         map_by_frame[frame] = route.map_id;
         // GameSession writes the leader/facing/action-key state here; this route
-        // never moves the player and never presses the action key.
+        // never moves the player and never presses the action key. Auto events are
+        // edge-synced before the VM step, exactly like Game::frame.
+        auto_events.sync(&mut route.vm);
         route.vm.step_frame(&mut route.host);
         if let Some(runtime) = route.runtime.as_mut() {
             runtime.start_pending(&mut route.vm);

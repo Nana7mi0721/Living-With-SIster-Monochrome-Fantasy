@@ -67,6 +67,7 @@ public sealed class GameSession
     private readonly string _dataPath;
     private readonly string _savePath;
     private readonly Queue<PendingTeleport> _teleports = new();
+    private AutoEvents? _autoEvents;
 
     private MapDefinition? _map;
     private MapRuntime? _mapRuntime;
@@ -98,6 +99,8 @@ public sealed class GameSession
     public int Frames { get; private set; }
     public bool HasChoices => _hasChoices;
     public bool MessageOpen => _messageOpen;
+    /// <summary>Number of conditional common events tracked by the auto-event scheduler.</summary>
+    public int AutoEventCount => EnsureAutoEvents().EventCount;
     /// <summary>Direction/action bits currently denied by opcode 126 (D-20).</summary>
     public uint MovementDeny => _vm.MovementDeny;
     public uint BasicAllDeny => _vm.BasicAllDeny;
@@ -161,9 +164,18 @@ public sealed class GameSession
         _vm.ActionKeyRequested = _actionPressed && !_messageOpen && !_hasChoices
             && (BasicAllDeny & KeyCodes.Ok) == 0;
         _actionPressed = false;
+        // Rust Game::frame syncs conditional common events before the VM step, so a
+        // newly-triggered event starts executing in this same frame.
+        EnsureAutoEvents().Sync(_vm.Vm);
         _vm.StepFrame();
         ApplyPending();
         UpdateMapHud(false);
+    }
+
+    private AutoEvents EnsureAutoEvents()
+    {
+        _autoEvents ??= AutoEvents.FromPrograms(_vm.Vm.Programs.Values);
+        return _autoEvents;
     }
 
     /// <summary>Map changes are applied between frames, never inside a running coroutine.</summary>
@@ -473,6 +485,7 @@ public sealed class GameSession
         }
 
         EnterMap(state.MapId, selfVars, state);
+        EnsureAutoEvents().PrimeLatched(_vm.Vm);
         if (_vm.Faulted)
         {
             _view.SetStatus("load faulted: " + _vm.FaultReason);

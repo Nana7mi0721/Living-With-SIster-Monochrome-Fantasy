@@ -128,9 +128,10 @@ oracle/                    # Rust trace/夹具/对拍脚本；开发期
 - [x] M3 鼠标右键/中键三态（2026-11-15）：`0x3000` 的 field 8/9 补齐官方三态（0/1/2），`VmController` 三组 held/边沿同帧推进，`InputRouter` 分别记录右/中按压，故障返回标题一并复位；`PICTURE_STATE_TEST_OK checks=37`、`INPUT_ROUTER_TEST_OK`，30 步门禁 headless/windowed 双绿（§4.19，D-24）。
 - [x] M3 原版 `.sav` 导入严格校验（2026-11-15）：`LegacySaveImporter` 校验起始/结束字节，`rejectBadChecksum` 可选严格拒绝；`ReadMemDataString` 先严格 UTF-8，失败按 replacement 记 `encoding_warnings`，`ImportAll` 在非空时写 `reports/encoding_warnings.json`；`SAVE_IMPORT_OK 8/8`、`SAVE_IMPORT_VALIDATION_OK`，30 步门禁双绿（§4.20，D-25）。
 - [x] M3 `250` 数据库宿主（2026-11-15）：新增 `GameDatabase`，读 `database.json` 的 `cdata/database/system` 三容器与 `work/all/BasicData/*.project` 标签；脚本写走覆盖层，支持行数/清行/首空行/扩展行与 8 种写算子，数字写不覆盖文本。`VmController` 在 `LoadPrograms` 时加载并暴露 `DatabaseStore`，`EventVm` 的 `250` 委派 host。`DATABASE_TEST_OK .../vm-250`，30 步门禁双模式全绿（§4.21，D-26）。
+- [x] M3 AutoEvents 调度器与 route 同步（2026-11-15）：`Program` 解析 `run_condition_op_var_val`，新增 `AutoEvents` 跟踪 98 个并行事件（跳过标题菜单 43，allow-list 242/243），边沿触发、resume 重放与 `PrimeLatched`；`GameSession` 在 `StepFrame` 前同步、读档后 prime。Rust `route.rs` 同序同步后整路线由 73,812 增至 73,814 步，两侧 `ROUTE_DIFF_OK 73814/73814`；`AUTO_EVENTS_TEST_OK`，30 步门禁双绿（§4.23，D-28）。
 - [x] M3 战斗命令可用性切片（2026-11-15）：`CE188` 经 `CE152` 构建真实攻击命令列表；`BattleCommandTest` 用数据库覆盖层播种队伍/敌数/命令槽/领队属性，空库存时四条真实攻击行不可选，`CData 7/0/0=1` 后可选，两条线都到 CE192 且不生成 CE244。`BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`，30 步门禁双模式全绿（§4.22，D-27）。
 
-- 未完成边界：逐指令 Oracle 现有两条线——SampleMapA 事件 0 的 418 帧（2461 步）与整路线 1500 帧（73,812 步）；整路线只含标题菜单 1 次选择，没有 op101 消息，save/load 只做状态回路而不逐指令对拍；`wait` 与未建模的 130/160/290 转场不入 effects；MapChip 为引擎通用素材，正片未使用（D-21）；30 天 soak 只走就寝/日历链，白天 `CE251/CE310` 图片菜单已由 §4.16 端到端覆盖，但仍未从冷启动进入白天；旧表现层已退役（§4.13）；`123/126` 已按官方三态/设备分支实现（§4.15，D-20），但 `123` mask 的逐位表与 `126` target 的具体键/设备对应仍待编辑器二进制差分；战斗侧只覆盖 CE188/CE152 的命令可用性，CE239/CE242 真实回合、目标选择与伤害胜负仍未接。
+- 未完成边界：逐指令 Oracle 现有两条线——SampleMapA 事件 0 的 418 帧（2461 步）与整路线 1500 帧（73,814 步）；整路线只含标题菜单 1 次选择，没有 op101 消息，save/load 只做状态回路而不逐指令对拍；`wait` 与未建模的 130/160/290 转场不入 effects；MapChip 为引擎通用素材，正片未使用（D-21）；30 天 soak 只走就寝/日历链，白天 `CE251/CE310` 图片菜单已由 §4.16 端到端覆盖，但仍未从冷启动进入白天；旧表现层已退役（§4.13）；`123/126` 已按官方三态/设备分支实现（§4.15，D-20），但 `123` mask 的逐位表与 `126` target 的具体键/设备对应仍待编辑器二进制差分；战斗侧只覆盖 CE188/CE152 的命令可用性，CE239/CE242 真实回合、目标选择与伤害胜负仍未接；98 个自动事件已接入 `GameSession`（§4.23，D-28），但 `battle_wiring` 与标题菜单合成未接。
 
 ## 5. 测试与验收
 
@@ -145,13 +146,13 @@ oracle/                    # Rust trace/夹具/对拍脚本；开发期
 
 ## 6. 下一步
 
-M1 已完成，M2 W1 审计修复、W2 Day-1 第二轮审计止血、W2 Day 2–5 表现层/逐指令对拍、W3 Day-1 第三轮审阅 P1 修复、W3 Day-2 核心收敛、W3 Day-3 地图呈现、W3 Day-4 GameSession 接管、W3 Day-5 主场景与 vars/effects trace、W4 Day1-4 音频三轨与确定性时钟、第四轮审阅加固、整路线 Oracle、图片状态/指针桥、旧表现层退役、`123/126` 输入权限状态模型、白天菜单端到端已完成（2026-11-15）：
+M1 已完成，M2 W1 审计修复、W2 Day-1 第二轮审计止血、W2 Day 2–5 表现层/逐指令对拍、W3 Day-1 第三轮审阅 P1 修复、W3 Day-2 核心收敛、W3 Day-3 地图呈现、W3 Day-4 GameSession 接管、W3 Day-5 主场景与 vars/effects trace、W4 Day1-4 音频三轨与确定性时钟、第四轮审阅加固、整路线 Oracle、图片状态/指针桥、旧表现层退役、`123/126` 输入权限状态模型、白天菜单端到端、AutoEvents 调度器已完成（2026-11-15）：
 
 0. ~~M2 W1：M1 审计 P0/P1/P2 加固~~（已完成，见 §4）。
 1. ~~W2 Day-1：存档语义/原子备份、全 opcode 覆盖、StrictMode 门禁~~（已完成，见 M1_HANDOFF §4.4）。
 2. ~~InputRouter、9 级图层、101/102 自绘与字体度量~~（W2 Day 2–4 已完成）；~~第三轮审阅 P1 交互/存档缺陷~~（W3 Day-1 已完成）；~~`TitleScreen` 业务切到 `GameRoot.gd`~~（W3 Day-4 已完成，§4.8）；~~主场景切到 `GameRoot.tscn`~~（W3 Day-5 已完成，§4.9）；
 3. ~~tile 呈现与地形通行、地图点触、角色层~~（W3 Day-3 已完成，§4.8）；MapChip 为引擎通用素材，正片未使用；调色板占位仅兼容/测试；
-4. ~~把“标题→新游戏→map 1→消息/选择→存档/读档”冻结成输入序列~~（整路线 1500 帧 73,812/73,812，§4.12；只覆盖标题菜单 1 次选择，消息与白天选择仍靠单独用例）；
+4. ~~把“标题→新游戏→map 1→消息/选择→存档/读档”冻结成输入序列~~（整路线 1500 帧 73,814/73,814，§4.12/§4.23；只覆盖标题菜单 1 次选择，消息与白天选择仍靠单独用例）；
 5. ~~日程/时间接入确定性时钟~~（W4 Day1-4 已完成，§4.10）；~~白天 CE251/CE310 工作菜单与 HUD 时间~~（2026-11-15 已完成，§4.16；仍缺从冷启动进入白天的剧情夹具）；
-6. ~~StrictMode 收口与旧表现层退役~~（StrictMode 已强制 true，D-15；旧表现层 2026-11-15 退役，§4.13）；~~`123/126` 输入权限~~（2026-11-15 已按官方三态/设备分支实现，§4.15，D-20）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）。
+6. ~~StrictMode 收口与旧表现层退役~~（StrictMode 已强制 true，D-15；旧表现层 2026-11-15 退役，§4.13）；~~`123/126` 输入权限~~（2026-11-15 已按官方三态/设备分支实现，§4.15，D-20）；~~AutoEvents 调度器~~（2026-11-15 已接 98 个并行事件并同步 route，§4.23，D-28）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）。
 7. 决策变化先更新 `DECISIONS.md`。

@@ -61,7 +61,7 @@
 | 证据 | 命令/路径 | 结果 |
 | --- | --- | --- |
 | 全门槛 | `bash tools/godot_check.sh` | 30/30，输出 `GODOT_GATE_OK` |
-| 整路线 Oracle | `res://tests/RouteTraceTest.tscn` + `python oracle/diff_route.py` | `73,812/73,812`，`ROUTE_DIFF_OK`，save/load 状态回路通过（§4.12） |
+| 整路线 Oracle | `res://tests/RouteTraceTest.tscn` + `python oracle/diff_route.py` | `73,814/73,814`，`ROUTE_DIFF_OK`，save/load 状态回路通过（§4.12/§4.23） |
 | C# 构建 | `DOTNET_ROOT=E:/Study/tools/dotnet8 /e/Study/tools/dotnet8/dotnet build godot/Lwsmf.csproj -v:minimal` | 0 warning / 0 error |
 | 标题事件 | `res://tests/TitleTest.tscn` | `TITLE_TEST_OK`；frames=4000 titleSteps=127 keyPolls=362 |
 | 新游戏链 | `res://tests/NewGameTest.tscn` | `NEW_GAME_TEST_OK`；program ニューゲーム処理 len=43 blocks=2；teleport map=1 |
@@ -79,9 +79,10 @@
 | 白天工作菜单 | `res://tests_gd/DayMenuTest.tscn` | `DAY_MENU_TEST_OK checks=13 command=1 hour=18 minute=30 energy=0`；CE251 从 pc1022 走真实图片 hover/点击、自动确认与工作命令 |
 | 周末行动菜单 | `res://tests_gd/WeekendMenuTest.tscn` | `WEEKEND_MENU_TEST_OK checks=9 hour=15 energy=1`；CE310 点击“悠然自得”后休息分支结束事件、时钟推进、体力下降 |
 | 30 天日程 | `res://tests/SleepSoakTest.tscn` | `SLEEP_SOAK_TEST_OK days=30 checks=61`；真实 CE329→CE317 就寝链 |
-| core 存档夹具全等 | `res://tests/SessionParityTest.tscn` | `SESSION_PARITY_TEST_OK checks=9 frames=418 core=frozen`；与 `oracle/fixtures/session_core_save_state.json` 逐字段相等 |
+| core 存档夹具全等 | `res://tests/SessionParityTest.tscn` | `SESSION_PARITY_TEST_OK checks=10 frames=418 core=frozen`；与 `oracle/fixtures/session_core_save_state.json` 逐字段相等 |
 | 数据库 250 | `res://tests/Smoke.tscn` | `DATABASE_TEST_OK name/labels/sentinels/overlay/vm-250`；`.project` 标签漂移、哨兵、覆盖层与 VM 读写均过 |
 | 战斗命令切片 | `res://tests/Smoke.tscn` | `BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`；CE188 空库存无真实攻击行、有道具可选，均到 CE192 且不生成 CE244 |
+| 自动事件 98 | `res://tests/Smoke.tscn` | `AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`；CE38/216/217/242 的边沿/resume/停止，`SessionParityTest` 断言 `AutoEventCount==98` |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
 ---
@@ -329,17 +330,27 @@
 - **门禁**：`VmTest` 在 `DatabaseTest` 后调用；`tools/godot_check.sh` 第 3 步追加 `BATTLE_COMMAND_TEST_OK`。headless `reports/gate_battle_command.log` 与 `LWsmf_RENDER=1` `reports/gate_battle_command_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30/30 全绿。
 - **边界**：只覆盖命令构建/可用性，不覆盖真实回合推进、目标选择、伤害/胜负、CE239/CE242/CE243；`CE188` 不调用 `CE244` 是结构边界；敌数/队伍数仍靠播种而非完整存档导入。
 
+### 4.23 AutoEvents 调度器与整路线同步（已完成 2026-11-15）
+
+- **来源**：Rust `crates/wolf-game/src/auto_events.rs`。该调度器跟踪 98 个事件：96 个 `run_condition==2` 的并行事件，加 allow-list 的 `CE242/CE243`；标题菜单 `CE43` 跳过（只由标题入口显式启动），`CE216/CE217` 是读档后每帧重放的 HUD 事件。条件算子只有 `1 >=`、`2 ==`、`3 <=`，其他为 false；变量地址只接受 `VAR_BASE+0..800`（raw `2000000+n`，`n<800`）。同步是边沿触发：false→true 启动；true→false 只停止自己持有的实例；条件持续为真时不重启已自然结束的一次性事件；resume 事件在每个 `sync` 发现同事件没有 live 实例时重放。live 判定为 `pc < program.len` 或 `wait != None`。
+- **实现**：`Program` 新增 `RunCondition/ConditionOperator/ConditionVariable/ConditionValue`，`ProgramLoader` 读 `run_condition_op_var_val` 四元组；新增 `godot/core_cs/AutoEvents.cs`（`FromPrograms`、`Sync`、`PrimeLatched`、`IsRunning`、`RunningCount`）。`GameSession.EnsureAutoEvents()` 惰性建表，`AdvanceFrame` 在 `_vm.StepFrame()` 之前同步，读档在 `EnterMap` 后 `PrimeLatched`；`StartNewGameNow` 不重建调度器，避免标题阶段已启动的 `CE38` 被重复启动（parity 的 map instance 从 7,8,9 恢复到 6,7,8）。调试可用 `LWsmf_TRACE_AUTO=1`。
+- **route Oracle 修正**：`crates/wolf-cli/src/route.rs` 原先只复刻消息/选择应答，从不同步自动事件；C# 接入后第 32 步即分叉（Rust `frame=2/event 2`，C# `frame=1/event 38`）。现在 `route.rs` 在 `vm.step_frame` 前调用 `auto_events.sync(&mut route.vm)`，与 `Game::frame` 的“先同步、后 step”一致，传动/start_pending 仍在 step 之后；Rust 夹具重生成后两侧都是 **73,814 步**，`ROUTE_DIFF_OK 73814/73814`。
+- **测试**：`AutoEventsTest` 用合成 38/216/217/43/242/244 程序覆盖 allow-list、边沿启动、resume 重放、条件回落停止与 `PrimeLatched`，输出 `AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`；`SessionParityTest` 断言 `AutoEventCount==98`，仍 `SESSION_PARITY_TEST_OK checks=10 frames=418 core=frozen`，冻结夹具已按新增 `CE38` 实例刷新。
+- **门禁**：`VmTest` 在 `DatabaseTest` 后调用 `AutoEventsTest`，`tools/godot_check.sh` 第 3 步追加 `AUTO_EVENTS_TEST_OK`；整路线夹具由 73,812 步更新为 73,814 步。30 步 headless `reports/gate_auto_wired2.log` 与 `LWsmf_RENDER=1` `reports/gate_auto_wired2_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，含 `AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`、`SESSION_PARITY_TEST_OK checks=10 frames=418 core=frozen`、`ROUTE_DIFF_OK 73814/73814`。
+- **边界**：自动事件只读普通变量条件，不覆盖 `raw_condition` 的其他分支；没有把 `battle_wiring`、标题菜单合成或引擎层 `CE271` 常驻事件一起接入；`CE38` 在标题阶段即可启动，与 Rust `Game::frame` 一致；完整战斗 `CE239/CE242` 与 H 场景仍未覆盖。
+
 ---
 
 ## 5. 下一步（M2 入口）
 
 1. ~~**输入与 UI 骨架**：InputRouter、9 级图层、101/102 自绘与字体度量~~（W2 Day 2–4 已完成，见 §4.5；第三轮审阅 P1 交互/存档缺陷见 §4.6；D-13/D-14 与 KeyCodes/缓存/传送收敛见 §4.7）；GameRoot 已接管标题→新游戏→卧室→F5/F9（§4.8），`project.godot` 主场景已切到 `GameRoot.tscn`（§4.9），旧表现层已退役（§4.13）。
 2. **地图呈现**：tile 图层与地形通行已接通（§4.8）；MapChip 为引擎通用素材，正片未使用，调色板占位仅回归辅助；OVERVIEW 保留。
-3. **整段 trace**：SampleMapA 事件 0 的 418 帧逐指令对拍（§4.5/§4.9，2461/2461）与整路线 1500 帧（§4.12，73812/73812）均已打通；整路线只覆盖标题菜单 1 次选择，白天 101/102 消息/选择仍靠单独用例。
+3. **整段 trace**：SampleMapA 事件 0 的 418 帧逐指令对拍（§4.5/§4.9，2461/2461）与整路线 1500 帧（§4.12/§4.23，73814/73814）均已打通；整路线只覆盖标题菜单 1 次选择，白天 101/102 消息/选择仍靠单独用例。
 4. **日程/时间**：确定性时钟与 30 天就寝链已打通（§4.10）；HUD 时间已由 `CE217` 的 6200 真实渲染（§4.14）；白天 `CE251/CE310` 的图片菜单点击、确认与日程/体力推进已由 §4.16 端到端覆盖。仍未做“从冷启动进入白天”的剧情夹具。
 5. **输入权限**：`123/126` 已按官方三态/设备分支实现并由两侧单测覆盖（§4.15，D-20）；表现层已按 §4.18 接线（D-23）；`123` mask 的逐位表与 `126` target 的具体键对应仍待编辑器差分，不阻塞本作。
 6. **故障恢复**：D-13 除锁档/诊断包外已支持显式「返回标题」重建标题安全点（§4.17）；返回标题时会清 `InputRouter` 指针/帧 latch，F9 读档故障进入模态（§4.18）；存档槽级安全点回滚留 M5。
 7. **原版 `.sav` 导入**：起始/结束字节与可选 checksum 严格校验、严格 UTF-8 + replacement 告警已落地（§4.20，D-25）；零售 8 槽 `SAVE_IMPORT_OK 8/8`；回写原版 `.sav` 仍不在 M3 范围。
 8. **数据库**：`250` 的三容器读写、`.project` 标签漂移、覆盖层与扩展行已落地并由 `DATABASE_TEST_OK .../vm-250` 覆盖（§4.21，D-26）；战斗 `CE152/CE188` 的命令可用性切片已由 §4.22 接到该宿主，完整战斗回合仍需。
 9. **战斗命令切片**：`CE188→CE152→CE192` 的空库存/有道具两条线已由 `BattleCommandTest` 覆盖（§4.22，D-27）；CE239/CE242 真实回合、目标选择、伤害与胜负仍未接。
-10. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
+10. **自动事件**：98 个并行事件已由 `AutoEvents` 调度并接入 `GameSession`，整路线同步后两侧均为 73,814 步（§4.23，D-28）；`battle_wiring` 与 HUD 读档重放之外的引擎接线仍未接。
+11. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

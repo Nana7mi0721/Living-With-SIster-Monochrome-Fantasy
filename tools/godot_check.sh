@@ -28,6 +28,7 @@ out="$("$GODOT" --headless --path "$IMO/godot" res://tests/Smoke.tscn 2>&1)"
 echo "$out"
 echo "$out" | grep -q SMOKE_OK
 echo "$out" | grep -q DATABASE_TEST_OK
+echo "$out" | grep -q AUTO_EVENTS_TEST_OK
 echo "$out" | grep -q BATTLE_COMMAND_TEST_OK
 
 echo "[4/30] save import test"

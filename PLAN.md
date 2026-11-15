@@ -55,15 +55,16 @@
 22. M3 原版 `.sav` 导入严格校验：`LegacySaveImporter` 校验起始/结束字节，`rejectBadChecksum` 可选严格拒绝；`ReadMemDataString` 先严格 UTF-8，失败按 replacement 记 `encoding_warnings`，`ImportAll` 非空时写 `reports/encoding_warnings.json`；`SAVE_IMPORT_OK 8/8`、`SAVE_IMPORT_VALIDATION_OK`，30 步门禁双绿（§4.20，D-25）。
 23. M3 `250` 数据库宿主：新增 `GameDatabase` 读 `database.json` 三容器与 `.project` 标签，脚本写走覆盖层（行数/清行/首空行/扩展行、8 种算子、数字写不覆盖文本）；`VmController` 加载 `DatabaseStore`，`EventVm` `250` 委派 host；`DATABASE_TEST_OK .../vm-250`，30 步门禁双绿（§4.21，D-26）。
 24. M3 战斗命令可用性切片：`CE188` 经 `CE152` 构建攻击命令，覆盖层播种队伍/敌数/命令槽/领队属性；空库存真实攻击行不可选，`CData 7/0/0=1` 后可选，均到 CE192 且不生成 CE244；`BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`，30 步门禁双绿（§4.22，D-27）。
+25. M3 AutoEvents 调度器与 route 同步：`Program` 解析条件四元组，`AutoEvents` 跟踪 98 个并行事件（跳过 43，allow-list 242/243），`GameSession` 在 VM step 前同步、读档后 `PrimeLatched`；Rust `route.rs` 同序同步后整路线 **73,814/73,814** 步全等，`AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`，30 步门禁双绿（§4.23，D-28）。
 
 
 ## 下一步（M2 主循环与 UI）
 
 1. ~~InputRouter、9 级图层、101/102 自绘与字体度量~~（W2 Day 2–4 已完成）；~~第三轮审阅 P1 交互/存档缺陷~~（W3 Day-1 已完成）；~~`TitleScreen` 业务切到 `GameRoot.gd`~~（W3 Day-4 已完成）；~~主场景切到 `GameRoot.tscn`~~（W3 Day-5 已完成）。
 2. ~~tile 呈现、地形通行、地图点触、角色层~~（W3 Day-3 已完成）；MapChip 为引擎通用素材，正片未使用，调色板占位仅兼容/测试。
-3. ~~把“标题→新游戏→map 1”冻结成输入序列~~（整路线 1500 帧 73,812/73,812，§4.12）；消息/选择只覆盖标题菜单 1 次，白天 101/102 与 save/load 的逐指令对拍仍待补。
+3. ~~把“标题→新游戏→map 1”冻结成输入序列~~（整路线 1500 帧 73,814/73,814，§4.12/§4.23）；消息/选择只覆盖标题菜单 1 次，白天 101/102 与 save/load 的逐指令对拍仍待补。
 4. ~~日程/时间接入确定性时钟~~（W4 Day1-4 已完成）；HUD 时间已随图片状态桥显示（§4.14）；~~白天 `CE251/CE310` 工作菜单~~（2026-11-15 已完成端到端点击/日程/体力回归，§4.16；仍缺从冷启动进入白天的剧情夹具）。
-5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27），CE239/CE242 真实回合与 H 阈值仍待。
+5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27）；AutoEvents 已接 98 个并行事件并同步 route（§4.23/D-28）；CE239/CE242 真实回合与 H 阈值仍待。
 
 ## 约束
 

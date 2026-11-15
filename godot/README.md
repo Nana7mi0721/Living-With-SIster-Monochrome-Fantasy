@@ -10,13 +10,13 @@
 
 | 目录 | 内容 |
 |---|---|
-| `core_cs/` | C# 确定性核心：EventVM、WolfRng、ProgramLoader、MapRuntime、Terrain/MapTileData、SaveCodec、GameSession、GameClock、LegacySaveImporter、GameDatabase |
+| `core_cs/` | C# 确定性核心：EventVM、WolfRng、ProgramLoader、MapRuntime、Terrain/MapTileData、SaveCodec、GameSession、GameClock、LegacySaveImporter、GameDatabase、AutoEvents |
 | `presentation/` | C# 桥：VmController（IHost/IVmSession）、GameSessionController、TerrainBridge |
 | `presentation_gd/` | 生产表现层：GameRoot、PictureStage、MessageWindow、ChoiceWindow、InputRouter、AudioManager、MapLayer、UiSkin |
-| `tests/` | headless 测试（烟雾/数据库 250/战斗命令切片/存档导入/追踪差分/呈现/地图运行/存档往返/地图消息/路线 trace/地形/时钟/30 天 soak 等） |
+| `tests/` | headless 测试（烟雾/自动事件/数据库 250/战斗命令切片/存档导入/追踪差分/呈现/地图运行/存档往返/地图消息/路线 trace/地形/时钟/30 天 soak 等） |
 | `tests_gd/` | GDScript 测试（GameRoot、InputRouter、PictureState、MapLayer、AudioManager、Day/Weekend Menu） |
 
-主场景是 `res://scenes/GameRoot.tscn`；旧的 `TitleScreen`、`ScreenHostView`、`MapView`、`AssetCatalog` 已退役。原版 `.sav` 导入在 `core_cs/LegacySaveImporter.cs` 内校验起始/结束字节，可选严格拒绝 checksum；严格 UTF-8 失败时 replacement 回退并记录 `reports/encoding_warnings.json`。`core_cs/GameDatabase.cs` 承载 `250` 的 CData/Data/Sys 读写与 `.project` 标签解析，`VmController.LoadPrograms` 时加载并暴露 `DatabaseStore`；`tests/BattleCommandTest.cs` 用覆盖层播种跑 `CE188/CE152` 的命令可用性切片。
+主场景是 `res://scenes/GameRoot.tscn`；旧的 `TitleScreen`、`ScreenHostView`、`MapView`、`AssetCatalog` 已退役。原版 `.sav` 导入在 `core_cs/LegacySaveImporter.cs` 内校验起始/结束字节，可选严格拒绝 checksum；严格 UTF-8 失败时 replacement 回退并记录 `reports/encoding_warnings.json`。`core_cs/GameDatabase.cs` 承载 `250` 的 CData/Data/Sys 读写与 `.project` 标签解析，`VmController.LoadPrograms` 时加载并暴露 `DatabaseStore`；`tests/BattleCommandTest.cs` 用覆盖层播种跑 `CE188/CE152` 的命令可用性切片。`core_cs/AutoEvents.cs` 跟踪 98 个并行事件（跳过标题菜单 43，allow-list 242/243），`GameSession` 在 VM step 前同步、读档后 `PrimeLatched`；`tests/AutoEventsTest.cs` 覆盖边沿/resume/停止。
 
 ## 操作
 
@@ -44,8 +44,8 @@ LWsmf_RENDER=1 bash tools/godot_check.sh   # 带窗口的截图/渲染分支
 "$GODOT" --headless --path godot res://tests/PresentationTest.tscn   # PRESENTATION_TEST_OK phase=bedroom frames=418
 "$GODOT" --headless --path godot res://tests/SaveLoadTest.tscn       # SAVE_LOAD_TEST_OK 98/98
 "$GODOT" --headless --path godot res://tests/MapMessageTest.tscn     # MAP_MESSAGE_TEST_OK 14/14
-"$GODOT" --headless --path godot res://tests/RouteTraceTest.tscn     # ROUTE_TRACE_TEST_OK steps=73812
-"$GODOT" --headless --path godot res://tests/Smoke.tscn             # SMOKE_OK + DATABASE_TEST_OK + BATTLE_COMMAND_TEST_OK
+"$GODOT" --headless --path godot res://tests/RouteTraceTest.tscn     # ROUTE_TRACE_TEST_OK steps=73814
+"$GODOT" --headless --path godot res://tests/Smoke.tscn             # SMOKE_OK + AUTO_EVENTS_TEST_OK + DATABASE_TEST_OK + BATTLE_COMMAND_TEST_OK
 "$GODOT" --headless --path godot res://tests_gd/GameRootTest.tscn    # GAME_ROOT_TEST_OK
 "$GODOT" --headless --path godot res://tests_gd/PictureStateTest.tscn # PICTURE_STATE_TEST_OK checks=37
 "$GODOT" --headless --path godot res://tests_gd/DayMenuTest.tscn      # DAY_MENU_TEST_OK checks=13
@@ -58,8 +58,8 @@ LWsmf_RENDER=1 bash tools/godot_check.sh   # 带窗口的截图/渲染分支
 
 - MapChip 是 WOLF 通用示例素材，零售正片未使用；`MapLayer` 保留 16 色占位色块，仅作引擎兼容/测试，不接入 `work/all/MapChip`；`Terrain` 通行数据已接。
 - 白天 `CE251/CE310` 的图片点击、`102` 自动确认与日程/体力推进已由 `DayMenuTest`/`WeekendMenuTest` 覆盖；仍缺从冷启动进入白天的剧情夹具。
-- 整路线 Oracle 已冻结 1500 帧（标题→新游戏→map 1，73,812 步），但还没有消息/选择段与存档/读档的逐指令 trace。
+- 整路线 Oracle 已冻结 1500 帧（标题→新游戏→map 1，73,814 步，含 AutoEvents），但还没有消息/选择段与存档/读档的逐指令 trace。
 - `123/126` 已按官方三态/设备分支实现（D-20/§4.15）；`123` mask 逐位表与 `126` target 具体键仍待编辑器差分，不阻塞标量键码路径。
 - 商店/BGS 之外的 W4 音频三轨、BGS 循环点、音频存档已接；Rust oracle 侧尚未实现 BGS 混音轨。
 - 选择窗是居中回退（未用 Sys3/Sys4 锚点），消息控制码只清洗不排版。
-- 战斗只覆盖 `CE188/CE152` 的命令可用性；`CE239/CE242` 真实回合、目标选择、伤害/胜负与 H 阈值仍未接。
+- 战斗只覆盖 `CE188/CE152` 的命令可用性；`CE239/CE242` 真实回合、目标选择、伤害/胜负与 H 阈值仍未接。自动事件已接 98 个并行事件，但 `battle_wiring` 与标题菜单合成未接。

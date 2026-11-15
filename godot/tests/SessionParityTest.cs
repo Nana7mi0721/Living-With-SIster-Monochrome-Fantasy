@@ -56,6 +56,7 @@ public partial class SessionParityTest : Node
         }
 
         Check(harness.RunToBedroom(), "core title chain must reach a map (" + harness.Session.Phase + ")");
+        Check(harness.Session.AutoEventCount == 98, $"auto-event scheduler must track 98 common events (got {harness.Session.AutoEventCount})");
         Check(harness.Session.SaveGame(), "core SaveGame on the reached map");
         SaveState? core = SaveCodec.Read(coreSave);
         Check(core != null, "core slot must be readable");

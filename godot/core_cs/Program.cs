@@ -66,6 +66,11 @@ public sealed class Program
     public string Title { get; init; } = "";
     public uint ReturnValueId { get; set; } = NoReturnValue;
     public int SelfBase { get; set; } = CommonSelfBase;
+    /// <summary>Header run condition: 0 called only, 1 auto start, 2 parallel condition, 3 always.</summary>
+    public int RunCondition { get; set; }
+    public int ConditionOperator { get; set; }
+    public int ConditionVariable { get; set; }
+    public int ConditionValue { get; set; }
     public List<Slot> Slots { get; init; } = new();
     public Control[] ControlMap { get; private set; } = Array.Empty<Control>();
     public List<Block> Blocks { get; } = new();
