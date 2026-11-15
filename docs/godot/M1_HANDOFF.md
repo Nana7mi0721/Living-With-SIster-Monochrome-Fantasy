@@ -283,6 +283,13 @@
 - **证据**：`godot/tests_gd/GameRootTest.gd` 在报告故障、导出诊断后调用 `restart_after_fault()`，断言 latch 清除、`phase=="title"`、模态隐藏、`frames==0`、`session.Phase=="title"`；`GAME_ROOT_TEST_OK`。整段回归仍由 30 步门禁覆盖。
 - **边界**：这是“回到标题”的放弃式恢复，不是回到故障前最后一步；带 `VmController` 状态的安全点快照/回滚仍留 M5（D-13/D-21 之外的发布策略）。
 
+### 4.18 Round-5 审阅 P1：126 权限接线与故障复位（已完成 2026-11-15）
+
+- **`126` 权限进入移动与交互**：`VmController` 暴露 `MovementDeny`/`BasicAllDeny`，`GameSessionController` 同步；`GameSession.MoveLeader` 在设置朝向前按 `KeyCodes.Up/Down/Left/Right` 拒绝被禁方向，`AdvanceFrame` 的 `ActionKeyRequested` 追加 `BasicAllDeny & KeyCodes.Ok` 检查；`GameRoot` 的裸 action/选项与取消尊重 `BasicAllDeny`，消息确认仍按 Rust `message_dismissed` 放行。
+- **故障/读档补口**：`restart_after_fault()` 在清指针按压之外同时清 `InputRouter.pointer_pressed` 与 `clear_frame_latches()`；F9 先 `LoadGame()`，若 `vm.Faulted` 则进入 D-13 模态并显示 `load faulted`，不再把故障读档当成功。
+- **证据**：`GameRootTest` 新增 126 全禁/方向禁与故障复位断言，headless `GAME_ROOT_TEST_OK`（`reports/game_root_test_p1.log`）；30 步门禁 headless `reports/gate_round5_p1.log` 与 `LWsmf_RENDER=1` `reports/gate_round5_p1_windowed.log` 均为 `GATE_EXIT=0` / `GODOT_GATE_OK`，`GAME_ROOT_TEST_OK`、`ROUTE_DIFF_OK 73812/73812`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`。
+- **边界**：只把已有 D-20 状态接到表现层，不改逐位映射；`EngineState(8/9)`、effects 归一化、共享 `AudioStream` 循环属性仍是 P2。
+
 ---
 
 ## 5. 下一步（M2 入口）
@@ -291,6 +298,6 @@
 2. **地图呈现**：tile 图层与地形通行已接通（§4.8）；MapChip 为引擎通用素材，正片未使用，调色板占位仅回归辅助；OVERVIEW 保留。
 3. **整段 trace**：SampleMapA 事件 0 的 418 帧逐指令对拍（§4.5/§4.9，2461/2461）与整路线 1500 帧（§4.12，73812/73812）均已打通；整路线只覆盖标题菜单 1 次选择，白天 101/102 消息/选择仍靠单独用例。
 4. **日程/时间**：确定性时钟与 30 天就寝链已打通（§4.10）；HUD 时间已由 `CE217` 的 6200 真实渲染（§4.14）；白天 `CE251/CE310` 的图片菜单点击、确认与日程/体力推进已由 §4.16 端到端覆盖。仍未做“从冷启动进入白天”的剧情夹具。
-5. **输入权限**：`123/126` 已按官方三态/设备分支实现并由两侧单测覆盖（§4.15，D-20）；`123` mask 的逐位表与 `126` target 的具体键对应仍待编辑器差分，不阻塞本作。
-6. **故障恢复**：D-13 除锁档/诊断包外已支持显式「返回标题」重建标题安全点（§4.17）；存档槽级安全点回滚留 M5。
+5. **输入权限**：`123/126` 已按官方三态/设备分支实现并由两侧单测覆盖（§4.15，D-20）；表现层已按 §4.18 接线（D-23）；`123` mask 的逐位表与 `126` target 的具体键对应仍待编辑器差分，不阻塞本作。
+6. **故障恢复**：D-13 除锁档/诊断包外已支持显式「返回标题」重建标题安全点（§4.17）；返回标题时会清 `InputRouter` 指针/帧 latch，F9 读档故障进入模态（§4.18）；存档槽级安全点回滚留 M5。
 7. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

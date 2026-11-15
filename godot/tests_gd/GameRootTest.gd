@@ -101,6 +101,23 @@ func _ready() -> void:
 			if not root.map_view.visible:
 				failures.append("the bedroom map layer should be visible")
 
+		# Round-5 P1: 126 state 2 on OK must block the map action key, and state 1 on Up
+		# must stop both walking and turning. Apply raw 126 args through the VM bridge.
+		if root.phase == "bedroom":
+			root.vm.ApplyInputPermission(0x201)
+			root._on_action()
+			root.advance_frame()
+			if root.vm.ActionKeyRequested:
+				failures.append("126 state 2 must block the bedroom action key")
+			root.vm.ApplyInputPermission(0x001)
+			var y0: int = root.session.LeaderY
+			var facing0: int = root.session.Facing
+			root.vm.ApplyInputPermission(0x110)
+			root._on_move(0, -1)
+			if root.session.LeaderY != y0 or root.session.Facing != facing0:
+				failures.append("126 movement ban must not move or turn the leader")
+			root.vm.ApplyInputPermission(0x010)
+
 		# F5/F9: save the bedroom, walk a frame, then reload the same slot.
 		if root.phase == "bedroom":
 			# W4 Day1-2: two live tracks must survive the save/load round trip. This scene
@@ -155,6 +172,9 @@ func _ready() -> void:
 			failures.append("diagnostics export must write a file")
 		else:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(diagnostics))
+		# D-13 recovery: a held click latched at fault time must not survive into the title.
+		root.router.pointer_pressed = true
+		root.router._click_latch = true
 		# D-13 recovery: title restart must release the latch, hide the modal and reset the clock.
 		if not root.restart_after_fault():
 			failures.append("restart_after_fault must succeed while faulted")
@@ -168,6 +188,8 @@ func _ready() -> void:
 			failures.append("restart_after_fault must reset the frame clock")
 		if root.session.Phase != "title":
 			failures.append("restart_after_fault must restart the title event")
+		if root.router.pointer_pressed or root.router._click_latch:
+			failures.append("restart_after_fault must clear router click latches")
 		root.queue_free()
 	if failures.is_empty():
 		print("GAME_ROOT_TEST_OK")

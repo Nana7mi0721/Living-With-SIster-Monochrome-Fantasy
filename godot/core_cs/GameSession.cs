@@ -16,6 +16,8 @@ public interface IVmSession
     int LeaderX { get; set; }
     int LeaderY { get; set; }
     int LeaderFacing { get; set; }
+    uint MovementDeny { get; }
+    uint BasicAllDeny { get; }
     bool ActionKeyRequested { get; set; }
     bool Faulted { get; }
     string FaultReason { get; }
@@ -96,6 +98,9 @@ public sealed class GameSession
     public int Frames { get; private set; }
     public bool HasChoices => _hasChoices;
     public bool MessageOpen => _messageOpen;
+    /// <summary>Direction/action bits currently denied by opcode 126 (D-20).</summary>
+    public uint MovementDeny => _vm.MovementDeny;
+    public uint BasicAllDeny => _vm.BasicAllDeny;
     public bool ScriptedInput { get; set; }
     public bool AutoPickChoice { get; set; } = true;
     public bool HasSave => _savePath.Length > 0 && SaveCodec.Exists(_savePath);
@@ -153,7 +158,8 @@ public sealed class GameSession
         _vm.LeaderX = _leaderX;
         _vm.LeaderY = _leaderY;
         _vm.LeaderFacing = _facing;
-        _vm.ActionKeyRequested = _actionPressed && !_messageOpen && !_hasChoices;
+        _vm.ActionKeyRequested = _actionPressed && !_messageOpen && !_hasChoices
+            && (BasicAllDeny & KeyCodes.Ok) == 0;
         _actionPressed = false;
         _vm.StepFrame();
         ApplyPending();
@@ -271,6 +277,14 @@ public sealed class GameSession
     public void MoveLeader(int dx, int dy, int facing)
     {
         if (_map == null) return;
+        // A 126 state 1/2 ban on this direction still faces nothing and does not move
+        // (crates/wolf-game/src/game.rs advance_player_input filters held directions).
+        uint direction = dy < 0 ? KeyCodes.Up
+            : dy > 0 ? KeyCodes.Down
+            : dx < 0 ? KeyCodes.Left
+            : dx > 0 ? KeyCodes.Right
+            : 0;
+        if ((MovementDeny & direction) != 0) return;
         _facing = facing;
         _vm.LeaderFacing = facing;
         int fromX = _leaderX;
@@ -459,6 +473,11 @@ public sealed class GameSession
         }
 
         EnterMap(state.MapId, selfVars, state);
+        if (_vm.Faulted)
+        {
+            _view.SetStatus("load faulted: " + _vm.FaultReason);
+            return false;
+        }
         if (Phase == "failed") return false;
         // EnterMap -> ShowMap clears the layer, so the saved slots are replayed after it.
         _view.RestorePictures(state.Pictures);

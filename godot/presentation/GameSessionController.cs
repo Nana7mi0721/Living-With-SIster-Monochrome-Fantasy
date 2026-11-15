@@ -31,6 +31,8 @@ public partial class GameSessionController : Node
     public bool MessageOpen => _session?.MessageOpen ?? false;
     public bool HasChoices => _session?.HasChoices ?? false;
     public bool Faulted => _vm?.Faulted ?? false;
+    public uint MovementDeny => _session?.MovementDeny ?? 0;
+    public uint BasicAllDeny => _session?.BasicAllDeny ?? 0;
 
     /// <summary>Wire the session to the live VM and the GDScript root. Call before StartTitle.</summary>
     public void Setup(VmController vm, Godot.Control ui) => Setup(vm, ui, "");

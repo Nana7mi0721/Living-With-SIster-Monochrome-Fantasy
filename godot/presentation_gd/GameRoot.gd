@@ -170,11 +170,18 @@ func start_event(event_id: int) -> bool:
 func _on_action() -> void:
 	if faulted:
 		return
+	# 126 state 2 denies the selected basic key. Messages keep their confirm path
+	# (matching Rust message_dismissed); choices and map interactions do not.
+	var action_denied := (int(session.BasicAllDeny) & 1) != 0
 	if choice.is_open:
+		if action_denied:
+			return
 		choice.confirm()
 		return
 	if message.is_open():
 		message.confirm()
+		return
+	if action_denied:
 		return
 	# A bare action key in the bedroom is opcode 123's decision press (W3 Day4).
 	session.PressActionKey()
@@ -182,6 +189,8 @@ func _on_action() -> void:
 
 func _on_cancel() -> void:
 	if faulted:
+		return
+	if (int(session.BasicAllDeny) & 2) != 0:
 		return
 	if choice.is_open:
 		choice.cancel()
@@ -206,6 +215,9 @@ func _on_move(dx: int, dy: int) -> void:
 	if faulted:
 		return
 	if choice.is_open:
+		var bit := 16 if dy < 0 else 32 if dy > 0 else 0
+		if (int(session.BasicAllDeny) & bit) != 0:
+			return
 		choice.move(dy)
 		return
 	# Bedroom walking: same step/facing convention as TitleScreen.MoveLeader.
@@ -418,8 +430,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			status("save refused (not in a bedroom map)")
 		get_viewport().set_input_as_handled()
 	elif key.keycode == KEY_F9:
-		if session.LoadGame():
-			frames = session.Frames
+		var loaded := session.LoadGame()
+		frames = session.Frames
+		if vm.Faulted:
+			status("load faulted")
+			report_fault(vm.FaultReason)
+		elif loaded:
 			status("loaded %s" % session.SavePath)
 		else:
 			status("load failed")
@@ -503,6 +519,10 @@ func restart_after_fault() -> bool:
 	vm.ResetDiagnostics()
 	vm.SetPointer(-1.0, -1.0)
 	vm.SetPointerPressed(false)
+	# The fault may have latched a held/just-pressed click in the router. Clear it here or
+	# the first title frame consumes a phantom click (round-5 review P1).
+	router.pointer_pressed = false
+	router.clear_frame_latches()
 	message.close()
 	choice.close()
 	stage.clear_pictures()

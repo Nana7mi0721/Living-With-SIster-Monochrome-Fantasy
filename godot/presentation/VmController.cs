@@ -55,6 +55,12 @@ public partial class VmController : Node, IHost, IVmSession
 
     public EventVm Vm { get; } = new();
 
+    /// <summary>Direction bits opcode 126 currently denies for basic movement.</summary>
+    public uint MovementDeny => Vm.MovementDeny;
+
+    /// <summary>Key bits opcode 126 currently denies for all basic input (map action/choice).</summary>
+    public uint BasicAllDeny => Vm.BasicAllDeny;
+
     /// <summary>Extra fields of the last 140 command; the frozen signal keeps its 5 args.</summary>
     public int SoundLoopPoint => _lastSoundLoopPoint;
     public int SoundTempo => _lastSoundTempo;
@@ -386,6 +392,9 @@ public partial class VmController : Node, IHost, IVmSession
         _pictureStateTarget = target;
         _pictureStateMethod = method;
     }
+
+    /// <summary>Test/probe bridge for a raw opcode 126 argument (target bits + state bits).</summary>
+    public void ApplyInputPermission(uint raw) => Vm.ApplyInputPermission(raw);
 
     public void SetPointer(float x, float y)
     {

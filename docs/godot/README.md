@@ -54,6 +54,7 @@
 - 旧表现层退役（2026-11-15）：`SessionParityTest` 改为 core-only（夹具 `oracle/fixtures/session_core_save_state.json`，`checks=9`）；`TestSessionView`/`SessionHarness` 接管 `SaveLoadTest 98/98`、`PresentationTest`、`MapMessageTest 14/14`；删除 `TitleScreen`/`ScreenHostView`/`ScreenHostSessionView`/`AssetCatalog`/`MapView`/`TitleScreen.tscn`/`ScreenshotTest`，保留三座 C# 桥。
 - 图片状态/指针（2026-11-15）：`VmController` 缓存 `PictureCmd` 槽并把 `124` 的 hover/existence/x/y/scale/text 委派给 `PictureStage`，`EngineState(7)` 按官方三态（0/1/2）提供左键；`GameRoot` 现在把 `anchor`/`kind` 传给舞台，`CE217` 的 6200 渲染成真实 `8:30`。`PICTURE_STATE_TEST_OK checks=30`。
 - 输入权限（2026-11-15）：`126` 按官方帮助改为「目标位 + 三态（常允许/移动禁/全禁）+ bit28 设备分支」，无自动清除；`123` mask 是复合 UI 位字段而非允许键掩码，改为标量键码后按权限过滤。Rust `InputState` 与 C# `EventVm` 同构，`cargo test -p wolf-vm` 95 passed、`VmTest` 覆盖三态/设备/`125` 穿透。
+- Round-5 审阅 P1（2026-11-15）：`126` 的 `BasicAllDeny`/`MovementDeny` 已接到 `GameSession.MoveLeader`、`AdvanceFrame` 与 `GameRoot` 交互；故障返回标题清 `InputRouter` 指针/帧 latch，F9 读档后检查 `vm.Faulted`（§4.18，D-23）。
 - 白天菜单端到端（2026-11-15）：`EngineState(7)` 按官方三态返回（0 未按/1 按住/2 刚按下）；CE251 从 pc1022 真实菜单点击到全局 48 与工作命令，CE310 从 pc128 点击“悠然自得”到 15:30/体力 1。`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`。
 
 - 30 道门槛全绿（`GODOT_GATE_OK`，headless 与 `LWsmf_RENDER=1` 双模式）；`SAVE_LOAD_TEST_OK 98/98`、`AUDIO_MANAGER_TEST_OK checks=30`、`CLOCK_TEST_OK checks=11`、`SLEEP_SOAK_TEST_OK days=30 checks=61`、`MAP_RUNTIME_TEST_OK 51/51`、`MAP_MESSAGE_TEST_OK 14/14`、`PICTURE_ROUNDTRIP_TEST_OK`、`TERRAIN_TEST_OK`、`MAP_LAYER_TEST_OK`、`SESSION_PARITY_TEST_OK checks=9`、`TRACE_DIFF_OK 2461/2461`、`ROUTE_DIFF_OK 73812/73812`、`PICTURE_STATE_TEST_OK checks=30`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`。详见 [`M1_HANDOFF.md`](M1_HANDOFF.md)。
@@ -61,7 +62,7 @@
 **下一步（M2）**
 
 - 整段切片（标题→新游戏→map 1）已冻结成 1500 帧整路线 Oracle（73,812/73,812）；消息/选择只覆盖标题菜单 1 次，白天 101/102 与 save/load 的逐指令对拍仍待补。
-- 白天 `CE251/CE310` 工作菜单的图片点击、确认与日程/体力推进已端到端覆盖（§4.16）；仍缺从冷启动进入白天的剧情夹具。`123/126` 已按官方三态/设备分支实现（逐位表待编辑器差分，见 §4.15/D-20）；Faulted 已支持显式返回标题重建安全点（§4.17），存档槽级回退留 M5。
+- 白天 `CE251/CE310` 工作菜单的图片点击、确认与日程/体力推进已端到端覆盖（§4.16）；仍缺从冷启动进入白天的剧情夹具。`123/126` 已按官方三态/设备分支实现并接到表现层（逐位表待编辑器差分，见 §4.15/D-20、§4.18/D-23）；Faulted 已支持显式返回标题重建安全点（§4.17），存档槽级回退留 M5。
 
 ## 4. 当前唯一路线
 

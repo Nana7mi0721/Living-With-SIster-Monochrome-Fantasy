@@ -2,7 +2,7 @@
 
 本文件面向在本仓库工作的 AI coding agent（Lead 与子代理），补充 `docs/README.md`（文档总索引）与 `docs/godot/` 下的当前入口。旧 `docs/archive/rust/NEW_SESSION_START_RUST_2026-11-04.md`、旧 HANDOFF 和旧研究只作历史证据。
 
-> **当前阶段（2026-11-14）：Godot 重制版 M1 已完成，进入 M2（输入/图层/呈现骨架）。**
+> **当前阶段（2026-11-15）：Godot 重制版 M2 已收口，进入 M3（战斗与 H）。**
 > 当前入口是 [`docs/godot/README.md`](docs/godot/README.md)、
 > [`docs/godot/M1_HANDOFF.md`](docs/godot/M1_HANDOFF.md)、
 > [`docs/godot/DECISIONS.md`](docs/godot/DECISIONS.md) 与
@@ -33,7 +33,7 @@
 
 ## 4. 集成与验收入口
 
-> Godot 交付门禁 12 道、全 headless；任一道失败即不是可交付状态。
+> Godot 交付门禁 30 道，headless 与窗口模式双跑；任一道失败即不是可交付状态。
 > Rust 命令只用于维护开发期 Oracle，不能代替 Godot 数据/行为/画面验收。
 
 ```bash
@@ -103,3 +103,8 @@ git worktree list
 - 删除/移动前先确认解析后的绝对路径是你想操作的目标；不要对未确认的变量路径执行递归删除。
 - 不删除任何已跟踪文档：过期文档移到 `docs/archive/`；不删除 `docs/gpt调研/`（用户资料）。
 - 不跑 `git clean`；不清理用户自己的游戏安装、截图和未跟踪工作。
+
+## 7. 协作授权与外部核实
+
+- **提交/推送无需逐次征求用户同意**：Lead 在完成当前批次、通过验收门禁并检查 `git status` / `git diff` 后，可自行 commit 并 push；提交信息与分支沿用 §4。推送失败时保留本地提交，报告凭据或网络原因，不重写历史。
+- **需要联网核实的问题默认交给用户用 Gemini 调研**：Lead 不自行展开大规模网络检索；把问题、已核实事实、需要的证据和期望输出写成清单交给用户。仅当问题能在本仓库、Rust Oracle 或已抓取资料内确认时才自行查证。

@@ -50,6 +50,7 @@
 17. M2 图片状态/指针桥：`VmController` 缓存 `PictureCmd` 槽、委派 `124` 给 `PictureStage`（hover/existence/x/y/scale/text/屏幕层），`EngineState(7)` 单帧左键，`GameRoot` 传 `anchor`/`kind`；真实 `CE217` HUD 显示 `8:30`。`PICTURE_STATE_TEST_OK checks=30`，门禁扩到 28/28 双模式全绿。
 18. M2 123/126 输入权限状态模型：`126` 改为「目标位 + 三态（常允许/移动禁/全禁）+ bit28 设备分支」，无自动清除；`123` mask 是复合 UI 位字段而非允许键掩码，改为标量键码后按权限过滤。Rust `InputState` 与 C# `EventVm` 同构，移动/选择分别读 `movement_deny`/`basic_all_deny`；`cargo test -p wolf-vm` 95 passed，route 仍 73,812/73,812，门禁 28/28。
 19. M2 白天菜单端到端：`EngineState(7)` 改为官方三态（0/1/2），CE251 从 pc1022 真实菜单点击到全局 48/工作命令，CE310 从 pc128 点击“悠然自得”到 15:30/体力 1；`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`，门禁 30/30 双模式全绿（§4.16）。
+20. M2 Round-5 审阅 P1：`126` 的 `BasicAllDeny`/`MovementDeny` 接入 `GameSession.MoveLeader`、`AdvanceFrame` 与 `GameRoot` 交互；故障返回标题清 `InputRouter` 指针/帧 latch，F9 读档后检查 `vm.Faulted`；`GAME_ROOT_TEST_OK`，30 步门禁 headless/windowed 均绿（§4.18，D-23）。
 
 
 ## 下一步（M2 主循环与 UI）
@@ -58,7 +59,7 @@
 2. ~~tile 呈现、地形通行、地图点触、角色层~~（W3 Day-3 已完成）；MapChip 为引擎通用素材，正片未使用，调色板占位仅兼容/测试。
 3. ~~把“标题→新游戏→map 1”冻结成输入序列~~（整路线 1500 帧 73,812/73,812，§4.12）；消息/选择只覆盖标题菜单 1 次，白天 101/102 与 save/load 的逐指令对拍仍待补。
 4. ~~日程/时间接入确定性时钟~~（W4 Day1-4 已完成）；HUD 时间已随图片状态桥显示（§4.14）；~~白天 `CE251/CE310` 工作菜单~~（2026-11-15 已完成端到端点击/日程/体力回归，§4.16；仍缺从冷启动进入白天的剧情夹具）。
-5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现（§4.15/D-20），逐位表待编辑器差分。
+5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分。
 
 ## 约束
 
