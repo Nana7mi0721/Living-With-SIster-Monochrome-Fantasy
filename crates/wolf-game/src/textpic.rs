@@ -425,11 +425,18 @@ impl<'a, 'b> Builder<'a, 'b> {
         }
     }
 
-    /// Apply a new font size, clamping it to something drawable.
+    /// Apply a new font size, falling back to the picture default when it is unusable.
+    ///
+    /// A zero size is not a request for a 1 px font: it is what `\f[\cself[18]]`
+    /// resolves to before common event 48 has filled the auto-system font slot, and
+    /// the save/load screen is reachable straight from the title menu before that
+    /// initialisation runs. Clamping to one pixel there collapsed every slot label
+    /// to an unreadable speck. Treat zero/negative/non-finite as "keep the default"
+    /// instead; genuinely tiny but positive sizes still clamp to [MIN_FONT_PX].
     fn set_font_px(&mut self, px: f32) {
         self.flush();
-        self.style.font_px = if px.is_finite() {
-            px.max(MIN_FONT_PX)
+        self.style.font_px = if px.is_finite() && px >= MIN_FONT_PX {
+            px
         } else {
             self.ctx.default_font_px.max(MIN_FONT_PX)
         };
@@ -505,6 +512,56 @@ impl<'a, 'b> Builder<'a, 'b> {
 
     /// Resolve one variable escape to text.
     fn var_text(&mut self, var: &VarRef) -> String {
+        VarResolver {
+            vars: self.ctx.vars,
+            cells: self.ctx.cells,
+            depth: self.depth,
+        }
+        .var_text(var)
+    }
+
+    /// Render a token list back to plain text, resolving the escapes inside it.
+    fn display(&mut self, tokens: &[TextToken]) -> String {
+        VarResolver {
+            vars: self.ctx.vars,
+            cells: self.ctx.cells,
+            depth: self.depth,
+        }
+        .display(tokens)
+    }
+
+    /// Evaluate a token list as an integer, if it resolves to one.
+    fn int(&mut self, tokens: &[TextToken]) -> Option<i32> {
+        let text = self.display(tokens);
+        text.trim().parse::<i32>().ok()
+    }
+
+    /// Evaluate a markup fragment (a [TextToken::Code] argument) as an integer.
+    fn int_raw(&mut self, source: &str) -> Option<i32> {
+        let tokens = tokenize(source);
+        self.int(&tokens)
+    }
+}
+
+/// Resolve one variable escape against live VM state.
+///
+/// This is the same evaluator [Builder] uses for picture markup, exposed for the
+/// message and choice text passes: an option written as `\cdb[0:12:0]` has to paint
+/// the database cell, not the control code. Keeping one evaluator means the message
+/// window and the HUD cannot disagree about what a variable means.
+pub(crate) fn resolve_var_text(var: &VarRef, vars: &dyn Vars, cells: &dyn Cells) -> String {
+    VarResolver { vars, cells, depth: 0 }.var_text(var)
+}
+
+/// Shared recursive evaluator for `\v`, `\s`, `\cself` and the database escapes.
+struct VarResolver<'a> {
+    vars: &'a dyn Vars,
+    cells: &'a dyn Cells,
+    depth: u8,
+}
+
+impl VarResolver<'_> {
+    fn var_text(&mut self, var: &VarRef) -> String {
         if self.depth >= MAX_ESCAPE_DEPTH {
             return String::new();
         }
@@ -520,21 +577,21 @@ impl<'a, 'b> Builder<'a, 'b> {
             // `\sdb` resolves through the same call because WOLF stores both in one array.
             VarBank::VarDb | VarBank::SysDb => {
                 let [ty, row, column] = self.db_coords(var);
-                self.ctx.cells.cdb(ty, row, column).unwrap_or_default()
+                self.cells.cdb(ty, row, column).unwrap_or_default()
             }
             VarBank::UserDb => {
                 let [ty, row, column] = self.db_coords(var);
-                self.ctx.cells.udb(ty, row, column).unwrap_or_default()
+                self.cells.udb(ty, row, column).unwrap_or_default()
             }
             VarBank::Normal => match self.slot(var) {
-                Some(index) => self.ctx.vars.num(index).to_string(),
+                Some(index) => self.vars.num(index).to_string(),
                 None => String::new(),
             },
             // Strings, self variables and `\cself` all reach the same string bank from the
             // host's point of view; which bank is *live* is the caller's business (see
             // [Vars::text]).
             VarBank::Str | VarBank::SelfVar | VarBank::CommonSelf => match self.slot(var) {
-                Some(index) => self.ctx.vars.text(index),
+                Some(index) => self.vars.text(index),
                 None => String::new(),
             },
             // Reserve numbers, XY coordinates and named XY have no picture-side meaning.
@@ -600,12 +657,6 @@ impl<'a, 'b> Builder<'a, 'b> {
     fn int(&mut self, tokens: &[TextToken]) -> Option<i32> {
         let text = self.display(tokens);
         text.trim().parse::<i32>().ok()
-    }
-
-    /// Evaluate a markup fragment (a [TextToken::Code] argument) as an integer.
-    fn int_raw(&mut self, source: &str) -> Option<i32> {
-        let tokens = tokenize(source);
-        self.int(&tokens)
     }
 }
 

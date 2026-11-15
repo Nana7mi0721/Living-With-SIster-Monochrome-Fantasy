@@ -13,15 +13,18 @@
 //! That matches WOLF's page lifecycle ("created while the condition holds, discarded
 //! when it fails") without turning a one-shot event into a per-frame loop.
 //!
-//! ## A deliberate exception
+//! The one exception is RESUME_ON_LOAD: the HUD drawing events 216/217 are
+//! linear pages that must be replayed while their condition holds, including every
+//! frame after a save load. See the comment on AutoEvents::sync.
 //!
-//! Event 43 (`┗オリジナルタイトル画面Ｂ`) is dead code in this data set: it has zero
-//! 210/211/300 call sites, it draws pictures 3/4/5 which the title picture 12000
-//! completely covers, and its only visible effect outside those pictures is a write
-//! to Sys20 (the choice cursor position). Its run condition is true at boot (v0 == 0),
-//! so a literal scheduler would start it; the measured title screen is pixel-identical
-//! without it (docs/ENGINE_EVENTS.md section 1, conclusion 5). It is listed in
-//! [`SKIPPED`] and recorded in the capture diagnostics instead.
+//! ## A deliberately skipped event
+//!
+//! Event 43 (`┗オリジナルタイトル画面Ｂ`) is the visible three-item title menu. It has
+//! no 210/211/300 call site (the WOLF title screen is engine driven), and its run
+//! condition is true at boot, so a literal scheduler would start it on *every* map.
+//! That left its menu pictures 3/4/5 drawn over the first gameplay scene. It is
+//! listed in [`SKIPPED`] here and started explicitly by [`crate::game::Game::boot`]
+//! and [`crate::game::Game::start_title`] instead; map changes stop it.
 
 use std::collections::BTreeMap;
 
@@ -43,12 +46,18 @@ pub struct AutoEvent {
     pub variable: u32,
     /// Right-hand side of the comparison.
     pub value: u32,
+    /// Whether this event is replayed while its condition holds, including
+    /// immediately after a save load. Only the HUD drawing events use this: they
+    /// are pure presentation coroutines that end immediately, so they have to be
+    /// re-created every frame to replace the literal SavePart5 text with live
+    /// \v[...] markup.
+    pub resume_on_load: bool,
 }
 
 /// Events this scheduler deliberately does not start.
 ///
-/// Event 43 is dead code in this data set; see the module documentation and
-/// docs/ENGINE_EVENTS.md section 1 conclusion 5.
+/// Event 43 is the title menu. It must only run on the title screen, so the title
+/// entry points start it explicitly; see the module documentation.
 pub const SKIPPED: &[u32] = &[43];
 
 /// `run_condition == 0` events that the engine never starts on its own but that
@@ -66,6 +75,22 @@ pub const SKIPPED: &[u32] = &[43];
 /// entry points). Both conditions are false at boot (2000350 == 0), so they
 /// cost nothing until the battle sets 2000350.
 pub const GATED_CALL_ONLY: &[u32] = &[242, 243];
+
+/// Conditional events that must be replayed after a save load even when their
+/// condition already held before the save.
+///
+/// `CE216` (ステータスバー表示) and `CE217` (時刻表示) are the top-bar HUD. They are
+/// linear, one-shot drawing events: each runs once and ends. Their condition is
+/// `2000003 == 1`, which stays true for the whole game, so the normal edge
+/// scheduler would start them once at the beginning of a session and never
+/// again. The save stores the *rendered* text of every picture in SavePart5
+/// (e.g. picture 6200 is literally "21:40", not a \v[4]:\v[5] template), so
+/// without this replay the loaded HUD keeps showing the values from the moment
+/// the player saved, while the underlying variables continue to change.
+///
+/// This is deliberately an allow-list: replaying every `run_condition == 2`
+/// event would also restart event 506 (the DLC eye overlay) and event 337.
+pub const RESUME_ON_LOAD: &[u32] = &[216, 217];
 
 /// Result of one scheduler pass.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -110,6 +135,7 @@ impl AutoEvents {
                 operator: event.condition_operator(),
                 variable: event.condition_variable,
                 value: event.condition_value,
+                resume_on_load: RESUME_ON_LOAD.contains(&event.id),
             })
             .collect();
         Self {
@@ -143,24 +169,49 @@ impl AutoEvents {
         self.enabled
     }
 
-    /// Seeds the latched state from the current variable values without starting
-    /// or stopping anything, and without changing `enabled`.
+    /// Seeds the latched state from the current variable values after a save
+    /// load, and resumes the HUD drawing events listed in [`RESUME_ON_LOAD`].
     ///
-    /// Called after a save load. A load restores the ordinary variables to their
-    /// saved values, but leaves this scheduler's `latched` map empty. On the first
-    /// `frame()`, `sync` would then read every condition that already holds as a
-    /// fresh false -> true edge and start its event — replaying edges that only
-    /// "appeared" because the variables were restored. Event 506
-    /// (`妹トイレ前まばたき`, the DLC eye overlay) is the visible symptom. Priming
-    /// records the loaded truth values so those events stay dormant until a real
-    /// 0 -> 1 transition, which still starts them normally.
+    /// A load restores the ordinary variables to their saved values, but leaves
+    /// this scheduler's `latched` map empty. On the first `frame()`, `sync` would
+    /// then read every condition that already holds as a fresh false -> true edge
+    /// and start its event — replaying edges that only "appeared" because the
+    /// variables were restored. Event 506 (`妹トイレ前まばたき`, the DLC eye
+    /// overlay) is the visible symptom. Priming records the loaded truth values so
+    /// those events stay dormant until a real 0 -> 1 transition, which still
+    /// starts them normally.
+    ///
+    /// Two events are the exception: 216/217 draw the top-bar HUD from `\v[...]`
+    /// markup, while SavePart5 stores their text already rendered. They are
+    /// therefore started here (once, if their condition holds) so the HUD becomes
+    /// live again on the load frame; [`Self::sync`] then replays them every frame
+    /// while the condition stays true. Starting is skipped when an instance of the
+    /// same event is already alive, which keeps a second load from duplicating the
+    /// HUD.
     ///
     /// See docs/research/M13_AUTO_EVENTS_SCOPE.md.
-    pub fn prime_latched(&mut self, vm: &Vm) {
+    pub fn prime_latched(&mut self, vm: &mut Vm) {
+        if !self.enabled {
+            return;
+        }
         for event in &self.events {
             let now = condition_value(vm, event.variable)
                 .map_or(false, |left| condition_met(event.operator, left, event.value));
             self.latched.insert(event.id, now);
+            if !now || !event.resume_on_load {
+                continue;
+            }
+            let already_running = self
+                .running
+                .get(&event.id)
+                .is_some_and(|instance| vm.instance(*instance).is_some())
+                || vm.instances().iter().any(|instance| instance.event == event.id);
+            if already_running {
+                continue;
+            }
+            if let Some(instance) = vm.start_event(event.id) {
+                self.running.insert(event.id, instance);
+            }
         }
     }
 
@@ -190,6 +241,14 @@ impl AutoEvents {
     }
 
     /// Evaluates every condition and creates or destroys coroutines as needed.
+    ///
+    /// Events in [`RESUME_ON_LOAD`] are presentation coroutines that finish
+    /// immediately and must be re-created on the next pass. WOLF treats a
+    /// run_condition == 2 page as a parallel process that stays resident while
+    /// its condition holds, so a linear page like CE216 runs once per frame.
+    /// This is the one exception to the otherwise edge-triggered rule, and it is
+    /// restricted to the allow-list: replaying every run_condition == 2 event
+    /// would wake 506 (the DLC eye overlay) and 337.
     pub fn sync(&mut self, vm: &mut Vm) -> SyncReport {
         let mut report = SyncReport::default();
         if !self.enabled {
@@ -199,7 +258,22 @@ impl AutoEvents {
             let now = condition_value(vm, event.variable)
                 .map_or(false, |left| condition_met(event.operator, left, event.value));
             let before = self.latched.get(&event.id).copied().unwrap_or(false);
-            if now && !before {
+            if event.resume_on_load && now {
+                // A finished coroutine can remain in Vm::instances until the next
+                // step reaps it. Treat that as gone so the HUD is redrawn exactly
+                // once per frame; a coroutine parked on a child call is still live.
+                let live = vm.instances().iter().any(|instance| {
+                    instance.event == event.id
+                        && (instance.pc < instance.program.len()
+                            || !matches!(instance.wait, wolf_vm::exec::WaitState::None))
+                });
+                if !live {
+                    if let Some(instance) = vm.start_event(event.id) {
+                        self.running.insert(event.id, instance);
+                        report.started += 1;
+                    }
+                }
+            } else if now && !before {
                 if let Some(instance) = vm.start_event(event.id) {
                     self.running.insert(event.id, instance);
                     report.started += 1;
@@ -360,7 +434,7 @@ mod tests {
         let mut auto = AutoEvents::from_common_events(&data);
         // A fresh game: event 38's condition (v160 <= 2, v160 = 0) already holds.
         // Priming must record that without starting anything.
-        auto.prime_latched(&vm);
+        auto.prime_latched(&mut vm);
         let report = auto.sync(&mut vm);
         assert_eq!(report.started, 0, "priming must not fabricate an edge");
         assert_eq!(report.stopped, 0);
@@ -368,7 +442,7 @@ mod tests {
         assert!(auto.enabled(), "priming must not touch enabled");
         // With the condition now false, priming-then-sync still does nothing.
         vm.vars.set(160, 3);
-        auto.prime_latched(&vm);
+        auto.prime_latched(&mut vm);
         let report = auto.sync(&mut vm);
         assert_eq!(report.started, 0);
         assert!(!vm.instances().iter().any(|instance| instance.event == 38));
@@ -377,5 +451,61 @@ mod tests {
         let report = auto.sync(&mut vm);
         assert_eq!(report.started, 1, "a real edge still starts after priming");
         assert!(vm.instances().iter().any(|instance| instance.event == 38));
+    }
+
+    #[test]
+    fn prime_latched_resumes_the_hud_events_once_and_never_the_dlc_overlay() {
+        let Some((data, _)) = have_data() else { return };
+        let programs = ProgramSet::from_common_events(&data);
+        let mut vm = Vm::new(programs);
+        let mut auto = AutoEvents::from_common_events(&data);
+        // Both HUD events are gated on 2000003 == 1 (ordinary variable index 3).
+        vm.vars.set(3, 1);
+        auto.prime_latched(&mut vm);
+        assert!(auto.running_ids().contains(&216));
+        assert!(auto.running_ids().contains(&217));
+        assert_eq!(
+            vm.instances()
+                .iter()
+                .filter(|instance| instance.event == 216)
+                .count(),
+            1,
+            "priming must start exactly one HUD status-bar instance"
+        );
+        assert_eq!(
+            vm.instances()
+                .iter()
+                .filter(|instance| instance.event == 217)
+                .count(),
+            1,
+            "priming must start exactly one HUD clock instance"
+        );
+        assert!(
+            !auto
+                .events()
+                .iter()
+                .find(|event| event.id == 506)
+                .expect("event 506 is tracked")
+                .resume_on_load,
+            "the DLC eye overlay must never be a resume-on-load event"
+        );
+        // A second load (or the normal first-frame sync) must not duplicate them.
+        auto.prime_latched(&mut vm);
+        auto.sync(&mut vm);
+        assert_eq!(
+            vm.instances()
+                .iter()
+                .filter(|instance| instance.event == 216)
+                .count(),
+            1
+        );
+        assert_eq!(
+            vm.instances()
+                .iter()
+                .filter(|instance| instance.event == 217)
+                .count(),
+            1
+        );
+        assert!(!vm.instances().iter().any(|instance| instance.event == 506));
     }
 }

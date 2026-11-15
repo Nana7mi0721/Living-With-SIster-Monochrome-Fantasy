@@ -20,18 +20,324 @@ use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
-use wolf_game::atlas::{Atlas, TextQuad};
-use wolf_game::{choice, key, Game};
-use wolf_render::{Renderer, Scaler, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
+use wolf_game::atlas::{Atlas, SpriteQuad, TextQuad};
+use wolf_game::window::{self, LayerBand};
+use wolf_game::{key, Game};
+use wolf_render::{Renderer, Scaler, SceneLayer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 use wolf_vm::rng::{resolve_session_event_seed, EVENT_SEED_ENV};
 
 /// One frame at 60 Hz.
 const FRAME_TIME: Duration = Duration::from_micros(16_667);
+
+/// One sprite submission with its semantic band and append sequence.
+///
+/// Host UI (choice window, nameplate, message cursor) has no script picture slot, so
+/// `SpriteQuad::number` cannot say where it belongs. Keeping the band beside the quad
+/// lets the interactive and offscreen capture paths sort one common display list by
+/// `(band, picture_number, sequence)` instead of trusting append order.
+#[derive(Clone, Debug)]
+pub(crate) struct LayeredSprite {
+    pub band: LayerBand,
+    pub number: i32,
+    pub seq: usize,
+    pub quad: SpriteQuad,
+}
+
+/// One text submission with its semantic band and append sequence.
+#[derive(Clone, Debug)]
+pub(crate) struct LayeredText {
+    pub band: LayerBand,
+    pub number: i32,
+    pub seq: usize,
+    pub quad: TextQuad,
+}
+
+impl LayeredSprite {
+    fn script(quad: SpriteQuad, seq: usize) -> Self {
+        Self {
+            band: window::picture_band(quad.number),
+            number: quad.number,
+            seq,
+            quad,
+        }
+    }
+
+    fn host(band: LayerBand, quad: SpriteQuad, seq: usize) -> Self {
+        Self {
+            band,
+            number: quad.number,
+            seq,
+            quad,
+        }
+    }
+}
+
+impl LayeredText {
+    fn script(quad: TextQuad, seq: usize) -> Self {
+        Self {
+            band: LayerBand::SceneText,
+            number: quad.number,
+            seq,
+            quad,
+        }
+    }
+
+    fn host(band: LayerBand, quad: TextQuad, seq: usize) -> Self {
+        Self {
+            band,
+            number: quad.number,
+            seq,
+            quad,
+        }
+    }
+}
+
+/// Stable `(band, picture_number, sequence)` sort used by every submission path.
+pub(crate) fn sort_layered_sprites(entries: &mut [LayeredSprite]) {
+    entries.sort_by_key(|entry| (entry.band.rank(), entry.number, entry.seq));
+}
+
+/// Stable `(band, picture_number, sequence)` sort for the glyph pass.
+pub(crate) fn sort_layered_texts(entries: &mut [LayeredText]) {
+    entries.sort_by_key(|entry| (entry.band.rank(), entry.number, entry.seq));
+}
+
+/// Turns one display-list text entry into the renderer's glyph item.
+///
+/// Text pictures may mix sizes, colours and outlines inside one string; the
+/// layout already split each style change into its own quad.
+pub(crate) fn text_item(entry: &LayeredText, default_font_px: f32) -> TextItem {
+    let text = &entry.quad;
+    let size = if text.font_px > 0.0 {
+        text.font_px
+    } else {
+        default_font_px
+    };
+    let mut item = TextItem::new(text.text.clone(), text.rect, size)
+        .with_alpha(text.alpha)
+        .with_colour(text.colour);
+    if text.outline {
+        item = item.with_outline(2, [0, 0, 0]);
+    }
+    item
+}
+
+/// Submits the display list as one renderer layer per semantic band.
+///
+/// The inputs must already be sorted by `(band, picture_number, sequence)`;
+/// entries are grouped by band without reordering, so the renderer receives
+/// ascending bands and clips each layer to the next one instead of relying on
+/// one append order for every kind of UI.
+pub(crate) fn scene_bands(sprites: &[LayeredSprite], texts: &[LayeredText]) -> Vec<LayerBand> {
+    let mut bands: Vec<LayerBand> = Vec::new();
+    for band in sprites
+        .iter()
+        .map(|entry| entry.band)
+        .chain(texts.iter().map(|entry| entry.band))
+    {
+        if !bands.contains(&band) {
+            bands.push(band);
+        }
+    }
+    if bands.is_empty() {
+        bands.push(LayerBand::Map);
+    }
+    bands.sort_by_key(|band| band.rank());
+    bands
+}
+
+pub(crate) fn draw_scene_layers(
+    renderer: &mut Renderer,
+    sprites: &[LayeredSprite],
+    texts: &[LayeredText],
+    default_font_px: f32,
+) {
+    let bands = scene_bands(sprites, texts);
+
+    let sprite_layers: Vec<Vec<SpriteInstance>> = bands
+        .iter()
+        .map(|band| {
+            sprites
+                .iter()
+                .filter(|entry| entry.band == *band)
+                .map(|entry| App::tint_instance(&entry.quad))
+                .collect()
+        })
+        .collect();
+    let text_layers: Vec<Vec<TextItem>> = bands
+        .iter()
+        .map(|band| {
+            texts
+                .iter()
+                .filter(|entry| entry.band == *band)
+                .map(|entry| text_item(entry, default_font_px))
+                .collect()
+        })
+        .collect();
+
+    let layers: Vec<SceneLayer<'_>> = bands
+        .iter()
+        .enumerate()
+        .map(|(index, _)| SceneLayer {
+            sprites: &sprite_layers[index],
+            texts: &text_layers[index],
+        })
+        .collect();
+    renderer.draw_layers(&layers);
+}
+
+/// Builds the complete sprite/text display list for one frame.
+///
+/// This is the single composition point for the live window and the offscreen
+/// capture path. Script pictures are classified through `window::picture_band`;
+/// host UI passes its band explicitly, so a choice panel stays above a nameplate
+/// even though both are drawn from the same `WindowBase.png` skin and both carry
+/// `PANEL_PICTURE` as their trace number.
+pub(crate) fn build_scene_layers(
+    game: &mut Game,
+    atlas: &mut Atlas,
+) -> (Vec<LayeredSprite>, Vec<LayeredText>) {
+    let mut sprites = Vec::new();
+    let mut texts = Vec::new();
+
+    // Tilemap first; its quads use TILE_NUMBER[-10000] and classify as Map. Script
+    // pictures follow in atlas paint order, keeping their picture number as tie-break.
+    for quad in game.tile_quads(atlas) {
+        let seq = sprites.len();
+        sprites.push(LayeredSprite::script(quad, seq));
+    }
+    for quad in game.picture_quads(atlas) {
+        let seq = sprites.len();
+        sprites.push(LayeredSprite::script(quad, seq));
+    }
+    for quad in game.text_quads() {
+        let seq = texts.len();
+        texts.push(LayeredText::script(quad, seq));
+    }
+
+    // A WOLF script never draws its own choice frame: the engine paints a window skin
+    // and moves a cursor over it at system variables 3/4. It is host UI, not a script
+    // picture, so the band is explicit rather than derived from PANEL_PICTURE.
+    if let Some((panel, rows)) = game.choice_overlay(atlas) {
+        for quad in panel {
+            let seq = sprites.len();
+            sprites.push(LayeredSprite::host(LayerBand::ChoicePanel, quad, seq));
+        }
+        for quad in rows {
+            let seq = texts.len();
+            texts.push(LayeredText::host(LayerBand::ChoiceText, quad, seq));
+        }
+    }
+
+    // The 101 pause cursor is engine art drawn from SystemFile/Text_Pause.png; it is
+    // above every panel and text layer in the retail composition.
+    let newest = game.messages.last().map(|message| message.frames);
+    if let Some(frames) = newest {
+        if let Some(layout) = game.message_layout() {
+            if let Some(at) = layout.cursor {
+                let frame = wolf_game::message::cursor_frame(frames);
+                let src = [
+                    0,
+                    frame * wolf_game::message::CURSOR_FRAME_H,
+                    wolf_game::message::CURSOR_FRAME_W,
+                    wolf_game::message::CURSOR_FRAME_H,
+                ];
+                let dst = [
+                    at[0],
+                    at[1],
+                    wolf_game::message::CURSOR_FRAME_W as f32,
+                    wolf_game::message::CURSOR_FRAME_H as f32,
+                ];
+                if let Some(quad) = atlas.sprite_from(
+                    &mut game.assets,
+                    wolf_game::message::CURSOR_FILE,
+                    wolf_game::message::CURSOR_SLOT,
+                    src,
+                    dst,
+                    1.0,
+                ) {
+                    let seq = sprites.len();
+                    sprites.push(LayeredSprite::host(LayerBand::Cursor, quad, seq));
+                }
+            }
+        }
+    }
+
+    // Speaker tab for a 101 message with a face: one nine-slice of WindowBase.png,
+    // painted above the message frame but below a modal choice.
+    if let Some((plate, _name, _font)) = game.message_nameplate() {
+        for piece in wolf_game::window::nine_slice(plate, 18, 18) {
+            if let Some(quad) = atlas.sprite_from(
+                &mut game.assets,
+                wolf_game::window::SKIN,
+                wolf_game::window::PANEL_PICTURE,
+                piece.src,
+                piece.rect,
+                1.0,
+            ) {
+                let seq = sprites.len();
+                sprites.push(LayeredSprite::host(LayerBand::Nameplate, quad, seq));
+            }
+        }
+    }
+
+    // The 101 message glyphs are engine text, not picture text. Their frame is the
+    // 19500 picture group; keeping the glyphs in the MessageText band makes message
+    // text stay under a choice prompt while remaining above ordinary scene text.
+    if let Some(layout) = game.message_layout() {
+        let vars = game.message_vars();
+        for run in &layout.runs {
+            // Keep the renderer's wrap box at the whole row remainder: the layout
+            // measures with the half-em rule, the shaper uses the real (wider)
+            // advance, and re-wrapping there clips the tail of the line.
+            let mut rect = run.rect;
+            let remaining = (vars.wrap_width() - (run.rect[0] - vars.x)).max(run.rect[2]);
+            rect[2] = remaining + 2.0;
+            let quad = TextQuad {
+                number: wolf_game::message::FRAME_PICTURE,
+                text: run.text.clone(),
+                rect,
+                alpha: 1.0,
+                font_px: run.font_px,
+                colour: run.colour.unwrap_or(wolf_game::message::DEFAULT_COLOUR),
+                outline: run.outline,
+            };
+            let seq = texts.len();
+            texts.push(LayeredText::host(LayerBand::MessageText, quad, seq));
+        }
+    }
+
+    // Speaker name, above the plate it belongs to. This is text, but its band keeps
+    // it under a modal choice in the same text pass.
+    if let Some((plate, name, font)) = game.message_nameplate() {
+        let rect = [
+            plate[0] + font * 0.5,
+            plate[1] + (plate[3] - font * 1.25) * 0.5,
+            (plate[2] - font * 0.25).max(font),
+            font * 1.25,
+        ];
+        let quad = TextQuad {
+            number: wolf_game::window::PANEL_PICTURE,
+            text: name,
+            rect,
+            alpha: 1.0,
+            font_px: font,
+            colour: [255, 255, 255],
+            outline: true,
+        };
+        let seq = texts.len();
+        texts.push(LayeredText::host(LayerBand::Nameplate, quad, seq));
+    }
+
+    sort_layered_sprites(&mut sprites);
+    sort_layered_texts(&mut texts);
+    (sprites, texts)
+}
 
 /// Runs the title screen in a window until the user closes it (or `frames` pass).
 ///
@@ -69,9 +375,11 @@ pub fn run(
             "clock"
         }
     );
-    if crate::AUDIO.load(std::sync::atomic::Ordering::Relaxed) {
-        game.enable_audio();
-    }
+    // The packaged game is launched by double-clicking the executable, which never
+    // reaches the --audio flag parser. A front end meant for a player should always try
+    // to open the mixer; the engine falls back to a silent null backend when the machine
+    // has no usable output device, so this stays safe on CI.
+    game.enable_audio();
     crate::install_font_metrics(&mut game, root);
     println!(
         "startup: data loaded in {:.0} ms",
@@ -131,6 +439,8 @@ pub fn run(
         sprites: Vec::new(),
         texts: Vec::new(),
         held: HashSet::new(),
+        wheel: 0,
+        wheel_dir: 0,
         mouse: [-1, -1],
         mouse_buttons: 0,
         window: None,
@@ -187,9 +497,15 @@ fn window_icon() -> Option<winit::window::Icon> {
 struct App {
     game: Game,
     atlas: Atlas,
-    sprites: Vec<SpriteInstance>,
-    texts: Vec<TextQuad>,
+    sprites: Vec<LayeredSprite>,
+    texts: Vec<LayeredText>,
     held: HashSet<u32>,
+    /// Scroll wheel turned into WOLF key bits for exactly one frame (see `bits`).
+    wheel: u32,
+    /// Signed wheel notch for the frame: +1 up, -1 down, 0 when the wheel did not move.
+    /// The save/load list polls opcode 123 with mask 771 and compares against these
+    /// values, so it cannot be derived from the UP/DOWN key bits above.
+    wheel_dir: i32,
     /// Mouse position in game pixels, or (-1, -1) while the cursor is outside the window.
     mouse: [i32; 2],
     /// WOLF mouse button bits: 1 left, 2 right, 4 middle.
@@ -211,17 +527,81 @@ struct App {
     step_times: Vec<Duration>,
 }
 
+/// Combines held keys, the one-frame wheel bits and the mouse buttons into the bitmask
+/// written to `Game::key_bits`.
+///
+/// A held right button is the game's cancel key: the save/load screen (and every other
+/// WOLF menu that polls opcode 123) only closes on key code 11, and the port previously
+/// reported the right button through `Game::mouse_buttons` alone, which no script reads
+/// for that decision. The raw bit survives in `mouse_buttons` so `engine_state(8)`
+/// still answers the right-button tri-state.
+fn key_bits(held: &HashSet<u32>, wheel: u32, mouse_buttons: u32) -> u32 {
+    let mut bits = held.iter().copied().fold(wheel, |acc, bit| acc | bit);
+    if mouse_buttons & 2 != 0 {
+        bits |= key::CANCEL;
+    }
+    bits
+}
+
+/// Splits a winit scroll delta into the ordinary arrow-key bits and the signed notch the
+/// save/load list reads (opcode 123 mask 771).
+///
+/// Only the vertical component is meaningful: the wheel is horizontal-capable hardware,
+/// but this game uses it as up/down. A zero vertical delta leaves both outputs at zero so
+/// a horizontal-only event cannot cancel a pending notch.
+fn wheel_notch(delta: &MouseScrollDelta) -> (u32, i32) {
+    let y = match delta {
+        MouseScrollDelta::LineDelta(_, y) => *y,
+        MouseScrollDelta::PixelDelta(pos) => pos.y as f32,
+    };
+    if y > 0.0 {
+        (key::UP, 1)
+    } else if y < 0.0 {
+        (key::DOWN, -1)
+    } else {
+        (0, 0)
+    }
+}
+
+/// Drops every latched input when the window loses focus.
+///
+/// Alt-Tab can happen while a key or mouse button is held down. The window system then
+/// never delivers the matching release, and the next frame would keep reporting a stuck
+/// right button as key::CANCEL (or keep a direction held). Clearing the latches here
+/// means the first frame after focus loss reads zero from key_bits and Game::mouse_buttons.
+fn clear_input_latches(
+    held: &mut HashSet<u32>,
+    mouse_buttons: &mut u32,
+    wheel: &mut u32,
+    wheel_dir: &mut i32,
+) {
+    held.clear();
+    *mouse_buttons = 0;
+    *wheel = 0;
+    *wheel_dir = 0;
+}
+
 impl App {
     fn bits(&self) -> u32 {
-        self.held.iter().copied().fold(0, |acc, bit| acc | bit)
+        key_bits(&self.held, self.wheel, self.mouse_buttons)
     }
 
     /// Advances one frame: latch input, run the script, rebuild the draw list.
     fn step(&mut self) {
-        self.game.key_bits = self.bits();
+        // A left click is WOLF's decide key: the retail title waits on a `123` poll that
+        // answers to either mouse or keyboard, and every message/menu loop confirms on it.
+        // Injecting OK here keeps the script layer in charge while letting the player click
+        // through the title exactly like the original.
         self.game.mouse = self.mouse;
         self.game.mouse_buttons = self.mouse_buttons;
+        let click = self.game.left_click_fresh();
+        self.game.key_bits = self.bits() | if click { key::OK } else { 0 };
+        self.game.wheel_dir = self.wheel_dir;
         let outcome = self.game.frame();
+        // A wheel notch is one key press, not a held key: clear both channels after the
+        // frame that saw them so a single event can never drive two frames.
+        self.wheel = 0;
+        self.wheel_dir = 0;
         if outcome.idle && !self.game.screen.is_empty() {
             // Nothing is running any more: keep presenting the last frame rather than
             // tearing the window down, so the capture stays inspectable.
@@ -229,67 +609,14 @@ impl App {
         self.rebuild();
     }
 
-    /// Rebuilds the draw list: script pictures, the runtime choice panel, and text.
+    /// Rebuilds the draw list: script pictures, host choice panel, message chrome and text.
     ///
-    /// The panel is appended last so it composites over every script layer, which is
-    /// what the engine does: a choice prompt is an engine overlay, not a picture slot.
+    /// Every entry carries an explicit `LayerBand`; `build_scene_layers` sorts the
+    /// complete list by `(band, picture_number, sequence)` before either renderer
+    /// pass sees it, so host UI cannot drift above or below a script layer by append
+    /// order alone.
     fn rebuild(&mut self) {
-        let mut quads = self.game.tile_quads(&mut self.atlas);
-        quads.extend(self.game.picture_quads(&mut self.atlas));
-        let mut sprites: Vec<SpriteInstance> = quads.iter().map(Self::tint_instance).collect();
-        let mut texts = self.game.text_quads();
-        if let Some(choices) = &self.game.choices {
-            let options = choices.options.clone();
-            let cursor = self.game.choice_cursor();
-            let (x, y) = self.game.choice_anchor();
-            // Sys8 sizes the option text, so the panel is measured at the size it is drawn.
-            let font_px = self.game.font_px();
-            if let Some((panel, rows)) = choice::overlay_at_sized(
-                &mut self.atlas,
-                &mut self.game.assets,
-                &options,
-                cursor,
-                x,
-                y,
-                font_px,
-            ) {
-                sprites.extend(panel.iter().map(Self::tint_instance));
-                texts.extend(rows);
-            }
-        }
-        // The engine draws the 101 pause cursor itself (SystemFile/Text_Pause.png, six 17x15
-        // frames), so it joins the sprite list rather than the glyph list.
-        let newest = self.game.messages.last().map(|m| m.frames);
-        if let Some(frames) = newest {
-            let Some(layout) = self.game.message_layout() else {
-                unreachable!("the newest message has a layout");
-            };
-            if let Some(at) = layout.cursor {
-                let frame = wolf_game::message::cursor_frame(frames);
-                let src = [
-                    0,
-                    frame * wolf_game::message::CURSOR_FRAME_H,
-                    wolf_game::message::CURSOR_FRAME_W,
-                    wolf_game::message::CURSOR_FRAME_H,
-                ];
-                let dst = [
-                    at[0],
-                    at[1],
-                    wolf_game::message::CURSOR_FRAME_W as f32,
-                    wolf_game::message::CURSOR_FRAME_H as f32,
-                ];
-                if let Some(quad) = self.atlas.sprite_from(
-                    &mut self.game.assets,
-                    wolf_game::message::CURSOR_FILE,
-                    wolf_game::message::CURSOR_SLOT,
-                    src,
-                    dst,
-                    1.0,
-                ) {
-                    sprites.push(Self::tint_instance(&quad));
-                }
-            }
-        }
+        let (sprites, texts) = build_scene_layers(&mut self.game, &mut self.atlas);
         self.sprites = sprites;
         self.texts = texts;
         for warning in self.atlas.take_warnings() {
@@ -306,45 +633,6 @@ impl App {
         SpriteInstance::new(quad.rect, quad.uv)
             .with_alpha(quad.alpha)
             .with_tint_rgb(quad.tint[0], quad.tint[1], quad.tint[2])
-    }
-
-    fn build_text_items(&self) -> Vec<TextItem> {
-        let mut items: Vec<TextItem> = self
-            .texts
-            .iter()
-            .map(|text| {
-                let size = if text.font_px > 0.0 {
-                    text.font_px
-                } else {
-                    self.game.font_px()
-                };
-                let mut item = TextItem::new(text.text.clone(), text.rect, size)
-                    .with_alpha(text.alpha)
-                    .with_colour(text.colour);
-                if text.outline {
-                    item = item.with_outline(2, [0, 0, 0]);
-                }
-                item
-            })
-            .collect();
-        // A 101 message is engine text, not a picture: the frame comes from common event 63
-        // as ordinary pictures, the glyphs come from the message layout. Only the newest
-        // message is on screen, which is the order the interpreter produces.
-        if let Some(layout) = self.game.message_layout() {
-            for run in &layout.runs {
-                // One em of slack keeps cosmic-text from wrapping the last glyph: the
-                // layout measures with the half-em rule, the shaper uses the real advance.
-                let mut rect = run.rect;
-                rect[2] += run.font_px;
-                let mut item = TextItem::new(run.text.clone(), rect, run.font_px)
-                    .with_colour(run.colour.unwrap_or(wolf_game::message::DEFAULT_COLOUR));
-                if run.outline {
-                    item = item.with_outline(2, [0, 0, 0]);
-                }
-                items.push(item);
-            }
-        }
-        items
     }
 
     fn upload_if_needed(&mut self, renderer: &mut Renderer) {
@@ -367,7 +655,7 @@ impl App {
             return;
         };
         let scaler = renderer.scaler();
-        let text_count = self.game.text_quads().len();
+        let text_count = self.texts.len();
         window.set_title(&format!(
             "imoto-life | {}x{} -> x{} | frame {} | {} quad(s){} | {} fps",
             LOGICAL_W,
@@ -385,7 +673,7 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let attributes = Window::default_attributes()
             .with_title("imoto-life | title screen")
-            .with_inner_size(PhysicalSize::new(1920u32, 1080u32))
+            .with_inner_size(PhysicalSize::new(LOGICAL_W, LOGICAL_H))
             .with_window_icon(window_icon());
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),
@@ -437,9 +725,12 @@ impl ApplicationHandler for App {
             "startup: font loaded in {:.0} ms",
             self.launched_at.elapsed().as_secs_f64() * 1000.0
         );
-        renderer.draw(&self.sprites);
-        let items = self.build_text_items();
-        renderer.draw_text(&items);
+        draw_scene_layers(
+            &mut renderer,
+            &self.sprites,
+            &self.texts,
+            self.game.font_px(),
+        );
         self.window = Some(window);
         self.renderer = Some(renderer);
         self.window_ready = Some(self.launched_at.elapsed());
@@ -453,6 +744,23 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::Focused(false) => {
+                // Losing focus means releases may never arrive (Alt-Tab with a key or the
+                // right button held). Drop every latch so the next step writes zeros to
+                // the game instead of a stuck CANCEL/OK/direction.
+                clear_input_latches(
+                    &mut self.held,
+                    &mut self.mouse_buttons,
+                    &mut self.wheel,
+                    &mut self.wheel_dir,
+                );
+                // The engine's copy is refreshed at the start of step(); clearing it here
+                // as well keeps a frame that runs before the next step from seeing stale
+                // key/mouse/cancel state.
+                self.game.key_bits = 0;
+                self.game.mouse_buttons = 0;
+                self.game.wheel_dir = 0;
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 let bit = wolf_bit(&event.logical_key);
                 if event.state == ElementState::Pressed {
@@ -478,6 +786,18 @@ impl ApplicationHandler for App {
             WindowEvent::CursorLeft { .. } => {
                 self.mouse = [-1, -1];
                 self.mouse_buttons = 0;
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                // The game is mouse-first: a wheel notch is an arrow key for ordinary
+                // menus, and the save/load list additionally polls the signed notch.
+                // Winit reports either whole lines or physical pixels depending on the
+                // platform/driver, so treat any positive/negative delta as one notch and
+                // let the next `step()` clear it. The horizontal component is ignored.
+                let (bits, notch) = wheel_notch(&delta);
+                self.wheel |= bits;
+                if notch != 0 {
+                    self.wheel_dir = notch;
+                }
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let bit = match button {
@@ -506,9 +826,12 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 if let Some(mut renderer) = self.renderer.take() {
                     self.upload_if_needed(&mut renderer);
-                    renderer.draw(&self.sprites);
-                    let items = self.build_text_items();
-                    renderer.draw_text(&items);
+                    draw_scene_layers(
+                        &mut renderer,
+                        &self.sprites,
+                        &self.texts,
+                        self.game.font_px(),
+                    );
                     renderer.present();
                     self.renderer = Some(renderer);
                 }
@@ -579,7 +902,12 @@ fn step_summary(samples: &[Duration]) -> (f64, f64, f64, f64) {
         ms[index]
     };
     let mean = ms.iter().sum::<f64>() / ms.len() as f64;
-    (percentile(0.50), percentile(0.95), *ms.last().unwrap_or(&0.0), mean)
+    (
+        percentile(0.50),
+        percentile(0.95),
+        *ms.last().unwrap_or(&0.0),
+        mean,
+    )
 }
 
 fn game_point(window: &Window, x: f64, y: f64) -> [i32; 2] {
@@ -608,5 +936,104 @@ fn wolf_bit(key: &Key) -> Option<u32> {
             _ => None,
         },
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn held(bits: &[u32]) -> HashSet<u32> {
+        bits.iter().copied().collect()
+    }
+
+    #[test]
+    fn a_wheel_notch_reports_the_arrow_bit_and_the_signed_direction() {
+        // UI-01: the save/load list polls 123 with mask 771 and compares against +1/-1,
+        // while ordinary menus keep receiving the UP/DOWN key bits.
+        assert_eq!(
+            wheel_notch(&MouseScrollDelta::LineDelta(0.0, 1.0)),
+            (key::UP, 1)
+        );
+        assert_eq!(
+            wheel_notch(&MouseScrollDelta::LineDelta(0.0, -1.0)),
+            (key::DOWN, -1)
+        );
+    }
+
+    #[test]
+    fn pixel_deltas_count_as_one_notch_in_their_direction() {
+        let up = MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(0.0, 120.0));
+        let down = MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(0.0, -120.0));
+        assert_eq!(wheel_notch(&up), (key::UP, 1));
+        assert_eq!(wheel_notch(&down), (key::DOWN, -1));
+    }
+
+    #[test]
+    fn horizontal_wheel_movement_is_ignored() {
+        assert_eq!(wheel_notch(&MouseScrollDelta::LineDelta(3.0, 0.0)), (0, 0));
+        let pixels = MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(120.0, 0.0));
+        assert_eq!(wheel_notch(&pixels), (0, 0));
+    }
+
+    #[test]
+    fn ordinary_wheel_still_speaks_the_direction_key_codes() {
+        // Regression guard: adding the signed notch must not replace the UP/DOWN bits
+        // ordinary menus read through key::code.
+        let (up, _) = wheel_notch(&MouseScrollDelta::LineDelta(0.0, 1.0));
+        let (down, _) = wheel_notch(&MouseScrollDelta::LineDelta(0.0, -1.0));
+        assert_eq!(key::code(key_bits(&HashSet::new(), up, 0)), key::CODE_UP);
+        assert_eq!(
+            key::code(key_bits(&HashSet::new(), down, 0)),
+            key::CODE_DOWN
+        );
+    }
+
+    #[test]
+    fn a_held_right_button_is_cancel_and_never_decide() {
+        // UI-02: CE131 closes on key code 11; right click must not inject OK.
+        let bits = key_bits(&HashSet::new(), 0, 2);
+        assert_ne!(bits & key::CANCEL, 0, "right button sets the cancel bit");
+        assert_eq!(
+            bits & key::OK,
+            0,
+            "right button must not set the decide bit"
+        );
+        assert_eq!(key::code(bits), key::CODE_CANCEL);
+    }
+
+    #[test]
+    fn a_held_right_button_keeps_other_held_keys() {
+        let bits = key_bits(&held(&[key::UP]), 0, 2);
+        assert_ne!(bits & key::UP, 0);
+        assert_eq!(key::code(bits), key::CODE_CANCEL);
+    }
+
+    #[test]
+    fn left_and_middle_buttons_do_not_become_cancel() {
+        assert_eq!(key_bits(&HashSet::new(), 0, 1) & key::CANCEL, 0);
+        assert_eq!(key_bits(&HashSet::new(), 0, 4) & key::CANCEL, 0);
+    }
+
+    #[test]
+    fn losing_focus_drops_every_latched_input() {
+        // Alt-Tab while the right button and a direction are held must not leave a
+        // sticky CANCEL behind: the next frame has to read zero from key_bits and
+        // mouse_buttons.
+        let mut held = held(&[key::CANCEL, key::UP, key::SUB]);
+        let mut mouse_buttons = 2;
+        let mut wheel = key::DOWN;
+        let mut wheel_dir = -1;
+        assert_ne!(key_bits(&held, wheel, mouse_buttons), 0);
+
+        clear_input_latches(&mut held, &mut mouse_buttons, &mut wheel, &mut wheel_dir);
+
+        assert!(held.is_empty());
+        assert_eq!(mouse_buttons, 0);
+        assert_eq!(wheel, 0);
+        assert_eq!(wheel_dir, 0);
+        let bits = key_bits(&held, wheel, mouse_buttons);
+        assert_eq!(bits, 0);
+        assert_eq!(key::code(bits), key::CODE_NONE);
     }
 }

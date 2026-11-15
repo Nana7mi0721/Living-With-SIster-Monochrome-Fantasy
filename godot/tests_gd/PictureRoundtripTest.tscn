@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://cpictureround0lwsmf"]
+
+[ext_resource type="Script" path="res://tests_gd/PictureRoundtripTest.gd" id="1_test"]
+
+[node name="Test" type="Node"]
+script = ExtResource("1_test")

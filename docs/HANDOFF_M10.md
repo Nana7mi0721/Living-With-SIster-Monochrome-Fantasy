@@ -1,5 +1,7 @@
 # M10 交接：opcode 111 引用语义落地、战斗重基线、残项收口
 
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件不再追加“下一步”。
+>
 > 仓库：`E:\Study\github program\imoto life`
 > 阅读顺序：本文件（M10 最新）→ `docs/README.md`（文档总索引）→ `PLAN.md`（当前路线图）；历史 M9/M8/M7/M6/M4/M3 交接已标为历史归档，需要追溯时从索引进入。
 > 基线：M9 集成 HEAD `22148d8`；M10 由 `ce680b3`（残项）与 `3bbbb12`（opcode 111 落地）两个提交组成。M10 剩余边界项（M11 第一批 task-79..84）已收口，见 §8；M11 round 1（task-85..88）已收口，见 §9；M11 round 2（task-89..96）见 [`HANDOFF_M11.md`](HANDOFF_M11.md)。`docs/gpt调研/` 与 `.claude/` 不是项目文件，不提交。

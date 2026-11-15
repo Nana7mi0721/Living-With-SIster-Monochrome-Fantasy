@@ -484,6 +484,27 @@ impl Databases {
         }
     }
 
+    /// Editor row name of a database row (the face name for SysDatabase type 24).
+    ///
+    /// Row names live only in the .project companion; without it this returns
+    /// None rather than inventing a label. SysDatabase type 24 column 0 is the
+    /// face graphic path, so a name must come from the row label, not from text().
+    pub fn name_of(&self, container: Container, db_type: i32, row: i32) -> Option<&str> {
+        if row < 0 {
+            return None;
+        }
+        let row = row as usize;
+        match container {
+            Container::Sys => self
+                .sys
+                .as_ref()
+                .and_then(|table| table.name_of(db_type as usize, row)),
+            _ => self
+                .table(container)
+                .and_then(|table| table.row_name(db_type as usize, row)),
+        }
+    }
+
     /// Copies every row of a save file variable database over the .dat tables.
     ///
     /// The variable database is part of the save, not of the installation:
@@ -1031,6 +1052,12 @@ mod tests {
         assert_eq!(
             databases.text(Container::Sys, 24, 4, 0),
             Some("DLC_data/member_20_s.png")
+        );
+        // The speaker label is the row name, not the graphic path in column 0.
+        assert_eq!(databases.name_of(Container::Sys, 24, 2), Some("妹（制服）"));
+        assert_eq!(
+            databases.name_of(Container::Sys, 24, 3),
+            Some("妹（部屋義）")
         );
     }
 

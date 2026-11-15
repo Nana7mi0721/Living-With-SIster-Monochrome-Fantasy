@@ -1,5 +1,7 @@
 # M3 交接说明（关机前快照）
 
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件不再追加“下一步”。
+>
 > 仓库：`E:\Study\github program\imoto life`
 > 当前源码 HEAD：`be4ed7f M3: implement negative database column semantics`（本文档是紧随其后的文档提交）
 > 状态：所有已完成的源码/文档均已提交，工作区只剩三个其他 agent 的未跟踪 scratch 文件；可以安全关机。

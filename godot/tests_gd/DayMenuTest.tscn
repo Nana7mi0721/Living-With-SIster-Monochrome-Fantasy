@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://cdaymenutest0lwsmf"]
+
+[ext_resource type="Script" path="res://tests_gd/DayMenuTest.gd" id="1_daymenu"]
+
+[node name="DayMenuTest" type="Node"]
+script = ExtResource("1_daymenu")

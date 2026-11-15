@@ -105,6 +105,8 @@ Every scene reports choice none open and zero warnings.
 
 **2026-11-02 文字基线对齐后重录**：`crates/wolf-render/src/text.rs` 统一 `BASELINE_NUDGE_Y=-2`，`crates/wolf-game/src/textpic.rs` 让同一文本图内的较小字号按 `(最大字号-本字号)+1px` 下移对齐基线。受影响的非黑像素只差几个抗锯齿边缘：`map_idle 544405→544394`、`battle 524412→524409`、`h_overlay 527714→527713`；`title` 与 `day_command` 不变。5 个视觉回归在重录后全部通过。
 
+**2026-11-04 UI-07/UI-08 文本排布刷新后重录**：`\cdb` 解析把 HUD 姓名多解析出一个字形，因此 `map_idle` 的 `textured_quads 27661→27662`、`text_glyphs 76→77`、`nonblack 544394→544431`；`h_overlay` 的 `text_glyphs 60→59`、`nonblack 527713→527554`，其余结构指标与 `title`、`day_command`、`battle` 不变。5 个视觉回归在重录后全部通过。
+
 ### h_overlay baseline update (M13 common-event self restore, anchored 2026-11-01)
 
 The h_overlay baseline was re-pinned when the M13 common-event self-variable

@@ -1,5 +1,7 @@
 # M13 交接：内容一致三批验收（2026-11-01 标准）
 
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件不再追加“下一步”。
+>
 > 仓库：`E:\Study\github program\imoto life`
 > 阅读顺序：本文件（M13 最新）→ `docs/README.md` → `PLAN.md`；`HANDOFF_M12.md` 及更早已标历史归档。
 > 数据根 `work/all`；零售存档 `work/retail_backup/Save`（SaveData01..08 + System.sav）。

@@ -16,3 +16,18 @@
 /tools/wgpusmoke/target/
 /docs/gpt调研/
 /.claude/
+/game_data/
+__pycache__/
+*.pyc
+# Local captures, reference assets and scratch dumps (not shipped)
+/reports/
+/tmp_dump_*.py
+/*.CT
+/docs/攻略/
+/docs/攻略文档/
+/游戏示例图片/
+/godot/.godot/
+/godot/.mono/
+/godot/bin/
+/godot/obj/
+*.csproj.user

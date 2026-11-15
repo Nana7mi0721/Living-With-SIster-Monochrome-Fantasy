@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://cterraintest0lwsmf"]
+
+[ext_resource type="Script" path="res://tests/TerrainTest.cs" id="1_terrain"]
+
+[node name="TerrainTest" type="Node"]
+script = ExtResource("1_terrain")

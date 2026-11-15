@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://csleepsoaktest0lwsmf"]
+
+[ext_resource type="Script" path="res://tests/SleepSoakTest.cs" id="1_soak"]
+
+[node name="SleepSoakTest" type="Node"]
+script = ExtResource("1_soak")

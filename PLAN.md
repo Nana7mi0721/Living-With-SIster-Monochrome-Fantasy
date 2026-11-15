@@ -1,137 +1,68 @@
-# 《妹相随～黑白世界的缤纷冒险～》Rust 重写 — 当前路线图
+# Godot 重制版当前路线图
 
-> 本文件是**当前路线图（living document）**，只记录“现在做到哪、接下来做什么”。
-> 原始可行性研究与 M0–M5 的详细规划已归档到 [`docs/archive/PLAN_2026-10-26.md`](docs/archive/PLAN_2026-10-26.md)，仅作历史参考。
-> 最新交接：[docs/HANDOFF_M12.md](docs/HANDOFF_M12.md)　｜　文档总索引：[docs/README.md](docs/README.md)　｜　协作约定：[AGENT.md](AGENT.md)
-
-## 1. 当前状态
-
-- 当前源码 HEAD：以 `git log` 为准。M10 交接/基线为 `e52855d`；M11 第一批/round 1/round 2 分别见 `22de104`、`5ef6b1f`、`fdeed07`；M11 round 3 见 M12 交接提交。
-- 里程碑：**M0–M11 全部完成并收口；M12 round 1（task-101..103）、day6（task-104）与 30/90 天 soak（task-105）已完成**，可运行、可交付的工程约 **96%**；严格 1:1 原版等价约 **87–91%**。该百分比是引擎/子系统口径——按用户 2026-11-01 的“全内容一致 + 修 bug”口径，主线后半/结局、DLC、随机事件与 H 阈值矩阵仍未验收（见 §4.5）。
-- 质量门禁：`cargo test -q --workspace` 全绿（133 test result / 812 passed / 2 ignored）；`./target/debug/wolf-cli.exe verify --root work/all` = **PASS 70 / pending 0**。
-- 工作树：3 个永久 scratch（`crates/wolf-format/examples/opscan.rs`、`crates/wolf-format/tests/_scratch_cdata.rs`、`crates/wolf-format/tests/_scratch_event.rs`）与用户资料（`docs/gpt调研/`、`docs/攻略文档/`、`游戏示例图片/`、`docs/research/GUIDE_CONTENT_CROSSWALK.md`）未跟踪；`docs/README.md`、`docs/research/README.md` 有用户自己的未提交改动。**这些都不提交**。
-
-## 2. 里程碑总表（现行命名）
-
-| 里程碑 | 状态 | 主题 | 主要记录 |
-| --- | --- | --- | --- |
-| M0 | 完成 | 加载器 / 格式解析 / verify 基线 | `FORMAT_SPEC.md`、`BASELINE.json` |
-| M1 | 完成 | 标题画面像素级还原 | [`M1_CLOSURE.md`](docs/M1_CLOSURE.md) |
-| M2 | 完成 | 开场剧情纵切片（消息/选择/存档） | [`M2_SLICE.md`](docs/M2_SLICE.md) |
-| M3 | 完成 | 完整运行时：数据库、时间/日程、地图、战斗/H 调研 | [`HANDOFF_M3.md`](docs/HANDOFF_M3.md) |
-| M4 | 完成 | 音频后端与接线 | [`HANDOFF_M4.md`](docs/HANDOFF_M4.md)、[`AUDIO.md`](docs/AUDIO.md) |
-| M5 | 完成 | 存档层与官方 .sav 互通 | [`SAVE_SPEC.md`](docs/SAVE_SPEC.md)、[M10 save audit](docs/research/M10_SAVE_COMPLETENESS.md) |
-| M6 | 完成 | 主线贯通与可玩日常循环 | [`HANDOFF_M6.md`](docs/HANDOFF_M6.md) |
-| M7 | 完成 | 真实战斗 / H 场景切片 / 零售 PRNG / 选择窗口 | [`HANDOFF_M7.md`](docs/HANDOFF_M7.md) |
-| M8 | 完成 | day4 战斗结算→day5、H 前向链、地图角色层、模板存档、事件 RNG | [`HANDOFF_M8.md`](docs/HANDOFF_M8.md) |
-| M9 | 完成 | 锚点/图片槽位、H 闭环、战斗多回合/多队员、移动与地图触发、音频盘点 | [`HANDOFF_M9.md`](docs/HANDOFF_M9.md) |
-| M10 | 完成 | opcode 111 引用语义与 compound 修复、12 个战斗/H 测试重基线、残项收口 | [`HANDOFF_M10.md`](docs/HANDOFF_M10.md) |
-| M11 | 完成 | 战斗默认驱动/确定性、菜单桥、H 深链、引擎行走/交互能力、视觉/音频回归 | [`HANDOFF_M11.md`](docs/HANDOFF_M11.md) |
-| M12 | 进行中 | 零售范围审计 + round 1（战斗取消/confirm 页/存档逐字节）+ day6 周末日程 + 30/90 天 soak | [`HANDOFF_M12.md`](docs/HANDOFF_M12.md) |
-
-## 3. 当前完成度（按子系统）
-
-| 子系统 | 完成度 | 说明 |
-| --- | ---: | --- |
-| 数据格式 / VM / opcode | 100% | 50 种 opcode 与格式解析已收口；opcode 111 引用语义已落地 |
-| 存档 | 99% | 官方 .sav 往返、SavePart 完整性、模板存档、row counts；M12 起 `Game` 层 load→save 与 8 个零售存档整文件逐字节一致；未建模音调/效果 bank 只保留不模拟 |
-| 主线 / 日常循环 | 97% | 标题→新游戏→多日日程→睡眠→次日已打通；通用驱动连续 30 天（默认）与 90 天（ignored）到 day97，覆盖周末、剧情战斗与跳天 |
-| 战斗 | 96% | 真实回合、结算、BOSS 多回合、真实 2 人队伍、默认 auto-arm（CE253 + 任意 parented CE239）、真实 CData type14 菜单→3 个 CE242 body、取消/返回/连续确认验收已完成；30 天 soak 覆盖 11 个战斗日；剩余仅目标选择/左右切换的逐项 UI 验收（可选） |
-| H 场景 | 90–94% | 真实入口→推进→退出→次日已闭环；真实 CE328→CE402/CE410 自然帧（默认预算）已证；act4/5 无零售自然证据、不计必做，剩余为零售像素对照 |
-| 地图移动 / NPC | —（非内容项） | 零售注册地图是点触式（6 张地图 115 页 `graphic` 全空，150 图片 + 124 悬停）；confirm 页审计已收口，事件格不是命中区；8 向行走/ActionKey 仅为引擎通用能力与测试夹具 |
-| 视觉 | 90% | 标题/地图/窗口/锚点大部分还原；锚点 5/6 与 CN 窗口右缘待像素对照 |
-| 音频 | 90% | 358 个音频盘点、混音回归、异常 WAV 容错；剩余人工听感验收 |
-| 测试 / 文档 | 100% | 133 test suites / 812 passed / 2 ignored、verify 70/0、HANDOFF_M12/BASELINE/research 索引齐全 |
-
-> 上表按引擎/子系统口径；`主线 / 日常循环 97%` 指循环本身，不等于全内容通关。按 2026-11-01“内容一致 + 修 bug”标准的内容缺口见 §4.5。
-
-## 4. M12 候选与优先级
-
-> 原则：先消除“会让玩家流程不确定”的缺口，再做视觉/音频打磨；每项都必须有测试或可复现证据。
+> 状态：**现行**
 >
-> 进度：M11 第一批（task-79..84）与 round 1（task-85..88）见 `docs/HANDOFF_M10.md` §8/§9；round 2（task-89..96）见 `docs/HANDOFF_M11.md`；round 3（task-97..100）与零售范围审计见 `docs/HANDOFF_M12.md` §2/§5；M12 round 1（task-101..103）见 `docs/HANDOFF_M12.md` §8。下列条目保留仍未完成的部分。
+> 本文件只保留当前 Godot 阶段的摘要。完整决策、子系统和阶段交接分别见：
+> [`docs/godot/DECISIONS.md`](docs/godot/DECISIONS.md)、
+> [`docs/godot/PLAN.md`](docs/godot/PLAN.md)、
+> [`docs/godot/M1_HANDOFF.md`](docs/godot/M1_HANDOFF.md)、
+> [`docs/godot/M0_HANDOFF.md`](docs/godot/M0_HANDOFF.md)、
+> [`docs/godot/LEGACY_RUST_AUDIT.md`](docs/godot/LEGACY_RUST_AUDIT.md)。
 >
-> **范围约束（M12 审计）**：只实现零售能走到的流程；引擎通用但本作不用的行走/碰撞/contact/ActionKey、触发 3/4、相机/281、201 路线、远景视差不再新增，也不作为内容缺口。证据见 `docs/research/M12_RETAIL_SCOPE.md`。
+> 旧 Rust 路线图已归档：`docs/archive/PLAN_RUST_2026-11-04.md`。
 
-### P0 — 确定性与真实流程
+## 当前状态
 
-1. **战斗自然路线确定性（已完成，task-79）**：`started_events` 已是 `BTreeSet`（有序，非 HashSet），实例为 `Vec`，HashMap 仅键查表；自然 day4 路线已逐字节复现（5 次重跑一致：4 回合、v352=1），#11/#12 已改为定值断言（见 `docs/research/M11_BATTLE_DETERMINISM.md`）。PRNG 零售时钟种子来源与无 folding 已由 task-99 反汇编证实（`M11_PRNG_CLOCK.md`）；交互 `wolf-cli play` 已按本地时钟播种（`resolve_session_event_seed`，`WOLF_EVENT_SEED` 可回放零售 tick），剩余仅是零状态首 tick 重读导致该种子的单 tick 重放例外（见 `docs/UNVERIFIED.md` H-PRNG-1）。
-2. **真实多命令菜单桥接（真实菜单已通，task-85/89/93/95/98/101）**：`battle_wiring.rs` 实现 CE157 确认采集、`set_menu_command_queue`，`Game::set_battle_menu_command_queue` 为应用层入口。task-89 推翻“CE157 cursor VM bug”：物理 cursor 是 CData type18 row73；task-93 用 2 成员 fixture 注册 15 行并驱动 4 个不同 CE242 body；task-95 默认 auto-arm 让自然 day4 战斗自行结算；task-98 harvester 改读 committed CData type14 并移到 `drive` 判断之前，真实 2 成员菜单无需注入即注册 2 行、驱动 3 个 CE242 body；task-101 完成取消/返回/连续确认验收（`M12_BATTLE_CANCEL.md`）。剩余只有目标选择/左右切换的逐项 UI 验收（可选）；3–4 人队伍不是零售内容。
+- 目标：Godot 4.7.2 .NET，Windows x64；C# 核心 + GDScript 表现层。
+- 阶段：**M1 已完成 (2026-11-14) / 进入 M2 主循环与 UI**。
+- 最终运行时不使用 Rust；Rust 只作为开发期 Oracle 保留到 M4。
+- 内容目标：550 公共事件、73 地图事件、169,831 条真实指令、9 结局与 DLC。
+- 存档目标：原版 `.sav` 尽力导入；新版本保存 VM/地图事件/对话/RNG，临时文件+fsync+原子写入。
 
-### M12 round 1（task-101..103，已完成）
+## M0 达成成果
 
-- **战斗取消/返回/连续确认**：`crates/wolf-game/tests/m12_battle_cancel.rs` + `docs/research/M12_BATTLE_CANCEL.md`。CE191 窗口取消重开且不登记；CE192 窗口取消退出且不写行/不启动 CE157；后续确认仍得到 `[(1,0,26),(2,1,25)]`、`ce157_starts=2`。无生产改动。
-- **confirm 页命中审计**：`crates/wolf-game/tests/m12_confirm_pages.rs` + `docs/research/M12_CONFIRM_PAGES.md`。5 个空页选择器 + ev24 p6 `self0==99` 调试页；全库无写 `1_000_000`；事件格不是点击命中区，124 图片矩形才是。`MAP_AUDIT.md` §9 对应项已标为解决。
-- **存档逐段全量对照**：`crates/wolf-game/src/picture.rs` / `savegame.rs` + `crates/wolf-game/tests/m12_save_full_compare.rs` + `docs/research/M12_SAVE_FULL_COMPARE.md`。`Picture::saved_record` 写入基线；8/8 零售存档整文件逐字节一致；未建模 bank/文本 md1/淡入/纵向缩放保留。
+1. 锁定 Godot 4.7.2 .NET 开发/CI 门限（当前 `tools/godot_check.sh` 12 门限全绿）。
+2. 建立 Python 离线数据管道并对账 550/73/169,831 条指令（`reports/reconcile.json` 69/69 全部通过）。
+3. 生成 172 项核心资源 SHA256 清单（`game_data/manifest.json`），0 未知 opcode。
+4. C# `LegacySaveImporter` 成功解析校验 8 槽原版 `.sav`（`reports/save_import.json`）。
+5. 冻结 Oracle trace 契约与 Python/C# 双向对拍机制（`oracle/TRACE_CONTRACT.md`）。
+6. 制定 Top 5 高频 opcode 测试计划（`docs/godot/OPCODE_TEST_PLAN.md`）。
+7. 输出 M0 阶段交接文档（`docs/godot/M0_HANDOFF.md`）。
 
-### M12 day6（task-104，已完成）
+## M1 达成成果
 
-- **day5→day7 周末日程**：`crates/wolf-game/tests/m12_day6_weekend.rs` + `docs/research/M12_DAY6_WEEKEND.md`。day5 工作日 → 周六 09:30 CE310 休日五按钮（外出/自主锻炼/处理积攒的家务/努力打工/悠然自得）→ 三个活动时段（12:00/15:00/17:00）→ 18:30 晚餐/就寝 → 周日 09:30 同一菜单；`frames=11247 instructions=580912`、warnings=0，3 次运行一致；无时间/日程注入。
-- **多日通用 soak**：`crates/wolf-game/tests/m12_multiday_soak.rs` + `docs/research/M12_MULTIDAY_SOAK.md`。一个驱动连续 30 天到 day31（11 个战斗日、4 个周末、7 个工作日菜单日，warnings=0）；`#[ignore]` 90 天到 day97（含剧情跳天）；修复 auto-arm 只认 CE253 的缺口，parented CE239 也可武装。
+1. C# EventVM、MINSTD PRNG、事件调度/等待/调用栈与地图事件页运行时。
+2. 纵向切片走通：`标题 CE42 → 新游戏 → map 3 → map 1`，418 帧进入可操作地图。
+3. 101 消息 / 102 选择与地图事件 4 联通；地图行走、碰撞、0x08 穿透、PlayerTouch 接触框。
+4. JSON `lwsmf.save` v1：变量/地图事件/VM 实例 pc/wait/loops/self/RNG/对话，临时文件+fsync+原子替换；消息与选择中读档不重放。
+5. 12 道 headless 门槛全绿：`SAVE_LOAD_TEST_OK 47/47`、`MAP_RUNTIME_TEST_OK 51/51`、`MAP_MESSAGE_TEST_OK 12/12`。详见 [`docs/godot/M1_HANDOFF.md`](docs/godot/M1_HANDOFF.md)。
+6. M2 W1 审计加固：CommonSelf、实例上限/未实现 opcode 诊断、schema + `.bak` + 稀疏存档（14.7 KB）、`int.MinValue/-1` 安全除法、移除第二时钟。
+7. M2 W2 Day 2–5：GDScript 表现层（InputRouter、9 级图层、101/102 自绘 + 字体度量）、立绘入档与读档重建、Rust↔C# 418 帧逐指令对拍 2461/2461、立绘重建像素一致；门槛 20/20。
+8. M2 W3 Day-1：第三轮审阅 4 项 P1 交互缺陷（悬停点选、Cancel 唤醒 VM、123 掩码/滚轮 notch、音量淡入）+ 空槽 Move/负缩放镜像 + `\cdb`/负色 + 立绘路径与 `Pc` 越界校验；`SaveLoadTest` 87/87，门槛 20/20 双模式全绿。
+9. M2 W3 Day-2：D-13 Faulted 模态/写档锁/诊断包、D-14 CI 占位夹具、KeyCodes 单一实现（`VmController.KeyCodeForPoll`）、`programs.json` 解析缓存、Teleport 帧边界队列（任意地图）。
+10. M2 W3 Day-3：`game_data/map_tiles.json` 导出（564,948 B，6 tilesets / 9 maps）、`Terrain.cs` 四向/quarter 通行度、`MapLayer.gd` 三层 TileMapLayer + 点击/悬停；`TERRAIN_TEST_OK checks=32`、`MAP_LAYER_TEST_OK checks=18`；MapChip 为引擎通用素材，正片未使用；调色板占位仅兼容/测试。
+11. M2 W3 Day-4：`core_cs/GameSession.cs` 抽取、`GameSessionController` 桥接、`GameRoot.gd` 接管标题→新游戏→卧室→F5/F9；`SESSION_PARITY_TEST_OK frames=418`（当时新旧 `SaveState` 逐字节相等；夹具已于 2026-11-15 改为 core-only，`checks=9`）；门槛 23/23 双模式全绿。
+12. M2 W3 Day-5：`project.godot` 主场景切到 `scenes/GameRoot.tscn`；Rust/C# 逐指令 trace 增 `vars`/`effects`，事件 0 的 418 帧 **2461/2461 全等（428 步 vars、330 步 effects、10 步 str_vars）**，Oracle 夹具与门禁同步更新。
+13. M2 W4 Day1-4：`140` 分离 BGM/BGS/SE（修复 43 条 BGS 误判），`AudioManager.gd` 三轨 + 循环点/淡入淡出，`SaveState.audio` 入档；`GameClock.cs` 镜像 `217` 的 13:70 单次进位与跨午夜/周末标志；真实 `CE329→CE317` 连续 30 天就寝 soak 通过；门槛 26/26，`SAVE_LOAD_TEST_OK 94/94`。
+14. M2 第四轮审阅加固：300 补 host `call` 副作用、BGS trace 归因 `bgs`、`diff_trace` 比较 `frame` 并增 `str_vars`；存档校验 `MapFile`/`LoopPoint`，非主角 teleport 忽略、队列上限 64；WAV 循环点帧→采样；`TerrainBridge` 让 `MapLayer` 复用唯一 C# 通行度实现。`SAVE_LOAD_TEST_OK 98/98`、`AUDIO_MANAGER_TEST_OK checks=30`、26/26 双模式全绿。
+15. M2 整路线 Oracle：Rust `route.rs` 与 C# `RouteTraceTest` 同跑 `TitleMap` event 2 → 新游戏 → map 1 的 1500 帧，**73,812/73,812 步全等**（12,469 步带 effects）；route 末尾 `SaveGame→LoadGame` 状态回路通过；`diff_route.py` 逐字段比较 `frame/map_id/event_id/pc/op/vars/str_vars/effects`。
+16. M2 旧表现层退役：`SessionParityTest` 改为 core-only（`oracle/fixtures/session_core_save_state.json`，`checks=9`），新增 `TestSessionView`/`SessionHarness` 并迁移 `SaveLoadTest 98/98`、`PresentationTest`、`MapMessageTest 14/14`；删除 `TitleScreen`/`ScreenHostView`/`ScreenHostSessionView`/`AssetCatalog`/`MapView`/`TitleScreen.tscn`/`ScreenshotTest`，保留 `VmController`/`GameSessionController`/`TerrainBridge`；门禁全绿。
+17. M2 图片状态/指针桥：`VmController` 缓存 `PictureCmd` 槽、委派 `124` 给 `PictureStage`（hover/existence/x/y/scale/text/屏幕层），`EngineState(7)` 单帧左键，`GameRoot` 传 `anchor`/`kind`；真实 `CE217` HUD 显示 `8:30`。`PICTURE_STATE_TEST_OK checks=30`，门禁扩到 28/28 双模式全绿。
+18. M2 123/126 输入权限状态模型：`126` 改为「目标位 + 三态（常允许/移动禁/全禁）+ bit28 设备分支」，无自动清除；`123` mask 是复合 UI 位字段而非允许键掩码，改为标量键码后按权限过滤。Rust `InputState` 与 C# `EventVm` 同构，移动/选择分别读 `movement_deny`/`basic_all_deny`；`cargo test -p wolf-vm` 95 passed，route 仍 73,812/73,812，门禁 28/28。
+19. M2 白天菜单端到端：`EngineState(7)` 改为官方三态（0/1/2），CE251 从 pc1022 真实菜单点击到全局 48/工作命令，CE310 从 pc128 点击“悠然自得”到 15:30/体力 1；`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`，门禁 30/30 双模式全绿（§4.16）。
 
-### 4.5 下一阶段：内容一致（M13，2026-11-01 用户定标）
 
-> 完成标准：**重构版体验内容与原版一致，且修复可能存在的 bug**。验收对象是每条零售可达内容路径，不是引擎百分比。
+## 下一步（M2 主循环与 UI）
 
-已核实边界（HEAD `b2da473`，8 个零售存档）：最远 day90（SaveData01/08），`var619 DLCチャプター` 全 0，`var466/492/493` 结局旗标全 0；后半与 DLC 没有零售存档可对照。`m12_multiday_soak` 到 day97 只证循环，不证 stage/结局。
+1. ~~InputRouter、9 级图层、101/102 自绘与字体度量~~（W2 Day 2–4 已完成）；~~第三轮审阅 P1 交互/存档缺陷~~（W3 Day-1 已完成）；~~`TitleScreen` 业务切到 `GameRoot.gd`~~（W3 Day-4 已完成）；~~主场景切到 `GameRoot.tscn`~~（W3 Day-5 已完成）。
+2. ~~tile 呈现、地形通行、地图点触、角色层~~（W3 Day-3 已完成）；MapChip 为引擎通用素材，正片未使用，调色板占位仅兼容/测试。
+3. ~~把“标题→新游戏→map 1”冻结成输入序列~~（整路线 1500 帧 73,812/73,812，§4.12）；消息/选择只覆盖标题菜单 1 次，白天 101/102 与 save/load 的逐指令对拍仍待补。
+4. ~~日程/时间接入确定性时钟~~（W4 Day1-4 已完成）；HUD 时间已随图片状态桥显示（§4.14）；~~白天 `CE251/CE310` 工作菜单~~（2026-11-15 已完成端到端点击/日程/体力回归，§4.16；仍缺从冷启动进入白天的剧情夹具）。
+5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现（§4.15/D-20），逐位表待编辑器差分。
 
-- **P0-A 主线后半与结局**：SaveData01/08 day90 → stage 25→27→28/30；另跑约 day100 期限的逃亡 END；再补其余 7 个结局。
-- **P0-B DLC CE452**：CE251@2498 → EP0–EP34 → CE446/447；第二主线 CE424–CE428 温泉讨伐链。
-- **P0-C 内容矩阵**：111 条随机事件、H 分支、战斗敌人/胜负、道具/技能/CG，逐条标 `已测 / 需夹具 / 数据不可达`。
-- **P1-D**：跨天存读 + NG+ 继承（CE436）+ 全存档槽。
-- **P1-E**：锚点 5/6 与关键场景零售像素 diff；31 首 loop 人耳。
-- **Bug 政策**：移植版 bug 必修；原版明确缺陷（死锁/崩溃/内容不可达/文本错位）修并记录差异；无害怪癖默认保留，单列决策。
+## 约束
 
-第一步与可执行细节见 `docs/HANDOFF_M12.md` §9。
-
-### 4.6 M13 进展（2026-11-01 首批验收）
-
-- 已修复 common-event self 跨调用持久 bug（`7c3b728`）与 Text picture 存读尺寸丢失（`dcd513a`）。
-- 已验收：主线 SaveData01/08 无注入通关（stage28→29，var492=1）、逃亡 END、DLC CE452（自然 var619 0→25；注入 EP0–36 全通）、111 随机事件抽样（25/115，dead=0）、H 阈值矩阵（37 门边界）、NG+ 继承（CE436/SampleMapA）、跨天存读与 8/8 槽 round-trip。
-- 全量：836 passed / 0 failed / 10 ignored；verify PASS 70/0。
-- 像素/音频人工验收（P1-E）已由用户全部通过（H2–H5，2026-11-02）；详见 `docs/HANDOFF_M13.md` §6 与 `docs/research/M13_MANUAL_ACCEPTANCE.md`。
-- **第二批（task-13..18）**：九结局其余 7 条、17 条件注入随机事件、H 端到端、DLC EP26–36 结案均已完成（全量 860 passed / 0 failed / 14 ignored；verify PASS）。DLC 结案结论：var395 是永久献身技能标志不可重置，EP26 卡点为探针缺已升级队伍属性，预置后自然链 EP0→36/var619=36；像素/音频仍需人工。
-- **第三批（task-19..23）**：P1-E 可自动化审计、DLC 眼睛层根因定位、**读档伪启动修复**（`AutoEvents::prime_latched`，读档不再伪造 run==2 边沿、不再多画 506 眼睛层 -6）、h_overlay 视觉基线重录、P1-E 修复后复测；全量 **863 passed / 0 failed / 14 ignored**，`wolf-cli verify` **PASS 70/0**。P1-E 机器部分闭环（1–7 档全指标改善，第 8 档仅 HUD +1 glyph 波动、场景区改善），H2–H5 人工项（锚点零售像素核对、HUD 抗锯齿、28 首 loop 人耳）已由用户全部通过（2026-11-02）。详见 `docs/HANDOFF_M13.md` §6.2 与 `docs/research/M13_MANUAL_ACCEPTANCE.md`。
-- **第四批（bug 修复）**：**行动力条白色填充未铺满纵向**修复——图片 6233 是窗口类 `<SQUARE>` 150×14、零售横向=AP 比例(62) 纵向恒 100，`Picture::destination` 曾把 62% 同时用于两轴；改为窗口类 `height_scale=1.0`（文件/文本仍等比）。新增 `wolf-cli` 子命令 `wolf-layout` 逐画面导出 150/101 排布表，底稿 `docs/research/UI_LAYOUT.md`（CE216/217/226 布局 + 窗口类仅横向缩放规则）。详见 `docs/HANDOFF_M13.md` §6.3。
-
-### P1 — 内容完整性
-
-3. **H 完整 CG 分支（自然帧已证，task-80/86/90/94/96/97）**：var304=1、var276/277/326 可从 SaveData01 真实输入获得；task-96 用 calendar-consistent fixture 只 `start_event(328)` 经 pc986 进 CE402（pc0→511）并驱动 CE410（pc0→247），warnings=0；task-97 用默认 200000 预算、普通 `Game::frame`、关闭背景 AutoEvents 复现自然帧 `frames=3667 maxpc402=509 CE410 acts=[1,1,2,1,3] warnings=0`，并新增 `--load-save`+`--event` 截图入口。关键修正：pc122 就寝是 `var6==4 && var4<6`；可达路径是 pc850 假→else pc969→pc986，不经过 pc964/var64。**已确认非缺口**：act4/5 只在 budget≤5 饥饿观测出现，无零售自然证据（`M11_HSCENE_NATURAL.md`、`M12_RETAIL_SCOPE.md`）。
-4. **移动 / NPC（引擎通用，不是零售内容，task-81/91/102）**：零售注册地图是点触式（6 张地图 115 页 `graphic` 全空，交互靠 150 图片 + 124 悬停），没有 NPC 行走动画/走位对话；8 向对角移动、contact、每 8 帧连续行走与 ActionKey 只是引擎能力与测试夹具，不再作为内容缺口。M12 task-102 已收口点触命中框与事件格：6 个 confirm 页不是点击目标，命中区是 124 图片矩形（`M12_CONFIRM_PAGES.md`）。
-5. **日程边界**：通用 soak 已连续覆盖 30 天（默认测试）与 90 天（ignored，day84→97 剧情跳天）；跨天存档一致性仍可补。
-
-### P2 — 还原度与交付
-
-> 2026-11-01 标准下，P2 排在内容覆盖之后；先做 §4.5 的 P0-A/B/C。
-
-6. 视觉像素对照：锚点 5/6 几何已固定（task-82，`M11_ANCHOR_PIXELS.md`）；CN 窗口皮肤右缘已证为 data-only 且无 1024 宽溢出（task-87，`M11_WINDOW_EDGE.md`）。剩余零售像素 diff、关键场景截图 diff。
-7. 音频人工听感验收：已产出 31 首 loop 验收档案与分层（task-84，`M11_AUDIO_ACCEPTANCE.md`），并有逐曲阈值固定、两次 decode 位相同的回归（task-88，`M11_AUDIO_LOOP_REGRESSION.md`）；剩余 BGM 循环点/SE 音量延迟的人工确认。
-8. 打包/性能（工具，非游戏流程）：`wolf-package`（validate/assemble/check/bench）与 `FrameBudgetReport` 已落地（task-100）；P2 发布包与性能核对已完成（2026-11-03，详见 `docs/research/M11_PACKAGING.md`）：真实 `work/all` 组装 **4070 files / 814,703,960 bytes**、`check` **PACKAGE OK**（修复非 ASCII manifest 路径解析 bug）；最新 `release/` 包 **4067 files / 813,818,915 bytes**（可直接双击 `wolf-cli.exe` 启动，带 charicon 程序图标，exe 12,183,040 bytes），`check` **PASS**；`Game::new` 启动即校验数据根；asset cache 统计接入 play；release bench **p50 1.5µs / p95 2.8µs / warnings=0**；窗口可见 ~251ms（零售 165–480ms），首帧 warm ~0.87–0.9s（wgpu adapter/swapchain 初始化为主，未找到低风险优化）；全量 **878 passed / 0 failed / 14 ignored**、`wolf-cli verify` **PASS 70/0**。**验收要求（用户 m00888）：发布版实际游玩性能须 ≥ 原版（含启动耗时与资源缓存），并随包修复已知 bug（见 `docs/UNVERIFIED.md` 残余）。**
-9. 文档：每个新里程碑完成时按 §5 收口。
-
-### P3 — 中文双轨（新，草案）
-
-- 目标：保留官方（校对后）+ 彼梦精翻两套中文；台词默认彼梦、UI/贴图术语回填官方 canonical；图源取清晰版。方案见 [docs/research/TRANSLATION_DUAL_TRACK.md](docs/research/TRANSLATION_DUAL_TRACK.md)。
-- 语料已抽取到 `work/translation/`（17089 主台词、123 名字、414 UI 图、glossary）。
-- 状态（2026-11-02）：策略 A 已落地。`tools/translation/{pipeline.py,gen_override.py}` 产出运行时覆盖表；`wolf_game::translation` 在 `Game::new` 按 `(event id, slot pc)` 覆盖 `101 Message` 文本；`wolf-cli --text-overlay` 生效。当前 7496 行 / 61 事件（约 62% 台词），其余 DLC/相册事件回落官方中文。详见 TRANSLATION_DUAL_TRACK 附录 C。
-- 已验收样本：CE280 官方↔彼梦 1:1 对齐（官方笔误“再买一点”→“慢一点”已由彼梦纠正）；CE313/418 已做 A/B 文本切换实测。
-
-## 5. 里程碑完成的定义（Definition of Done）
-
-一个里程碑只有同时满足以下条件才算完成：
-
-1. **代码**：实现落地，未破坏既有测试；关键行为有集成测试或可复现命令。
-2. **验证**：`cargo test -q --workspace` 全绿；`wolf-cli verify` 保持 PASS 70 / pending 0（或同步更新基线并说明原因）。
-3. **交接**：写 `docs/HANDOFF_Mx.md`（现状、证据、边界、下一步），把上一份交接标为历史归档。
-4. **文档**：更新本 `PLAN.md`、`docs/README.md`、`docs/BASELINE.json`；研究底稿登记到 `docs/research/README.md`。
-5. **清理**：按 [AGENT.md](AGENT.md) §6 清理临时文件/构建缓存/worktree，确认 `git status` 只剩约定的未跟踪文件。
-
-## 6. 文档地图
-
-- 总索引：[docs/README.md](docs/README.md)
-- 新会话启动：[docs/NEW_SESSION_START.md](docs/NEW_SESSION_START.md)
-- 最新交接：[docs/HANDOFF_M12.md](docs/HANDOFF_M12.md)
-- 技术规格：[docs/FORMAT_SPEC.md](docs/FORMAT_SPEC.md)、[docs/OPCODE_SPEC.md](docs/OPCODE_SPEC.md)、[docs/SAVE_SPEC.md](docs/SAVE_SPEC.md)
-- 子系统全景：[docs/BATTLE.md](docs/BATTLE.md)、[docs/HSCENE.md](docs/HSCENE.md)、[docs/MAP_AUDIT.md](docs/MAP_AUDIT.md)
-- 研究底稿：[docs/research/README.md](docs/research/README.md)
-- 历史原稿：[docs/archive/PLAN_2026-10-26.md](docs/archive/PLAN_2026-10-26.md)
+- 决策冲突：以 `docs/godot/DECISIONS.md` 为准。
+- 路线冲突：以 `docs/godot/PLAN.md` 为准。
+- 旧交接、旧研究、旧策略只作历史证据，不作为当前指令。
+- 原版素材、`game_data/`、攻略 PDF、外部调研和 vendor 工具不入库、不随发布分发。

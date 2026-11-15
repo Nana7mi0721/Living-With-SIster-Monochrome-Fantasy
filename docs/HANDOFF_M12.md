@@ -1,5 +1,7 @@
 # M12 交接：M11 round 3 收口 + 零售范围审计
 
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件不再追加“下一步”。
+>
 > 仓库：`E:\Study\github program\imoto life`
 > 阅读顺序：本文件（M12 最新）→ `docs/README.md`（文档总索引）→ `PLAN.md`（当前路线图）；M11 及更早已标历史归档。
 > 基线：M11 第一批/round 1/round 2 见 `22de104`、`5ef6b1f`、`fdeed07`；本文件记录 round 3（task-97..100）与本批集成提交。数据根 `work/all`，零售存档 `work/retail_backup/Save`。
@@ -204,6 +206,6 @@ cargo build -q -p wolf-cli                                             # EXIT 0
 
 ### 9.6 本节相关事实的优先级
 
-- 恢复后先读：本文件 §9 → `PLAN.md` §4.5 → `docs/NEW_SESSION_START.md`。
+- 历史记录：恢复时先读本文件 §9 → 旧路线图 §4.5 → 旧会话提示；当前 Godot 入口改为 [`godot/README.md`](godot/README.md)。
 - `docs/research/GUIDE_CONTENT_CROSSWALK.md` 是**未提交的用户资料**，只用于找内容入口；不要把它当规格，也不要提交它。
 - `docs/UNVERIFIED.md` 的两处过期账已于 2026-11-02 清理：opcode 111 值操作数现已走 `eval_num`（`crates/wolf-vm/src/exec.rs:2362`，commit 3bbbb12，`crates/wolf-vm/tests/opcode_111_semantics.rs` 5 测全过）；H-ANC-1 的锚点已由 `crates/wolf-game/tests/m11_anchor_pixels.rs` 覆盖。

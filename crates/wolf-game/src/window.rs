@@ -38,10 +38,76 @@ pub const MIN_BOX: i32 = 2;
 
 /// Picture number reported for runtime-drawn panels.
 ///
-/// The engine's own UI is not a script picture, so it needs a number that can never
-/// collide with one: scripts use >= -2, so a large negative sentinel sorts it behind
-/// every script layer while still being recognisable in a trace.
-pub const PANEL_PICTURE: i32 = -100;
+/// The engine's own UI is not a script picture, so it needs a value that can never
+/// collide with one. Scripts use picture numbers >= -2 and the title screen owns the
+/// internal backdrop at -100 ([`crate::picture::TITLE_BACKDROP_LAYER`]); this sentinel
+/// stays well clear of both. It is only an identity for traces and diagnostics: host
+/// panels are appended after the script list and must be ordered by an explicit
+/// [`LayerBand`], not by this number.
+pub const PANEL_PICTURE: i32 = -1000;
+
+/// Display bands for every kind of UI the game can compose on one frame.
+///
+/// WOLF itself draws text pictures in a separate band above the map and character
+/// sprites, while message frames, choice panels and the engine cursor are host UI and
+/// have no script picture slot at all. The port used to append those host layers in
+/// whatever order the frame happened to build them, so a later append could cover a
+/// semantically higher layer (the nameplate over the choice panel, for example).
+///
+/// The values are the single ordering contract for both sprite and text submission:
+/// a display list entry sorts by `(band, picture_number, sequence)`. Keeping the order
+/// here, next to the window skin, means UI-13 fixes do not have to invent ad-hoc
+/// negative picture numbers. The numeric values are stable and deliberately spaced so
+/// a new band can be inserted without renumbering the existing ones.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(u32)]
+pub enum LayerBand {
+    /// Tilemap and whole-screen (negative-numbered) scene layers.
+    Map = 0,
+    /// Ordinary scene pictures: characters, room props, scene-bound UI panels.
+    ScenePicture = 10,
+    /// Script-owned text pictures (`1601`..`1621` HUD text, map labels).
+    SceneText = 11,
+    /// The 101 message frame and its decoration.
+    MessageFrame = 20,
+    /// Glyphs inside the 101 message frame.
+    MessageText = 21,
+    /// Speaker nameplate, above the message frame but below a modal choice.
+    Nameplate = 22,
+    /// Modal choice window.
+    ChoicePanel = 30,
+    /// Choice labels and cursor marker.
+    ChoiceText = 31,
+    /// The engine pause cursor, always topmost.
+    Cursor = 40,
+}
+
+impl LayerBand {
+    /// Numeric rank used in a display-list sort key.
+    #[must_use]
+    pub const fn rank(self) -> u32 {
+        self as u32
+    }
+}
+
+/// The band a script picture number belongs to when it is submitted as a sprite.
+///
+/// Text pictures are submitted through the glyph pass instead, so the sprite classifier
+/// only has to separate whole-screen layers, the message frame and ordinary pictures.
+/// Common event 63 paints the message frame into slots 19500..19503; those are script
+/// pictures, but they are engine message chrome and belong above every scene picture.
+/// Host UI passes its own band explicitly; it must not infer one from [`PANEL_PICTURE`].
+#[must_use]
+pub const fn picture_band(number: i32) -> LayerBand {
+    if number < 0 {
+        LayerBand::Map
+    } else if number >= crate::message::FRAME_PICTURE && number <= crate::message::FRAME_PICTURE + 3
+    {
+        LayerBand::MessageFrame
+    } else {
+        LayerBand::ScenePicture
+    }
+}
 
 /// One stretched piece of the skin.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -133,10 +199,7 @@ mod tests {
     fn a_full_skin_uses_every_texel_exactly_once() {
         let pieces = nine_slice([0.0, 0.0, 30.0, 20.0], 18, 18);
         assert_eq!(pieces.len(), 9);
-        let area: u32 = pieces
-            .iter()
-            .map(|piece| piece.src[2] * piece.src[3])
-            .sum();
+        let area: u32 = pieces.iter().map(|piece| piece.src[2] * piece.src[3]).sum();
         assert_eq!(area, 18 * 18);
         // The centre piece keeps the skin centre and stretches in the destination.
         let centre = pieces
@@ -192,5 +255,51 @@ mod tests {
         let pieces = nine_slice([0.0, 0.0, 8.0, 8.0], 4, 4);
         assert_eq!(pieces.len(), 4);
         assert!(pieces.iter().all(|piece| piece.src[2] == 2));
+    }
+
+    #[test]
+    fn layer_bands_match_the_retail_composition_order() {
+        // UI-13: 选择弹窗 > 消息框 > 场景 UI > 地图/背景. The nameplate and cursor are
+        // refinements of that rule: a nameplate belongs to the message frame, while the
+        // pause cursor is engine chrome and must stay above even a modal choice.
+        let ordered = [
+            LayerBand::Map,
+            LayerBand::ScenePicture,
+            LayerBand::SceneText,
+            LayerBand::MessageFrame,
+            LayerBand::MessageText,
+            LayerBand::Nameplate,
+            LayerBand::ChoicePanel,
+            LayerBand::ChoiceText,
+            LayerBand::Cursor,
+        ];
+        for pair in ordered.windows(2) {
+            assert!(
+                pair[0].rank() < pair[1].rank(),
+                "{:?} must sort below {:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+        assert_eq!(LayerBand::Map.rank(), 0);
+        assert_eq!(LayerBand::Cursor.rank(), 40);
+    }
+
+    #[test]
+    fn panel_sentinel_is_below_script_layers_and_the_title_backdrop() {
+        // Script picture numbers start at -2 (title art) and the title backdrop is -100;
+        // a host panel identity must not alias either of them (NEW-1 in the review).
+        assert!(PANEL_PICTURE < -2);
+        assert!(PANEL_PICTURE < crate::picture::TITLE_BACKDROP_LAYER);
+        assert_ne!(PANEL_PICTURE, crate::picture::TITLE_BACKDROP_LAYER);
+    }
+
+    #[test]
+    fn picture_band_separates_whole_screen_layers_from_scene_pictures() {
+        assert_eq!(picture_band(-100), LayerBand::Map);
+        assert_eq!(picture_band(-2), LayerBand::Map);
+        assert_eq!(picture_band(-1), LayerBand::Map);
+        assert_eq!(picture_band(0), LayerBand::ScenePicture);
+        assert_eq!(picture_band(1600), LayerBand::ScenePicture);
     }
 }

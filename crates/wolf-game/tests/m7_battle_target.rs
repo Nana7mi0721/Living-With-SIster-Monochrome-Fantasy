@@ -102,9 +102,14 @@ fn production_seed_carries_the_enemy_count_ce162_reads() {
     assert_eq!(cdata(&g, 18, 69, 0), 1, "CE190 preserves the enemy count");
     assert!(cdata(&g, 10, 0, 2) > 0, "CE144 copied a live enemy HP row into type10");
     assert_eq!(cdata(&g, 18, 35, 0), 512, "CE175 enemy x");
-    assert_eq!(cdata(&g, 18, 36, 0), -2880, "CE175 enemy y");
-    assert_eq!(cdata(&g, 18, 37, 0), 5120, "CE175 enemy draw x scale");
-    assert_eq!(cdata(&g, 18, 38, 0), 3120, "CE175 enemy draw y scale");
+    // CE175 pc72 is one op121 with an inclusive last offset of 3, so it scales
+    // all four consecutive coordinates (x, y, x-scale, y-scale) by 1/10, not
+    // just x. The old value -2880 came from treating it as a single slot; -288
+    // is the correctly scaled y that the interpreter now stores.
+    assert_eq!(cdata(&g, 18, 36, 0), -288, "CE175 enemy y");
+    // pc72 scales the whole contiguous block (x, y, x-scale, y-scale) by 1/10.
+    assert_eq!(cdata(&g, 18, 37, 0), 512, "CE175 enemy draw x scale");
+    assert_eq!(cdata(&g, 18, 38, 0), 312, "CE175 enemy draw y scale");
     assert_eq!(g.stats.warnings, 0);
 }
 

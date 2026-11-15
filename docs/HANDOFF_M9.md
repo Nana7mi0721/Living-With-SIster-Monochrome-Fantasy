@@ -1,5 +1,7 @@
 # M9 交接：锚点/图片槽位、H 场景闭环、战斗驱动、移动与地图触发
 
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件不再追加“下一步”。
+>
 > 仓库：`E:\Study\github program\imoto life`
 > 基线：本文件随 M9 集成提交入仓。M8 集成 HEAD / origin/master 均为 `bcbcfba`；M9 从该提交之后开始。
 > 阅读顺序：本文件（M9 最新）→ `docs/HANDOFF_M8.md` → `docs/HANDOFF_M7.md` → `docs/HANDOFF_M6.md` → `docs/HANDOFF_M4.md` → `docs/HANDOFF_M3.md`。

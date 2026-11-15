@@ -1,5 +1,7 @@
 # M11 交接：战斗默认驱动、真实菜单/行走、H 深链实证
 
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件不再追加“下一步”。
+>
 > 仓库：`E:\Study\github program\imoto life`
 > 阅读顺序：`docs/HANDOFF_M12.md`（最新）→ `docs/README.md`（文档总索引）→ `PLAN.md`（当前路线图）；本文件是 M11 round 2 历史归档，M10 及更早已标历史归档。
 > 后续：M11 round 3（task-97..100：自然帧 H、真实战斗菜单、PRNG 时钟、打包/帧预算）已由 `docs/HANDOFF_M12.md` 收口。

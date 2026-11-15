@@ -1,5 +1,7 @@
 # M4 交接说明（音频后端 + 接线完成）
 
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件不再追加“下一步”。
+>
 > 仓库：`E:\Study\github program\imoto life`
 > 基线 HEAD：`270ab37 M4: wire the audio engine into Game and add --audio`
 > 前置：M3 已收口（`12ecfb6 M3 close: row-past-count DB semantics, battle slice C unreachable proof, doc closure`）；M0–M3 全部完成，M4 后端与接线完成，M4 只差“有设备时的人耳验收”。

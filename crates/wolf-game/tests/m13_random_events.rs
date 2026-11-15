@@ -76,10 +76,11 @@ fn drive(game: &mut Game, ce: u32, selfvars: &[(usize, i32)], pc: Option<usize>,
 
     let mut messages: Vec<String> = Vec::new();
     let mut ended = false;
-    for _ in 0..max_frames {
-        game.key_bits = wolf_game::key::OK;
+    for frame in 0..max_frames {
+        // UI-06 made message dismissal edge-triggered, so the driver has to pulse OK
+        // instead of holding it: a held key is never a fresh press.
+        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
         game.frame();
-        game.key_bits = 0;
         for m in &game.messages {
             let c = clean(&m.text);
             if !c.is_empty() && messages.last() != Some(&c) {

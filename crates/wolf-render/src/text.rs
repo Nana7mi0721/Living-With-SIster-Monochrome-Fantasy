@@ -29,8 +29,8 @@ use std::borrow::Cow;
 use glyphon::cosmic_text::Align;
 use glyphon::{
     fontdb, Attrs, Buffer, Cache, Color, ColorMode, Family, FontSystem, Metrics, Resolution,
-    Shaping, SwashCache, TextArea, TextAtlas, TextBounds,
-    TextRenderer as GlyphonTextRenderer, Viewport, Wrap,
+    Shaping, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer as GlyphonTextRenderer,
+    Viewport, Wrap,
 };
 use wgpu::{Device, MultisampleState, Queue, RenderPass, TextureFormat};
 

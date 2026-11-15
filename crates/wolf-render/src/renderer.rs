@@ -1,13 +1,15 @@
 //! The renderer.
 //!
-//! Two passes per frame, always in this order:
+//! Two phases per frame, always in this order:
 //!
-//! 1. **Logical pass** -- everything the game draws goes into a fixed
+//! 1. **Logical passes** -- everything the game draws goes into a fixed
 //!    1024x576 `Rgba8Unorm` texture (see `FRAME_FORMAT` for why not sRGB).
 //!    All game coordinates are logical
 //!    pixels in that space (WOLF hard-codes the 1024-wide canvas: Picture
 //!    positions, message windows and map scrolling are all authored against
-//!    it), so the game layer never learns the window size.
+//!    it), so the game layer never learns the window size. A frame may use
+//!    one pass per semantic layer (see `SceneLayer`): the first clears the
+//!    texture, later passes load it and paint their sprites and text on top.
 //! 2. **Blit pass** -- that texture is drawn onto the swapchain as a single
 //!    quad, scaled by an integer factor and centred. See `crate::scaler` for
 //!    why integer-only, and `shaders/blit.wgsl` for why the quad does the
@@ -82,6 +84,32 @@ struct QuadUniform {
     half: [f32; 2],
 }
 
+/// One semantic layer of a frame: its sprites followed by its text.
+///
+/// WOLF composition is not a single sprite pass with a single text pass on top:
+/// scene text sits below the message frame, the cursor sits above message text,
+/// and the choice panel sits above the nameplate. A caller builds one
+/// `SceneLayer` per band, in painting order, and hands the whole slice to
+/// [`Renderer::draw_layers`]. Within a layer the sprites are painted before the
+/// text, which matches the old two-pass renderer for any one band.
+pub struct SceneLayer<'a> {
+    /// Sprite instances painted in this layer.
+    pub sprites: &'a [SpriteInstance],
+    /// Text pictures painted after this layer's sprites.
+    pub texts: &'a [TextItem],
+}
+
+/// A queued layer stored by the renderer between `draw_layers` and `present`.
+#[derive(Clone, Debug, Default)]
+struct RenderLayer {
+    /// First instance in `instance_buffer`.
+    sprite_start: u32,
+    /// Number of instances belonging to this layer.
+    sprite_len: u32,
+    /// Text pictures for this layer, cloned so the layer outlives the call.
+    texts: Vec<TextItem>,
+}
+
 /// Everything needed to draw one frame.
 ///
 /// Construction is synchronous (`pollster::block_on` inside) because winit 0.30
@@ -123,13 +151,20 @@ pub struct Renderer {
     instance_buffer: wgpu::Buffer,
     /// Capacity of `instance_buffer` in instances (not bytes).
     instance_capacity: u32,
-    /// How many instances the last `draw` queued.
+    /// How many instances the last `draw` or `draw_layers` queued.
     instance_count: u32,
+
+    /// Layers queued by `draw_layers`, in painting order.
+    layers: Vec<RenderLayer>,
+    /// Whether `layers` is the active queue (set by `draw_layers` and cleared by
+    /// the legacy `draw`/`draw_text` pair, which keeps its original
+    /// single-sprite-then-single-text semantics).
+    layers_active: bool,
 
     /// Glyph pass. `None` until a font is installed, so a renderer used for
     /// sprites only never parses a font or allocates a glyph atlas.
     text: Option<TextRenderer>,
-    /// Text pictures queued for the next `present` (replaced, like the batch).
+    /// Legacy text pictures queued for the next `present` (replaced, like the batch).
     text_items: Vec<TextItem>,
     /// Statistics of the last text `prepare`, for the example and tests.
     text_stats: TextStats,
@@ -594,6 +629,8 @@ impl Renderer {
             instance_buffer,
             instance_capacity: INITIAL_INSTANCE_CAPACITY,
             instance_count: 0,
+            layers: Vec::new(),
+            layers_active: false,
             text: None,
             text_items: Vec::new(),
             text_stats: TextStats::default(),
@@ -626,7 +663,7 @@ impl Renderer {
         self.atlas_size
     }
 
-    /// Number of instances queued by the last `draw`.
+    /// Number of instances queued by the last `draw` or `draw_layers`.
     #[must_use]
     pub fn instance_count(&self) -> u32 {
         self.instance_count
@@ -659,10 +696,12 @@ impl Renderer {
     /// Queue text pictures for the next `present`, replacing the previous list.
     ///
     /// Coordinates are logical pixels, the same space as `SpriteInstance::rect`.
-    /// Text is drawn after the sprite batch inside the same render pass, so it
-    /// always composites on top of the frame -- which is where WOLF puts every
-    /// text picture (band 20/50/70 all sit above the map and the characters).
+    /// This is the legacy single-text-layer path: it composites above the one
+    /// sprite batch from [`Self::draw`]. Use [`Self::draw_layers`] when text must
+    /// sit between sprite layers.
     pub fn draw_text(&mut self, items: &[TextItem]) {
+        self.layers.clear();
+        self.layers_active = false;
         self.text_items.clear();
         self.text_items.extend_from_slice(items);
     }
@@ -799,31 +838,80 @@ impl Renderer {
     /// every frame from the layer stack, so an append API would only invite
     /// double-draws.
     pub fn draw(&mut self, sprites: &[SpriteInstance]) {
+        self.layers.clear();
+        self.layers_active = false;
         self.instance_count = 0;
         if sprites.is_empty() {
             return;
         }
 
+        self.reserve_instances(sprites.len());
         let bytes: &[u8] = bytemuck::cast_slice(sprites);
-        if bytes.len() as u64 > self.instance_buffer.size() {
-            // Power-of-two growth keeps the reallocation amortised over a
-            // session; the WOLF layer stack is very lumpy (a map transition can
-            // go from 3 sprites to 2000 in one frame).
-            let capacity = sprites
-                .len()
-                .next_power_of_two()
-                .max(INITIAL_INSTANCE_CAPACITY as usize) as u32;
-            self.instance_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("wolf-render sprite instances"),
-                size: u64::from(capacity) * SpriteInstance::SIZE as u64,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            self.instance_capacity = capacity;
-        }
-
         self.queue.write_buffer(&self.instance_buffer, 0, bytes);
         self.instance_count = sprites.len() as u32;
+    }
+
+    /// Queue a whole frame as an ordered list of semantic layers.
+    ///
+    /// Unlike [`Self::draw`], which paints one sprite batch and then every text
+    /// item above it, this keeps text and sprites interleaved by layer: a later
+    /// layer's sprites cover an earlier layer's text and a later layer's text
+    /// covers an earlier layer's sprites. The caller supplies layers in painting
+    /// order, normally one per UI band. Within each layer the sprites are painted
+    /// before that layer's text.
+    ///
+    /// All sprite instances are packed contiguously into the one instance buffer,
+    /// with each layer recording its `(start, len)` range. Text items are cloned
+    /// per layer because `TextRenderer` has a single glyph buffer that is
+    /// re-prepared immediately before each layer's pass.
+    pub fn draw_layers(&mut self, layers: &[SceneLayer<'_>]) {
+        self.layers.clear();
+        self.layers_active = true;
+        self.instance_count = 0;
+
+        let total: usize = layers.iter().map(|layer| layer.sprites.len()).sum();
+        if total > 0 {
+            self.reserve_instances(total);
+        }
+
+        let mut offset = 0_u64;
+        let mut start = 0_u32;
+        for layer in layers {
+            let len = layer.sprites.len() as u32;
+            if !layer.sprites.is_empty() {
+                let bytes: &[u8] = bytemuck::cast_slice(layer.sprites);
+                self.queue
+                    .write_buffer(&self.instance_buffer, offset, bytes);
+                offset += bytes.len() as u64;
+            }
+            self.layers.push(RenderLayer {
+                sprite_start: start,
+                sprite_len: len,
+                texts: layer.texts.to_vec(),
+            });
+            start += len;
+        }
+        self.instance_count = start;
+    }
+
+    /// Grow the instance buffer until it can hold `count` instances.
+    fn reserve_instances(&mut self, count: usize) {
+        if count as u64 * SpriteInstance::SIZE as u64 <= self.instance_buffer.size() {
+            return;
+        }
+        // Power-of-two growth keeps the reallocation amortised over a session;
+        // the WOLF layer stack is very lumpy (a map transition can go from 3
+        // sprites to 2000 in one frame).
+        let capacity = count
+            .next_power_of_two()
+            .max(INITIAL_INSTANCE_CAPACITY as usize) as u32;
+        self.instance_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("wolf-render sprite instances"),
+            size: u64::from(capacity) * SpriteInstance::SIZE as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.instance_capacity = capacity;
     }
 
     /// Render the queued batch and put it on screen.
@@ -854,75 +942,112 @@ impl Renderer {
             let _ = &frame.texture;
         }
 
-        // Text is shaped and uploaded *before* the pass opens: prepare() only
-        // writes to the queue and to the glyph atlas, and the pass then just
-        // encodes one draw. That ordering is what lets the sprite batch and the
-        // glyphs share a single colour attachment (and therefore a single clear).
+        // Snapshot the queued layers. The legacy path is exactly one sprite
+        // layer with the legacy text items painted after it, which is what the
+        // old single logical pass did.
+        let layers = if self.layers_active {
+            let mut layers = std::mem::take(&mut self.layers);
+            if layers.is_empty() {
+                // A completely empty frame still needs one layer so the frame
+                // texture is cleared to black instead of keeping stale pixels.
+                layers.push(RenderLayer::default());
+            }
+            layers
+        } else {
+            vec![RenderLayer {
+                sprite_start: 0,
+                sprite_len: self.instance_count,
+                texts: self.text_items.clone(),
+            }]
+        };
+        let has_any_text = layers.iter().any(|layer| !layer.texts.is_empty());
+        if has_any_text {
+            self.text_error = None;
+        }
         self.text_stats = TextStats::default();
-        if let Some(text) = self.text.as_mut() {
-            if !self.text_items.is_empty() {
-                match text.prepare(&self.device, &self.queue, &self.text_items) {
-                    Ok(stats) => {
-                        self.text_stats = stats;
-                        self.text_error = None;
-                    }
-                    Err(err) => {
-                        // Keep drawing the rest of the frame: a broken font costs
-                        // the text, not the whole screen.
-                        self.text_error = Some(err.to_string());
+
+        // One submit per logical layer. TextRenderer::prepare() rewrites one
+        // shared glyph vertex buffer through Queue::write_buffer, so preparing
+        // several layers into a single encoder would make every layer pass read
+        // the last layer's glyph vertices. Submitting each layer immediately
+        // keeps each prepare ordered before the pass that consumes it.
+        for (index, layer) in layers.iter().enumerate() {
+            let mut text_prepared = false;
+            if !layer.texts.is_empty() {
+                if let Some(text) = self.text.as_mut() {
+                    match text.prepare(&self.device, &self.queue, &layer.texts) {
+                        Ok(stats) => {
+                            merge_text_stats(&mut self.text_stats, stats);
+                            text_prepared = true;
+                        }
+                        Err(err) => {
+                            // Keep drawing the rest of the frame: a broken font
+                            // costs that layer's text, not the whole screen.
+                            self.text_error = Some(err.to_string());
+                        }
                     }
                 }
             }
-        }
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("wolf-render frame"),
-            });
-
-        // Pass 1: the game's 1024x576 canvas.
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("wolf-render logical pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.frame_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        // Opaque black rather than transparent: the frame is the
-                        // bottom of the stack, and WOLF's own "no map loaded"
-                        // state is black.
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                ..Default::default()
-            });
-            if self.instance_count > 0 {
-                pass.set_pipeline(&self.sprite_pipeline);
-                pass.set_bind_group(0, &self.sprite_screen_bind, &[]);
-                pass.set_bind_group(1, &self.atlas_bind, &[]);
-                pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
-                // 4 vertices (triangle strip) x N instances = one draw call for
-                // the whole batch.
-                pass.draw(0..4, 0..self.instance_count);
-            }
-            // Text shares this attachment on purpose: a second pass would either
-            // clear the sprites away or force a full-frame load, and every WOLF
-            // text band (20/50/70) composites above the map and character bands.
-            if let Some(text) = self.text.as_ref() {
-                if let Err(err) = text.render(&mut pass) {
-                    self.text_error = Some(err.to_string());
+            let load = if index == 0 {
+                // Opaque black rather than transparent: the frame is the bottom
+                // of the stack, and WOLF's own "no map loaded" state is black.
+                wgpu::LoadOp::Clear(wgpu::Color::BLACK)
+            } else {
+                wgpu::LoadOp::Load
+            };
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("wolf-render logical layer"),
+                });
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("wolf-render logical layer pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &self.frame_view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    ..Default::default()
+                });
+                if layer.sprite_len > 0 {
+                    pass.set_pipeline(&self.sprite_pipeline);
+                    pass.set_bind_group(0, &self.sprite_screen_bind, &[]);
+                    pass.set_bind_group(1, &self.atlas_bind, &[]);
+                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+                    // 4 vertices (triangle strip), this layer's contiguous
+                    // instance range: one draw call for the layer.
+                    pass.draw(
+                        0..4,
+                        layer.sprite_start..layer.sprite_start + layer.sprite_len,
+                    );
+                }
+                if text_prepared {
+                    if let Some(text) = self.text.as_ref() {
+                        if let Err(err) = text.render(&mut pass) {
+                            self.text_error = Some(err.to_string());
+                        }
+                    }
                 }
             }
+            self.queue.submit(Some(encoder.finish()));
         }
 
-        // Pass 2: integer upscale onto the swapchain.
+        // Pass 2: integer upscale onto the swapchain, in its own submission.
         if let Some(frame) = frame {
             let view = frame
                 .texture
                 .create_view(&wgpu::TextureViewDescriptor::default());
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("wolf-render blit pass"),
+                });
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("wolf-render blit pass"),
@@ -944,8 +1069,6 @@ impl Renderer {
             }
             self.queue.submit(Some(encoder.finish()));
             self.queue.present(frame);
-        } else {
-            self.queue.submit(Some(encoder.finish()));
         }
     }
 
@@ -1030,6 +1153,23 @@ impl Renderer {
         };
         self.surface = Some(surface);
         frame
+    }
+}
+
+/// Add one layer's text statistics to the frame total.
+///
+/// Counts add up; `missing` is a set-like list (first-seen order) so the same
+/// uncovered glyph is reported once per frame, not once per layer.
+fn merge_text_stats(into: &mut TextStats, stats: TextStats) {
+    into.items += stats.items;
+    into.glyphs += stats.glyphs;
+    into.lines += stats.lines;
+    into.substituted += stats.substituted;
+    into.outlines += stats.outlines;
+    for ch in stats.missing {
+        if !into.missing.contains(&ch) {
+            into.missing.push(ch);
+        }
     }
 }
 

@@ -1,5 +1,8 @@
 # 新会话启动提示（复制即可）
 
+> **历史归档（2026-11-14）**：请勿再把本提示交给新会话。
+> 当前 Godot 启动入口：[`../../godot/README.md`](../../godot/README.md)。
+
 > 用途：本文件给“下一次新开会话”的 coding agent 用。新会话没有旧聊天记录，读完本文件 + `docs/README.md`（文档总索引）+ `docs/HANDOFF_M12.md`（最新交接：M11 round 3、M12 零售范围审计/round 1/day6/多日 soak，以及 **2026-11-01 的“内容一致 + 修 bug”完成标准与下一阶段 §9**）即可接续；`HANDOFF_M3`–`HANDOFF_M11` 已标为历史归档，需要追溯时从索引进入。
 > 当前仓库：`E:\Study\github program\imoto life`
 > 当前源码 HEAD：以 `git log` 为准（M11 三批见 `22de104`、`5ef6b1f`、`fdeed07`；M11 round 3 见 M12 交接提交）。

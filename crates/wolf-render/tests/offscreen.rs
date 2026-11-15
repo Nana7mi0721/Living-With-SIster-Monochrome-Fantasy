@@ -17,7 +17,7 @@
 //!   rgb=0 / alpha=191 over a background of 251 must land on 63, which is what
 //!   the retail title screenshot shows at (246,503).
 
-use wolf_render::{Renderer, SpriteInstance, LOGICAL_H, LOGICAL_W};
+use wolf_render::{Renderer, SceneLayer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
 
 const ATLAS_W: u32 = 64;
 const ATLAS_H: u32 = 64;
@@ -275,4 +275,222 @@ fn per_picture_tone_is_expressible_through_tint() {
         "255 * 222/255 must land on 222, got {got:?}"
     );
     assert_eq!(got[3], 255, "opaque white must stay opaque");
+}
+
+/// The game's own font, if this checkout sits next to the data root.
+fn test_font() -> Option<Vec<u8>> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..");
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Some(dir) = std::env::var_os("WOLF_GAME_DIR") {
+        candidates.push(std::path::PathBuf::from(dir).join("Lolita.ttf"));
+    }
+    for base in ["work/full", "work/alldata", "work/full/Data"] {
+        candidates.push(root.join(base).join("Fonts").join("Lolita.ttf"));
+    }
+    candidates.push(std::path::PathBuf::from(
+        "E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy/Lolita.ttf",
+    ));
+    for path in candidates {
+        match std::fs::read(&path) {
+            Ok(bytes) if !bytes.is_empty() => return Some(bytes),
+            _ => {}
+        }
+    }
+    eprintln!("skipping GPU text test: no Lolita.ttf found");
+    None
+}
+
+fn offscreen_text_or_skip() -> Option<Renderer> {
+    let font = test_font()?;
+    let mut renderer = offscreen_or_skip()?;
+    if let Err(err) = renderer.set_font(&font) {
+        eprintln!("skipping GPU text test: font rejected: {err}");
+        return None;
+    }
+    Some(renderer)
+}
+
+fn count_pixels(pixels: &[u8], want: impl Fn([u8; 4]) -> bool) -> usize {
+    pixels
+        .chunks_exact(4)
+        .filter(|pixel| want([pixel[0], pixel[1], pixel[2], pixel[3]]))
+        .count()
+}
+
+/// A later sprite layer must paint over text submitted in an earlier layer.
+///
+/// This is the exact composition the runtime needs for "message frame above
+/// scene text, choice window above the message": before `draw_layers` every
+/// text item was painted in one pass after every sprite, so a full-screen
+/// background sprite could never cover text. Layer 0 renders the glyph alone
+/// first to prove the glyph exists; layer 1 is an opaque blue rect that must
+/// erase every white pixel of it.
+#[test]
+fn later_sprite_layer_covers_earlier_text_layer() {
+    let Some(mut renderer) = offscreen_text_or_skip() else {
+        return;
+    };
+    renderer
+        .set_atlas(&checkerboard_atlas(), ATLAS_W, ATLAS_H)
+        .unwrap();
+
+    let body = [0.0, 0.0, 100.0, 100.0];
+    let text_only = [SceneLayer {
+        sprites: &[],
+        texts: &[TextItem::new("M", body, 90.0)],
+    }];
+    renderer.draw_layers(&text_only);
+    renderer.present();
+    let alone = renderer.capture_rgba().expect("readback");
+    let white_alone = count_pixels(&alone, |p| p == [255, 255, 255, 255]);
+    assert!(
+        white_alone > 10,
+        "test text never rendered: {white_alone} white pixel(s)"
+    );
+
+    let cover = SpriteInstance::new(body, [0.0, 0.0, 0.5, 1.0]).with_tint_rgb(0.0, 0.0, 1.0);
+    let layers = [
+        SceneLayer {
+            sprites: &[],
+            texts: &[TextItem::new("M", body, 90.0)],
+        },
+        SceneLayer {
+            sprites: &[cover],
+            texts: &[],
+        },
+    ];
+    renderer.draw_layers(&layers);
+    renderer.present();
+    let covered = renderer.capture_rgba().expect("readback");
+    assert_eq!(
+        count_pixels(&covered, |p| p == [255, 255, 255, 255]),
+        0,
+        "the later sprite layer must cover the earlier text layer"
+    );
+    assert_eq!(pixel(&covered, 50, 50), [0, 0, 255, 255]);
+}
+
+/// A later text layer must paint over sprites submitted in an earlier layer.
+///
+/// The inverse of the test above: text is no longer an unconditional final
+/// pass. Layer 0 fills the body with opaque red, layer 1 draws a white "M" on
+/// top, and both the white glyph pixels and the surrounding red must survive.
+#[test]
+fn later_text_layer_covers_earlier_sprite_layer() {
+    let Some(mut renderer) = offscreen_text_or_skip() else {
+        return;
+    };
+    renderer
+        .set_atlas(&checkerboard_atlas(), ATLAS_W, ATLAS_H)
+        .unwrap();
+
+    let body = [0.0, 0.0, 100.0, 100.0];
+    let background = SpriteInstance::new(body, [0.0, 0.0, 0.5, 1.0]).with_tint_rgb(1.0, 0.0, 0.0);
+    let layers = [
+        SceneLayer {
+            sprites: &[background],
+            texts: &[],
+        },
+        SceneLayer {
+            sprites: &[],
+            texts: &[TextItem::new("M", body, 90.0)],
+        },
+    ];
+    renderer.draw_layers(&layers);
+    renderer.present();
+    let pixels = renderer.capture_rgba().expect("readback");
+    let white = count_pixels(&pixels, |p| p == [255, 255, 255, 255]);
+    let red = count_pixels(&pixels, |p| p == [255, 0, 0, 255]);
+    assert!(
+        white > 10,
+        "the later text layer never reached the framebuffer: {white} white pixel(s)"
+    );
+    assert!(
+        red > 100,
+        "the earlier sprite layer disappeared under the text layer: {red} red pixel(s)"
+    );
+}
+
+fn count_region_pixels(
+    pixels: &[u8],
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    want: impl Fn([u8; 4]) -> bool,
+) -> usize {
+    let mut count = 0;
+    for row in y..y + h {
+        for col in x..x + w {
+            if want(pixel(pixels, col, row)) {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
+/// Multiple text layers must each render with their own prepared glyph buffer.
+///
+/// TextRenderer::prepare() reuses one glyphon vertex buffer. If several
+/// prepares happen before a single queue submit, every layer pass reads the
+/// last layer's vertices: layer 0's "A" would turn into a second "B" at B's
+/// position. Each layer is submitted separately, so the red A must stay in the
+/// top-left and the blue B in the bottom-right with no cross-contamination.
+#[test]
+fn multiple_text_layers_keep_their_own_glyphs() {
+    let Some(mut renderer) = offscreen_text_or_skip() else {
+        return;
+    };
+    renderer
+        .set_atlas(&checkerboard_atlas(), ATLAS_W, ATLAS_H)
+        .unwrap();
+
+    let a = [TextItem::new("A", [40.0, 40.0, 180.0, 120.0], 96.0).with_colour([255, 0, 0])];
+    let b = [TextItem::new("B", [700.0, 380.0, 180.0, 120.0], 96.0).with_colour([0, 0, 255])];
+    let layers = [
+        SceneLayer {
+            sprites: &[],
+            texts: &a,
+        },
+        SceneLayer {
+            sprites: &[],
+            texts: &b,
+        },
+    ];
+    renderer.draw_layers(&layers);
+    renderer.present();
+    let pixels = renderer.capture_rgba().expect("readback");
+
+    let red_in_a = count_region_pixels(&pixels, 40, 40, 180, 120, |p| {
+        p[0] > 200 && p[1] < 40 && p[2] < 40
+    });
+    let blue_in_b = count_region_pixels(&pixels, 700, 380, 180, 120, |p| {
+        p[2] > 200 && p[0] < 40 && p[1] < 40
+    });
+    assert!(
+        red_in_a > 10,
+        "layer 0's red A is missing from its own region: {red_in_a} red pixel(s)"
+    );
+    assert!(
+        blue_in_b > 10,
+        "layer 1's blue B is missing from its own region: {blue_in_b} blue pixel(s)"
+    );
+
+    let blue_in_a = count_region_pixels(&pixels, 40, 40, 180, 120, |p| {
+        p[2] > 200 && p[0] < 40 && p[1] < 40
+    });
+    let red_in_b = count_region_pixels(&pixels, 700, 380, 180, 120, |p| {
+        p[0] > 200 && p[1] < 40 && p[2] < 40
+    });
+    assert_eq!(
+        blue_in_a, 0,
+        "layer 0 drew layer 1's blue glyph: prepares were batched ahead of one submit"
+    );
+    assert_eq!(
+        red_in_b, 0,
+        "layer 1 was contaminated by layer 0's red glyph at the wrong position"
+    );
 }

@@ -1,5 +1,7 @@
 # M6 交接：主线贯通与可玩日常循环（收尾）
 
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件不再追加“下一步”。
+>
 > 仓库：`E:\Study\github program\imoto life`
 > 基线：本文件随 M6 收尾提交一起入仓；上一提交为 `f5aca1c M6: fix night-page teardown and prove the natural sleep loop`。以 `git log --oneline -3` 为准。
 > 阅读顺序：本文件（M6 最新）→ `docs/HANDOFF_M4.md`（M4 音频 + M6 纵切片前史）→ `docs/HANDOFF_M3.md`（M3 收口）。

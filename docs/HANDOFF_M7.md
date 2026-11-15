@@ -1,5 +1,7 @@
 # M7 交接：并行工作流第一批（战斗回合 / H 场景交互 / 零售 PRNG / 选择窗口）
 
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件不再追加“下一步”。
+>
 > 仓库：`E:\Study\github program\imoto life`
 > 基线：本文件随 M7 集成提交一起入仓；上一提交为 `b5a2d56 M6: close the playable daily loop and pin the battle boundary`。以 `git log --oneline -3` 为准。
 > 阅读顺序：本文件（M7 最新）→ `docs/HANDOFF_M6.md`（M0–M6 主线与日常循环）→ `docs/HANDOFF_M4.md` → `docs/HANDOFF_M3.md`。

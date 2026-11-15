@@ -530,6 +530,15 @@ pub trait Host {
         let _ = options;
     }
 
+    /// `210 CommonEvent`: called immediately before the child coroutine starts.
+    ///
+    /// The message-window wrapper CE264 takes its speaker name as `strings[1]`;
+    /// a host that renders the name tab needs to see the call arguments because
+    /// the wrapper itself only forwards a window id to a plugin.
+    fn common_event_call(&mut self, target: EventId, args: &[i32], strings: &[String]) {
+        let _ = (target, args, strings);
+    }
+
     /// Polled once per frame while a `102` is blocking.
     fn choice_made(&mut self) -> Option<ChoiceReply> {
         Some(ChoiceReply::Index(0))
@@ -689,6 +698,15 @@ pub trait Host {
     fn log(&mut self, level: LogLevel, message: &str) {
         let _ = (level, message);
     }
+
+    /// Effects recorded since the last call, as compact JSON objects.
+    ///
+    /// The M2 oracle harness overrides this on its trace host so every step of
+    /// `wolf.trace` can carry the `effects` list; the default is empty, which
+    /// keeps every other host unchanged.
+    fn take_trace_effects(&mut self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// Answer to a blocking `102 ShowChoices`.
@@ -733,28 +751,157 @@ pub struct HotSpot {
     pub hits: u64,
 }
 
+/// One executed instruction, recorded when [Vm::step_trace] is on.
+///
+/// The M2 oracle harness diffs this list against the Godot C# `EventVm`
+/// `StepHook`. `vars` and `effects` are filled in when the next instruction (or
+/// the frame) finalizes the entry, because they describe what this instruction
+/// did: the interpreter takes the variable delta and drains the host's
+/// [Host::take_trace_effects] buffer at that point.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StepTraceEntry {
+    /// Frame the instruction ran in (1-based, same as [StepReport::frame]).
+    pub frame: u64,
+    /// Event whose coroutine ran it.
+    pub event: EventId,
+    /// Program counter inside that event.
+    pub pc: usize,
+    /// Opcode of the slot (0 for an empty slot or a structural marker).
+    pub op: u32,
+    /// `(address, new value)` for every integer slot the instruction changed.
+    pub vars: Vec<(i32, i32)>,
+    /// `(address, new value)` for every string slot the instruction changed.
+    pub str_vars: Vec<(i32, String)>,
+    /// Host effects as compact JSON objects (oracle/TRACE_CONTRACT.md).
+    pub effects: Vec<String>,
+}
+
 /// Input policy set by the two input-control opcodes.
 ///
-/// 125 (auto input) and 126 (ban input) both take a single int argument that is
-/// a key mask in the same bit space that 123 polls: this game passes 1, 2, 16,
-/// 32, 64, 128, 240, 247, 496, 752 - the OK/cancel/sub bits plus the four
-/// direction bits, sometimes all at once (247 = every key). The value persists
-/// until the script writes it again, so the two masks are state, not one-shot
-/// commands.
+/// 125 (auto input) takes a key mask: those bits are pressed even when the player
+/// is not touching the keyboard. 126 is not a mask at all. Its argument packs a
+/// target (bits 0..7) and a permission state (bits 8..9):
 ///
-/// Banning is applied by the interpreter itself: the banned bits are cleared out
-/// of the mask handed to the host, so a banned key reads as not pressed. Auto
-/// input is passed to the host on every 123 poll through `Host::key_code_auto`;
-/// a host that owns a real keyboard ORs it into the held-key state, while a
-/// headless host keeps its default "nobody is touching the keyboard". 126 appears
-/// in the opening script (it bans every key for the cutscene); 125 is polled by the
-/// UI cursor events in the real game.
+/// * state 0 - always accepted (the default, i.e. restore the target)
+/// * state 1 - movement blocked, key input still accepted
+/// * state 2 - movement and key input blocked
+///
+/// Bit 28 switches 126 to the device form, which only has allow/deny: target
+/// bits 0..7 and state 0 = allow, anything else = deny. The state persists for
+/// the whole session, applies only to the keys named by that call, and is never
+/// cleared automatically; a script restores a key by sending the same target
+/// with state 0. This is why the old `ban_keys = raw` model was wrong: 240
+/// (0xF0) restores the four directions, and 496/752 encode "movement blocked"
+/// rather than a set of banned keys.
+///
+/// Auto input is passed to the host on every 123 poll through
+/// `Host::key_code_auto`; a host that owns a real keyboard ORs it into the
+/// held-key state, while a headless host keeps its default "nobody is touching
+/// the keyboard". The interpreter filters the code the host returns against the
+/// basic-input permissions (and, for device denials, against auto input, which
+/// mirrors 125's keyboard bypass).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct InputState {
     /// Key bits the script wants pressed even when the player is not pressing them.
     pub auto_keys: u32,
-    /// Key bits the script wants ignored while they are held.
-    pub ban_keys: u32,
+    /// Bits whose state is 1: walking is blocked, key input is still accepted.
+    pub basic_move_deny: u32,
+    /// Bits whose state is 2: both walking and key input are blocked.
+    pub basic_all_deny: u32,
+    /// Device-form 126 denial. Keyboard auto input can still bypass this, matching
+    /// the documented 125 keyboard bypass.
+    pub device_deny: bool,
+}
+
+/// Target bits carried in the low byte of a 126 argument.
+const INPUT_TARGET_MASK: u32 = 0xFF;
+/// Bit 28 selects the device form of 126.
+const INPUT_DEVICE_FLAG: u32 = 0x1000_0000;
+/// Bit space of the port's host keys (crates/wolf-game/src/key.rs).
+const KEY_OK: u32 = 1;
+const KEY_CANCEL: u32 = 2;
+const KEY_SUB: u32 = 4;
+const KEY_PAUSE: u32 = 8;
+const KEY_UP: u32 = 16;
+const KEY_DOWN: u32 = 32;
+const KEY_LEFT: u32 = 64;
+const KEY_RIGHT: u32 = 128;
+
+impl InputState {
+    /// Apply one 126 argument. Unknown states are ignored so a malformed script
+    /// cannot silently unlock keys it never restored.
+    pub fn apply_permission(&mut self, raw: u32) {
+        let target = raw & INPUT_TARGET_MASK;
+        let state = (raw >> 8) & 0x3;
+        if raw & INPUT_DEVICE_FLAG != 0 {
+            if target == 0 {
+                return;
+            }
+            self.device_deny = state != 0;
+            return;
+        }
+        if target == 0 {
+            return;
+        }
+        match state {
+            0 => {
+                self.basic_move_deny &= !target;
+                self.basic_all_deny &= !target;
+            }
+            1 => {
+                self.basic_move_deny |= target;
+                self.basic_all_deny &= !target;
+            }
+            2 => {
+                self.basic_all_deny |= target;
+                self.basic_move_deny &= !target;
+            }
+            _ => {}
+        }
+    }
+
+    /// Bits blocked for walking (both permission states block movement).
+    #[must_use]
+    pub const fn movement_deny(self) -> u32 {
+        self.basic_move_deny | self.basic_all_deny
+    }
+
+    /// Filter the code a host returned for 123. A blocked basic-input code reads
+    /// as "nothing pressed"; a device denial leaves script-driven auto input
+    /// working, because 125's keyboard form bypasses 126.
+    #[must_use]
+    pub fn filter_code(self, code: i32) -> i32 {
+        let bits = code_bits(code);
+        if bits == 0 {
+            return code;
+        }
+        if bits & self.basic_all_deny != 0 {
+            return 0;
+        }
+        if self.device_deny && bits & self.auto_keys == 0 {
+            return 0;
+        }
+        code
+    }
+}
+
+/// Host bit(s) a 123 key code corresponds to (mirrors key.rs `bits_for_code`).
+const fn code_bits(code: i32) -> u32 {
+    match code {
+        10 => KEY_OK,
+        11 => KEY_CANCEL,
+        12 => KEY_SUB,
+        13 => KEY_PAUSE,
+        2 => KEY_DOWN,
+        4 => KEY_LEFT,
+        6 => KEY_RIGHT,
+        8 => KEY_UP,
+        1 => KEY_DOWN | KEY_LEFT,
+        3 => KEY_DOWN | KEY_RIGHT,
+        7 => KEY_UP | KEY_LEFT,
+        9 => KEY_UP | KEY_RIGHT,
+        _ => 0,
+    }
 }
 
 /// Transition setting installed by opcode 160 and consumed by 161/162.
@@ -802,6 +949,19 @@ pub struct Vm {
     pub rng: WolfRng,
     /// Collect a per-frame instruction histogram into StepReport::hottest.
     pub hot_trace: bool,
+    /// Every instruction executed, for the cross-language oracle diff.
+    ///
+    /// Off by default so the normal game path pays nothing; the M2 trace
+    /// harness turns it on and dumps the list as `wolf.trace` steps.
+    pub step_trace: Option<Vec<StepTraceEntry>>,
+    /// Variable snapshots taken before the most recent traced instruction.
+    /// Ordinary/system values first, then the instance's self bank.
+    trace_before: Option<(
+        Vec<(i32, i32)>,
+        Vec<(i32, String)>,
+        Vec<(i32, i32)>,
+        Vec<(i32, String)>,
+    )>,
     /// Input policy set by opcodes 125 and 126.
     pub input: InputState,
     /// Transition setting shared by 160/161/162.
@@ -838,6 +998,8 @@ impl Vm {
             budget: DEFAULT_BUDGET,
             rng: WolfRng::new(),
             hot_trace: false,
+            step_trace: None,
+            trace_before: None,
             input: InputState::default(),
             transition: TransitionState::default(),
             started_events: BTreeSet::new(),
@@ -1195,6 +1357,8 @@ impl Vm {
             if *budget == 0 {
                 return;
             }
+            let frame = self.frame;
+            let event = self.instances[i].event;
             let mut hist: Vec<(usize, u64)> = Vec::new();
             let result = {
                 let inst = &mut self.instances[i];
@@ -1209,8 +1373,19 @@ impl Vm {
                     &mut self.transition,
                     self.hot_trace,
                     &mut hist,
+                    frame,
+                    event,
+                    &mut self.step_trace,
+                    &mut self.trace_before,
                 )
             };
+            finalize_trace(
+                &mut self.step_trace,
+                &mut self.trace_before,
+                &self.vars,
+                &self.instances[i].self_vars,
+                host,
+            );
             if self.hot_trace && !hist.is_empty() {
                 let event = self.instances[i].event;
                 hist.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
@@ -1636,6 +1811,119 @@ fn compare(lhs: i32, rhs: i32, operator: i32) -> bool {
     }
 }
 
+/// Finalize the most recent traced instruction with the variable delta and the
+/// effects the host recorded while running it.
+fn finalize_trace(
+    trace: &mut Option<Vec<StepTraceEntry>>,
+    before: &mut Option<(
+        Vec<(i32, i32)>,
+        Vec<(i32, String)>,
+        Vec<(i32, i32)>,
+        Vec<(i32, String)>,
+    )>,
+    vars: &Variables,
+    self_vars: &SelfVars,
+    host: &mut dyn Host,
+) {
+    let Some((before_vars, before_strs, before_self, before_self_strs)) = before.take() else {
+        return;
+    };
+    let Some(entry) = trace.as_mut().and_then(|log| log.last_mut()) else {
+        return;
+    };
+    entry.vars = diff_snapshots(
+        &before_vars,
+        &vars.trace_snapshot(),
+        &before_self,
+        &self_vars.trace_snapshot(),
+    );
+    entry.str_vars = diff_str_snapshots(
+        &before_strs,
+        &vars.trace_str_snapshot(),
+        &before_self_strs,
+        &self_vars.trace_str_snapshot(),
+    );
+    entry.effects = host.take_trace_effects();
+}
+
+/// Every integer slot whose value differs between the two snapshots.
+///
+/// A slot absent from `before` reads as zero, so an untouched trailing slot in a
+/// longer bank is not reported as a change.
+fn diff_snapshots(
+    before_vars: &[(i32, i32)],
+    after_vars: &[(i32, i32)],
+    before_self: &[(i32, i32)],
+    after_self: &[(i32, i32)],
+) -> Vec<(i32, i32)> {
+    let before_vars: HashMap<i32, i32> = before_vars.iter().copied().collect();
+    let after_vars: HashMap<i32, i32> = after_vars.iter().copied().collect();
+    let before_self: HashMap<i32, i32> = before_self.iter().copied().collect();
+    let after_self: HashMap<i32, i32> = after_self.iter().copied().collect();
+    let mut out = Vec::new();
+    for (address, value) in &after_vars {
+        if before_vars.get(address).copied().unwrap_or(0) != *value {
+            out.push((*address, *value));
+        }
+    }
+    for (address, old) in &before_vars {
+        if *old != 0 && !after_vars.contains_key(address) {
+            out.push((*address, 0));
+        }
+    }
+    for (address, value) in &after_self {
+        if before_self.get(address).copied().unwrap_or(0) != *value {
+            out.push((*address, *value));
+        }
+    }
+    for (address, old) in &before_self {
+        if *old != 0 && !after_self.contains_key(address) {
+            out.push((*address, 0));
+        }
+    }
+    out.sort_by_key(|(address, _)| *address);
+    out
+}
+
+/// Every string slot whose value differs between the two snapshots.
+///
+/// Snapshots hold only non-empty strings, so a missing slot reads as the empty
+/// string and a cleared slot is reported explicitly.
+fn diff_str_snapshots(
+    before_vars: &[(i32, String)],
+    after_vars: &[(i32, String)],
+    before_self: &[(i32, String)],
+    after_self: &[(i32, String)],
+) -> Vec<(i32, String)> {
+    let before_vars: HashMap<i32, String> = before_vars.iter().cloned().collect();
+    let after_vars: HashMap<i32, String> = after_vars.iter().cloned().collect();
+    let before_self: HashMap<i32, String> = before_self.iter().cloned().collect();
+    let after_self: HashMap<i32, String> = after_self.iter().cloned().collect();
+    let mut out = Vec::new();
+    for (address, value) in &after_vars {
+        if before_vars.get(address) != Some(value) {
+            out.push((*address, value.clone()));
+        }
+    }
+    for (address, old) in &before_vars {
+        if !old.is_empty() && !after_vars.contains_key(address) {
+            out.push((*address, String::new()));
+        }
+    }
+    for (address, value) in &after_self {
+        if before_self.get(address) != Some(value) {
+            out.push((*address, value.clone()));
+        }
+    }
+    for (address, old) in &before_self {
+        if !old.is_empty() && !after_self.contains_key(address) {
+            out.push((*address, String::new()));
+        }
+    }
+    out.sort_by_key(|(address, _)| *address);
+    out
+}
+
 /// Execute one coroutine until it blocks, ends, or the budget runs out.
 fn execute(
     inst: &mut Instance,
@@ -1648,6 +1936,15 @@ fn execute(
     transition: &mut TransitionState,
     hot: bool,
     hist: &mut Vec<(usize, u64)>,
+    frame: u64,
+    event: EventId,
+    trace: &mut Option<Vec<StepTraceEntry>>,
+    trace_before: &mut Option<(
+        Vec<(i32, i32)>,
+        Vec<(i32, String)>,
+        Vec<(i32, i32)>,
+        Vec<(i32, String)>,
+    )>,
 ) -> BlockResult {
     // Holds the jump table and the instruction stream. Cloning the Arc (not the
     // Program) keeps the `&Command` borrow pointing at this local instead of at
@@ -1677,11 +1974,48 @@ fn execute(
         }
 
         let pc = inst.pc;
+        let opcode = match &program.slots[pc] {
+            Slot::Command(cmd) => cmd.opcode,
+            _ => 0,
+        };
+        if let Some(log) = trace.as_mut() {
+            if let (Some(entry), Some((before_vars, before_strs, before_self, before_self_strs))) =
+                (log.last_mut(), trace_before.as_ref())
+            {
+                entry.vars = diff_snapshots(
+                    before_vars,
+                    &vars.trace_snapshot(),
+                    before_self,
+                    &inst.self_vars.trace_snapshot(),
+                );
+                entry.str_vars = diff_str_snapshots(
+                    before_strs,
+                    &vars.trace_str_snapshot(),
+                    before_self_strs,
+                    &inst.self_vars.trace_str_snapshot(),
+                );
+                entry.effects = host.take_trace_effects();
+            }
+            log.push(StepTraceEntry {
+                frame,
+                event,
+                pc,
+                op: opcode,
+                vars: Vec::new(),
+                str_vars: Vec::new(),
+                effects: Vec::new(),
+            });
+            *trace_before = Some((
+                vars.trace_snapshot(),
+                vars.trace_str_snapshot(),
+                inst.self_vars.trace_snapshot(),
+                inst.self_vars.trace_str_snapshot(),
+            ));
+        }
         let Slot::Command(cmd) = &program.slots[pc] else {
             inst.pc += 1;
             continue;
         };
-        let opcode = cmd.opcode;
 
         // Control flow first: these need the jump table, everything else does not.
         match program.control.get(pc).copied().unwrap_or(Control::None) {
@@ -1745,6 +2079,13 @@ fn execute(
                 if let Some(face) = face {
                     vars.set_sys(0, face);
                 }
+                // The game's wrapper events (CE267 and friends) set Sys0 before calling
+                // 101 instead of prefixing the text with `@n`. Snapshot that face onto the
+                // message so the speaker tab survives the 3-frame Sys0 reset.
+                let face = face.or_else(|| {
+                    let current = vars.get_sys(0);
+                    (current >= 2).then_some(current)
+                });
                 host.show_message(text, face);
                 inst.wait = WaitState::Message;
                 inst.pc += 1;
@@ -1817,9 +2158,25 @@ fn execute(
                 } else {
                     binary_op(bin, a, b)
                 };
-                let current = eval_num(target, inst, vars);
-                let value = compound((bits & 0x0FFF) as i32, current, result);
-                store_num(inst, vars, target, value);
+                // arg[3] bit16 means arg[4] is an inclusive last offset: the
+                // operation is applied to slots arg[0] ..= arg[0] + arg[4]
+                // (slot count = arg[4] + 1), exactly like the retail Game.exe
+                // handler at 0x4af158/0x4afd58 ("cmp esi, arg4; jle").
+                // CE94 pc87 (1600022,10,0,66560,3) divides the four-slot window
+                // 1600022..=1600025 (x/y/width/height) by 10 in one instruction;
+                // treating it as a single slot left the save-slot geometry ten
+                // times too large and made the load screen look empty.
+                let last_offset = if bits & 0x10000 != 0 {
+                    eval_num(arg(cmd, 4), inst, vars).clamp(0, 1024)
+                } else {
+                    0
+                };
+                for offset in 0..=last_offset {
+                    let slot = target.wrapping_add(offset);
+                    let current = eval_num(slot, inst, vars);
+                    let value = compound((bits & 0x0FFF) as i32, current, result);
+                    store_num(inst, vars, slot, value);
+                }
                 inst.pc += 1;
                 None
             }
@@ -1840,15 +2197,12 @@ fn execute(
                 // old "key_bits & mask" model could never take a branch. A headless
                 // host reports 0, exactly like an untouched keyboard.
                 let target = arg(cmd, 0);
-                // A key the script banned with 126 must read as not pressed; a key
-                // it asked for with 125 is handed to the host, which owns the keyboard.
-                let mask = arg(cmd, 1) as u32 & !input.ban_keys;
-                store_num(
-                    inst,
-                    vars,
-                    target,
-                    host.key_code_auto(mask, input.auto_keys),
-                );
+                // The mask is a composite UI selector (which device, which key
+                // groups, which edge to wait for), not a set of allowed keys, so it
+                // is passed through verbatim. 126 permissions are applied to the
+                // code the host returns, after 125's auto bits have been folded in.
+                let code = host.key_code_auto(arg(cmd, 1) as u32, input.auto_keys);
+                store_num(inst, vars, target, input.filter_code(code));
                 inst.pc += 1;
                 None
             }
@@ -1918,8 +2272,9 @@ fn execute(
                 None
             }
             126 => {
-                // Ban input: every later 123 poll has these bits cleared.
-                input.ban_keys = arg(cmd, 0) as u32;
+                // Input permission: target in the low byte, state in bits 8..9.
+                // See InputState::apply_permission for the state model.
+                input.apply_permission(arg(cmd, 0) as u32);
                 inst.pc += 1;
                 None
             }
@@ -2076,6 +2431,7 @@ fn execute(
                     };
                 };
                 let (args, strings, return_to) = call_arguments(cmd, inst, vars);
+                host.common_event_call(target, &args, &strings);
                 inst.pc += 1;
                 Some(Signal::Call {
                     target,
@@ -2680,6 +3036,33 @@ mod tests {
         Vm::new(ProgramSet::from_common_events(&data))
     }
 
+    fn code_for_bits(bits: u32) -> i32 {
+        let bits = bits & 0x3FF;
+        if bits & 1 != 0 {
+            return 10;
+        }
+        if bits & 2 != 0 {
+            return 11;
+        }
+        if bits & 4 != 0 {
+            return 12;
+        }
+        if bits & 8 != 0 {
+            return 13;
+        }
+        match bits & 0xF0 {
+            0x50 => 7,
+            0x60 => 9,
+            0x30 => 1,
+            0xA0 => 3,
+            0x10 => 8,
+            0x20 => 2,
+            0x40 => 4,
+            0x80 => 6,
+            _ => 0,
+        }
+    }
+
     #[derive(Default)]
     struct Recorder {
         messages: Vec<String>,
@@ -2712,6 +3095,8 @@ mod tests {
         effects: Vec<(i32, i32, Vec<i32>)>,
         // Every 123 poll the host answered: (mask, auto-input bits).
         key_polls: Vec<(u32, u32)>,
+        // Bits the fake keyboard is currently holding.
+        held: u32,
         // Every 151 ChangeColor: (packed colour, frames).
         colours: Vec<(i32, i32)>,
     }
@@ -2771,7 +3156,7 @@ mod tests {
         }
         fn key_code_auto(&mut self, mask: u32, auto: u32) -> i32 {
             self.key_polls.push((mask, auto));
-            0
+            code_for_bits(self.held | auto)
         }
         fn close_message(&mut self) {
             self.closed += 1;
@@ -2797,6 +3182,48 @@ mod tests {
         let mut host = Recorder::default();
         vm.step_frame(&mut host);
         assert_eq!(host.key_polls, vec![(247, 16), (247, 0)]);
+    }
+
+    #[test]
+    fn opcode_126_sets_basic_input_permissions_by_state() {
+        // 126 is target (bits 0..7) + state (bits 8..9), not a key mask. 240 is
+        // "restore the four directions", 496 blocks walking but leaves key input,
+        // and 752 blocks both. Device form uses bit 28 and a single deny state.
+        let ev = event(
+            6,
+            "input permissions",
+            vec![
+                cmd(126, &[0x1F0], &[]), // directions: movement blocked only
+                cmd(123, &[2_000_000, 240], &[]),
+                cmd(126, &[0x2F0], &[]), // directions: movement + key input blocked
+                cmd(123, &[2_000_001, 240], &[]),
+                cmd(126, &[0x0F0], &[]), // restore directions
+                cmd(123, &[2_000_002, 240], &[]),
+                cmd(125, &[1], &[]), // auto OK
+                cmd(126, &[0x201], &[]), // OK: both blocked, auto must not bypass
+                cmd(123, &[2_000_003, 1], &[]),
+                cmd(126, &[0x001], &[]), // restore basic OK
+                cmd(125, &[0], &[]), // release auto input
+                cmd(126, &[0x10000101], &[]), // device form: deny
+                cmd(123, &[2_000_004, 1], &[]),
+                cmd(126, &[0x10000001], &[]), // device form: allow
+                cmd(123, &[2_000_005, 1], &[]),
+            ],
+        );
+        let mut vm = vm_with(vec![ev]);
+        let mut host = Recorder {
+            held: 16,
+            ..Recorder::default()
+        };
+        vm.start_event(6).unwrap();
+        vm.step_frame(&mut host);
+
+        assert_eq!(vm.vars.get(0), 8, "state 1 only blocks walking");
+        assert_eq!(vm.vars.get(1), 0, "state 2 blocks the key poll");
+        assert_eq!(vm.vars.get(2), 8, "state 0 restores the key");
+        assert_eq!(vm.vars.get(3), 0, "basic deny beats 125 auto input");
+        assert_eq!(vm.vars.get(4), 0, "device deny blocks physical keys");
+        assert_eq!(vm.vars.get(5), 8, "state 0 restores the device");
     }
 
     #[test]

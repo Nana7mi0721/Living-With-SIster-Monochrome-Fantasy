@@ -24,6 +24,7 @@ use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
 use wolf_format::mps::Map;
 use wolf_format::tileset::TileSetData;
+use wolf_vm::exec::EventId;
 use wolf_vm::{
     ChoiceReply, DbOp, DbValue, Host, LogLevel, PictureCmd, Program, ProgramSet, SaveOp,
     SaveTarget, SoundCmd, StepReport, Vm,
@@ -55,11 +56,58 @@ use battle_wiring::BattleWiring;
 /// The event the game opens with in this build (the "original title screen A").
 pub const TITLE_EVENT: u32 = 42;
 
+/// The save/load screen CE42 calls with `CommonEvent [500014, 1, -1]`.
+const TITLE_LOAD_EVENT: u32 = 14;
+
+/// The visible three-item title menu ("original title screen B").
+///
+/// It is a parallel-process (`run_condition == 2`) common event with no 210/211/300
+/// call site: the original starts it while its condition holds. Our boot / title
+/// entry points start it explicitly, and a map change stops it so its menu pictures
+/// (3/4/5) never leak into gameplay scenes.
+pub const TITLE_MENU_EVENT: u32 = 43;
+
+/// The room conversation menu (CE247). Its top label paints the sister and then
+/// several branches erase pictures 90..98 through CE218 mode -1 before jumping back
+/// to that label; the label itself has no repaint, so the engine snapshots the base
+/// room art when this event starts and puts it back when the menu is waiting again.
+pub const ROOM_MENU_EVENT: u32 = 247;
+
+/// The parent room menu (CE245). It calls CE247 for the conversation branch and
+/// redraws its own top menu when CE247 returns, but never repaints the standing art
+/// that CE247's leave branch erased.
+const ROOM_MENU_ROOT_EVENT: u32 = 245;
+
+/// The shared standing-picture helper (CE218). Its mode -1 erases the picture range
+/// in its command list (90..98 for the room menu's leave branch).
+pub const STANDING_PICTURE_EVENT: u32 = 218;
+
+/// First slot of the room menu's base standing pictures (sister plus her props).
+const ROOM_BASE_PICTURE_FIRST: i32 = 90;
+/// Last slot of that range; CE218's erase command covers 90 through 98.
+const ROOM_BASE_PICTURE_LAST: i32 = 98;
+
+/// The `深夜開始` event that swaps the room scene for the night/H scene on the
+/// same map. The night chain never erases the room's status panel (`1600`-`1621`),
+/// so entering this event drops that room-only HUD group first.
+pub const NIGHT_START_EVENT: u32 = 332;
+
 /// The map the original boots into (SysDatabase type 0, row 0).
 pub const BOOT_MAP: &str = "MapData/TitleMap.mps";
 
 /// The autorun event on [`BOOT_MAP`] that plays the splashes and reaches the title.
 pub const BOOT_EVENT: u32 = 2;
+
+/// Internal whole-screen black layer kept under the title art.
+///
+/// The title script paints `Kagura/bg.png` (a pure-black 1024x576 image) as the
+/// splash backdrop, then drops it when `Picture/title01.jpg` appears. From then on
+/// the map tiles behind the title are the only background, so cross-fading the
+/// old title art out reveals the green MapChip grass for a few frames. Keeping
+/// our own black layer under the title makes that fade black-to-black. It lives
+/// in a negative slot, so `switch_map` removes it with the other screen layers
+/// before the first gameplay map is drawn.
+pub const TITLE_BACKDROP: i32 = -100;
 
 /// Frames between held-direction walking steps.
 ///
@@ -119,6 +167,8 @@ pub struct Message {
     pub text: String,
     /// Face graphic id from the @-prefix, when the script carries one.
     pub face: Option<i32>,
+    /// Speaker name for the name tab, taken from the CE264 wrapper call.
+    pub speaker: Option<String>,
     /// Frames this message has been on screen.
     pub frames: u32,
 }
@@ -206,6 +256,8 @@ pub struct FrameOutcome {
     pub sounds: usize,
     /// True once nothing is running any more.
     pub idle: bool,
+    /// True when the title screen's Exit row asked the host to close the game.
+    pub quit_requested: bool,
 }
 
 /// Why the game could not be created.
@@ -277,6 +329,10 @@ pub struct Game {
     pub databases: Databases,
     /// Keys held this frame (see crate::key).
     pub key_bits: u32,
+    /// Signed wheel notch for this frame: +1 up, -1 down, 0 when the wheel did not
+    /// move. `123` with the save-list mask (771) reads this directly; the ordinary
+    /// menus keep using the UP/DOWN bits above.
+    pub wheel_dir: i32,
     /// Sounds requested during the current frame.
     pub sounds: Vec<SoundCmd>,
     /// M4 audio output. `None` keeps the pure-logic and test paths silent and
@@ -284,6 +340,8 @@ pub struct Game {
     pub audio: Option<wolf_audio::Engine>,
     /// Message windows on screen.
     pub messages: Vec<Message>,
+    /// Name supplied by the most recent CE264 wrapper call, consumed by the next 101.
+    pending_speaker: Option<String>,
     /// Pending choice prompt.
     pub choices: Option<Choices>,
     /// Counters.
@@ -339,6 +397,43 @@ pub struct Game {
     /// True once the engine events have been started, so a map switch cannot start a
     /// second copy of a coroutine that is meant to live for the whole session.
     engine_events_started: bool,
+    /// Set when the title menu was retired because the save/load window covered it.
+    /// The save screen is part of the same title map, so closing it must bring the
+    /// menu back; nothing else in the data restarts event 43.
+    title_menu_suspended: bool,
+    /// True while the title screen owns the session (boot / start_title). A map change
+    /// or a loaded game clears it, so the save-menu restart cannot fire in gameplay.
+    title_screen_active: bool,
+    /// True while the title screen's synthetic three-row choice is open.
+    ///
+    /// The save/load page can outlive event 42, and event 42 is what normally owns
+    /// the parked 102 window. When the page closes the engine rebuilds that window
+    /// itself (same three options, same parked anchor) and interprets its answer
+    /// directly, instead of replaying CE42 (which would also replay BGM and logo).
+    title_menu_choice_active: bool,
+    /// Set when the title screen's Exit row has been chosen.
+    quit_requested: bool,
+    /// Negative screen layers the previous map left behind when switch_map began.
+    /// Their old map is gone, but the new map's background arrives a few frames later;
+    /// holding these until then covers the gap instead of flashing bare tilemap.
+    stale_screen_layers: Vec<(i32, String, Option<u64>)>,
+    /// Frames left before stale_screen_layers are pruned (0 = nothing pending).
+    stale_clear_countdown: u8,
+    /// Pictures 90..=98 captured when the room conversation menu (CE247) starts.
+    ///
+    /// Several CE247 branches call CE218 with mode -1, whose command list erases that
+    /// range, and then jump straight back to the menu label without repainting the
+    /// sister. The snapshot lets the engine restore the base art only when the menu is
+    /// waiting for its four-way choice again; temporary CE218 poses keep their slots,
+    /// so the restore never overwrites them.
+    room_base_pictures: Vec<Picture>,
+    /// A CE218 mode -1 ran while the room menu owned those pictures; restore once the
+    /// menu is waiting on its top-level choice and the whole captured range is gone.
+    room_restore_pending: bool,
+    /// Whether the room snapshot was taken for the current CE247 run. Separates "no
+    /// base pictures existed" from "not captured yet", so a later temporary pose is
+    /// never mistaken for the base art.
+    room_base_captured: bool,
     /// `220` loads queued by the interpreter; applied after the VM step that asked.
     save_requests: Vec<crate::savegame::SaveRequest>,
     /// `130` teleports queued by the interpreter; applied after the VM step that asked.
@@ -479,9 +574,11 @@ impl Game {
             assets: Assets::new(&root),
             databases,
             key_bits: 0,
+            wheel_dir: 0,
             sounds: Vec::new(),
             audio: None,
             messages: Vec::new(),
+            pending_speaker: None,
             choices: None,
             stats: GameStats::default(),
             diagnostics,
@@ -504,6 +601,15 @@ impl Game {
             previous_mouse: [0, 0],
             engine_always: None,
             engine_events_started: false,
+            title_menu_suspended: false,
+            title_screen_active: false,
+            title_menu_choice_active: false,
+            quit_requested: false,
+            stale_screen_layers: Vec::new(),
+            stale_clear_countdown: 0,
+            room_base_pictures: Vec::new(),
+            room_restore_pending: false,
+            room_base_captured: false,
             save_requests: Vec::new(),
             map_requests: Vec::new(),
             base_save,
@@ -543,6 +649,12 @@ impl Game {
     #[must_use]
     pub fn playtime_frames(&self) -> u32 {
         self.playtime_frames
+    }
+
+    /// True after the title screen's Exit row has been chosen.
+    #[must_use]
+    pub fn quit_requested(&self) -> bool {
+        self.quit_requested
     }
 
     /// Replaces the play-time clock, used when a save is loaded.
@@ -645,9 +757,217 @@ impl Game {
         Ok(bytes.len())
     }
 
+    /// Drops the room-only HUD group before the same-map night/H scene paints.
+    ///
+    /// `CE232` owns the `1600`-`1621` status panel and only clears it when its own
+    /// close branch runs; the night chain (`290 -> 285 -> 328 -> 332 -> 333`) never
+    /// calls that branch, so the panel would sit on top of the H art.
+    ///
+    /// `108`-`111` are the room message window and `118`/`119` are its speaker
+    /// extensions. `120` is the sister's standing picture and the range `108..=120`
+    /// also catches unrelated pictures, so the erase stops at 111 and handles the
+    /// two speaker slots separately.
+    fn clear_night_room_hud(&mut self) {
+        self.screen.remove_range(1600, 1621);
+        self.screen.remove_range(108, 111);
+        self.screen.remove_range(118, 119);
+        self.clear_room_base_snapshot();
+    }
+
     /// Starts one common event as a coroutine. Returns false when the id is unknown.
     pub fn start_event(&mut self, id: u32) -> bool {
+        if id == NIGHT_START_EVENT {
+            self.clear_night_room_hud();
+        }
         self.vm.start_event(id).is_some()
+    }
+
+    /// Keeps one opaque black screen layer under the title art.
+    ///
+    /// See [`TITLE_BACKDROP`] for why the title needs a floor of its own: the data
+    /// drops its splash backdrop before the title art arrives, and the map tiles
+    /// behind the title are green. `Picture::new` gives a top-left, 100% image, so
+    /// the 1024x576 asset covers the viewport exactly.
+    fn ensure_title_backdrop(&mut self) {
+        if self.screen.get(TITLE_BACKDROP).is_some() {
+            return;
+        }
+        let mut picture = Picture::new(TITLE_BACKDROP);
+        picture.file = "Kagura/bg.png".to_owned();
+        self.screen.insert(picture);
+    }
+
+    /// Starts the visible title menu (`event 43`) once, if it is not already live.
+    pub fn start_title_menu(&mut self) -> bool {
+        // Reaching here means the menu is wanted again: either it is still live or it
+        // is about to be started, so a save-screen suspension is over either way.
+        self.title_menu_suspended = false;
+        if self
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == TITLE_MENU_EVENT)
+        {
+            return true;
+        }
+        self.start_event(TITLE_MENU_EVENT)
+    }
+
+    /// Repaints the visible title menu's three hover states.
+    ///
+    /// Event 43 paints `Picture/menuN_b.png` and its own hover code (which would swap in
+    /// `menuN_a.png`) sits after a `172 BreakEvent`, so it never runs. The pictures are
+    /// ordinary screen slots, not the 102 panel, so the engine has to repaint them when
+    /// the cursor moves or the menu looks like three identical rows.
+    fn sync_title_menu_highlight(&mut self, cursor: usize) {
+        for row in 0..3 {
+            let number = 3 + row as i32;
+            let Some(picture) = self.screen.get(number).cloned() else {
+                continue;
+            };
+            if !picture.file.starts_with("Picture/menu") {
+                continue;
+            }
+            // User-verified convention: menuN_a is the dark fill with a white
+            // outline (selected) and menuN_b is the white fill with a black outline
+            // (idle). The cursor row takes _a and the other two rows take _b.
+            let file = format!(
+                "Picture/menu{}_{}.png",
+                row + 1,
+                if row == cursor { "a" } else { "b" }
+            );
+            if picture.file != file {
+                let mut picture = picture;
+                picture.file = file;
+                self.screen.insert(picture);
+            }
+        }
+    }
+
+    /// Stops any live title-menu coroutines, so their pictures do not outlive the title.
+    pub fn stop_title_menu(&mut self) {
+        // Only the save/load window may suspend the menu for later. A map change also
+        // stops event 43, but it is leaving the title screen for good and clears the
+        // flag separately; recording it there would make the menu return in gameplay.
+        let save_window_open = self.screen.has_file_containing("SystemFile/WindowBase");
+        let ids: Vec<_> = self
+            .vm
+            .instances()
+            .iter()
+            .filter(|instance| instance.event == TITLE_MENU_EVENT)
+            .map(|instance| instance.id)
+            .collect();
+        for id in ids {
+            self.vm.stop_instance(id);
+        }
+        // The menu's three pictures are ordinary slots, so stopping the coroutine alone
+        // would leave them painted over whatever screen comes next. Drop them too.
+        for number in 3..=5 {
+            if self
+                .screen
+                .get(number)
+                .is_some_and(|picture| picture.file.starts_with("Picture/menu"))
+            {
+                self.screen.remove(number);
+            }
+        }
+        if save_window_open && self.title_screen_active {
+            self.title_menu_suspended = true;
+        }
+    }
+
+    /// Brings the title menu back after the save/load window that suspended it is gone.
+    ///
+    /// Event 42 can already have returned by the time the save page closes (its load
+    /// branch calls the save event and then ends), and event 42 is also what normally
+    /// owns the parked 102 choice. Restarting event 43 only repaints the three rows;
+    /// the input window has to be rebuilt by the host so the title is not left as a
+    /// picture with no live choice. The two title flags are the real gate: a map
+    /// change or a loaded game clears them before gameplay, and only the title
+    /// screen's own save window may set the suspension flag.
+    fn resume_title_menu_if_ready(&mut self) {
+        if !self.title_menu_suspended || !self.title_screen_active {
+            return;
+        }
+        if self.screen.has_file_containing("SystemFile/WindowBase") {
+            return;
+        }
+        self.start_title_menu();
+        if self.choices.is_none() {
+            self.open_title_menu_choice();
+        }
+    }
+
+    /// Rebuilds CE42's parked three-row choice without replaying CE42.
+    ///
+    /// CE42 paints the real title menu in event 43, then parks a 102 window at
+    /// (512, 1000) so the script window itself stays off screen. When a save page
+    /// outlives CE42 that window is gone; this puts an identical one back so the
+    /// visible rows can be navigated and clicked again. The index is not sent back
+    /// to a coroutine - choose_title_menu_row() performs the title action itself.
+    fn open_title_menu_choice(&mut self) {
+        if self.choices.is_some() {
+            return;
+        }
+        self.vm.vars.set_sys(3, 512);
+        self.vm.vars.set_sys(4, 1000);
+        let from_sys = self.sys(20);
+        self.choice_cursor = if from_sys >= 0 && from_sys < 3 {
+            from_sys as usize
+        } else {
+            0
+        };
+        self.vm.vars.set_sys(20, self.choice_cursor as i32);
+        self.choices = Some(Choices {
+            options: vec!["1".to_owned(), "2".to_owned(), "3".to_owned()],
+            frames: 0,
+        });
+        self.title_menu_choice_active = true;
+        self.sync_title_menu_highlight(self.choice_cursor);
+    }
+
+    /// Executes one row of the rebuilt title menu.
+    ///
+    /// The mapping is the one CE42 itself uses: row 0 jumps to map 3 at (60, 34)
+    /// (Map003's opening hook), row 1 calls CE14 with arguments (1, -1) for the
+    /// load screen, row 2 is the Exit branch. None of these replay the title event,
+    /// so its BGM and logo do not start over.
+    fn choose_title_menu_row(&mut self, row: usize) {
+        self.title_menu_choice_active = false;
+        self.choices = None;
+        self.choice_cursor = 0;
+        match row {
+            0 => {
+                self.start_engine_events();
+                self.map_requests.push(MapRequest {
+                    target: -1,
+                    map: 3,
+                    x: 60,
+                    y: 34,
+                    options: 1,
+                });
+            }
+            1 => {
+                self.start_title_load_screen();
+            }
+            2 => {
+                self.quit_requested = true;
+            }
+            _ => {}
+        }
+    }
+
+    /// Starts CE14 as the title's Load row would: `CommonEvent [500014, 1, -1]`.
+    fn start_title_load_screen(&mut self) {
+        let Some(id) = self.vm.start_event(TITLE_LOAD_EVENT) else {
+            self.diagnostics
+                .insert("title Load: common event 14 is missing".to_owned(), 1);
+            return;
+        };
+        if let Some(instance) = self.vm.instance_mut(id) {
+            instance.self_vars.set(wolf_vm::magic::SELF_ARG_BASE, 1);
+            instance.self_vars.set(wolf_vm::magic::SELF_ARG_BASE + 1, -1);
+        }
     }
 
     /// Seeds the battle-only `CData` cells a fresh game never initialises (command slots
@@ -783,6 +1103,14 @@ impl Game {
         let bytes = self.read(BOOT_MAP)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, Some(BOOT_EVENT));
+        self.title_screen_active = true;
+        self.title_menu_choice_active = false;
+        self.quit_requested = false;
+        self.ensure_title_backdrop();
+        // The title's own common-event page paints the three visible menu items.
+        // Start it here, not in the global auto-event scheduler: it belongs to the
+        // title screen and must not run on every gameplay map.
+        self.start_title_menu();
         if self.start_map_event(&map, BOOT_EVENT) {
             Ok(())
         } else {
@@ -917,7 +1245,7 @@ impl Game {
     /// turns the leader even when collision blocks the move, which is why a tap at
     /// a wall still changes facing.
     fn advance_player_input(&mut self) {
-        let pressed = self.key_bits & !self.previous_keys;
+        let pressed = self.key_bits & !self.previous_keys & !self.vm.input.basic_all_deny;
         let dialogue_open = self.choices.is_some() || !self.messages.is_empty();
 
         if !dialogue_open && self.runtime.leader().is_some() && pressed & crate::key::OK != 0 {
@@ -929,7 +1257,9 @@ impl Game {
             }
         }
 
-        let held = crate::key::code(self.key_bits & crate::key::DIRECTIONS);
+        let held = crate::key::code(
+            self.key_bits & crate::key::DIRECTIONS & !self.vm.input.movement_deny(),
+        );
         if dialogue_open || held == crate::key::CODE_NONE || self.runtime.leader().is_none() {
             self.walk_last_direction = 0;
             self.walk_wait = 0;
@@ -1057,10 +1387,15 @@ impl Game {
         hero: Option<(i32, i32, i32, Option<i32>)>,
     ) -> Result<(), GameError> {
         self.runtime.stop_all(&mut self.vm);
-        // Whole-screen layers belong to the map that drew them. The new map's
-        // events rebuild whatever overlay it needs; leaving the old map's title
-        // art in the negative slots painted it on top of the new scene.
-        self.screen.clear_screen_layers();
+        // The title menu is a common event, not a map page, so stop_all leaves it
+        // alive. Without this its menu pictures (3/4/5) stay on top of the first
+        // gameplay scene.
+        self.stop_title_menu();
+        self.title_screen_active = false;
+        self.title_menu_suspended = false;
+        self.title_menu_choice_active = false;
+        self.clear_room_base_snapshot();
+        self.retire_screen_for_map_change();
         let bytes = self.read(path)?;
         let map = Map::parse(&bytes).map_err(GameError::Format)?;
         self.start_pages(&map, None);
@@ -1079,6 +1414,196 @@ impl Game {
         Ok(())
     }
 
+    /// Retires the previous map's whole-screen layers without exposing the bare
+    /// tilemap while the new map's first background pictures are still a few frames
+    /// away.
+    ///
+    /// Negative-numbered pictures belong to the map that drew them. Deleting them at
+    /// the transfer instant leaves nothing but the tile grid until the next map paints
+    /// its own -1 background, so this keeps the old layers for four frames and then
+    /// drops only the exact pictures that were there (a new map may already reuse the
+    /// same slot with a different file, and that one must survive). A 151 tint and a
+    /// 160/162 fade also belong to the old scene; each map's events re-apply what
+    /// they need, so both are reset here.
+    fn retire_screen_for_map_change(&mut self) {
+        self.stale_screen_layers = self
+            .screen
+            .iter()
+            .filter(|picture| picture.number < 0)
+            .map(|picture| {
+                (
+                    picture.number,
+                    picture.file.clone(),
+                    self.screen.generation(picture.number),
+                )
+            })
+            .collect();
+        self.stale_clear_countdown = if self.stale_screen_layers.is_empty() { 0 } else { 4 };
+        self.screen_tint = ScreenTint::new();
+        self.screen_transition.cancel();
+    }
+
+    /// Drops retired layers once the new map has had time to paint over them.
+    ///
+    /// Matching file names alone is not enough: a new map can redraw the very same
+    /// negative slot with the very same file inside the four-frame window. The slot's
+    /// insert generation changes on every insertion, so comparing it with the recorded
+    /// generation distinguishes the new picture from the retired one.
+    fn prune_stale_screen_layers(&mut self) {
+        if self.stale_clear_countdown == 0 {
+            return;
+        }
+        self.stale_clear_countdown -= 1;
+        if self.stale_clear_countdown != 0 {
+            return;
+        }
+        for (number, file, generation) in std::mem::take(&mut self.stale_screen_layers) {
+            let same_picture = self
+                .screen
+                .get(number)
+                .is_some_and(|picture| picture.number == number && picture.file == file);
+            if same_picture && self.screen.generation(number) == generation {
+                self.screen.remove(number);
+            }
+        }
+    }
+
+    /// Snapshots the room menu's base standing pictures (slots 90 through 98).
+    ///
+    /// Called once per CE247 run, before its first frame executes: the base art is
+    /// already on screen from the room event (or from a loaded save), and later CE218
+    /// calls are free to draw temporary poses into the same slots.
+    fn capture_room_base_pictures(&mut self) {
+        self.room_base_pictures = self
+            .screen
+            .iter()
+            .filter(|picture| {
+                (ROOM_BASE_PICTURE_FIRST..=ROOM_BASE_PICTURE_LAST).contains(&picture.number)
+            })
+            .cloned()
+            .collect();
+        self.room_base_captured = true;
+        self.room_restore_pending = false;
+    }
+
+    /// Drops the room-session snapshot. Called only when the room is really left or a
+    /// new scene is loaded, never when a CE247 branch merely returns to its menu.
+    fn clear_room_base_snapshot(&mut self) {
+        self.room_base_pictures.clear();
+        self.room_base_captured = false;
+        self.room_restore_pending = false;
+    }
+
+    /// True while the room status panel (`1600`-`1621`) is on screen, i.e. the
+    /// player is still on the room map rather than in a different scene.
+    fn room_scene_live(&self) -> bool {
+        (1600..=1621).any(|number| self.screen.get(number).is_some())
+    }
+
+    /// Starts the room snapshot when CE247 is running but the host did not see its
+    /// call (a direct CLI event start, for example).
+    fn refresh_room_base_pictures(&mut self) {
+        let menu_live = self
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == ROOM_MENU_EVENT);
+        let parent_menu_live = self
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == ROOM_MENU_ROOT_EVENT);
+        if !menu_live {
+            // The snapshot belongs to the room session, not to CE247's lifetime.
+            // A branch can stop CE247 and hand control back to CE245, and CE245 can
+            // then return to the map while the room status panel is still up. Keep
+            // the erased base art until the player actually leaves the room map or
+            // a new scene is loaded; only then is it safe to drop.
+            let parent_waiting = parent_menu_live && self.room_restore_pending;
+            if !parent_waiting
+                && !self.room_scene_live()
+                && (self.room_base_captured || !self.room_base_pictures.is_empty())
+            {
+                self.clear_room_base_snapshot();
+            }
+            return;
+        }
+        let top_menu = self
+            .choices
+            .as_ref()
+            .is_some_and(|choices| choices.options.len() == 4);
+        // The save scene paints its standing pictures a few frames after the first
+        // step, so an early capture can be empty. Keep retrying while CE247 is on its
+        // top-level menu; a branch's temporary pose is never shown under that menu.
+        if top_menu && (!self.room_base_captured || self.room_base_pictures.is_empty()) {
+            self.capture_room_base_pictures();
+        }
+    }
+
+    /// Puts the room base standing pictures back after CE218 mode -1 erased them.
+    ///
+    /// The restore is deliberately narrow: the menu must be waiting on its top-level
+    /// four-way choice (CE247's other prompts have two, three, six or eighteen
+    /// options), and every captured slot must be gone. A temporary CE218 pose lives in
+    /// a different slot or replaces one of these slots, so its presence cancels the
+    /// restore instead of painting the base art over it.
+    fn restore_room_base_if_ready(&mut self) {
+        if !self.room_restore_pending || self.room_base_pictures.is_empty() {
+            return;
+        }
+        let room_menu_live = self
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == ROOM_MENU_EVENT);
+        let parent_menu_live = self
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == ROOM_MENU_ROOT_EVENT);
+        // CE245's top menu is a row of custom button pictures (1200..=1213), not
+        // a 102 choice list, so looking only at Choices misses it. Those picture
+        // numbers are unique to that menu and are removed as soon as a button is
+        // picked, which makes them a reliable "room top menu is waiting" signal.
+        let root_menu_top_visible = (1200..=1213).any(|number| self.screen.get(number).is_some());
+        let room_scene_live = self.room_scene_live();
+        // CE247's leave branch hands control back to CE245, whose top menu redraws
+        // itself but not the erased standing pictures. Accept CE247's own four-way
+        // top menu, a prompt of the CE245 parent menu, CE245's picture menu, or the
+        // room map itself after both menus have returned (the status panel is still
+        // up, so the player is still in the room and the base art must come back).
+        let menu_waiting = if room_menu_live {
+            self.choices
+                .as_ref()
+                .is_some_and(|choices| choices.options.len() == 4)
+                || root_menu_top_visible
+        } else if parent_menu_live {
+            self.choices.is_some() || root_menu_top_visible
+        } else {
+            room_scene_live && self.choices.is_none()
+        };
+        if !menu_waiting {
+            return;
+        }
+        let all_missing = self
+            .room_base_pictures
+            .iter()
+            .all(|picture| self.screen.get(picture.number).is_none());
+        if !all_missing {
+            // A temporary CE218 pose (or a surviving base slot) is still in one of
+            // the captured slots. Keep the request for a later frame instead of
+            // consuming it; the pose may be erased on the next branch step.
+            return;
+        }
+        for picture in &self.room_base_pictures {
+            self.screen.insert(picture.clone());
+        }
+        // Only a successful restore ends the request. This is the fix for the real
+        // CE245 -> CE247 chat path: an early temporary pose used to consume the flag
+        // and the later CE218 -1 erase then left the sister gone forever.
+        self.room_restore_pending = false;
+    }
+
     /// Start one event of a named map, collecting that map's other pages too.
     ///
     /// This is what a new game does once the title menu answers: it switches to
@@ -1095,6 +1620,16 @@ impl Game {
         event_id: u32,
     ) -> Result<(), GameError> {
         self.start_engine_events();
+        // A new game arrives here from the title menu; retire the menu and every
+        // whole-screen layer the title map left behind. The opening map's own
+        // background arrives a few frames later, so the old layers have to cover the
+        // gap rather than being cleared at once.
+        self.stop_title_menu();
+        self.title_screen_active = false;
+        self.title_menu_suspended = false;
+        self.title_menu_choice_active = false;
+        self.clear_room_base_snapshot();
+        self.retire_screen_for_map_change();
         let name = if map_name.contains('.') {
             map_name.to_owned()
         } else {
@@ -1134,6 +1669,11 @@ impl Game {
     /// Fails when this build has no event 42.
     pub fn start_title(&mut self) -> Result<(), GameError> {
         if self.start_event(TITLE_EVENT) {
+            self.title_screen_active = true;
+            self.title_menu_choice_active = false;
+            self.quit_requested = false;
+            self.ensure_title_backdrop();
+            self.start_title_menu();
             Ok(())
         } else {
             Err(GameError::MissingEvent(TITLE_EVENT))
@@ -1262,12 +1802,116 @@ impl Game {
         let colours = PictureColours {
             databases: &self.databases,
         };
-        Some(crate::message::layout_styled(
+        let picture_vars = PictureVars {
+            vars: &self.vm.vars,
+        };
+        let cells = PictureCells {
+            databases: &self.databases,
+        };
+        let ctx = crate::textpic::Ctx {
+            vars: &picture_vars,
+            cells: &cells,
+            colours: &colours,
+            default_font_px: self.font_px(),
+        };
+        Some(crate::message::layout_styled_with(
             &message.text,
             &vars,
             message.frames,
             &colours,
+            Some(&ctx),
         ))
+    }
+
+    /// Speaker name for the newest 101 message, when its CE264 wrapper supplied one.
+    ///
+    /// CE264 keeps the name in a plugin-private window record, so the engine reads
+    /// the wrapper's second string argument instead (see `Host::common_event_call`).
+    /// A blank name is a narration window and gets no tab.
+    ///
+    /// Deliberately no face-id fallback: the VM snapshots `face` from Sys0 for every
+    /// ordinary 101 whose Sys0 is a character id, including narration that follows a
+    /// character line, so a face alone cannot tell a speaker from a narrator. Only
+    /// CE264's explicit name is authoritative (it keeps `['', '妹妹', '']` intact).
+    #[must_use]
+    pub fn message_speaker(&self) -> Option<String> {
+        let message = self.messages.last()?;
+        message
+            .speaker
+            .as_deref()
+            .filter(|name| !name.trim().is_empty())
+            .map(str::to_owned)
+    }
+
+    /// Geometry of the speaker tab: box rect, name and font size.
+    ///
+    /// The tab sits just above the message frame's top-left corner. Width follows the
+    /// name, with half an em of padding on each side and the 3 px nine-slice border.
+    #[must_use]
+    pub fn message_nameplate(&self) -> Option<([f32; 4], String, f32)> {
+        let name = self.message_speaker()?;
+        let vars = self.message_vars();
+        let font = vars.font_px();
+        // CJK glyphs advance roughly one em each; the half-em choice metric would
+        // under-size the tab enough to clip the tail of a two-character name.
+        let text_w = name.chars().count() as f32 * font;
+        let box_w = (text_w + font * 1.25).max(font * 2.5);
+        let box_h = (font * 1.5).max(24.0);
+        // Sys2 is the text origin inside the box, not the box's top edge, so anchoring
+        // the tab to it pushed the name into the message window. The frame picture is
+        // the real geometry: put the tab's bottom eight pixels above its top-left.
+        let (x, y) = self
+            .screen
+            .get(crate::message::FRAME_PICTURE)
+            .and_then(|frame| {
+                let (window_w, window_h) = frame.window?;
+                (window_w > 0).then(|| frame.destination(window_w as f32, window_h.max(0) as f32))
+            })
+            .map_or((vars.x + 4.0, vars.y - box_h - 2.0), |rect| {
+                (rect[0] + 4.0, rect[1] - box_h - 8.0)
+            });
+        Some(([x, y, box_w, box_h], name, font))
+    }
+
+    /// Builds the runtime `102` choice overlay with the SysDatabase palette.
+    ///
+    /// The panel needs the same colour resolution as messages and text pictures, but
+    /// the palette is private to the game layer. Returning the quads here keeps the
+    /// renderer from having to know how the database is stored.
+    pub fn choice_overlay(
+        &mut self,
+        atlas: &mut Atlas,
+    ) -> Option<(Vec<SpriteQuad>, Vec<crate::atlas::TextQuad>)> {
+        let options = self.choices.as_ref()?.options.clone();
+        let cursor = self.choice_cursor();
+        let (x, y) = self.choice_anchor();
+        let font_px = self.font_px();
+        let colours = PictureColours {
+            databases: &self.databases,
+        };
+        let picture_vars = PictureVars {
+            vars: &self.vm.vars,
+        };
+        let cells = PictureCells {
+            databases: &self.databases,
+        };
+        let ctx = crate::textpic::Ctx {
+            vars: &picture_vars,
+            cells: &cells,
+            colours: &colours,
+            default_font_px: font_px,
+        };
+        crate::choice::overlay_at_sized_styled_with(
+            atlas,
+            &mut self.assets,
+            &options,
+            cursor,
+            x,
+            y,
+            font_px,
+            &colours,
+            Some(&ctx),
+        )
     }
 
     /// Preselects an option of the current choice prompt.
@@ -1303,12 +1947,37 @@ impl Game {
             if !picture.kind.is_text() || picture.hidden || picture.text.is_empty() {
                 continue;
             }
+            // A centred text picture inside a window uses the window's box as its
+            // anchor target: WOLF stores the window-relative origin on the child but
+            // the centre has to be measured against the parent frame, otherwise the
+            // caption hangs off the left/top edge of the row (empty save slots showed
+            // a clipped 没有存档). The window frame is the sibling whose number has
+            // the same tens prefix, e.g. 12052/12053 -> 12050.
+            let mut origin = [picture.x as f32, picture.y as f32];
+            if picture.anchor == 1 {
+                // Walk back to the nearest preceding real window frame; text pictures
+                // point at the frame by slot order (e.g. 12002 -> 12001 banner,
+                // 12053 -> 12051 row), not by a fixed numeric offset.
+                for delta in 1..=9 {
+                    let Some(base) = self.screen.get(picture.number - delta) else {
+                        continue;
+                    };
+                    let Some((w, h)) = base.window else { continue };
+                    if w > 1 && h > 1 {
+                        origin = [
+                            base.x as f32 + w as f32 / 2.0,
+                            base.y as f32 + h as f32 / 2.0,
+                        ];
+                        break;
+                    }
+                }
+            }
             let runs = if let Some(metrics) = &self.font_metrics {
                 let advance = |ch: char, px: f32| metrics.advance(ch, px);
                 crate::textpic::layout_with(
                     &picture.text,
-                    picture.x as f32,
-                    picture.y as f32,
+                    origin[0],
+                    origin[1],
                     picture.anchor,
                     &ctx,
                     &advance,
@@ -1316,8 +1985,8 @@ impl Game {
             } else {
                 crate::textpic::layout(
                     &picture.text,
-                    picture.x as f32,
-                    picture.y as f32,
+                    origin[0],
+                    origin[1],
                     picture.anchor,
                     &ctx,
                 )
@@ -1372,6 +2041,16 @@ impl Game {
         self.choice_cursor = index;
     }
 
+    /// True on the frame the left mouse button goes down.
+    ///
+    /// WOLF's own input polling (`123`) and its message/menu loops treat a left click as the
+    /// decide key, so the window layer needs one place to ask for the fresh edge without
+    /// reaching into the private previous-button state.
+    #[must_use]
+    pub fn left_click_fresh(&self) -> bool {
+        self.mouse_buttons & 1 != 0 && self.previous_mouse_buttons & 1 == 0
+    }
+
     /// Applies this frame's key state to the open choice prompt, if there is one.
     ///
     /// WOLF's runtime owns choice navigation: opcode 102 hands the runtime a list of
@@ -1379,6 +2058,42 @@ impl Game {
     /// returns an index. The port has to do the same, otherwise a script that opens a
     /// menu simply stops - the measured title screen does exactly that, advancing 45
     /// instructions and then waiting forever.
+    /// True while event 43's three picture slots are the visible title menu.
+    fn title_menu_live(&self) -> bool {
+        (3..=5).any(|number| {
+            self.screen
+                .get(number)
+                .is_some_and(|picture| picture.file.starts_with("Picture/menu"))
+        })
+    }
+
+    /// Drives the visible title menu before the 102 choice opens.
+    ///
+    /// The boot flow paints event 43's three rows long before CE42 opens its parked
+    /// choice window, so the normal choice path never sees arrow keys or hover on the
+    /// initial title. This keeps Sys20 and the row textures in step with the pointer and
+    /// keyboard even while choices is still None.
+    fn handle_title_menu_input(&mut self) {
+        if self.choices.is_some() || !self.title_menu_live() {
+            return;
+        }
+        let count = 3usize;
+        let mut cursor = self.choice_cursor.min(count - 1);
+        if let Some(row) = (0..count).rev().find(|row| self.picture_hover(3 + *row as i32) == 1) {
+            cursor = row;
+        }
+        let pressed = self.key_bits & !self.previous_keys;
+        if pressed & crate::key::UP != 0 {
+            cursor = (cursor + count - 1) % count;
+        }
+        if pressed & crate::key::DOWN != 0 {
+            cursor = (cursor + 1) % count;
+        }
+        self.choice_cursor = cursor;
+        self.vm.vars.set_sys(20, cursor as i32);
+        self.sync_title_menu_highlight(cursor);
+    }
+
     fn handle_choice_input(&mut self) {
         let Some(count) = self.choices.as_ref().map(|choices| choices.options.len()) else {
             self.choice_cursor = 0;
@@ -1387,30 +2102,123 @@ impl Game {
         if count == 0 {
             return;
         }
+        // The title screen parks the 102 choice window at Sys4 = 1000, far below the
+        // 576-pixel screen, and draws the real menu itself in event 43. Event 43 also
+        // stores the hovered item in Sys20, so for a parked window Sys20 is the visible
+        // cursor and a click on a menu row must answer that item.
+        let (_, anchor_y) = self.choice_anchor();
+        let parked = anchor_y >= crate::picture::SCREEN_H as i32;
+        let mut cursor = self.choice_cursor;
+        // Hover preselection applies when the pointer moves or a prompt first opens.
+        // Re-applying it every idle frame would drag the cursor back to a resting
+        // pointer and make UP/DOWN navigation appear stuck (RF-01).
+        let pointer_moved = self.mouse != self.previous_mouse;
+        let prompt_fresh = self.choices.as_ref().is_some_and(|choices| choices.frames <= 1);
+        if parked {
+            // Event 43 paints the visible title menu into picture slots 3, 4, 5 and was
+            // written to store the hovered row in Sys20 - but its own hover instructions
+            // sit after a 172 BreakEvent, so in the data they are unreachable. Reproduce
+            // that intent here: hit-test those pictures so pointer movement highlights the
+            // row and a click selects the row under the pointer rather than always row 0.
+            // The rows overlap by two pixels at their edges; the later (topmost) picture
+            // wins, so search in reverse paint order.
+            let hovered = if pointer_moved || prompt_fresh {
+                (0..count)
+                    .rev()
+                    .find(|row| self.picture_hover(3 + *row as i32) == 1)
+            } else {
+                None
+            };
+            let from_sys = self.sys(20);
+            if from_sys >= 0 && (from_sys as usize) < count {
+                cursor = from_sys as usize;
+            }
+            if let Some(row) = hovered {
+                cursor = row;
+                self.vm.vars.set_sys(20, row as i32);
+            }
+        } else {
+            // Ordinary 102 prompts had no pointer preselection: only the parked title
+            // menu looked at the mouse. A fresh prompt or pointer movement highlights the
+            // row under the cursor without answering it; a click below commits.
+            if pointer_moved || prompt_fresh {
+                if let Some(row) = self.choice_row_at(self.mouse[0], self.mouse[1]) {
+                    cursor = row;
+                    self.choice_cursor = row;
+                    self.vm.vars.set_sys(20, row as i32);
+                }
+            }
+        }
         // A left click on a row both highlights and confirms it. WOLF's menu windows are
         // mouse-first, so without this the port would only answer to the keyboard.
         let clicked = self.mouse_buttons & 1 != 0 && self.previous_mouse_buttons & 1 == 0;
         if clicked {
+            if self.title_menu_choice_active {
+                // The rebuilt title window is parked off screen; the real hit boxes
+                // are event 43's three pictures, exactly as on the initial title.
+                if let Some(row) = (0..count)
+                    .rev()
+                    .find(|row| self.picture_hover(3 + *row as i32) == 1)
+                {
+                    self.choose_title_menu_row(row);
+                }
+                return;
+            }
             if let Some(row) = self.choice_row_at(self.mouse[0], self.mouse[1]) {
                 self.reply(ChoiceReply::Index(row));
                 self.choice_cursor = 0;
                 return;
             }
+            if parked {
+                if let Some(row) = (0..count)
+                    .rev()
+                    .find(|row| self.picture_hover(3 + *row as i32) == 1)
+                {
+                    self.reply(ChoiceReply::Index(row));
+                    self.choice_cursor = 0;
+                    return;
+                }
+            }
+            // NEW-02: a blank click must not confirm the highlighted option. Return
+            // without touching the cursor or the reply queue.
+            return;
         }
         // Only fresh presses count: holding a key must not scroll a menu at 60 steps a
-        // second, which is what a level-triggered read would do.
-        let pressed = self.key_bits & !self.previous_keys;
+        // second, which is what a level-triggered read would do. A 126 state-2 ban
+        // also stops the cursor, matching the retail Ver3.582 behaviour.
+        let pressed =
+            self.key_bits & !self.previous_keys & !self.vm.input.basic_all_deny;
         if pressed & crate::key::UP != 0 {
-            self.choice_cursor = (self.choice_cursor + count - 1) % count;
+            cursor = (cursor + count - 1) % count;
         }
         if pressed & crate::key::DOWN != 0 {
-            self.choice_cursor = (self.choice_cursor + 1) % count;
+            cursor = (cursor + 1) % count;
         }
-        self.choice_cursor = self.choice_cursor.min(count - 1);
+        cursor = cursor.min(count - 1);
+        if parked {
+            // Keep the script's own menu painter in step with keyboard/scroll navigation.
+            self.vm.vars.set_sys(20, cursor as i32);
+        }
+        self.choice_cursor = cursor;
+        if parked {
+            // Repaint every frame: event 43 creates all three rows with the light _b
+            // texture, so without an unconditional first sync the untouched rows stay
+            // light until the player presses a key.
+            self.sync_title_menu_highlight(cursor);
+        }
         if pressed & crate::key::OK != 0 {
-            self.reply(ChoiceReply::Index(self.choice_cursor));
+            if self.title_menu_choice_active {
+                self.choose_title_menu_row(cursor);
+                return;
+            }
+            self.reply(ChoiceReply::Index(cursor));
             self.choice_cursor = 0;
         } else if pressed & crate::key::CANCEL != 0 {
+            if self.title_menu_choice_active {
+                // Cancel has no meaning in the rebuilt title menu; keep the rows
+                // alive instead of feeding a Cancel reply to a coroutine that is gone.
+                return;
+            }
             self.reply(ChoiceReply::Cancel);
             self.choice_cursor = 0;
         }
@@ -1430,9 +2238,24 @@ impl Game {
         // Player input is sampled before the VM step: a movement step or action-key
         // page start has to be visible to this frame's step, not the next one.
         self.advance_player_input();
+        self.handle_title_menu_input();
         self.handle_choice_input();
+        // The save/load screen lives in the same title map and paints WindowString
+        // slots, so the title menu coroutine would otherwise survive into it and eat
+        // the clicks meant for the save rows. Gate on the title session, not on
+        // event 43 still painting: CE43 can end while its three pictures survive, and
+        // then only the session flag can suspend the menu for a later rebuild.
+        if self.title_screen_active && self.screen.has_file_containing("SystemFile/WindowBase") {
+            self.stop_title_menu();
+        }
+        // A CE247 run started by the CLI has no 210 call site the host can see. Snapshot
+        // the room art from the first frame it is live, before its branches can erase it.
+        self.refresh_room_base_pictures();
         let mut report = self.vm.step_frame(&mut GameHost {
             screen: &mut self.screen,
+            room_base_pictures: &mut self.room_base_pictures,
+            room_restore_pending: &mut self.room_restore_pending,
+            room_base_captured: &mut self.room_base_captured,
             screen_tint: &mut self.screen_tint,
             screen_transition: &mut self.screen_transition,
             assets: &mut self.assets,
@@ -1440,11 +2263,15 @@ impl Game {
             sounds: &mut self.sounds,
             audio: self.audio.as_mut(),
             messages: &mut self.messages,
+            pending_speaker: &mut self.pending_speaker,
             choices: &mut self.choices,
+            title_menu_choice_active: &mut self.title_menu_choice_active,
             replies: &mut self.replies,
             diagnostics: &mut self.diagnostics,
             stats: &mut self.stats,
             key_bits: self.key_bits,
+            pressed_bits: self.key_bits & !self.previous_keys,
+            wheel_dir: self.wheel_dir,
             auto_advance: self.auto_advance,
             auto_choice: self.auto_choice,
             auto_choice_delay: self.auto_choice_delay,
@@ -1458,12 +2285,25 @@ impl Game {
             map_requests: &mut self.map_requests,
             actors: &self.runtime,
         });
+        // CE247's leave branch erases the room standing pictures through CE218 -1 and
+        // jumps back to its top label without repainting them. If the menu is waiting
+        // on that top choice again and the whole captured range is gone, put the base
+        // art back; a live temporary pose cancels the restore.
+        self.restore_room_base_if_ready();
+        // The old map's screen layers stay up for a few frames so a bare tilemap never
+        // flashes between the old background and the new one.
+        self.prune_stale_screen_layers();
         // A `220` load replaces the picture layer and the normal variables, so it runs
         // as soon as the VM step that requested it has released its borrow of `Game`.
         let requests = std::mem::take(&mut self.save_requests);
         for request in requests {
             match request {
                 crate::savegame::SaveRequest::Load(path) => {
+                    // A loaded game is gameplay, not the title map any more.
+                    self.title_screen_active = false;
+                    self.title_menu_suspended = false;
+                    self.title_menu_choice_active = false;
+                    self.clear_room_base_snapshot();
                     match crate::savegame::load_into(self, &path) {
                         Ok(loaded) => {
                             self.diagnostics.insert(
@@ -1527,6 +2367,9 @@ impl Game {
                 }
             }
         }
+        // The save/load window is part of the title map and event 42 keeps running
+        // behind it. Once its WindowBase pictures are gone, put the menu back.
+        self.resume_title_menu_if_ready();
         // One more frame of play time; the save stores this in SavePart2.vars3_21[0].
         self.playtime_frames = self.playtime_frames.saturating_add(1);
         // Age the UI state after the VM ran, so a message shown this frame is 0 frames old.
@@ -1571,6 +2414,7 @@ impl Game {
             // A coroutine parked on a menu is alive but does no work, and that is what
             // a renderer needs to know: idle means this frame executed nothing.
             idle: report.steps == 0,
+            quit_requested: self.quit_requested,
             report: StepReport::default(),
         };
         report.notes.clear();
@@ -1775,6 +2619,13 @@ impl crate::message::Colours for PictureColours<'_> {
 /// Per-frame borrow shim: the VM lives inside Game, so the host cannot borrow Game.
 struct GameHost<'a> {
     screen: &'a mut Screen,
+    /// Room-menu base pictures, captured when CE247 starts. See
+    /// Game::capture_room_base_pictures.
+    room_base_pictures: &'a mut Vec<Picture>,
+    /// Set when CE218 mode -1 ran; the frame loop restores after the VM step.
+    room_restore_pending: &'a mut bool,
+    /// Whether the current CE247 run already took its snapshot.
+    room_base_captured: &'a mut bool,
     screen_tint: &'a mut ScreenTint,
     screen_transition: &'a mut ScreenTransition,
     assets: &'a mut Assets,
@@ -1784,11 +2635,20 @@ struct GameHost<'a> {
     /// `Host::sound` a pure recorder (tests, headless captures).
     audio: Option<&'a mut wolf_audio::Engine>,
     messages: &'a mut Vec<Message>,
+    pending_speaker: &'a mut Option<String>,
     choices: &'a mut Option<Choices>,
+    /// Clears the host-owned title menu marker when a real script 102 replaces it.
+    title_menu_choice_active: &'a mut bool,
     replies: &'a mut std::collections::VecDeque<ChoiceReply>,
     diagnostics: &'a mut BTreeMap<String, u64>,
     stats: &'a mut GameStats,
     key_bits: u32,
+    /// Keys that went down this frame (press edge). Message dismissal uses this
+    /// instead of the held state so holding OK cannot clear a following line in
+    /// the same frame it appears.
+    pressed_bits: u32,
+    /// Signed wheel notch for this frame. See [`Game::wheel_dir`].
+    wheel_dir: i32,
     auto_advance: bool,
     auto_choice: bool,
     auto_choice_delay: u32,
@@ -1927,6 +2787,69 @@ fn mouse_state(held: bool, held_before: bool) -> i32 {
 }
 
 impl Host for GameHost<'_> {
+    fn common_event_call(&mut self, target: EventId, args: &[i32], strings: &[String]) {
+        // CE247 is the room conversation menu. Its base standing pictures are already
+        // on screen when it starts; remember them before any branch calls CE218 -1 and
+        // erases slots 90..98, because the jump back to the menu label never repaints
+        // them. A direct CLI event start is handled by Game::refresh_room_base_pictures.
+        if target == ROOM_MENU_EVENT && !*self.room_base_captured {
+            let snapshot: Vec<Picture> = self
+                .screen
+                .iter()
+                .filter(|picture| {
+                    (ROOM_BASE_PICTURE_FIRST..=ROOM_BASE_PICTURE_LAST).contains(&picture.number)
+                })
+                .cloned()
+                .collect();
+            if !snapshot.is_empty() {
+                *self.room_base_pictures = snapshot;
+                *self.room_base_captured = true;
+            }
+            *self.room_restore_pending = false;
+        }
+        // CE218 mode -1 erases its own picture list (90..98 for the leave branch).
+        // Mark the base snapshot for restoration after the VM step has settled on the
+        // menu's next wait; the restore itself checks that every captured slot is gone.
+        if target == STANDING_PICTURE_EVENT
+            && args.first().copied() == Some(-1)
+            && !self.room_base_pictures.is_empty()
+        {
+            *self.room_restore_pending = true;
+        }
+        // The night chain swaps the room scene for H on the same map, so no 130
+        // Teleport runs and switch_map's cleanup never fires. CE232's status panel
+        // (1600-1621) must go before CE332's H art is drawn.
+        if target == NIGHT_START_EVENT {
+            // Same precision as Game::clear_night_room_hud: keep picture 120 (the
+            // sister) and the two separate speaker slots 118/119.
+            self.screen.remove_range(1600, 1621);
+            self.screen.remove_range(108, 111);
+            self.screen.remove_range(118, 119);
+            // The room session ends here even though no 130 Teleport runs.
+            self.room_base_pictures.clear();
+            *self.room_base_captured = false;
+            *self.room_restore_pending = false;
+        }
+        // CE264 is the message-window wrapper: its second string argument is the
+        // name tab, and an empty string means "no name" (CE264 comment §名前欄).
+        // Keep the value until the following 101 consumes it.
+        if target == 264 {
+            // `call_arguments` already drops the reserved leading blank slot, so
+            // the name is the first string argument the wrapper receives.
+            let name = strings.first().map_or("", |s| s.trim());
+            // The wrapper's second string argument is either a speaker name or one of
+            // the library's window presets. "message"/"system"/"hint" are layout
+            // keywords, not characters, so treating them as a name paints a bogus
+            // "message" tab over narration (the opening question uses "message").
+            let reserved = matches!(
+                name.to_ascii_lowercase().as_str(),
+                "" | "message" | "system" | "hint"
+            );
+            *self.pending_speaker = (!reserved).then(|| name.to_owned());
+            let _ = args;
+        }
+    }
+
     fn show_message(&mut self, text: &str, face: Option<i32>) {
         // The engine keeps at most one message window: a new 101 replaces the old
         // text rather than stacking behind it.
@@ -1934,15 +2857,17 @@ impl Host for GameHost<'_> {
         self.messages.push(Message {
             text: text.to_owned(),
             face,
+            speaker: self.pending_speaker.take(),
             frames: 0,
         });
         self.stats.messages += 1;
     }
 
     fn message_dismissed(&mut self) -> bool {
-        // A human dismisses messages with the confirm key; a headless run dismisses them
-        // immediately so a scripted capture can walk through a conversation.
-        self.auto_advance || self.key_bits & crate::key::OK != 0
+        // A human dismisses messages with a fresh confirm press; a headless run dismisses
+        // them immediately so a scripted capture can walk through a conversation. Using
+        // the press edge keeps a held OK from clearing the next line the moment it opens.
+        self.auto_advance || self.pressed_bits & crate::key::OK != 0
     }
 
     fn close_message(&mut self) {
@@ -1950,6 +2875,9 @@ impl Host for GameHost<'_> {
     }
 
     fn show_choices(&mut self, options: &[String]) {
+        // A script-owned 102 replaces the host's rebuilt title window; its answers go
+        // back to the coroutine, not to the title action dispatcher.
+        *self.title_menu_choice_active = false;
         *self.choices = Some(Choices {
             options: options.to_vec(),
             frames: 0,
@@ -2346,17 +3274,22 @@ impl Host for GameHost<'_> {
     }
 
     fn key_code(&mut self, mask: u32) -> i32 {
-        // The mask is deliberately unused: one mask can yield six different codes,
-        // see crates/wolf-game/src/key.rs.
-        let _ = mask;
+        // 771 is the save/load list's wheel poll (event 131 pc58): it expects the
+        // signed notch (+1 up, -1 down), not the direction-key codes 8/2. Every other
+        // mask keeps the key-code model from crates/wolf-game/src/key.rs.
+        if mask == 771 && self.wheel_dir != 0 {
+            return self.wheel_dir;
+        }
         crate::key::code(self.key_bits)
     }
 
     fn key_code_auto(&mut self, mask: u32, auto: u32) -> i32 {
         // Opcode 125 exists exactly for script-driven input: the key bits it names
-        // are pressed even when the player is not touching the keyboard. The mask is
-        // still irrelevant for the code mapping, as above.
-        let _ = mask;
+        // are pressed even when the player is not touching the keyboard. The wheel
+        // special case matches key_code above.
+        if mask == 771 && self.wheel_dir != 0 {
+            return self.wheel_dir;
+        }
         crate::key::code(self.key_bits | auto)
     }
 
@@ -2457,9 +3390,8 @@ impl Host for GameHost<'_> {
                 self.previous_mouse_buttons & 4 != 0,
             )),
             // 10 is the wheel rotation delta (`[input+0x40]` in the shipped engine).
-            // The port has no wheel input channel, so "no rotation" is the truthful
-            // answer rather than a guess.
-            10 => Some(0),
+            // The CLI feeds the signed notch here; 0 means no rotation.
+            10 => Some(self.wheel_dir),
             // 11/12 are NOT "event under the pointer" / "event in contact": the
             // shipped 0x3000 field switch reads two plain globals there, and the
             // input update fills them with
@@ -2515,6 +3447,82 @@ mod tests {
             eprintln!("skipping: no game data at {}", root.display());
             None
         }
+    }
+
+    #[test]
+    fn message_speaker_comes_from_the_message_window_wrapper() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.messages.push(Message {
+            text: "……哥哥，哥哥！".to_owned(),
+            face: Some(2),
+            speaker: Some("妹妹".to_owned()),
+            frames: 0,
+        });
+        assert_eq!(game.message_speaker().as_deref(), Some("妹妹"));
+        game.messages.last_mut().expect("message").speaker = Some("加奈".to_owned());
+        assert_eq!(
+            game.message_speaker().as_deref(),
+            Some("加奈"),
+            "an explicit CE264 name outranks the face's own name"
+        );
+        // A face alone is not a speaker: ordinary 101 narration inherits Sys0 from
+        // the previous character line, so the VM snapshots the same face id.
+        game.messages.last_mut().expect("message").speaker = None;
+        assert_eq!(
+            game.message_speaker(),
+            None,
+            "no explicit name means no tab, even when a face id is present"
+        );
+    }
+
+    #[test]
+    fn narration_after_a_character_line_gets_no_nameplate() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.messages.push(Message {
+            text: "……哥哥，哥哥！".to_owned(),
+            face: Some(2),
+            speaker: Some("妹妹".to_owned()),
+            frames: 0,
+        });
+        assert_eq!(game.message_speaker().as_deref(), Some("妹妹"));
+        // The next ordinary 101 inherits Sys0 = 2 but carries no CE264 name.
+        game.messages.push(Message {
+            text: "屋里安静了下来。".to_owned(),
+            face: Some(2),
+            speaker: None,
+            frames: 0,
+        });
+        assert_eq!(
+            game.message_speaker(),
+            None,
+            "a narration window after a character line must not show a nameplate"
+        );
+    }
+
+    #[test]
+    fn common_event_call_captures_the_ce264_name() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        {
+            let mut host = host(&mut game);
+            host.common_event_call(
+                264,
+                &[12323, 0, 2002, 1, 0, 0],
+                &["妹妹".to_owned(), "".to_owned()],
+            );
+        }
+        assert_eq!(game.pending_speaker.as_deref(), Some("妹妹"));
+        {
+            let mut host = host(&mut game);
+            host.common_event_call(
+                264,
+                &[12323, 0, 2002, 1, 0, 0],
+                &["".to_owned(), "".to_owned()],
+            );
+        }
+        assert_eq!(game.pending_speaker, None, "blank name clears the tab");
     }
 
     #[test]
@@ -2671,7 +3679,11 @@ mod tests {
     fn the_title_event_parks_on_its_menu_after_one_graphic() {
         let Some(root) = have_data() else { return };
         let mut game = Game::new(&root).expect("game");
+        // This test isolates CE42 (the prompt), so drop the menu painter event 43 that
+        // start_title also installs for the visible title screen.
+        game.auto_events.set_enabled(false);
         game.start_title().expect("title event");
+        game.stop_title_menu();
         let mut peak = 0usize;
         let mut last = FrameOutcome::default();
         for _ in 0..200 {
@@ -2691,13 +3703,18 @@ mod tests {
         assert_eq!(game.stats.pictures, 1);
         assert!(last.idle, "a parked title does no work");
         let pictures: Vec<_> = game.screen.iter().collect();
-        assert_eq!(pictures.len(), 1);
+        assert_eq!(pictures.len(), 2);
         assert_eq!(
-            pictures[0].number, -2,
+            pictures[0].number, TITLE_BACKDROP,
+            "the black floor sits below the title art"
+        );
+        assert_eq!(pictures[0].file, "Kagura/bg.png");
+        assert_eq!(
+            pictures[1].number, -2,
             "the title layer is the whole screen"
         );
-        assert!(pictures[0].is_screen_layer());
-        assert!(pictures[0].file.contains("TitleGraphic"));
+        assert!(pictures[1].is_screen_layer());
+        assert!(pictures[1].file.contains("TitleGraphic"));
         assert_eq!(
             game.stats.warnings, 0,
             "diagnostics: {:?}",
@@ -2709,6 +3726,8 @@ mod tests {
     fn the_title_menu_advances_when_the_confirm_key_is_pressed() {
         let Some(root) = have_data() else { return };
         let mut game = Game::new(&root).expect("game");
+        // Isolate the prompt from the per-frame menu painter for the same reason.
+        game.auto_events.set_enabled(false);
         game.start_title().expect("title event");
         for _ in 0..30 {
             game.frame();
@@ -2738,6 +3757,62 @@ mod tests {
             game.stats.instructions
         );
         assert!(game.choices.is_none(), "the prompt should be answered");
+    }
+
+    #[test]
+    fn the_title_menu_starts_once_and_tracks_the_pointer() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.start_title().expect("title event");
+        for _ in 0..6 {
+            game.frame();
+        }
+        // Event 43 paints its three rows and ends; the pictures stay live afterwards.
+        assert!(game.start_title_menu(), "the title menu can be (re)started");
+        for _ in 0..6 {
+            game.frame();
+        }
+        for number in 3..=5 {
+            assert!(
+                game.screen.get(number).is_some(),
+                "menu picture {number} should exist"
+            );
+        }
+        // Hovering the second row (menu2 starts at y=450 and overlaps the first row's
+        // last two pixels) must move the parked cursor to 1. The topmost picture wins,
+        // not the first slot that happens to contain the point.
+        game.mouse = [10, 450];
+        for _ in 0..4 {
+            game.frame();
+        }
+        assert_eq!(game.vm.vars.get_sys(20), 1, "hover should advance Sys20");
+        // And the third row to 2.
+        game.mouse = [10, 510];
+        for _ in 0..4 {
+            game.frame();
+        }
+        assert_eq!(game.vm.vars.get_sys(20), 2, "hover should follow the pointer");
+    }
+
+    #[test]
+    fn clicking_a_parked_title_menu_row_answers_that_row() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.start_title().expect("title event");
+        for _ in 0..12 {
+            game.frame();
+        }
+        // Park the pointer over "继续咯" (menu2 at y=450), then click there. The click
+        // must answer index 1 even though the 102 window itself is off-screen.
+        game.mouse = [10, 460];
+        for _ in 0..4 {
+            game.frame();
+        }
+        assert_eq!(game.vm.vars.get_sys(20), 1);
+        game.previous_mouse_buttons = 0;
+        game.mouse_buttons = 1;
+        game.handle_choice_input();
+        assert_eq!(game.replies.pop_front(), Some(ChoiceReply::Index(1)));
     }
 
     #[test]
@@ -2786,6 +3861,492 @@ mod tests {
                 .all(|picture| !picture.file.contains("Button01")),
             "the hint banner is erased on the way into the menu"
         );
+    }
+
+    #[test]
+    fn hovering_a_choice_row_moves_the_cursor_but_does_not_confirm() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.vm.vars.set_sys(3, 100);
+        game.vm.vars.set_sys(4, 200);
+        game.vm.vars.set_sys(8, 24);
+        game.choices = Some(Choices {
+            options: vec!["选项一".to_owned(), "选项二".to_owned()],
+            frames: 0,
+        });
+        // The second row starts at 200 + PADDING(14) + LINE_HEIGHT(30) = 244.
+        game.mouse = [120, 250];
+        game.handle_choice_input();
+        assert_eq!(game.choice_cursor, 1, "hover should preselect the second row");
+        assert_eq!(game.vm.vars.get_sys(20), 1, "Sys20 follows the hover");
+        assert!(game.replies.is_empty(), "hover must not answer the prompt");
+
+        // A fresh left click on the same row confirms it.
+        game.previous_mouse_buttons = 0;
+        game.mouse_buttons = 1;
+        game.handle_choice_input();
+        assert_eq!(game.replies.pop_front(), Some(ChoiceReply::Index(1)));
+    }
+
+    #[test]
+    fn clicking_empty_space_does_not_confirm_the_highlighted_choice() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.vm.vars.set_sys(3, 100);
+        game.vm.vars.set_sys(4, 200);
+        game.vm.vars.set_sys(8, 24);
+        game.choices = Some(Choices {
+            options: vec!["选项一".to_owned(), "选项二".to_owned()],
+            frames: 0,
+        });
+        game.choice_cursor = 1;
+        game.mouse = [900, 500];
+        game.previous_mouse_buttons = 0;
+        game.mouse_buttons = 1;
+        game.handle_choice_input();
+        assert!(game.replies.is_empty(), "a blank click must not confirm row 1");
+        assert_eq!(game.choice_cursor, 1);
+    }
+
+    #[test]
+    fn the_nameplate_hangs_above_the_message_frame_not_the_text_origin() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.vm.vars.set_sys(1, 64);
+        game.vm.vars.set_sys(2, 410);
+        game.vm.vars.set_sys(8, 24);
+        game.messages.push(Message {
+            text: "……哥哥，哥哥！".to_owned(),
+            face: None,
+            speaker: Some("妹妹".to_owned()),
+            frames: 0,
+        });
+        let mut frame = Picture::new(crate::message::FRAME_PICTURE);
+        frame.window = Some((700, 180));
+        frame.x = 100;
+        frame.y = 300;
+        game.screen.insert(frame);
+        let (rect, name, font) = game.message_nameplate().expect("nameplate");
+        assert_eq!(name, "妹妹");
+        assert_eq!(font, 24.0);
+        assert!((rect[0] - 104.0).abs() < 0.01, "left inset: {rect:?}");
+        assert!(
+            (rect[1] + rect[3] - (300.0 - 8.0)).abs() < 0.01,
+            "bottom should sit 8 px above the frame top: {rect:?}"
+        );
+
+        // Without a frame picture the old text-origin fallback still applies.
+        game.screen.remove(crate::message::FRAME_PICTURE);
+        let (fallback, _, _) = game.message_nameplate().expect("fallback");
+        assert!((fallback[0] - 68.0).abs() < 0.01);
+        assert!((fallback[1] + fallback[3] - 408.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_held_ok_does_not_dismiss_the_next_message() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.messages.push(Message {
+            text: "first".to_owned(),
+            face: None,
+            speaker: None,
+            frames: 0,
+        });
+        game.key_bits = key::OK;
+        game.previous_keys = 0;
+        assert!(
+            host(&mut game).message_dismissed(),
+            "a fresh OK press dismisses"
+        );
+        game.previous_keys = key::OK;
+        assert!(
+            !host(&mut game).message_dismissed(),
+            "holding OK must not dismiss a newly opened message"
+        );
+    }
+
+    #[test]
+    fn switching_maps_clears_the_previous_maps_screen_tint() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        // A green/yellow 151 flash (Dungeon event 1) must not survive into the map
+        // entered next: the retail engine gives each map a neutral screen tone.
+        game.screen_tint.set(0x0096_C896, 0);
+        assert!(game.screen_tint_rgb()[1] > 1.5);
+        game.switch_map("MapData/SampleMapA.mps", None)
+            .expect("switch to the opening map");
+        assert_eq!(game.screen_tint_rgb(), [1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn a_new_game_retires_the_title_screen_without_clearing_it_immediately() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        let mut backdrop = Picture::new(TITLE_BACKDROP);
+        backdrop.file = "Kagura/bg.png".to_owned();
+        game.screen.insert(backdrop);
+        let mut title_art = Picture::new(-2);
+        title_art.file = "TitleGraphic.jpg".to_owned();
+        game.screen.insert(title_art);
+        game.screen_tint.set(0x0096_C896, 0);
+        game.title_screen_active = true;
+        game.title_menu_suspended = true;
+        game.start_map_event_by_name("SampleMapA", 0)
+            .expect("opening map and event");
+        // The old title layers cover the gap until the new map paints its own -1 art.
+        assert!(game.screen.get(TITLE_BACKDROP).is_some());
+        assert_eq!(game.stale_clear_countdown, 4);
+        assert_eq!(game.stale_screen_layers.len(), 2);
+        assert_eq!(game.screen_tint_rgb(), [1.0, 1.0, 1.0]);
+        assert!(!game.title_screen_active, "a new game leaves the title screen");
+        assert!(!game.title_menu_suspended);
+    }
+
+    #[test]
+    fn a_same_slot_redraw_during_the_stale_window_is_not_retired() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        for (number, file) in [(-1, "Picture/background.png"), (-2, "TitleGraphic.jpg")] {
+            let mut picture = Picture::new(number);
+            picture.file = file.to_owned();
+            game.screen.insert(picture);
+        }
+        game.retire_screen_for_map_change();
+        assert_eq!(game.stale_clear_countdown, 4);
+        let old_generation = game
+            .stale_screen_layers
+            .iter()
+            .find(|(number, _, _)| *number == -1)
+            .and_then(|(_, _, generation)| *generation)
+            .expect("old slot has a generation");
+
+        // The new map repaints the same negative slot with the same file before the
+        // four-frame window closes. It must survive the stale cleanup.
+        let mut redraw = Picture::new(-1);
+        redraw.file = "Picture/background.png".to_owned();
+        game.screen.insert(redraw);
+        let new_generation = game.screen.generation(-1).expect("new slot has a generation");
+        assert_ne!(old_generation, new_generation);
+
+        for _ in 0..4 {
+            game.prune_stale_screen_layers();
+        }
+        assert!(
+            game.screen.get(-1).is_some(),
+            "a freshly inserted same-number, same-file picture must survive"
+        );
+        assert!(
+            game.screen.get(-2).is_none(),
+            "the old map's untouched layer must still be retired"
+        );
+    }
+
+    #[test]
+    fn the_title_menu_resumes_after_the_save_window_even_if_event_42_ended() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.title_screen_active = true;
+        game.title_menu_suspended = true;
+        // No event 42 instance exists here: the save page's load branch may already
+        // have let the title prompt return. The suspended flag alone must bring the
+        // three visible rows back.
+        game.resume_title_menu_if_ready();
+        assert!(
+            game.vm
+                .instances()
+                .iter()
+                .any(|instance| instance.event == TITLE_MENU_EVENT),
+            "event 43 should be running again"
+        );
+        assert!(!game.title_menu_suspended);
+        // CE42 may have returned with the save page, so the visible rows alone are
+        // not enough: a real parked 102 with the three original options must exist.
+        let choices = game.choices.as_ref().expect("rebuilt title choices");
+        assert_eq!(choices.options, ["1", "2", "3"]);
+        assert!(game.title_menu_choice_active);
+        assert_eq!(game.sys(3), 512);
+        assert_eq!(game.sys(4), 1000);
+        assert_eq!(game.choice_cursor, 0);
+
+        // The rebuilt prompt is a real 102: DOWN moves it and keeps Sys20 in sync.
+        game.key_bits = key::DOWN;
+        game.previous_keys = 0;
+        game.handle_choice_input();
+        assert_eq!(game.choice_cursor, 1);
+        assert_eq!(game.vm.vars.get_sys(20), 1);
+        game.key_bits = 0;
+        game.previous_keys = key::DOWN;
+        game.handle_choice_input();
+        assert_eq!(game.choice_cursor, 1, "the cursor stays where DOWN put it");
+    }
+
+    #[test]
+    fn clicking_a_rebuilt_title_row_runs_that_row() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.start_title().expect("title event");
+        for _ in 0..12 {
+            game.frame();
+        }
+        game.title_screen_active = true;
+        game.title_menu_suspended = true;
+        game.choices = None;
+        game.resume_title_menu_if_ready();
+        assert!(game.title_menu_choice_active);
+        // Row 1 (menu2 at y=450) is Load. The synthetic prompt is parked off screen,
+        // so the click has to hit event 43's picture slot exactly like the real title.
+        game.mouse = [10, 460];
+        game.previous_mouse_buttons = 0;
+        game.mouse_buttons = 1;
+        game.handle_choice_input();
+        assert!(
+            game.vm
+                .instances()
+                .iter()
+                .any(|instance| instance.event == TITLE_LOAD_EVENT),
+            "clicking row 1 must start the Load screen"
+        );
+        assert!(!game.title_menu_choice_active);
+
+        // Row 2 (menu3 at y=500) is Quit; a click there must set the quit request.
+        game.title_screen_active = true;
+        game.open_title_menu_choice();
+        game.mouse = [10, 510];
+        game.previous_mouse_buttons = 0;
+        game.mouse_buttons = 1;
+        game.handle_choice_input();
+        assert!(game.quit_requested());
+        assert!(!game.title_menu_choice_active);
+    }
+
+    #[test]
+    fn the_rebuilt_title_rows_execute_new_game_load_and_quit() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.title_screen_active = true;
+        game.open_title_menu_choice();
+        game.choose_title_menu_row(0);
+        let request = game.map_requests.first().expect("new-game map request");
+        assert_eq!((request.target, request.map, request.x, request.y), (-1, 3, 60, 34));
+        assert!(!game.title_menu_choice_active);
+
+        game.title_screen_active = true;
+        game.open_title_menu_choice();
+        game.choose_title_menu_row(1);
+        assert!(
+            game.vm
+                .instances()
+                .iter()
+                .any(|instance| instance.event == TITLE_LOAD_EVENT),
+            "the Load row starts common event 14"
+        );
+        assert!(!game.title_menu_choice_active);
+
+        game.title_screen_active = true;
+        game.open_title_menu_choice();
+        game.choose_title_menu_row(2);
+        assert!(game.quit_requested());
+        assert!(!game.title_menu_choice_active);
+    }
+
+    #[test]
+    fn a_game_map_does_not_resume_the_title_menu() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.title_screen_active = true;
+        game.title_menu_suspended = true;
+        game.start_map_event_by_name("SampleMapA", 0)
+            .expect("opening map and event");
+        game.resume_title_menu_if_ready();
+        assert!(
+            game.vm
+                .instances()
+                .iter()
+                .all(|instance| instance.event != TITLE_MENU_EVENT),
+            "gameplay must never get the title menu back"
+        );
+    }
+
+    #[test]
+    fn a_resting_pointer_does_not_override_title_keyboard_navigation() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        for row in 0..3 {
+            let mut picture = Picture::new(3 + row as i32);
+            picture.kind = PictureKind::Text;
+            picture.window = Some((240, 52));
+            picture.x = 10;
+            picture.y = 400 + 50 * row as i32;
+            game.screen.insert(picture);
+        }
+        game.title_screen_active = true;
+        game.open_title_menu_choice();
+        if let Some(choices) = game.choices.as_mut() {
+            choices.frames = 5;
+        }
+        // Pointer rests over row 0; moving DOWN must stick instead of being dragged
+        // back to the hovered row on the next idle frame (RF-01).
+        game.mouse = [10, 410];
+        game.previous_mouse = game.mouse;
+        game.key_bits = crate::key::DOWN;
+        game.previous_keys = 0;
+        game.handle_choice_input();
+        assert_eq!(game.choice_cursor, 1, "DOWN must move the title cursor");
+        assert_eq!(game.sys(20), 1);
+        game.key_bits = 0;
+        game.previous_keys = 0;
+        game.handle_choice_input();
+        assert_eq!(
+            game.choice_cursor, 1,
+            "an idle pointer over another row must not snap the cursor back"
+        );
+        assert_eq!(game.sys(20), 1);
+    }
+
+    #[test]
+    fn erased_room_base_pictures_are_restored_when_the_chat_menu_returns() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.start_event(ROOM_MENU_EVENT);
+        for (number, file) in [(90, "Picture/stand_imouto_paja2.png"), (91, "Picture/room_a.png")] {
+            let mut picture = Picture::new(number);
+            picture.file = file.to_owned();
+            game.screen.insert(picture);
+        }
+        game.capture_room_base_pictures();
+        assert_eq!(game.room_base_pictures.len(), 2);
+        // CE218 mode -1 erases 90..98 and CE247 jumps to its top menu, whose choice has
+        // four options. The captured base art must be back before the frame renders.
+        game.screen.remove_range(90, 98);
+        game.room_restore_pending = true;
+        game.choices = Some(Choices {
+            options: vec![
+                "对话".to_owned(),
+                "cself[5]".to_owned(),
+                "小酌一杯？".to_owned(),
+                "再见".to_owned(),
+            ],
+            frames: 0,
+        });
+        game.restore_room_base_if_ready();
+        assert_eq!(game.screen.get(90).map(|p| p.file.as_str()), Some("Picture/stand_imouto_paja2.png"));
+        assert_eq!(game.screen.get(91).map(|p| p.file.as_str()), Some("Picture/room_a.png"));
+        assert!(!game.room_restore_pending);
+    }
+
+
+    #[test]
+    fn room_base_pictures_are_restored_when_the_parent_menu_returns() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.start_event(ROOM_MENU_ROOT_EVENT);
+        game.start_event(ROOM_MENU_EVENT);
+        for (number, file) in [(90, "Picture/stand_imouto_paja2.png"), (91, "Picture/room_a.png")] {
+            let mut picture = Picture::new(number);
+            picture.file = file.to_owned();
+            game.screen.insert(picture);
+        }
+        game.capture_room_base_pictures();
+        game.screen.remove_range(90, 98);
+        game.room_restore_pending = true;
+        let chat_id = game
+            .vm
+            .instances()
+            .iter()
+            .find(|instance| instance.event == ROOM_MENU_EVENT)
+            .map(|instance| instance.id)
+            .expect("chat event");
+        assert!(game.vm.stop_instance(chat_id));
+        // The hand-off frame: CE247 is gone but CE245 has not painted its top menu
+        // yet. The snapshot must survive this gap.
+        game.choices = None;
+        game.refresh_room_base_pictures();
+        assert_eq!(game.room_base_pictures.len(), 2, "snapshot survives the hand-off");
+        // CE245's top menu is drawn with picture slots 1200..=1213, not Choices.
+        for number in [1200, 1201, 1212, 1213] {
+            game.screen.insert(Picture::new(number));
+        }
+        game.restore_room_base_if_ready();
+        assert_eq!(game.screen.get(90).map(|p| p.file.as_str()), Some("Picture/stand_imouto_paja2.png"));
+        assert_eq!(game.screen.get(91).map(|p| p.file.as_str()), Some("Picture/room_a.png"));
+        assert!(!game.room_restore_pending);
+    }
+
+    #[test]
+    fn a_temporary_room_pose_is_never_overwritten_by_the_base_restore() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        game.start_event(ROOM_MENU_EVENT);
+        for number in [90, 91] {
+            let mut picture = Picture::new(number);
+            picture.file = format!("Picture/base_{number}.png");
+            game.screen.insert(picture);
+        }
+        game.capture_room_base_pictures();
+        game.screen.remove_range(90, 98);
+        let mut temporary = Picture::new(90);
+        temporary.file = "Picture/temporary_pose.png".to_owned();
+        game.screen.insert(temporary);
+        game.room_restore_pending = true;
+        game.choices = Some(Choices {
+            options: vec![
+                "对话".to_owned(),
+                "cself[5]".to_owned(),
+                "小酌一杯？".to_owned(),
+                "再见".to_owned(),
+            ],
+            frames: 0,
+        });
+        game.restore_room_base_if_ready();
+        assert_eq!(
+            game.screen.get(90).map(|p| p.file.as_str()),
+            Some("Picture/temporary_pose.png"),
+            "a temporary CE218 pose owns the slot"
+        );
+        assert!(game.screen.get(91).is_none(), "base must not be painted behind it");
+        assert!(
+            game.room_restore_pending,
+            "a temporary pose defers the restore instead of consuming the request"
+        );
+
+        // CE218 mode -1 erases the temporary pose on a later branch step. The still
+        // pending request must now paint the captured base pictures back.
+        game.screen.remove_range(90, 98);
+        game.restore_room_base_if_ready();
+        assert_eq!(
+            game.screen.get(90).map(|p| p.file.as_str()),
+            Some("Picture/base_90.png")
+        );
+        assert_eq!(
+            game.screen.get(91).map(|p| p.file.as_str()),
+            Some("Picture/base_91.png")
+        );
+        assert!(!game.room_restore_pending, "a successful restore ends the request");
+    }
+
+    #[test]
+    fn the_night_chain_drops_the_room_hud_but_keeps_the_sister_picture() {
+        let Some(root) = have_data() else { return };
+        let mut game = Game::new(&root).expect("game");
+        for number in [1600, 1601, 108, 110, 118, 119, 120] {
+            game.screen.insert(Picture::new(number));
+        }
+        game.room_base_pictures.push(Picture::new(90));
+        game.room_base_captured = true;
+        game.room_restore_pending = true;
+        // Entering CE332 directly is what the scripted night chain does; it must not
+        // erase picture 120 (the sister) while clearing the HUD and message window.
+        let _ = game.start_event(NIGHT_START_EVENT);
+        for number in [1600, 1601, 108, 110, 118, 119] {
+            assert!(game.screen.get(number).is_none(), "slot {number} should be cleared");
+        }
+        assert!(
+            game.screen.get(120).is_some(),
+            "picture 120 is the sister and must survive the night HUD clear"
+        );
+        assert!(game.room_base_pictures.is_empty());
+        assert!(!game.room_base_captured);
+        assert!(!game.room_restore_pending);
     }
 
     #[test]
@@ -2914,6 +4475,9 @@ mod tests {
     fn host<'a>(game: &'a mut Game) -> GameHost<'a> {
         GameHost {
             screen: &mut game.screen,
+            room_base_pictures: &mut game.room_base_pictures,
+            room_restore_pending: &mut game.room_restore_pending,
+            room_base_captured: &mut game.room_base_captured,
             screen_tint: &mut game.screen_tint,
             screen_transition: &mut game.screen_transition,
             assets: &mut game.assets,
@@ -2921,11 +4485,14 @@ mod tests {
             sounds: &mut game.sounds,
             audio: game.audio.as_mut(),
             messages: &mut game.messages,
+            pending_speaker: &mut game.pending_speaker,
             choices: &mut game.choices,
             replies: &mut game.replies,
             diagnostics: &mut game.diagnostics,
             stats: &mut game.stats,
             key_bits: game.key_bits,
+            pressed_bits: game.key_bits & !game.previous_keys,
+            wheel_dir: game.wheel_dir,
             auto_advance: game.auto_advance,
             auto_choice: game.auto_choice,
             auto_choice_delay: game.auto_choice_delay,
@@ -2934,6 +4501,7 @@ mod tests {
             mouse_buttons: game.mouse_buttons,
             previous_mouse_buttons: game.previous_mouse_buttons,
             previous_mouse: game.previous_mouse,
+            title_menu_choice_active: &mut game.title_menu_choice_active,
             root: &game.root,
             save_requests: &mut game.save_requests,
             map_requests: &mut game.map_requests,

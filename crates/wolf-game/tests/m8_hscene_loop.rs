@@ -279,7 +279,13 @@ fn drive_to_next_morning(game: &mut Game, expected_day: i32, seen: &mut BTreeSet
 fn h_overlay_files(game: &Game) -> Vec<(i32, String, bool, i32)> {
     game.screen
         .iter()
-        .filter(|picture| picture.file.contains("hscene/") || picture.file.contains("cutin/"))
+        // Picture 6000 is CE216's `hscene/header_bar.jpg` status-bar backdrop, not
+        // H-scene art: CE216 is resumed on load so the normal HUD stays available
+        // after the night scene tears down.
+        .filter(|picture| {
+            picture.number != 6000
+                && (picture.file.contains("hscene/") || picture.file.contains("cutin/"))
+        })
         .map(|picture| (picture.number, picture.file.clone(), picture.hidden, picture.opacity))
         .collect()
 }
@@ -346,6 +352,12 @@ fn full_loop_enters_stage13_exits_and_rolls_to_next_morning() {
     assert!(game.vm.vars.get(4) >= 7, "the clock is back in the morning (var4 = {})", game.vm.vars.get(4));
     assert_eq!(game.stats.warnings, 0, "the whole loop -- exit, sleep and morning -- must be warning-free");
 
+    assert!(
+        game.screen
+            .iter()
+            .any(|picture| picture.number == 6000 && picture.file.contains("hscene/header_bar")),
+        "CE216's status-bar header must be restored after the sleep teardown"
+    );
     assert!(
         h_overlay_files(&game).is_empty(),
         "the H overlay (hscene/ + cutin/ layers) must be gone after the sleep teardown: {:?}",

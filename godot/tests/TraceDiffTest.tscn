@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://ctrace0diff0m0lwsmf"]
+
+[ext_resource type="Script" path="res://tests/TraceDiffTest.cs" id="1_tracediff"]
+
+[node name="TraceDiffTest" type="Node"]
+script = ExtResource("1_tracediff")

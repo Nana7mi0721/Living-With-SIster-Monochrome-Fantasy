@@ -1,115 +1,151 @@
-# 文档总索引（docs/README.md）
+# 文档总索引
 
-> 本文件是仓库文档的唯一总入口。**新增、移动、归档文档时，必须同步更新本索引。**
-> 当前里程碑：**M0–M12 已完成；M13 内容一致自动化验收三批完成（九结局/条件注入事件/DLC EP26–36/H 端到端/读档伪启动修复），并修复行动力条纵向缩放、HUD 调色板/文字基线 bug、新增 `wolf-layout` 布局导出工具（全量 874 passed / 0 failed / 14 ignored，`verify` PASS 70/0）**；H2–H5 人工验收已由用户全部通过（2026-11-02）。**P2 打包与性能第一轮已收口（2026-11-03）：最新重建发布包 `release/` 4067 files / 813,818,915 bytes，`wolf-package check` PASS，可直接双击 `wolf-cli.exe` 启动并带 charicon 程序图标；启动数据根校验、asset cache 统计、release bench 与启动拆解已接入，P2 后全量 878 passed / 0 failed / 14 ignored、`verify` PASS 70/0，详见 [`research/M11_PACKAGING.md`](research/M11_PACKAGING.md) 与 [`HANDOFF_M13.md`](HANDOFF_M13.md) §8–9。H-PRNG-1 已解除（2026-11-03）：交互 `wolf-cli play` 按本地时钟播种，`WOLF_EVENT_SEED` 可回放零售 tick，库默认仍固定；最新全量 882 passed / 0 failed / 14 ignored，见 [`UNVERIFIED.md`](UNVERIFIED.md) 与 [`research/M9_PRNG_SEED.md`](research/M9_PRNG_SEED.md)。** 最新交接：[`HANDOFF_M13.md`](HANDOFF_M13.md)。当前路线图：[`../PLAN.md`](../PLAN.md)。
+> **当前阶段（2026-11-14）：Godot 重制版 M1 已完成 / 进入 M2 主循环与 UI。**
+>
+> 最高优先级入口：[`godot/README.md`](godot/README.md) →
+> [`godot/DECISIONS.md`](godot/DECISIONS.md) →
+> [`godot/PLAN.md`](godot/PLAN.md) →
+> [`godot/M1_HANDOFF.md`](godot/M1_HANDOFF.md) →
+> [`godot/M0_HANDOFF.md`](godot/M0_HANDOFF.md)。
+>
+> 根目录 [`../PLAN.md`](../PLAN.md) 是当前路线摘要；
+> 旧 Rust 路线图已归档为 [`archive/PLAN_RUST_2026-11-04.md`](archive/PLAN_RUST_2026-11-04.md)。
 
-## 0. 先读什么
+## 0. 状态图例
 
-| 场景 | 阅读顺序 |
+| 状态 | 含义 |
 | --- | --- |
-| 新会话接续 | [`NEW_SESSION_START.md`](NEW_SESSION_START.md) → [`HANDOFF_M12.md`](HANDOFF_M12.md) → 本索引 → [`../PLAN.md`](../PLAN.md) |
-| 查格式 / 解码 | [`FORMAT_SPEC.md`](FORMAT_SPEC.md) → [`SAVE_SPEC.md`](SAVE_SPEC.md) → [`PARTY_DB.md`](PARTY_DB.md) |
-| 查 opcode 语义 | [`OPCODE_SPEC.md`](OPCODE_SPEC.md) → 对应的 [`OPCODE_*.md`](OPCODE_SPEC.md) 专题 |
-| 查战斗 / H / 地图 | [`BATTLE.md`](BATTLE.md) / [`HSCENE.md`](HSCENE.md) / [`MAP_AUDIT.md`](MAP_AUDIT.md) |
-| 查某里程碑做了什么 | [`HANDOFF_M12.md`](HANDOFF_M12.md)（现行，M11 round 3 + M12 审计）→ [`HANDOFF_M11.md`](HANDOFF_M11.md)（M11 round 2，历史）→ 更早历史交接（见 §3） |
-| 查研究/实测底稿 | [`research/README.md`](research/README.md) |
+| **现行** | 当前执行的决策、路线或协作规则 |
+| **迁移输入** | Rust 阶段验证出的格式/行为规格，Godot 重制仍应复用 |
+| **历史证据** | 旧实现、里程碑、测试和研究底稿；只用于追溯与 Oracle |
+| **归档** | 已被新决策替代的入口、策略或路线图 |
+| **用户资料** | 攻略、外部调研、第三方工具；不作为项目权威 |
 
-## 1. 状态图例
+## 1. 先读什么
 
-- **现行**：当前仍在维护、应优先相信的入口或路线图。
-- **稳定参考**：技术规格/审计，除非实测推翻，否则长期有效。
-- **历史归档**：已完成里程碑的记录，保留可追溯性，但不要当作当前指令。
-- **研究记录**：一次性调查/验收底稿，按里程碑归档；结论以对应 HANDOFF/规格为准。
-- **用户资料**：外部调研材料，不提交、不作为权威。
+| 目标 | 阅读顺序 |
+| --- | --- |
+| 开始 Godot 工作 | [`godot/README.md`](godot/README.md) → [`godot/DECISIONS.md`](godot/DECISIONS.md) → [`godot/PLAN.md`](godot/PLAN.md) |
+| 查看 M1 验收证据 | [`godot/M1_HANDOFF.md`](godot/M1_HANDOFF.md) → [`godot/PLAN.md`](godot/PLAN.md) §4 |
+| 查看 M0 验收证据 | [`godot/M0_HANDOFF.md`](godot/M0_HANDOFF.md) → [`godot/DATA_CONTRACT.md`](godot/DATA_CONTRACT.md) → [`godot/OPCODE_TEST_PLAN.md`](godot/OPCODE_TEST_PLAN.md) |
+| 查旧 Rust 风险 | [`godot/LEGACY_RUST_AUDIT.md`](godot/LEGACY_RUST_AUDIT.md) → [`godot/audit/GEMINI_AUDIT_AND_PLAN_2026-11-14.md`](godot/audit/GEMINI_AUDIT_AND_PLAN_2026-11-14.md) |
+| 查二进制格式 | [`FORMAT_SPEC.md`](FORMAT_SPEC.md) → [`SAVE_SPEC.md`](SAVE_SPEC.md) → [`PARTY_DB.md`](PARTY_DB.md) |
+| 查 opcode | [`OPCODE_SPEC.md`](OPCODE_SPEC.md) → 对应 `OPCODE_*.md` 专题 |
+| 查战斗/H/地图/文本 | [`BATTLE.md`](BATTLE.md) / [`HSCENE.md`](HSCENE.md) / [`MAP_AUDIT.md`](MAP_AUDIT.md) / [`TEXT_SPEC.md`](TEXT_SPEC.md) |
+| 查旧里程碑做了什么 | [`archive/README.md`](archive/README.md) → 下方 §3 的交接表 |
+| 查研究底稿 | [`research/README.md`](research/README.md) |
 
-## 2. 入口与协作文档
+## 2. Godot 现行文档
 
-| 文档 | 状态 | 用途 |
+| 文档 | 状态 | 内容 |
 | --- | --- | --- |
-| [`NEW_SESSION_START.md`](NEW_SESSION_START.md) | 现行 | 新会话启动提示，可直接复制给下一个 agent |
-| [`HANDOFF_M13.md`](HANDOFF_M13.md) | 现行 | 最新里程碑交接（M13 内容一致首批验收；common-self 与 Text picture 两处修复；P2 打包/性能收口见 §8–9） |
-| [`HANDOFF_M12.md`](HANDOFF_M12.md) | 历史归档 | 最新里程碑交接（M11 round 3：自然帧 H、真实战斗菜单、PRNG 时钟种子、打包/帧预算；M12 零售范围审计 + round 1：战斗取消、confirm 页命中、存档逐字节 + day6 周末日程 + 30/90 天多日 soak） |
-| [`../PLAN.md`](../PLAN.md) | 现行 | 当前路线图（M0–M12 汇总与剩余项） |
-| [`../AGENT.md`](../AGENT.md) | 现行 | Lead 与子代理协作约定（并行、写范围、验收、清理） |
+| [`godot/README.md`](godot/README.md) | 现行 | Godot 阶段唯一入口、当前状态、维护规则 |
+| [`godot/DECISIONS.md`](godot/DECISIONS.md) | 现行 | D-01..D-15 定稿决策、`.sav` 边界、废止旧方案 |
+| [`godot/PLAN.md`](godot/PLAN.md) | 现行 | M0–M5 路线、M0/M1 退出（已完成）、M2 入口 |
+| [`godot/M1_HANDOFF.md`](godot/M1_HANDOFF.md) | 现行 | M1 验收交接：切片运行链、存档续跑、证据与边界 |
+| [`godot/M0_HANDOFF.md`](godot/M0_HANDOFF.md) | 现行 | M0 验收交接：环境门限、对账、.sav 导入、Oracle 对拍 |
+| [`godot/DATA_CONTRACT.md`](godot/DATA_CONTRACT.md) | 现行 | 离线转换数据契约（manifest / programs / database / save） |
+| [`godot/OPCODE_TEST_PLAN.md`](godot/OPCODE_TEST_PLAN.md) | 现行 | Top 5 高频 opcode（`401, 210, 121, 111, 180`）测试计划 |
+| [`godot/LEGACY_RUST_AUDIT.md`](godot/LEGACY_RUST_AUDIT.md) | 现行 | 22 项 Rust 风险、行为兼容矩阵、禁止带入 Godot 的习惯 |
+| [`godot/HANDOFF_TEMPLATE.md`](godot/HANDOFF_TEMPLATE.md) | 模板 | 后续 Godot 里程碑交接格式 |
+| [`../oracle/TRACE_CONTRACT.md`](../oracle/TRACE_CONTRACT.md) | 现行 | Rust Oracle 与 Godot EventVM 对拍格式规范 |
+| [`../PLAN.md`](../PLAN.md) | 现行 | 当前路线摘要与下一步 |
+| [`../AGENT.md`](../AGENT.md) | 现行 | 协作规则；Godot 阶段以新入口为准 |
 
-## 3. 里程碑交接（历史归档）
+## 3. 迁移输入（稳定参考）
 
-> 最新只保留 `HANDOFF_M12.md` 为现行。下列交接按时间倒序，仅用于追溯；不要从旧交接直接开始做事。
+这些文档来自 Rust 阶段，但对方格式、事件语义和内容验收仍有复用价值。
+它们不是 Godot 现有实现的说明；若与 `godot/DECISIONS.md` 冲突，以决策文件为准。
+
+### 3.1 格式与运行时基础
+
+| 文档 | 状态 | 内容 |
+| --- | --- | --- |
+| [`FORMAT_SPEC.md`](FORMAT_SPEC.md) | 迁移输入 | Game.dat / CommonEvent / .mps / 数据库 / TileSetData / .wolf / .sav 规格 |
+| [`SAVE_SPEC.md`](SAVE_SPEC.md) | 迁移输入 | WOLF `.sav` 格式与加解密；用于 C# 导入器 |
+| [`PARTY_DB.md`](PARTY_DB.md) | 迁移输入 | CDataBase / SysDatabase / DataBase 运行时规格 |
+| [`ENGINE_EVENTS.md`](ENGINE_EVENTS.md) | 迁移输入 | 引擎常驻公共事件调查 |
+| [`TIME_SYSTEM.md`](TIME_SYSTEM.md) | 迁移输入 | 游戏内时间/星期/就寝/早朝 |
+| [`TEXT_SPEC.md`](TEXT_SPEC.md) | 迁移输入 | 消息文本内联标记与词法契约 |
+| [`ASSET_AUDIT.md`](ASSET_AUDIT.md) | 迁移输入 | 素材引用与可达性审计 |
+| [`UNVERIFIED.md`](UNVERIFIED.md) | 迁移输入 | 尚未证实的假设；迁移前需逐项处理 |
+
+### 3.2 子系统与 opcode
+
+| 文档 | 状态 | 内容 |
+| --- | --- | --- |
+| [`OPCODE_SPEC.md`](OPCODE_SPEC.md) | 迁移输入 | 50 种 opcode 总规格 |
+| [`OPCODE_101.md`](OPCODE_101.md) | 迁移输入 | 101 消息窗口 |
+| [`OPCODE_102.md`](OPCODE_102.md) | 迁移输入 | 102 选择肢窗口 |
+| [`OPCODE_112.md`](OPCODE_112.md) | 迁移输入 | 112 字符串条件 |
+| [`OPCODE_124.md`](OPCODE_124.md) | 迁移输入 | 124 SetVariableEx |
+| [`OPCODE_210_RETURN.md`](OPCODE_210_RETURN.md) | 迁移输入 | 210/300 调用与返回值 |
+| [`OPCODE_220_SAVE.md`](OPCODE_220_SAVE.md) | 迁移输入 | 220/221/222 存档三件套 |
+| [`OPCODE_250.md`](OPCODE_250.md) | 迁移输入 | 250 数据库读写 |
+| [`OPCODE_290.md`](OPCODE_290.md) | 迁移输入 | 290 图片效果 |
+| [`BATTLE.md`](BATTLE.md) | 迁移输入 | 战斗子系统全景、事件图、DB 依赖 |
+| [`HSCENE.md`](HSCENE.md) | 迁移输入 | H 场景子系统地图 |
+| [`MAP_AUDIT.md`](MAP_AUDIT.md) | 迁移输入 | 六张地图、页面激活与点触语义 |
+
+### 3.3 Rust 实现参考（不作为目标架构）
+
+| 文档 | 状态 | 内容 |
+| --- | --- | --- |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | 历史实现参考 | Rust 7-crate 架构、wgpu/kira 管线、旧里程碑表 |
+| [`AUDIO.md`](AUDIO.md) | 历史实现参考 | Rust 音频后端与接线；Godot 用 `AudioManager` 重建 |
+| [`TOOLING.md`](TOOLING.md) | 历史实现参考 | Rust/wgpu/kira 工具链与踩坑 |
+| [`BASELINE.json`](BASELINE.json) | 历史基线 | Rust 版本的数据/测试/UI 证据快照 |
+
+## 4. Rust 历史证据（冻结）
+
+以下文档保留原路径，以维持源码注释、旧规格和研究索引的可追溯性。
+它们**不是当前任务**，不再继续扩写。
 
 | 文档 | 状态 | 覆盖范围 |
 | --- | --- | --- |
-| [`HANDOFF_M11.md`](HANDOFF_M11.md) | 历史归档 | M11 三批（task-79..96）：战斗默认驱动、真实菜单/行走、H 深链、视觉/音频回归 |
-| [`HANDOFF_M10.md`](HANDOFF_M10.md) | 历史归档 | M10 opcode 111 引用语义/compound、战斗重基线、残项收口；含 M11 第一批 §8 与 round 1 §9 |
-| [`HANDOFF_M9.md`](HANDOFF_M9.md) | 历史归档 | 锚点/图片槽位、H 闭环、战斗驱动、移动与地图触发 |
-| [`HANDOFF_M8.md`](HANDOFF_M8.md) | 历史归档 | 战斗结算闭环、H 前向链、地图角色层、模板存档 |
-| [`HANDOFF_M7.md`](HANDOFF_M7.md) | 历史归档 | 战斗回合 / H 场景交互 / 零售 PRNG / 选择窗口第一批 |
-| [`HANDOFF_M6.md`](HANDOFF_M6.md) | 历史归档 | 主线贯通与可玩日常循环 |
-| [`HANDOFF_M4.md`](HANDOFF_M4.md) | 历史归档 | 音频后端 + 接线；含 M6 纵切片前史 |
-| [`HANDOFF_M3.md`](HANDOFF_M3.md) | 历史归档 | M3 完整运行时关机前快照 |
+| [`HANDOFF_M3.md`](HANDOFF_M3.md) | 历史证据 | M3 完整运行时快照 |
+| [`HANDOFF_M4.md`](HANDOFF_M4.md) | 历史证据 | 音频后端 + 接线 |
+| [`HANDOFF_M6.md`](HANDOFF_M6.md) | 历史证据 | 主线贯通与日常循环 |
+| [`HANDOFF_M7.md`](HANDOFF_M7.md) | 历史证据 | 战斗/H/PRNG/选择窗口 |
+| [`HANDOFF_M8.md`](HANDOFF_M8.md) | 历史证据 | 战斗结算、H 前向链、地图角色层 |
+| [`HANDOFF_M9.md`](HANDOFF_M9.md) | 历史证据 | 锚点、H 闭环、战斗、地图触发 |
+| [`HANDOFF_M10.md`](HANDOFF_M10.md) | 历史证据 | opcode 111、战斗重基线 |
+| [`HANDOFF_M11.md`](HANDOFF_M11.md) | 历史证据 | 战斗默认驱动、菜单、H 深链、视觉回归 |
+| [`HANDOFF_M12.md`](HANDOFF_M12.md) | 历史证据 | 零售范围、存档/日程/soak |
+| [`HANDOFF_M13.md`](HANDOFF_M13.md) | 历史证据 | 内容一致三批、P1-E、打包性能 |
+| [`M1_CLOSURE.md`](M1_CLOSURE.md) | 历史证据 | 标题画面像素级闭包 |
+| [`M2_SLICE.md`](M2_SLICE.md) | 历史证据 | 开场剧情/消息/选择纵切片 |
+| [`research/README.md`](research/README.md) | 历史证据索引 | M6–M13 研究、探针、视觉/音频验收 |
 
-## 4. 技术规格与审计（稳定参考）
+研究文档的状态、测量 HEAD、数据根和复现命令仍按各自文件为准；任何“下一步”均已失效。
 
-### 4.1 数据格式 / 运行时基础
-
-| 文档 | 状态 | 内容 |
-| --- | --- | --- |
-| [`FORMAT_SPEC.md`](FORMAT_SPEC.md) | 稳定参考 | 8 种二进制格式逐字节规格（Game.dat / CommonEvent / .mps / 三个数据库 / TileSetData / .wolf / .sav） |
-| [`SAVE_SPEC.md`](SAVE_SPEC.md) | 稳定参考 | WOLF 存档 .sav 格式与已实现加解密 |
-| [`PARTY_DB.md`](PARTY_DB.md) | 稳定参考 | CDataBase / SysDatabase / DataBase 运行时规格 |
-| [`ENGINE_EVENTS.md`](ENGINE_EVENTS.md) | 稳定参考 | 引擎常驻公共事件调查 |
-| [`TIME_SYSTEM.md`](TIME_SYSTEM.md) | 稳定参考 | 游戏内时间/星期/就寝/早朝 |
-| [`TEXT_SPEC.md`](TEXT_SPEC.md) | 稳定参考 | 消息文本内联标记与词法契约 |
-| [`AUDIO.md`](AUDIO.md) | 稳定参考 | 音频后端与接线 |
-| [`TOOLING.md`](TOOLING.md) | 稳定参考 | 本机工具链清单 |
-| [`ASSET_AUDIT.md`](ASSET_AUDIT.md) | 稳定参考 | 素材审计：哪些字节真正被引用 |
-| [`UNVERIFIED.md`](UNVERIFIED.md) | 稳定参考 | 仍然未验证的假设清单（先看这里再声称“完成”） |
-
-### 4.2 子系统全景
-
-| 文档 | 状态 | 内容 |
-| --- | --- | --- |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | 稳定参考（里程碑表为历史规划） | Rust 架构设计；其 M0–M6 里程碑表是 2026-10-26 规划稿，当前里程碑以 `../PLAN.md` 为准 |
-| [`BATTLE.md`](BATTLE.md) | 稳定参考 | 战斗子系统全景、事件图、DB 依赖、三阶段切片 |
-| [`HSCENE.md`](HSCENE.md) | 稳定参考 | H 场景子系统地图 |
-| [`MAP_AUDIT.md`](MAP_AUDIT.md) | 稳定参考 | 六张注册地图结构、页面激活与可触达性 |
-
-### 4.3 Opcode 专题
-
-| 文档 | 状态 | 内容 |
-| --- | --- | --- |
-| [`OPCODE_SPEC.md`](OPCODE_SPEC.md) | 稳定参考 | 50 种 opcode 总规格（参数布局/语义/真实样例/未确认项） |
-| [`OPCODE_101.md`](OPCODE_101.md) | 稳定参考 | 101 消息窗口契约 |
-| [`OPCODE_102.md`](OPCODE_102.md) | 稳定参考 | 102 选择肢窗口 |
-| [`OPCODE_112.md`](OPCODE_112.md) | 稳定参考 | 112 字符串条件与 111 共用块栈 |
-| [`OPCODE_124.md`](OPCODE_124.md) | 稳定参考 | 124 SetVariableEx 语义 |
-| [`OPCODE_210_RETURN.md`](OPCODE_210_RETURN.md) | 稳定参考 | 210/300 公共事件调用与返回值 |
-| [`OPCODE_220_SAVE.md`](OPCODE_220_SAVE.md) | 稳定参考 | 220/221/222 存档三件套 |
-| [`OPCODE_250.md`](OPCODE_250.md) | 稳定参考 | 250 数据库读写 |
-| [`OPCODE_290.md`](OPCODE_290.md) | 稳定参考 | 290 图片效果 |
-
-## 5. 里程碑验收基准（历史归档）
-
-| 文档 | 状态 | 内容 |
-| --- | --- | --- |
-| [`M1_CLOSURE.md`](M1_CLOSURE.md) | 历史归档 | M1 标题画面闭包与像素级验收基准 |
-| [`M2_SLICE.md`](M2_SLICE.md) | 历史归档 | M2 开场剧情/消息/选择窗口纵切验收基准 |
-
-## 6. 研究记录
-
-所有一次性调查、测试底稿与跨里程碑研究在 [`research/README.md`](research/README.md) 按 M6–M12 分组索引；M11 的 round 2/round 3、M12 零售范围审计、round 1（战斗取消/confirm 页/存档逐字节）、day6 周末日程与 30/90 天多日 soak 均已登记。外部攻略与零售脚本的内容对照见 [`research/GUIDE_CONTENT_CROSSWALK.md`](research/GUIDE_CONTENT_CROSSWALK.md)（索引/检查清单，不是规格）。研究文档不是当前指令；与 HANDOFF/规格冲突时，以现行代码与 HANDOFF 为准。
-
-## 7. 归档
+## 5. 归档
 
 | 文档 | 内容 |
 | --- | --- |
-| [`archive/PLAN_2026-10-26.md`](archive/PLAN_2026-10-26.md) | 项目最初可行性研究与 M0–M5 实施规划（历史原稿，含当时的测算与风险） |
-| [`archive/README.md`](archive/README.md) | 归档说明 |
+| [`archive/README.md`](archive/README.md) | 归档规则、已移动文件、冻结文档清单 |
+| [`archive/PLAN_2026-10-26.md`](archive/PLAN_2026-10-26.md) | 项目开工前可行性研究与 M0–M5 旧规划 |
+| [`archive/PLAN_RUST_2026-11-04.md`](archive/PLAN_RUST_2026-11-04.md) | Rust 阶段最终路线图与终止说明 |
+| [`archive/rust/`](archive/rust/README.md) | 旧策略、UI backlog、资产清点、旧会话启动与编排记录 |
+| [`godot/audit/GEMINI_AUDIT_AND_PLAN_2026-11-14.md`](godot/audit/GEMINI_AUDIT_AND_PLAN_2026-11-14.md) | Gemini 原始审计与规划；含已过时纯 GDScript 草稿，仅保留证据 |
 
-## 8. 文档维护规则
+## 6. 用户资料与外部材料（不入库、不作为权威）
 
-1. **单一入口**：新增/移动/删除任何文档，都要更新本索引；不能只在目录里丢文件。
-2. **里程碑命名**：每个里程碑结束时写 `HANDOFF_Mx.md`（现行），并把上一个交接标为历史归档。历史文件不删除、不覆盖。
-3. **状态与测量时点**：技术文档开头要写清状态（已验证/未验证/历史）、测量 HEAD、数据根（`work/all` / `work/full`）与复现命令。
-4. **研究文档**：放 `docs/research/`，文件名用 `Mx_主题.md` 或 `主题.md`，并登记到 `docs/research/README.md`。
-5. **路线图**：`PLAN.md` 只保留当前路线与剩余项；旧规划稿进 `docs/archive/`，不在根目录保留过期版本。
-6. **不提交**：`docs/gpt调研/`、`.claude/`、`work/`、临时探针/截图不解包产物，均不进版本库。
+| 位置 | 内容 |
+| --- | --- |
+| [`攻略/`](攻略/) | 玩家攻略、数据定稿、正文；用户资料 |
+| [`攻略文档/`](攻略文档/) | 攻略 PDF/TXT；用户资料，禁止随发布分发 |
+| [`gpt调研/`](gpt调研/) | 外部 GPT 调研；用户资料 |
+| [`vendor/`](vendor/) | WolfDec/WolfTL/WolfSave 等第三方工具；只作参考 |
+| [`deepseek 建议.txt`](deepseek%20建议.txt) | 外部实现建议；非权威 |
+
+## 7. 文档维护规则
+
+1. **单一当前入口**：Godot 阶段只看 `docs/godot/README.md`、`DECISIONS.md`、`PLAN.md`。
+2. **单一决策源**：任何技术栈、存档、内容范围变化先改 `DECISIONS.md`，再改实现/文档。
+3. **单一路线源**：完整路线只在 `godot/PLAN.md`；根 `PLAN.md` 只做摘要。
+4. **历史不重写**：旧 HANDOFF、研究、审计保留原貌；发现错误加勘误，不把历史改成当前。
+5. **移动必登记**：新增/移动/归档文档必须更新本索引和 `archive/README.md`。
+6. **证据优先**：Rust 代码/测试是 Oracle；攻略和外部调研不能覆盖实测。
+7. **不入库**：`game_data/`、零售素材、攻略 PDF、`gpt调研/`、`vendor/`、临时截图/日志。
+8. **不复活旧路线**：旧 `ENGINE_STRATEGY` 的“不迁移”、旧 Rust `PLAN` 的里程碑和旧 UI backlog 的修复任务均不得作为当前执行依据。

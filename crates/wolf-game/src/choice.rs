@@ -16,6 +16,7 @@
 
 use crate::assets::Assets;
 use crate::atlas::{Atlas, SpriteQuad, TextQuad};
+use crate::message::{self, Colours, WhiteColours};
 use crate::picture::{SCREEN_H, SCREEN_W};
 use crate::window::{self, WindowPiece};
 
@@ -104,15 +105,41 @@ pub fn text_width_at(text: &str, font_px: f32) -> f32 {
     text.chars().map(|ch| advance_at(ch, font_px)).sum()
 }
 
+/// Width an option actually needs after its display markup is resolved.
+///
+/// The panel used to measure the raw string, so `\f[12]` counted as five visible
+/// characters and the frame widened around codes nobody sees. Measuring the styled
+/// runs keeps the frame and the glyphs on the same arithmetic.
+/// [styled_width] with live variable/database resolution.
+fn styled_width_with(
+    text: &str,
+    font_px: f32,
+    vars: Option<&crate::textpic::Ctx<'_>>,
+) -> f32 {
+    message::inline_runs_with(text, font_px, &WhiteColours, vars)
+        .iter()
+        .map(|run| run.rect[2])
+        .sum()
+}
+
 /// Panel size in logical pixels, rounded so every row lands on a whole pixel.
 ///
 /// The width is the widest option measured at the size the text pass actually draws,
 /// plus the cursor column and the frame padding. A flat per-character estimate is what
 /// broke CJK: a full-width glyph is one em, not half of one.
 fn size(options: &[String], font_px: f32) -> (f32, f32) {
+    size_with(options, font_px, None)
+}
+
+/// [size] with live variable/database resolution.
+fn size_with(
+    options: &[String],
+    font_px: f32,
+    vars: Option<&crate::textpic::Ctx<'_>>,
+) -> (f32, f32) {
     let widest = options
         .iter()
-        .map(|option| text_width_at(option, font_px))
+        .map(|option| styled_width_with(option, font_px, vars))
         .fold(0.0_f32, f32::max);
     let marker = font_px * 1.5;
     let width = (widest + marker + PADDING * 2.0 + WIDTH_SLACK).max(MIN_WIDTH);
@@ -122,7 +149,19 @@ fn size(options: &[String], font_px: f32) -> (f32, f32) {
 
 /// Builds rows and cursor rectangle for a panel whose top-left corner is `(x, y)`.
 fn build(options: &[String], cursor: usize, x: f32, y: f32, font_px: f32) -> ChoiceLayout {
-    let (width, height) = size(options, font_px);
+    build_with(options, cursor, x, y, font_px, None)
+}
+
+/// [build] with live variable/database resolution.
+fn build_with(
+    options: &[String],
+    cursor: usize,
+    x: f32,
+    y: f32,
+    font_px: f32,
+    vars: Option<&crate::textpic::Ctx<'_>>,
+) -> ChoiceLayout {
+    let (width, height) = size_with(options, font_px, vars);
     let rect = [x, y, width, height];
     let mut lines = Vec::with_capacity(options.len());
     for (index, _) in options.iter().enumerate() {
@@ -181,10 +220,26 @@ pub fn layout_at_sized(
     y: i32,
     font_px: f32,
 ) -> Option<ChoiceLayout> {
+    layout_at_sized_with(options, cursor, x, y, font_px, None)
+}
+
+/// [layout_at_sized] with live variable/database resolution.
+///
+/// A 102 option may contain \cdb, \v or \cself escapes. Measuring the raw source
+/// would size the panel around invisible control codes; resolving first keeps the frame
+/// and the painted glyphs on the same arithmetic, so long options never truncate.
+pub fn layout_at_sized_with(
+    options: &[String],
+    cursor: usize,
+    x: i32,
+    y: i32,
+    font_px: f32,
+    vars: Option<&crate::textpic::Ctx<'_>>,
+) -> Option<ChoiceLayout> {
     if options.is_empty() {
         return None;
     }
-    let panel = build(options, cursor, x as f32, y as f32, font_px);
+    let panel = build_with(options, cursor, x as f32, y as f32, font_px, vars);
     let on_screen = panel.rect[0] < SCREEN_W as f32
         && panel.rect[1] < SCREEN_H as f32
         && panel.rect[0] + panel.rect[2] > 0.0
@@ -213,6 +268,9 @@ fn draw(
     options: &[String],
     cursor: usize,
     layout: &ChoiceLayout,
+    font_px: f32,
+    colours: &dyn Colours,
+    vars: Option<&crate::textpic::Ctx<'_>>,
 ) -> (Vec<SpriteQuad>, Vec<TextQuad>) {
     let mut sprites = Vec::new();
     if let Some(skin) = atlas.add_asset(assets, window::SKIN) {
@@ -226,20 +284,38 @@ fn draw(
             });
         }
     }
-    let mut texts = Vec::with_capacity(options.len());
+    let marker_px = font_px * 1.5;
+    let mut texts = Vec::new();
     for (index, option) in options.iter().enumerate() {
-        let marker = if index == cursor { "▶ " } else { "   " };
-        texts.push(TextQuad {
-            number: window::PANEL_PICTURE,
-            text: format!("{marker}{option}"),
-            rect: layout.lines[index],
-            alpha: 1.0,
-            // The panel is drawn at one size (the caller passes Sys8 in), so each row
-            // is a single run with the default style.
-            font_px: 0.0,
-            colour: [255, 255, 255],
-            outline: false,
-        });
+        let line = layout.lines[index];
+        let marker = if index == cursor { "▶" } else { "" };
+        if !marker.is_empty() {
+            texts.push(TextQuad {
+                number: window::PANEL_PICTURE,
+                text: marker.to_owned(),
+                rect: [line[0], line[1], marker_px, LINE_HEIGHT],
+                alpha: 1.0,
+                font_px: 0.0,
+                colour: [255, 255, 255],
+                outline: false,
+            });
+        }
+        let mut x = line[0] + marker_px;
+        for run in message::inline_runs_with(option, font_px, colours, vars) {
+            let top = line[1] + (font_px - run.font_px).max(0.0);
+            texts.push(TextQuad {
+                number: window::PANEL_PICTURE,
+                text: run.text,
+                // The shaper's real advance can exceed the half/whole-em estimate by a
+                // side bearing; one em of slack stops the last glyph wrapping.
+                rect: [x, top, run.rect[2] + run.font_px, LINE_HEIGHT],
+                alpha: 1.0,
+                font_px: run.font_px,
+                colour: run.colour.unwrap_or([255, 255, 255]),
+                outline: run.outline,
+            });
+            x += run.rect[2];
+        }
     }
     (sprites, texts)
 }
@@ -255,7 +331,16 @@ pub fn overlay(
         return (Vec::new(), Vec::new());
     }
     let panel = layout(options, cursor);
-    draw(atlas, assets, options, cursor, &panel)
+    draw(
+        atlas,
+        assets,
+        options,
+        cursor,
+        &panel,
+        TEXT_PX,
+        &WhiteColours,
+        None,
+    )
 }
 
 /// Builds the engine-anchored draw list, `None` when the window would be invisible.
@@ -271,7 +356,16 @@ pub fn overlay_at(
     y: i32,
 ) -> Option<(Vec<SpriteQuad>, Vec<TextQuad>)> {
     let panel = layout_at(options, cursor, x, y)?;
-    Some(draw(atlas, assets, options, cursor, &panel))
+    Some(draw(
+        atlas,
+        assets,
+        options,
+        cursor,
+        &panel,
+        TEXT_PX,
+        &WhiteColours,
+        None,
+    ))
 }
 
 /// overlay_at with the engine's live font size (Sys8).
@@ -285,7 +379,49 @@ pub fn overlay_at_sized(
     font_px: f32,
 ) -> Option<(Vec<SpriteQuad>, Vec<TextQuad>)> {
     let panel = layout_at_sized(options, cursor, x, y, font_px)?;
-    Some(draw(atlas, assets, options, cursor, &panel))
+    Some(draw(
+        atlas,
+        assets,
+        options,
+        cursor,
+        &panel,
+        font_px,
+        &WhiteColours,
+        None,
+    ))
+}
+
+/// overlay_at_sized with the SysDatabase palette, so `\c[n]` and `\E` in an option
+/// resolve the same way they do in a message or a text picture.
+pub fn overlay_at_sized_styled(
+    atlas: &mut Atlas,
+    assets: &mut Assets,
+    options: &[String],
+    cursor: usize,
+    x: i32,
+    y: i32,
+    font_px: f32,
+    colours: &dyn Colours,
+) -> Option<(Vec<SpriteQuad>, Vec<TextQuad>)> {
+    overlay_at_sized_styled_with(atlas, assets, options, cursor, x, y, font_px, colours, None)
+}
+
+/// [overlay_at_sized_styled] with live variable/database resolution for option text.
+pub fn overlay_at_sized_styled_with(
+    atlas: &mut Atlas,
+    assets: &mut Assets,
+    options: &[String],
+    cursor: usize,
+    x: i32,
+    y: i32,
+    font_px: f32,
+    colours: &dyn Colours,
+    vars: Option<&crate::textpic::Ctx<'_>>,
+) -> Option<(Vec<SpriteQuad>, Vec<TextQuad>)> {
+    let panel = layout_at_sized_with(options, cursor, x, y, font_px, vars)?;
+    Some(draw(
+        atlas, assets, options, cursor, &panel, font_px, colours, vars,
+    ))
 }
 
 #[cfg(test)]
@@ -355,8 +491,41 @@ mod tests {
         // to text instead of failing the frame.
         let (sprites, texts) = overlay(&mut atlas, &mut assets, &options(2), 1);
         assert!(sprites.is_empty(), "no skin available in a bare root");
-        assert_eq!(texts.len(), 2);
+        // The cursor is its own run so a mixed-size option does not shrink it.
+        assert_eq!(texts.len(), 3);
         assert!(!texts[0].text.starts_with('\u{25b6}'));
-        assert!(texts[1].text.starts_with('\u{25b6}'));
+        assert_eq!(texts[1].text, "\u{25b6}");
+        assert_eq!(texts[2].text, "option 1");
+    }
+
+    #[test]
+    fn option_markup_is_stripped_and_its_size_escape_is_honoured() {
+        let options = vec![
+            "「是啊。」\u{3000}\\f[12]NORMAL".to_owned(),
+            "\\f[20]「我觉得可以再拼一点儿……」\u{3000}\\f[12]HARD".to_owned(),
+        ];
+        let mut atlas = Atlas::new();
+        let mut assets = Assets::new("no-such-root");
+        let (_, texts) = overlay(&mut atlas, &mut assets, &options, 0);
+        let shown: String = texts.iter().map(|text| text.text.as_str()).collect();
+        assert!(
+            !shown.contains("\\f["),
+            "a control escape must never reach the glyph pass: {shown}"
+        );
+        assert!(shown.contains("NORMAL") && shown.contains("HARD"));
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.text.contains("NORMAL") && (text.font_px - 12.0).abs() < 0.01),
+            "the \\f[12] span keeps its own size"
+        );
+        // The frame is measured from visible glyphs, not from the raw escape bytes.
+        let raw_width = text_width_at(&options[1], TEXT_PX);
+        let panel = layout(&options, 0);
+        assert!(
+            panel.rect[2] < raw_width + MARKER_PX + PADDING * 2.0,
+            "panel {} should be narrower than a raw-string measurement {raw_width}",
+            panel.rect[2]
+        );
     }
 }

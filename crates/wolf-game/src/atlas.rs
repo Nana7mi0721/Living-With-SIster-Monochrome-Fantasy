@@ -513,6 +513,13 @@ impl Atlas {
                 if !picture.kind.is_window() {
                     return None;
                 }
+                // A hidden window keeps its slot so a later draw can restore the same skin
+                // and box, but must not paint. The sprite pass already honours this; the
+                // panel pass has to as well, otherwise a hidden raster window (the save
+                // screen's zero-brightness cursor frame) still covers the slot.
+                if picture.hidden || picture.opacity <= 0 {
+                    return None;
+                }
                 // A window picture whose "file" is a built-in drawing command is not a
                 // window: WOLF stores every system graphic as a type-3 command (all 375 of
                 // them in this game are type 3), so without this test the author's
@@ -598,7 +605,13 @@ impl Atlas {
                 ],
             });
         }
-        out.sort_by_key(|quad| quad.number);
+        // UI-13: order by semantic band before picture number. For script pictures alone
+        // this is equivalent to the old numeric sort (every negative whole-screen layer
+        // sorts below every normal picture), but making the band explicit keeps the
+        // contract shared with the host UI list in `window::LayerBand`; a future caller
+        // that merges host panels into this list cannot accidentally put a message frame
+        // below a scene picture just because its picture number is smaller.
+        out.sort_by_key(|quad| (window::picture_band(quad.number).rank(), quad.number));
         out
     }
 }

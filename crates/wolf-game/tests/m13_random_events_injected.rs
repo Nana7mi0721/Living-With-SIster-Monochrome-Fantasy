@@ -76,8 +76,10 @@ fn drive(
 
     let mut messages: Vec<String> = Vec::new();
     let mut ended = false;
-    for _ in 0..max_frames {
-        game.key_bits = wolf_game::key::OK;
+    for frame in 0..max_frames {
+        // UI-06 uses fresh-press edge detection; holding OK every frame would
+        // only advance the first message. Pulse it every other frame.
+        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
         game.frame();
         game.key_bits = 0;
         for m in &game.messages {

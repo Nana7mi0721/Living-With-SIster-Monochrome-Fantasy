@@ -1,0 +1,156 @@
+{
+  "schema": "wolf.trace",
+  "schema_version": 1,
+  "seed": 0,
+  "event_id": 42,
+  "event_name": "オリジナルタイトル画面Ａ",
+  "total_steps": 10,
+  "steps": [
+    {
+      "step": 1,
+      "frame": 0,
+      "event_id": 42,
+      "pc": 8,
+      "op": 180,
+      "vars": {},
+      "effects": [
+        {
+          "kind": "wait",
+          "action": "frames",
+          "duration": 1
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "frame": 1,
+      "event_id": 42,
+      "pc": 13,
+      "op": 111,
+      "vars": {},
+      "effects": []
+    },
+    {
+      "step": 3,
+      "frame": 1,
+      "event_id": 42,
+      "pc": 14,
+      "op": 401,
+      "vars": {},
+      "effects": []
+    },
+    {
+      "step": 4,
+      "frame": 1,
+      "event_id": 42,
+      "pc": 20,
+      "op": 150,
+      "vars": {},
+      "effects": [
+        {
+          "kind": "picture",
+          "action": "draw",
+          "slot": 0,
+          "file": "SystemGraphic/TitleGraphic.jpg",
+          "args": [30, 1, 1, 1, 255, 0, 0, 100, 0]
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "frame": 1,
+      "event_id": 42,
+      "pc": 31,
+      "op": 140,
+      "vars": {},
+      "effects": [
+        {
+          "kind": "sound",
+          "action": "play",
+          "type": "bgm",
+          "file": "BGM/White_Base.mp3",
+          "vol": 10,
+          "frames": 0
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "frame": 1,
+      "event_id": 42,
+      "pc": 35,
+      "op": 121,
+      "vars": {
+        "1600010": 999
+      },
+      "effects": []
+    },
+    {
+      "step": 7,
+      "frame": 1,
+      "event_id": 42,
+      "pc": 36,
+      "op": 102,
+      "vars": {},
+      "effects": [
+        {
+          "kind": "choice",
+          "options": ["1", "2", "3"],
+          "selected": 0
+        }
+      ]
+    },
+    {
+      "step": 8,
+      "frame": 2,
+      "event_id": 42,
+      "pc": 45,
+      "op": 130,
+      "vars": {},
+      "effects": [
+        {
+          "kind": "teleport",
+          "map_id": -1,
+          "x": 60,
+          "y": 34,
+          "direction": 3
+        }
+      ]
+    },
+    {
+      "step": 9,
+      "frame": 2,
+      "event_id": 42,
+      "pc": 48,
+      "op": 250,
+      "vars": {},
+      "effects": [
+        {
+          "kind": "database",
+          "type": 18,
+          "data": 68,
+          "item": 0,
+          "flags": 200704,
+          "value": 0
+        }
+      ]
+    },
+    {
+      "step": 10,
+      "frame": 2,
+      "event_id": 42,
+      "pc": 50,
+      "op": 210,
+      "vars": {
+        "9000001": 1
+      },
+      "effects": [
+        {
+          "kind": "call",
+          "target_event_id": 94,
+          "args": [0, 0]
+        }
+      ]
+    }
+  ]
+}

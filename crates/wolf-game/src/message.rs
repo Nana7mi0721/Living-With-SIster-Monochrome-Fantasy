@@ -436,7 +436,12 @@ fn push_plain(items: &mut Vec<Item>, text: &str, style: Style) {
 /// screen is worse than a missing effect. A surviving variable read is the opposite case:
 /// the VM expands variables before show_message, so one that is still here was written
 /// literally and is shown as text.
-fn styled_items(text: &str, base_font_px: f32, colours: &dyn Colours) -> Vec<Item> {
+fn styled_items(
+    text: &str,
+    base_font_px: f32,
+    colours: &dyn Colours,
+    vars: Option<&crate::textpic::Ctx<'_>>,
+) -> Vec<Item> {
     let mut style = Style {
         font_px: base_font_px.max(MIN_FONT_PX),
         colour: None,
@@ -444,9 +449,17 @@ fn styled_items(text: &str, base_font_px: f32, colours: &dyn Colours) -> Vec<Ite
     };
     let mut items: Vec<Item> = Vec::new();
     for token in wolf_format::messagetext::tokenize(text) {
-        if let TextToken::Var(_) = token {
-            let literal = wolf_format::messagetext::to_source(std::slice::from_ref(&token));
-            push_plain(&mut items, &literal, style);
+        if let TextToken::Var(var) = &token {
+            // The message and choice passes get the same live database as the HUD text
+            // pictures: an option written with \cdb[0:12:0] paints the cell, not the
+            // control code. Without a context (offline tools and the legacy API) the
+            // historical literal rendering is kept, so an unevaluated read stays visible
+            // instead of vanishing into an empty string.
+            let shown = match vars {
+                Some(ctx) => crate::textpic::resolve_var_text(var, ctx.vars, ctx.cells),
+                None => wolf_format::messagetext::to_source(std::slice::from_ref(&token)),
+            };
+            push_plain(&mut items, &shown, style);
             continue;
         }
         match &token {
@@ -472,6 +485,65 @@ fn styled_items(text: &str, base_font_px: f32, colours: &dyn Colours) -> Vec<Ite
         }
     }
     items
+}
+
+/// Flatten one line of WOLF markup into same-styled spans for a caller that owns the
+/// geometry, such as the opcode `102` choice panel.
+///
+/// The choice panel is not a message: it has no typewriter, no wrap box and no
+/// alignment escapes. It still has to strip markup and honour `\f[n]` (and, when a
+/// palette is available, `\c[n]` and `\E`), because a raw `\f[12]NORMAL` reaching
+/// the glyph pass is a visible bug. The returned spans carry a zero origin and a
+/// width in their `rect`; the caller offsets each one onto its row.
+///
+/// A hard break is dropped: an option is one row in the engine's menu layout.
+/// [inline_runs] with live variable/database resolution for the choice panel.
+pub(crate) fn inline_runs_with(
+    text: &str,
+    base_font_px: f32,
+    colours: &dyn Colours,
+    vars: Option<&crate::textpic::Ctx<'_>>,
+) -> Vec<Run> {
+    let items = styled_items(text, base_font_px, colours, vars);
+    let mut runs: Vec<Run> = Vec::new();
+    let mut run_text = String::new();
+    let mut run_width = 0.0_f32;
+    let mut run_style: Option<Style> = None;
+    for item in items {
+        let Item::Glyph(glyph) = item else {
+            continue;
+        };
+        if run_style.is_some_and(|style| style != glyph.style) {
+            push_inline_run(&mut runs, &mut run_text, &mut run_width, run_style);
+        }
+        run_style = Some(glyph.style);
+        run_text.push(glyph.ch);
+        run_width += choice::advance_at(glyph.ch, glyph.style.font_px);
+    }
+    push_inline_run(&mut runs, &mut run_text, &mut run_width, run_style);
+    runs
+}
+
+fn push_inline_run(
+    runs: &mut Vec<Run>,
+    text: &mut String,
+    width: &mut f32,
+    style: Option<Style>,
+) {
+    let Some(style) = style else {
+        return;
+    };
+    if text.is_empty() {
+        return;
+    }
+    runs.push(Run {
+        text: std::mem::take(text),
+        rect: [0.0, 0.0, *width, line_height(style.font_px)],
+        font_px: style.font_px,
+        colour: style.colour,
+        outline: style.outline,
+    });
+    *width = 0.0;
 }
 
 /// Wrap the item stream into rows, at the font size each character carries.
@@ -544,9 +616,27 @@ fn styled_lines(items: &[Item], wrap_width: f32) -> Vec<StyledLine> {
 /// pause cursor sits after the last visible glyph of the last visible row.
 #[must_use]
 pub fn layout_styled(text: &str, vars: &Vars, frames: u32, colours: &dyn Colours) -> Layout {
+    layout_styled_with(text, vars, frames, colours, None)
+}
+
+/// [layout_styled] with live variable/database resolution.
+///
+/// The engine expands \v, \s, \cself and the database escapes before a normal message
+/// reaches the window, but opcode 102 option strings are stored by the script and arrive
+/// with their escapes intact. The same evaluator the text-picture HUD uses resolves them
+/// here, so the visible glyph count - and therefore the wrap and the typewriter budget -
+/// counts what is painted, not the source control codes.
+#[must_use]
+pub fn layout_styled_with(
+    text: &str,
+    vars: &Vars,
+    frames: u32,
+    colours: &dyn Colours,
+    var_ctx: Option<&crate::textpic::Ctx<'_>>,
+) -> Layout {
     let font_px = vars.font_px();
     let wrap_width = vars.wrap_width();
-    let items = styled_items(text, font_px, colours);
+    let items = styled_items(text, font_px, colours, var_ctx);
     let lines = styled_lines(&items, wrap_width);
     let breaks = items
         .iter()

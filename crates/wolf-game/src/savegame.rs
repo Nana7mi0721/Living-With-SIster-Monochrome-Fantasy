@@ -178,9 +178,11 @@ pub fn apply(game: &mut Game, save: &SaveFile) -> LoadedSave {
     // `run_condition == 2` event whose restored condition already holds as a
     // false -> true edge and start it (event 506 draws the DLC eye overlay -6 on
     // top of the loaded scene). Prime the latched map from the loaded truth values
-    // so the running set mirrors the snapshot; real 0 -> 1 transitions still fire.
+    // so those events stay dormant; real 0 -> 1 transitions still fire. Priming
+    // also resumes 216/217, the top-bar HUD drawings, whose SavePart5 text is a
+    // rendered snapshot and would otherwise never update again.
     // See docs/research/M13_AUTO_EVENTS_SCOPE.md.
-    game.auto_events.prime_latched(&game.vm);
+    game.auto_events.prime_latched(&mut game.vm);
 
     loaded
 }
@@ -470,7 +472,11 @@ pub fn decode_picture_text(bytes: &[u8]) -> String {
             5 => {
                 if let Some(code) = payload.get(2) {
                     let size = *code as i32 - 14;
-                    if (1..=96).contains(&size) {
+                    // Size 0 is the no-op font escape scripts expand from
+                    // `\f[\cself[n]]` when the variable is 0; encode_picture_text
+                    // writes it as code 14, so decoding it back keeps a save round
+                    // trip byte-stable instead of silently dropping the prefix.
+                    if (0..=96).contains(&size) {
                         out.push_str(&format!("\\f[{size}]"));
                     }
                 }
@@ -581,6 +587,18 @@ mod tests {
             0x01, 0x05, 0x03, 0x0e, 0x26, 0x01, b'2', b'1', b':', b'4', b'0', 0x00,
         ];
         assert_eq!(decode_picture_text(&bytes), "\\f[24]21:40");
+    }
+
+    #[test]
+    fn a_zero_font_escape_survives_a_save_round_trip() {
+        // Scripts expand `\f[\cself[n]]` to `\f[0]` when the font variable is unset.
+        // Zero means "default size", but the text still has to come back unchanged:
+        // the opening save/reload test compares the visible picture layer.
+        let mut picture = Picture::new(16001);
+        picture.kind = PictureKind::Text;
+        picture.text = "\\f[0]\n".to_owned();
+        let record = picture_to_record(&picture);
+        assert_eq!(decode_picture_text(&record.md1), picture.text);
     }
 
     #[test]

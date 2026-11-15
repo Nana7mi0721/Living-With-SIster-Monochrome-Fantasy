@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://coraclestep0lwsmf"]
+
+[ext_resource type="Script" path="res://tests/OracleStepTraceTest.cs" id="1_oraclestep"]
+
+[node name="OracleStepTraceTest" type="Node"]
+script = ExtResource("1_oraclestep")

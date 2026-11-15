@@ -1,5 +1,7 @@
 # M8 交接：战斗结算闭环、H 前向链、地图角色层、模板存档
 
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件不再追加“下一步”。
+>
 > 仓库：`E:\Study\github program\imoto life`
 > 基线：本文件随 M8 集成提交入仓。以 `git log --oneline` 为准；M7 第二批集成为 `b9e0d36`，
 > M8 集成从 `332b82e` 起。

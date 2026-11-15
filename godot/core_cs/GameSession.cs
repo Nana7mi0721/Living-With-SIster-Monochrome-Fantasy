@@ -1,0 +1,609 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace Lwsmf.Core;
+
+/// <summary>
+/// The VM operations a session needs. Implemented by the presentation VmController so the
+/// core session can drive the deterministic VM without knowing about Godot signals.
+/// </summary>
+public interface IVmSession
+{
+    EventVm Vm { get; }
+    MapRuntime? Map { get; set; }
+    int LeaderX { get; set; }
+    int LeaderY { get; set; }
+    int LeaderFacing { get; set; }
+    bool ActionKeyRequested { get; set; }
+    bool Faulted { get; }
+    string FaultReason { get; }
+    void StepFrame();
+    void StopAll();
+    void ResetDiagnostics();
+    bool IsWaitingForChoice();
+    bool IsWaitingForMessage();
+    string[] GetCurrentChoices();
+    void SelectChoice(int index);
+    void CancelChoice();
+    void DismissMessage();
+    void RestoreDialogue(string? message, string[] choices);
+}
+
+/// <summary>
+/// Presentation surface the session drives. Implemented by the Godot controller and test views
+/// adapter and by the GameRoot.gd relay so both front-ends run the same core logic.
+/// </summary>
+public interface IGameSessionView
+{
+    void SetStatus(string text);
+    void SetMapHud(int leaderX, int leaderY, string text);
+    void ShowMap(MapDefinition map, MapRuntime runtime, int leaderX, int leaderY);
+    void ShowMessage(string text, int face);
+    void HideMessage();
+    void ShowChoices(string[] options, int selected);
+    void HideChoices();
+    void ClearPictures();
+    void RestorePictures(IReadOnlyList<SavedPicture> pictures);
+    IReadOnlyList<SavedPicture> SnapshotPictures();
+    void RestoreAudio(IReadOnlyList<SavedAudio> audio);
+    IReadOnlyList<SavedAudio> SnapshotAudio();
+    bool HasMessage { get; }
+    string MessageText { get; }
+}
+
+/// <summary>
+/// W3 Day4: the title -> new game -> map -> save/load chain extracted from the legacy title screen.
+/// Pure core code: it owns map state, the frame clock, the teleport queue and the save
+/// format, and talks to the VM and the screen through the two interfaces above.
+/// </summary>
+public sealed class GameSession
+{
+    private readonly IVmSession _vm;
+    private readonly IGameSessionView _view;
+    private readonly string _dataPath;
+    private readonly string _savePath;
+    private readonly Queue<PendingTeleport> _teleports = new();
+
+    private MapDefinition? _map;
+    private MapRuntime? _mapRuntime;
+    private int _leaderX;
+    private int _leaderY;
+    private int _facing = 2;
+    private bool _actionPressed;
+    private bool _messageOpen;
+    private bool _hasChoices;
+    private bool _pendingLoad;
+    private bool _started;
+
+    public GameSession(IVmSession vm, IGameSessionView view, string dataPath, string savePath)
+    {
+        _vm = vm;
+        _view = view;
+        _dataPath = dataPath;
+        _savePath = savePath;
+    }
+
+    public string DataPath => _dataPath;
+    public string SavePath => _savePath;
+    public string Phase { get; private set; } = "boot";
+    public MapDefinition? MapData => _map;
+    public MapRuntime? MapRuntime => _mapRuntime;
+    public int LeaderX => _leaderX;
+    public int LeaderY => _leaderY;
+    public int Facing => _facing;
+    public int Frames { get; private set; }
+    public bool HasChoices => _hasChoices;
+    public bool MessageOpen => _messageOpen;
+    public bool ScriptedInput { get; set; }
+    public bool AutoPickChoice { get; set; } = true;
+    public bool HasSave => _savePath.Length > 0 && SaveCodec.Exists(_savePath);
+
+    /// <summary>Record a fatal data error without starting the VM.</summary>
+    public void Fail(string reason)
+    {
+        Phase = "failed";
+        _view.SetStatus(reason);
+    }
+
+    /// <summary>Close the choice window and tell the VM the selection was cancelled.</summary>
+    public void CancelChoice()
+    {
+        _hasChoices = false;
+        _view.HideChoices();
+        _vm.CancelChoice();
+    }
+
+    /// <summary>Start the real title event (TitleMap event 2). False means the data is missing.</summary>
+    public bool StartTitle()
+    {
+        Program? title = ProgramLoader.LoadMapEvent(_dataPath, "TitleMap.mps", 2);
+        if (title == null)
+        {
+            _view.SetStatus("TitleMap.mps event 2 missing");
+            Phase = "failed";
+            return false;
+        }
+
+        _messageOpen = false;
+        _hasChoices = false;
+        _actionPressed = false;
+        _pendingLoad = false;
+        _teleports.Clear();
+        _vm.Vm.ResetInputPermissions();
+        _vm.Vm.CreateInstance(title);
+        _started = true;
+        Phase = "title";
+        _view.SetStatus("title: " + title.Title + $" ({title.Len} slots)");
+        return true;
+    }
+
+    /// <summary>One VM frame; the deterministic entry point used by tests.</summary>
+    public void AdvanceFrame()
+    {
+        if (!_started || Phase == "failed") return;
+        if (ScriptedInput)
+        {
+            if (_messageOpen) DismissMessage();
+            if (_hasChoices && AutoPickChoice) PickChoice(0);
+        }
+
+        Frames++;
+        _vm.LeaderX = _leaderX;
+        _vm.LeaderY = _leaderY;
+        _vm.LeaderFacing = _facing;
+        _vm.ActionKeyRequested = _actionPressed && !_messageOpen && !_hasChoices;
+        _actionPressed = false;
+        _vm.StepFrame();
+        ApplyPending();
+        UpdateMapHud(false);
+    }
+
+    /// <summary>Map changes are applied between frames, never inside a running coroutine.</summary>
+    private void ApplyPending()
+    {
+        while (_teleports.Count > 0) ApplyTeleport(_teleports.Dequeue());
+        if (_pendingLoad)
+        {
+            _pendingLoad = false;
+            LoadGame();
+        }
+    }
+
+    private void UpdateMapHud(bool blocked)
+    {
+        if (_mapRuntime == null || _map == null) return;
+        string hud = blocked
+            ? $"MAP {_map.Id} {_map.File}  {_map.Width}x{_map.Height}    BLOCKED    " +
+              $"LEADER {_leaderX},{_leaderY}    INST {_vm.Vm.Instances.Count}    SAVE {(HasSave ? "01" : "-")}    F {Frames}"
+            : $"MAP {_map.Id} {_map.File}  {_map.Width}x{_map.Height}    " +
+              $"EVENTS {_mapRuntime.Events.Count}  AUTO {_mapRuntime.AutorunCount}  PAR {_mapRuntime.ParallelCount}    " +
+              $"LEADER {_leaderX},{_leaderY}    INST {_vm.Vm.Instances.Count}    SAVE {(HasSave ? "01" : "-")}    F {Frames}";
+        _view.SetMapHud(_leaderX, _leaderY, hud);
+    }
+
+    // ---- dialogue -------------------------------------------------------
+
+    public void ShowMessage(string text, int face)
+    {
+        _messageOpen = true;
+        _view.ShowMessage(text, face);
+    }
+
+    public void NotifyMessageClosed()
+    {
+        _messageOpen = false;
+        _view.HideMessage();
+    }
+
+    public void DismissMessage()
+    {
+        _messageOpen = false;
+        _view.HideMessage();
+        _vm.DismissMessage();
+    }
+
+    public void ShowChoices(string[] options)
+    {
+        _hasChoices = true;
+        _view.ShowChoices(options, 0);
+    }
+
+    public void PickChoice(int index)
+    {
+        _hasChoices = false;
+        _view.HideChoices();
+        // Title menu: row 0 new game (the event teleports to map 3), row 1 load, row 2 quit.
+        if (Phase == "title" && index == 1)
+        {
+            if (HasSave)
+            {
+                _pendingLoad = true;
+            }
+            else
+            {
+                _view.SetStatus("load: no save slot 01 yet (F5 in the map saves)");
+            }
+            return;
+        }
+        _vm.SelectChoice(index);
+    }
+
+    // ---- movement and teleports ----------------------------------------
+
+    public const int MaxTeleportsPerFrame = 64;
+
+    public void QueueTeleport(int target, int map, int x, int y, int options)
+    {
+        if (_teleports.Count >= MaxTeleportsPerFrame)
+        {
+            _view.SetStatus($"teleport queue full ({MaxTeleportsPerFrame}); dropping map={map}");
+            return;
+        }
+        _teleports.Enqueue(new PendingTeleport(target, map, x, y, options));
+    }
+
+    /// <summary>Opcode 116 applied at the frame boundary (target 0 = leader).</summary>
+    private void ApplyTeleport(PendingTeleport request)
+    {
+        _view.SetStatus($"teleport map={request.Map} x={request.X} y={request.Y} options={request.Options}");
+        // 130 target -1 (and legacy 0) is the leader; any other id names a different
+        // event, which the leader-mode session cannot move (round-4 review P1).
+        if (request.Target != -1 && request.Target != 0)
+        {
+            _view.SetStatus($"teleport target {request.Target} is not the leader; ignored");
+            return;
+        }
+        if (request.Map == 3)
+        {
+            StartNewGameNow();
+            return;
+        }
+        if (_map != null && _map.Id == request.Map && _leaderX == request.X && _leaderY == request.Y) return;
+
+        _leaderX = request.X;
+        _leaderY = request.Y;
+        EnterMap(request.Map);
+    }
+
+    /// <summary>Turn towards the step and move one tile unless the map or an active event page blocks it.</summary>
+    public void MoveLeader(int dx, int dy, int facing)
+    {
+        if (_map == null) return;
+        _facing = facing;
+        _vm.LeaderFacing = facing;
+        int fromX = _leaderX;
+        int fromY = _leaderY;
+        int toX = _leaderX + dx;
+        int toY = _leaderY + dy;
+        int step = dy < 0 ? 0 : dx > 0 ? 1 : dx < 0 ? 2 : 3;
+        bool blocked = _mapRuntime != null && !_mapRuntime.CanEnter(toX, toY, step);
+        if (blocked)
+        {
+            // The attempted step still touches player-touch pages (map_runtime.rs:1031).
+            FireContactTriggers(fromX, fromY, toX, toY);
+            UpdateMapHud(true);
+            return;
+        }
+        _leaderX = toX;
+        _leaderY = toY;
+        FireContactTriggers(fromX, fromY, toX, toY);
+        UpdateMapHud(false);
+    }
+
+    private void FireContactTriggers(int fromX, int fromY, int toX, int toY)
+    {
+        if (_mapRuntime == null) return;
+        foreach (var contact in _mapRuntime.ContactTriggers(fromX, fromY, toX, toY))
+        {
+            _mapRuntime.StartTriggerPage(contact.State.Def.Id, contact.Page, _vm.Vm);
+        }
+    }
+
+    public void PressActionKey() => _actionPressed = true;
+
+    // ---- save / load ----------------------------------------------------
+
+    /// <summary>Build the complete slot payload from the live map state.</summary>
+    public SaveState? BuildSaveState()
+    {
+        if (Phase != "bedroom" || _map == null || _mapRuntime == null) return null;
+        if (_vm.Faulted) return null;
+
+        var state = new SaveState
+        {
+            SavedAt = DateTime.UtcNow.ToString("o"),
+            PlayFrames = Frames,
+            MapId = _map.Id,
+            MapFile = _map.File,
+            LeaderX = _leaderX,
+            LeaderY = _leaderY,
+            Facing = _facing,
+            Vars = _vm.Vm.Vars.SnapshotNums(),
+            StrVars = _vm.Vm.Vars.SnapshotStrings(),
+            SysVars = _vm.Vm.Vars.SnapshotSysNums(),
+            SysStrVars = _vm.Vm.Vars.SnapshotSysStrings(),
+            RngState = _vm.Vm.Rng.State,
+            RngEventState = _vm.Vm.Rng.EventState,
+            RngEventSeed = _vm.Vm.Rng.EventSeed,
+            RngDraws = _vm.Vm.Rng.Draws
+        };
+
+        foreach (var snapshot in _mapRuntime.SnapshotSelfVars())
+        {
+            state.SelfVars.Add(SavedSelf(snapshot.Key, snapshot.Value));
+        }
+        foreach (var bank in _vm.Vm.CommonSelf)
+        {
+            state.CommonSelf.Add(SavedSelf(bank.Key, bank.Value));
+        }
+
+        state.MapEvents = _mapRuntime.SnapshotStates(_vm.Vm);
+        foreach (Instance inst in _vm.Vm.Instances)
+        {
+            MapEventState? owner = _mapRuntime.Events.FirstOrDefault(e => e.InstanceId == inst.Id);
+            var saved = new SavedInstance
+            {
+                Id = inst.Id,
+                ParentId = inst.ParentId,
+                EventId = inst.EventId,
+                Pc = inst.Pc,
+                ReturnTo = inst.ReturnTo,
+                Kind = owner != null ? "map" : "ce",
+                Page = owner?.Active ?? -1,
+                WaitKind = (int)inst.Wait.Kind,
+                WaitFrames = inst.Wait.Frames,
+                WaitBlock = inst.Wait.Block,
+                WaitChild = inst.Wait.ChildId,
+                Self = SavedSelf(inst.EventId, inst.Self)
+            };
+            foreach (LoopCtx loop in inst.Loops)
+            {
+                saved.Loops.Add(new SavedLoop { Block = loop.Block, Remaining = loop.Remaining });
+            }
+            state.Instances.Add(saved);
+        }
+
+        state.Pictures.AddRange(_view.SnapshotPictures());
+        state.Audio.AddRange(_view.SnapshotAudio());
+
+        if (_view.HasMessage)
+        {
+            state.Dialogue = new SavedDialogue { Message = _view.MessageText };
+        }
+        else if (_vm.IsWaitingForChoice())
+        {
+            state.Dialogue = new SavedDialogue { Choices = _vm.GetCurrentChoices().ToList() };
+        }
+
+        return state;
+    }
+
+    public bool SaveGame()
+    {
+        if (Phase != "bedroom" || _map == null || _mapRuntime == null)
+        {
+            _view.SetStatus("save: only while walking a map");
+            return false;
+        }
+        if (_vm.Faulted)
+        {
+            // An unimplemented opcode means the live state diverged from the retail VM;
+            // writing it would produce a slot that cannot be trusted on load.
+            _view.SetStatus("save disabled: " + _vm.FaultReason);
+            return false;
+        }
+
+        SaveState? state = BuildSaveState();
+        if (state == null) return false;
+
+        try
+        {
+            SaveCodec.Write(_savePath, state);
+        }
+        catch (IOException ex)
+        {
+            _view.SetStatus("save failed: " + ex.Message);
+            return false;
+        }
+
+        _view.SetStatus($"saved slot 01 (map {state.MapId} {state.LeaderX},{state.LeaderY})");
+        UpdateMapHud(false);
+        return true;
+    }
+
+    public bool LoadGame()
+    {
+        SaveState? state;
+        try
+        {
+            state = SaveCodec.Read(_savePath);
+        }
+        catch (IOException ex)
+        {
+            _view.SetStatus("load failed: " + ex.Message);
+            return false;
+        }
+
+        if (state == null)
+        {
+            _view.SetStatus("load: slot 01 missing or unreadable");
+            return false;
+        }
+
+        _vm.Vm.StopAll();
+        _vm.Map = null;
+        _mapRuntime = null;
+        _map = null;
+        Frames = (int)state.PlayFrames;
+        _leaderX = state.LeaderX;
+        _leaderY = state.LeaderY;
+        _facing = state.Facing;
+        _vm.Vm.Vars.Restore(state.Vars, state.StrVars, state.SysVars, state.SysStrVars);
+        _vm.Vm.Rng.RestoreState(state.RngState, state.RngEventState, state.RngEventSeed, state.RngDraws);
+        _vm.Vm.CommonSelf.Clear();
+        foreach (var saved in state.CommonSelf)
+        {
+            var bank = new SelfVars();
+            bank.Restore(saved);
+            _vm.Vm.CommonSelf[saved.Id] = bank;
+        }
+
+        var selfVars = new Dictionary<int, SelfVars>();
+        foreach (var saved in state.SelfVars)
+        {
+            var vars = new SelfVars();
+            vars.Restore(saved);
+            selfVars[saved.Id] = vars;
+        }
+
+        EnterMap(state.MapId, selfVars, state);
+        if (Phase == "failed") return false;
+        // EnterMap -> ShowMap clears the layer, so the saved slots are replayed after it.
+        _view.RestorePictures(state.Pictures);
+        // Audio last: the map load above may start its own track, and the slot wins.
+        _view.RestoreAudio(state.Audio);
+        _view.SetStatus($"loaded slot 01 (map {state.MapId} {state.LeaderX},{state.LeaderY})");
+        UpdateMapHud(false);
+        return true;
+    }
+
+    private void StartNewGameNow()
+    {
+        Phase = "newgame";
+        _vm.Vm.StopAll();
+        _vm.ResetDiagnostics();
+        _vm.Vm.ResetInputPermissions();
+        _vm.Vm.CommonSelf.Clear();
+        _vm.Map = null;
+        _view.ClearPictures();
+        Program? newGame = ProgramLoader.LoadMapEvent(_dataPath, "Map003.mps", 1);
+        if (newGame == null)
+        {
+            _view.SetStatus("Map003 event 1 (new game) missing");
+            Phase = "failed";
+            return;
+        }
+        _vm.Vm.CreateInstance(newGame);
+        _view.SetStatus("new game: " + newGame.Title);
+    }
+
+    private static EventSelfVars SavedSelf(int id, SelfVars vars)
+    {
+        return EventSelfVars.Pack(id, vars.SnapshotNums(), vars.SnapshotStrings());
+    }
+
+    private void RestoreInstances(SaveState state)
+    {
+        foreach (SavedInstance saved in state.Instances)
+        {
+            Program? program = null;
+            if (saved.Kind == "map" && saved.Page >= 0)
+            {
+                MapEventDef? def = _map?.Events.FirstOrDefault(e => e.Id == saved.EventId);
+                if (def != null && saved.Page < def.Pages.Count) program = def.Pages[saved.Page].Program;
+            }
+            else
+            {
+                program = _vm.Vm.GetProgram(saved.EventId);
+            }
+
+            if (program == null)
+            {
+                Console.Error.WriteLine($"[Session] cannot restore instance {saved.Id}: program {saved.EventId} page {saved.Page}");
+                continue;
+            }
+
+            if (saved.Pc < 0 || saved.Pc > program.Len)
+            {
+                Console.Error.WriteLine($"[Session] cannot restore instance {saved.Id}: pc {saved.Pc} outside program {saved.EventId} (len {program.Len})");
+                continue;
+            }
+
+            var inst = new Instance
+            {
+                Id = saved.Id,
+                ParentId = saved.ParentId,
+                EventId = saved.EventId,
+                Program = program,
+                Pc = saved.Pc,
+                ReturnTo = saved.ReturnTo
+            };
+            inst.Wait.Kind = (WaitStateKind)saved.WaitKind;
+            inst.Wait.Frames = saved.WaitFrames;
+            inst.Wait.Block = saved.WaitBlock;
+            inst.Wait.ChildId = saved.WaitChild;
+            inst.Self.Restore(saved.Self);
+            foreach (SavedLoop loop in saved.Loops)
+            {
+                inst.Loops.Add(new LoopCtx { Block = loop.Block, Remaining = loop.Remaining });
+            }
+            _vm.Vm.RestoreInstance(inst);
+        }
+    }
+
+    private void EnterMap(int mapId, Dictionary<int, SelfVars>? selfVars = null, SaveState? restore = null)
+    {
+        _vm.Vm.StopAll();
+        _vm.Map = null;
+        _mapRuntime = null;
+
+        _map = ProgramLoader.LoadMap(_dataPath, "", mapId);
+        if (_map == null)
+        {
+            _view.SetStatus($"map {mapId} missing from programs.json");
+            Phase = "failed";
+            return;
+        }
+
+        _mapRuntime = new MapRuntime(_map);
+        MapTileData? tileData = MapTileData.LoadAlongside(_dataPath);
+        if (tileData != null) _mapRuntime.SetTerrain(tileData.BuildTerrain(_map));
+        _vm.Map = _mapRuntime;
+        Phase = "bedroom";
+
+        if (_leaderX < 0 || _leaderX >= _map.Width) _leaderX = Math.Clamp(_leaderX, 0, Math.Max(0, _map.Width - 1));
+        if (_leaderY < 0 || _leaderY >= _map.Height) _leaderY = Math.Clamp(_leaderY, 0, Math.Max(0, _map.Height - 1));
+
+        if (selfVars != null) _mapRuntime.RestoreSelfVars(selfVars);
+        if (restore != null)
+        {
+            _mapRuntime.RestoreStates(restore.MapEvents);
+            RestoreInstances(restore);
+            // A skipped instance (missing program/page) must not leave a page pointing
+            // at a coroutine that does not exist; the next SelectPage would trust it.
+            foreach (var state in _mapRuntime.Events)
+            {
+                if (state.InstanceId is int restoredId && _vm.Vm.FindInstance(restoredId) == null)
+                {
+                    state.InstanceId = null;
+                }
+            }
+        }
+        _view.ShowMap(_map, _mapRuntime, _leaderX, _leaderY);
+        _mapRuntime.StartPending(_vm.Vm);
+        if (restore?.Dialogue != null)
+        {
+            _vm.RestoreDialogue(restore.Dialogue.Message, restore.Dialogue.Choices.ToArray());
+        }
+    }
+
+    private readonly struct PendingTeleport
+    {
+        public PendingTeleport(int target, int map, int x, int y, int options)
+        {
+            Target = target;
+            Map = map;
+            X = x;
+            Y = y;
+            Options = options;
+        }
+
+        public readonly int Target;
+        public readonly int Map;
+        public readonly int X;
+        public readonly int Y;
+        public readonly int Options;
+    }
+}

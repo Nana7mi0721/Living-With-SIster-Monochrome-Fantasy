@@ -6,13 +6,13 @@
 //! parser change moves one of them, the change is a bug until proven otherwise.
 
 mod play;
+mod route;
 
 /// `--audio` turns on real audio output for every command that builds a [`Game`] (M4).
 /// It is one process-wide flag rather than a new parameter on every runner, so `capture`,
 /// `capture --map`, `dump` and `play` all honour it without threading an argument through
 /// each signature.
-pub(crate) static AUDIO: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+pub(crate) static AUDIO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -24,13 +24,13 @@ use wolf_format as wf;
 use wolf_format::command::SlotStats;
 use wolf_format::commonevent::CommonEventData;
 use wolf_format::gamedat::GameDat;
-use wolf_game::atlas::{Atlas, SpriteQuad, TextQuad};
+use wolf_game::atlas::Atlas;
 use wolf_game::db::Container;
 use wolf_game::{choice, Game};
-use wolf_render::{Renderer, SpriteInstance, TextItem, LOGICAL_H, LOGICAL_W};
+use wolf_render::{Renderer, LOGICAL_H, LOGICAL_W};
 use wolf_vm::{
-    ChoiceReply, DbOp, DbValue, Host, InstanceId, LogLevel, PictureCmd, PrecompileStats, Program,
-    ProgramSet, SoundCmd, StepReport, Vm,
+    ChoiceReply, DbOp, DbValue, Host, InstanceId, LogLevel, PictureAction, PictureCmd,
+    PrecompileStats, Program, ProgramSet, SoundAction, SoundChannel, SoundCmd, StepReport, Vm,
 };
 
 /// One asserted number.
@@ -75,7 +75,39 @@ impl Check {
     }
 }
 
+/// Hides the console window Windows creates for a console-subsystem executable when it
+/// is launched from Explorer (double-click). A terminal launch keeps its console: the
+/// check asks how many processes share it and only hides it when this process is alone.
+#[cfg(windows)]
+fn hide_console_only_when_launched_from_explorer() {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetConsoleProcessList(process_list: *mut u32, process_count: u32) -> u32;
+        fn GetConsoleWindow() -> isize;
+    }
+    #[link(name = "user32")]
+    extern "system" {
+        fn ShowWindow(window: isize, command: i32) -> i32;
+    }
+    // A console is shared with the shell when launched from cmd/PowerShell. Explorer
+    // starts the executable as the console's only process, and that is the window the
+    // player should never see.
+    let mut processes = [0u32; 2];
+    let count = unsafe { GetConsoleProcessList(processes.as_mut_ptr(), processes.len() as u32) };
+    if count == 1 {
+        let console = unsafe { GetConsoleWindow() };
+        if console != 0 {
+            // SW_HIDE = 0; keep the console object (and stdout) alive for diagnostics.
+            unsafe {
+                ShowWindow(console, 0);
+            }
+        }
+    }
+}
+
 fn main() -> ExitCode {
+    #[cfg(windows)]
+    hide_console_only_when_launched_from_explorer();
     let mut args = std::env::args().skip(1);
     let mut root: Option<PathBuf> = None;
     let mut command: Option<String> = None;
@@ -83,11 +115,17 @@ fn main() -> ExitCode {
     let mut frames: usize = 600;
     let mut trace = false;
     let mut hot = false;
+    // `--step-trace FILE` dumps every executed instruction as a `wolf.trace` JSON file.
+    let mut step_trace: Option<PathBuf> = None;
     let mut out: Option<PathBuf> = None;
     let mut answer: Option<usize> = None;
     let mut answer_delay: u32 = 0;
     let mut pointer: Option<(i32, i32)> = None;
     let mut press_frame: Option<usize> = None;
+    // How many frames that press is held. The original mouse state is three-valued
+    // (fresh press 2, held 1, released 0); menus that test field 7 for "held" need the
+    // button to survive the frame after the initial edge.
+    let mut press_hold: usize = 1;
     let mut key_frames: Vec<(usize, u32)> = Vec::new();
     // `--press-every N:CODE` repeats a WOLF key code every Nth frame (N=1 holds it on
     // every frame). A 123 poll fires on whatever frame the script happens to reach it,
@@ -147,6 +185,9 @@ fn main() -> ExitCode {
                     .unwrap_or(600);
             }
             "--trace" | "-t" => trace = true,
+            "--step-trace" => {
+                step_trace = args.next().map(PathBuf::from);
+            }
             "--hot" => hot = true,
             "--until" => {
                 frame_limit = args.next().and_then(|value| value.parse().ok());
@@ -176,6 +217,15 @@ fn main() -> ExitCode {
             // Frame (0-based) at which that pointer presses the left button once.
             "--press-frame" => {
                 press_frame = args.next().and_then(|value| value.parse().ok());
+            }
+            // Optional hold length for --press-frame; menus that compare the mouse
+            // state against "held" (1) rather than "fresh press" (2) need this.
+            "--press-hold" => {
+                press_hold = args
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(1)
+                    .max(1);
             }
             // Frame (0-based) at which a WOLF key code is held for exactly one frame.
             // Repeat the flag to inject more than one press; H-scene polls wait on
@@ -324,6 +374,7 @@ fn main() -> ExitCode {
     let root = root.unwrap_or_else(|| packaged_root.clone().unwrap_or_else(default_root));
     match command.as_deref() {
         Some("verify") => run_verify(&root),
+        Some("route") => route::run_route(&root, frames),
         Some("precompile") => run_precompile(&root),
         Some("blocks") => run_blocks(&root, map.as_deref(), event, page),
         Some("capture") => match map.as_deref() {
@@ -333,6 +384,7 @@ fn main() -> ExitCode {
                     delay: answer_delay,
                     pointer,
                     press_frame,
+                    press_hold,
                     key_frames,
                     press_every,
                     auto_input,
@@ -340,7 +392,15 @@ fn main() -> ExitCode {
                     seed_selfs,
                     auto_events,
                 };
-                run_capture_map(&root, out, frames, name, &answers, load_save.as_deref())
+                run_capture_map(
+                    &root,
+                    out,
+                    frames,
+                    name,
+                    &answers,
+                    load_save.as_deref(),
+                    hold_message,
+                )
             }
             None => {
                 // Resolved into an owning value first: Entry borrows its map name and
@@ -375,6 +435,7 @@ fn main() -> ExitCode {
                     delay: answer_delay,
                     pointer,
                     press_frame,
+                    press_hold,
                     key_frames,
                     press_every,
                     auto_input,
@@ -437,7 +498,9 @@ fn main() -> ExitCode {
             play::run(&root, frame_limit, entry)
         }
         Some("run") => match (map.as_deref(), event) {
-            (Some(name), Some(id)) => run_map_event(&root, name, id, frames, trace, answer, hot),
+            (Some(name), Some(id)) => {
+                run_map_event(&root, name, id, frames, trace, answer, hot, step_trace.as_deref())
+            }
             (Some(_), None) => {
                 eprintln!("run --map needs --event <ID>");
                 ExitCode::from(2)
@@ -526,7 +589,8 @@ fn print_help() {
     println!("    --hold-message    Park on the first 101 message instead of dismissing it.");
     println!("    --audio           Play BGM/SE through the real mixer (silent null backend if no device).");
     println!("    --pointer <x,y>   Put the mouse pointer at a game pixel for the whole capture.");
-    println!("    --press-frame <N> Frame at which --pointer clicks the left button once.");
+    println!("    --press-frame <N> Frame at which --pointer presses the left button once.");
+    println!("    --press-hold <N>  Frames that press stays down (default 1).");
     println!(
         "    --key-frame N:CODE Frame at which a WOLF key code is held for one frame (repeatable);"
     );
@@ -733,16 +797,8 @@ fn run_verify(root: &Path) -> ExitCode {
     // half of the "new game start map" question (see docs/FORMAT_SPEC.md §2.6).
     match read(&basic.join("MapTree.dat")).map(|bytes| wf::maptree::MapTree::parse(&bytes)) {
         Some(Ok(tree)) => {
-            checks.push(Check::num(
-                "maptree.entries",
-                50,
-                tree.entries.len() as u64,
-            ));
-            checks.push(Check::num(
-                "maptree.version",
-                0x90,
-                u64::from(tree.version),
-            ));
+            checks.push(Check::num("maptree.entries", 50, tree.entries.len() as u64));
+            checks.push(Check::num("maptree.version", 0x90, u64::from(tree.version)));
             checks.push(Check::num("maptree.footer", 0xBC, u64::from(tree.footer)));
             checks.push(Check::num("maptree.roots", 47, tree.roots().len() as u64));
             checks.push(Check::text(
@@ -757,7 +813,11 @@ fn run_verify(root: &Path) -> ExitCode {
             ));
         }
         Some(Err(err)) => {
-            checks.push(Check::text("maptree.parse", "ok", &format!("FAILED: {err}")));
+            checks.push(Check::text(
+                "maptree.parse",
+                "ok",
+                &format!("FAILED: {err}"),
+            ));
         }
         None => checks.push(Check::text("maptree.parse", "ok", "FILE MISSING")),
     }
@@ -1217,6 +1277,75 @@ fn count_titles_indexed(programs: &ProgramSet) -> u64 {
     count
 }
 
+/// Quote a string for the hand-written JSON of the step trace.
+pub(crate) fn json_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    for ch in text.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if (ch as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out
+}
+
+/// `[1,2,3]`
+pub(crate) fn json_args(args: &[i32]) -> String {
+    let mut out = String::from("[");
+    for (index, value) in args.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push_str(&value.to_string());
+    }
+    out.push(']');
+    out
+}
+
+/// `["a","b"]`
+pub(crate) fn json_strings(values: &[String]) -> String {
+    let mut out = String::from("[");
+    for (index, value) in values.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push('"');
+        out.push_str(&json_escape(value));
+        out.push('"');
+    }
+    out.push(']');
+    out
+}
+
+pub(crate) fn picture_action(action: PictureAction) -> &'static str {
+    match action {
+        PictureAction::Draw => "draw",
+        PictureAction::Move => "move",
+        PictureAction::Erase => "erase",
+        PictureAction::Hide => "hide",
+        PictureAction::Set => "set",
+    }
+}
+
+pub(crate) fn sound_action(action: SoundAction) -> &'static str {
+    match action {
+        SoundAction::Play => "play",
+        SoundAction::Stop => "stop",
+    }
+}
+
+pub(crate) fn sound_channel(channel: SoundChannel) -> &'static str {
+    match channel {
+        SoundChannel::Bgm => "bgm",
+        SoundChannel::Se => "se",
+    }
+}
+
 /// Everything the interpreter asked the platform layer to do, counted.
 struct TraceHost {
     trace: bool,
@@ -1241,6 +1370,8 @@ struct TraceHost {
     /// Documented-but-unmodelled behaviour (124 sub-ops, 151/161 layouts).
     infos: Vec<String>,
     ended: bool,
+    /// JSON effect objects recorded since the VM last drained them.
+    trace_effects: Vec<String>,
 }
 
 impl TraceHost {
@@ -1266,6 +1397,7 @@ impl TraceHost {
             warnings: Vec::new(),
             infos: Vec::new(),
             ended: false,
+            trace_effects: Vec::new(),
         }
     }
 
@@ -1296,6 +1428,19 @@ impl Host for TraceHost {
 
     fn show_choices(&mut self, options: &[String]) {
         self.note(format!("  102 choices  {options:?}"));
+        self.trace_effects.push(format!(
+            "{{\"kind\":\"choice\",\"options\":{},\"selected\":{}}}",
+            json_strings(options),
+            self.answer.unwrap_or(0)
+        ));
+    }
+
+    fn common_event_call(&mut self, target: wolf_vm::exec::EventId, args: &[i32], _strings: &[String]) {
+        self.trace_effects.push(format!(
+            "{{\"kind\":\"call\",\"target_event_id\":{},\"args\":{}}}",
+            target,
+            json_args(args)
+        ));
     }
 
     // Without --answer the prompt is held: a headless trace then shows the menu
@@ -1321,6 +1466,13 @@ impl Host for TraceHost {
             short(&cmd.text),
             cmd.args
         ));
+        self.trace_effects.push(format!(
+            "{{\"kind\":\"picture\",\"action\":\"{}\",\"slot\":{},\"file\":\"{}\",\"args\":{}}}",
+            picture_action(cmd.action),
+            cmd.number,
+            json_escape(&cmd.file),
+            json_args(&cmd.args)
+        ));
     }
 
     fn sound(&mut self, cmd: &SoundCmd) {
@@ -1333,6 +1485,14 @@ impl Host for TraceHost {
             cmd.volume,
             cmd.frames
         ));
+        self.trace_effects.push(format!(
+            "{{\"kind\":\"sound\",\"action\":\"{}\",\"type\":\"{}\",\"file\":\"{}\",\"vol\":{},\"frames\":{}}}",
+            sound_action(cmd.action),
+            sound_channel(cmd.channel),
+            json_escape(&cmd.file),
+            cmd.volume,
+            cmd.frames
+        ));
     }
 
     fn database(&mut self, op: &DbOp) -> Option<DbValue> {
@@ -1341,6 +1501,14 @@ impl Host for TraceHost {
             "  250 database type {} data {} item {} flags {:#x} destination {:?} source {:?} labels {:?}/{:?}",
             op.db_type, op.data_id, op.item_id, op.flags, op.destination, op.source,
             op.type_label, op.field_label
+        ));
+        let value = match &op.source {
+            Some(DbValue::Num(value)) => *value,
+            _ => 0,
+        };
+        self.trace_effects.push(format!(
+            "{{\"kind\":\"database\",\"type\":{},\"data\":{},\"item\":{},\"value\":{}}}",
+            op.db_type, op.data_id, op.item_id, value
         ));
         None
     }
@@ -1357,6 +1525,10 @@ impl Host for TraceHost {
         self.teleports += 1;
         self.note(format!(
             "  130 teleport target {target} -> map {map} at {x},{y} options {options:#x}"
+        ));
+        self.trace_effects.push(format!(
+            "{{\"kind\":\"teleport\",\"map_id\":{},\"x\":{},\"y\":{},\"direction\":{}}}",
+            map, x, y, options
         ));
     }
 
@@ -1380,6 +1552,16 @@ impl Host for TraceHost {
         self.note(format!(
             "  290 effect   kind {kind} for {duration} {args:?}"
         ));
+        self.trace_effects.push(format!(
+            "{{\"kind\":\"effect\",\"type\":{},\"duration\":{},\"args\":{}}}",
+            kind,
+            duration,
+            json_args(args)
+        ));
+    }
+
+    fn take_trace_effects(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.trace_effects)
     }
 
     fn save_load(&mut self, op: &wolf_vm::SaveOp) -> Option<i32> {
@@ -1728,7 +1910,8 @@ fn run_dump(
     let mut total_steps = 0usize;
     let mut peak = 1usize;
     let mut frames_run = 0usize;
-    let mut watch_pc: std::collections::BTreeMap<InstanceId, usize> = std::collections::BTreeMap::new();
+    let mut watch_pc: std::collections::BTreeMap<InstanceId, usize> =
+        std::collections::BTreeMap::new();
     // Lifecycle state for --watch-start: store the instance id currently alive per
     // watched event (None = not running). A fresh id means a new start; None after an
     // id means it stopped, so both edges are reported without relying on --watch pc moves.
@@ -1741,7 +1924,13 @@ fn run_dump(
         let outcome = game.frame();
         frames_run += 1;
         for (i, wanted) in watch_start.iter().enumerate() {
-            let live = game.vm.instances().iter().rev().find(|inst| inst.event == *wanted).map(|inst| inst.id);
+            let live = game
+                .vm
+                .instances()
+                .iter()
+                .rev()
+                .find(|inst| inst.event == *wanted)
+                .map(|inst| inst.id);
             match (watch_start_live[i], live) {
                 (None, Some(new_id)) => {
                     println!("  start frame {frame}: id {new_id} event {wanted} (started)");
@@ -1766,7 +1955,10 @@ fn run_dump(
                 }
                 if watch_pc.get(&inst.id).copied() != Some(inst.pc) {
                     if watch_pc.len() < 400 {
-                        println!("  watch frame {frame}: id {} event {} pc {} wait {:?}", inst.id, inst.event, inst.pc, inst.wait);
+                        println!(
+                            "  watch frame {frame}: id {} event {} pc {} wait {:?}",
+                            inst.id, inst.event, inst.pc, inst.wait
+                        );
                     }
                     watch_pc.insert(inst.id, inst.pc);
                 }
@@ -1796,7 +1988,10 @@ fn run_dump(
     println!("  peak coroutines {peak}");
     println!("  instance alive  {}", game.vm.instance(instance).is_some());
     for addr in print_vars {
-        println!("  var {addr} = {}", game.vm.vars.get(normalise_var_addr(*addr)));
+        println!(
+            "  var {addr} = {}",
+            game.vm.vars.get(normalise_var_addr(*addr))
+        );
     }
     for (i, slot) in print_selfs.iter().enumerate() {
         match last_self[i] {
@@ -1830,7 +2025,10 @@ fn run_dump(
         .iter()
         .filter(|(msg, _)| msg.contains("unanswered"))
         .count();
-    println!("  diagnostics     {} distinct, {unanswered} unanswered", game.diagnostics.len());
+    println!(
+        "  diagnostics     {} distinct, {unanswered} unanswered",
+        game.diagnostics.len()
+    );
     for (msg, count) in game.diagnostics.iter().take(30) {
         println!("    {count}x {msg}");
     }
@@ -1994,16 +2192,6 @@ fn find_font(root: &Path) -> Option<(PathBuf, Vec<u8>)> {
     None
 }
 
-/// Builds a render instance from an atlas quad, carrying its alpha and its picture tone.
-///
-/// The tone is per picture, not per frame: a `290` flash changes what one picture
-/// multiplies its texels by while everything else on screen keeps drawing at full
-/// brightness, so it has to ride on the instance rather than on a global draw state.
-fn tint_instance(quad: &wolf_game::atlas::SpriteQuad) -> SpriteInstance {
-    SpriteInstance::new(quad.rect, quad.uv)
-        .with_alpha(quad.alpha)
-        .with_tint_rgb(quad.tint[0], quad.tint[1], quad.tint[2])
-}
 /// Where a capture starts.
 ///
 /// The retail entry point is the boot map, but two other entries are useful: the
@@ -2019,8 +2207,10 @@ struct Answers {
     delay: u32,
     /// Pointer position in game pixels, written to the host every frame.
     pointer: Option<(i32, i32)>,
-    /// 0-based frame at which the left mouse button goes down for one frame.
+    /// 0-based frame at which the left mouse button goes down.
     press_frame: Option<usize>,
+    /// Number of frames the button stays down (1 = one-frame click).
+    press_hold: usize,
     /// (frame, WOLF key code) pairs injected for exactly one frame each.
     key_frames: Vec<(usize, u32)>,
     /// (cadence, WOLF key code) pairs: the key is held on every frame divisible by the
@@ -2124,8 +2314,8 @@ fn resolve_capture_entry(
 /// pictures, the runtime choice window and the 101 pause cursor.
 struct CaptureFrame {
     atlas: Atlas,
-    sprites: Vec<SpriteQuad>,
-    texts: Vec<TextQuad>,
+    sprites: Vec<crate::play::LayeredSprite>,
+    texts: Vec<crate::play::LayeredText>,
 }
 
 /// Runs `frames` frames of the game, injecting this capture's pointer / press / key
@@ -2138,82 +2328,40 @@ fn drive_capture_frames(game: &mut Game, frames: usize, answers: &Answers) -> us
         }
         // One frame of a held button is a click: the host compares against the previous
         // frame, so the press edge survives exactly one step.
-        game.mouse_buttons = u32::from(answers.press_frame == Some(frame));
-        game.key_bits =
-            key_bits_for_frame(frame, &answers.key_frames, &answers.press_every, answers.auto_input);
+        game.mouse_buttons = u32::from(answers.press_frame.is_some_and(|start| {
+            frame >= start && frame < start.saturating_add(answers.press_hold)
+        }));
+        game.key_bits = key_bits_for_frame(
+            frame,
+            &answers.key_frames,
+            &answers.press_every,
+            answers.auto_input,
+        );
         let outcome = game.frame();
         peak = peak.max(outcome.report.running);
     }
     peak
 }
 
-/// Composites one frame from a live game: tiles, then the picture layer, then the
-/// choice window and the message cursor. Both capture paths call this so
-/// `capture --map` cannot drift from `capture`.
+/// Composites one frame from a live game through the shared display-list builder.
+///
+/// `capture --map` and `capture` both call this, and the live window calls the same
+/// `play::build_scene_layers` function, so tile/picture/choice/message/nameplate
+/// ordering cannot drift between the two front ends.
 fn build_capture_frame(game: &mut Game) -> CaptureFrame {
     let mut atlas = Atlas::new();
-    let mut sprites = game.tile_quads(&mut atlas);
-    sprites.extend(game.picture_quads(&mut atlas));
-    let mut texts = game.text_quads();
-    // A WOLF script never draws its own choice frame: the engine paints a window skin and
-    // moves a cursor over it, at the coordinates system variables 3 (x) and 4 (y) name.
-    // There is no centred default (docs/OPCODE_102.md section 4.2), and when the finished
-    // rectangle falls outside the 1024x576 viewport the engine paints nothing at all -
-    // which is what the title event relies on when it parks the window at y = 1000.
-    if let Some(choices) = &game.choices {
-        let options = choices.options.clone();
-        let cursor = game.choice_cursor();
-        let (x, y) = game.choice_anchor();
-        // Sys8 sizes the option text, so the panel is measured at the size it is drawn.
-        let font_px = game.font_px();
-        if let Some((panel, rows)) = choice::overlay_at_sized(
-            &mut atlas,
-            &mut game.assets,
-            &options,
-            cursor,
-            x,
-            y,
-            font_px,
-        ) {
-            sprites.extend(panel);
-            texts.extend(rows);
-        }
-    }
-    // The engine draws the 101 pause cursor itself: SystemFile/Text_Pause.png is a strip of
-    // six 17x15 frames whose triangle bobs down and back up, and no picture command in the
-    // game names it. It is a texture, so it joins the sprite pass, not the glyph pass.
-    let newest = game.messages.last().map(|m| (m.text.clone(), m.frames));
-    if let Some((text, frames)) = newest {
-        let vars = game.message_vars();
-        let layout = wolf_game::message::layout(&text, &vars, frames);
-        if let Some(at) = layout.cursor {
-            let frame = wolf_game::message::cursor_frame(frames);
-            let src = [
-                0,
-                frame * wolf_game::message::CURSOR_FRAME_H,
-                wolf_game::message::CURSOR_FRAME_W,
-                wolf_game::message::CURSOR_FRAME_H,
-            ];
-            let dst = [
-                at[0],
-                at[1],
-                wolf_game::message::CURSOR_FRAME_W as f32,
-                wolf_game::message::CURSOR_FRAME_H as f32,
-            ];
-            if let Some(quad) = atlas.sprite_from(
-                &mut game.assets,
-                wolf_game::message::CURSOR_FILE,
-                wolf_game::message::CURSOR_SLOT,
-                src,
-                dst,
-                1.0,
-            ) {
-                sprites.push(quad);
-            }
-        }
-    }
+    let (sprites, texts) = crate::play::build_scene_layers(game, &mut atlas);
     for warning in atlas.take_warnings() {
         *game.diagnostics.entry(warning).or_insert(0) += 1;
+    }
+    if std::env::var_os("WOLF_DEBUG_PICTURES").is_some() {
+        for entry in &sprites {
+            let quad = &entry.quad;
+            eprintln!(
+                "SPR num={} band={:?} rect={:?} uv={:?} alpha={:.2} tint={:?}",
+                quad.number, entry.band, quad.rect, quad.uv, quad.alpha, quad.tint
+            );
+        }
     }
     CaptureFrame {
         atlas,
@@ -2230,8 +2378,8 @@ fn render_capture_frame(
     root: &Path,
     out: &Path,
     atlas: Atlas,
-    sprites: &[SpriteQuad],
-    texts: &[TextQuad],
+    sprites: &[crate::play::LayeredSprite],
+    texts: &[crate::play::LayeredText],
 ) -> bool {
     let [atlas_w, atlas_h] = atlas.size();
     let mut renderer = match Renderer::new_offscreen() {
@@ -2255,27 +2403,13 @@ fn render_capture_frame(
         None => println!("  font      : none found; text pictures will not draw"),
     }
 
-    let instances: Vec<SpriteInstance> = sprites.iter().map(tint_instance).collect();
-    renderer.draw(&instances);
-    let mut items: Vec<TextItem> = texts
-        .iter()
-        .map(|text| {
-            // A text picture may mix sizes, colours and outlines inside one string;
-            // the layout already turned each style change into its own quad.
-            let size = if text.font_px > 0.0 {
-                text.font_px
-            } else {
-                game.font_px()
-            };
-            let mut item = TextItem::new(text.text.clone(), text.rect, size)
-                .with_alpha(text.alpha)
-                .with_colour(text.colour);
-            if text.outline {
-                item = item.with_outline(2, [0, 0, 0]);
-            }
-            item
-        })
-        .collect();
+    // `build_capture_frame` already sorted them, but sorting again here keeps the
+    // offscreen path honest if a future caller hands over a hand-built list. Both
+    // front ends then submit through the same `draw_scene_layers` band grouping.
+    let mut sorted_sprites = sprites.to_vec();
+    crate::play::sort_layered_sprites(&mut sorted_sprites);
+    let mut sorted_texts = texts.to_vec();
+    crate::play::sort_layered_texts(&mut sorted_texts);
     // The engine draws 101 message text itself: the frame comes from common event 63 as
     // ordinary pictures, the glyphs come from here. Only the newest message is visible,
     // which is the order the interpreter produces.
@@ -2300,21 +2434,13 @@ fn render_capture_frame(
             cursor
         );
         println!("    text    : {preview:?}");
-        for run in &layout.runs {
-            // Give each run one em of slack: the layout measures with the half-em rule,
-            // while cosmic-text shapes with the real font advance, and a box that is a
-            // fraction too narrow makes the renderer wrap the last glyph onto a new line.
-            let mut rect = run.rect;
-            rect[2] += run.font_px;
-            let mut item = TextItem::new(run.text.clone(), rect, run.font_px)
-                .with_colour(run.colour.unwrap_or(wolf_game::message::DEFAULT_COLOUR));
-            if run.outline {
-                item = item.with_outline(2, [0, 0, 0]);
-            }
-            items.push(item);
-        }
     }
-    renderer.draw_text(&items);
+    crate::play::draw_scene_layers(
+        &mut renderer,
+        &sorted_sprites,
+        &sorted_texts,
+        game.font_px(),
+    );
 
     renderer.present();
     // Text statistics are only known after the pass has been encoded, so they are reported
@@ -2447,7 +2573,13 @@ fn run_capture(
         Entry::CommonEvent(id) => {
             game.start_engine_events();
             let started = if game.start_event(id) {
-                entry_instance = game.vm.instances().iter().rev().find(|i| i.event == id).map(|i| i.id);
+                entry_instance = game
+                    .vm
+                    .instances()
+                    .iter()
+                    .rev()
+                    .find(|i| i.event == id)
+                    .map(|i| i.id);
                 Ok(())
             } else {
                 Err(format!("no common event with id {id}"))
@@ -2607,10 +2739,12 @@ fn run_capture(
         atlas.len(),
         atlas.fill_ratio() * 100.0
     );
-    for quad in &sprites {
+    for entry in &sprites {
+        let quad = &entry.quad;
         println!(
-            "    quad pic {:>6} at [{:.0},{:.0},{:.0},{:.0}] uv [{:.3},{:.3},{:.3},{:.3}]",
+            "    quad pic {:>6} band {:?} at [{:.0},{:.0},{:.0},{:.0}] uv [{:.3},{:.3},{:.3},{:.3}]",
             quad.number,
+            entry.band,
             quad.rect[0],
             quad.rect[1],
             quad.rect[2],
@@ -2621,11 +2755,18 @@ fn run_capture(
             quad.uv[3]
         );
     }
-    for text in &texts {
+    for entry in &texts {
+        let text = &entry.quad;
         let preview: String = text.text.chars().take(40).collect();
         println!(
-            "    text pic {:>6} at [{:.0},{:.0},{:.0},{:.0}] {}",
-            text.number, text.rect[0], text.rect[1], text.rect[2], text.rect[3], preview
+            "    text pic {:>6} band {:?} at [{:.0},{:.0},{:.0},{:.0}] {}",
+            text.number,
+            entry.band,
+            text.rect[0],
+            text.rect[1],
+            text.rect[2],
+            text.rect[3],
+            preview
         );
     }
 
@@ -2675,6 +2816,7 @@ fn run_capture_map(
     name: &str,
     answers: &Answers,
     load_save: Option<&Path>,
+    hold_message: bool,
 ) -> ExitCode {
     let out = out.unwrap_or_else(|| PathBuf::from("work/out/map.png"));
     let basic = if root.join("BasicData").is_dir() {
@@ -2755,7 +2897,7 @@ fn run_capture_map(
         game.enable_audio();
     }
     install_font_metrics(&mut game, root);
-    game.auto_advance = true;
+    game.auto_advance = !hold_message;
     game.auto_events.set_enabled(answers.auto_events);
     if let Some(index) = answers.index {
         game.set_choice_cursor(index);
@@ -2856,10 +2998,12 @@ fn run_capture_map(
         atlas.len(),
         atlas.fill_ratio() * 100.0
     );
-    for quad in &sprites {
+    for entry in &sprites {
+        let quad = &entry.quad;
         println!(
-            "    quad pic {:>6} at [{:.0},{:.0},{:.0},{:.0}] uv [{:.3},{:.3},{:.3},{:.3}]",
+            "    quad pic {:>6} band {:?} at [{:.0},{:.0},{:.0},{:.0}] uv [{:.3},{:.3},{:.3},{:.3}]",
             quad.number,
+            entry.band,
             quad.rect[0],
             quad.rect[1],
             quad.rect[2],
@@ -2870,11 +3014,18 @@ fn run_capture_map(
             quad.uv[3]
         );
     }
-    for text in &texts {
+    for entry in &texts {
+        let text = &entry.quad;
         let preview: String = text.text.chars().take(40).collect();
         println!(
-            "    text pic {:>6} at [{:.0},{:.0},{:.0},{:.0}] {}",
-            text.number, text.rect[0], text.rect[1], text.rect[2], text.rect[3], preview
+            "    text pic {:>6} band {:?} at [{:.0},{:.0},{:.0},{:.0}] {}",
+            text.number,
+            entry.band,
+            text.rect[0],
+            text.rect[1],
+            text.rect[2],
+            text.rect[3],
+            preview
         );
     }
 
@@ -3031,6 +3182,7 @@ fn run_map_event(
     trace: bool,
     answer: Option<usize>,
     hot: bool,
+    step_trace: Option<&Path>,
 ) -> ExitCode {
     println!("wolf-cli run --map {map_name} --event {event_id} --frames {frames}");
     let basic = if root.join("BasicData").is_dir() {
@@ -3119,6 +3271,7 @@ fn run_map_event(
 
     let mut vm = Vm::new(programs);
     vm.hot_trace = hot;
+    vm.step_trace = step_trace.map(|_| Vec::new());
     let mut host = TraceHost::new(trace, answer);
     if vm.start_program(Arc::new(program)).is_none() {
         eprintln!("  ! cannot start map event {event_id}");
@@ -3146,6 +3299,56 @@ fn run_map_event(
         if report.running == 0 {
             break;
         }
+    }
+
+    if let Some(path) = step_trace {
+        let entries = vm.step_trace.as_deref().unwrap_or(&[]);
+        let mut out = String::with_capacity(entries.len() * 72 + 256);
+        out.push_str("{\"schema\":\"wolf.trace\",\"schema_version\":1,\"seed\":0,");
+        out.push_str(&format!(
+            "\"event_id\":{event_id},\"event_name\":\"\",\"total_steps\":{},\"steps\":[",
+            entries.len()
+        ));
+        for (index, entry) in entries.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
+            }
+            out.push_str(&format!(
+                "{{\"step\":{},\"frame\":{},\"event_id\":{},\"pc\":{},\"op\":{},\"vars\":{{",
+                index + 1,
+                entry.frame,
+                entry.event,
+                entry.pc,
+                entry.op
+            ));
+            for (var_index, (address, value)) in entry.vars.iter().enumerate() {
+                if var_index > 0 {
+                    out.push(',');
+                }
+                out.push_str(&format!("\"{address}\":{value}"));
+            }
+            out.push_str("},\"str_vars\":{");
+            for (var_index, (address, value)) in entry.str_vars.iter().enumerate() {
+                if var_index > 0 {
+                    out.push(',');
+                }
+                out.push_str(&format!("\"{address}\":\"{}\"", json_escape(value)));
+            }
+            out.push_str("},\"effects\":[");
+            for (effect_index, effect) in entry.effects.iter().enumerate() {
+                if effect_index > 0 {
+                    out.push(',');
+                }
+                out.push_str(effect);
+            }
+            out.push_str("]}");
+        }
+        out.push_str("]}");
+        if let Err(err) = std::fs::write(path, out) {
+            eprintln!("  ! cannot write step trace {}: {err}", path.display());
+            return ExitCode::FAILURE;
+        }
+        println!("  step trace       {} ({} steps)", path.display(), entries.len());
     }
 
     println!();

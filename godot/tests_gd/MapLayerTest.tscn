@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://cmaplayertest0lwsmf"]
+
+[ext_resource type="Script" path="res://tests_gd/MapLayerTest.gd" id="1_maplayer"]
+
+[node name="MapLayerTest" type="Node"]
+script = ExtResource("1_maplayer")

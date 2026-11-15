@@ -42,9 +42,7 @@ fn main() {
         .expect("write generated .rc file");
 
     let Some(rc) = find_rc() else {
-        println!(
-            "cargo:warning=rc.exe not found; wolf-cli.exe will not carry its program icon"
-        );
+        println!("cargo:warning=rc.exe not found; wolf-cli.exe will not carry its program icon");
         return;
     };
 
@@ -123,7 +121,10 @@ fn find_rc() -> Option<PathBuf> {
             .filter_map(Result::ok)
             .filter_map(|entry| {
                 let name = entry.file_name().to_string_lossy().into_owned();
-                let key: Vec<u64> = name.split('.').filter_map(|part| part.parse().ok()).collect();
+                let key: Vec<u64> = name
+                    .split('.')
+                    .filter_map(|part| part.parse().ok())
+                    .collect();
                 if key.len() == 4 {
                     Some((key, entry.path()))
                 } else {

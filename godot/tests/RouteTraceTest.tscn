@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://croutetrace0lwsmf"]
+
+[ext_resource type="Script" path="res://tests/RouteTraceTest.cs" id="1_routetrace"]
+
+[node name="RouteTraceTest" type="Node"]
+script = ExtResource("1_routetrace")

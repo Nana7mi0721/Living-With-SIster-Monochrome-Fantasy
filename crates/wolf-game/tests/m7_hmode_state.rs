@@ -192,8 +192,12 @@ const H_MODE_VARS: &[(usize, i32, i32)] = &[
     (16, 3, 2),
     (18, 22, 60),
     (20, 75, 90),
-    (21, 18, 688),
-    (22, -1, 375),
+    // op121's argc-5 form operates on a contiguous slot block; the day loop's
+    // range clears now leave 20 instead of the old single-slot 18.
+    (21, 20, 688),
+    // CE38 pc2 sets the 600-slot block 2000001..=2000601 to zero, so a fresh
+    // file starts at 0, not the old single-slot template's -1.
+    (22, 0, 375),
     (23, 5, 9),
     (28, 105, 1815),
     (62, 0, 1),
@@ -252,7 +256,7 @@ fn h_mode_var_table_is_derived_from_the_retail_save() {
         );
     }
 
-    // The intimacy gates that are non-positive on a fresh file (var22 = -1, and
+    // The intimacy gates that are non-positive on a fresh file (var22 = 0, and
     // var70/var102/var150/var200/var452 = 0), which is exactly why the deep 性骚扰
     // branch returns early before it can reach the CE333 tail. (var23 is a small
     // positive 5 fresh and is not a "<= 0" default.)

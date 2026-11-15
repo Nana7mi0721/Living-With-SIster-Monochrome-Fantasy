@@ -91,8 +91,10 @@ fn drive(
 
     let mut messages: Vec<String> = Vec::new();
     let mut ended = false;
-    for _ in 0..max_frames {
-        game.key_bits = wolf_game::key::OK;
+    for frame in 0..max_frames {
+        // Message dismissal is edge-triggered (a held OK must not skip the
+        // next line), so pulse the key instead of holding it every frame.
+        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
         game.frame();
         game.key_bits = 0;
         for m in &game.messages {

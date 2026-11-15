@@ -134,6 +134,16 @@ pub const SCREEN_W: u32 = 1024;
 /// Logical screen height used when a picture is a whole-screen layer.
 pub const SCREEN_H: u32 = 576;
 
+/// Internal whole-screen black layer kept under the title art.
+///
+/// The title script paints `Kagura/bg.png` (a pure-black 1024x576 image) into this slot
+/// and then forgets about it. It is deliberately below every script layer, including the
+/// title art in `-2`, so the first gameplay map can paint over it while the previous
+/// screen is dismantled. [`Screen::clear_screen_layers`] treats it as infrastructure,
+/// not as a scene layer: deleting it exposes the bare green/yellow tile grid for the
+/// frames before the new map paints its own background (UI-05).
+pub const TITLE_BACKDROP_LAYER: i32 = -100;
+
 /// Anchor code 0: x/y name the picture top-left corner.
 pub const ANCHOR_TOP_LEFT: u8 = 0;
 /// Anchor code 1 (head bit 0x1000): x/y name the picture centre.
@@ -366,15 +376,35 @@ impl PictureEffect {
     /// The channel multiplier at the current phase, scaled by the cycle length.
     ///
     /// Returned as percent-times-duration so the caller divides exactly once and the whole
-    /// chain stays in integers, which keeps the result reproducible frame for frame. The
-    /// ramp is the one docs/OPCODE_290.md section 5.2 derives from the measurements: the
-    /// colour changes with no wait, then walks linearly back to neutral over `duration`.
+    /// chain stays in integers, which keeps the result reproducible frame for frame.
+    ///
+    /// A one-shot flash (type 0) is the ramp docs/OPCODE_290.md section 5.2 derives from
+    /// the measurements: the colour changes with no wait, then walks linearly back to
+    /// neutral over `duration`.
+    ///
+    /// A blink (type 5, 点滅A) is a triangle wave instead: the same ramp down to neutral,
+    /// then a second ramp back to the tinted colour, over a `2 * duration` period. The
+    /// docs' section 5.5 is explicit that the value travels between 100 and 100+Δ; a
+    /// one-sided ramp snapped back to the tint every `duration` frames, which made the
+    /// title banner flicker twice as fast as retail and never rest at neutral.
     #[must_use]
     pub fn percent_times_duration(&self, channel: usize) -> i64 {
         let from = i64::from(SCALE_ONE + self.target[channel]);
-        let span = i64::from(self.duration);
-        let phase = i64::from(self.age % self.duration);
-        from * (span - phase) + i64::from(SCALE_ONE) * phase
+        let neutral = i64::from(SCALE_ONE);
+        let duration = self.duration.max(1);
+        let span = i64::from(duration);
+        if self.kind == EFFECT_BLINK {
+            let period = duration.saturating_mul(2);
+            let phase = i64::from(self.age % period);
+            if phase < span {
+                from * (span - phase) + neutral * phase
+            } else {
+                neutral * (i64::from(period) - phase) + from * (phase - span)
+            }
+        } else {
+            let phase = i64::from(self.age % duration);
+            from * (span - phase) + neutral * phase
+        }
     }
 }
 /// A `290` type 4 zoom: the picture grows about a fixed point of the logical screen.
@@ -826,6 +856,15 @@ pub struct Picture {
     /// picture all have to agree on where it is. The destination travels in `to` and only
     /// reaches the fields when the slide lands.
     pub transition: Option<Transition>,
+    /// Fade-out length of a `150` erase, in frames (0 = remove at once).
+    ///
+    /// TitleMap erases its black-and-white `Picture/title01.jpg` with
+    /// `150 [2, 12000, 30, 5]` at the same moment CE42 fades `TitleGraphic6` in. Removing
+    /// the old title immediately exposed the green/yellow map tiles underneath for half a
+    /// second; WOLF instead cross-fades the two title art layers over the 30 frames.
+    pub erase_fade: u32,
+    /// Frames elapsed since the erase fade started.
+    pub erase_age: u32,
     /// The `SavePart5_1` record this picture was loaded from, when it came from a save.
     ///
     /// The record holds fields this runtime does not model yet (tone/effect banks, the
@@ -868,6 +907,8 @@ impl Picture {
             pattern: None,
             hidden: false,
             transition: None,
+            erase_fade: 0,
+            erase_age: 0,
             saved_record: None,
         }
     }
@@ -912,6 +953,9 @@ impl Picture {
     /// arrival frame assigns the stored target rather than a rounded interpolation, so a slide
     /// cannot leave the picture a pixel short of where the script put it.
     pub fn advance(&mut self) {
+        if self.erase_fade > 0 && self.erase_age < self.erase_fade {
+            self.erase_age = self.erase_age.saturating_add(1);
+        }
         let Some(mut transition) = self.transition else {
             return;
         };
@@ -958,12 +1002,22 @@ impl Picture {
     /// source art at age 5 of a 20-frame fade, and 5/20 * 255 = 63.75.
     #[must_use]
     pub fn alpha(&self) -> f32 {
-        let opacity = (self.opacity.clamp(0, 255) as f32) / 255.0;
-        if self.fade == 0 {
-            return opacity;
+        let mut opacity = (self.opacity.clamp(0, 255) as f32) / 255.0;
+        if self.fade > 0 {
+            let progress = (self.age as f32 / self.fade as f32).min(1.0);
+            opacity *= progress;
         }
-        let progress = (self.age as f32 / self.fade as f32).min(1.0);
-        opacity * progress
+        if self.erase_fade > 0 {
+            let remaining = 1.0 - (self.erase_age as f32 / self.erase_fade as f32).min(1.0);
+            opacity *= remaining.max(0.0);
+        }
+        opacity
+    }
+
+    /// True once an erase fade has run its course and the slot can be dropped.
+    #[must_use]
+    pub fn erase_finished(&self) -> bool {
+        self.erase_fade > 0 && self.erase_age >= self.erase_fade
     }
     /// The per-channel draw brightness this picture currently asks for, 0..=255.
     ///
@@ -1050,6 +1104,11 @@ pub struct ScreenQuad {
 #[derive(Clone, Debug, Default)]
 pub struct Screen {
     pictures: BTreeMap<i32, Picture>,
+    /// Insert generation per live slot. A replacement gets a new value even when
+    /// the number and file are unchanged, so a deferred cleanup can tell the old
+    /// picture from a new one that reuses the same slot.
+    generations: BTreeMap<i32, u64>,
+    next_generation: u64,
 }
 
 impl Screen {
@@ -1082,25 +1141,83 @@ impl Screen {
         self.pictures.values()
     }
 
+    /// Insert generation of a live slot, or `None` when it is empty.
+    ///
+    /// A later redraw of the same number/file pair receives a different value.
+    #[must_use]
+    pub fn generation(&self, number: i32) -> Option<u64> {
+        self.generations.get(&number).copied()
+    }
+
+    /// Drops one slot unconditionally.
+    pub fn remove(&mut self, number: i32) {
+        self.pictures.remove(&number);
+        self.generations.remove(&number);
+    }
+
     /// Inserts a fully built picture, replacing any slot with the same number.
     ///
     /// Loading a save rebuilds every picture from the save's Part5 records, and those
     /// records carry fields (anchor, window box, scale, fade) that no single `150`
-    /// command would reproduce on its own.
+    /// command would reproduce on its own. Every insertion also allocates a new slot
+    /// generation so deferred cleanup can tell a replacement from the old picture.
     pub fn insert(&mut self, picture: Picture) {
+        self.bump_generation(picture.number);
         self.pictures.insert(picture.number, picture);
+    }
+
+    /// Allocates the next generation for one slot.
+    fn bump_generation(&mut self, number: i32) -> u64 {
+        self.next_generation = self.next_generation.wrapping_add(1);
+        if self.next_generation == 0 {
+            self.next_generation = 1;
+        }
+        self.generations.insert(number, self.next_generation);
+        self.next_generation
+    }
+
+    /// Retains pictures by predicate and drops the generations of removed slots.
+    fn retain_pictures(&mut self, mut keep: impl FnMut(i32, &Picture) -> bool) {
+        let mut removed = Vec::new();
+        self.pictures.retain(|number, picture| {
+            if keep(*number, picture) {
+                true
+            } else {
+                removed.push(*number);
+                false
+            }
+        });
+        for number in removed {
+            self.generations.remove(&number);
+        }
+    }
+
+    /// Drops every slot whose number falls in `first..=last`.
+    ///
+    /// Used when the same map swaps from a room scene into an H scene: the room's
+    /// status panel is a normal picture group (`1600`-`1621`) that the night chain
+    /// never erases, so it would otherwise stay painted over the H art.
+    pub fn remove_range(&mut self, first: i32, last: i32) {
+        self.retain_pictures(|number, _| number < first || number > last);
     }
 
     /// Drops every picture. Used when returning to the title or loading a save.
     pub fn clear(&mut self) {
         self.pictures.clear();
+        self.generations.clear();
     }
 
-    /// Drops only the whole-screen (negative numbered) layers, keeping ordinary
+    /// Drops the old map's whole-screen (negative numbered) layers, keeping ordinary
     /// numbered pictures. Map changes rebuild the screen layers from the new map's
     /// event scripts, and the old map's overlays must not bleed through.
+    ///
+    /// The title screen's internal black backdrop uses [`TITLE_BACKDROP_LAYER`]. It is
+    /// not a scene layer: it has to survive until the first gameplay map paints its own
+    /// background, otherwise the bare green/yellow tile grid shows through during the
+    /// transition (UI-05). Only the backdrop is spared; every other negative layer is a
+    /// script-owned scene layer and still has to go.
     pub fn clear_screen_layers(&mut self) {
-        self.pictures.retain(|number, _| *number >= 0);
+        self.retain_pictures(|number, _| number >= 0 || number == TITLE_BACKDROP_LAYER);
     }
 
     /// Advances the animation clock by one frame.
@@ -1128,6 +1245,8 @@ impl Screen {
         for picture in self.pictures.values_mut() {
             picture.advance();
         }
+        // A `150` erase with a fade stays visible while it fades, then leaves the screen.
+        self.retain_pictures(|_, picture| !picture.erase_finished());
     }
 
     /// Applies one `150` picture command.
@@ -1139,6 +1258,17 @@ impl Screen {
     /// Tolerance, matching the interpreter's house rules: a Move for a slot that does not
     /// exist creates it rather than being dropped, because losing the mutation would make
     /// every later move target nothing and the picture would never appear.
+    /// True when any slot still draws a file whose path contains `needle`.
+    ///
+    /// Used by the title teardown: the save/load screen is identifiable by its
+    /// WindowString slots, and the title menu must not stay on top of it.
+    #[must_use]
+    pub fn has_file_containing(&self, needle: &str) -> bool {
+        self.pictures
+            .values()
+            .any(|picture| picture.file.contains(needle))
+    }
+
     pub fn apply(&mut self, cmd: &PictureCmd) {
         match cmd.action {
             PictureAction::Erase => {
@@ -1154,11 +1284,22 @@ impl Screen {
                 match cmd.args.get(ERASE_SPAN) {
                     Some(other) => {
                         let (lo, hi) = (cmd.number.min(*other), cmd.number.max(*other));
-                        self.pictures
-                            .retain(|number, _| *number < lo || *number > hi);
+                        self.remove_range(lo, hi);
                     }
                     None => {
-                        self.pictures.remove(&cmd.number);
+                        // A single-slot erase may carry a fade length in raw slot 2. TitleMap
+                        // uses `150 [2, 12000, 30, 5]` to fade the black-and-white title art
+                        // out while CE42 fades the colour art in; removing the slot at once
+                        // exposed the map tiles underneath for the length of the fade.
+                        let fade = cmd.args.first().copied().unwrap_or(0).max(0) as u32;
+                        if fade > 0 {
+                            if let Some(picture) = self.pictures.get_mut(&cmd.number) {
+                                picture.erase_fade = fade;
+                                picture.erase_age = 0;
+                            }
+                        } else {
+                            self.remove(cmd.number);
+                        }
                     }
                 }
             }
@@ -1178,9 +1319,12 @@ impl Screen {
                 picture.text = cmd.text.clone();
                 picture.anchor = cmd.anchor;
                 merge_args(&mut picture, &cmd.args);
-                self.pictures.insert(cmd.number, picture);
+                self.insert(picture);
             }
             PictureAction::Move => {
+                if !self.pictures.contains_key(&cmd.number) {
+                    self.bump_generation(cmd.number);
+                }
                 let picture = self.pictures.entry(cmd.number).or_insert_with(|| {
                     let mut fresh = Picture::new(cmd.number);
                     fresh.kind = PictureKind::from_code(cmd.kind);
@@ -1760,11 +1904,31 @@ fn merge_args(picture: &mut Picture, args: &[i32]) {
     // notes number 15..17; PictureCmd::args starts at raw arg 2, so they land at
     // 13..15 here. The short forms simply do not have them, which leaves the
     // default neutral tone in place.
-    if let (Some(r), Some(g), Some(b)) = (
+    //
+    // Window pictures backed by a real image file are the exception. Every coloured
+    // window draw in this game with a literal file is one of the built-in shapes
+    // (<SQUARE>, <SQUARE>FRAME, <TRI-...>), whose white texels exist to be tinted.
+    // The only coloured *image* window is SystemFile/CursorBase.png, drawn by the
+    // save/load screen with (0,0,0); a DxLib SetDrawBright of zero turns its opaque
+    // interior into a solid black sheet that hides the slot text and is not what the
+    // retail screenshot shows. The retail engine leaves raster window skins
+    // un-tinted, so keep their neutral tone and let the artwork blend normally.
+    let raster_window = picture.kind.is_window() && !picture.file.starts_with('<');
+    let tone_slots = (
         take(args, field::TONE_R),
         take(args, field::TONE_G),
         take(args, field::TONE_B),
-    ) {
+    );
+    if raster_window {
+        // The cursor frame (SystemFile/CursorBase.png) is the only raster window that
+        // carries a tone, and it carries (0,0,0). Retail draws the four save slots as a
+        // translucent WindowBase panel with no dark sheet over them; brightness zero here
+        // is the "cursor off" state, not a black fill. Treating it as invisible reproduces
+        // the retail slot body, while the WindowBase skin still supplies the border.
+        if matches!(tone_slots, (Some(0), Some(0), Some(0))) {
+            picture.hidden = true;
+        }
+    } else if let (Some(r), Some(g), Some(b)) = tone_slots {
         picture.tone = [r.clamp(0, 200), g.clamp(0, 200), b.clamp(0, 200)];
     }
 }
@@ -2137,6 +2301,34 @@ mod tests {
         screen.apply(&cmd(11, 0, PictureAction::Erase, "", "", &[0]));
         assert_eq!(screen.len(), 2);
         assert!(screen.get(10).is_some() && screen.get(12).is_some());
+    }
+
+    #[test]
+    fn a_short_erase_with_a_fade_keeps_the_slot_until_the_fade_ends() {
+        // TitleMap.mps:ev2 pc114 erases the black-and-white title with `150 [2, 12000, 30, 5]`
+        // while CE42 fades the colour art in. WOLF cross-fades the two over 30 frames; an
+        // immediate remove would show the map tiles through the gap.
+        let mut screen = Screen::new();
+        screen.apply(&cmd(
+            12000,
+            0,
+            PictureAction::Draw,
+            "Picture/title01.jpg",
+            "",
+            &short_draw_args(),
+        ));
+        screen.apply(&cmd(12000, 0, PictureAction::Erase, "", "", &[30, 5]));
+        assert!(screen.get(12000).is_some(), "the slot is still fading");
+        assert_eq!(screen.get(12000).expect("picture").alpha(), 1.0);
+        for _ in 0..15 {
+            screen.advance();
+        }
+        let half = screen.get(12000).expect("halfway through the fade");
+        assert!((half.alpha() - 0.5).abs() < 0.01, "alpha={}", half.alpha());
+        for _ in 0..15 {
+            screen.advance();
+        }
+        assert!(screen.get(12000).is_none(), "the slot leaves at the end");
     }
 
     #[test]
@@ -2652,17 +2844,20 @@ mod effect_tests {
         screen
     }
 
-    /// A map change drops the whole-screen (negative) layers but keeps ordinary pictures.
+    /// A map change drops the old map's whole-screen layers but keeps ordinary pictures
+    /// and the title screen's internal black backdrop.
     ///
     /// The sample title screen draws its art into slot -2; when its menu answers
     /// `はじめから` with a `130`, that art belongs to the old map and must not stay on
-    /// top of the new scene, while numbered pictures (and the HUD) survive.
+    /// top of the new scene, while numbered pictures (and the HUD) survive. Slot -100 is
+    /// not old scene art: it is the black backdrop that has to cover the frame between
+    /// the title teardown and the first gameplay background (UI-05).
     #[test]
-    fn a_map_change_clears_only_the_negative_screen_layers() {
-        let mut screen = screen_with(&[-2, -1, 0, 50000, 12001]);
+    fn clear_screen_layers_preserves_title_backdrop() {
+        let mut screen = screen_with(&[-100, -2, -1, 0, 50000, 12001]);
         screen.clear_screen_layers();
         let left: Vec<i32> = screen.iter().map(|picture| picture.number).collect();
-        assert_eq!(left, vec![0, 12001, 50000]);
+        assert_eq!(left, vec![-100, 0, 12001, 50000]);
     }
 
     /// The picture range is the closed interval the manual describes, not two loose slots.
@@ -2882,9 +3077,8 @@ mod effect_tests {
         picture.split = (6, 2);
         picture.pattern_index = 2;
         screen.insert(picture);
-        let quads = screen.quads(|name| {
-            (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300))
-        });
+        let quads =
+            screen.quads(|name| (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300)));
         assert_eq!(quads.len(), 1);
         assert_eq!(quads[0].src, [400, 0, 400, 650]);
         assert_eq!(quads[0].dst, [0.0, 0.0, 400.0, 650.0]);
@@ -2896,10 +3090,12 @@ mod effect_tests {
         picture.split = (6, 2);
         picture.pattern_index = 99;
         screen.insert(picture);
-        let quads = screen.quads(|name| {
-            (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300))
-        });
-        let cell = quads.iter().find(|quad| quad.number == 91).expect("picture 91");
+        let quads =
+            screen.quads(|name| (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300)));
+        let cell = quads
+            .iter()
+            .find(|quad| quad.number == 91)
+            .expect("picture 91");
         assert_eq!(cell.src, [0, 0, 400, 650]);
     }
 
@@ -2930,11 +3126,18 @@ mod effect_tests {
 
         let quads = screen.quads(|name| (name == file).then_some((1536u32, 576u32)));
         for (number, expect_x) in [(101, 0u32), (102, 512), (103, 1024), (-6, 512)] {
-            let cell = quads.iter().find(|q| q.number == number).expect("eye frame");
+            let cell = quads
+                .iter()
+                .find(|q| q.number == number)
+                .expect("eye frame");
             assert_eq!(cell.src, [expect_x, 0, 512, 576], "picture {number}");
         }
         let layer = quads.iter().find(|q| q.number == -6).expect("screen eye");
-        assert_eq!(layer.dst, [0.0, 0.0, 1024.0, 576.0], "screen layer fills the frame");
+        assert_eq!(
+            layer.dst,
+            [0.0, 0.0, 1024.0, 576.0],
+            "screen layer fills the frame"
+        );
 
         // One frame past a shorter sheet (the pre-v6 two-frame art under a 3x1 grid) still
         // clamps to the first cell, so a stale file can never be read out of bounds.
@@ -2966,9 +3169,8 @@ mod effect_tests {
         assert_eq!(picture.split, (6, 2));
         assert_eq!(picture.pattern_index, 2);
         assert_eq!(picture.window, None, "a file picture has no window box");
-        let quads = screen.quads(|name| {
-            (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300))
-        });
+        let quads =
+            screen.quads(|name| (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300)));
         assert_eq!(quads[0].src, [400, 0, 400, 650]);
     }
 
@@ -2982,17 +3184,23 @@ mod effect_tests {
         picture.pattern_index = 1;
         picture.pattern = Some(PatternFx::new(EFFECT_PATTERN_LOOP, 2, 3, 4, 1));
         screen.insert(picture);
-        let quads = screen.quads(|name| {
-            (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300))
-        });
-        assert_eq!(quads[0].src, [400, 0, 400, 650], "pattern 2 is the second cell");
+        let quads =
+            screen.quads(|name| (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300)));
+        assert_eq!(
+            quads[0].src,
+            [400, 0, 400, 650],
+            "pattern 2 is the second cell"
+        );
         for _ in 0..4 {
             screen.tick();
         }
-        let quads = screen.quads(|name| {
-            (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300))
-        });
-        assert_eq!(quads[0].src, [800, 0, 400, 650], "the loop reaches pattern 3 next");
+        let quads =
+            screen.quads(|name| (name == "Picture/stand_imouto_paja2.png").then_some((2400, 1300)));
+        assert_eq!(
+            quads[0].src,
+            [800, 0, 400, 650],
+            "the loop reaches pattern 3 next"
+        );
     }
 
     /// The zoom percentage ramps over the action time instead of popping.

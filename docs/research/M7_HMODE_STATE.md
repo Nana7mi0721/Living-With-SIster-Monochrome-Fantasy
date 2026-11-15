@@ -34,7 +34,7 @@ Mid-H snapshot: `work/retail_backup/Save/SaveData08.sav`, loaded by `Game::load_
 | 18  | 22   | 60    | affection tier |
 | 20  | 75   | 90    | deep gate (needs > 60) |
 | 21  | 20   | 688   | intimacy counter (deep gate needs >= 100) |
-| 22  | -1   | 375   | intimacy tier (deep gates need >= 50 / 100 / 200) |
+| 22  | 0    | 375   | intimacy tier (deep gates need >= 50 / 100 / 200); CE38 pc2 zeroes 2000001..=2000601 |
 | 23  | 5    | 9     | relationship level (deep gate needs >= 8 at pc1951) |
 | 28  | 103  | 1815  | |
 | 62  | 0    | 1     | **H-scene stage index** (深夜UI処理) |
@@ -50,7 +50,7 @@ Mid-H snapshot: `work/retail_backup/Save/SaveData08.sav`, loaded by `Game::load_
 | 452 | 0    | 10    | |
 | 365 | 0    | 1737  | |
 
-The five "blocking defaults" on a fresh file are `var22 == -1`, and
+The five "blocking defaults" on a fresh file are `var22 == 0`, and
 `var70 = var102 = var150 = var200 = var452 = 0`; the deep branch returns early long before
 it can reach the CE333 tail. The elevated retail column is exactly the H-mode / intimacy
 state. Note the mid-H save still has **var157 == 12, not 13** — the CE333 gate is not even

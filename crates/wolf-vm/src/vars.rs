@@ -28,6 +28,18 @@
 /// corrupt magic number (say `2_999_999`) cannot allocate 12 MB by accident.
 pub const MAX_SLOTS: usize = 65_536;
 
+/// First address the instruction trace uses for system variables.
+pub const TRACE_SYS_BASE: i32 = 9_000_000;
+/// First address the instruction trace uses for self variables
+/// (`group*100_000 + slot`, matching WOLF's magic addressing).
+pub const TRACE_SELF_BASE: i32 = 1_000_000;
+/// Self string variables share the self window's low half: `2_000_000 + group*100_000 + slot`.
+pub const TRACE_SELF_STR_BASE: i32 = 2_000_000;
+/// Ordinary string bank (`3_000_000 + n`), matching the documented magic.
+pub const TRACE_STR_BASE: i32 = 3_000_000;
+/// System string bank; kept clear of the numeric sys bank.
+pub const TRACE_SYS_STR_BASE: i32 = 4_000_000;
+
 /// The global variable banks.
 #[derive(Clone, Debug)]
 pub struct Variables {
@@ -150,6 +162,40 @@ impl Variables {
     pub fn is_empty(&self) -> bool {
         self.nums.is_empty()
     }
+
+    /// Every integer slot as `(trace address, value)`.
+    ///
+    /// The oracle trace compares per-instruction deltas, so this deliberately
+    /// returns the whole bank (including trailing zeros) instead of a sparse
+    /// map: the diff step needs to see a slot written back to zero as well.
+    #[must_use]
+    pub fn trace_snapshot(&self) -> Vec<(i32, i32)> {
+        let mut out = Vec::with_capacity(self.nums.len() + self.sys_nums.len());
+        for (index, value) in self.nums.iter().enumerate() {
+            out.push((index as i32, *value));
+        }
+        for (index, value) in self.sys_nums.iter().enumerate() {
+            out.push((TRACE_SYS_BASE + index as i32, *value));
+        }
+        out
+    }
+
+    /// Ordinary and system string slots, non-empty only, for the step trace.
+    #[must_use]
+    pub fn trace_str_snapshot(&self) -> Vec<(i32, String)> {
+        let mut out = Vec::new();
+        for (index, value) in self.strings.iter().enumerate() {
+            if !value.is_empty() {
+                out.push((TRACE_STR_BASE + index as i32, value.clone()));
+            }
+        }
+        for (index, value) in self.sys_strings.iter().enumerate() {
+            if !value.is_empty() {
+                out.push((TRACE_SYS_STR_BASE + index as i32, value.clone()));
+            }
+        }
+        out
+    }
 }
 
 /// One coroutine's self variables.
@@ -208,6 +254,35 @@ impl SelfVars {
             slot.clear();
             slot.push_str(value);
         }
+    }
+
+    /// Every self integer slot as `(trace address, value)`.
+    ///
+    /// The flattened bank index is `group*100 + slot`; the address keeps WOLF's
+    /// public magic form `1_000_000 + group*100_000 + slot`.
+    #[must_use]
+    pub fn trace_snapshot(&self) -> Vec<(i32, i32)> {
+        let mut out = Vec::with_capacity(self.nums.len());
+        for (index, value) in self.nums.iter().enumerate() {
+            let group = (index / 100) as i32;
+            let slot = (index % 100) as i32;
+            out.push((TRACE_SELF_BASE + group * 100_000 + slot, *value));
+        }
+        out
+    }
+
+    /// This coroutine's string self variables, non-empty only.
+    #[must_use]
+    pub fn trace_str_snapshot(&self) -> Vec<(i32, String)> {
+        let mut out = Vec::new();
+        for (index, value) in self.strings.iter().enumerate() {
+            if !value.is_empty() {
+                let group = (index / 100) as i32;
+                let slot = (index % 100) as i32;
+                out.push((TRACE_SELF_STR_BASE + group * 100_000 + slot, value.clone()));
+            }
+        }
+        out
     }
 }
 

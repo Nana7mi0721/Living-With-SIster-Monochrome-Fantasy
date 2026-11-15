@@ -26,7 +26,12 @@ struct Args {
 }
 
 fn parse_args() -> Args {
-    let mut a = Args { root: "work/all".into(), map: None, event: 216, page: None };
+    let mut a = Args {
+        root: "work/all".into(),
+        map: None,
+        event: 216,
+        page: None,
+    };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
         match flag.as_str() {
@@ -61,20 +66,49 @@ fn tag(kind: u8) -> &'static str {
 fn dump_pictures(commands: &[Slot]) {
     println!(
         "{:<5} {:<8} {:<4} {:>7} {:>5} {:>5} {:>8} {:>5} {:>5} {:>7} {:>5} {:>6}  {}",
-        "pc", "kind", "cmd", "#pic", "boxW", "boxH", "opacity", "x", "y", "scale", "anch", "blend", "text"
+        "pc",
+        "kind",
+        "cmd",
+        "#pic",
+        "boxW",
+        "boxH",
+        "opacity",
+        "x",
+        "y",
+        "scale",
+        "anch",
+        "blend",
+        "text"
     );
     for (pc, slot) in commands.iter().enumerate() {
         let Slot::Command(cmd) = slot else { continue };
         match cmd.opcode {
             150 => {
-                let ints: Vec<i32> = cmd.params.chunks_exact(4)
-                    .map(|w| i32::from_le_bytes([w[0], w[1], w[2], w[3]])).collect();
-                if ints.len() < 10 { continue; }
+                let ints: Vec<i32> = cmd
+                    .params
+                    .chunks_exact(4)
+                    .map(|w| i32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+                    .collect();
+                if ints.len() < 10 {
+                    continue;
+                }
                 let (ty, cn, anchor) = head_decode(ints[0]);
                 let text = cmd.strings.first().cloned().unwrap_or_default();
                 println!(
                     "{:<5} {:<8} {:<4} {:>7} {:>5} {:>5} {:>8} {:>5} {:>5} {:>7} {:>5} {:>6}  {:?}",
-                    pc, tag(ty), cn, ints[1], ints[3], ints[4], ints[6], ints[7], ints[8], ints[9], anchor, ints[10], text
+                    pc,
+                    tag(ty),
+                    cn,
+                    ints[1],
+                    ints[3],
+                    ints[4],
+                    ints[6],
+                    ints[7],
+                    ints[8],
+                    ints[9],
+                    anchor,
+                    ints[10],
+                    text
                 );
             }
             101 => {

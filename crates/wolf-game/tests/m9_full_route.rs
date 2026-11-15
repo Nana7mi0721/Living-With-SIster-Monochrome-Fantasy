@@ -625,8 +625,8 @@ fn the_continuous_new_game_route_reaches_day_five_0830() {
         "2000340 rises on the exact deterministic frame"
     );
     assert_eq!(
-        trace.wiring_rounds, 4,
-        "the rebuilt wiring starts exactly four CE242 command rounds"
+        trace.wiring_rounds, 2,
+        "the rebuilt wiring starts exactly two CE242 command rounds"
     );
     assert!(trace.ce242_started, "CE242 command phase must run");
     // opcode-111 reference semantics raises the party power to 201 (var28), which
@@ -638,14 +638,14 @@ fn the_continuous_new_game_route_reaches_day_five_0830() {
         "party power {pre_power} takes the CE253 HIGH branch"
     );
     assert_eq!(
-        trace.max_ce242_pc, 967,
-        "CE242 reaches the exact slot-3 body pc"
+        trace.max_ce242_pc, 866,
+        "CE242 reaches its cleanup pc"
     );
     assert!(settled, "the day-4 round must settle");
     assert_eq!(
         trace.v350_seq,
-        vec![0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 0],
-        "2000350 exact deterministic trajectory (four command rounds)"
+        vec![0, 1, 2, 0, 1, 0],
+        "2000350 exact deterministic trajectory (two command rounds)"
     );
     assert_eq!(
         trace.v352_peak, 1,

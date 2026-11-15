@@ -39,7 +39,7 @@ mod text;
 
 pub use diff::{compare, diff_image, rgba_at, DiffReport, WorstPixel, DIFF_GAIN, WORST_LIMIT};
 pub use error::RenderError;
-pub use renderer::{Renderer, FRAME_FORMAT};
+pub use renderer::{Renderer, SceneLayer, FRAME_FORMAT};
 pub use scaler::{integer_scale, Scaler, LOGICAL_H, LOGICAL_W};
 pub use sprite::SpriteInstance;
 pub use text::{

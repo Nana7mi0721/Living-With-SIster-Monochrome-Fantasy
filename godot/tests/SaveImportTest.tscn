@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://csaveimport0m0lwsmf"]
+
+[ext_resource type="Script" path="res://tests/SaveImportTest.cs" id="1_saveimport"]
+
+[node name="SaveImportTest" type="Node"]
+script = ExtResource("1_saveimport")

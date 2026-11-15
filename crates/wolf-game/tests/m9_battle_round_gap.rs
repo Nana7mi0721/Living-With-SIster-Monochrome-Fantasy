@@ -2,22 +2,23 @@
 //!
 //! Under correct opcode-111 value-operand (reference) semantics the continuous-route day-4
 //! battle no longer one-shots the enemy. With the round loop enabled 2000350 cycles
-//! 0 -> 1 -> 2 -> 0 FOUR times before CE244 settles through its enemy-gauge<=0 arm: CE241
-//! (turn start) and CE243 (enemy action) both run every round. This replaces the old
+//! 0 -> 1 -> 2 -> 0 -> 1 -> 0 before CE244 settles through its enemy-gauge<=0 arm: CE241
+//! (turn start) and CE243 (enemy action) both run each round. This replaces the old
 //! single-round artifact (the literal-operand bug mis-sized the gauge so the first command
 //! zeroed it before phase 2 was ever reached).
 //!
-//! Measured (WOLF_DATA_ROOT=work/all): v350=[0,1,2,0,1,2,0,1,2,0,1,0], settle frame 1516,
-//! 2000349=4 (four command rounds: three full 0->1->2 cycles + a final 0->1->0), 2000342 min 0
-//! (enemy gauge drained), 2000343=1, 2000352=1 (victory). CE241 live for 258 frames, CE243 for
-//! 294 frames. Task-79 proved this trajectory is byte-reproducible across process restarts (5x,
-//! identical trace) — the exact values below are locked as a determinism regression.
+//! The corrected opcode-121 range semantics (arg[3] bit 0x10000 makes arg[4] an inclusive
+//! last offset) also changed the battle setup: CE239/CE244 clear the four action flags
+//! 2000386..=2000389 as one range, and CE241/CE242 read that group. The resulting locked
+//! trajectory is v350=[0,1,2,0,1,0], settle frame 884, 2000349=2 (two command rounds:
+//! 0->1->2 then 0->1->0), 2000342 min 0, 2000343=1, 2000352=1 (victory). CE241 is live for
+//! 86 frames and CE243 for 98 frames.
 //!
 //! Two probes in this file:
 //!  1. the natural continuous route above (test-only trace of live event ids, phase, enemy
 //!     gauge, CE241/CE243 presence and CE244 result writes), asserting the exact locked
-//!     trajectory v350=[0,1,2,0,1,2,0,1,2,0,1,0] settling at frame 1516 with v349=4 and
-//!     pools [3,2,3,2], CE241/CE243 running before settle;
+//!     trajectory v350=[0,1,2,0,1,0] settling at frame 884 with v349=2 and pools [4,3,3,2],
+//!     CE241/CE243 running before settle;
 //!  2. the task-57 BOSS path with set_battle_round_loop(true) as an independent multi-round
 //!     control.
 //!
@@ -605,25 +606,25 @@ fn natural_day_four_battle_runs_genuine_multi_round_and_settles() {
         .collect();
     assert_eq!(
         main_phases,
-        vec![0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 0],
-        "2000350 exact trajectory: four command rounds (0->1->2 x3 then 0->1->0 settle)"
+        vec![0, 1, 2, 0, 1, 0],
+        "2000350 exact trajectory: two command rounds (0->1->2 then 0->1->0 settle)"
     );
     // Frame indices shift 134 frames earlier than the pre-M13 baseline because persisted
     // common-event self (CE251 etc.) advances the day-flow clock; the phase trajectory,
     // round count and pools above are unchanged.
-    assert_eq!(settle, 1382, "CE244 settles on the exact deterministic frame");
+    assert_eq!(settle, 884, "CE244 settles on the exact deterministic frame");
     let command_rounds = main_phases.iter().filter(|v| **v == 1).count();
     let action_phases = main_phases.iter().filter(|v| **v == 2).count();
-    assert_eq!(command_rounds, 4, "exactly four command rounds");
-    assert_eq!(action_phases, 3, "exactly three enemy-action phases");
-    assert_eq!(trace.v349_at_settle, 4, "2000349 = four command rounds elapsed");
+    assert_eq!(command_rounds, 2, "exactly two command rounds");
+    assert_eq!(action_phases, 1, "exactly one enemy-action phase");
+    assert_eq!(trace.v349_at_settle, 2, "2000349 = two command rounds elapsed");
     assert_eq!(
         trace.pools_at_settle,
-        [3, 2, 3, 2],
+        [4, 3, 3, 2],
         "member pools (2000345/346/347/348) at settle"
     );
-    assert_eq!(trace.ce241_frames, 258, "CE241 turn-start live-frame count");
-    assert_eq!(trace.ce243_frames, 294, "CE243 enemy-action live-frame count");
+    assert_eq!(trace.ce241_frames, 86, "CE241 turn-start live-frame count");
+    assert_eq!(trace.ce243_frames, 98, "CE243 enemy-action live-frame count");
     assert_eq!(
         trace.ce243_first_frame,
         Some(641),
@@ -641,7 +642,7 @@ fn natural_day_four_battle_runs_genuine_multi_round_and_settles() {
     );
     assert_eq!(trace.v342_min, 0, "enemy gauge drained to exactly 0");
     assert_eq!(trace.max_ce239_pc, 1099, "CE239 reaches its cleanup tail pc");
-    assert_eq!(trace.max_ce242_pc, 967, "CE242 reaches the slot-3 body pc");
+    assert_eq!(trace.max_ce242_pc, 866, "CE242 reaches its cleanup pc");
     // Deterministic victory: the reference-semantics day-4 fight always ends 2000352 = 1 (win);
     // this is NOT a {1,-1} coin flip (proven stable across process restarts by task-79).
     assert_eq!(trace.v352_at_settle, 1, "CE244 writes 2000352 = 1 (win)");

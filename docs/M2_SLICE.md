@@ -1,5 +1,7 @@
 # M2 纵切验收基准（开场剧情 · SampleMapA 事件 0）
 
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件只作追溯和迁移参考。
+>
 > 目标读者：负责把《Living With Sister Monochrome Fantasy》的 `M2 垂直切片` 在 Rust 运行时里跑通、并判断
 > "还算不算忠实还原"的人。本文是 **M2 的验收基准**：入口是哪条脚本、屏幕上该出现什么、每个数字由哪条命令产出。
 > 标记沿用 docs/FORMAT_SPEC.md 的规范：**已验证** / **未验证** / **★已实测纠正**。

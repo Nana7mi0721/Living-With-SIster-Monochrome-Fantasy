@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://cmapruntime0lwsmf"]
+
+[ext_resource type="Script" path="res://tests/MapRuntimeTest.cs" id="1_mapruntime"]
+
+[node name="MapRuntimeTest" type="Node"]
+script = ExtResource("1_mapruntime")
