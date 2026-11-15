@@ -58,6 +58,7 @@
 25. M3 AutoEvents 调度器与 route 同步：`Program` 解析条件四元组，`AutoEvents` 跟踪 98 个并行事件（跳过 43，allow-list 242/243），`GameSession` 在 VM step 前同步、读档后 `PrimeLatched`；Rust `route.rs` 同序同步后整路线 **73,814/73,814** 步全等，`AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`，30 步门禁双绿（§4.23，D-28）。
 26. M3 CE239/CE242 战斗 wiring：新增 `BattleWiring` 把 `340` rising、`CE157` 菜单命令、`CE242`/合成 `CE241` 与 `350/343/352` 结算接进 `GameSession`（AutoEvents → BattleWiring → VM step），`EventVm.CreateFreshInstance` 保证合成实例空白 `Self`；`BATTLE_WIRING_TEST_OK rounds=1 result=-1 ce242_pc=415`，30 步门禁双绿（§4.24，D-29）。
 27. M3 CE190/CE175 敌人生成与 CE162 目标选择：`GameDatabase` 补引擎默认坐标倍率 32/24 与窗口皮肤，读序为覆盖层 → 引擎层 → 文件层；`CE190/CE175` 写 512/-288/512/312，`CE162` 选中索引 0 并在 pc57 退出，无敌人时停 pc49/50；`BATTLE_TARGET_TEST_OK selected=1 control_pc=49 enemy_hp=100`，30 步门禁双绿（§4.25，D-30）。
+28. M3 CE159 技能尾段与 CE162 目标入口：覆盖层写 `Data 0/2/2=10`（效果目标）与 `Data 0/2/6=1`（可用场景），从 pc94 注入 CE159，经 pc110/115/244/247 启动 CE162，选中索引 0 后 pc57 退出；目标 0 不生成 CE162，敌数 0 时停 pc49/50；`BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`，30 步门禁双绿（§4.26，D-31）。
 
 
 ## 下一步（M2 主循环与 UI）
@@ -66,7 +67,7 @@
 2. ~~tile 呈现、地形通行、地图点触、角色层~~（W3 Day-3 已完成）；MapChip 为引擎通用素材，正片未使用，调色板占位仅兼容/测试。
 3. ~~把“标题→新游戏→map 1”冻结成输入序列~~（整路线 1500 帧 73,814/73,814，§4.12/§4.23）；消息/选择只覆盖标题菜单 1 次，白天 101/102 与 save/load 的逐指令对拍仍待补。
 4. ~~日程/时间接入确定性时钟~~（W4 Day1-4 已完成）；HUD 时间已随图片状态桥显示（§4.14）；~~白天 `CE251/CE310` 工作菜单~~（2026-11-15 已完成端到端点击/日程/体力回归，§4.16；仍缺从冷启动进入白天的剧情夹具）。
-5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27）；AutoEvents 已接 98 个并行事件并同步 route（§4.23/D-28）；CE239/CE242 真实回合 wiring 已接（§4.24/D-29），CE162 目标选择直启已接（§4.25/D-30），`CE253` 自然日线、CE159 执行入口、伤害矩阵与 H 阈值仍待。
+5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27）；AutoEvents 已接 98 个并行事件并同步 route（§4.23/D-28）；CE239/CE242 真实回合 wiring 已接（§4.24/D-29），CE162 目标选择直启已接（§4.25/D-30），CE159 技能尾段已接（§4.26/D-31），`CE253` 自然日线、真实 CE159 命令 dispatch、伤害矩阵与 H 阈值仍待。
 
 ## 约束
 

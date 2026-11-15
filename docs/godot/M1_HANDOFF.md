@@ -85,6 +85,7 @@
 | 自动事件 98 | `res://tests/Smoke.tscn` | `AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`；CE38/216/217/242 的边沿/resume/停止，`SessionParityTest` 断言 `AutoEventCount==98` |
 | 战斗 wiring | `res://tests/Smoke.tscn` | `BATTLE_WIRING_TEST_OK rounds=1 result=-1 ce242_pc=415`；CE239 真实回合经 CE242 命令、350/343/352 结算并返回 |
 | 战斗目标选择 | `res://tests/Smoke.tscn` | `BATTLE_TARGET_TEST_OK selected=1 control_pc=49 enemy_hp=100`；CE190/CE175 坐标倍率、CE162 选 0 并退出，无敌人时停 pc49/50 |
+| 技能目标入口 | `res://tests/Smoke.tscn` | `BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`；CE159 尾段场景/效果目标门、CE162 由 pc247 生成并选中退出，目标 0 不生成、敌数 0 停 pc49/50 |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
 ---
@@ -360,6 +361,15 @@
 - **门禁**：`VmTest` 在 `BattleWiringTest` 后调用；`tools/godot_check.sh` 第 3 步追加 `BATTLE_TARGET_TEST_OK`。headless `reports/gate_battle_target.log` 与 `LWsmf_RENDER=1` `reports/gate_battle_target_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30/30；整路线仍 `ROUTE_DIFF_OK 73814/73814`。
 - **边界**：CE162 是从测试直接启动，不是 CE188 命令确认后的真实 dispatch；`CE159` 技能选择执行入口仍未接，伤害/胜负矩阵与 H 未覆盖。引擎默认层目前只补坐标倍率与窗口皮肤三项，不声称覆盖 Rust 的全部引擎默认值。
 
+### 4.26 CE159 技能尾段与 CE162 目标入口（已完成 2026-11-15）
+
+- **来源**：Rust `crates/wolf-game` 的 CE159 `X[戦]技能選択実行` 与 CE162 `X[戦]敵対象選択実行`；C# 侧此前只有 CE162 直启，没有技能选择到目标选择的完整尾段。CE159 的 pc110 读 Data 0/row/6（`使用可能シーン`），pc115 读 Data 0/row/2（`効果対象`），pc244 只放行目标值 10/11/12，pc247 才以 `300` 启动 CE162。
+- **数据事实**：`work/all` 的 Data type0 是 18 列精简 schema，零售 44 行 `col2` 全 0，`col3` 才是 10/11/12；`.project` 的字段标签与数据版本错位，`使用可能シーン`/`効果対象` 无匹配标签，250 只能按回退列号读取。测试因此显式写覆盖层 `Data 0/2/2=10`（效果目标）与 `Data 0/2/6=1`（可用场景），不修改文件层。
+- **测试**：新增 `BattleSkillTargetTest`。battle seed 后写入目标/场景，`CreateInstance(159)` 并设 `Self 1600000=1、1600001=2、1600002=0、1600022=2`，从 pc94 起跑（跳过 pc46 的菜单列表分支，直接验证尾段），`123` 脉冲按帧号奇数帧 OK。断言 pc110/115/247 到达、CE162 pc12/pc57 到达并退出、CE159 结束。
+- **控制线**：效果目标为 0 时 CE159 走取消支路，CE162 从未启动；敌数为 0 时 CE162 已经由 pc247 生成，但停在 pc49/pc50 自旋，不写选中索引。分别输出 `no_target=1`、`no_enemy_pc=50`。
+- **门禁**：`VmTest` 在 `BattleTargetTest` 后调用；`tools/godot_check.sh` 第 3 步追加 `BATTLE_SKILL_TARGET_TEST_OK`。headless `reports/gate_skill_target.log` 与 `LWsmf_RENDER=1` `reports/gate_skill_target_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30/30；整路线仍 `ROUTE_DIFF_OK 73814/73814`。
+- **边界**：测试从 pc94 注入 CE159 尾段，不是 CE188 命令确认后的生产 dispatch；没有覆盖 CE157 菜单到 CE159 的真实选择、CE253 自然日线、伤害/胜负矩阵与 H 场景。`使用可能シーン` 的 1/2 语义来自本数据集实测（0 立即结束、1/2 放行、100 在 pc113 后结束），不等于全部零售脚本语义。
+
 ---
 
 ## 5. 下一步（M2 入口）
@@ -374,6 +384,7 @@
 8. **数据库**：`250` 的三容器读写、`.project` 标签漂移、覆盖层与扩展行已落地并由 `DATABASE_TEST_OK .../vm-250` 覆盖（§4.21，D-26）；战斗 `CE152/CE188` 的命令可用性切片已由 §4.22 接到该宿主，完整战斗回合仍需。
 9. **战斗命令切片**：`CE188→CE152→CE192` 的空库存/有道具两条线已由 `BattleCommandTest` 覆盖（§4.22，D-27）；真实回合已由 §4.24 接上 CE239/CE242，目标选择与伤害胜负仍未接。
 10. **自动事件**：98 个并行事件已由 `AutoEvents` 调度并接入 `GameSession`，整路线同步后两侧均为 73,814 步（§4.23，D-28）；HUD 读档重放之外的引擎接线仍未接。
-11. **战斗 wiring**：`CE239` 真实回合经 `CE242` 命令、`350/343/352` 结算并返回已由 `BattleWiringTest` 覆盖（§4.24，D-29）；`CE253` 自然日线、`CE159` 执行入口、伤害矩阵与 H 仍未接。
+11. **战斗 wiring**：`CE239` 真实回合经 `CE242` 命令、`350/343/352` 结算并返回已由 `BattleWiringTest` 覆盖（§4.24，D-29）；`CE253` 自然日线、真实 `CE159` 命令 dispatch、伤害矩阵与 H 仍未接。
+12. **技能目标入口**：`CE159` 尾段（场景 1/2、目标 10..12）到 `CE162` 的生成与选中退出已由 `BattleSkillTargetTest` 覆盖（§4.26，D-31）；入口仍从 pc94 注入，生产命令链未接。
 12. **战斗目标选择**：`CE190/CE175` 的敌人生成/坐标倍率与 `CE162` 的敌方索引 0 选择已由 `BattleTargetTest` 覆盖（§4.25，D-30）；`CE159` 技能选择执行入口、伤害/胜负矩阵仍未接。
 13. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
