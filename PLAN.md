@@ -53,6 +53,7 @@
 20. M2 Round-5 审阅 P1：`126` 的 `BasicAllDeny`/`MovementDeny` 接入 `GameSession.MoveLeader`、`AdvanceFrame` 与 `GameRoot` 交互；故障返回标题清 `InputRouter` 指针/帧 latch，F9 读档后检查 `vm.Faulted`；`GAME_ROOT_TEST_OK`，30 步门禁 headless/windowed 均绿（§4.18，D-23）。
 21. M3 鼠标右键/中键三态：`0x3000` 的 field 8/9 补齐官方三态（0/1/2），`VmController` 三组 held/边沿同帧推进，`InputRouter` 分别记录右/中按压，故障返回标题一并复位；`PICTURE_STATE_TEST_OK checks=37`、`INPUT_ROUTER_TEST_OK`，30 步门禁 headless/windowed 双绿（§4.19，D-24）。
 22. M3 原版 `.sav` 导入严格校验：`LegacySaveImporter` 校验起始/结束字节，`rejectBadChecksum` 可选严格拒绝；`ReadMemDataString` 先严格 UTF-8，失败按 replacement 记 `encoding_warnings`，`ImportAll` 非空时写 `reports/encoding_warnings.json`；`SAVE_IMPORT_OK 8/8`、`SAVE_IMPORT_VALIDATION_OK`，30 步门禁双绿（§4.20，D-25）。
+23. M3 `250` 数据库宿主：新增 `GameDatabase` 读 `database.json` 三容器与 `.project` 标签，脚本写走覆盖层（行数/清行/首空行/扩展行、8 种算子、数字写不覆盖文本）；`VmController` 加载 `DatabaseStore`，`EventVm` `250` 委派 host；`DATABASE_TEST_OK .../vm-250`，30 步门禁双绿（§4.21，D-26）。
 
 
 ## 下一步（M2 主循环与 UI）

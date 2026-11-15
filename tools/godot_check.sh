@@ -27,6 +27,7 @@ echo "[3/30] smoke test"
 out="$("$GODOT" --headless --path "$IMO/godot" res://tests/Smoke.tscn 2>&1)"
 echo "$out"
 echo "$out" | grep -q SMOKE_OK
+echo "$out" | grep -q DATABASE_TEST_OK
 
 echo "[4/30] save import test"
 out_save="$("$GODOT" --headless --path "$IMO/godot" res://tests/SaveImportTest.tscn 2>&1)"

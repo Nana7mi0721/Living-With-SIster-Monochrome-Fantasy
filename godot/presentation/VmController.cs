@@ -99,6 +99,9 @@ public partial class VmController : Node, IHost, IVmSession
     /// <summary>Opcode 123 input source; the screen supplies it, the VM never guesses.</summary>
     public Func<uint, int>? KeyCodeProvider { get; set; }
 
+    /// <summary>Opcode 250 store loaded from game_data/database.json.</summary>
+    public GameDatabase? DatabaseStore { get; private set; }
+
     public override void _Ready()
     {
         Vm.Host = this;
@@ -124,6 +127,16 @@ public partial class VmController : Node, IHost, IVmSession
             Vm.RegisterProgram(prog);
         }
         GD.Print($"[VmController] Loaded {programs.Count} common event programs.");
+
+        string dataDir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".";
+        string projectRoot = ProjectSettings.GlobalizePath("res://").TrimEnd('/', '\\');
+        string basicDir = Path.GetFullPath(Path.Combine(projectRoot, "..", "work", "all", "BasicData"));
+        string databasePath = Path.Combine(dataDir, "database.json");
+        DatabaseStore = GameDatabase.Load(databasePath, basicDir);
+        if (DatabaseStore == null)
+            GD.PrintErr($"[VmController] database.json not found at: {databasePath}");
+        else
+            GD.Print($"[VmController] Loaded database from {DatabaseStore.SourcePath}.");
         return true;
     }
 
@@ -335,10 +348,7 @@ public partial class VmController : Node, IHost, IVmSession
         EmitSignal(SignalName.SoundRequested, (int)cmd.Channel, (int)cmd.Action, cmd.File, cmd.Volume, cmd.Frames);
     }
 
-    public DbValue? Database(DbOp op)
-    {
-        return null;
-    }
+    public DbValue? Database(DbOp op) => DatabaseStore?.Execute(op);
 
     public void Teleport(int target, int map, int x, int y, int options)
     {

@@ -10,13 +10,13 @@
 
 | 目录 | 内容 |
 |---|---|
-| `core_cs/` | C# 确定性核心：EventVM、WolfRng、ProgramLoader、MapRuntime、Terrain/MapTileData、SaveCodec、GameSession、GameClock、LegacySaveImporter |
+| `core_cs/` | C# 确定性核心：EventVM、WolfRng、ProgramLoader、MapRuntime、Terrain/MapTileData、SaveCodec、GameSession、GameClock、LegacySaveImporter、GameDatabase |
 | `presentation/` | C# 桥：VmController（IHost/IVmSession）、GameSessionController、TerrainBridge |
 | `presentation_gd/` | 生产表现层：GameRoot、PictureStage、MessageWindow、ChoiceWindow、InputRouter、AudioManager、MapLayer、UiSkin |
-| `tests/` | headless 测试（烟雾/存档导入/追踪差分/呈现/地图运行/存档往返/地图消息/路线 trace/地形/时钟/30 天 soak 等） |
+| `tests/` | headless 测试（烟雾/数据库 250/存档导入/追踪差分/呈现/地图运行/存档往返/地图消息/路线 trace/地形/时钟/30 天 soak 等） |
 | `tests_gd/` | GDScript 测试（GameRoot、InputRouter、PictureState、MapLayer、AudioManager、Day/Weekend Menu） |
 
-主场景是 `res://scenes/GameRoot.tscn`；旧的 `TitleScreen`、`ScreenHostView`、`MapView`、`AssetCatalog` 已退役。原版 `.sav` 导入在 `core_cs/LegacySaveImporter.cs` 内校验起始/结束字节，可选严格拒绝 checksum；严格 UTF-8 失败时 replacement 回退并记录 `reports/encoding_warnings.json`。
+主场景是 `res://scenes/GameRoot.tscn`；旧的 `TitleScreen`、`ScreenHostView`、`MapView`、`AssetCatalog` 已退役。原版 `.sav` 导入在 `core_cs/LegacySaveImporter.cs` 内校验起始/结束字节，可选严格拒绝 checksum；严格 UTF-8 失败时 replacement 回退并记录 `reports/encoding_warnings.json`。`core_cs/GameDatabase.cs` 承载 `250` 的 CData/Data/Sys 读写与 `.project` 标签解析，`VmController.LoadPrograms` 时加载并暴露 `DatabaseStore`。
 
 ## 操作
 

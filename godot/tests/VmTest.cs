@@ -34,6 +34,7 @@ public static class VmTest
         TestOpcode125126AutoAndBanKeys();
         TestOpcode1000ProFeatureWait();
         TestMaxCallDepth();
+        DatabaseTest.Run();
 
         Console.WriteLine("[VmTest] ALL VM TESTS PASSED!");
     }

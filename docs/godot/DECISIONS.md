@@ -36,6 +36,7 @@
 | `D-24` | **鼠标右键/中键三态** | `124` 的 `0x3000` field 8/9 按官方定义与 field 7 同为三态（0 未按 / 1 按住 / 2 刚按下）；`VmController` 为左/右/中分开维护 held 与 false→true 边沿，`BeginFrameInput()` 同帧搬运，`ResetPointer()` 清坐标与三组 latch；`InputRouter` 分别记录 `right_pressed`/`middle_pressed`，`GameRoot` 逐帧传入，故障「返回标题」一并复位 | 关闭 Round-5 P2 的 field 8/9 恒 0；右键/中键不再泄漏到左键；`PICTURE_STATE_TEST_OK checks=37`，30 步门禁双模式仍绿 |
 | `D-25` | **原版 `.sav` 严格校验与编码告警** | `LegacySaveImporter` 对每个槽校验解密后的起始字节 `0x14=0x19` 与末字节 `0x19`；`ImportFile(..., rejectBadChecksum:true)` 在 checksum 不符时抛 `InvalidDataException`，宽松模式仍保留 `checksum_ok=false` 供诊断。`ReadMemDataString(size, field)` 先严格 UTF-8，失败时按 replacement 解码并记录字段/偏移；`SlotResult.encoding_warnings` 暴露告警，`ImportAll` 在非空时写 `reports/encoding_warnings.json`。不引入 CP932/GBK 重写 | 收口 M3 的导入边界；零售 8 槽仍 `SAVE_IMPORT_OK 8/8`；新校验覆盖坏 checksum、坏起始字节与非法 UTF-8，且不静默改写名字/图片名（DATA_CONTRACT §6/§7） |
 
+| `D-26` | **250 数据库宿主** | `250` 的 CData/Data/Sys 三容器由 `GameDatabase` 唯一实现：基础层读 `game_data/database.json`，脚本写进覆盖层，行数/清行/首空行/扩展行按 Rust 哨兵语义；`work/all/BasicData/*.project` 只解析 type/field 标签，按 type 名与字段数匹配列，标签做 NUL/破折号/全角空格规范化。`VmController` 在 `LoadPrograms` 时加载并暴露 `DatabaseStore`，`EventVm` 的 `250` 走 host | 先补战斗命令 `CE152/CE188` 的数据底座；`.project` 行名/说明/默认值不消费，覆盖层不回写；`DATABASE_TEST_OK .../vm-250`，30 步门禁双模式仍绿 |
 | `D-14` | **CI 占位素材** | `godot/tests/fixtures/asset_stub/` 只放程序生成的纯色 18×18 PNG 与静音 WAV（`tools/make_asset_stub.py` 可复现），供无零售资产的环境跑表现层测试；显式指定 AssetDB 根时永不回退到占位 | 不违反 D-11；缺零售资产时 local/CI 行为确定、可断言 |
 
 ## 2. 技术含义

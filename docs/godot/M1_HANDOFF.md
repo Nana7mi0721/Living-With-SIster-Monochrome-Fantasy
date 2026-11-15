@@ -80,6 +80,7 @@
 | 周末行动菜单 | `res://tests_gd/WeekendMenuTest.tscn` | `WEEKEND_MENU_TEST_OK checks=9 hour=15 energy=1`；CE310 点击“悠然自得”后休息分支结束事件、时钟推进、体力下降 |
 | 30 天日程 | `res://tests/SleepSoakTest.tscn` | `SLEEP_SOAK_TEST_OK days=30 checks=61`；真实 CE329→CE317 就寝链 |
 | core 存档夹具全等 | `res://tests/SessionParityTest.tscn` | `SESSION_PARITY_TEST_OK checks=9 frames=418 core=frozen`；与 `oracle/fixtures/session_core_save_state.json` 逐字段相等 |
+| 数据库 250 | `res://tests/Smoke.tscn` | `DATABASE_TEST_OK name/labels/sentinels/overlay/vm-250`；`.project` 标签漂移、哨兵、覆盖层与 VM 读写均过 |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
 ---
@@ -308,6 +309,16 @@
 - **门禁**：headless `reports/gate_save_import.log` 与 `LWsmf_RENDER=1` `reports/gate_save_import_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30/30 全绿。
 - **边界**：不把 `raw[6]` 当作可切换编码；不重写原版 `.sav`；`encoding_warnings` 是附加字段，`schema_version` 仍为 1；未建模的 VM 协程字段仍按 `not_recoverable` 排除。
 
+### 4.21 `250` 数据库宿主（已完成 2026-11-15）
+
+- **契约**：`250` 读写三个数据库容器——`CData`（角色/队伍）、`Data`（系统/物品）、`Sys`（系统变量表）。逻辑列顺序来自转换后的 `game_data/database.json`：根键是 `cdata`/`database`/`system`，每个 type 的 `fields` 顺序即列号；`field.kind=="str"` 取 `strings[]`，否则取 `numbers[]`。编辑器标签来自 `work/all/BasicData/{CDataBase,DataBase,SysDatabase}.project`。
+- **实现**：新增 `godot/core_cs/GameDatabase.cs`。基础层读 `.dat` 导出的行；脚本写只进覆盖层 `_cells`/`_texts`，行数写进 `_rowCounts`。读 `data_id=-1` 返回行数、`item_id=-1` 返回首个全空行；写 `data_id=-2` 改行数并丢弃越界覆盖，写 `item_id=-2` 清整行；`>=100` 的行按扩展行返回空。写算子 `(flags>>4)&7` 覆盖 assign/add/sub/mul/div/rem/max/min，除/模 0 保持原值；数字写不覆盖非空文本列，文本写数字列按 InvariantCulture 解析整数。
+- **标签解析**：`.project` 解析 type 名与字段名，`ResolveLabels` 先按 type 标签找 type，再按字段标签在字段数一致时找列；标签做 NUL 截断、U+2014/U+2015→'-'、U+3000→' ' 与 Trim。`Sys` 容器按 Rust 规则不使用 `.project` 标签。实测 `Data(18,22)` 的“システム設定/装備可能欄数”漂移到 `(17,22)`，`CData(3,1)` 的“パーティー情報/メンバー1”解析为 `(6,1)`。
+- **接线**：`VmController` 新增 `DatabaseStore` 与 `Database(DbOp)`；`LoadPrograms` 从 `programs.json` 同目录加载 `database.json`，并从 `work/all/BasicData` 读三份 `.project`。`EventVm` 的 `250` 已把 `DbOp` 交给 host；数据库缺失只报错，不阻断程序加载。
+- **测试**：`DatabaseTest` 先直接断言导出名 `勇者先生`、CData 0/0/5=1、标签漂移、哨兵行/列、行数覆盖、清行、扩展行、文本保护与覆盖层；再用真实 `EventVm` 跑一条 `250` 程序，覆盖数值读、字符串读、带标签读、字符串写、数值写。输出 `DATABASE_TEST_OK name/labels/sentinels/overlay/vm-250`；`VmTest` 在 `TestMaxCallDepth` 后调用它，Smoke 门禁第 3 步同时断言 `SMOKE_OK` 与 `DATABASE_TEST_OK`。
+- **门禁**：headless `reports/gate_database.log` 与 `LWsmf_RENDER=1` `reports/gate_database_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30/30 全绿；含 `DATABASE_TEST_OK .../vm-250`、`ROUTE_DIFF_OK 73812/73812`、`PICTURE_STATE_TEST_OK checks=37`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`。
+- **边界**：只解析 `.project` 的 type/field 标签，不消费行名、说明、默认值等编辑器元数据；覆盖层不写回 `database.json`；战斗侧 `CE152/CE188` 尚未接到该宿主。
+
 ---
 
 ## 5. 下一步（M2 入口）
@@ -319,4 +330,5 @@
 5. **输入权限**：`123/126` 已按官方三态/设备分支实现并由两侧单测覆盖（§4.15，D-20）；表现层已按 §4.18 接线（D-23）；`123` mask 的逐位表与 `126` target 的具体键对应仍待编辑器差分，不阻塞本作。
 6. **故障恢复**：D-13 除锁档/诊断包外已支持显式「返回标题」重建标题安全点（§4.17）；返回标题时会清 `InputRouter` 指针/帧 latch，F9 读档故障进入模态（§4.18）；存档槽级安全点回滚留 M5。
 7. **原版 `.sav` 导入**：起始/结束字节与可选 checksum 严格校验、严格 UTF-8 + replacement 告警已落地（§4.20，D-25）；零售 8 槽 `SAVE_IMPORT_OK 8/8`；回写原版 `.sav` 仍不在 M3 范围。
-8. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
+8. **数据库**：`250` 的三容器读写、`.project` 标签漂移、覆盖层与扩展行已落地并由 `DATABASE_TEST_OK .../vm-250` 覆盖（§4.21，D-26）；战斗 `CE152/CE188` 仍需接该宿主。
+9. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
