@@ -55,6 +55,16 @@ func _ready() -> void:
 		root._on_choices(["A", "B"])
 		if not root.choice.is_open:
 			failures.append("ChoicesRequested path did not open the choice window")
+		# R5-P1-01: 126 state 2 must also stop the wheel from moving the choice cursor.
+		root.vm.ApplyInputPermission(0x210)
+		var wheel_before: int = root.choice.selected
+		root._on_wheel(-1)
+		if root.choice.selected != wheel_before:
+			failures.append("126 state 2 must block the wheel cursor")
+		root.vm.ApplyInputPermission(0x010)
+		root._on_wheel(1)
+		if root.choice.selected == wheel_before:
+			failures.append("the wheel must still move when the direction is allowed")
 		root.choice.cancel()
 		if root.choice.is_open:
 			failures.append("choice cancel should close the window")

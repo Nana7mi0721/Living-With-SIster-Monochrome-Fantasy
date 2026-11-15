@@ -31,6 +31,7 @@ public static class VmTest
         TestOpcode270Party();
         TestOpcode300CallByName();
         TestTraceBgsChannel();
+        TestUnknownSoundType();
         TestOpcode125126AutoAndBanKeys();
         TestOpcode1000ProFeatureWait();
         TestMaxCallDepth();
@@ -677,6 +678,26 @@ public static class VmTest
         string json = host.PendingEffects[0].ToJsonString();
         if (!json.Contains("\"type\":\"bgs\""))
             throw new Exception($"BGS trace must say bgs, got {json}");
+    }
+
+    private static void TestUnknownSoundType()
+    {
+        Console.WriteLine("  Testing unknown opcode 140 sound type...");
+        var prog = Program.FromSlots(92, "UnknownSoundType", new List<Slot>
+        {
+            Slot.Command(140, [0x0200_0030], ["BGM/unknown.ogg"])
+        });
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        vm.RegisterProgram(prog);
+        vm.CreateInstance(92);
+        vm.StepFrame();
+        if (host.Sounds.Count != 1)
+            throw new Exception($"unknown sound type expected one command, got {host.Sounds.Count}");
+        if (host.Sounds[0].Channel != SoundChannel.Bgm)
+            throw new Exception($"unknown sound type should keep the BGM fallback, got {host.Sounds[0].Channel}");
+        if (!host.Logs.Exists(l => l.Contains("unknown sound type 3")))
+            throw new Exception("unknown sound type must be logged instead of silently remapped");
     }
 
     private sealed class KeyHost : RecordingHost

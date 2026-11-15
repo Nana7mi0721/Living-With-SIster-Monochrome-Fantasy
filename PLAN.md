@@ -59,7 +59,8 @@
 26. M3 CE239/CE242 战斗 wiring：新增 `BattleWiring` 把 `340` rising、`CE157` 菜单命令、`CE242`/合成 `CE241` 与 `350/343/352` 结算接进 `GameSession`（AutoEvents → BattleWiring → VM step），`EventVm.CreateFreshInstance` 保证合成实例空白 `Self`；`BATTLE_WIRING_TEST_OK rounds=1 result=-1 ce242_pc=415`，30 步门禁双绿（§4.24，D-29）。
 27. M3 CE190/CE175 敌人生成与 CE162 目标选择：`GameDatabase` 补引擎默认坐标倍率 32/24 与窗口皮肤，读序为覆盖层 → 引擎层 → 文件层；`CE190/CE175` 写 512/-288/512/312，`CE162` 选中索引 0 并在 pc57 退出，无敌人时停 pc49/50；`BATTLE_TARGET_TEST_OK selected=1 control_pc=49 enemy_hp=100`，30 步门禁双绿（§4.25，D-30）。
 28. M3 CE159 技能尾段与 CE162 目标入口：覆盖层写 `Data 0/2/2=10`（效果目标）与 `Data 0/2/6=1`（可用场景），从 pc94 注入 CE159，经 pc110/115/244/247 启动 CE162，选中索引 0 后 pc57 退出；目标 0 不生成 CE162，敌数 0 时停 pc49/50；`BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`，30 步门禁双绿（§4.26，D-31）。
-29. M3 H 阈值数据面：把 Rust `m13_h_thresholds.rs` 的 37 个真实 op111 载荷（CE310 10、CE318 6、CE323 6、CE335 15）钉进 `HEventGateTest`，逐条断言 event/pc/params；单条件门测 `value-1`/`value`，多条件门 31 点按 compare 0..6 取 first-true；不执行 H 场景。`H_EVENT_GATE_TEST_OK gates=37 boundaries=59`，30 步门禁双绿（§4.27，D-32）。
+29. M3 H 阈值数据面：把 Rust `m13_h_thresholds.rs` 的 37 个真实 op111 载荷（CE310 10、CE318 6、CE323 6、CE335 15）钉进 `HEventGateTest`，逐条断言 event/pc/params；单条件门测 `value-1`/`value`，多条件门 31 点按 compare 0..6 取 first-true；不执行 H 场景。`H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`，30 步门禁双绿（§4.27，D-32）。
+30. M3 第六轮审阅 P1/P2 收口：`GameRoot._on_wheel` 补 126 方向位过滤，`AudioManager` 播放前 duplicate 共享流，`EventVm` 140 对未知 soundType 3..7 告警，`PictureStage` 以容器 pivot/scale 镜像文本与占位槽，`diff_trace/diff_route` 统一严格 effects；AutoEvents 新游戏复位按 D-33 拒绝，Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。`AUDIO_MANAGER_TEST_OK checks=32`、`PICTURE_ROUNDTRIP_TEST_OK`、`SESSION_PARITY_TEST_OK checks=10 frames=418`，30 步门禁双模式双绿（§4.28，D-33/D-34/D-35）。
 
 ## 下一步（M2 主循环与 UI）
 
@@ -67,7 +68,7 @@
 2. ~~tile 呈现、地形通行、地图点触、角色层~~（W3 Day-3 已完成）；MapChip 为引擎通用素材，正片未使用，调色板占位仅兼容/测试。
 3. ~~把“标题→新游戏→map 1”冻结成输入序列~~（整路线 1500 帧 73,814/73,814，§4.12/§4.23）；消息/选择只覆盖标题菜单 1 次，白天 101/102 与 save/load 的逐指令对拍仍待补。
 4. ~~日程/时间接入确定性时钟~~（W4 Day1-4 已完成）；HUD 时间已随图片状态桥显示（§4.14）；~~白天 `CE251/CE310` 工作菜单~~（2026-11-15 已完成端到端点击/日程/体力回归，§4.16；仍缺从冷启动进入白天的剧情夹具）。
-5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27）；AutoEvents 已接 98 个并行事件并同步 route（§4.23/D-28）；CE239/CE242 真实回合 wiring 已接（§4.24/D-29），CE162 目标选择直启已接（§4.25/D-30），CE159 技能尾段已接（§4.26/D-31），H 阈值数据面已接（§4.27/D-32）；`CE253` 自然日线、真实 CE159 命令 dispatch、伤害矩阵与 H 场景（CE318→CE360）仍待。
+5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27）；AutoEvents 已接 98 个并行事件并同步 route（§4.23/D-28）；CE239/CE242 真实回合 wiring 已接（§4.24/D-29），CE162 目标选择直启已接（§4.25/D-30），CE159 技能尾段已接（§4.26/D-31），H 阈值数据面已接（§4.27/D-32）；第六轮 P2 的滚轮 126、音频流隔离、未知 soundType、图片镜像与严格 effects 已收口（§4.28/D-34），`101` 未读完取消与零售字体仍待运行时/零售证据；`CE253` 自然日线、真实 CE159 命令 dispatch、伤害矩阵与 H 场景（CE318→CE360）仍待；Data type0 列错位保持 `needs-retail-data`（D-35）。
 
 ## 约束
 

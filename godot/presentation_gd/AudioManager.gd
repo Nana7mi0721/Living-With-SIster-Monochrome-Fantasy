@@ -36,12 +36,17 @@ func play(channel: int, file: String, volume: int, loop_point: int = 0, tempo: i
 	if file.is_empty():
 		stop(channel, frames)
 		return false
-	var stream := _assets.audio(file)
-	if stream == null:
+	var cached := _assets.audio(file)
+	if cached == null:
 		push_warning("AudioManager: missing audio %s" % file)
 		stop(channel, 0)
 		return false
 
+	# AssetDB caches one AudioStream per file. Duplicate it before touching loop
+	# properties so a BGS loop cannot rewrite the BGM's shared stream (R5-P2-03).
+	var stream := cached.duplicate() as AudioStream
+	if stream == null:
+		stream = cached
 	var player := _players[channel]
 	var looping := channel != CHANNEL_SE
 	_apply_loop(stream, looping, loop_point)

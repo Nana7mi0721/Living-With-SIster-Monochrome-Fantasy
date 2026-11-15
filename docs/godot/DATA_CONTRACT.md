@@ -107,6 +107,8 @@
 
 所有类型都保留**原始类型 id 与序号**，不做重编号；文字按 D-06 保留原文。
 
+**Data type 0（技能）列契约（D-35）**：`work/all` 导出的 type 0 是 18 列精简 schema（`技能の名前`、`スキル説明`、`スキルタイプ`、`消費行動力`、`戦況影響値`、`効果基本値`、`筋力影響`、`精神影響`、`使用時文章`、`スキル属性`、`アニメーション`、`付与するステータス1/2`、`回復させるステータス1/2/3`、`相手の防御を`、重复的 `スキルタイプ`）。`.project` 没有 `使用可能シーン` 或 `効果対象` 字段，因此 CE159 pc110/pc115 的 250 字段标签会回退到 `ItemId` 列：`col2` 是 `スキルタイプ`（44 行全 0），`col3` 是 `消費行動力`（出现 10/11/12）。转换器按字段顺序写 `numbers`，没有证据表明存在列偏移；脚本显然按更宽的零售 schema 编写。**在取得零售 `DataBase.dat` 证据前，不得把 `┏ 効果対象` 别名到 `col3`**；战斗测试必须显式写 250 覆盖层（D-31）。
+
 ## 6. `save_import.json`（.sav 导入报告）
 
 由 C# `LegacySaveImporter` 生成，schema 在此冻结；M0 只要求 8 个存档槽全部可解析。
@@ -120,7 +122,7 @@
 
 `not_recoverable` 清单直接对应 DECISIONS.md §3(3)：不承诺恢复 pc / 调用栈 / Wait / 音频相位；UI 文案必须与此一致。
 
-`encoding_warnings` 为附加字段：每个槽列出该槽内严格 UTF-8 失败并 replacement 的字段与偏移；`ImportAll` 在任一槽非空时汇总写入 `reports/encoding_warnings.json`，空则不改写该文件。`ImportFile(..., rejectBadChecksum:true)` 在 checksum 不符时抛 `InvalidDataException`；所有导入都校验起始字节 `0x14=0x19` 与末字节 `0x19`。`schema_version` 保持 1（附加字段不破坏旧读取器）。
+`encoding_warnings` 为附加字段：每个槽列出该槽内严格 UTF-8 失败并 replacement 的字段与偏移；`ImportAll` 在任一槽非空时汇总写入 `reports/encoding_warnings.json`，空则不改写该文件。`ImportFile(..., rejectBadChecksum:true)` 在 checksum 不符时抛 `InvalidDataException`；所有导入都校验起始字节 `0x14=0x19` 与末字节 `0x19`。`schema_version` 保持 1（附加字段不破坏旧读取器）。**生产 UI/发行入口必须显式传 `rejectBadChecksum:true`**；默认 `false` 只服务 `SaveImportTest` 的诊断路径（宽松导入仍写 `checksum_ok=false`，不得当成合法生产导入）。
 
 ## 7. 字符串与编码
 

@@ -286,8 +286,10 @@ func _apply_picture_geometry(holder: Control, number: int, file: String, args: A
 	holder.size = final_size
 	holder.position = Vector2.ZERO if backdrop else UiSkin.anchor_position(anchor, x, y, final_size)
 	holder.modulate = Color(1, 1, 1, clampf(opacity, 0, 255) / 255.0)
-	if holder.get_child_count() > 0 and holder.get_child(0) is TextureRect:
-		(holder.get_child(0) as TextureRect).flip_h = mirrored
+	# Mirroring the container covers text and placeholder slots too; a TextureRect-only
+	# flip left every non-texture picture unmirrored (R5-P2-07).
+	holder.pivot_offset = final_size * 0.5
+	holder.scale = Vector2(-1.0 if mirrored else 1.0, 1.0)
 
 
 func picture_count() -> int:

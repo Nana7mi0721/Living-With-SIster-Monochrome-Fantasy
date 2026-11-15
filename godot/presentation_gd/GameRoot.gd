@@ -208,6 +208,14 @@ func _on_wheel(direction: int) -> void:
 	if faulted:
 		return
 	if choice.is_open:
+		# 126 state 2 denies the direction keys; the wheel must respect the same bits.
+		var bit := 0
+		if direction < 0:
+			bit = 16
+		elif direction > 0:
+			bit = 32
+		if bit != 0 and (int(session.BasicAllDeny) & bit) != 0:
+			return
 		choice.move(direction)
 	elif message.is_open():
 		message.confirm()

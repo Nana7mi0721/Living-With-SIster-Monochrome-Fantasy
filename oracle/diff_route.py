@@ -22,7 +22,11 @@ def load_document(path):
 
 
 def normalize_effects(effects):
-    return [effect for effect in effects if effect]
+    """Keep the full effect payload: a missing key and an empty string are distinct.
+
+    This must stay aligned with oracle/diff_trace.py (R5-P2-02).
+    """
+    return [dict(effect) for effect in effects]
 
 
 def diff_steps(base, target):

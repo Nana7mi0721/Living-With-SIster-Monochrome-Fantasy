@@ -129,7 +129,7 @@ public static class HEventGateTest
         AssertCase(vm, 335, 3483, new Dictionary<int, int> { [102] = 70 }, 0);
         boundaries += 31;
 
-        GD.Print($"H_EVENT_GATE_TEST_OK gates={Gates.Length} boundaries={boundaries}");
+        GD.Print($"H_EVENT_GATE_TEST_OK gates={Gates.Length} boundaries={boundaries} data_only=1");
     }
 
     private static void CheckBoundary(VmController vm, (int Event, int Pc, int[] Ints) gate,

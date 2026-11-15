@@ -73,7 +73,7 @@
 | Oracle 逐指令对拍 | `oracle/fixtures/samplemapa_event0_418_rust_trace.json` + `OracleStepTraceTest` | `TRACE_DIFF_OK: 2461/2461 steps matched 100% (event_id=0)`；418 帧，Rust 与 C# 同格式 trace |
 | 地形通行 | `res://tests/TerrainTest.tscn` | `TERRAIN_TEST_OK checks=32 blocked=348,0,160 solid=114,0,158` |
 | 地图图层/点触 | `res://tests_gd/MapLayerTest.tscn` | `MAP_LAYER_TEST_OK checks=18`；三层 64×36、点击 (2,3)、Dungeon/SampleMapB 计数一致 |
-| 音频三轨 | `res://tests_gd/AudioManagerTest.tscn` | `AUDIO_MANAGER_TEST_OK checks=30`；BGM/BGS/SE 独立、循环点、快照恢复、WAV 循环点帧→采样换算 |
+| 音频三轨 | `res://tests_gd/AudioManagerTest.tscn` | `AUDIO_MANAGER_TEST_OK checks=32`；BGM/BGS/SE 独立、循环点、快照恢复、WAV 循环点帧→采样换算 |
 | 时钟 | `res://tests/ClockTest.tscn` | `CLOCK_TEST_OK checks=11`；CE217 +130→13:70、跨午夜、周末标志 |
 | 图片状态/指针 | `res://tests_gd/PictureStateTest.tscn` | `PICTURE_STATE_TEST_OK checks=37`；124 的 hover/existence/x/y/scale/text、屏幕层命中、左/右/中三态、真实 CE217 HUD 显示 `8:30` |
 | 白天工作菜单 | `res://tests_gd/DayMenuTest.tscn` | `DAY_MENU_TEST_OK checks=13 command=1 hour=18 minute=30 energy=0`；CE251 从 pc1022 走真实图片 hover/点击、自动确认与工作命令 |
@@ -86,7 +86,8 @@
 | 战斗 wiring | `res://tests/Smoke.tscn` | `BATTLE_WIRING_TEST_OK rounds=1 result=-1 ce242_pc=415`；CE239 真实回合经 CE242 命令、350/343/352 结算并返回 |
 | 战斗目标选择 | `res://tests/Smoke.tscn` | `BATTLE_TARGET_TEST_OK selected=1 control_pc=49 enemy_hp=100`；CE190/CE175 坐标倍率、CE162 选 0 并退出，无敌人时停 pc49/50 |
 | 技能目标入口 | `res://tests/Smoke.tscn` | `BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`；CE159 尾段场景/效果目标门、CE162 由 pc247 生成并选中退出，目标 0 不生成、敌数 0 停 pc49/50 |
-| H 阈值数据面 | `res://tests/Smoke.tscn` | `H_EVENT_GATE_TEST_OK gates=37 boundaries=59`；37 个 op111 真实载荷与 59 个阈值/多条件边界点，只验证数据面 |
+| H 阈值数据面 | `res://tests/Smoke.tscn` | `H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`；37 个 op111 真实载荷与 59 个阈值/多条件边界点，只验证数据面 |
+| 第六轮 P2 收口 | `res://tests_gd/AudioManagerTest.tscn` / `PictureRoundtripTest.tscn` / `Smoke.tscn` | `AUDIO_MANAGER_TEST_OK checks=32`、`PICTURE_ROUNDTRIP_TEST_OK`、`H_EVENT_GATE_TEST_OK ... data_only=1`；滚轮 126 拦截、同文件流隔离、未知 soundType 告警、容器镜像与严格 effects 对拍 |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
 ---
@@ -375,9 +376,23 @@
 
 - **来源**：Rust `crates/wolf-game/tests/m13_h_thresholds.rs` 的 `gate_bytecode_conformance` 与 `gate_branch_boundary_semantics`；真实 H 门共 37 个（CE310 10、CE318 6、CE323 6、CE335 15）。
 - **测试**：新增 `HEventGateTest`。加载 `programs.json` 后逐条断言 37 个 `(event, pc, params)` 与 Rust 载荷一致（opcode 111、参数长度与每个 int）；单条件门按 `(Ints[0] & 0x0F) == 1` 识别，取 `value-1`（不匹配，first-true 为 -1）与 `value`（匹配 case0）两个边界；多条件门显式 31 点，`FirstTrueCase` 按 compare `0 >`、`1 >=`、`2 ==`、`3 <=`、`4 <`、`5 !=`、`6 &` 与 live store 求第一个真分支。
-- **结果**：`H_EVENT_GATE_TEST_OK gates=37 boundaries=59`；14 个单条件门 ×2 + 31 个多条件点 = 59。
+- **结果**：`H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`；14 个单条件门 ×2 + 31 个多条件点 = 59。
 - **门禁**：`VmTest` 在 `BattleSkillTargetTest` 后调用；`tools/godot_check.sh` 第 3 步追加 `H_EVENT_GATE_TEST_OK`。headless `reports/gate_h_threshold.log` 与 `LWsmf_RENDER=1` `reports/gate_h_threshold_windowed.log` 均以 `GODOT_GATE_OK` 结束（shell exit 0），30/30；整路线仍 `ROUTE_DIFF_OK 73814/73814`。
 - **边界**：只验证 bytecode/data 面与 compare 分支语义，不执行 H 场景；CE318 信頼 100/99 到 CE360 的剧情生成、CE310/323/335 的实际调用仍未接。它是 H 场景的前置门数据回归，不是 H 完成。
+
+### 4.28 第六轮审阅 P1/P2 收口（2026-11-15）
+
+- **来源**：`m3_round6_review_2026_11_15.md`，快照 `84bd3c7`；可执行项为 R5-P1-01、R5-P2-02/03/04/07，以及 D-28 的复位边界。
+- **输入权限（R5-P1-01）**：`GameRoot.gd` 的 `_on_wheel` 与 `_on_move` 同口径检查 `BasicAllDeny` 的 16/32 位；`GameRootTest.gd` 在 126 state 2 下断言滚轮不移动选项，普通权限下滚轮仍可移动。
+- **音频（R5-P2-03）**：`AudioManager.gd` 播放前取 `_assets.audio(file).duplicate()`，BGM/BGS 同文件不再共享 `AudioStream.loop_*`；`AudioManagerTest.gd` 断言两者不是同一实例且 BGS 播放后 BGM 的 `loop_begin` 仍为 0。
+- **未知音效类型（R5-P2-04）**：`EventVm` 的 140 在 soundType 3..7 时写 `Host.Log("[EventVm] unknown sound type ...")`，仍落 BGM；`VmTest.TestUnknownSoundType` 钉住日志与通道。Rust 对这些位落 SE，C# 暂不改落点，避免静音。
+- **图片镜像（R5-P2-07）**：`PictureStage` 改为容器 `pivot_offset=中心`、`scale.x=-1`，文本与占位槽随贴图一起镜像；`PictureRoundtripTest` 断言容器 scale/pivot 而非单个 TextureRect 的 flip。
+- **Oracle（R5-P2-02）**：`diff_trace.py` 与 `diff_route.py` 的 effects 都改为严格 `[dict(...)]` 比对，不再一边滤空一边只滤假值；整路线仍 73814/73814。
+- **AutoEvents 复位（D-33）**：第六轮建议的 `ResetForNewGame()` 曾实现，随后回退。Rust `AutoEvents` 没有 reset API，latched 是 session-scoped；清空会让 CE38 在新游戏首帧重放并顺移实例 id（6/7/8→7/8/9），破坏 `SESSION_PARITY_TEST`。现保留“StopAll 不清 latch”，测试断言 StopAll 后再次 Sync 只重放 216/217。
+- **H 标记（D-32）**：输出追加 `data_only=1`，避免把 H 阈值数据面误读成 H 场景完成。
+- **测试**：`GAME_ROOT_TEST_OK`、`AUDIO_MANAGER_TEST_OK checks=32`、`PICTURE_ROUNDTRIP_TEST_OK`、`SESSION_PARITY_TEST_OK checks=10 frames=418`、`H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`。
+- **门禁**：headless `reports/gate_review6_r3.log` 与 `LWsmf_RENDER=1` `reports/gate_review6_r3_windowed.log` 均 `GODOT_GATE_OK` / `GATE_EXIT=0`，30/30；整路线 `ROUTE_DIFF_OK 73814/73814`。
+- **边界**：`101` 未读完取消、零售字体、Data type0 列错位仍需运行时/零售证据；玩家胜利与多轮战斗、CE253 自然线、伤害/胜负矩阵、H 场景仍未接。
 
 ---
 
@@ -396,5 +411,6 @@
 11. **战斗 wiring**：`CE239` 真实回合经 `CE242` 命令、`350/343/352` 结算并返回已由 `BattleWiringTest` 覆盖（§4.24，D-29）；`CE253` 自然日线、真实 `CE159` 命令 dispatch、伤害矩阵与 H 仍未接。
 12. **战斗目标选择**：`CE190/CE175` 的敌人生成/坐标倍率与 `CE162` 的敌方索引 0 选择已由 `BattleTargetTest` 覆盖（§4.25，D-30）；`CE159` 技能选择执行入口、伤害/胜负矩阵仍未接。
 13. **技能目标入口**：`CE159` 尾段（场景 1/2、目标 10..12）到 `CE162` 的生成与选中退出已由 `BattleSkillTargetTest` 覆盖（§4.26，D-31）；入口仍从 pc94 注入，生产命令链未接。
-14. **H 阈值**：37 个真实 op111 载荷与 59 个阈值/多条件边界已由 `HEventGateTest` 钉住（§4.27，D-32）；只到数据面，H 场景与 CE318→CE360 仍未接。
-15. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
+14. **H 阈值**：37 个真实 op111 载荷与 59 个阈值/多条件边界已由 `HEventGateTest` 钉住（§4.27，D-32），输出带 `data_only=1`；只到数据面，H 场景与 CE318→CE360 仍未接。
+15. **第六轮审阅 P1/P2**：滚轮 126、同文件音频流隔离、未知 soundType 告警、图片容器镜像、严格 effects 对拍与 H 标记已收口（§4.28，D-33/D-34）；AutoEvents 新游戏复位按 D-33 拒绝；Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。
+16. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

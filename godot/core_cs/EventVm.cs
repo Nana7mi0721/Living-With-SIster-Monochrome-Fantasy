@@ -685,6 +685,12 @@ public sealed class EventVm
                     // intArgs[0] >> 4 is the sound type: 0=BGM, 1=BGS, 2=SE. Testing 0x20
                     // alone classified the 43 BGS commands as BGM and replaced the music.
                     int soundType = (bits >> 4) & 0x07;
+                    if (soundType > 2)
+                    {
+                        // 0/1/2 are BGM/BGS/SE; 3..7 are reserved. Keep the legacy BGM
+                        // fallback but make it visible instead of silently replacing music.
+                        Host.Log($"[EventVm] unknown sound type {soundType} at event {inst.EventId} pc {inst.Pc}; mapped to BGM");
+                    }
                     SoundChannel channel = soundType switch
                     {
                         1 => SoundChannel.Bgs,

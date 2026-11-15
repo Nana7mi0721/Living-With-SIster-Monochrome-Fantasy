@@ -58,11 +58,16 @@ func _ready() -> void:
 	if ghost != null or _stage.picture_count() != commands.size():
 		failures.append("moving an empty slot must not create a picture")
 	var mirrored = _stage.draw_picture(88, 0, "SystemFile/WindowBase.png", "", [0, 0, 0, 0, 255, 200, 200, -50], 0)
-	if mirrored == null or mirrored.get_child_count() == 0 or not (mirrored.get_child(0) as TextureRect).flip_h:
-		failures.append("a negative scale must mirror the texture")
 	var unmirrored = _stage.draw_picture(89, 0, "SystemFile/WindowBase.png", "", [0, 0, 0, 0, 255, 200, 200, 50], 0)
 	if mirrored != null and unmirrored != null and mirrored.size != unmirrored.size:
 		failures.append("mirroring must not change the picture size")
+	if mirrored != null and not is_equal_approx(mirrored.scale.x, -1.0):
+		failures.append("a negative scale must flip the holder so non-texture slots mirror too")
+	var text_mirror = _stage.draw_picture(90, 0, "", "HUD", [0, 0, 0, 0, 255, 300, 300, -50], 0)
+	if text_mirror == null or text_mirror.get_child_count() == 0 or not is_equal_approx(text_mirror.scale.x, -1.0):
+		failures.append("a mirrored text picture must flip its holder")
+	if text_mirror != null and not is_equal_approx(text_mirror.pivot_offset.x, text_mirror.size.x * 0.5):
+		failures.append("mirroring must pivot around the picture centre")
 	if mirrored != null:
 		_stage.draw_picture(88, 1, "", "", [0, 0, 0, 0, 255, 210, 210, -50], 0)
 		if unmirrored != null and not is_equal_approx(mirrored.size.x, unmirrored.size.x):

@@ -62,6 +62,15 @@ public static class AutoEventsTest
         Check(handover.Stopped == 1, $"350 leaving 1 must stop CE242, stopped={handover.Stopped}");
         Check(!auto.IsRunning(vm, 242), "CE242 must not run in the action phase");
 
+        // D-33: StopAll keeps the edge latch, matching Rust's session-scoped
+        // AutoEvents. A still-true one-shot must not be re-armed by clearing state.
+        vm.Vars.Set(3, 1);
+        auto.Sync(vm);
+        vm.StopAll();
+        var afterStopAll = auto.Sync(vm);
+        Check(afterStopAll.Started == 2, $"only the HUD painters may resume after StopAll, started={afterStopAll.Started}");
+        Check(!auto.IsRunning(vm, 38), "StopAll must not re-arm the still-true one-shot event 38");
+
         var primedVm = new EventVm();
         Program AddPrime(int id, int run, int op, int variable, int value)
         {

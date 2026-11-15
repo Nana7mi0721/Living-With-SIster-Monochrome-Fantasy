@@ -36,16 +36,12 @@ class TraceDiffResult:
 
 
 def normalize_effects(effects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Normalize effect entries by stripping empty strings and sorting keys."""
-    normalized = []
-    for eff in effects:
-        cleaned = {}
-        for k, v in eff.items():
-            if v == "" or v is None:
-                continue
-            cleaned[k] = v
-        normalized.append(cleaned)
-    return normalized
+    """Keep the full effect payload: a missing key and an empty string are distinct.
+
+    This must stay aligned with oracle/diff_route.py so the single-event and route
+    oracles enforce the same effect contract (R5-P2-02).
+    """
+    return [dict(eff) for eff in effects]
 
 
 def diff_traces(base_data: Dict[str, Any], target_data: Dict[str, Any]) -> TraceDiffResult:

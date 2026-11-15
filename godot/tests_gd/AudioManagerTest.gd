@@ -23,6 +23,9 @@ func _ready() -> void:
 	var bgs := mixer.player_for(AudioManager.CHANNEL_BGS)
 	_expect(bgm != null and bgs != null and bgm != bgs, "per-channel players")
 	_expect(bgm.stream != null and bgs.stream != null, "streams resolved")
+	_expect(bgm.stream != bgs.stream, "per-channel streams must not share one cached resource")
+	var bgm_wav := bgm.stream as AudioStreamWAV
+	_expect(bgm_wav != null and bgm_wav.loop_begin == 0, "bgm loop begin stays 0 after bgs")
 	var loop_wav := bgs.stream as AudioStreamWAV
 	_expect(loop_wav != null, "stub loop stream is a wav")
 	if loop_wav != null:

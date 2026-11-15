@@ -510,6 +510,9 @@ public sealed class GameSession
     {
         Phase = "newgame";
         _vm.Vm.StopAll();
+        // AutoEvents is session-scoped like Rust's Game::auto_events; StopAll does not
+        // clear its edge latch. Re-arming here would replay event 38 and shift instance ids
+        // (D-33). A fresh engine boot constructs a fresh scheduler instead.
         _vm.ResetDiagnostics();
         _vm.Vm.ResetInputPermissions();
         _vm.Vm.CommonSelf.Clear();
