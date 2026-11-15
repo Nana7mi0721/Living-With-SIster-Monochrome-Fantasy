@@ -268,12 +268,12 @@
 
 ### 4.16 白天菜单端到端与 30 步门禁（已完成 2026-11-15）
 
-- **`EngineState(7)` 改为官方三态**：按 `docs/OPCODE_124.md:97`，`0x3000` 的 field 7 不是单帧布尔，而是 **0=未按 / 1=按住 / 2=刚按下**。`VmController` 改为 `_pointerPressFrame ? 2 : (_pointerPressed ? 1 : 0)`，field 8/9 仍返回 0；`BeginFrameInput()` 继续把 false→true 边沿搬进本帧。旧实现只在边沿返回 1，导致 CE251 的 `111 [1,1600098,1,2]`（`== 1`）在按住帧失败。
+- **`EngineState(7)` 改为官方三态**：按 `docs/OPCODE_124.md:97`，`0x3000` 的 field 7 不是单帧布尔，而是 **0=未按 / 1=按住 / 2=刚按下**。`VmController` 改为 `_pointerPressFrame ? 2 : (_pointerPressed ? 1 : 0)`，field 8/9 当时仍返回 0（已在 §4.19 补齐）；`BeginFrameInput()` 继续把 false→true 边沿搬进本帧。旧实现只在边沿返回 1，导致 CE251 的 `111 [1,1600098,1,2]`（`== 1`）在按住帧失败。
 - **CE251 真实菜单**：正常处理入口是 pc1022，不是图片绘制块 pc1486；从 pc1486 起步会跳过 pc1061/1088/1239 对 self10/11/12 的随机命令写入（`121 [..,1,7/9/10,24576]`，`0x6000` = rand_range），点击后 self13=0、全局 48 永远 0。`DayMenuTest` 改为 `StartEventAt(251,1022)` + 150 帧预热，hover (512,230) 12 帧、按住 5 帧、松开 20 帧，再循环到 var48 变化并跑到事件结束。
 - **CE251 点击链**：图片点击块在 pc1647/1772/1897/1930/1986，分别 `124 field7`→`111 ==1`→erase→`213 ["1".."5"]`；标签定义在 pc2025/2029/2033/2037/2041 的 `102 [5]` 分支里。第 1 行把随机命令 self10 复制到 self13（pc2026），确认在 pc2434 `102 ["是","算了"]`，pc2438 写全局 48，随后按 6/7/8 分派执行 500252/500256 等工作命令。
 - **CE310 周末菜单**：菜单绘制在 pc128-168，行按钮/文字为 1200/1201 (512,200)、1202/1203 (250)、1204/1205 (300)、1206/1207 (350)、1208/1209 (400)、1210/1211 (450)。点击块 pc201/236/271/305/339/373 都先 `121 [2000613,0]` 再 `213 ["処理1".."処理6"]`；第 5 行“悠然自得”落在 pc2199 的休息分支，调用 500217/500222，实测把时钟推到 15:30、体力降到 1 并结束事件。
 - **新增回归**：`godot/tests_gd/DayMenuTest.gd`（13 项，`DAY_MENU_TEST_OK checks=13 command=1 hour=18 minute=30 energy=0`）与 `godot/tests_gd/WeekendMenuTest.gd`（9 项，`WEEKEND_MENU_TEST_OK checks=9 hour=15 energy=1`）。两者都断言图片存在、hover、三态鼠标、日程推进与体力下降；CE251 另断言命令号与全局 48，CE310 另断言事件结束。`PictureStateTest` 的旧“边沿=1”断言同步改为 2/1/0。
-- **门禁**：`tools/godot_check.sh` 扩为 **30/30**，新增第 29 步 CE251、第 30 步 CE310。headless `reports/gate_weekend.log` 与 `LWsmf_RENDER=1` `reports/gate_weekend_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30 步全绿；其中 `ROUTE_DIFF_OK 73812/73812`、`PICTURE_STATE_TEST_OK checks=30`。
+- **门禁**：`tools/godot_check.sh` 扩为 **30/30**，新增第 29 步 CE251、第 30 步 CE310。headless `reports/gate_weekend.log` 与 `LWsmf_RENDER=1` `reports/gate_weekend_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30 步全绿；其中 `ROUTE_DIFF_OK 73812/73812`、`PICTURE_STATE_TEST_OK checks=30`（右键/中键补测后为 37，见 §4.19）。
 - **边界**：两条测试都从菜单绘制前的中段 pc 起步，不是从冷启动/前一晚走完整剧情；CE251 的 `102` 确认由脚本自动选“是”，没有点击确认窗；CE310 的动态标签行（self5/6/7）未构造，只覆盖无条件的“悠然自得”。从冷启动进入白天仍需剧情夹具。
 
 ### 4.17 Faulted 标题安全点恢复（已完成 2026-11-15）
@@ -288,7 +288,16 @@
 - **`126` 权限进入移动与交互**：`VmController` 暴露 `MovementDeny`/`BasicAllDeny`，`GameSessionController` 同步；`GameSession.MoveLeader` 在设置朝向前按 `KeyCodes.Up/Down/Left/Right` 拒绝被禁方向，`AdvanceFrame` 的 `ActionKeyRequested` 追加 `BasicAllDeny & KeyCodes.Ok` 检查；`GameRoot` 的裸 action/选项与取消尊重 `BasicAllDeny`，消息确认仍按 Rust `message_dismissed` 放行。
 - **故障/读档补口**：`restart_after_fault()` 在清指针按压之外同时清 `InputRouter.pointer_pressed` 与 `clear_frame_latches()`；F9 先 `LoadGame()`，若 `vm.Faulted` 则进入 D-13 模态并显示 `load faulted`，不再把故障读档当成功。
 - **证据**：`GameRootTest` 新增 126 全禁/方向禁与故障复位断言，headless `GAME_ROOT_TEST_OK`（`reports/game_root_test_p1.log`）；30 步门禁 headless `reports/gate_round5_p1.log` 与 `LWsmf_RENDER=1` `reports/gate_round5_p1_windowed.log` 均为 `GATE_EXIT=0` / `GODOT_GATE_OK`，`GAME_ROOT_TEST_OK`、`ROUTE_DIFF_OK 73812/73812`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`。
-- **边界**：只把已有 D-20 状态接到表现层，不改逐位映射；`EngineState(8/9)`、effects 归一化、共享 `AudioStream` 循环属性仍是 P2。
+- **边界**：只把已有 D-20 状态接到表现层，不改逐位映射；`EngineState(8/9)` 已在 §4.19 补齐，effects 归一化、共享 `AudioStream` 循环属性仍是 P2。
+
+### 4.19 鼠标右键/中键三态（已完成 2026-11-15）
+
+- **官方契约**：`docs/OPCODE_124.md:97` 与 `:293` 规定 `0x3000` 的 field 7/8/9 都是鼠标三态——**0=未按 / 1=按住 / 2=刚按下**。此前只有 field 7 实现三态，field 8/9 恒 0，CE ev41 的「右/左/中键状态」读取会缺右/中两项。
+- **单一状态源**：`VmController` 为左/右/中分别维护 `_pointerPressed`、`_rightPressed`、`_middlePressed` 与各自的 `Pending/Frame` 边沿；`EngineState(7/8/9)` 统一走 `TriState(held, pressedThisFrame)`。`SetPointerRightPressed`/`SetPointerMiddlePressed` 在 false→true 时置 pending，`BeginFrameInput()` 在同一帧把三组 pending 搬进 frame；`ResetPointer()` 清坐标 `(-1,-1)` 与三组 held/pending/frame。
+- **输入层**：`InputRouter` 分别记录 `pointer_pressed`/`right_pressed`/`middle_pressed`，鼠标按钮按 `LEFT/RIGHT/MIDDLE` 统一更新；`GameRoot.advance_frame` 每帧传三个 held 状态，故障「返回标题」调用 `ResetPointer()` 并清三个 router 标志。
+- **测试**：`PictureStateTest` 新增 field 8/9 的边沿 2→按住 1→释放 0 断言，并断言右键不泄漏到 field 7、中键同理，`PICTURE_STATE_TEST_OK checks=37`；`InputRouterTest` 新增右键/中键 held 与释放清零，`INPUT_ROUTER_TEST_OK`。
+- **门禁**：30 步 headless `reports/gate_m3_pointer.log` 与 `LWsmf_RENDER=1` `reports/gate_m3_pointer_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`；含 `PICTURE_STATE_TEST_OK checks=37`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`、`ROUTE_DIFF_OK 73812/73812`。
+- **边界**：field 10 仍是滚轮量（不属三态）；`125` 注入的虚拟鼠标与真实右键/中键的优先级仍沿用现有链路，未新增语义。
 
 ---
 

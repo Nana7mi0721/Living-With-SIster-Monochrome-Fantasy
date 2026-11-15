@@ -1,9 +1,9 @@
-# godot/ — LWSMF Remake（M2 进行中）
+# godot/ — LWSMF Remake（M3 进行中）
 
 标题画面 → 新游戏 → 地图行走 → 消息/选择 → 存档/读档 的 Godot 4.7 C# 切片。所有游戏逻辑走
 `core_cs/` 的确定性 VM；`presentation_gd/` 负责显示、输入与真实存档路径，`presentation/` 只剩 C# 桥。
 
-> 阶段：**M1 已完成 (2026-11-14) / M2 主循环与 UI 收口中 (2026-11-15)**。
+> 阶段：**M1 已完成 (2026-11-14) / M2 已收口，M3 战斗与 H 进行中 (2026-11-15)**。
 > 验收证据、存读档续跑边界与下一步见 [`../docs/godot/M1_HANDOFF.md`](../docs/godot/M1_HANDOFF.md)。
 
 ## 目录契约
@@ -14,7 +14,7 @@
 | `presentation/` | C# 桥：VmController（IHost/IVmSession）、GameSessionController、TerrainBridge |
 | `presentation_gd/` | 生产表现层：GameRoot、PictureStage、MessageWindow、ChoiceWindow、InputRouter、AudioManager、MapLayer、UiSkin |
 | `tests/` | headless 测试（烟雾/存档导入/追踪差分/呈现/地图运行/存档往返/地图消息/路线 trace/地形/时钟/30 天 soak 等） |
-| `tests_gd/` | GDScript 测试（GameRoot、MapLayer、AudioManager） |
+| `tests_gd/` | GDScript 测试（GameRoot、InputRouter、PictureState、MapLayer、AudioManager、Day/Weekend Menu） |
 
 主场景是 `res://scenes/GameRoot.tscn`；旧的 `TitleScreen`、`ScreenHostView`、`MapView`、`AssetCatalog` 已退役。
 
@@ -46,7 +46,7 @@ LWsmf_RENDER=1 bash tools/godot_check.sh   # 带窗口的截图/渲染分支
 "$GODOT" --headless --path godot res://tests/MapMessageTest.tscn     # MAP_MESSAGE_TEST_OK 14/14
 "$GODOT" --headless --path godot res://tests/RouteTraceTest.tscn     # ROUTE_TRACE_TEST_OK steps=73812
 "$GODOT" --headless --path godot res://tests_gd/GameRootTest.tscn    # GAME_ROOT_TEST_OK
-"$GODOT" --headless --path godot res://tests_gd/PictureStateTest.tscn # PICTURE_STATE_TEST_OK checks=30
+"$GODOT" --headless --path godot res://tests_gd/PictureStateTest.tscn # PICTURE_STATE_TEST_OK checks=37
 "$GODOT" --headless --path godot res://tests_gd/DayMenuTest.tscn      # DAY_MENU_TEST_OK checks=13
 "$GODOT" --headless --path godot res://tests_gd/WeekendMenuTest.tscn  # WEEKEND_MENU_TEST_OK checks=9
 ```

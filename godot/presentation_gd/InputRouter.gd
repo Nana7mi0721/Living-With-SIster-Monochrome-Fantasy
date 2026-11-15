@@ -33,8 +33,10 @@ var hover_position := Vector2.ZERO
 ## False until the first real mouse event, matching Rust Game's (-1,-1) pointer:
 ## pictures must not hover at (0,0) before the player moves the mouse.
 var mouse_seen := false
-## Left button held right now; opcode 124 field 8 and EngineState(7) read it.
+## Mouse buttons held right now; opcode 124 fields 7/8/9 and EngineState(7/8/9) read them.
 var pointer_pressed := false
+var right_pressed := false
+var middle_pressed := false
 ## How many mouse-motion events actually moved the hover cursor (tests assert this).
 var hover_updates := 0
 ## "none" before any input, then "keyboard" or "mouse".
@@ -66,8 +68,13 @@ func handle_event(event: InputEvent) -> bool:
 		mouse_seen = true
 		hover_position = event.position
 		last_input_source = "mouse"
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			pointer_pressed = event.pressed
+		match event.button_index:
+			MOUSE_BUTTON_LEFT:
+				pointer_pressed = event.pressed
+			MOUSE_BUTTON_RIGHT:
+				right_pressed = event.pressed
+			MOUSE_BUTTON_MIDDLE:
+				middle_pressed = event.pressed
 		if not event.pressed:
 			return false
 		match event.button_index:

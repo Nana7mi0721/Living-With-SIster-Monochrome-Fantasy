@@ -131,6 +131,8 @@ func advance_frame() -> void:
 	var pointer := router.hover_position if router.mouse_seen else Vector2(-1, -1)
 	vm.SetPointer(pointer.x, pointer.y)
 	vm.SetPointerPressed(router.pointer_pressed)
+	vm.SetPointerRightPressed(router.right_pressed)
+	vm.SetPointerMiddlePressed(router.middle_pressed)
 	vm.BeginFrameInput()
 	session.AdvanceFrame()
 	frames = session.Frames
@@ -517,11 +519,12 @@ func restart_after_fault() -> bool:
 		return false
 	vm.StopAll()
 	vm.ResetDiagnostics()
-	vm.SetPointer(-1.0, -1.0)
-	vm.SetPointerPressed(false)
-	# The fault may have latched a held/just-pressed click in the router. Clear it here or
+	vm.ResetPointer()
+	# The fault may have latched a held/just-pressed button in the router. Clear it here or
 	# the first title frame consumes a phantom click (round-5 review P1).
 	router.pointer_pressed = false
+	router.right_pressed = false
+	router.middle_pressed = false
 	router.clear_frame_latches()
 	message.close()
 	choice.close()

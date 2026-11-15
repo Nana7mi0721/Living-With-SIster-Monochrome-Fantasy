@@ -125,6 +125,7 @@ oracle/                    # Rust trace/夹具/对拍脚本；开发期
 - [x] M2 白天菜单端到端（2026-11-15）：`EngineState(7)` 改为官方三态（0/1/2），CE251 从 pc1022 真实菜单点击到全局 48/工作命令，CE310 从 pc128 点击“悠然自得”到 15:30/体力 1；`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`，门禁 **30/30** 双模式（§4.16）。
 - [x] M2 Faulted 标题安全点恢复（2026-11-15）：故障模态新增「返回标题（放弃当前进度）」；`restart_after_fault()` 停 VM、清诊断/指针/窗口/图片/音频/地图层后重建标题事件，`frames` 归零，不写档；`StartTitle` 同时清对话/选择/传送队列。GameRootTest 断言 latch 清除、phase title、模态隐藏、帧归零（§4.17，D-13）。
 - [x] M2 Round-5 审阅 P1（2026-11-15）：`126` 的 `BasicAllDeny`/`MovementDeny` 接到 `GameSession.MoveLeader`、`AdvanceFrame` 与 `GameRoot` 交互；故障「返回标题」同清 `InputRouter.pointer_pressed`/帧 latch，F9 读档后检查 `vm.Faulted`。`GAME_ROOT_TEST_OK`，30 步门禁 headless/windowed 均绿（§4.18，D-23）。
+- [x] M3 鼠标右键/中键三态（2026-11-15）：`0x3000` 的 field 8/9 补齐官方三态（0/1/2），`VmController` 三组 held/边沿同帧推进，`InputRouter` 分别记录右/中按压，故障返回标题一并复位；`PICTURE_STATE_TEST_OK checks=37`、`INPUT_ROUTER_TEST_OK`，30 步门禁 headless/windowed 双绿（§4.19，D-24）。
 
 - 未完成边界：逐指令 Oracle 现有两条线——SampleMapA 事件 0 的 418 帧（2461 步）与整路线 1500 帧（73,812 步）；整路线只含标题菜单 1 次选择，没有 op101 消息，save/load 只做状态回路而不逐指令对拍；`wait` 与未建模的 130/160/290 转场不入 effects；MapChip 为引擎通用素材，正片未使用（D-21）；30 天 soak 只走就寝/日历链，白天 `CE251/CE310` 图片菜单已由 §4.16 端到端覆盖，但仍未从冷启动进入白天；旧表现层已退役（§4.13）；`123/126` 已按官方三态/设备分支实现（§4.15，D-20），但 `123` mask 的逐位表与 `126` target 的具体键/设备对应仍待编辑器二进制差分。
 

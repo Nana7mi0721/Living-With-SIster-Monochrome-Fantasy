@@ -78,6 +78,26 @@ func _ready() -> void:
 	vm.BeginFrameInput()
 	check(vm.EngineStateBridge(7) == 0, "release does not create a press")
 
+	# Right and middle buttons share the same tri-state contract (fields 8 and 9).
+	vm.SetPointerRightPressed(true)
+	vm.BeginFrameInput()
+	check(vm.EngineStateBridge(8) == 2, "right press edge reports 2")
+	vm.BeginFrameInput()
+	check(vm.EngineStateBridge(8) == 1, "held right press reports 1")
+	check(vm.EngineStateBridge(7) == 0, "right press does not leak into the left field")
+	vm.SetPointerRightPressed(false)
+	vm.BeginFrameInput()
+	check(vm.EngineStateBridge(8) == 0, "right release clears field 8")
+
+	vm.SetPointerMiddlePressed(true)
+	vm.BeginFrameInput()
+	check(vm.EngineStateBridge(9) == 2, "middle press edge reports 2")
+	vm.BeginFrameInput()
+	check(vm.EngineStateBridge(9) == 1, "held middle press reports 1")
+	vm.SetPointerMiddlePressed(false)
+	vm.BeginFrameInput()
+	check(vm.EngineStateBridge(9) == 0, "middle release clears field 9")
+
 	# Run the real CE217 clock event and assert the live HUD text picture arrives.
 	vm.SetVar(4, 8)
 	vm.SetVar(5, 30)

@@ -46,6 +46,23 @@ func _ready() -> void:
 	if _action != actions_before:
 		failures.append("right click must not emit action_pressed")
 
+	# 3b. Right and middle presses expose held state for opcode 124 fields 8/9; releases clear it.
+	if not _router.right_pressed:
+		failures.append("right press should latch right_pressed")
+	var right_release := _mouse(MOUSE_BUTTON_RIGHT)
+	right_release.pressed = false
+	_router.handle_event(right_release)
+	if _router.right_pressed:
+		failures.append("right release should clear right_pressed")
+	_router.handle_event(_mouse(MOUSE_BUTTON_MIDDLE))
+	if not _router.middle_pressed:
+		failures.append("middle press should latch middle_pressed")
+	var middle_release := _mouse(MOUSE_BUTTON_MIDDLE)
+	middle_release.pressed = false
+	_router.handle_event(middle_release)
+	if _router.middle_pressed:
+		failures.append("middle release should clear middle_pressed")
+
 	# 4. Left click is action; the wheel pages up/down.
 	_router.handle_event(_mouse(MOUSE_BUTTON_LEFT))
 	if _action != actions_before + 1:

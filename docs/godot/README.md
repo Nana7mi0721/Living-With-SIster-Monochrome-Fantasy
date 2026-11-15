@@ -52,12 +52,13 @@
 - M2 第四轮审阅加固：300 补 host `call` 副作用、BGS 归因 `bgs`、trace 比较 `frame` 并增 `str_vars`；存档校验 `MapFile`/`LoopPoint`，非主角 teleport 忽略且队列上限 64；WAV 循环点帧→采样；`TerrainBridge` 让 `MapLayer` 复用 C# 通行度。
 - M2 整路线 Oracle：Rust `route.rs` 与 C# `RouteTraceTest` 同跑 `TitleMap` event 2 → 新游戏 → map 1 的 1500 帧，两侧 **73,812/73,812 步全等**（12,469 步带 effects），route 末尾 `SaveGame→LoadGame` 状态回路通过；`diff_route.py` 支持 `.gz` 夹具，逐字段比较 `frame/map_id/event_id/pc/op/vars/str_vars/effects`。
 - 旧表现层退役（2026-11-15）：`SessionParityTest` 改为 core-only（夹具 `oracle/fixtures/session_core_save_state.json`，`checks=9`）；`TestSessionView`/`SessionHarness` 接管 `SaveLoadTest 98/98`、`PresentationTest`、`MapMessageTest 14/14`；删除 `TitleScreen`/`ScreenHostView`/`ScreenHostSessionView`/`AssetCatalog`/`MapView`/`TitleScreen.tscn`/`ScreenshotTest`，保留三座 C# 桥。
-- 图片状态/指针（2026-11-15）：`VmController` 缓存 `PictureCmd` 槽并把 `124` 的 hover/existence/x/y/scale/text 委派给 `PictureStage`，`EngineState(7)` 按官方三态（0/1/2）提供左键；`GameRoot` 现在把 `anchor`/`kind` 传给舞台，`CE217` 的 6200 渲染成真实 `8:30`。`PICTURE_STATE_TEST_OK checks=30`。
+- 图片状态/指针（2026-11-15）：`VmController` 缓存 `PictureCmd` 槽并把 `124` 的 hover/existence/x/y/scale/text 委派给 `PictureStage`，`EngineState(7)` 按官方三态（0/1/2）提供左键；`GameRoot` 现在把 `anchor`/`kind` 传给舞台，`CE217` 的 6200 渲染成真实 `8:30`；右键/中键 field 8/9 三态见 §4.19（D-24）。`PICTURE_STATE_TEST_OK checks=37`。
 - 输入权限（2026-11-15）：`126` 按官方帮助改为「目标位 + 三态（常允许/移动禁/全禁）+ bit28 设备分支」，无自动清除；`123` mask 是复合 UI 位字段而非允许键掩码，改为标量键码后按权限过滤。Rust `InputState` 与 C# `EventVm` 同构，`cargo test -p wolf-vm` 95 passed、`VmTest` 覆盖三态/设备/`125` 穿透。
 - Round-5 审阅 P1（2026-11-15）：`126` 的 `BasicAllDeny`/`MovementDeny` 已接到 `GameSession.MoveLeader`、`AdvanceFrame` 与 `GameRoot` 交互；故障返回标题清 `InputRouter` 指针/帧 latch，F9 读档后检查 `vm.Faulted`（§4.18，D-23）。
 - 白天菜单端到端（2026-11-15）：`EngineState(7)` 按官方三态返回（0 未按/1 按住/2 刚按下）；CE251 从 pc1022 真实菜单点击到全局 48 与工作命令，CE310 从 pc128 点击“悠然自得”到 15:30/体力 1。`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`。
+- 鼠标右键/中键三态（2026-11-15）：`0x3000` field 8/9 补齐官方三态（0/1/2），与左键分开维护；`InputRouter` 记录右/中按压，故障返回标题一并复位。`PICTURE_STATE_TEST_OK checks=37`、`INPUT_ROUTER_TEST_OK`（§4.19，D-24）。
 
-- 30 道门槛全绿（`GODOT_GATE_OK`，headless 与 `LWsmf_RENDER=1` 双模式）；`SAVE_LOAD_TEST_OK 98/98`、`AUDIO_MANAGER_TEST_OK checks=30`、`CLOCK_TEST_OK checks=11`、`SLEEP_SOAK_TEST_OK days=30 checks=61`、`MAP_RUNTIME_TEST_OK 51/51`、`MAP_MESSAGE_TEST_OK 14/14`、`PICTURE_ROUNDTRIP_TEST_OK`、`TERRAIN_TEST_OK`、`MAP_LAYER_TEST_OK`、`SESSION_PARITY_TEST_OK checks=9`、`TRACE_DIFF_OK 2461/2461`、`ROUTE_DIFF_OK 73812/73812`、`PICTURE_STATE_TEST_OK checks=30`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`。详见 [`M1_HANDOFF.md`](M1_HANDOFF.md)。
+- 30 道门槛全绿（`GODOT_GATE_OK`，headless 与 `LWsmf_RENDER=1` 双模式）；`SAVE_LOAD_TEST_OK 98/98`、`AUDIO_MANAGER_TEST_OK checks=30`、`CLOCK_TEST_OK checks=11`、`SLEEP_SOAK_TEST_OK days=30 checks=61`、`MAP_RUNTIME_TEST_OK 51/51`、`MAP_MESSAGE_TEST_OK 14/14`、`PICTURE_ROUNDTRIP_TEST_OK`、`TERRAIN_TEST_OK`、`MAP_LAYER_TEST_OK`、`SESSION_PARITY_TEST_OK checks=9`、`TRACE_DIFF_OK 2461/2461`、`ROUTE_DIFF_OK 73812/73812`、`PICTURE_STATE_TEST_OK checks=37`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`。详见 [`M1_HANDOFF.md`](M1_HANDOFF.md)。
 
 **下一步（M2）**
 

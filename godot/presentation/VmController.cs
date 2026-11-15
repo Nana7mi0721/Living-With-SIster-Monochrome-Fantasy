@@ -87,6 +87,12 @@ public partial class VmController : Node, IHost, IVmSession
     private bool _pointerPressed;
     private bool _pointerPressPending;
     private bool _pointerPressFrame;
+    private bool _rightPressed;
+    private bool _rightPressPending;
+    private bool _rightPressFrame;
+    private bool _middlePressed;
+    private bool _middlePressPending;
+    private bool _middlePressFrame;
     private GodotObject? _pictureStateTarget;
     private StringName _pictureStateMethod = "";
 
@@ -363,17 +369,20 @@ public partial class VmController : Node, IHost, IVmSession
     /// <summary>
     /// Opcode 124 0x3000. WOLF reports the three mouse buttons as a tri-state:
     /// 0 = up, 1 = held, 2 = went down this frame (docs/OPCODE_124.md:97).
-    /// Only the left button is wired today; right/middle stay 0 until the router tracks them.
+    /// Field 7 is left, 8 right, 9 middle; each uses the same one-frame edge latch.
     /// </summary>
     public int? EngineState(int field)
     {
         return field switch
         {
-            7 => _pointerPressFrame ? 2 : (_pointerPressed ? 1 : 0),
-            8 or 9 => 0,
+            7 => TriState(_pointerPressed, _pointerPressFrame),
+            8 => TriState(_rightPressed, _rightPressFrame),
+            9 => TriState(_middlePressed, _middlePressFrame),
             _ => 0,
         };
     }
+
+    private static int TriState(bool held, bool pressedThisFrame) => pressedThisFrame ? 2 : (held ? 1 : 0);
 
     // Godot's C# marshalling refuses Nullable<int>, so the two IHost queries would vanish
     // from the GDScript method table. These bridges use int.MinValue for "no answer".
@@ -408,11 +417,43 @@ public partial class VmController : Node, IHost, IVmSession
         _pointerPressed = pressed;
     }
 
+    public void SetPointerRightPressed(bool pressed)
+    {
+        if (pressed && !_rightPressed) _rightPressPending = true;
+        _rightPressed = pressed;
+    }
+
+    public void SetPointerMiddlePressed(bool pressed)
+    {
+        if (pressed && !_middlePressed) _middlePressPending = true;
+        _middlePressed = pressed;
+    }
+
+    /// <summary>Clear position and every held/edge latch, e.g. before rebuilding the title.</summary>
+    public void ResetPointer()
+    {
+        PointerX = -1.0f;
+        PointerY = -1.0f;
+        _pointerPressed = false;
+        _pointerPressPending = false;
+        _pointerPressFrame = false;
+        _rightPressed = false;
+        _rightPressPending = false;
+        _rightPressFrame = false;
+        _middlePressed = false;
+        _middlePressPending = false;
+        _middlePressFrame = false;
+    }
+
     /// <summary>Turn the latched press into this frame's answer, once per 1/60 s step.</summary>
     public void BeginFrameInput()
     {
         _pointerPressFrame = _pointerPressPending;
         _pointerPressPending = false;
+        _rightPressFrame = _rightPressPending;
+        _rightPressPending = false;
+        _middlePressFrame = _middlePressPending;
+        _middlePressPending = false;
     }
 
     /// <summary>Scripted sessions answer every poll with the OK key (legacy title-path parity).</summary>
