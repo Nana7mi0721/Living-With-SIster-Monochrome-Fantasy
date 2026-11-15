@@ -147,7 +147,7 @@ public static class BattleMenuBridgeTest
             wiring.SetRoundLoop(true);
             wiring.SetMenuCommandQueue(queue);
             vm.Vm.Vars.Set(445, 1);
-            vm.Vm.Vars.Set(446, -1);
+            vm.Vm.Vars.Set(446, 4000);
 
             var seen = new HashSet<int>();
             int frame = 0;
