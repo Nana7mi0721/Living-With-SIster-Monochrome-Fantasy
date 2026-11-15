@@ -32,6 +32,7 @@ echo "[4/30] save import test"
 out_save="$("$GODOT" --headless --path "$IMO/godot" res://tests/SaveImportTest.tscn 2>&1)"
 echo "$out_save"
 echo "$out_save" | grep -q SAVE_IMPORT_OK
+echo "$out_save" | grep -q SAVE_IMPORT_VALIDATION_OK
 
 echo "[5/30] oracle trace diff (cli)"
 python "$IMO/oracle/diff_trace.py" \

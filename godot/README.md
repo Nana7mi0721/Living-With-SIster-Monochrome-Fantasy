@@ -16,7 +16,7 @@
 | `tests/` | headless 测试（烟雾/存档导入/追踪差分/呈现/地图运行/存档往返/地图消息/路线 trace/地形/时钟/30 天 soak 等） |
 | `tests_gd/` | GDScript 测试（GameRoot、InputRouter、PictureState、MapLayer、AudioManager、Day/Weekend Menu） |
 
-主场景是 `res://scenes/GameRoot.tscn`；旧的 `TitleScreen`、`ScreenHostView`、`MapView`、`AssetCatalog` 已退役。
+主场景是 `res://scenes/GameRoot.tscn`；旧的 `TitleScreen`、`ScreenHostView`、`MapView`、`AssetCatalog` 已退役。原版 `.sav` 导入在 `core_cs/LegacySaveImporter.cs` 内校验起始/结束字节，可选严格拒绝 checksum；严格 UTF-8 失败时 replacement 回退并记录 `reports/encoding_warnings.json`。
 
 ## 操作
 

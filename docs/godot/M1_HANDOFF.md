@@ -299,6 +299,15 @@
 - **门禁**：30 步 headless `reports/gate_m3_pointer.log` 与 `LWsmf_RENDER=1` `reports/gate_m3_pointer_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`；含 `PICTURE_STATE_TEST_OK checks=37`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`、`ROUTE_DIFF_OK 73812/73812`。
 - **边界**：field 10 仍是滚轮量（不属三态）；`125` 注入的虚拟鼠标与真实右键/中键的优先级仍沿用现有链路，未新增语义。
 
+### 4.20 原版 `.sav` 导入严格校验（已完成 2026-11-15）
+
+- **契约**：`docs/godot/DATA_CONTRACT.md` §6/§7 要求严格 UTF-8、失败后 replacement 解码并记录告警；`docs/FORMAT_SPEC.md:1861-1868` 明确零售 8 槽的 `raw[6]=0x55`（UTF-8）、`0x14=0x19`、末字节 `0x19`。这批存档不是 CP932/GBK，审查建议的代码页重写不适用。
+- **实现**：`LegacySaveImporter` 增 `StrictUtf8`；`SaveReader.ReadMemDataString(size, field)` 先严格解码，失败时用 `Encoding.UTF8` replacement 回退并记录 `"<field> at 0xXXXX: invalid UTF-8, replacement applied"`；`SlotResult.encoding_warnings` 暴露每条告警，`ImportAll` 在非空时写 `reports/encoding_warnings.json`。
+- **严格校验**：`ImportFile` 始终校验解密后的起始字节 `0x19` 与末字节 `0x19`；新增 `rejectBadChecksum`，为 true 时 checksum 不符抛 `InvalidDataException`，宽松模式仍保留 `checksum_ok=false` 供诊断。`ImportAll` 透传该选项。
+- **测试**：`SaveImportTest` 仍验证零售 8/8；新增篡改 `raw[2]`（宽松 `ChecksumOk=false`、strict 抛）、篡改 `raw[0x14]`（抛）、合法 UTF-8 “あ” 不告警、非法 `FF FE` 恰好 1 条告警且不抛。输出 `SAVE_IMPORT_VALIDATION_OK checksum=strict start=strict utf8=warn-once` 与 `SAVE_IMPORT_OK 8/8`。门禁第 4 步同时断言两条标记。
+- **门禁**：headless `reports/gate_save_import.log` 与 `LWsmf_RENDER=1` `reports/gate_save_import_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30/30 全绿。
+- **边界**：不把 `raw[6]` 当作可切换编码；不重写原版 `.sav`；`encoding_warnings` 是附加字段，`schema_version` 仍为 1；未建模的 VM 协程字段仍按 `not_recoverable` 排除。
+
 ---
 
 ## 5. 下一步（M2 入口）
@@ -309,4 +318,5 @@
 4. **日程/时间**：确定性时钟与 30 天就寝链已打通（§4.10）；HUD 时间已由 `CE217` 的 6200 真实渲染（§4.14）；白天 `CE251/CE310` 的图片菜单点击、确认与日程/体力推进已由 §4.16 端到端覆盖。仍未做“从冷启动进入白天”的剧情夹具。
 5. **输入权限**：`123/126` 已按官方三态/设备分支实现并由两侧单测覆盖（§4.15，D-20）；表现层已按 §4.18 接线（D-23）；`123` mask 的逐位表与 `126` target 的具体键对应仍待编辑器差分，不阻塞本作。
 6. **故障恢复**：D-13 除锁档/诊断包外已支持显式「返回标题」重建标题安全点（§4.17）；返回标题时会清 `InputRouter` 指针/帧 latch，F9 读档故障进入模态（§4.18）；存档槽级安全点回滚留 M5。
-7. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
+7. **原版 `.sav` 导入**：起始/结束字节与可选 checksum 严格校验、严格 UTF-8 + replacement 告警已落地（§4.20，D-25）；零售 8 槽 `SAVE_IMPORT_OK 8/8`；回写原版 `.sav` 仍不在 M3 范围。
+8. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

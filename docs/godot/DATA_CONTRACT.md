@@ -112,7 +112,7 @@
 由 C# `LegacySaveImporter` 生成，schema 在此冻结；M0 只要求 8 个存档槽全部可解析。
 
 ```json
-{ "slots": [{ "index": 1, "file": "SaveData01.sav", "bytes": 0, "checksum_ok": true,
+{ "slots": [{ "index": 1, "file": "SaveData01.sav", "bytes": 0, "checksum_ok": true, "encoding_warnings": [],
   "recovered": { "variables": {}, "switches": {}, "pictures": [], "play_time": {},
                  "map": { "id": 0, "x": 0, "y": 0 }, "database_overrides": [] },
   "not_recoverable": ["event_instances","pc","call_stack","wait","audio_phase"] }] }
@@ -120,10 +120,12 @@
 
 `not_recoverable` 清单直接对应 DECISIONS.md §3(3)：不承诺恢复 pc / 调用栈 / Wait / 音频相位；UI 文案必须与此一致。
 
+`encoding_warnings` 为附加字段：每个槽列出该槽内严格 UTF-8 失败并 replacement 的字段与偏移；`ImportAll` 在任一槽非空时汇总写入 `reports/encoding_warnings.json`，空则不改写该文件。`ImportFile(..., rejectBadChecksum:true)` 在 checksum 不符时抛 `InvalidDataException`；所有导入都校验起始字节 `0x14=0x19` 与末字节 `0x19`。`schema_version` 保持 1（附加字段不破坏旧读取器）。
+
 ## 7. 字符串与编码
 
 - `t_str` = `u32` 字节长度（**含**结尾 NUL）+ 载荷；读取时去掉 NUL。
-- 解码：先严格 UTF-8；失败则按 `errors="replace"` 解码（与 Rust `String::from_utf8_lossy` 等价），并把该字段记入 `reports/encoding_warnings.json`，不得静默改写文本。
+- 解码：先严格 UTF-8；失败则按 `errors="replace"` 解码（与 Rust `String::from_utf8_lossy` 等价），并把该字段记入 `reports/encoding_warnings.json`，不得静默改写文本。实现见 `godot/core_cs/LegacySaveImporter.cs` 的 `StrictUtf8` / `ReadMemDataString(size, field)`。
 - 归档内文件名是 CP932（Shift-JIS），只影响 .wolf 解包，与本契约无关。
 
 ## 8. 版本与迁移

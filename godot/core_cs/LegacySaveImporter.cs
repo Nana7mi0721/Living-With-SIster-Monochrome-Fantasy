@@ -12,6 +12,7 @@ public sealed class LegacySaveImporter
     private const int CryptStart = 0x14;
     private const byte StartByte = 0x19;
     private const byte EndByte = 0x19;
+    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static readonly string[] NotRecoverableFields =
     [
@@ -22,10 +23,11 @@ public sealed class LegacySaveImporter
         "audio_phase"
     ];
 
-    public sealed class SaveReader(byte[] buffer, int position = 0)
+    public sealed class SaveReader(byte[] buffer, int position = 0, List<string>? warnings = null)
     {
         public byte[] Buffer { get; } = buffer;
         public int Position { get; set; } = position;
+        public List<string> Warnings { get; } = warnings ?? [];
 
         public int Remaining => Buffer.Length - Position;
 
@@ -88,13 +90,23 @@ public sealed class LegacySaveImporter
             return ReadBytes(len);
         }
 
-        public string ReadMemDataString(int size)
+        public string ReadMemDataString(int size, string field = "")
         {
+            int at = Position;
             byte[] raw = ReadMemData(size);
             if (raw.Length == 0) return "";
             int len = raw.Length;
             if (raw[^1] == 0) len--;
-            return len > 0 ? Encoding.UTF8.GetString(raw, 0, len) : "";
+            if (len <= 0) return "";
+            try
+            {
+                return StrictUtf8.GetString(raw, 0, len);
+            }
+            catch (DecoderFallbackException)
+            {
+                Warnings.Add($"{field} at 0x{at:X4}: invalid UTF-8, replacement applied");
+                return Encoding.UTF8.GetString(raw, 0, len);
+            }
         }
     }
 
@@ -138,6 +150,7 @@ public sealed class LegacySaveImporter
         [JsonPropertyName("file")] public string File { get; set; } = "";
         [JsonPropertyName("bytes")] public long Bytes { get; set; }
         [JsonPropertyName("checksum_ok")] public bool ChecksumOk { get; set; }
+        [JsonPropertyName("encoding_warnings")] public List<string> EncodingWarnings { get; set; } = [];
         [JsonPropertyName("recovered")] public RecoveredData Recovered { get; set; } = new();
         [JsonPropertyName("not_recoverable")] public string[] NotRecoverable { get; set; } = NotRecoverableFields;
     }
@@ -174,10 +187,15 @@ public sealed class LegacySaveImporter
         return buf;
     }
 
-    public static SlotResult ImportFile(string path, int slotIndex)
+    public static SlotResult ImportFile(string path, int slotIndex, bool rejectBadChecksum = false)
     {
         byte[] raw = File.ReadAllBytes(path);
         byte[] dec = Decrypt(raw);
+
+        if (dec[CryptStart] != StartByte)
+        {
+            throw new InvalidDataException($"Expected start byte 0x19 at 0x{CryptStart:X}, got 0x{dec[CryptStart]:X2}");
+        }
 
         byte storedChecksum = raw[2];
         byte computedChecksum = 0;
@@ -186,9 +204,14 @@ public sealed class LegacySaveImporter
             computedChecksum = unchecked((byte)(computedChecksum + dec[i]));
         }
         bool checksumOk = (storedChecksum == computedChecksum);
+        if (rejectBadChecksum && !checksumOk)
+        {
+            throw new InvalidDataException($"Checksum mismatch: stored 0x{storedChecksum:X2}, computed 0x{computedChecksum:X2}");
+        }
 
-        var r = new SaveReader(dec, CryptStart + 1);
-        string saveName = r.ReadMemDataString(2);
+        var warnings = new List<string>();
+        var r = new SaveReader(dec, CryptStart + 1, warnings);
+        string saveName = r.ReadMemDataString(2, "save_name");
         ushort fileVersion = r.ReadU16();
 
         // SavePart1
@@ -202,7 +225,7 @@ public sealed class LegacySaveImporter
             long cells = (long)mapWidth * mapHeight * 3;
             for (long i = 0; i < cells; i++) r.ReadU32();
         }
-        string chipImage = r.ReadMemDataString(4);
+        string chipImage = r.ReadMemDataString(4, "chip_image");
         for (int i = 0; i < 31; i++) r.ReadMemData(4);
         uint vars2Count = r.ReadU32();
         var switches = new Dictionary<string, bool>();
@@ -331,7 +354,7 @@ public sealed class LegacySaveImporter
                 r.ReadU8(); r.ReadU8(); r.ReadU16();
                 byte isText = r.ReadU8();
                 byte isWin = r.ReadU8();
-                string picName = r.ReadMemDataString(2);
+                string picName = r.ReadMemDataString(2, "picture_name");
                 for (int k = 0; k < 12; k++) r.ReadU32();
                 for (int k = 0; k < 6; k++) r.ReadU32();
                 for (int k = 0; k < 18; k++) r.ReadU32();
@@ -428,6 +451,7 @@ public sealed class LegacySaveImporter
             File = Path.GetFileName(path),
             Bytes = raw.Length,
             ChecksumOk = checksumOk,
+            EncodingWarnings = warnings,
             Recovered = new RecoveredData
             {
                 Variables = normalVars,
@@ -488,7 +512,7 @@ public sealed class LegacySaveImporter
         r.ReadU32(); r.ReadU32();
     }
 
-    public static ImportReport ImportAll(string saveDir, string? reportPath = null)
+    public static ImportReport ImportAll(string saveDir, string? reportPath = null, bool rejectBadChecksum = false)
     {
         var report = new ImportReport();
         for (int slot = 1; slot <= 8; slot++)
@@ -497,7 +521,7 @@ public sealed class LegacySaveImporter
             string filePath = Path.Combine(saveDir, fileName);
             if (File.Exists(filePath))
             {
-                var slotResult = ImportFile(filePath, slot);
+                var slotResult = ImportFile(filePath, slot, rejectBadChecksum);
                 report.Slots.Add(slotResult);
             }
         }
@@ -513,6 +537,14 @@ public sealed class LegacySaveImporter
             };
             string json = JsonSerializer.Serialize(report, options);
             File.WriteAllText(reportPath, json, Encoding.UTF8);
+
+            var warnings = new List<string>();
+            foreach (var slot in report.Slots) warnings.AddRange(slot.EncodingWarnings);
+            if (warnings.Count > 0)
+            {
+                string warningPath = Path.Combine(dir ?? ".", "encoding_warnings.json");
+                File.WriteAllText(warningPath, JsonSerializer.Serialize(warnings, options), Encoding.UTF8);
+            }
         }
 
         return report;
