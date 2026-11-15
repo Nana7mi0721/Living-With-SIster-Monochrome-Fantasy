@@ -42,11 +42,14 @@ func play(channel: int, file: String, volume: int, loop_point: int = 0, tempo: i
 		stop(channel, 0)
 		return false
 
-	# AssetDB caches one AudioStream per file. Duplicate it before touching loop
-	# properties so a BGS loop cannot rewrite the BGM's shared stream (R5-P2-03).
-	var stream := cached.duplicate() as AudioStream
-	if stream == null:
-		stream = cached
+	# AssetDB caches one AudioStream per file. BGM/BGS need independent loop state, so
+	# duplicate before touching loop properties (R5-P2-03). SE never loops and is
+	# high-frequency; it can use the cached stream directly (R7-NEW-01).
+	var stream := cached
+	if channel != CHANNEL_SE:
+		stream = cached.duplicate() as AudioStream
+		if stream == null:
+			stream = cached
 	var player := _players[channel]
 	var looping := channel != CHANNEL_SE
 	_apply_loop(stream, looping, loop_point)

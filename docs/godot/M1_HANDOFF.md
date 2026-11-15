@@ -88,6 +88,7 @@
 | 技能目标入口 | `res://tests/Smoke.tscn` | `BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`；CE159 尾段场景/效果目标门、CE162 由 pc247 生成并选中退出，目标 0 不生成、敌数 0 停 pc49/50 |
 | H 阈值数据面 | `res://tests/Smoke.tscn` | `H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`；37 个 op111 真实载荷与 59 个阈值/多条件边界点，只验证数据面 |
 | 第六轮 P2 收口 | `res://tests_gd/AudioManagerTest.tscn` / `PictureRoundtripTest.tscn` / `Smoke.tscn` | `AUDIO_MANAGER_TEST_OK checks=32`、`PICTURE_ROUNDTRIP_TEST_OK`、`H_EVENT_GATE_TEST_OK ... data_only=1`；滚轮 126 拦截、同文件流隔离、未知 soundType 告警、容器镜像与严格 effects 对拍 |
+| 第七轮 P2 收口 | `res://tests_gd/GameRootTest.tscn` / `AudioManagerTest.tscn` / `Smoke.tscn` / `converter validate` | `GAME_ROOT_TEST_OK`（Generation+1、重开新游戏后 event 38 重启）、`AUDIO_MANAGER_TEST_OK checks=32`、`unknown sound type` 循环两次仅 1 条日志、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 needs_retail=3` |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
 ---
@@ -394,6 +395,19 @@
 - **门禁**：headless `reports/gate_review6_r3.log` 与 `LWsmf_RENDER=1` `reports/gate_review6_r3_windowed.log` 均 `GODOT_GATE_OK` / `GATE_EXIT=0`，30/30；整路线 `ROUTE_DIFF_OK 73814/73814`。
 - **边界**：`101` 未读完取消、零售字体、Data type0 列错位仍需运行时/零售证据；玩家胜利与多轮战斗、CE253 自然线、伤害/胜负矩阵、H 场景仍未接。
 
+### 4.29 第七轮审阅 P1/P2 与 D-35 静态审计（2026-11-15）
+
+- **来源**：`m3_round7_review_2026_11_15.md`，快照 `80eab07`；本轮处理 R7-NEW-04（会话重建）、R7-NEW-01（SE 复制策略）、R7-NEW-02（soundType 日志去重）与 D-35 的转换期审计，R7-NEW-03（文本槽负缩放）暂延后。
+- **故障恢复重建（R7-NEW-04，D-36）**：`GameSessionController` 保存 `_ui/_savePath` 并新增 `Generation` 与 `Rebuild()`；`Rebuild()` 重新 `Setup` 一个全新 `GameSession`（连同新的 `AutoEvents` 边沿状态），不是复用旧对象清字典。`GameRoot.restart_after_fault()` 在 `StartTitle()` 前调用 `session.Rebuild()`，失败则回到 `phase=failed`。
+- **测试**：`GameRootTest` 记录故障前 `generation_before`，重启后断言 `Generation == generation_before+1`；再以 scripted 输入重开新游戏，最多 900 帧回到 bedroom，并断言 `session.AutoEventStarts(38) >= 1`。`AutoEvents` 新增 `_starts`/`StartsFor`，`GameSession`/控制器透传 `AutoEventStarts`。
+- **SE 复制（R7-NEW-01）**：`AudioManager.play` 只对 `channel != CHANNEL_SE` 的 BGM/BGS 复制 `AudioStream`；SE 直接使用缓存流，避免高频音效每次分配。BGM/BGS 的同文件 loop 隔离仍由 `AudioManagerTest` 的 `bgm.stream != bgs.stream` 与 BGM `loop_begin==0` 钉住，`AUDIO_MANAGER_TEST_OK checks=32`。
+- **soundType 去重（R7-NEW-02）**：`EventVm` 新增 `(EventId, Pc, SoundType)` 的 `HashSet`，140 的 3..7 告警每个站点只写一次；`VmTest.TestUnknownSoundType` 改成 `179[2]` 循环两次 140，断言产生 2 个 `SoundRequested` 但只有 1 条日志（通道仍落 BGM）。
+- **音效分布证据**：全量扫描 `game_data/programs.json` 的 140 共 **1,611** 条（CE 1,368 + map），soundType `{0:342, 1:113, 2:1156}`，零售导出**没有 3..7**。因此当前通道分歧只存在于合成测试，C# 保留 BGM 回退并告警，不据此改生产通道。
+- **D-35 静态审计**：`converter/validate.py` 新增 `audit_database()`，与 `reconcile` 同入口写 `reports/database_schema_audit.json`；检查 Data type0 的 18 列、44 行、每行 14 个 `numbers` + 4 个 `strings`、字段 raw 顺序。`DATABASE_SCHEMA_AUDIT_OK=True fields=18 rows=44 needs_retail=3`，69/69 BASELINE 对账不变。
+- **回退列**：审计把 `┏ 効果対象` 记录为回退到 field2 `スキルタイプ`（全 0，另有 field3 `消費行動力` 10/11/12），把 `使用可能シーン` 记录为回退到 field6 `筋力影響`（100）；两者都标 `needs-retail-data`，并注明不得把 `効果対象` 别名到 col3。`BattleSkillTargetTest` 增加 `<remarks>`，明确依赖 250 覆盖层播种。
+- **边界（R7-NEW-03）**：文本槽负缩放仍未拆分——当前 `PictureStage` 的容器镜像会让 `Label` 文字也反向；现阶段没有生产文本槽使用负缩放，故记录为可延后，不在无实机样本时改布局。
+- **门禁**：headless `reports/gate_review7.log` 与 `LWsmf_RENDER=1` `reports/gate_review7_windowed.log` 均 `GODOT_GATE_OK` / `GATE_EXIT=0`，30/30；门槛 preflight 先跑 `converter validate` 并断言 `DATABASE_SCHEMA_AUDIT_OK=True`，所以日志同时含 69/69 与审计 marker；整路线仍 `ROUTE_DIFF_OK 73814/73814`。
+
 ---
 
 ## 5. 下一步（M2 入口）
@@ -413,4 +427,5 @@
 13. **技能目标入口**：`CE159` 尾段（场景 1/2、目标 10..12）到 `CE162` 的生成与选中退出已由 `BattleSkillTargetTest` 覆盖（§4.26，D-31）；入口仍从 pc94 注入，生产命令链未接。
 14. **H 阈值**：37 个真实 op111 载荷与 59 个阈值/多条件边界已由 `HEventGateTest` 钉住（§4.27，D-32），输出带 `data_only=1`；只到数据面，H 场景与 CE318→CE360 仍未接。
 15. **第六轮审阅 P1/P2**：滚轮 126、同文件音频流隔离、未知 soundType 告警、图片容器镜像、严格 effects 对拍与 H 标记已收口（§4.28，D-33/D-34）；AutoEvents 新游戏复位按 D-33 拒绝；Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。
-16. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
+16. **第七轮审阅 P1/P2**：故障返回标题重建 `GameSession`/`AutoEvents`，SE 复用缓存流，未知 soundType 按站点去重；D-35 增加 `reports/database_schema_audit.json` 静态审计并把两个 250 回退列标为 `needs-retail-data`（§4.29，D-36）。
+17. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

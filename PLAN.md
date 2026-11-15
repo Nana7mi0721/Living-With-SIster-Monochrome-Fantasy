@@ -61,6 +61,7 @@
 28. M3 CE159 技能尾段与 CE162 目标入口：覆盖层写 `Data 0/2/2=10`（效果目标）与 `Data 0/2/6=1`（可用场景），从 pc94 注入 CE159，经 pc110/115/244/247 启动 CE162，选中索引 0 后 pc57 退出；目标 0 不生成 CE162，敌数 0 时停 pc49/50；`BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`，30 步门禁双绿（§4.26，D-31）。
 29. M3 H 阈值数据面：把 Rust `m13_h_thresholds.rs` 的 37 个真实 op111 载荷（CE310 10、CE318 6、CE323 6、CE335 15）钉进 `HEventGateTest`，逐条断言 event/pc/params；单条件门测 `value-1`/`value`，多条件门 31 点按 compare 0..6 取 first-true；不执行 H 场景。`H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`，30 步门禁双绿（§4.27，D-32）。
 30. M3 第六轮审阅 P1/P2 收口：`GameRoot._on_wheel` 补 126 方向位过滤，`AudioManager` 播放前 duplicate 共享流，`EventVm` 140 对未知 soundType 3..7 告警，`PictureStage` 以容器 pivot/scale 镜像文本与占位槽，`diff_trace/diff_route` 统一严格 effects；AutoEvents 新游戏复位按 D-33 拒绝，Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。`AUDIO_MANAGER_TEST_OK checks=32`、`PICTURE_ROUNDTRIP_TEST_OK`、`SESSION_PARITY_TEST_OK checks=10 frames=418`，30 步门禁双模式双绿（§4.28，D-33/D-34/D-35）。
+31. M3 第七轮审阅 P1/P2 与 D-35 审计：故障返回标题经 `GameSessionController.Rebuild()` 重建 `GameSession`/`AutoEvents`（`Generation` 递增），重开新游戏后 event 38 重启；`AudioManager` 只对 BGM/BGS 复制流、SE 用缓存；`EventVm` 未知 soundType 按站点去重；`converter/validate.py` 增写 `database_schema_audit.json`，把 `効果対象`/`使用可能シーン` 回退列标 `needs-retail-data`。`GAME_ROOT_TEST_OK`、`AUDIO_MANAGER_TEST_OK checks=32`、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 needs_retail=3`，30 步门禁双绿（§4.29，D-36）。
 
 ## 下一步（M2 主循环与 UI）
 

@@ -42,6 +42,7 @@ public sealed class AutoEvents
     private readonly List<AutoEvent> _events;
     private readonly Dictionary<int, bool> _latched = new();
     private readonly Dictionary<int, int> _running = new();
+    private readonly Dictionary<int, int> _starts = new();
 
     private AutoEvents(List<AutoEvent> events)
     {
@@ -105,6 +106,7 @@ public sealed class AutoEvents
                     if (inst != null)
                     {
                         _running[ev.Id] = inst.Id;
+                        _starts[ev.Id] = StartsFor(ev.Id) + 1;
                         started++;
                         TraceStart(ev.Id, inst.Id);
                     }
@@ -116,6 +118,7 @@ public sealed class AutoEvents
                 if (inst != null)
                 {
                     _running[ev.Id] = inst.Id;
+                    _starts[ev.Id] = StartsFor(ev.Id) + 1;
                     started++;
                     TraceStart(ev.Id, inst.Id);
                 }
@@ -139,6 +142,9 @@ public sealed class AutoEvents
 
     public bool IsRunning(EventVm vm, int eventId) =>
         _running.TryGetValue(eventId, out int id) && vm.FindInstance(id) != null;
+
+    /// <summary>Number of fresh starts recorded for one event by this scheduler instance.</summary>
+    public int StartsFor(int eventId) => _starts.TryGetValue(eventId, out int count) ? count : 0;
 
     private static bool Trace => Environment.GetEnvironmentVariable("LWsmf_TRACE_AUTO") == "1";
 

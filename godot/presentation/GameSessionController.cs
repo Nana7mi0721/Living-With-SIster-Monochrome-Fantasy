@@ -17,8 +17,12 @@ public partial class GameSessionController : Node
 {
     private GameSession? _session;
     private VmController? _vm;
+    private Godot.Control? _ui;
+    private string _savePath = "";
 
     public bool Valid => _session != null;
+    /// <summary>Increments whenever a fresh GameSession (and fresh AutoEvents) is constructed.</summary>
+    public int Generation { get; private set; }
     public bool ScriptedInput => _session?.ScriptedInput ?? false;
     public string Phase => _session?.Phase ?? "boot";
     public int Frames => _session?.Frames ?? 0;
@@ -31,6 +35,7 @@ public partial class GameSessionController : Node
     public bool MessageOpen => _session?.MessageOpen ?? false;
     public bool HasChoices => _session?.HasChoices ?? false;
     public bool Faulted => _vm?.Faulted ?? false;
+    public int AutoEventStarts(int eventId) => _session?.AutoEventStarts(eventId) ?? 0;
     public uint MovementDeny => _session?.MovementDeny ?? 0;
     public uint BasicAllDeny => _session?.BasicAllDeny ?? 0;
 
@@ -40,8 +45,21 @@ public partial class GameSessionController : Node
     public void Setup(VmController vm, Godot.Control ui, string savePath)
     {
         _vm = vm;
-        string path = savePath.Length > 0 ? savePath : DefaultSavePath();
-        _session = new GameSession(vm, new CallableView(ui), DefaultDataPath(), path);
+        _ui = ui;
+        _savePath = savePath.Length > 0 ? savePath : DefaultSavePath();
+        _session = new GameSession(vm, new CallableView(ui), DefaultDataPath(), _savePath);
+        Generation++;
+    }
+
+    /// <summary>
+    /// D-33 recovery: replace the core session instead of reusing it. AutoEvents is session-scoped,
+    /// so a new session is the only way to re-arm a one-shot condition after a fault return.
+    /// </summary>
+    public bool Rebuild()
+    {
+        if (_vm == null || _ui == null) return false;
+        Setup(_vm, _ui, _savePath);
+        return true;
     }
 
     public void SetScriptedInput(bool value)

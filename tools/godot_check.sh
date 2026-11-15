@@ -20,6 +20,14 @@ fi
 echo "[1/30] versions"
 "$GODOT" --headless --version | head -1
 
+echo "[preflight] converter schema audit"
+if ! out_validate="$(cd "$IMO" && python -m converter validate --root work/all --out game_data --reports reports 2>&1)"; then
+  echo "$out_validate"
+  exit 1
+fi
+echo "$out_validate"
+echo "$out_validate" | grep -q "DATABASE_SCHEMA_AUDIT_OK=True"
+
 echo "[2/30] build solutions"
 "$GODOT" --headless --path "$IMO/godot" --build-solutions --quit
 

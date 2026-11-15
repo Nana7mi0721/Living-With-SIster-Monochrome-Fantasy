@@ -15,6 +15,8 @@ namespace Lwsmf.Tests;
 /// pc247 starts CE162 <c>X[戦]敵対象選択実行</c>, which selects enemy index 0 at pc57.
 /// A zero target skips CE162; a zero enemy count leaves CE162 spinning at pc49/pc50.
 /// </summary>
+/// <remarks>D-35 needs-retail-data: the 18-column projection has no 効果対象/使用可能シーン
+/// fields, so this test seeds the 250 override columns (0/2/2 and 0/2/6) explicitly.</remarks>
 public static class BattleSkillTargetTest
 {
     private sealed class Line

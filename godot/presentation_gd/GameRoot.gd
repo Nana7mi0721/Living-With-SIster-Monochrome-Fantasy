@@ -539,6 +539,13 @@ func restart_after_fault() -> bool:
 	stage.clear_pictures()
 	audio.reset()
 	map_view.visible = false
+	# D-33: the session (and its AutoEvents edge latch) is session-scoped. Reusing it after
+	# a fault would keep one-shot events latched; rebuild before starting the title again.
+	if not session.Rebuild():
+		phase = "failed"
+		if _fault_root != null:
+			_fault_root.visible = true
+		return false
 	if not session.StartTitle():
 		phase = "failed"
 		if _fault_root != null:

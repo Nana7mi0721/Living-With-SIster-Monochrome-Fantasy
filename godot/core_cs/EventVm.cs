@@ -39,6 +39,8 @@ public sealed class EventVm
     public uint BasicMoveDeny { get; private set; }
     /// <summary>126 state 2: these keys stop both walking and 123.</summary>
     public uint BasicAllDeny { get; private set; }
+    /// <summary>Dedupe key for the reserved sound-type warning (R7-NEW-02).</summary>
+    private readonly HashSet<(int EventId, int Pc, int SoundType)> _unknownSoundTypeLogs = new();
     /// <summary>126 device form: physical input denied (125 auto input still passes).</summary>
     public bool DeviceDeny { get; private set; }
     /// <summary>Bits blocked for walking (both 126 permission states).</summary>
@@ -685,10 +687,10 @@ public sealed class EventVm
                     // intArgs[0] >> 4 is the sound type: 0=BGM, 1=BGS, 2=SE. Testing 0x20
                     // alone classified the 43 BGS commands as BGM and replaced the music.
                     int soundType = (bits >> 4) & 0x07;
-                    if (soundType > 2)
+                    if (soundType > 2 && _unknownSoundTypeLogs.Add((inst.EventId, inst.Pc, soundType)))
                     {
                         // 0/1/2 are BGM/BGS/SE; 3..7 are reserved. Keep the legacy BGM
-                        // fallback but make it visible instead of silently replacing music.
+                        // fallback but make it visible once per site instead of on every loop.
                         Host.Log($"[EventVm] unknown sound type {soundType} at event {inst.EventId} pc {inst.Pc}; mapped to BGM");
                     }
                     SoundChannel channel = soundType switch

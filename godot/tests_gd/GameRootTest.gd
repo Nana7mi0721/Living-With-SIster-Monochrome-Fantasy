@@ -165,6 +165,7 @@ func _ready() -> void:
 
 		# D-13: a core fault must latch the modal, stop the clock and lock save slots.
 		var before_frames: int = root.frames
+		var generation_before: int = root.session.Generation
 		root.report_fault("unhandled opcode 999 at event 1 pc 0")
 		if not root.faulted:
 			failures.append("report_fault must latch the fault state")
@@ -200,6 +201,19 @@ func _ready() -> void:
 			failures.append("restart_after_fault must restart the title event")
 		if root.router.pointer_pressed or root.router._click_latch:
 			failures.append("restart_after_fault must clear router click latches")
+		# R7-NEW-04 / D-33: the restart must construct a fresh session, not reuse the old
+		# AutoEvents latch. Replaying the retail title -> new-game chain must re-arm event 38.
+		if root.session.Generation != generation_before + 1:
+			failures.append("restart_after_fault must rebuild the GameSession (generation %d)" % root.session.Generation)
+		root.session.SetScriptedInput(true)
+		var replay_guard := 0
+		while root.phase != "bedroom" and replay_guard < 900:
+			root.advance_frame()
+			replay_guard += 1
+		if root.phase != "bedroom":
+			failures.append("rebuilt session never reached the bedroom (got %s)" % root.phase)
+		elif root.session.AutoEventStarts(38) < 1:
+			failures.append("rebuilt session must re-arm one-shot auto event 38 (starts %d)" % root.session.AutoEventStarts(38))
 		root.queue_free()
 	if failures.is_empty():
 		print("GAME_ROOT_TEST_OK")

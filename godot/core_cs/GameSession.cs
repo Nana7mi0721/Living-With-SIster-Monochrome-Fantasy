@@ -103,6 +103,8 @@ public sealed class GameSession
     public bool MessageOpen => _messageOpen;
     /// <summary>Number of conditional common events tracked by the auto-event scheduler.</summary>
     public int AutoEventCount => EnsureAutoEvents().EventCount;
+    /// <summary>Fresh starts recorded for one auto event in this session (D-33 test hook).</summary>
+    public int AutoEventStarts(int eventId) => EnsureAutoEvents().StartsFor(eventId);
     /// <summary>Rebuilt CE242 drive (crates/wolf-game/src/battle_wiring.rs).</summary>
     public BattleWiring BattleWiring => _battleWiring;
     /// <summary>Direction/action bits currently denied by opcode 126 (D-20).</summary>

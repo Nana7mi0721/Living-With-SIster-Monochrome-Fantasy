@@ -685,15 +685,18 @@ public static class VmTest
         Console.WriteLine("  Testing unknown opcode 140 sound type...");
         var prog = Program.FromSlots(92, "UnknownSoundType", new List<Slot>
         {
-            Slot.Command(140, [0x0200_0030], ["BGM/unknown.ogg"])
+            Slot.Command(179, [2]),
+            Slot.Command(140, [0x0200_0030], ["BGM/unknown.ogg"]),
+            Slot.Command(498),
+            Slot.Command(172)
         });
         var host = new RecordingHost();
         var vm = new EventVm { Host = host };
         vm.RegisterProgram(prog);
         vm.CreateInstance(92);
         vm.StepFrame();
-        if (host.Sounds.Count != 1)
-            throw new Exception($"unknown sound type expected one command, got {host.Sounds.Count}");
+        if (host.Sounds.Count != 2)
+            throw new Exception($"unknown sound type expected two commands from the loop, got {host.Sounds.Count}");
         if (host.Sounds[0].Channel != SoundChannel.Bgm)
             throw new Exception($"unknown sound type should keep the BGM fallback, got {host.Sounds[0].Channel}");
         if (!host.Logs.Exists(l => l.Contains("unknown sound type 3")))
