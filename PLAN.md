@@ -63,13 +63,15 @@
 30. M3 第六轮审阅 P1/P2 收口：`GameRoot._on_wheel` 补 126 方向位过滤，`AudioManager` 播放前 duplicate 共享流，`EventVm` 140 对未知 soundType 3..7 告警，`PictureStage` 以容器 pivot/scale 镜像文本与占位槽，`diff_trace/diff_route` 统一严格 effects；AutoEvents 新游戏复位按 D-33 拒绝，Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。`AUDIO_MANAGER_TEST_OK checks=32`、`PICTURE_ROUNDTRIP_TEST_OK`、`SESSION_PARITY_TEST_OK checks=10 frames=418`，30 步门禁双模式双绿（§4.28，D-33/D-34/D-35）。
 31. M3 第七轮审阅 P1/P2 与 D-35 审计：故障返回标题经 `GameSessionController.Rebuild()` 重建 `GameSession`/`AutoEvents`（`Generation` 递增），重开新游戏后 event 38 重启；`AudioManager` 只对 BGM/BGS 复制流、SE 用缓存；`EventVm` 未知 soundType 按站点去重；`converter/validate.py` 增写 `database_schema_audit.json`，把 `効果対象`/`使用可能シーン` 回退列记录为 `retail-confirmed-label-absent`（零售哈希见 D-37）。`GAME_ROOT_TEST_OK`、`AUDIO_MANAGER_TEST_OK checks=32`、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`，30 步门禁双绿（§4.29，D-36）。
 
+32. M3 CE188→CE157→CE253 自然战斗菜单桥：`BattleWiring` 改为按 `CData 18/73/0` 游标 harvest 已提交的 CE157 行（CE157 pc82 尚未写表，旧 live 门槛只读 CE188 预填 0/0）；`BattleMenuBridgeTest` 用真实两成员 CE188 菜单收 8 行（前两行技能 26/25），`CE253` 消费队列前两项生成 CE242 pc338/645 后结算 `-1`。headless 无 `SaveData01.sav`，输出 `save_parity=0`；Rust 的四轮 `+1` 需 CE143 物化 CData type10（§4.30，D-38）。
+
 ## 下一步（M2 主循环与 UI）
 
 1. ~~InputRouter、9 级图层、101/102 自绘与字体度量~~（W2 Day 2–4 已完成）；~~第三轮审阅 P1 交互/存档缺陷~~（W3 Day-1 已完成）；~~`TitleScreen` 业务切到 `GameRoot.gd`~~（W3 Day-4 已完成）；~~主场景切到 `GameRoot.tscn`~~（W3 Day-5 已完成）。
 2. ~~tile 呈现、地形通行、地图点触、角色层~~（W3 Day-3 已完成）；MapChip 为引擎通用素材，正片未使用，调色板占位仅兼容/测试。
 3. ~~把“标题→新游戏→map 1”冻结成输入序列~~（整路线 1500 帧 73,814/73,814，§4.12/§4.23）；消息/选择只覆盖标题菜单 1 次，白天 101/102 与 save/load 的逐指令对拍仍待补。
 4. ~~日程/时间接入确定性时钟~~（W4 Day1-4 已完成）；HUD 时间已随图片状态桥显示（§4.14）；~~白天 `CE251/CE310` 工作菜单~~（2026-11-15 已完成端到端点击/日程/体力回归，§4.16；仍缺从冷启动进入白天的剧情夹具）。
-5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27）；AutoEvents 已接 98 个并行事件并同步 route（§4.23/D-28）；CE239/CE242 真实回合 wiring 已接（§4.24/D-29），CE162 目标选择直启已接（§4.25/D-30），CE159 技能尾段已接（§4.26/D-31），H 阈值数据面已接（§4.27/D-32）；第六轮 P2 的滚轮 126、音频流隔离、未知 soundType、图片镜像与严格 effects 已收口（§4.28/D-34），`101` 未读完取消与零售字体仍待运行时/零售证据；`CE253` 自然日线、真实 CE159 命令 dispatch、伤害矩阵与 H 场景（CE318→CE360）仍待；Data type0 列错位已由零售 BasicData 哈希确认不存在（D-37）。
+5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27）；AutoEvents 已接 98 个并行事件并同步 route（§4.23/D-28）；CE239/CE242 真实回合 wiring 已接（§4.24/D-29），CE162 目标选择直启已接（§4.25/D-30），CE159 技能尾段已接（§4.26/D-31），H 阈值数据面已接（§4.27/D-32）；第六轮 P2 的滚轮 126、音频流隔离、未知 soundType、图片镜像与严格 effects 已收口（§4.28/D-34），`101` 未读完取消与零售字体仍待运行时/零售证据；`CE253` 自然日线、真实 CE159 命令 dispatch、伤害矩阵与 H 场景（CE318→CE360）仍待；Data type0 列错位已由零售 BasicData 哈希确认不存在（D-37）；CE188→CE157 菜单桥已接通（§4.30/D-38），headless 夹具只到 2 轮 `-1`，四轮 `+1` 需零售存档或 CE143 物化。
 
 ## 约束
 

@@ -88,6 +88,7 @@
 | 技能目标入口 | `res://tests/Smoke.tscn` | `BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`；CE159 尾段场景/效果目标门、CE162 由 pc247 生成并选中退出，目标 0 不生成、敌数 0 停 pc49/50 |
 | H 阈值数据面 | `res://tests/Smoke.tscn` | `H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`；37 个 op111 真实载荷与 59 个阈值/多条件边界点，只验证数据面 |
 | 第六轮 P2 收口 | `res://tests_gd/AudioManagerTest.tscn` / `PictureRoundtripTest.tscn` / `Smoke.tscn` | `AUDIO_MANAGER_TEST_OK checks=32`、`PICTURE_ROUNDTRIP_TEST_OK`、`H_EVENT_GATE_TEST_OK ... data_only=1`；滚轮 126 拦截、同文件流隔离、未知 soundType 告警、容器镜像与严格 effects 对拍 |
+| 自然战斗菜单桥 | `res://tests/Smoke.tscn` | `BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=2 turns=1 result=-1 pcs=338,645 save_parity=0`；CE188 菜单经 CData18/73 游标提交 8 行，前两行技能 26/25，CE253 消费前两行并生成 CE242 pc338/645；Rust 存档夹具的四轮 +1 仍未复刻 |
 | 第七轮 P2 收口 | `res://tests_gd/GameRootTest.tscn` / `AudioManagerTest.tscn` / `Smoke.tscn` / `converter validate` | `GAME_ROOT_TEST_OK`（Generation+1、重开新游戏后 event 38 重启）、`AUDIO_MANAGER_TEST_OK checks=32`、`unknown sound type` 循环两次仅 1 条日志、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`；零售 BasicData 四文件哈希与 `work/all` 全等（D-37） |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
@@ -408,6 +409,16 @@
 - **边界（R7-NEW-03）**：文本槽负缩放仍未拆分——当前 `PictureStage` 的容器镜像会让 `Label` 文字也反向；现阶段没有生产文本槽使用负缩放，故记录为可延后，不在无实机样本时改布局。
 - **门禁**：headless `reports/gate_review7.log` 与 `LWsmf_RENDER=1` `reports/gate_review7_windowed.log` 均 `GODOT_GATE_OK` / `GATE_EXIT=0`，30/30；门槛 preflight 先跑 `converter validate` 并断言 `DATABASE_SCHEMA_AUDIT_OK=True`，所以日志同时含 69/69 与审计 marker；整路线仍 `ROUTE_DIFF_OK 73814/73814`。
 
+### 4.30 CE188→CE157→CE253 自然战斗菜单桥（2026-11-15）
+
+- **来源**：用户 `m14937`「继续推进」；Rust 参考 `crates/wolf-game/tests/m11_party_live_bridge.rs`。本轮新增 `godot/tests/BattleMenuBridgeTest.cs`，并把 `BattleWiring.HarvestMenuRegistrations` 从「仅 live CE157」改为「CData 18/73/0 游标新提交行」。
+- **菜单半段**：真实 `CE188` 启动，两成员队（leader row12、member2 row13）与 26 个 battle seed；`CE157` pc82 被 Tick 看到时尚未写行，写完即退出，所以旧门槛永远只读到 CE188 预填的 0/0。改为每帧读 `CData 18/73/0`（コマンド入力位置）：首帧只记 baseline，游标推进后 harvest `[_menuCursor+1, cursor-1]` 的新行，按 row 去重，activator 必须是 `int >= 0` 的真实 cell。实测 frame119 收 row1=0/26、frame155 收 row2=1/25，随后 row3..8 activator 2..7、skill 0，共 8 行；前两行技能为 26（蓄力）与 25（睡眠）。
+- **战斗半段**：另开 VM，同一批 seed 加 `CData 18/73/0=1`、`CData 20/73/0=0` 与命令队列 `[1,2,3,4]`；`SetEnabled(true)` 显式 opt-in，`SetRoundLoop(true)`，`StartEvent(253)`，每帧 AutoEvents→Tick→StepFrame，选择窗选 0、消息 dismiss。`CE253` 消费前两行并生成 `CE242` body pc338/arg1 与 pc645/arg2，pool 从 `4,4,3,2` 变 `3,4,3,2`，随后 CE244 写入 `352=-1,343=1`，测试停。
+- **Rust 差距（save parity）**：Rust `open_fixture_game()` 先 `load_save("work/retail_backup/Save/SaveData01.sav")`，真实存档里 CE143 已物化 CData type10；C# 直接 VM 没有导入该存档，CData type10 row0/1 HP 为 0，测试只做 26 个 seed cell。Rust 期望 `started_rounds=4`、`turn_starts=3`、CE242 first_pc `[338,645,792,996]`、args `1..4`、settle `+1`；C# 只到 2 轮 `-1`。手工把 type10 row0/1 的 HP/攻防写成 999999/20、把 type0 属性提高、把 446 改成 -1，均不改变 2 轮 `-1`，故这不是单纯 HP 或 446 缺失。
+- **裁决（D-38）**：桥测试接受 headless fixture 的 2 轮 `-1`，输出带 `save_parity=0`，不伪造四轮 +1；四轮 +1 需要 C# 侧导入零售存档或执行 CE143 物化，另立任务。
+- **边界**：只证明 provider 链 `CE188 → CE157 → BattleWiring → CE253 → CE239/CE242 → CE244` 的真实运行；不证明胜利、多轮、伤害矩阵或逃跑。
+- **门禁**：Smoke `reports/menu_bridge_clean.log` EXIT=0，含 `BATTLE_MENU_BRIDGE_TEST_OK` 与 `SMOKE_OK`；全量门禁另跑。
+
 ---
 
 ## 5. 下一步（M2 入口）
@@ -428,4 +439,5 @@
 14. **H 阈值**：37 个真实 op111 载荷与 59 个阈值/多条件边界已由 `HEventGateTest` 钉住（§4.27，D-32），输出带 `data_only=1`；只到数据面，H 场景与 CE318→CE360 仍未接。
 15. **第六轮审阅 P1/P2**：滚轮 126、同文件音频流隔离、未知 soundType 告警、图片容器镜像、严格 effects 对拍与 H 标记已收口（§4.28，D-33/D-34）；AutoEvents 新游戏复位按 D-33 拒绝；Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。
 16. **第七轮审阅 P1/P2**：故障返回标题重建 `GameSession`/`AutoEvents`，SE 复用缓存流，未知 soundType 按站点去重；D-35 增加 `reports/database_schema_audit.json` 静态审计并把两个 250 回退列标为 `retail-confirmed-label-absent`；零售 BasicData 哈希确认关闭 D-31（§4.29，D-36/D-37）。
-17. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
+17. **自然战斗菜单桥**：`CE188` 菜单经 `CData 18/73/0` 游标提交 8 行，前两行技能 26/25；`CE253` 消费前两行并生成 `CE242` pc338/645 后 `CE244` 结算 `-1`（§4.30，D-38）。Rust 存档夹具的四轮 `+1` 仍待存档/CE143 物化，胜利与伤害矩阵仍未接。
+18. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

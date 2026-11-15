@@ -43,6 +43,7 @@ public sealed class BattleWiring
     private readonly List<MenuSelection> _menuSelections = new();
     private readonly HashSet<int> _harvestedRows = new();
     private readonly Queue<int> _menuQueue = new();
+    private int _menuCursor = -1;
 
     public long StartedRounds { get; private set; }
     public long TurnStarts { get; private set; }
@@ -82,24 +83,36 @@ public sealed class BattleWiring
            || vm.Instances.Any(i => i.EventId == EventBattleCaller && i.ParentId.HasValue);
 
     /// <summary>
-    /// Harvest committed command rows (CData type 14) while a CE157 registration is live.
-    /// Rows are deduplicated; the row index is the CE242 command index.
+    /// Harvest command rows (CData type 14) once CE157 has advanced the committed cursor
+    /// (CData 18/73/0). The cursor only moves after a registration is written, so reading
+    /// rows 1..cursor-1 avoids the zero-filled cells CE188 seeds at menu start. Row indices
+    /// are deduplicated; the row index is the CE242 command index.
     /// </summary>
     public int HarvestMenuRegistrations(EventVm vm, Func<DbOp, DbValue?> database)
     {
-        if (!vm.Instances.Any(i => i.EventId == EventCommandRegister)) return 0;
+        int cursor = ReadNum(database, 18, 73, 0) ?? 1;
+        if (cursor < 1) cursor = 1;
+        if (_menuCursor < 0)
+        {
+            _menuCursor = cursor;
+            return 0;
+        }
+        if (cursor <= _menuCursor) return 0;
+
         int added = 0;
-        for (int row = 1; row <= 8; row++)
+        int first = Math.Max(1, _menuCursor);
+        int last = Math.Min(8, cursor - 1);
+        for (int row = first; row <= last; row++)
         {
             if (_harvestedRows.Contains(row)) continue;
             var activator = ReadNum(database, CmdListType, row, 0);
-            if (activator < 0) continue;
-            int skill = ReadNum(database, CmdListType, row, 3);
+            if (activator is not int slot || slot < 0) continue;
+            int skill = ReadNum(database, CmdListType, row, 3) ?? 0;
             _harvestedRows.Add(row);
             int command = CommandIndexForRow(row);
             _menuSelections.Add(new MenuSelection
             {
-                Activator = activator,
+                Activator = slot,
                 Skill = skill,
                 Row = row,
                 CommandIndex = command
@@ -107,10 +120,11 @@ public sealed class BattleWiring
             _menuQueue.Enqueue(command);
             added++;
         }
+        _menuCursor = cursor;
         return added;
     }
 
-    private static int ReadNum(Func<DbOp, DbValue?> database, int type, int row, int column)
+    private static int? ReadNum(Func<DbOp, DbValue?> database, int type, int row, int column)
     {
         var value = database(new DbOp
         {
@@ -122,7 +136,7 @@ public sealed class BattleWiring
             ItemId = column,
             Destination = 0
         });
-        return value == null || value.IsString ? 0 : value.Num;
+        return value == null || value.IsString ? null : value.Num;
     }
 
     /// <summary>
