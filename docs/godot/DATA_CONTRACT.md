@@ -144,4 +144,4 @@ python -m converter validate  --root work/all --data game_data --reports reports
 
 `validate` 输出 `reports/reconcile.json`；任何一项与 BASELINE 不符即 **exit 1**（失败，不是警告）。
 
-同一入口还写 `reports/database_schema_audit.json`（D-35）：只审计 Data type0 的结构（18 列、44 行、每行 14 个 `numbers` + 4 个 `strings`、字段 raw 顺序），并记录 `効果対象` 与 `使用可能シーン` 因 `.project` 缺少标签而回退到的列。回退项标为 `needs-retail-data`，不参与 69 项 BASELINE 对账，也不据此改列；取得零售 `DataBase.dat` 前不得把 `効果対象` 别名到 `col3`。
+同一入口还写 `reports/database_schema_audit.json`（D-35、D-37）：审计 Data type0 的结构（18 列、44 行、每行 14 个 `numbers` + 4 个 `strings`、字段 raw 顺序），并记录 `効果対象` 与 `使用可能シーン` 因 `.project` 缺少标签而回退到的列。零售 `Data/BasicData.wolf` 解包后的 `DataBase.dat`、`DataBase.project`、`CDataBase.dat`、`CDataBase.project` 与 `work/all/BasicData` 四个 SHA-256 完全一致，故 **D-31 不是转换器列错位**；当前零售 build 的 CE159 pc115 因标签缺失而数据不可达。回退列不再标 `needs-retail-data`，不参与 69 项 BASELINE 对账，也不据此改列；不得把 `効果対象` 别名到 `col3`。

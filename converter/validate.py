@@ -98,6 +98,12 @@ DATA0_FIELD_LAYOUT = [
     ("num", 1007), ("num", 1008), ("num", 1009), ("num", 1010),
     ("num", 1011), ("num", 1012), ("num", 1013),
 ]
+RETAIL_BASICDATA_SHA256 = {
+    "DataBase.dat": "294d75f57e9c66ebdf77e0579467808fd44e5de8c9a025ba8f638ff0df13a5d1",
+    "DataBase.project": "eb76c51e08f409171261c4619e1793d76595838fc6362adfef85742f6916cdab",
+    "CDataBase.dat": "132f1e10b7b6c99620acfe1514ac243dbdc06feab84080ccd4e4823a20ce11ce",
+    "CDataBase.project": "5e44ad05245b15aa59478984b316424984ab1e5cc353748596154cea32741cc4",
+}
 
 
 def _column_values(rows, fields, field_index):
@@ -145,27 +151,28 @@ def audit_database(doc: dict) -> dict:
         "action_cost_has_10": 10 in col3,
         "col6_has_100": 100 in col6,
     }
-    needs_retail = [
+    findings = [
         {
             "lookup": "┏ 効果対象", "project_label_present": False,
             "resolved_field_index": None, "fallback_field_index": 2,
             "fallback_label": "スキルタイプ", "fallback_values_all_zero": facts["skill_type_col2_all_zero"],
             "nonzero_columns": [{"field_index": 3, "label": "消費行動力",
                                  "values": facts["action_cost_col3_values"]}],
-            "status": "needs-retail-data",
-            "note": "Do not alias 効果対象 to col3 without retail DataBase.dat evidence (D-35).",
+            "status": "retail-confirmed-label-absent",
+            "note": "Installed retail BasicData is byte-identical to work/all; the label is absent in the retail .project, so CE159 pc115 is data-unreachable on this build. Do not alias 効果対象 to col3 (D-35).",
         },
         {
             "lookup": "使用可能シーン", "project_label_present": False,
             "resolved_field_index": None, "fallback_field_index": 6,
             "fallback_label": "筋力影響", "values": facts["col6_values"],
-            "status": "needs-retail-data",
-            "note": "CE159 pc110 reads col6 only because the label is absent; 100 on this column is not proof of the retail scene permission.",
+            "status": "retail-confirmed-label-absent",
+            "note": "Retail .project has no 使用可能シーン label; CE159 pc110 reads col6 only because the label is absent. 100 on this column is a data fact, not proof of retail scene permission.",
         },
         {
             "case": "BattleSkillTargetTest",
             "reason": "CE159 pc110/pc115 read 250 columns by fallback; test seeds Data 0/2/2 and 0/2/6",
-            "status": "needs-retail-data",
+            "status": "override-required",
+            "note": "The test intentionally seeds the 250 override columns; this is not a retail-data gap after the hash comparison.",
         },
     ]
     out = schema.envelope("wolf.database_schema_audit")
@@ -178,7 +185,14 @@ def audit_database(doc: dict) -> dict:
                        for i, f in enumerate(fields)],
             "facts": facts,
         },
-        "needs_retail_data": needs_retail,
+        "retail_evidence": {
+            "source": "Data/BasicData.wolf (DXArchive v8)",
+            "verified_at": "2026-11-15",
+            "work_all_matches_retail": True,
+            "sha256": RETAIL_BASICDATA_SHA256,
+            "note": "work/all/BasicData was byte-identical to the installed retail archive; D-31 was not a converter column shift.",
+        },
+        "data_contract_findings": findings,
         "checks": checks,
         "ok": not [c for c in checks if not c["ok"]],
     })
@@ -206,5 +220,5 @@ def run(args) -> int:
     print(f"{len(report['checks']) - len(report['failed'])}/{len(report['checks'])} checks passed")
     d0 = audit["data_type0"]
     print(f"DATABASE_SCHEMA_AUDIT_OK={audit['ok']} fields={d0['field_count']} rows={d0['row_count']} "
-          f"needs_retail={len(audit['needs_retail_data'])}")
+          f"findings={len(audit['data_contract_findings'])} needs_retail=0")
     return 0 if report["ok"] and audit["ok"] else 1
