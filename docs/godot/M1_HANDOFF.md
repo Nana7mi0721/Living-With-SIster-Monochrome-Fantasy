@@ -84,6 +84,7 @@
 | 战斗命令切片 | `res://tests/Smoke.tscn` | `BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`；CE188 空库存无真实攻击行、有道具可选，均到 CE192 且不生成 CE244 |
 | 自动事件 98 | `res://tests/Smoke.tscn` | `AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`；CE38/216/217/242 的边沿/resume/停止，`SessionParityTest` 断言 `AutoEventCount==98` |
 | 战斗 wiring | `res://tests/Smoke.tscn` | `BATTLE_WIRING_TEST_OK rounds=1 result=-1 ce242_pc=415`；CE239 真实回合经 CE242 命令、350/343/352 结算并返回 |
+| 战斗目标选择 | `res://tests/Smoke.tscn` | `BATTLE_TARGET_TEST_OK selected=1 control_pc=49 enemy_hp=100`；CE190/CE175 坐标倍率、CE162 选 0 并退出，无敌人时停 pc49/50 |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
 ---
@@ -350,6 +351,15 @@
 - **门禁**：`VmTest` 在 `BattleCommandTest` 后调用；`tools/godot_check.sh` 第 3 步追加 `BATTLE_WIRING_TEST_OK`。30 步 headless `reports/gate_battle_wiring.log` 与 `LWsmf_RENDER=1` `reports/gate_battle_wiring_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，整路线仍 `ROUTE_DIFF_OK 73814/73814`。
 - **边界**：只验证 `CE239` 直接入口的单轮结算，不覆盖 `CE253` 自然日线、目标选择窗 `CE159/CE162`、伤害公式矩阵、多人队伍与 H 场景；菜单命令队列/轮转 API 已实现但尚未由真实剧情驱动。
 
+### 4.25 CE190/CE175 敌人生成与 CE162 目标选择（已完成 2026-11-15）
+
+- **来源**：Rust `crates/wolf-game/tests/m7_battle_target.rs`。CE190 按 CData 18/69 的敌数生成敌人；CE190 调 CE144 把敌人 DB 行拷进战斗 DB，CE175 用坐标倍率算屏幕坐标。CE162 读同一个 18/69，敌方索引 0 选中后在 pc57 写出并退出；控制线只清 18/69=0，CE162 停在 pc49/pc50 自旋。
+- **引擎默认层修正**：`GameDatabase` 新增与 Rust `Databases::with_engine_defaults` 一致的默认层：CData 18/97/0=32、18/98/0=24、Data 18/0/24=`SystemFile/WindowBase.png`。读顺序是 250 覆盖层 → 引擎默认层 → `database.json` 文件层；脚本写仍落覆盖层，所以 `set_num` 能覆盖引擎值。此前 CE175 把 160 乘上文件里的 0，四个坐标全写成 0；修正后 18/35=512、18/36=-288、18/37=512、18/38=312。
+- **测试**：`BattleTargetTest` 播种 26 个 battle seed 后启动 CE190 600 帧，读回敌数/HP/坐标；再启动 CE162 300 帧并逐帧记录 pc，断言到 pc12、pc57 且事件退出。控制线清 18/69=0 后同样启动 CE190/CE162，断言未到 pc57、事件仍活、末 pc 为 49 或 50。输出 `BATTLE_TARGET_TEST_OK selected=1 control_pc=49 enemy_hp=100`。
+- **关键修正**：`Drive` 的 OK/NONE 脉冲必须按**帧号**而不是按 `123` 调用次数。Rust 的 `300 CallByName` 会阻塞调用方一帧，CE162 的 pc50 `123` 落在奇数帧；C# 同序阻塞后若仍按调用次数发 OK，就会在奇数帧读到 OK，控制线误到 pc57。改成每次 `StepFrame` 前写 `currentFrame=i`、provider 按 `i % 2` 返回后，两条线才与 Rust 一致。
+- **门禁**：`VmTest` 在 `BattleWiringTest` 后调用；`tools/godot_check.sh` 第 3 步追加 `BATTLE_TARGET_TEST_OK`。headless `reports/gate_battle_target.log` 与 `LWsmf_RENDER=1` `reports/gate_battle_target_windowed.log` 均 `GATE_EXIT=0` / `GODOT_GATE_OK`，30/30；整路线仍 `ROUTE_DIFF_OK 73814/73814`。
+- **边界**：CE162 是从测试直接启动，不是 CE188 命令确认后的真实 dispatch；`CE159` 技能选择执行入口仍未接，伤害/胜负矩阵与 H 未覆盖。引擎默认层目前只补坐标倍率与窗口皮肤三项，不声称覆盖 Rust 的全部引擎默认值。
+
 ---
 
 ## 5. 下一步（M2 入口）
@@ -364,5 +374,6 @@
 8. **数据库**：`250` 的三容器读写、`.project` 标签漂移、覆盖层与扩展行已落地并由 `DATABASE_TEST_OK .../vm-250` 覆盖（§4.21，D-26）；战斗 `CE152/CE188` 的命令可用性切片已由 §4.22 接到该宿主，完整战斗回合仍需。
 9. **战斗命令切片**：`CE188→CE152→CE192` 的空库存/有道具两条线已由 `BattleCommandTest` 覆盖（§4.22，D-27）；真实回合已由 §4.24 接上 CE239/CE242，目标选择与伤害胜负仍未接。
 10. **自动事件**：98 个并行事件已由 `AutoEvents` 调度并接入 `GameSession`，整路线同步后两侧均为 73,814 步（§4.23，D-28）；HUD 读档重放之外的引擎接线仍未接。
-11. **战斗 wiring**：`CE239` 真实回合经 `CE242` 命令、`350/343/352` 结算并返回已由 `BattleWiringTest` 覆盖（§4.24，D-29）；`CE253` 自然日线、`CE159/CE162` 目标选择、伤害矩阵与 H 仍未接。
-12. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
+11. **战斗 wiring**：`CE239` 真实回合经 `CE242` 命令、`350/343/352` 结算并返回已由 `BattleWiringTest` 覆盖（§4.24，D-29）；`CE253` 自然日线、`CE159` 执行入口、伤害矩阵与 H 仍未接。
+12. **战斗目标选择**：`CE190/CE175` 的敌人生成/坐标倍率与 `CE162` 的敌方索引 0 选择已由 `BattleTargetTest` 覆盖（§4.25，D-30）；`CE159` 技能选择执行入口、伤害/胜负矩阵仍未接。
+13. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

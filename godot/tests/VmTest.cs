@@ -38,6 +38,7 @@ public static class VmTest
         AutoEventsTest.Run();
         BattleCommandTest.Run();
         BattleWiringTest.Run();
+        BattleTargetTest.Run();
 
         Console.WriteLine("[VmTest] ALL VM TESTS PASSED!");
     }

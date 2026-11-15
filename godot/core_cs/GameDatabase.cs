@@ -25,6 +25,16 @@ public sealed class GameDatabase
     public const int RowClearColumn = -2;
     public const int ExtensionRowBase = 100;
 
+    // crates/wolf-game/src/db.rs: the engine owns the coordinate scale and the
+    // system window skin even though CDataBase type 18 rows 97/98 store 0.
+    private const int CoordinateScaleType = 18;
+    private const int CoordinateScaleXRow = 97;
+    private const int CoordinateScaleYRow = 98;
+    private const int WindowSkinType = 18;
+    private const int WindowSkinRow = 0;
+    private const int WindowSkinColumn = 24;
+    private const string WindowSkinFile = "SystemFile/WindowBase.png";
+
     private sealed class ContainerDto
     {
         [JsonPropertyName("types")] public List<TypeDto> Types { get; set; } = new();
@@ -87,12 +97,17 @@ public sealed class GameDatabase
     private readonly Dictionary<(DbContainer, int), int> _rowCounts = new();
     private readonly Dictionary<(DbContainer, int, int, int), int> _cells = new();
     private readonly Dictionary<(DbContainer, int, int, int), string> _texts = new();
+    private readonly Dictionary<(DbContainer, int, int, int), int> _engineCells = new();
+    private readonly Dictionary<(DbContainer, int, int, int), string> _engineTexts = new();
 
     public string SourcePath { get; }
 
     private GameDatabase(string sourcePath)
     {
         SourcePath = sourcePath;
+        _engineCells[(DbContainer.CData, CoordinateScaleType, CoordinateScaleXRow, 0)] = 32;
+        _engineCells[(DbContainer.CData, CoordinateScaleType, CoordinateScaleYRow, 0)] = 24;
+        _engineTexts[(DbContainer.Data, WindowSkinType, WindowSkinRow, WindowSkinColumn)] = WindowSkinFile;
     }
 
     /// <summary>
@@ -421,13 +436,21 @@ public sealed class GameDatabase
     }
 
     private bool TryEngineNum(DbContainer container, int dbType, int row, int column, out int value)
-        => _cells.TryGetValue((container, dbType, row, column), out value);
+    {
+        if (_cells.TryGetValue((container, dbType, row, column), out value)) return true;
+        return _engineCells.TryGetValue((container, dbType, row, column), out value);
+    }
 
     private bool TryEngineText(DbContainer container, int dbType, int row, int column, out string value)
     {
         if (_texts.TryGetValue((container, dbType, row, column), out string? text))
         {
             value = text;
+            return true;
+        }
+        if (_engineTexts.TryGetValue((container, dbType, row, column), out string? engine))
+        {
+            value = engine;
             return true;
         }
         value = "";
