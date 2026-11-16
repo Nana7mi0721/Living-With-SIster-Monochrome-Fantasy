@@ -1,6 +1,7 @@
 extends Node
-## H scene end-to-end: CE310 A/B/C, CE323 and CE335 against the production VM.
-## Replicates crates/wolf-game/tests/m13_h_endtoend.rs; markers H_SCENE_TEST_OK.
+## H scene end-to-end: CE310 A/B/C, CE323, CE335, CE318→CE360 and CE326→CE502.
+## Replicates crates/wolf-game/tests/m13_h_endtoend.rs and m13_h_thresholds.rs;
+## markers H_SCENE_TEST_OK.
 
 var checks := 0
 var failures := 0
@@ -26,7 +27,7 @@ func _on_message(text: String, _face: int) -> void:
 		_messages.append(text)
 
 func _observe() -> void:
-	for id in [226, 355, 356, 376]:
+	for id in [226, 355, 356, 376, 360, 502]:
 		if vm.HasEvent(id):
 			_saw[id] = true
 
@@ -118,6 +119,23 @@ func _run(max_frames: int) -> void:
 		if not vm.IsRunning():
 			return
 
+## Auto-advance while choosing a fixed option index; CE318 needs the two-person bath
+## option (index 1), while the other scenes accept the default index 0.
+func _run_choice(index: int, max_frames: int) -> void:
+	for _i in max_frames:
+		vm.SetPointer(-1, -1)
+		vm.SetPointerPressed(false)
+		vm.BeginFrameInput()
+		vm.StepFrame()
+		vm.SyncAutoEvents()
+		_observe()
+		if vm.IsWaitingForMessage():
+			vm.DismissMessage()
+		if vm.IsWaitingForChoice():
+			vm.SelectChoice(index)
+		if not vm.IsRunning():
+			return
+
 func _has_message(part: String) -> bool:
 	for text in _messages:
 		if text.contains(part):
@@ -159,6 +177,37 @@ func _ce335() -> void:
 	check(_has_message("深夜"), "CE335 shows late night")
 	check(not vm.Faulted, "CE335 no fault")
 
+## CE318 bath: 信頼(var21) 100 opens the two-person bath (index 1) and spawns the H
+## body CE360; 99 refuses in the same menu and never spawns it.
+func _ce318(trust: int, want_spawn: bool) -> void:
+	_reset()
+	for v in range(80, 88):
+		vm.SetVar(v, 1)
+	_seed({1600010: 0, 21: trust, 16: 10, 102: 100, 23: 9, 103: 2})
+	check(vm.StartEvent(318), "CE318 starts trust=%d" % trust)
+	_run_choice(1, 3000)
+	check(bool(_saw.get(360, false)) == want_spawn, "CE318 trust=%d spawn360=%s" % [trust, str(want_spawn)])
+	if want_spawn:
+		check(_has_message("一起洗？可以啊"), "CE318 trust=100 two-person bath")
+	else:
+		check(_has_message("算了吧"), "CE318 trust=99 refuses bath")
+	check(not vm.Faulted, "CE318 trust=%d no fault" % trust)
+
+## CE326 @799 kitchen DLC tail: the real gate is 挿入経験(var424)>=3, 自己性欲(var18)
+## >=100 and 精力(var16)>=1; choosing 性欲 index 0 calls CE502 and spends one 精力.
+func _ce326(seed_values: Dictionary, want_spawn: bool) -> void:
+	_reset()
+	_seed(seed_values)
+	check(vm.StartEventAt(326, 799), "CE326 starts gate=" + str(want_spawn))
+	_run_choice(0, 3000)
+	check(bool(_saw.get(502, false)) == want_spawn, "CE326 spawn502=%s" % str(want_spawn))
+	if want_spawn:
+		check(_has_message("来享用吧"), "CE326 kitchen H dialogue")
+		check(int(vm.GetVar(16)) == 4, "CE326 spends one 精力")
+	else:
+		check(not _has_message("来享用吧"), "CE326 gate refuses kitchen H")
+	check(not vm.Faulted, "CE326 no fault")
+
 func _ready() -> void:
 	assets = AssetDB.new()
 
@@ -173,6 +222,10 @@ func _ready() -> void:
 
 	_ce323()
 	_ce335()
+	_ce318(100, true)
+	_ce318(99, false)
+	_ce326({424: 3, 18: 100, 16: 5, 102: 100}, true)
+	_ce326({424: 3, 18: 99, 16: 5, 102: 100}, false)
 
 	if failures == 0:
 		print("H_SCENE_TEST_OK checks=%d messages=%d" % [checks, _messages.size()])
