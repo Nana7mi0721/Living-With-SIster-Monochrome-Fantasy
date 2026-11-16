@@ -42,6 +42,7 @@ var layers: Dictionary = {}
 
 var _pictures: Dictionary = {}  # number -> Control
 var _cmds: Dictionary = {}     # number -> draw command, for save/restore (W3 Day4)
+var _base_sizes: Dictionary = {}  # number -> unscaled hit-box source size
 
 
 func _init(p_assets: AssetDB = null) -> void:
@@ -98,8 +99,16 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 
 	var node := _build_picture(number, file, text, args, anchor, kind)
 	_free_picture(number)
-	layer(LAYER_SCENE_PICTURE).add_child(node)
+	if node == null:
+		push_warning("draw_picture %d produced no node kind=%d action=%d" % [number, kind, action])
+		return null
+	var band := layer(LAYER_SCENE_PICTURE)
+	if band == null or not is_instance_valid(band):
+		push_warning("draw_picture %d band missing (layers=%d)" % [number, layers.size()])
+		return null
+	band.add_child(node)
 	_pictures[number] = node
+	_base_sizes[number] = node.get_meta("base_size", node.size)
 	_store_cmd(number, action, file, text, args, anchor, kind)
 	return node
 
@@ -116,6 +125,7 @@ func _store_cmd(number: int, action: int, file: String, text: String, args: Arra
 
 
 func _free_picture(number: int) -> void:
+	_base_sizes.erase(number)
 	if _pictures.has(number):
 		var node: Control = _pictures[number]
 		_pictures.erase(number)
@@ -196,15 +206,43 @@ func _hit_rect(number: int) -> Rect2:
 		base = Vector2(_arg(args, 1, 0), _arg(args, 2, 0))
 	else:
 		var holder: Control = _pictures.get(number)
-		if holder == null:
+		if holder != null:
+			base = holder.get_meta("base_size", holder.size)
+		else:
+			base = _base_sizes.get(number, Vector2.ZERO)
+		if base == Vector2.ZERO:
 			return Rect2()
-		base = holder.get_meta("base_size", holder.size)
 	var scale_percent := UiSkin.unit(_arg(args, 7, 100))
 	var scale_factor := 1.0 if scale_percent == 0 else absf(scale_percent) / 100.0
 	var size := base * scale_factor
 	var x := UiSkin.unit(_arg(args, 5, 0))
 	var y := UiSkin.unit(_arg(args, 6, 0))
 	return Rect2(UiSkin.anchor_position(anchor, x, y, size), size)
+
+
+## Queue mode: keep the slot table and hit boxes current without adding nodes. Opcode 124
+## still needs existence, coordinates and hover, but the managed Picture signal crashes
+## native listeners on long deterministic runs.
+func track_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int) -> void:
+	var erase := action == 2 or action == 3
+	if erase:
+		_cmds.erase(number)
+		_base_sizes.erase(number)
+		return
+	if kind < 0:
+		kind = 2 if file.is_empty() and not text.is_empty() else 0
+	var backdrop := number < 0 or number >= 12000
+	var base := Vector2.ZERO
+	if kind == 2 or kind == 4:
+		base = Vector2(maxi(0, _arg(args, 1, 0)), maxi(0, _arg(args, 2, 0)))
+	elif not file.is_empty() and assets != null and assets.texture(file) != null:
+		base = SCREEN_SIZE if backdrop else assets.texture(file).get_size()
+	elif not text.is_empty():
+		base = _measure_text(text)["size"]
+	else:
+		base = Vector2(420, 140)
+	_store_cmd(number, action, file, text, args, anchor, kind)
+	_base_sizes[number] = base
 
 
 func _build_picture(number: int, file: String, text: String, args: Array, anchor: int, kind: int) -> Control:

@@ -325,6 +325,68 @@ public partial class VmController : Node, IHost, IVmSession
     /// <summary>Test hook: stop emitting the signal while still tracking picture state.</summary>
     public bool EmitPictureSignals { get; set; } = true;
 
+    private readonly System.Collections.Generic.List<PictureCmd> _pictureQueue = new();
+
+    /// <summary>Test hook: queue picture commands and let GDScript drain them after the VM step.</summary>
+    public bool QueuePictureSignals { get; set; }
+
+    /// <summary>Drain queued picture commands as a JSON array (avoids managed Variant containers).</summary>
+    public string TakePicturesJson()
+    {
+        if (_pictureQueue.Count == 0)
+            return string.Empty;
+        var sb = new System.Text.StringBuilder(256);
+        sb.Append('[');
+        for (int i = 0; i < _pictureQueue.Count; i++)
+        {
+            var cmd = _pictureQueue[i];
+            if (i > 0) sb.Append(',');
+            sb.Append("{\"number\":").Append(cmd.Number);
+            sb.Append(",\"action\":").Append((int)cmd.Action);
+            sb.Append(",\"file\":");
+            AppendJsonString(sb, cmd.File);
+            sb.Append(",\"text\":");
+            AppendJsonString(sb, cmd.Text);
+            sb.Append(",\"args\":[");
+            var args = cmd.Args;
+            if (args != null)
+            {
+                for (int k = 0; k < args.Length; k++)
+                {
+                    if (k > 0) sb.Append(',');
+                    sb.Append(args[k]);
+                }
+            }
+            sb.Append("],\"anchor\":").Append(cmd.Anchor);
+            sb.Append(",\"kind\":").Append(cmd.Kind).Append('}');
+        }
+        sb.Append(']');
+        _pictureQueue.Clear();
+        return sb.ToString();
+    }
+
+    private static void AppendJsonString(System.Text.StringBuilder sb, string? value)
+    {
+        if (value == null) { sb.Append("\"\""); return; }
+        sb.Append('"');
+        foreach (char c in value)
+        {
+            switch (c)
+            {
+                case '"': sb.Append("\\\""); break;
+                case '\\': sb.Append("\\\\"); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                default:
+                    if (c < 0x20) sb.Append("\\u").Append(((int)c).ToString("x4"));
+                    else sb.Append(c);
+                    break;
+            }
+        }
+        sb.Append('"');
+    }
+
     public void Picture(PictureCmd cmd)
     {
         _lastPictureAnchor = cmd.Anchor;
@@ -343,6 +405,11 @@ public partial class VmController : Node, IHost, IVmSession
         }
         if (!EmitPictureSignals)
             return;
+        if (QueuePictureSignals)
+        {
+            _pictureQueue.Add(cmd);
+            return;
+        }
         EmitSignal(SignalName.PictureRequested, cmd.Number, (int)cmd.Action,
             cmd.File ?? string.Empty, cmd.Text ?? string.Empty,
             cmd.Args ?? System.Array.Empty<int>());
@@ -355,7 +422,36 @@ public partial class VmController : Node, IHost, IVmSession
         EmitSignal(SignalName.SoundRequested, (int)cmd.Channel, (int)cmd.Action, cmd.File, cmd.Volume, cmd.Frames);
     }
 
-    public DbValue? Database(DbOp op) => DatabaseStore?.Execute(op);
+    public DbValue? Database(DbOp op)
+    {
+        var value = DatabaseStore?.Execute(op);
+        if (op.Container == DbContainer.Data && op.DbType == 9)
+        {
+            BattleDataReads++;
+            BattleDataLast = "row=" + op.DataId + " col=" + op.ItemId + " dir=" + op.Direction
+                + " -> " + (value != null ? (value.IsString ? "s:" + value.Str : value.Num.ToString()) : "null");
+        }
+        return value;
+    }
+
+    /// <summary>Test hook: number of opcode 250 reads against DataBase type 9.</summary>
+    public int BattleDataReads { get; private set; }
+
+    /// <summary>Test hook: the most recent DataBase type 9 read, formatted.</summary>
+    public string BattleDataLast { get; private set; } = string.Empty;
+
+    public string DescribeBattleData()
+    {
+        var sb = new System.Text.StringBuilder();
+        for (int c = 0; c < 7; c++)
+        {
+            var v = DatabaseStore?.Read(new DbOp { Container = DbContainer.Data, Direction = DbDirection.Read, DbType = 9, DataId = 0, ItemId = c, Flags = 0x1200 });
+            if (c > 0) sb.Append(' ');
+            sb.Append(c).Append('=');
+            sb.Append(v != null ? (v.IsString ? v.Str : v.Num.ToString()) : "null");
+        }
+        return sb.ToString();
+    }
 
     public string MapPath(int mapId) =>
         DatabaseStore?.ReadText(DbContainer.Sys, 0, mapId, 0) ?? "";

@@ -65,6 +65,8 @@
 
 32. M3 CE188→CE157→CE253 自然战斗菜单桥：`BattleWiring` 改为按 `CData 18/73/0` 游标 harvest 已提交的 CE157 行（CE157 pc82 尚未写表，旧 live 门槛只读 CE188 预填 0/0）；`BattleMenuBridgeTest` 用真实两成员 CE188 菜单收 8 行（前两行技能 26/25），`CE253` 消费队列前两项生成 CE242 pc338/645 后结算 `-1`。headless 无 `SaveData01.sav`，输出 `save_parity=0`；Rust 的四轮 `+1` 需 CE143 物化 CData type10（§4.30，D-38）。
 
+34. M3 队列图片状态与 CE253 自然日线：`VmController.QueuePictureSignals` + `TakePicturesJson()` 把绘制命令改为 JSON 队列，`PictureStage.track_picture` 只维护槽位/命中框不建节点，消除 headless 长跑 `Picture` 信号崩溃并保留 opcode124 hover 几何；探针每帧观测 CE244 瞬态 `343/352/342`，day4 由 day3 清晨循环自然提交 CE157 菜单。`Ce253DayRouteTest` 从标题走到 day5 08:30（`CE253_DAY_ROUTE_TEST_OK day=5 hour=8 minute=30 rounds=2 turns=1 result=1 seeded=34`），门禁扩到 32 步（§4.33，D-42）。
+
 33. M3 冷启动日线、SysDatabase 地图语义与 Autorun 守卫：`op130` 的 map 参数按 `SysDatabase` type0 行号解析（`SampleMapA` row1，不是 artifact `SampleMapA_1=1`），C# `EnterMap` 走 `VmController.MapPath → GameDatabase.ReadText`；`MapRuntime.StartPending` 补 Autorun 只启动一次守卫。整路线 C#/Rust 收敛到 **149,247/149,247**（map 1005），Oracle 夹具重生成；新增 `ColdStartDayTest` 从标题新游戏到 day2 08:30（`COLD_START_DAY_TEST_OK day=2 hour=8 minute=30 weekday=1`），门禁扩到 31 步（§4.31，D-39/D-40）。
 
 ## 下一步（M3 战斗、H 与表现层收口）
@@ -72,8 +74,8 @@
 1. ~~InputRouter、9 级图层、101/102 自绘与字体度量~~（W2 Day 2–4 已完成）；~~第三轮审阅 P1 交互/存档缺陷~~（W3 Day-1 已完成）；~~`TitleScreen` 业务切到 `GameRoot.gd`~~（W3 Day-4 已完成）；~~主场景切到 `GameRoot.tscn`~~（W3 Day-5 已完成）。
 2. ~~tile 呈现、地形通行、地图点触、角色层~~（W3 Day-3 已完成）；MapChip 为引擎通用素材，正片未使用，调色板占位仅兼容/测试。
 3. ~~把“标题→新游戏→SampleMapA（1005）”冻结成输入序列~~（整路线 1500 帧 149,247/149,247，§4.31，D-39/D-40）；冷启动日线已由 `ColdStartDayTest` 覆盖到 day2 08:30；消息/选择只覆盖标题菜单与睡眠选择，bat 101/102 与 save/load 的逐指令对拍仍待补。
-4. ~~日程/时间接入确定性时钟~~（W4 Day1-4 已完成）；HUD 时间已随图片状态桥显示（§4.14）；~~白天 `CE251/CE310` 工作菜单~~（2026-11-15 已完成端到端点击/日程/体力回归，§4.16）；~~从冷启动进入白天~~（`ColdStartDayTest` 已覆盖卧室→day1 18:30→睡眠→day2 08:30，§4.31）。
-5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27）；AutoEvents 已接 98 个并行事件并同步 route（§4.23/D-28）；CE239/CE242 真实回合 wiring 已接（§4.24/D-29），CE162 目标选择直启已接（§4.25/D-30），CE159 技能尾段已接（§4.26/D-31），H 阈值数据面已接（§4.27/D-32）；第六轮 P2 的滚轮 126、音频流隔离、未知 soundType、图片镜像与严格 effects 已收口（§4.28/D-34），`101` 未读完取消与零售字体仍待运行时/零售证据；`CE253` 自然日线、真实 CE159 命令 dispatch、伤害矩阵与 H 场景（CE318→CE360）仍待；Data type0 列错位已由零售 BasicData 哈希确认不存在（D-37）；CE188→CE157 菜单桥已接通（§4.30/D-38），headless 夹具只到 2 轮 `-1`，四轮 `+1` 需零售存档或 CE143 物化；地图语义与 Autorun 守卫已由 D-39/D-40 收口，冷启动已到 day2 08:30（§4.31）。
+4. ~~日程/时间接入确定性时钟~~（W4 Day1-4 已完成）；HUD 时间已随图片状态桥显示（§4.14）；~~白天 `CE251/CE310` 工作菜单~~（2026-11-15 已完成端到端点击/日程/体力回归，§4.16）；~~从冷启动进入白天~~（`ColdStartDayTest` 已覆盖卧室→day1 18:30→睡眠→day2 08:30，§4.31）；~~自然日线到 day5~~（`Ce253DayRouteTest` 覆盖 day2/3 菜单→day4 自然 CE253→day5 08:30，§4.33/D-42）。
+5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27）；AutoEvents 已接 98 个并行事件并同步 route（§4.23/D-28）；CE239/CE242 真实回合 wiring 已接（§4.24/D-29），CE162 目标选择直启已接（§4.25/D-30），CE159 技能尾段已接（§4.26/D-31），H 阈值数据面已接（§4.27/D-32）；第六轮 P2 的滚轮 126、音频流隔离、未知 soundType、图片镜像与严格 effects 已收口（§4.28/D-34），`101` 未读完取消与零售字体仍待运行时/零售证据；~~`CE253` 自然日线~~（day1→day5 已通，§4.33/D-42；结算仍为 v342=0 直接判胜）、真实 CE159 命令 dispatch、伤害矩阵与 H 场景（CE318→CE360）仍待；Data type0 列错位已由零售 BasicData 哈希确认不存在（D-37）；CE188→CE157 菜单桥已接通（§4.30/D-38），headless 夹具只到 2 轮 `-1`，四轮 `+1` 需零售存档或 CE143 物化；地图语义与 Autorun 守卫已由 D-39/D-40 收口，冷启动已到 day2 08:30（§4.31），自然日线已到 day5（§4.33）。
 
 ## 约束
 

@@ -438,6 +438,16 @@
 - **崩溃修复**：长跑在 `VmController.Picture` 的 `EmitSignal` 抛 `AccessViolationException`；`cmd.File/Text/Args` 归一为非空（`?? string.Empty`、`?? Array.Empty<int>()`），并加 `EmitPictureSignals` 测试开关（战斗段关闭信号但保留 `_pictures` 状态）。`MapRuntimeTest` 与 `SMOKE_OK` 通过。
 - **边界**：自然日线到 day4 08:30 与 CE253/CE239 起始；CE244 结算、四轮 `+1`、胜负矩阵、post-battle day5 未完成，探针未进 31 步门禁。
 
+### 4.33 队列图片状态、CE244 自然结算与 day5 自然日线（2026-11-16）
+
+- **来源**：用户 `m16974`「继续下一步」；在 D-41 后继续让 CE244 自然结算。
+- **Picture 崩溃与队列（D-42）**：`VmController.Picture` 的 `EmitSignal`/`GodotObject.Call` 在 day4 首批 HUD 绘制时抛 `AccessViolationException`；新增 `QueuePictureSignals` 与 `TakePicturesJson()`（手写 JSON 传输，避开 managed Variant 容器），`GameRoot.advance_frame` 排空后逐条 `PictureStage.track_picture`。tracked 模式只维护 `_cmds` 与 `_base_sizes`，不创建 Control；`_hit_rect` 无 holder 时用 base size 计算，opcode124 的 field8 hover 仍是真实几何。
+- **CE244 胜利是瞬态**：临时 per-tick trace 显示 t=2687..2722 `v340=1 v343=1 v352=1 v342=0`，t=2723 起清零；CE244 以 `2000342==0` 直接判胜（pc77 `111 [18,2000342,0,3,...]`），战后尾声清掉 350/352/343。因此探针改为 `observe_battle()` 放进 `step()`，每帧记录 `_peak342/_saw343/_peak352`。
+- **day4 提交路径**：`select_day_row(4)` 的锁存循环会吞掉战斗，day4 日间菜单改由 day3 清晨循环每 2 帧 `_on_action()` 自然走 CE157 菜单提交；`SeedBattle(1,1)` 仍在 day4 08:30 后。
+- **结果**：`reports/ce253_clean.log` EXIT=0，`[Ce253DayRoute] seeded=34 saw253=true sawCaller=true rounds=2 turns=1 peak352=1 saw343=true peak342=45`，`CE253_DAY_ROUTE_TEST_OK day=5 hour=8 minute=30 rounds=2 turns=1 result=1 seeded=34`；运行约 4 秒。
+- **门禁**：`tools/godot_check.sh` 扩到 32 步，新增第 32 步 `res://tests_gd/Ce253DayRouteTest.tscn`（tee `reports/ce253_day_route.log`，grep `CE253_DAY_ROUTE_TEST_OK`）；`SMOKE_OK`。
+- **边界**：结算仍是 `v342=0` 直接判胜，不是真实伤害矩阵；`peak342=45` 来自战斗前 CE239 写入的瞬时值，CE244 看到的 `2000342` 在结算前被清零/归零路径影响，四轮 `+1` 与胜负矩阵仍未接；`track_picture` 不渲染，正式表现层仍走 `draw_picture`。
+
 ---
 
 ## 5. 下一步（M3 入口）
@@ -459,5 +469,5 @@
 15. **第六轮审阅 P1/P2**：滚轮 126、同文件音频流隔离、未知 soundType 告警、图片容器镜像、严格 effects 对拍与 H 标记已收口（§4.28，D-33/D-34）；AutoEvents 新游戏复位按 D-33 拒绝；Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。
 16. **第七轮审阅 P1/P2**：故障返回标题重建 `GameSession`/`AutoEvents`，SE 复用缓存流，未知 soundType 按站点去重；D-35 增加 `reports/database_schema_audit.json` 静态审计并把两个 250 回退列标为 `retail-confirmed-label-absent`；零售 BasicData 哈希确认关闭 D-31（§4.29，D-36/D-37）。
 17. **自然战斗菜单桥**：`CE188` 菜单经 `CData 18/73/0` 游标提交 8 行，前两行技能 26/25；`CE253` 消费前两行并生成 `CE242` pc338/645 后 `CE244` 结算 `-1`（§4.30，D-38）。Rust 存档夹具的四轮 `+1` 仍待存档/CE143 物化，胜利与伤害矩阵仍未接。
-18. **地图语义、Autorun 与冷启动**：`op130` 按 SysDatabase type0 行号进入 SampleMapA（artifact 1005），`MapRuntime` 补 Autorun 只启动一次守卫，整路线 149,247/149,247；`ColdStartDayTest` 从标题到 day2 08:30（§4.31，D-39/D-40）。四轮 `+1`、伤害/胜负矩阵与 H 场景仍待。
+18. **地图语义、Autorun 与冷启动**：`op130` 按 SysDatabase type0 行号进入 SampleMapA（artifact 1005），`MapRuntime` 补 Autorun 只启动一次守卫，整路线 149,247/149,247；`ColdStartDayTest` 从标题到 day2 08:30（§4.31，D-39/D-40）；`Ce253DayRouteTest` 沿 day2/3 菜单、day4 自然 CE253 到 day5 08:30（§4.33，D-42）。四轮 `+1`、真实伤害/胜负矩阵与 H 场景仍待。
 19. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

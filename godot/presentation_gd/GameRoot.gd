@@ -135,6 +135,15 @@ func advance_frame() -> void:
 	vm.SetPointerMiddlePressed(router.middle_pressed)
 	vm.BeginFrameInput()
 	session.AdvanceFrame()
+	var queued := str(vm.TakePicturesJson())
+	if not queued.is_empty():
+		var batch: Variant = JSON.parse_string(queued)
+		if batch is Array:
+			for p in batch:
+				if vm.QueuePictureSignals:
+					stage.track_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]))
+				else:
+					stage.draw_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]))
 	frames = session.Frames
 	phase = session.Phase
 	# A fault stops the deterministic clock: replaying the frame would only refault and
