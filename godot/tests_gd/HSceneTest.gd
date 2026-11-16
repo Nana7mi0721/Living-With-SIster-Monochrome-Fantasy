@@ -1,5 +1,7 @@
 extends Node
-## H scene end-to-end: CE310 A/B/C, CE323, CE335, CE318→CE360 and CE326→CE502.
+## H scene end-to-end: CE310 A/B/C, outdoor pool/beach, CE323, CE335, CE318→CE360
+## (including the var103 half-branch) and CE326 (natural dinner entry plus the
+## fixture @799 kitchen gate → CE502).
 ## Replicates crates/wolf-game/tests/m13_h_endtoend.rs and m13_h_thresholds.rs;
 ## markers H_SCENE_TEST_OK.
 
@@ -27,7 +29,7 @@ func _on_message(text: String, _face: int) -> void:
 		_messages.append(text)
 
 func _observe() -> void:
-	for id in [226, 355, 356, 376, 360, 502]:
+	for id in [226, 326, 355, 356, 376, 360, 502]:
 		if vm.HasEvent(id):
 			_saw[id] = true
 
@@ -193,6 +195,62 @@ func _ce318(trust: int, want_spawn: bool) -> void:
 		check(_has_message("算了吧"), "CE318 trust=99 refuses bath")
 	check(not vm.Faulted, "CE318 trust=%d no fault" % trust)
 
+## CE310 outdoor H (@731–743): 処女喪失(var265), 起こした回数(var455), 挿入経験
+## (var424), 性興味(var22), 発情度(var102) are nested single-condition gates. 102=30
+## enters the outdoor scene (var150/452/456 +1, var424+1, var22+5, var16-1);
+## 102=29 defers it and leaves those counters untouched.
+func _ce310_outdoor(seed_values: Dictionary, want_h: bool, label: String) -> void:
+	_reset()
+	_seed(seed_values)
+	check(vm.StartEventAt(310, 731), label + " starts CE310 outdoor gate")
+	_run(5000)
+	check(not vm.IsRunning(), label + " finishes CE310 outdoor")
+	check(int(vm.GetVar(150)) == (1 if want_h else 0), label + " var150=%d" % int(vm.GetVar(150)))
+	if want_h:
+		check(int(vm.GetVar(452)) == 1, label + " var452=1")
+		check(int(vm.GetVar(456)) == 1, label + " var456=1")
+		check(int(vm.GetVar(424)) == 2, label + " var424=2")
+		check(int(vm.GetVar(22)) == 125, label + " var22=125")
+		check(int(vm.GetVar(16)) == 4, label + " var16=4")
+		check(_has_message("要在……这里做"), label + " outdoor dialogue")
+	else:
+		check(int(vm.GetVar(452)) == 0, label + " var452 stays 0")
+		check(int(vm.GetVar(424)) == 1, label + " var424 stays 1")
+		check(_has_message("回家再做哦"), label + " outdoor refusal")
+	check(not vm.Faulted, label + " no fault")
+
+## CE318 @338/@415 is a two-tier op111: 欲求不満(var103)>=2 first, otherwise
+## 発情度(var102)>=75. The wipe-body choice (index 2) reaches it: var103=2 spends
+## two points of var131/var206, while var103=0 spends one. Both lower var103 by 1.
+func _ce318_half(want: int, seed_values: Dictionary) -> void:
+	_reset()
+	for v in range(80, 88):
+		vm.SetVar(v, 1)
+	_seed(seed_values)
+	check(vm.StartEvent(318), "CE318 wipe starts want=%d" % want)
+	_run_choice(2, 4000)
+	var label := "CE318 wipe want=%d" % want
+	var want_103 := int(seed_values[103]) - 1
+	check(int(vm.GetVar(103)) == want_103, label + " var103=%d" % want_103)
+	check(int(vm.GetVar(131)) == want, label + " var131=%d" % want)
+	check(int(vm.GetVar(206)) == want, label + " var206=%d" % want)
+	check(_has_message("谢谢你，哥哥"), label + " dialogue")
+	check(not vm.Faulted, label + " no fault")
+
+## CE327 休息 → CE326 食事処理 is the natural dinner entry (var69=0 daytime,
+## choose 休息 at pc5). It proves the call chain into CE326 itself; the DLC
+## kitchen tail at @799 still needs the fixture below because the dinner branch
+## does not reach it with these seeds.
+func _ce326_natural() -> void:
+	_reset()
+	_seed({69: 0, 424: 3, 18: 180, 16: 5, 102: 100, 21: 300})
+	check(vm.StartEvent(327), "CE327 starts natural dinner")
+	_run_choice(0, 30000)
+	check(bool(_saw.get(326, false)), "CE327 spawned CE326 dinner")
+	check(int(vm.GetVar(69)) == 1, "CE327 moves the clock to evening")
+	check(_has_message("今天的晚饭"), "CE326 dinner dialogue")
+	check(not vm.Faulted, "CE326 natural no fault")
+
 ## CE326 @799 kitchen DLC tail: the real gate is 挿入経験(var424)>=3, 自己性欲(var18)
 ## >=100 and 精力(var16)>=1; choosing 性欲 index 0 calls CE502 and spends one 精力.
 func _ce326(seed_values: Dictionary, want_spawn: bool) -> void:
@@ -220,10 +278,16 @@ func _ready() -> void:
 	c[102] = 39
 	_ce310_round(c, "抱歉哦，今天没那个心情呢", 0, "C")
 
+	_ce310_outdoor({265: 1, 455: 1, 424: 1, 22: 120, 102: 30, 16: 5}, true, "outdoor")
+	_ce310_outdoor({265: 1, 455: 1, 424: 1, 22: 120, 102: 29, 16: 5}, false, "defer")
+
 	_ce323()
 	_ce335()
 	_ce318(100, true)
 	_ce318(99, false)
+	_ce318_half(2, {1600010: 0, 21: 100, 16: 10, 102: 100, 23: 9, 103: 2})
+	_ce318_half(1, {1600010: 0, 21: 100, 16: 10, 102: 80, 23: 9, 103: 0})
+	_ce326_natural()
 	_ce326({424: 3, 18: 100, 16: 5, 102: 100}, true)
 	_ce326({424: 3, 18: 99, 16: 5, 102: 100}, false)
 

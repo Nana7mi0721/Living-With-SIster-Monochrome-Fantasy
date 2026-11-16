@@ -88,7 +88,7 @@
 | 技能目标入口 | `res://tests/Smoke.tscn` | `BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`；CE159 尾段场景/效果目标门、CE162 由 pc247 生成并选中退出，目标 0 不生成、敌数 0 停 pc49/50 |
 | H 阈值数据面 | `res://tests/Smoke.tscn` | `H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`；37 个 op111 真实载荷与 59 个阈值/多条件边界点，只验证数据面 |
 | 第六轮 P2 收口 | `res://tests_gd/AudioManagerTest.tscn` / `PictureRoundtripTest.tscn` / `Smoke.tscn` | `AUDIO_MANAGER_TEST_OK checks=32`、`PICTURE_ROUNDTRIP_TEST_OK`、`H_EVENT_GATE_TEST_OK ... data_only=1`；滚轮 126 拦截、同文件流隔离、未知 soundType 告警、容器镜像与严格 effects 对拍 |
-| H 场景端到端 | `res://tests_gd/HSceneTest.tscn` | `H_SCENE_TEST_OK checks=53 messages=7`；CE310 A/B/C（含 `var150/424`、spawn 226）、CE323（spawn 376/355/356、`var221=4`）、CE335、CE318 信頼 100/99→CE360、CE326 `@799` 门→CE502；菜单行 1208/1210 命中框重叠，H 行需在 85% 高度按 held=1 |
+| H 场景端到端 | `res://tests_gd/HSceneTest.tscn` | `H_SCENE_TEST_OK checks=92 messages=7`；CE310 A/B/C（含 `var150/424`、spawn 226）与 outdoor `@731` 门（`var150/452/456`、`var424` 1→2、`var22` 120→125、`var16` 5→4）及 `102=29` 拒绝、CE323（spawn 376/355/356、`var221=4`）、CE335、CE318 信頼 100/99→CE360 与 `var103` 半支（131/206 +2 vs +1）、CE327→CE326 自然晚餐、CE326 `@799` 门→CE502；菜单行 1208/1210 命中框重叠，H 行需在 85% 高度按 held=1 |
 | 自然战斗菜单桥/四轮 | `res://tests/Smoke.tscn` | `BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=4 turns=3 result=1 pcs=338,645,792,996 pools=3,2,3,2 save_vars=800 save_cells=16800`；导入零售存档 vars+CData 并 `PrimeLatched` 后与 Rust m11 四轮 `+1` 全等（§4.34，D-43）；`BATTLE_MATRIX_TEST_OK win=1 loss=-1 win_rounds=4 loss_rounds=10` |
 | 第七轮 P2 收口 | `res://tests_gd/GameRootTest.tscn` / `AudioManagerTest.tscn` / `Smoke.tscn` / `converter validate` | `GAME_ROOT_TEST_OK`（Generation+1、重开新游戏后 event 38 重启）、`AUDIO_MANAGER_TEST_OK checks=32`、`unknown sound type` 循环两次仅 1 条日志、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`；零售 BasicData 四文件哈希与 `work/all` 全等（D-37） |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
@@ -472,7 +472,7 @@
 - **修复**：`_hold_button(1210)` 取 `picture_rect(1210)` 后点 **85% 高度**（默认 512,499），该点只在 1210 内；再用 `VmController.SetPointerHeld(true)` 置 held，`BeginFrameInput(); StepFrame()` 让 opcode124 `[1600098,12288,7]` 读到 `1`。不能用 `SetPointerPressed(true)` 再 `BeginFrameInput`：那会得到当帧按下值 `2`，而 pc374 `111 [1,1600098,1,2]` 只认 `1`。trace 确认 pc360..378 `ms=1 hover1210=1`，pc376 进入 H 分支。
 - **CE323 的 spawn 依赖 AutoEvents**：376/355/356 的 `run_condition` 为 `[2,1,2000225,1]`/`[2,1,2000149,1]`，只 `StartEvent(323)` 时 25/32；加 `PrimeAutoEvents`+每帧 `SyncAutoEvents` 后三条 spawn 全部出现。
 - **输出**：`reports/hscene9.log`、`reports/hscene_clean.log` 均 EXIT=0，`H_SCENE_TEST_OK checks=32 messages=7`；门禁扩到 33 步（第 33 步 `res://tests_gd/HSceneTest.tscn`，tee `reports/h_scene_test.log`）。
-- **边界**：CE310 的菜单重叠是原版素材布局问题，表现层不修改命中框，只在测试里选安全点，真实玩家点击同样会先命中上一行；CE318→CE360 与 CE326 台所 H 已由 §4.36 覆盖（CE326 从烹饪菜单自然进入、CE318 乳交 `var327`/欲求不満半支仍未接）。
+- **边界**：CE310 的菜单重叠是原版素材布局问题，表现层不修改命中框，只在测试里选安全点，真实玩家点击同样会先命中上一行；CE318→CE360 与 CE326 台所 H 已由 §4.36 覆盖；其 outdoor/半支/自然入口剩余边界已由 §4.37 覆盖。
 
 ### 4.36 浴室/台所 H 运行时分支（2026-11-16）
 
@@ -482,7 +482,18 @@
 - **CE318**：夹具为睡衣 `80..87=1`、`1600010=0`、`var21=trust`，其余 `16=10,102=100,23=9,103=2`；`StartEvent(318)` 后 `@124 op102[4]` 的 idx1 是二人分支（`self[5]/[6]` 无零售字符串时显示 `0`，所以按 index 选，不按文本）。信頼 100 时 `@213` 放行、`@219 op210[500360,0]` 启动 CE360，台词「……一起洗？可以啊……」「……两个人一起洗是不是太窄了？」「和妹妹一起洗了澡。」；信頼 99 时 `@213` 拦住，只出「诶，和哥哥一起洗？……算了吧。」，无 CE360。
 - **CE326**：`StartEventAt(326,799)` 聚焦台所段，真实门 `@801/803/805` 为 `var424>=3`、`var18>=100`、`var16>=1`；`@814 op102[18]` 选 idx0（性欲优先）后经 `@820 op210[500502,4,1,...]` 启动 CE502，台词含「可以哦……来享用吧♥」「啊……插进来了……♥」，`var16` 5→4；idx1 走食欲线，不启动 CE502。负例 `18=99` 直接无选项、不启动 CE502，`var16` 保持 5。
 - **结果**：`godot/tests_gd/HSceneTest.tscn` headless EXIT=0，`H_SCENE_TEST_OK checks=53 messages=7`（CE310 A/B/C、CE323、CE335、CE318×2、CE326×2），无 fault。
-- **边界**：CE326 仍从 `@799` 聚焦进入，未从烹饪菜单自然走到；CE318 的乳交 `var327` 与欲求不満半支未覆盖；CE318/CE326 都使用最小夹具，不是零售存档的完整日程。
+- **边界**：CE326 仍从 `@799` 聚焦进入，未从烹饪菜单自然走到；CE318 的乳交 `var327` 与欲求不満半支未覆盖；CE318/CE326 都使用最小夹具，不是零售存档的完整日程。以上三项已由 §4.37/D-46 关闭（自然入口只到 CE326 生成，`@799` H 仍用本节夹具；`var327` 不是 CE318 门）。
+
+### 4.37 泳池/海边 H、欲求不満半支与 CE326 自然晚餐入口（2026-11-16）
+
+来源：用户 m20284「完成剩余边界」。目标是把 §4.27/§4.36 留下的三个 H 边界从“只有门数据/只能聚焦”推进到生产 VM 的真实分支：CE310 泳池/海边、CE318 `@338/@415` 半支、CE326 自然晚餐入口。
+
+- **CE310 outdoor**：从 `StartEventAt(310,731)` 聚焦，夹具 `265=1,455=1,424=1,22=120,16=5`。`@731/733/735/739/741` 是五个嵌套单条件门（処女喪失/起こした回数/挿入経験/性興味/発情度）；`102=30` 全过，body 写 `var150=452=456=1`、`var424` 1→2、`var22` 120→125、`var16` 5→4，台词「要在……这里做么」「既然哥哥那么想」。`102=29` 在 `@741` 被拒，`var452/424` 不变，台词「回家再做哦」「下次再一起去吧」。
+- **CE318 半支**：`@338` 与 `@415` 是同一个两档 op111（`[2,2000103,2,1,2000102,75,1]`），首真命中：先 `var103>=2`，否则 `var102>=75`。用擦身选项 idx2 走到该块：`var103=2,102=100` 时 `var131/206` 各 +2；`var103=0,102=80` 时各 +1；两者都 `var103-1`、`var102-25`，台词「谢谢你，哥哥」。
+- **CE326 自然入口**：`StartEvent(327)`、`var69=0`、选 idx0 休息（“是”），把时间推到 18:00、`var69=1`，经 `CE325`、`CE226` 后 `pc17 op210[500326,1,1]` 自然生成 CE326，晚餐台词含「今天的晚饭」。`@799` 台所 H 仍由 §4.36 的 `StartEventAt(326,799)` 夹具覆盖：本组种子在晚餐分支结束后 `var18` 已从 180 降到 110，没有再进入 `@801` 的台所段。
+- **`var327` 更正**：全 550 事件扫 op111，含 `var327` 的只有 CE234 pc399（三档）、CE247 pc694（`==0`）、CE361 pc8（`>=2`）；CE318 与 CE360 内没有显式门。因此“CE318 乳交 `var327`”不是可独立驱动的 CE318 边界，本任务以 `@338/@415` 的 `var103` 半支收口。
+- **结果**：`godot/tests_gd/HSceneTest.tscn` headless EXIT=0，`H_SCENE_TEST_OK checks=92 messages=7`（原 53，新增 outdoor 17、半支 10、自然入口 5，共 32 条断言），无 fault。
+- **边界**：CE310 outdoor 从 `@731` 聚焦、CE326 自然入口只到 CE326 生成，两者都不是零售存档的完整日程；CE318 用最小睡衣夹具；`@799` 台所 H 的真实晚餐分支仍未自然到达。
 
 ---
 
@@ -501,7 +512,7 @@
 11. **战斗 wiring**：`CE239` 真实回合经 `CE242` 命令、`350/343/352` 结算并返回已由 `BattleWiringTest` 覆盖（§4.24，D-29）；`CE253` 自然日线、真实 `CE159` 命令 dispatch 与伤害矩阵已由 §4.33/§4.34 覆盖，H 场景已由 §4.35 覆盖。
 12. **战斗目标选择**：`CE190/CE175` 的敌人生成/坐标倍率与 `CE162` 的敌方索引 0 选择已由 `BattleTargetTest` 覆盖（§4.25，D-30）；`CE159` 技能选择执行入口仍未接，伤害/胜负矩阵已由 §4.34 覆盖。
 13. **技能目标入口**：`CE159` 尾段（场景 1/2、目标 10..12）到 `CE162` 的生成与选中退出已由 `BattleSkillTargetTest` 覆盖（§4.26，D-31）；入口仍从 pc94 注入，生产命令链未接。
-14. **H 阈值**：37 个真实 op111 载荷与 59 个阈值/多条件边界已由 `HEventGateTest` 钉住（§4.27，D-32），输出带 `data_only=1`；H 场景已由 §4.35 覆盖（CE310 A/B/C、CE323、CE335），CE318→CE360 与 CE326 台所 H 已由 §4.36 覆盖；CE326 烹饪菜单入口、CE318 乳交/欲求不満支仍未接。
+14. **H 阈值**：37 个真实 op111 载荷与 59 个阈值/多条件边界已由 `HEventGateTest` 钉住（§4.27，D-32），输出带 `data_only=1`；H 场景已由 §4.35 覆盖（CE310 A/B/C、CE323、CE335），CE318→CE360 与 CE326 台所 H 已由 §4.36 覆盖，CE310 outdoor/CE318 半支/CE326 自然晚餐入口已由 §4.37 覆盖；`@799` 台所 H 的真实晚餐分支仍未自然到达。
 15. **第六轮审阅 P1/P2**：滚轮 126、同文件音频流隔离、未知 soundType 告警、图片容器镜像、严格 effects 对拍与 H 标记已收口（§4.28，D-33/D-34）；AutoEvents 新游戏复位按 D-33 拒绝；Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。
 16. **第七轮审阅 P1/P2**：故障返回标题重建 `GameSession`/`AutoEvents`，SE 复用缓存流，未知 soundType 按站点去重；D-35 增加 `reports/database_schema_audit.json` 静态审计并把两个 250 回退列标为 `retail-confirmed-label-absent`；零售 BasicData 哈希确认关闭 D-31（§4.29，D-36/D-37）。
 17. **自然战斗菜单桥**：`CE188` 菜单经 `CData 18/73/0` 游标提交 8 行，前两行技能 26/25；`CE253` 消费前两行并生成 `CE242` pc338/645 后 `CE244` 结算 `-1`（§4.30，D-38）。Rust 存档夹具的四轮 `+1` 已由 §4.34 接通（导入零售 800 vars + 16,800 CData cells 与 `PrimeLatched`），`+1/-1` 矩阵已覆盖，`-2` 记为边界。
