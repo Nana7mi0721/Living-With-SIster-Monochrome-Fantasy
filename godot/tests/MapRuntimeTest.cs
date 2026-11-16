@@ -227,5 +227,30 @@ public partial class MapRuntimeTest : Node
         Check(autorunRuntime.StartPending(vm) == 0, "finished autorun must not restart");
         Check(autorunRuntime.Events[0].Starts == 1, "autorun start counter must stay at one");
         Check(autorunRuntime.Events[0].Active == 0, "autorun page must stay active without a live instance");
+
+        // Switching to another page resets the per-page autorun budget
+        // (map_runtime.rs:1281), so returning to page 0 must run it again.
+        autorunDef.PageCount = 2;
+        autorunDef.Pages.Add(new MapEventPage
+        {
+            Page = 1,
+            Trigger = MapTrigger.Autorun,
+            Program = Program.FromSlots(2, "second", new List<Slot>()),
+            Conditions = new[]
+            {
+                new PageCondition { Enabled = true, Operator = 2, Variable = Magic.VarBase + 10, Value = 1 },
+                new PageCondition(),
+                new PageCondition(),
+                new PageCondition()
+            }
+        });
+        vm.Vars.Set(10, 1);
+        Check(autorunRuntime.StartPending(vm) == 1, "page 1 should start after the switch");
+        Check(autorunRuntime.Events[0].Active == 1 && autorunRuntime.Events[0].StartsOnPage == 1,
+            "page switch should reset the autorun budget for page 1");
+        vm.Vars.Set(10, 0);
+        Check(autorunRuntime.StartPending(vm) == 1, "returning to page 0 should start its autorun again");
+        Check(autorunRuntime.Events[0].Active == 0 && autorunRuntime.Events[0].Starts == 3,
+            "page 0 should own a second autorun start after switching back");
     }
 }

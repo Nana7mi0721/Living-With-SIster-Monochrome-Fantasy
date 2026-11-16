@@ -321,6 +321,9 @@ public sealed class MapRuntime
                     state.InstanceId = null;
                 }
                 state.Active = want;
+                // A new page owns a fresh autorun budget (map_runtime.rs:1281). Without
+                // this reset a page that once ran can never restart after switching back.
+                state.StartsOnPage = 0;
             }
 
             if (!state.Runs || state.Active is not int pageIndex) continue;
