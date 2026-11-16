@@ -10,12 +10,13 @@ use std::sync::Arc;
 use wolf_format as wf;
 use wolf_format::commonevent::CommonEventData;
 use wolf_game::auto_events::AutoEvents;
-use wolf_game::db::Databases;
+use wolf_game::db::{Container, Databases};
 use wolf_game::map_runtime::MapRuntime;
 use wolf_vm::exec::EventId;
 use wolf_vm::{
     ChoiceReply, DbOp, DbValue, Host, PictureCmd, Program, ProgramSet, SoundCmd, Vm,
 };
+use wolf_vm::exec::DbDirection;
 
 use crate::{
     json_args, json_escape, json_strings, picture_action, sound_action, sound_channel,
@@ -37,6 +38,7 @@ struct RouteHost {
     pending_choices: bool,
     reply: Option<ChoiceReply>,
     teleports: VecDeque<Teleport>,
+    databases: Databases,
 }
 
 impl Host for RouteHost {
@@ -104,6 +106,98 @@ impl Host for RouteHost {
             "{{\"kind\":\"database\",\"type\":{},\"data\":{},\"item\":{},\"value\":{}}}",
             op.db_type, op.data_id, op.item_id, value
         ));
+        let container = match op.container {
+            wolf_vm::DbContainer::CData => Container::CData,
+            wolf_vm::DbContainer::Sys => Container::Sys,
+            wolf_vm::DbContainer::Data => Container::Data,
+        };
+        let (db_type, column) = self.databases.resolve_labels(
+            container,
+            op.db_type,
+            op.item_id,
+            op.type_label.as_deref(),
+            op.field_label.as_deref(),
+        );
+        let row = op.data_id;
+        if op.direction == DbDirection::Write {
+            let databases = &mut self.databases;
+            if row == wolf_game::db::ROW_COUNT_SET {
+                if let Some(DbValue::Num(count)) = op.source.as_ref() {
+                    databases.set_row_count(container, db_type, *count);
+                }
+                return None;
+            }
+            if column == wolf_game::db::ROW_CLEAR_COLUMN {
+                databases.clear_row(container, db_type, row);
+                return None;
+            }
+            match op.source.as_ref() {
+                Some(DbValue::Num(operand)) => {
+                    let current = databases
+                        .engine_num(container, db_type, row, column)
+                        .or_else(|| {
+                            databases
+                                .row_exists(container, db_type, row)
+                                .then(|| databases.num(container, db_type, row, column))
+                                .flatten()
+                        })
+                        .unwrap_or(0);
+                    let value = combine_cell(op.op, current, *operand);
+                    databases.set_num(container, db_type, row, column, value);
+                }
+                Some(DbValue::Str(text)) => {
+                    databases.set_text(container, db_type, row, column, text);
+                }
+                None => {}
+            }
+            return None;
+        }
+        let databases = &self.databases;
+        if row == wolf_game::db::ROW_COUNT_QUERY {
+            let count = databases.row_count(container, db_type).unwrap_or(0);
+            return Some(DbValue::Num(i32::try_from(count).unwrap_or(i32::MAX)));
+        }
+        let wants_text = op.destination.is_some_and(|target| {
+            (wolf_vm::magic::STR_BASE..wolf_vm::magic::STR_BASE + 1_000_000).contains(&target)
+        });
+        let empty = || {
+            if wants_text {
+                DbValue::Str(String::new())
+            } else {
+                DbValue::Num(0)
+            }
+        };
+        if column == wolf_game::db::FIRST_EMPTY_COLUMN {
+            let row = databases.first_empty_row(container, db_type).unwrap_or(0);
+            return Some(DbValue::Num(row));
+        }
+        if column < 0 {
+            return Some(empty());
+        }
+        if let Some(number) = databases.engine_num(container, db_type, row, column) {
+            return Some(DbValue::Num(number));
+        }
+        if let Some(text) = databases.engine_text(container, db_type, row, column) {
+            return Some(DbValue::Str(text.to_owned()));
+        }
+        if databases.row_exists(container, db_type, row) {
+            if let Some(number) = databases.num(container, db_type, row, column) {
+                return Some(DbValue::Num(number));
+            }
+            if let Some(text) = databases.text(container, db_type, row, column) {
+                return Some(DbValue::Str(text.to_owned()));
+            }
+        } else if row >= wolf_game::db::EXTENSION_ROW_BASE {
+            return Some(empty());
+        } else if row >= 0 && databases.has_runtime_row_count(container, db_type) {
+            return Some(empty());
+        }
+        if databases
+            .field_count(container, db_type)
+            .is_some_and(|count| column >= i32::try_from(count).unwrap_or(i32::MAX))
+        {
+            return Some(empty());
+        }
         None
     }
 
@@ -152,6 +246,7 @@ impl Host for RouteHost {
 struct Route {
     vm: Vm,
     host: RouteHost,
+
     runtime: Option<MapRuntime>,
     map_id: i32,
     leader_x: i32,
@@ -159,10 +254,13 @@ struct Route {
 }
 
 impl Route {
-    fn new(vm: Vm) -> Self {
+    fn new(vm: Vm, databases: Databases) -> Self {
         Self {
             vm,
-            host: RouteHost::default(),
+            host: RouteHost {
+                databases,
+                ..RouteHost::default()
+            },
             runtime: None,
             map_id: -1,
             leader_x: 0,
@@ -188,7 +286,7 @@ impl Route {
         self.vm.start_program(Arc::new(program)).is_some()
     }
 
-    fn apply_teleports(&mut self, root: &Path, databases: &Databases) {
+    fn apply_teleports(&mut self, root: &Path) {
         while let Some(request) = self.host.teleports.pop_front() {
             if request.target != -1 && request.target != 0 {
                 continue;
@@ -203,9 +301,17 @@ impl Route {
             {
                 continue;
             }
+            let relative = self
+                .host
+                .databases
+                .map_path(request.map)
+                .map(str::to_owned);
+            let Some(relative) = relative else {
+                return;
+            };
             self.leader_x = request.x;
             self.leader_y = request.y;
-            self.enter_map(root, databases, request.map);
+            self.enter_map(root, &relative, request.map);
         }
     }
 
@@ -218,18 +324,14 @@ impl Route {
         self.start_event(&map, 1);
     }
 
-    fn enter_map(&mut self, root: &Path, _databases: &Databases, map_id: i32) {
+    fn enter_map(&mut self, root: &Path, relative: &str, map_id: i32) {
         self.stop_all();
         self.runtime = None;
-        // C# GameSession resolves a teleport map id through programs.json, whose
-        // ids come from converter/export/programs.py::_map_id (digits in the file
-        // stem, else 1000 + sorted index). SysDatabase rows use a different order
-        // (row 1 is SampleMapA, row 2 SampleMapA_1), so looking the id up in the
-        // SysDB would enter the wrong map for id 1.
-        let Some(relative) = map_file_for(root, map_id) else {
-            return;
-        };
-        let Some(map) = load_map(root, &relative) else {
+        // A 130 teleport map id is a SysDatabase type 0 row (column 0), exactly as
+        // C# GameSession.EnterMap resolves it (D-39). Row 1 is SampleMapA and row 2
+        // is SampleMapA_1; the converter artifact id is only the trace identity, so
+        // map ids stay comparable with programs.json output.
+        let Some(map) = load_map(root, relative) else {
             return;
         };
         // GameSession.EnterMap clamps a teleport target that lands outside the
@@ -242,16 +344,17 @@ impl Route {
         let mut runtime = MapRuntime::collect(&map);
         runtime.place_leader(self.leader_x, self.leader_y, None);
         self.runtime = Some(runtime);
-        self.map_id = map_id;
+        self.map_id = artifact_id_for_file(root, &relative).unwrap_or(map_id);
         if let Some(runtime) = self.runtime.as_mut() {
             runtime.start_pending(&mut self.vm);
         }
     }
 }
 
-fn map_file_for(root: &Path, map_id: i32) -> Option<String> {
+fn artifact_id_for_file(root: &Path, relative: &str) -> Option<i32> {
     // Mirror converter/export/programs.py::_map_id: a file stem that contains
     // digits takes that number, otherwise the sorted index plus 1000.
+    let target = Path::new(relative).file_name()?.to_string_lossy();
     let map_dir = root.join("MapData");
     let mut names: Vec<String> = std::fs::read_dir(map_dir)
         .ok()?
@@ -261,16 +364,16 @@ fn map_file_for(root: &Path, map_id: i32) -> Option<String> {
         .collect();
     names.sort();
     for (index, name) in names.iter().enumerate() {
+        if name != target.as_ref() {
+            continue;
+        }
         let stem = name.rsplit_once('.').map_or(name.as_str(), |(stem, _)| stem);
         let digits: String = stem.chars().filter(char::is_ascii_digit).collect();
-        let id = if digits.is_empty() {
+        return Some(if digits.is_empty() {
             1000 + index as i32
         } else {
             digits.parse::<i32>().ok()?
-        };
-        if id == map_id {
-            return Some(format!("MapData/{name}"));
-        }
+        });
     }
     None
 }
@@ -296,6 +399,19 @@ fn vars_json(values: &[(i32, i32)]) -> String {
         .map(|(address, value)| format!("\"{address}\":{value}"))
         .collect::<Vec<_>>()
         .join(",")
+}
+
+fn combine_cell(op: u8, current: i32, operand: i32) -> i32 {
+    match op {
+        1 => current.wrapping_add(operand),
+        2 => current.wrapping_sub(operand),
+        3 => current.wrapping_mul(operand),
+        4 if operand != 0 => current / operand,
+        5 if operand != 0 => current % operand,
+        6 => current.max(operand),
+        7 => current.min(operand),
+        _ => operand,
+    }
 }
 
 fn str_vars_json(values: &[(i32, String)]) -> String {
@@ -326,7 +442,7 @@ pub fn run_route(root: &Path, frames: usize) -> ExitCode {
 
     let mut vm = Vm::new(programs);
     vm.step_trace = Some(Vec::new());
-    let mut route = Route::new(vm);
+    let mut route = Route::new(vm, databases);
     let mut auto_events = AutoEvents::from_common_events(&events);
 
     let Some(title) = load_title(root) else {
@@ -357,7 +473,7 @@ pub fn run_route(root: &Path, frames: usize) -> ExitCode {
         if let Some(runtime) = route.runtime.as_mut() {
             runtime.start_pending(&mut route.vm);
         }
-        route.apply_teleports(root, &databases);
+        route.apply_teleports(root);
     }
 
     let entries = route.vm.step_trace.as_deref().unwrap_or(&[]);
@@ -391,7 +507,7 @@ pub fn run_route(root: &Path, frames: usize) -> ExitCode {
     }
 
     let document = format!(
-        "{{\"schema\":\"wolf.route\",\"schema_version\":1,\"route\":\"title_newgame_map1\",\"frames\":{},\"total_steps\":{},\"steps\":[{}]}}",
+        "{{\"schema\":\"wolf.route\",\"schema_version\":1,\"route\":\"title_newgame_map1005\",\"frames\":{},\"total_steps\":{},\"steps\":[{}]}}",
         frames,
         entries.len(),
         steps

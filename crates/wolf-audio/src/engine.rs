@@ -226,6 +226,16 @@ impl Engine {
             (SoundChannel::Bgm, SoundAction::Stop) => {
                 self.stop_bgm(cmd.frames.max(0) as u32);
             }
+            // The mixer has one looping bus, so BGS shares it with BGM until a third
+            // voice is added; routing it through BGM is closer than muting it.
+            (SoundChannel::Bgs, SoundAction::Play) => {
+                if let Err(err) = self.play_bgm_with_volume(&cmd.file, true, volume) {
+                    self.warn_once(&cmd.file, &err);
+                }
+            }
+            (SoundChannel::Bgs, SoundAction::Stop) => {
+                self.stop_bgm(cmd.frames.max(0) as u32);
+            }
             (SoundChannel::Se, SoundAction::Play) => {
                 if let Err(err) = self.play_se_with_volume(&cmd.file, volume) {
                     self.warn_once(&cmd.file, &err);

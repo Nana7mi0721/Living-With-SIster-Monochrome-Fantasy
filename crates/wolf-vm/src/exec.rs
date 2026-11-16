@@ -272,6 +272,9 @@ pub enum PictureAction {
 pub enum SoundChannel {
     /// Background music.
     Bgm,
+    /// Background sound (ambient loop); the retail opcode bitfield distinguishes
+    /// it from BGM even though the current mixer has only one looping bus.
+    Bgs,
     /// Sound effect.
     Se,
 }
@@ -2297,10 +2300,12 @@ fn execute(
                 // fade time was 0 and rendered 10 as 10%. The retail data's [4] values
                 // are the sane 0..100 (200 for the loud SE), so read [4] here.
                 let bits = arg(cmd, 0);
-                let channel = if bits & 0x20 != 0 {
-                    SoundChannel::Se
-                } else {
-                    SoundChannel::Bgm
+                // intArgs[0] >> 4 is the channel: 0=BGM, 1=BGS, 2=SE (the same
+                // decode as C# EventVm and the editor's bitfield documentation).
+                let channel = match (bits >> 4) & 0x07 {
+                    1 => SoundChannel::Bgs,
+                    2 => SoundChannel::Se,
+                    _ => SoundChannel::Bgm,
                 };
                 let playing = bits >= 0 && bits & 0x0200_0000 != 0;
                 let (action, file, volume, frames) = if playing {

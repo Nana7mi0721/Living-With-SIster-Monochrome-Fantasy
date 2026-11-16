@@ -104,8 +104,8 @@ func _ready() -> void:
 		else:
 			if root.frames != 418:
 				failures.append("scripted session should stop at frame 418 (got %d)" % root.frames)
-			if root.session.MapId != 1:
-				failures.append("scripted session should land on map 1 (got %d)" % root.session.MapId)
+			if root.session.MapId != 1005:
+				failures.append("scripted session should land on SampleMapA 1005 (got %d)" % root.session.MapId)
 			if root.session.LeaderX != 62 or root.session.LeaderY != 35:
 				failures.append("leader should stand at 62,35 (got %d,%d)" % [root.session.LeaderX, root.session.LeaderY])
 			if not root.map_view.visible:
@@ -151,7 +151,7 @@ func _ready() -> void:
 				failures.append("LoadGame should restore the slot")
 			if root.session.Frames != saved_frames:
 				failures.append("load must restore the saved frame count (got %d, want %d)" % [root.session.Frames, saved_frames])
-			if root.session.MapId != 1 or root.session.LeaderX != 62 or root.session.LeaderY != 35:
+			if root.session.MapId != 1005 or root.session.LeaderX != 62 or root.session.LeaderY != 35:
 				failures.append("load must restore the saved map and leader position")
 			if root.audio.track_count() != live_before:
 				failures.append("load must restore %d audio tracks (got %d)" % [live_before, root.audio.track_count()])

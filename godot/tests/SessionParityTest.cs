@@ -7,8 +7,9 @@ namespace Lwsmf.Tests;
 
 /// <summary>
 /// W3 Day4 parity gate, retired-adapter form: the core GameSession must reproduce the
-/// frozen title -> new game -> map -> save state that the old TitleScreen path captured
-/// (oracle/fixtures/session_core_save_state.json, play_frames=418).
+/// frozen title -> new game -> SampleMapA -> save state (oracle/fixtures/
+/// session_core_save_state.json, play_frames=418). The fixture was regenerated after D-39
+/// fixed opcode 130 to resolve SysDatabase row 1 as SampleMapA (artifact 1005).
 /// </summary>
 public partial class SessionParityTest : Node
 {
@@ -70,7 +71,7 @@ public partial class SessionParityTest : Node
         string coreJson = Normalize(SaveCodec.ToJson(core));
         Check(coreJson.Length > 0, "core state must serialize");
         Check(core.PlayFrames == 418, $"frozen route must stay at 418 frames (got {core.PlayFrames})");
-        Check(core.MapId == 1, $"frozen route must land on map 1 (got {core.MapId})");
+        Check(core.MapId == 1005, $"frozen route must land on SampleMapA artifact 1005 (got {core.MapId})");
         Check(core.LeaderX == 62 && core.LeaderY == 35,
             $"frozen route must place the leader at 62,35 (got {core.LeaderX},{core.LeaderY})");
 

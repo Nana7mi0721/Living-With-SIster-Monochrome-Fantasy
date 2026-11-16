@@ -419,20 +419,30 @@
 - **边界**：只证明 provider 链 `CE188 → CE157 → BattleWiring → CE253 → CE239/CE242 → CE244` 的真实运行；不证明胜利、多轮、伤害矩阵或逃跑。
 - **门禁**：Smoke `reports/menu_bridge_clean.log` EXIT=0，含 `BATTLE_MENU_BRIDGE_TEST_OK` 与 `SMOKE_OK`；全量门禁另跑。
 
+### 4.31 SysDatabase 地图解析、Autorun 守卫与冷启动日线（2026-11-15）
+
+- **来源**：用户 `m14937`「继续推进」；继续 M3 冷启动与整路线。此前 `ColdStartDayTest` 只到 bedroom，`vars 160` 永不写。
+- **地图语义（D-39）**：`op130` 的 map 参数是 SysDatabase type0 行号，不是 `programs.json` artifact id。`Sys` row0=`TitleMap.mps`、row1=`SampleMapA.mps`、row2=`SampleMapA_1.mps`、row3=`Map003.mps`；旧 C# `EnterMap` 按 artifact id 1 进了只有 12 事件的 `SampleMapA_1`，所以 day0 永不推进。现新增 `GameDatabase.ReadText(DbContainer,int,int,int)`、`IVmSession.MapPath` 与 `VmController.MapPath`；`GameSession.EnterMap` 先取文件路径再 `ProgramLoader.LoadMap(path,null)`，空路径才退回 artifact id。Rust `route.rs` 同步改用 `Databases::map_path`，只把内部 trace 的 `map_id` 标成 artifact 1005。
+- **冷启动日线**：`godot/tests_gd/ColdStartDayTest.gd` 走生产 `GameRoot`：标题→新游戏→bedroom（断言 `session.MapId==1005`）→归一化 295/68→等 picture120→day1 18:30→点姐姐→action→点 (512,450)→睡眠 choice（两项且为 `是/算了`）→选 0→day2 08:30，断言 weekday=1、pictures>20。输出 `COLD_START_DAY_TEST_OK day=2 hour=8 minute=30 weekday=1 pictures=60`。
+- **Autorun 守卫（D-40）**：`MapRuntime.StartPending` 在 `StartsOnPage > 0 && !Trigger.IsLooping()` 时跳过。SampleMapA event0（Autorun）此前每帧结束后被重建，frame1162 多出 event0 op180，累计 2,176 步。修正后 C# `RouteTraceTest` 从 151,423 步回到 **149,247**，Rust `route` 同为 149,247，`ROUTE_DIFF_OK 149247/149247`。`MapRuntimeTest` 的新合成 Autorun 断言首次 `StartPending==1`、二次 0 且 `Starts==1`。
+- **Oracle 重生成**：`oracle/fixtures/main_route_rust_trace.json.gz` 替换为 map1005 的 149,247 步（gzip 913,711 B）；`oracle/fixtures/session_core_save_state.json` 按 418 帧 SampleMapA 状态重生成（map 1005、leader 62,35）；`RouteTraceTest`、`SaveLoadTest`、`PresentationTest`、`GameRootTest` 的 map1 断言全部迁到 1005；`SessionParityTest` 断言 `core.MapId==1005`。
+- **测试**：`SMOKE_OK`；`PRESENTATION_TEST_OK phase=bedroom frames=418`；`SAVE_LOAD_TEST_OK 98/98`（事件 4 改为 SampleMapA page4：63=1/62=0/464=0/60=0）；`SESSION_PARITY_TEST_OK checks=10 frames=418 core=frozen`；`ROUTE_TRACE_TEST_OK steps=149247 map=1005 leader=62,35 save_load=ok`；`COLD_START_DAY_TEST_OK`；`MAP_RUNTIME_TEST_OK 56/56`。31 步门禁双模式全绿：`reports/gate_map1005_headless4.log`、`reports/gate_map1005_windowed.log` 均 `GODOT_GATE_OK`，含 `ROUTE_DIFF_OK 149247/149247`；Rust `cargo test -p wolf-vm -p wolf-audio -p wolf-cli --lib` 95 passed。
+- **边界**：冷启动只到 day2 08:30，未跑完整 30 天；`SaveLoadTest` 的传送目标仍是合成 map 1008；事件 4 page4 的选择路径是测试用条件变量触发，不是自然日推进的唯一路径；胜利/伤害矩阵与 H 仍未接。
+
 ---
 
-## 5. 下一步（M2 入口）
+## 5. 下一步（M3 入口）
 
 1. ~~**输入与 UI 骨架**：InputRouter、9 级图层、101/102 自绘与字体度量~~（W2 Day 2–4 已完成，见 §4.5；第三轮审阅 P1 交互/存档缺陷见 §4.6；D-13/D-14 与 KeyCodes/缓存/传送收敛见 §4.7）；GameRoot 已接管标题→新游戏→卧室→F5/F9（§4.8），`project.godot` 主场景已切到 `GameRoot.tscn`（§4.9），旧表现层已退役（§4.13）。
 2. **地图呈现**：tile 图层与地形通行已接通（§4.8）；MapChip 为引擎通用素材，正片未使用，调色板占位仅回归辅助；OVERVIEW 保留。
-3. **整段 trace**：SampleMapA 事件 0 的 418 帧逐指令对拍（§4.5/§4.9，2461/2461）与整路线 1500 帧（§4.12/§4.23，73814/73814）均已打通；整路线只覆盖标题菜单 1 次选择，白天 101/102 消息/选择仍靠单独用例。
-4. **日程/时间**：确定性时钟与 30 天就寝链已打通（§4.10）；HUD 时间已由 `CE217` 的 6200 真实渲染（§4.14）；白天 `CE251/CE310` 的图片菜单点击、确认与日程/体力推进已由 §4.16 端到端覆盖。仍未做“从冷启动进入白天”的剧情夹具。
+3. **整段 trace**：SampleMapA 事件 0 的 418 帧逐指令对拍（§4.5/§4.9，2461/2461）与整路线 1500 帧（§4.31，149247/149247，map1005）均已打通；整路线只覆盖标题菜单 1 次选择，白天 101/102 消息/选择仍靠单独用例。
+4. **日程/时间**：确定性时钟与 30 天就寝链已打通（§4.10）；HUD 时间已由 `CE217` 的 6200 真实渲染（§4.14）；白天 `CE251/CE310` 的图片菜单点击、确认与日程/体力推进已由 §4.16 端到端覆盖；从冷启动进入白天已由 `ColdStartDayTest` 覆盖到 day2 08:30（§4.31）。
 5. **输入权限**：`123/126` 已按官方三态/设备分支实现并由两侧单测覆盖（§4.15，D-20）；表现层已按 §4.18 接线（D-23）；`123` mask 的逐位表与 `126` target 的具体键对应仍待编辑器差分，不阻塞本作。
 6. **故障恢复**：D-13 除锁档/诊断包外已支持显式「返回标题」重建标题安全点（§4.17）；返回标题时会清 `InputRouter` 指针/帧 latch，F9 读档故障进入模态（§4.18）；存档槽级安全点回滚留 M5。
 7. **原版 `.sav` 导入**：起始/结束字节与可选 checksum 严格校验、严格 UTF-8 + replacement 告警已落地（§4.20，D-25）；零售 8 槽 `SAVE_IMPORT_OK 8/8`；回写原版 `.sav` 仍不在 M3 范围。
 8. **数据库**：`250` 的三容器读写、`.project` 标签漂移、覆盖层与扩展行已落地并由 `DATABASE_TEST_OK .../vm-250` 覆盖（§4.21，D-26）；战斗 `CE152/CE188` 的命令可用性切片已由 §4.22 接到该宿主，完整战斗回合仍需。
-9. **战斗命令切片**：`CE188→CE152→CE192` 的空库存/有道具两条线已由 `BattleCommandTest` 覆盖（§4.22，D-27）；真实回合已由 §4.24 接上 CE239/CE242，目标选择与伤害胜负仍未接。
-10. **自动事件**：98 个并行事件已由 `AutoEvents` 调度并接入 `GameSession`，整路线同步后两侧均为 73,814 步（§4.23，D-28）；HUD 读档重放之外的引擎接线仍未接。
+9. **战斗命令切片**：`CE188→CE152→CE192` 的空库存/有道具两条线已由 `BattleCommandTest` 覆盖（§4.22，D-27）；真实回合已由 §4.24 接上 CE239/CE242，目标选择已由 §4.25/§4.26 接，伤害/胜负矩阵仍未接。
+10. **自动事件**：98 个并行事件已由 `AutoEvents` 调度并接入 `GameSession`，整路线同步后两侧为 149,247 步（§4.31；D-39/D-40 后，D-28 时 73,814）；HUD 读档重放之外的引擎接线仍未接。
 11. **战斗 wiring**：`CE239` 真实回合经 `CE242` 命令、`350/343/352` 结算并返回已由 `BattleWiringTest` 覆盖（§4.24，D-29）；`CE253` 自然日线、真实 `CE159` 命令 dispatch、伤害矩阵与 H 仍未接。
 12. **战斗目标选择**：`CE190/CE175` 的敌人生成/坐标倍率与 `CE162` 的敌方索引 0 选择已由 `BattleTargetTest` 覆盖（§4.25，D-30）；`CE159` 技能选择执行入口、伤害/胜负矩阵仍未接。
 13. **技能目标入口**：`CE159` 尾段（场景 1/2、目标 10..12）到 `CE162` 的生成与选中退出已由 `BattleSkillTargetTest` 覆盖（§4.26，D-31）；入口仍从 pc94 注入，生产命令链未接。
@@ -440,4 +450,5 @@
 15. **第六轮审阅 P1/P2**：滚轮 126、同文件音频流隔离、未知 soundType 告警、图片容器镜像、严格 effects 对拍与 H 标记已收口（§4.28，D-33/D-34）；AutoEvents 新游戏复位按 D-33 拒绝；Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。
 16. **第七轮审阅 P1/P2**：故障返回标题重建 `GameSession`/`AutoEvents`，SE 复用缓存流，未知 soundType 按站点去重；D-35 增加 `reports/database_schema_audit.json` 静态审计并把两个 250 回退列标为 `retail-confirmed-label-absent`；零售 BasicData 哈希确认关闭 D-31（§4.29，D-36/D-37）。
 17. **自然战斗菜单桥**：`CE188` 菜单经 `CData 18/73/0` 游标提交 8 行，前两行技能 26/25；`CE253` 消费前两行并生成 `CE242` pc338/645 后 `CE244` 结算 `-1`（§4.30，D-38）。Rust 存档夹具的四轮 `+1` 仍待存档/CE143 物化，胜利与伤害矩阵仍未接。
-18. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
+18. **地图语义、Autorun 与冷启动**：`op130` 按 SysDatabase type0 行号进入 SampleMapA（artifact 1005），`MapRuntime` 补 Autorun 只启动一次守卫，整路线 149,247/149,247；`ColdStartDayTest` 从标题到 day2 08:30（§4.31，D-39/D-40）。四轮 `+1`、伤害/胜负矩阵与 H 场景仍待。
+19. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

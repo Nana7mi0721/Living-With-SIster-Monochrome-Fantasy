@@ -486,6 +486,13 @@ public sealed class GameDatabase
     private string TableText(DbContainer container, int dbType, int row, int column)
         => TryTableText(container, dbType, row, column, out string text) ? text : "";
 
+    /// <summary>Engine cells first, then the .dat table, like <see cref="Read"/>.</summary>
+    public string ReadText(DbContainer container, int dbType, int row, int column)
+    {
+        if (TryEngineText(container, dbType, row, column, out string text)) return text;
+        return TableText(container, dbType, row, column);
+    }
+
     private int TableNum(DbContainer container, int dbType, int row, int column)
         => TryTableNum(container, dbType, row, column, out int number) ? number : 0;
 

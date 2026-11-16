@@ -18,6 +18,8 @@ public interface IVmSession
     int LeaderFacing { get; set; }
     uint MovementDeny { get; }
     uint BasicAllDeny { get; }
+    /// <summary>Map file registered for a map id (SysDatabase type 0, column 0).</summary>
+    string MapPath(int mapId);
     bool ActionKeyRequested { get; set; }
     bool Faulted { get; }
     string FaultReason { get; }
@@ -591,7 +593,12 @@ public sealed class GameSession
         _vm.Map = null;
         _mapRuntime = null;
 
-        _map = ProgramLoader.LoadMap(_dataPath, "", mapId);
+        // Opcode 130 carries a SystemDB row, not the artifact map id: row 1 is
+        // SampleMapA, while programs.json's id 1 is SampleMapA_1. Resolve the file first.
+        string mapPath = _vm.MapPath(mapId);
+        _map = mapPath.Length > 0
+            ? ProgramLoader.LoadMap(_dataPath, mapPath, null)
+            : ProgramLoader.LoadMap(_dataPath, "", mapId);
         if (_map == null)
         {
             _view.SetStatus($"map {mapId} missing from programs.json");

@@ -207,5 +207,25 @@ public partial class MapRuntimeTest : Node
             Check(runtime.Events[0].Active == 1, "page must not change to none while the instance waits on a child");
             Check(runtime.Events[0].InstanceId == inst.Id, "the child-waiting instance must survive");
         }
+
+        // Autorun fires once per activation; a finished autorun must not be
+        // recreated by the next StartPending (parallel pages are the only trigger
+        // that restarts on its own, map_runtime.rs:1310).
+        var autorunMap = new MapDefinition { Id = 10, File = "Autorun.mps", Name = "autorun", Width = 8, Height = 8 };
+        var autorunDef = new MapEventDef { Id = 1, Name = "autorun", X = 1, Y = 1, PageCount = 1 };
+        autorunDef.Pages.Add(new MapEventPage
+        {
+            Page = 0,
+            Trigger = MapTrigger.Autorun,
+            Program = Program.FromSlots(2, "empty", new List<Slot>())
+        });
+        autorunMap.Events.Add(autorunDef);
+        var autorunRuntime = new MapRuntime(autorunMap);
+        Check(autorunRuntime.StartPending(vm) == 1, "autorun page should start once");
+        Check(autorunRuntime.Events[0].Starts == 1 && autorunRuntime.Events[0].StartsOnPage == 1,
+            "autorun start counters should record one activation");
+        Check(autorunRuntime.StartPending(vm) == 0, "finished autorun must not restart");
+        Check(autorunRuntime.Events[0].Starts == 1, "autorun start counter must stay at one");
+        Check(autorunRuntime.Events[0].Active == 0, "autorun page must stay active without a live instance");
     }
 }

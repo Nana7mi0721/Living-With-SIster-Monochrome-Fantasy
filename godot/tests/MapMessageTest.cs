@@ -7,9 +7,9 @@ using Lwsmf.Presentation;
 namespace Lwsmf.Tests;
 
 /// <summary>
-/// Drives the core session into map 1, flips the page condition that arms event 4
-/// (会話メニュー処理, autorun) and checks that a map event page really opens the
-/// message/choice windows through the GameSession view.
+/// Drives the core session into SampleMapA (artifact 1005), arms event 4 page 4 (parallel
+/// 会話メニュー処理: 63=1, 62=0, 464=0, 60=0) and checks that a map event page really opens
+/// the message/choice windows through the GameSession view.
 /// </summary>
 public partial class MapMessageTest : Node
 {
@@ -67,9 +67,11 @@ public partial class MapMessageTest : Node
         // Stop auto-dismissing so the first map-authored message stays on screen.
         session.ScriptedInput = false;
 
-        // Raw magic 2000030 decodes to normal variable 30; page 0 of event 4 needs it set to 1
-        // and 2000048 (variable 48) to 0, which is the default.
-        vm.SetVar(30, 1);
+        // SampleMapA event 4 page 4 gate: 2000063=1, 2000062=0, 2000464=0, 2000060=0.
+        vm.SetVar(63, 1);
+        vm.SetVar(62, 0);
+        vm.SetVar(464, 0);
+        vm.SetVar(60, 0);
 
         int wait = 0;
         while (wait < 3000 && !vm.IsWaitingForMessage() && !view.HasChoices)
@@ -89,9 +91,9 @@ public partial class MapMessageTest : Node
         }
 
         Check(session.MapRuntime != null, "map runtime exists");
-        var event4 = session.MapRuntime?.Events.FirstOrDefault(e => e.Def.Id == 4);
+        var event4 = session.MapRuntime?.Events.FirstOrDefault(e => e.Def.Id == 4 && e.InstanceId > 0);
         Check(event4 != null, "event 4 is in the runtime");
-        Check(event4?.Active == 0, $"event 4 selected page 0 (active={event4?.Active})");
+        Check(event4?.Active == 4, $"event 4 selected page 4 (active={event4?.Active})");
         Check(event4?.InstanceId != null, "event 4 page instance is live");
 
         // Walk the dialogue the page started (it calls a common event first): dismiss messages

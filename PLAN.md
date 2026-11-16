@@ -14,7 +14,7 @@
 ## 当前状态
 
 - 目标：Godot 4.7.2 .NET，Windows x64；C# 核心 + GDScript 表现层。
-- 阶段：**M1 已完成 (2026-11-14) / 进入 M2 主循环与 UI**。
+- 阶段：**M1 已完成 (2026-11-14) / M2 主循环与 UI 已收口 / M3 战斗与 H 进行中 (2026-11-15)**。
 - 最终运行时不使用 Rust；Rust 只作为开发期 Oracle 保留到 M4。
 - 内容目标：550 公共事件、73 地图事件、169,831 条真实指令、9 结局与 DLC。
 - 存档目标：原版 `.sav` 尽力导入；新版本保存 VM/地图事件/对话/RNG，临时文件+fsync+原子写入。
@@ -32,7 +32,7 @@
 ## M1 达成成果
 
 1. C# EventVM、MINSTD PRNG、事件调度/等待/调用栈与地图事件页运行时。
-2. 纵向切片走通：`标题 CE42 → 新游戏 → map 3 → map 1`，418 帧进入可操作地图。
+2. 纵向切片走通：`标题 CE42 → 新游戏 → map 3 → SampleMapA（artifact 1005）`，418 帧进入可操作地图。
 3. 101 消息 / 102 选择与地图事件 4 联通；地图行走、碰撞、0x08 穿透、PlayerTouch 接触框。
 4. JSON `lwsmf.save` v1：变量/地图事件/VM 实例 pc/wait/loops/self/RNG/对话，临时文件+fsync+原子替换；消息与选择中读档不重放。
 5. 12 道 headless 门槛全绿：`SAVE_LOAD_TEST_OK 47/47`、`MAP_RUNTIME_TEST_OK 51/51`、`MAP_MESSAGE_TEST_OK 12/12`。详见 [`docs/godot/M1_HANDOFF.md`](docs/godot/M1_HANDOFF.md)。
@@ -45,7 +45,7 @@
 12. M2 W3 Day-5：`project.godot` 主场景切到 `scenes/GameRoot.tscn`；Rust/C# 逐指令 trace 增 `vars`/`effects`，事件 0 的 418 帧 **2461/2461 全等（428 步 vars、330 步 effects、10 步 str_vars）**，Oracle 夹具与门禁同步更新。
 13. M2 W4 Day1-4：`140` 分离 BGM/BGS/SE（修复 43 条 BGS 误判），`AudioManager.gd` 三轨 + 循环点/淡入淡出，`SaveState.audio` 入档；`GameClock.cs` 镜像 `217` 的 13:70 单次进位与跨午夜/周末标志；真实 `CE329→CE317` 连续 30 天就寝 soak 通过；门槛 26/26，`SAVE_LOAD_TEST_OK 94/94`。
 14. M2 第四轮审阅加固：300 补 host `call` 副作用、BGS trace 归因 `bgs`、`diff_trace` 比较 `frame` 并增 `str_vars`；存档校验 `MapFile`/`LoopPoint`，非主角 teleport 忽略、队列上限 64；WAV 循环点帧→采样；`TerrainBridge` 让 `MapLayer` 复用唯一 C# 通行度实现。`SAVE_LOAD_TEST_OK 98/98`、`AUDIO_MANAGER_TEST_OK checks=30`、26/26 双模式全绿。
-15. M2 整路线 Oracle：Rust `route.rs` 与 C# `RouteTraceTest` 同跑 `TitleMap` event 2 → 新游戏 → map 1 的 1500 帧，**73,812/73,812 步全等**（12,469 步带 effects）；route 末尾 `SaveGame→LoadGame` 状态回路通过；`diff_route.py` 逐字段比较 `frame/map_id/event_id/pc/op/vars/str_vars/effects`。
+15. M2 整路线 Oracle：Rust `route.rs` 与 C# `RouteTraceTest` 同跑 `TitleMap` event 2 → 新游戏 → SampleMapA（artifact 1005）的 1500 帧，初版 **73,812/73,812**；D-39/D-40 修正地图语义与 Autorun 后为 **149,247/149,247**（第 33 条）。route 末尾 `SaveGame→LoadGame` 状态回路通过；`diff_route.py` 逐字段比较 `frame/map_id/event_id/pc/op/vars/str_vars/effects`。
 16. M2 旧表现层退役：`SessionParityTest` 改为 core-only（`oracle/fixtures/session_core_save_state.json`，`checks=9`），新增 `TestSessionView`/`SessionHarness` 并迁移 `SaveLoadTest 98/98`、`PresentationTest`、`MapMessageTest 14/14`；删除 `TitleScreen`/`ScreenHostView`/`ScreenHostSessionView`/`AssetCatalog`/`MapView`/`TitleScreen.tscn`/`ScreenshotTest`，保留 `VmController`/`GameSessionController`/`TerrainBridge`；门禁全绿。
 17. M2 图片状态/指针桥：`VmController` 缓存 `PictureCmd` 槽、委派 `124` 给 `PictureStage`（hover/existence/x/y/scale/text/屏幕层），`EngineState(7/8/9)` 左/右/中三态，`GameRoot` 传 `anchor`/`kind`；真实 `CE217` HUD 显示 `8:30`。`PICTURE_STATE_TEST_OK checks=37`，门禁扩到 28/28 双模式全绿（右键/中键见第 21 条）。
 18. M2 123/126 输入权限状态模型：`126` 改为「目标位 + 三态（常允许/移动禁/全禁）+ bit28 设备分支」，无自动清除；`123` mask 是复合 UI 位字段而非允许键掩码，改为标量键码后按权限过滤。Rust `InputState` 与 C# `EventVm` 同构，移动/选择分别读 `movement_deny`/`basic_all_deny`；`cargo test -p wolf-vm` 95 passed，route 仍 73,812/73,812，门禁 28/28。
@@ -55,7 +55,7 @@
 22. M3 原版 `.sav` 导入严格校验：`LegacySaveImporter` 校验起始/结束字节，`rejectBadChecksum` 可选严格拒绝；`ReadMemDataString` 先严格 UTF-8，失败按 replacement 记 `encoding_warnings`，`ImportAll` 非空时写 `reports/encoding_warnings.json`；`SAVE_IMPORT_OK 8/8`、`SAVE_IMPORT_VALIDATION_OK`，30 步门禁双绿（§4.20，D-25）。
 23. M3 `250` 数据库宿主：新增 `GameDatabase` 读 `database.json` 三容器与 `.project` 标签，脚本写走覆盖层（行数/清行/首空行/扩展行、8 种算子、数字写不覆盖文本）；`VmController` 加载 `DatabaseStore`，`EventVm` `250` 委派 host；`DATABASE_TEST_OK .../vm-250`，30 步门禁双绿（§4.21，D-26）。
 24. M3 战斗命令可用性切片：`CE188` 经 `CE152` 构建攻击命令，覆盖层播种队伍/敌数/命令槽/领队属性；空库存真实攻击行不可选，`CData 7/0/0=1` 后可选，均到 CE192 且不生成 CE244；`BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`，30 步门禁双绿（§4.22，D-27）。
-25. M3 AutoEvents 调度器与 route 同步：`Program` 解析条件四元组，`AutoEvents` 跟踪 98 个并行事件（跳过 43，allow-list 242/243），`GameSession` 在 VM step 前同步、读档后 `PrimeLatched`；Rust `route.rs` 同序同步后整路线 **73,814/73,814** 步全等，`AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`，30 步门禁双绿（§4.23，D-28）。
+25. M3 AutoEvents 调度器与 route 同步：`Program` 解析条件四元组，`AutoEvents` 跟踪 98 个并行事件（跳过 43，allow-list 242/243），`GameSession` 在 VM step 前同步、读档后 `PrimeLatched`；Rust `route.rs` 同序同步后整路线当时 **73,814/73,814** 步全等（D-39/D-40 后 149,247/149,247），`AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`，当时 30 步门禁双绿（§4.23，D-28）。
 26. M3 CE239/CE242 战斗 wiring：新增 `BattleWiring` 把 `340` rising、`CE157` 菜单命令、`CE242`/合成 `CE241` 与 `350/343/352` 结算接进 `GameSession`（AutoEvents → BattleWiring → VM step），`EventVm.CreateFreshInstance` 保证合成实例空白 `Self`；`BATTLE_WIRING_TEST_OK rounds=1 result=-1 ce242_pc=415`，30 步门禁双绿（§4.24，D-29）。
 27. M3 CE190/CE175 敌人生成与 CE162 目标选择：`GameDatabase` 补引擎默认坐标倍率 32/24 与窗口皮肤，读序为覆盖层 → 引擎层 → 文件层；`CE190/CE175` 写 512/-288/512/312，`CE162` 选中索引 0 并在 pc57 退出，无敌人时停 pc49/50；`BATTLE_TARGET_TEST_OK selected=1 control_pc=49 enemy_hp=100`，30 步门禁双绿（§4.25，D-30）。
 28. M3 CE159 技能尾段与 CE162 目标入口：覆盖层写 `Data 0/2/2=10`（效果目标）与 `Data 0/2/6=1`（可用场景），从 pc94 注入 CE159，经 pc110/115/244/247 启动 CE162，选中索引 0 后 pc57 退出；目标 0 不生成 CE162，敌数 0 时停 pc49/50；`BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`，30 步门禁双绿（§4.26，D-31）。
@@ -65,13 +65,15 @@
 
 32. M3 CE188→CE157→CE253 自然战斗菜单桥：`BattleWiring` 改为按 `CData 18/73/0` 游标 harvest 已提交的 CE157 行（CE157 pc82 尚未写表，旧 live 门槛只读 CE188 预填 0/0）；`BattleMenuBridgeTest` 用真实两成员 CE188 菜单收 8 行（前两行技能 26/25），`CE253` 消费队列前两项生成 CE242 pc338/645 后结算 `-1`。headless 无 `SaveData01.sav`，输出 `save_parity=0`；Rust 的四轮 `+1` 需 CE143 物化 CData type10（§4.30，D-38）。
 
-## 下一步（M2 主循环与 UI）
+33. M3 冷启动日线、SysDatabase 地图语义与 Autorun 守卫：`op130` 的 map 参数按 `SysDatabase` type0 行号解析（`SampleMapA` row1，不是 artifact `SampleMapA_1=1`），C# `EnterMap` 走 `VmController.MapPath → GameDatabase.ReadText`；`MapRuntime.StartPending` 补 Autorun 只启动一次守卫。整路线 C#/Rust 收敛到 **149,247/149,247**（map 1005），Oracle 夹具重生成；新增 `ColdStartDayTest` 从标题新游戏到 day2 08:30（`COLD_START_DAY_TEST_OK day=2 hour=8 minute=30 weekday=1`），门禁扩到 31 步（§4.31，D-39/D-40）。
+
+## 下一步（M3 战斗、H 与表现层收口）
 
 1. ~~InputRouter、9 级图层、101/102 自绘与字体度量~~（W2 Day 2–4 已完成）；~~第三轮审阅 P1 交互/存档缺陷~~（W3 Day-1 已完成）；~~`TitleScreen` 业务切到 `GameRoot.gd`~~（W3 Day-4 已完成）；~~主场景切到 `GameRoot.tscn`~~（W3 Day-5 已完成）。
 2. ~~tile 呈现、地形通行、地图点触、角色层~~（W3 Day-3 已完成）；MapChip 为引擎通用素材，正片未使用，调色板占位仅兼容/测试。
-3. ~~把“标题→新游戏→map 1”冻结成输入序列~~（整路线 1500 帧 73,814/73,814，§4.12/§4.23）；消息/选择只覆盖标题菜单 1 次，白天 101/102 与 save/load 的逐指令对拍仍待补。
-4. ~~日程/时间接入确定性时钟~~（W4 Day1-4 已完成）；HUD 时间已随图片状态桥显示（§4.14）；~~白天 `CE251/CE310` 工作菜单~~（2026-11-15 已完成端到端点击/日程/体力回归，§4.16；仍缺从冷启动进入白天的剧情夹具）。
-5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27）；AutoEvents 已接 98 个并行事件并同步 route（§4.23/D-28）；CE239/CE242 真实回合 wiring 已接（§4.24/D-29），CE162 目标选择直启已接（§4.25/D-30），CE159 技能尾段已接（§4.26/D-31），H 阈值数据面已接（§4.27/D-32）；第六轮 P2 的滚轮 126、音频流隔离、未知 soundType、图片镜像与严格 effects 已收口（§4.28/D-34），`101` 未读完取消与零售字体仍待运行时/零售证据；`CE253` 自然日线、真实 CE159 命令 dispatch、伤害矩阵与 H 场景（CE318→CE360）仍待；Data type0 列错位已由零售 BasicData 哈希确认不存在（D-37）；CE188→CE157 菜单桥已接通（§4.30/D-38），headless 夹具只到 2 轮 `-1`，四轮 `+1` 需零售存档或 CE143 物化。
+3. ~~把“标题→新游戏→SampleMapA（1005）”冻结成输入序列~~（整路线 1500 帧 149,247/149,247，§4.31，D-39/D-40）；冷启动日线已由 `ColdStartDayTest` 覆盖到 day2 08:30；消息/选择只覆盖标题菜单与睡眠选择，bat 101/102 与 save/load 的逐指令对拍仍待补。
+4. ~~日程/时间接入确定性时钟~~（W4 Day1-4 已完成）；HUD 时间已随图片状态桥显示（§4.14）；~~白天 `CE251/CE310` 工作菜单~~（2026-11-15 已完成端到端点击/日程/体力回归，§4.16）；~~从冷启动进入白天~~（`ColdStartDayTest` 已覆盖卧室→day1 18:30→睡眠→day2 08:30，§4.31）。
+5. ~~StrictMode 收口~~（W4 Day5 已完成：GameRoot 强制 true，D-15）；~~旧 `godot/presentation/*.cs` 退役~~（2026-11-15 已完成，`SessionParityTest` 已换 core 夹具）；~~发布期 Faulted 恢复策略~~（2026-11-15 已完成标题安全点恢复，§4.17；存档槽回退留 M5）；`123/126` 已按官方三态/设备分支实现并接到表现层（§4.15/D-20、§4.18/D-23），逐位表待编辑器差分；鼠标右键/中键三态已补齐（§4.19/D-24）；原版 `.sav` 导入严格校验已完成（§4.20/D-25）；`250` 数据库宿主与 CE188/CE152 命令可用性切片已落地（§4.21/D-26、§4.22/D-27）；AutoEvents 已接 98 个并行事件并同步 route（§4.23/D-28）；CE239/CE242 真实回合 wiring 已接（§4.24/D-29），CE162 目标选择直启已接（§4.25/D-30），CE159 技能尾段已接（§4.26/D-31），H 阈值数据面已接（§4.27/D-32）；第六轮 P2 的滚轮 126、音频流隔离、未知 soundType、图片镜像与严格 effects 已收口（§4.28/D-34），`101` 未读完取消与零售字体仍待运行时/零售证据；`CE253` 自然日线、真实 CE159 命令 dispatch、伤害矩阵与 H 场景（CE318→CE360）仍待；Data type0 列错位已由零售 BasicData 哈希确认不存在（D-37）；CE188→CE157 菜单桥已接通（§4.30/D-38），headless 夹具只到 2 轮 `-1`，四轮 `+1` 需零售存档或 CE143 物化；地图语义与 Autorun 守卫已由 D-39/D-40 收口，冷启动已到 day2 08:30（§4.31）。
 
 ## 约束
 

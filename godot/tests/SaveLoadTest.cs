@@ -9,7 +9,7 @@ using Lwsmf.Presentation;
 namespace Lwsmf.Tests;
 
 /// <summary>
-/// Walks the core title/new-game chain into map 1, writes save slot 01, mutates the live
+/// Walks the core title/new-game chain into SampleMapA (artifact 1005), writes save slot 01, mutates the live
 /// state, then reloads and checks that variables, leader and map came back. Also
 /// checkpoints an open message and an open choice: reload must reopen the window
 /// and resume the same instance at the same pc/wait instead of replaying opcode 101/102.
@@ -92,7 +92,7 @@ public partial class SaveLoadTest : Node
         Check(vars.GetStr(3) == "save-test", "string variable must come back");
         Check(session.LeaderX == savedX && session.LeaderY == savedY,
             $"leader must come back at {savedX},{savedY} (got {session.LeaderX},{session.LeaderY})");
-        Check(session.MapRuntime != null && session.MapData != null && session.MapData.Id == 1, "map 1 must be live after load");
+        Check(session.MapRuntime != null && session.MapData != null && session.MapData.Id == 1005, "SampleMapA (1005) must be live after load");
         Check(vm.Vm.Instances.Count > 0, "automatic pages should restart after load");
         Check(vm.Vm.CommonSelf.TryGetValue(99, out var restoredCommon) && restoredCommon.Get(600) == 42,
             "common-event self bank must survive save/load");
@@ -127,13 +127,18 @@ public partial class SaveLoadTest : Node
 
         // Arm the map's conversation page and save in the middle of its message: the load
         // must resume the same coroutine instead of replaying the opcode that opened it.
-        vars.Set(30, 1);
+        // SampleMapA event 4 page 4 (parallel): 63=1, 62=0, 464=0, 60=0 opens its
+        // message; the same page later offers the two-option sleep choice (pc 102).
+        vars.Set(63, 1);
+        vars.Set(62, 0);
+        vars.Set(464, 0);
+        vars.Set(60, 0);
         int messageGuard = 0;
         while (!vm.IsWaitingForMessage() && messageGuard++ < 2000) session.AdvanceFrame();
         Check(vm.IsWaitingForMessage(), "event 4 must open a message");
         Check(view.HasMessage, "view must show the message window");
         string messageText = view.MessageText;
-        MapEventState? event4 = session.MapRuntime?.Events.FirstOrDefault(e => e.Def.Id == 4);
+        MapEventState? event4 = session.MapRuntime?.Events.FirstOrDefault(e => e.Def.Id == 4 && e.InstanceId > 0);
         int liveId = event4?.InstanceId ?? -1;
         Instance? liveMessage = liveId > 0 ? vm.Vm.FindInstance(liveId) : null;
         Check(liveMessage != null, "event 4 must have a live instance while waiting");
@@ -150,7 +155,7 @@ public partial class SaveLoadTest : Node
         Check(resumed != null, "the same instance id must be live after load");
         Check(resumed?.Pc == savedPc, $"pc must resume at {savedPc} (got {resumed?.Pc})");
         Check((int)(resumed?.Wait.Kind ?? WaitStateKind.None) == savedWait, "wait state must resume unchanged");
-        Check(session.MapRuntime?.Events.FirstOrDefault(e => e.Def.Id == 4)?.InstanceId == liveId,
+        Check(session.MapRuntime?.Events.FirstOrDefault(e => e.Def.Id == 4 && e.InstanceId == liveId) != null,
             "map event 4 must point at the resumed instance");
 
         // Same checkpoint rule for a choice: reopen the options instead of rerunning the
@@ -199,7 +204,7 @@ public partial class SaveLoadTest : Node
         // A teleport is queued and applied at the frame boundary, never during the VM step
         // (M1-P1-06): the map switch must not free instances the frame is still walking.
         vm2.EmitSignal(VmController.SignalName.TeleportRequested, 0, 1008, 5, 7, 0);
-        Check(session2.MapData?.Id == 1, "a teleport must not apply inside the VM frame");
+        Check(session2.MapData?.Id == 1005, "a teleport must not apply inside the VM frame");
         session2.AdvanceFrame();
         Check(session2.MapData?.Id == 1008, $"a teleport must switch maps at the frame boundary (got {session2.MapData?.Id})");
         Check(session2.LeaderX == 5 && session2.LeaderY == 7,
@@ -253,7 +258,7 @@ public partial class SaveLoadTest : Node
             File.WriteAllText(savePath, "{ broken");
             var recovered = SaveCodec.Read(savePath);
             Check(recovered != null, "corrupt main must recover from .bak");
-            Check(recovered?.MapId == 1 && recovered?.Vars.Count > 0, "backup must restore the saved map and vars");
+            Check(recovered?.MapId == 1005 && recovered?.Vars.Count > 0, "backup must restore the saved map and vars");
             if (recovered != null) SaveCodec.Write(savePath, recovered);
         }
 

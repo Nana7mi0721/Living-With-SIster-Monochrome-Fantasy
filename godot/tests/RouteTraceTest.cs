@@ -12,7 +12,7 @@ using Lwsmf.Presentation;
 namespace Lwsmf.Tests;
 
 /// <summary>
-/// Runs the production GameSession path (TitleMap event 2 -> new game -> map 1)
+/// Runs the production GameSession path (TitleMap event 2 -> new game -> SampleMapA 1005)
 /// with scripted input and exports a wolf.route trace. The Rust side runs the
 /// same frames through wolf-cli route; oracle/diff_route.py compares the two.
 /// </summary>
@@ -107,6 +107,7 @@ public partial class RouteTraceTest : Node
         int framesAtSave = session.Frames;
         int leaderXAtSave = session.LeaderX;
         int leaderYAtSave = session.LeaderY;
+        int mapAtSave = session.MapData?.Id ?? -1;
         bool saved = session.SaveGame();
         session.AdvanceFrame();
         session.AdvanceFrame();
@@ -115,7 +116,7 @@ public partial class RouteTraceTest : Node
             && session.Frames == framesAtSave
             && session.LeaderX == leaderXAtSave
             && session.LeaderY == leaderYAtSave
-            && session.MapData?.Id == 1;
+            && (session.MapData?.Id ?? -1) == mapAtSave;
         if (File.Exists(session.SavePath)) File.Delete(session.SavePath);
         if (!saveOk)
         {
@@ -128,7 +129,7 @@ public partial class RouteTraceTest : Node
 
         var sb = new StringBuilder(steps.Count * 160 + 256);
         sb.Append("{\"schema\":\"wolf.route\",\"schema_version\":1,");
-        sb.Append("\"route\":\"title_newgame_map1\",\"frames\":").Append(Frames);
+        sb.Append("\"route\":\"title_newgame_map1005\",\"frames\":").Append(Frames);
         sb.Append(",\"total_steps\":").Append(steps.Count).Append(",\"steps\":[");
         for (int i = 0; i < steps.Count; i++)
         {
@@ -179,9 +180,9 @@ public partial class RouteTraceTest : Node
             GetTree().Quit(3);
             return;
         }
-        if (session.Phase != "bedroom" || (session.MapData?.Id ?? -1) != 1)
+        if (session.Phase != "bedroom" || (session.MapData?.Id ?? -1) != 1005)
         {
-            GD.PrintErr($"[RouteTraceTest] FAIL: route did not reach map 1 (phase={session.Phase} map={session.MapData?.Id ?? -1})");
+            GD.PrintErr($"[RouteTraceTest] FAIL: route did not reach map 1005 (phase={session.Phase} map={session.MapData?.Id ?? -1})");
             GetTree().Quit(4);
             return;
         }

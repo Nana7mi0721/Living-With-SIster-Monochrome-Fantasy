@@ -329,6 +329,10 @@ public sealed class MapRuntime
             var page = state.Def.Pages[pageIndex];
             if (page.Program == null || !page.Trigger.IsAutomatic()) continue;
             if (state.InstanceId is int existing && vm.FindInstance(existing) != null) continue;
+            // Autorun runs once per activation; only parallel pages restart on their
+            // own (map_runtime.rs:1310). Without this guard every finished autorun
+            // is recreated on the next StartPending, which replay never does.
+            if (state.StartsOnPage > 0 && !page.Trigger.IsLooping()) continue;
 
             var inst = vm.CreateInstance(page.Program);
             if (inst == null) continue;

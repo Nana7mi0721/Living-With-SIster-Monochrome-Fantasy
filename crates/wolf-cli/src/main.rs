@@ -1342,6 +1342,7 @@ pub(crate) fn sound_action(action: SoundAction) -> &'static str {
 pub(crate) fn sound_channel(channel: SoundChannel) -> &'static str {
     match channel {
         SoundChannel::Bgm => "bgm",
+        SoundChannel::Bgs => "bgs",
         SoundChannel::Se => "se",
     }
 }

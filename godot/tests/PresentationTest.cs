@@ -9,7 +9,7 @@ namespace Lwsmf.Tests;
 /// <summary>
 /// Drives the core session headless and checks the presentation hand-off: title event
 /// runs, the new-game chain teleports through map 3, and the bedroom screen owns the
-/// frame once the chain reaches map 1.
+/// frame once the chain reaches SampleMapA (artifact 1005).
 /// </summary>
 public partial class PresentationTest : Node
 {
@@ -70,13 +70,14 @@ public partial class PresentationTest : Node
         Check(session.Phase == "bedroom", $"phase '{session.Phase}' != 'bedroom' after {frames} frames");
         Check(session.Frames > 0, "no VM frames were stepped");
 
-        // The bedroom is the real map 1 runtime: pages get selected and automatic pages start.
+        // The bedroom is the real SampleMapA runtime (SysDatabase row 1 -> artifact 1005):
+        // pages get selected and automatic pages start.
         for (int i = 0; i < 240; i++) session.AdvanceFrame();
 
         var map = session.MapData;
         var runtime = session.MapRuntime;
-        Check(map != null, "no map definition loaded after the teleport to map 1");
-        Check(runtime != null, "no map runtime after the teleport to map 1");
+        Check(map != null, "no map definition loaded after the teleport to SampleMapA");
+        Check(runtime != null, "no map runtime after the teleport to SampleMapA");
 
         if (map != null && runtime != null)
         {
@@ -92,7 +93,7 @@ public partial class PresentationTest : Node
                          $"active={state.Active} starts={state.Starts} instance={state.InstanceId}");
             }
 
-            Check(map.Id == 1, $"map id {map.Id} != 1");
+            Check(map.Id == 1005, $"map id {map.Id} != 1005");
             Check(map.Width > 0 && map.Height > 0, "map dimensions missing");
             Check(map.Events.Count > 0, "map has no events");
 

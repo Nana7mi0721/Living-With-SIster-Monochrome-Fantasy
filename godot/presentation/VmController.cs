@@ -350,6 +350,9 @@ public partial class VmController : Node, IHost, IVmSession
 
     public DbValue? Database(DbOp op) => DatabaseStore?.Execute(op);
 
+    public string MapPath(int mapId) =>
+        DatabaseStore?.ReadText(DbContainer.Sys, 0, mapId, 0) ?? "";
+
     public void Teleport(int target, int map, int x, int y, int options)
     {
         EmitSignal(SignalName.TeleportRequested, target, map, x, y, options);
