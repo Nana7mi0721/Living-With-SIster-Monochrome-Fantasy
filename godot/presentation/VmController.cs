@@ -322,6 +322,9 @@ public partial class VmController : Node, IHost, IVmSession
         EmitSignal(SignalName.CommonEventCalled, target, args);
     }
 
+    /// <summary>Test hook: stop emitting the signal while still tracking picture state.</summary>
+    public bool EmitPictureSignals { get; set; } = true;
+
     public void Picture(PictureCmd cmd)
     {
         _lastPictureAnchor = cmd.Anchor;
@@ -338,7 +341,11 @@ public partial class VmController : Node, IHost, IVmSession
                 _pictures.Remove(cmd.Number);
                 break;
         }
-        EmitSignal(SignalName.PictureRequested, cmd.Number, (int)cmd.Action, cmd.File, cmd.Text, cmd.Args);
+        if (!EmitPictureSignals)
+            return;
+        EmitSignal(SignalName.PictureRequested, cmd.Number, (int)cmd.Action,
+            cmd.File ?? string.Empty, cmd.Text ?? string.Empty,
+            cmd.Args ?? System.Array.Empty<int>());
     }
 
     public void Sound(SoundCmd cmd)
@@ -352,6 +359,13 @@ public partial class VmController : Node, IHost, IVmSession
 
     public string MapPath(int mapId) =>
         DatabaseStore?.ReadText(DbContainer.Sys, 0, mapId, 0) ?? "";
+
+    /// <summary>Battle data precondition (battle_seed.rs); tests call this, the game never does.</summary>
+    public int SeedBattle(int partyCount = 1, int enemyCount = 1) =>
+        DatabaseStore == null
+            ? 0
+            : DatabaseStore.SeedBattleCells(partyCount, enemyCount)
+              + DatabaseStore.SeedBattleMenuText();
 
     public void Teleport(int target, int map, int x, int y, int options)
     {

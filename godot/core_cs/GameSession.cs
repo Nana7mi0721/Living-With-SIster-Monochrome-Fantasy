@@ -107,6 +107,26 @@ public sealed class GameSession
     public int AutoEventCount => EnsureAutoEvents().EventCount;
     /// <summary>Fresh starts recorded for one auto event in this session (D-33 test hook).</summary>
     public int AutoEventStarts(int eventId) => EnsureAutoEvents().StartsFor(eventId);
+    /// <summary>True while a VM instance for the event is resident (test telemetry).</summary>
+    public bool HasEvent(int eventId) => _vm.Vm.Instances.Any(inst => inst.EventId == eventId);
+    /// <summary>Test-only: compact live instance list (event:id@pc,parent,wait).</summary>
+    public string DescribeEvent(int eventId)
+    {
+        var state = _mapRuntime?.Events.FirstOrDefault(e => e.Def.Id == eventId);
+        if (state == null) return "missing";
+        var inst = state.InstanceId is int id ? _vm.Vm.FindInstance(id) : null;
+        return $"active={state.Active} starts={state.Starts} on={state.StartsOnPage} inst={state.InstanceId} pc={inst?.Pc} wait={inst?.Wait.Kind}";
+    }
+
+    public string DescribeInstances()
+    {
+        var parts = new List<string>();
+        foreach (var inst in _vm.Vm.Instances)
+        {
+            parts.Add($"{inst.EventId}:{inst.Id}@{inst.Pc} p={inst.ParentId?.ToString() ?? "-"} w={inst.Wait.Kind}");
+        }
+        return string.Join(" | ", parts);
+    }
     /// <summary>Rebuilt CE242 drive (crates/wolf-game/src/battle_wiring.rs).</summary>
     public BattleWiring BattleWiring => _battleWiring;
     /// <summary>Direction/action bits currently denied by opcode 126 (D-20).</summary>

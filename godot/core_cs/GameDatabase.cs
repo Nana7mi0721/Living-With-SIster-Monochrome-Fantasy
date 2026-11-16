@@ -493,6 +493,42 @@ public sealed class GameDatabase
         return TableText(container, dbType, row, column);
     }
 
+    /// <summary>
+    /// Test/data precondition from crates/wolf-game/src/battle_seed.rs: a fresh game never
+    /// writes the party/enemy counts, leader command slots or stats the battle events read.
+    /// Never called by GameSession; tests and fixture builders opt in explicitly.
+    /// </summary>
+    public int SeedBattleCells(int partyCount = 1, int enemyCount = 1)
+    {
+        int written = 0;
+        void Put(int dbType, int row, int column, int value)
+        {
+            if (SetNum(DbContainer.CData, dbType, row, column, value)) written++;
+        }
+
+        Put(18, 4, 0, partyCount);
+        Put(18, 69, 0, enemyCount);
+        int[] commandSlots = [3, 4, 6, 7, 0, 0, 0, 0];
+        for (int i = 0; i < commandSlots.Length; i++) Put(0, 12, 47 + i, commandSlots[i]);
+        int[] leaderStats = [100, 100, 50, 50, 20, 15, 10, 30, 30, 20, 10, 10];
+        int[] leaderColumns = [20, 21, 22, 23, 24, 25, 26, 27, 28, 9, 10, 4];
+        for (int i = 0; i < leaderStats.Length; i++) Put(0, 12, leaderColumns[i], leaderStats[i]);
+        Put(7, 0, 0, 1);
+        Put(8, 0, 0, 1);
+        Put(8, 1, 0, 1);
+        Put(8, 2, 0, 1);
+        return written;
+    }
+
+    /// <summary>Command-window labels (CData type 19 column 0) used by battle seed tests.</summary>
+    public int SeedBattleMenuText()
+    {
+        string[] labels = ["蓄力", "防御", "强斩", "反击", "普通攻击", "普通攻击", "普通攻击", "普通攻击"];
+        for (int row = 0; row < labels.Length; row++)
+            SetText(DbContainer.CData, 19, row, 0, labels[row]);
+        return labels.Length;
+    }
+
     private int TableNum(DbContainer container, int dbType, int row, int column)
         => TryTableNum(container, dbType, row, column, out int number) ? number : 0;
 
@@ -507,7 +543,7 @@ public sealed class GameDatabase
     private static string NormaliseLabel(string? label)
     {
         if (string.IsNullOrEmpty(label)) return "";
-        return label.TrimEnd(' ')
+        return label.TrimEnd('\0')
             .Replace('—', '-')
             .Replace('―', '-')
             .Replace('　', ' ')

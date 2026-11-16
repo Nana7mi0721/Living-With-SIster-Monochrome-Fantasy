@@ -44,9 +44,15 @@ public sealed class BattleWiring
     private readonly HashSet<int> _harvestedRows = new();
     private readonly Queue<int> _menuQueue = new();
     private int _menuCursor = -1;
+    private bool _sawDispatch;
+    private bool _sawCaller;
 
     public long StartedRounds { get; private set; }
     public long TurnStarts { get; private set; }
+    /// <summary>CE253 was resident at least once (natural day-4 dispatch observed).</summary>
+    public bool SawDispatch => _sawDispatch;
+    /// <summary>CE239 with a parent script was resident (CE253 called the real battle).</summary>
+    public bool SawCaller => _sawCaller;
     public bool AutoArm => _autoArm;
     public bool? ManualEnable => _manualEnable;
     public bool? ManualRoundLoop => _manualRoundLoop;
@@ -145,6 +151,14 @@ public sealed class BattleWiring
     /// </summary>
     public int? Tick(EventVm vm, Func<DbOp, DbValue?> database)
     {
+        if (!_sawDispatch)
+        {
+            _sawDispatch = vm.Instances.Any(i => i.EventId == EventBattleDispatch);
+        }
+        if (!_sawCaller)
+        {
+            _sawCaller = vm.Instances.Any(i => i.EventId == EventBattleCaller && i.ParentId.HasValue);
+        }
         bool battleActive = vm.Vars.Get(VarBattleActive) != 0;
         bool rising = battleActive && !_prevBattleActive;
         _prevBattleActive = battleActive;

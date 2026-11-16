@@ -36,6 +36,15 @@ public partial class GameSessionController : Node
     public bool HasChoices => _session?.HasChoices ?? false;
     public bool Faulted => _vm?.Faulted ?? false;
     public int AutoEventStarts(int eventId) => _session?.AutoEventStarts(eventId) ?? 0;
+    /// <summary>CE242 command rounds driven by the rebuilt battle wiring.</summary>
+    public long BattleRounds => _session?.BattleWiring.StartedRounds ?? 0;
+    public long BattleTurnStarts => _session?.BattleWiring.TurnStarts ?? 0;
+    public bool BattleSawDispatch => _session?.BattleWiring.SawDispatch ?? false;
+    public bool BattleSawCaller => _session?.BattleWiring.SawCaller ?? false;
+    public bool HasEvent(int eventId) => _session?.HasEvent(eventId) ?? false;
+
+    public string DescribeEvent(int eventId) => _session?.DescribeEvent(eventId) ?? "missing";
+    public string DescribeInstances() => _session?.DescribeInstances() ?? "";
     public uint MovementDeny => _session?.MovementDeny ?? 0;
     public uint BasicAllDeny => _session?.BasicAllDeny ?? 0;
 

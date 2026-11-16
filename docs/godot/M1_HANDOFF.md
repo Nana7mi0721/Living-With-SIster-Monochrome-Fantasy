@@ -429,6 +429,15 @@
 - **测试**：`SMOKE_OK`；`PRESENTATION_TEST_OK phase=bedroom frames=418`；`SAVE_LOAD_TEST_OK 98/98`（事件 4 改为 SampleMapA page4：63=1/62=0/464=0/60=0）；`SESSION_PARITY_TEST_OK checks=10 frames=418 core=frozen`；`ROUTE_TRACE_TEST_OK steps=149247 map=1005 leader=62,35 save_load=ok`；`COLD_START_DAY_TEST_OK`；`MAP_RUNTIME_TEST_OK 56/56`。31 步门禁双模式全绿：`reports/gate_map1005_headless4.log`、`reports/gate_map1005_windowed.log` 均 `GODOT_GATE_OK`，含 `ROUTE_DIFF_OK 149247/149247`；Rust `cargo test -p wolf-vm -p wolf-audio -p wolf-cli --lib` 95 passed。
 - **边界**：冷启动只到 day2 08:30，未跑完整 30 天；`SaveLoadTest` 的传送目标仍是合成 map 1008；事件 4 page4 的选择路径是测试用条件变量触发，不是自然日推进的唯一路径；胜利/伤害矩阵与 H 仍未接。
 
+### 4.32 页切换复位、自然日线与 CE253 自然 dispatch（2026-11-16）
+
+- **来源**：用户 `m15649`「进行下一步CE253 自然日线」；在 D-39/D-40 提交 `46d6a04` 后继续。
+- **页切换根因（D-41）**：`map_runtime.rs:1281` 在页切换时清 `starts_on_page`；C# `MapRuntime.StartPending` 原来只递增不复位，map1005 event4 白天在 page2（晚餐）、晚上切回 page0（房间菜单）时被 `StartsOnPage > 0` 守卫挡住，CE245 永不启动。修复为 `state.Active = want;` 后 `state.StartsOnPage = 0;`；`MapRuntimeTest` 新增双页 Autorun 场景，`MAP_RUNTIME_TEST_OK 60/60`。提交 `11d071d`。
+- **自然日线探针**：`godot/tests_gd/Ce253DayRouteTest.gd` 走生产 `GameRoot`：冷启动→day1 18:30 睡眠→day2/day3 真实 CE251 行 0（picture `1200` hitbox）→夜间 event4 page0 等 `pc90` 后 action→CE245→`是/算了`→day4 08:30（`160==4, 4==8, 5==30, 6==3`）。`day3` 晚餐在 19:30 结束，探针接受 `hour>=18`。
+- **CE253 自然 dispatch**：day4 不注入 253/239/242，`SeedBattle(1,1)` 只写 26 个 numeric + CData19 菜单文本；60000 帧内 `BattleSawDispatch=true`、`BattleSawCaller=true`、`BattleRounds=2`、`BattleTurnStarts=1`，`v342=0 v343=0 v350=0`，未到 CE244 结算。与 D-38 的 `save_parity=0` 同源：缺零售存档里 CE143 已物化的 CData type10 伤害源。
+- **崩溃修复**：长跑在 `VmController.Picture` 的 `EmitSignal` 抛 `AccessViolationException`；`cmd.File/Text/Args` 归一为非空（`?? string.Empty`、`?? Array.Empty<int>()`），并加 `EmitPictureSignals` 测试开关（战斗段关闭信号但保留 `_pictures` 状态）。`MapRuntimeTest` 与 `SMOKE_OK` 通过。
+- **边界**：自然日线到 day4 08:30 与 CE253/CE239 起始；CE244 结算、四轮 `+1`、胜负矩阵、post-battle day5 未完成，探针未进 31 步门禁。
+
 ---
 
 ## 5. 下一步（M3 入口）
