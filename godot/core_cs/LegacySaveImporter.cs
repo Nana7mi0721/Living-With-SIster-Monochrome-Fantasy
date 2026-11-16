@@ -142,6 +142,15 @@ public sealed class LegacySaveImporter
         [JsonPropertyName("map")] public MapSummary Map { get; set; } = new();
         [JsonPropertyName("choice_anchor")] public int[] ChoiceAnchor { get; set; } = [512, 240];
         [JsonPropertyName("database_overrides")] public List<int> DatabaseOverrides { get; set; } = [];
+        [JsonIgnore] public List<DatabaseCell> DatabaseCells { get; set; } = [];
+    }
+
+    public sealed class DatabaseCell
+    {
+        public int Type { get; set; }
+        public int Row { get; set; }
+        public int Column { get; set; }
+        public int Value { get; set; }
     }
 
     public sealed class SlotResult
@@ -390,6 +399,7 @@ public sealed class LegacySaveImporter
         r.ReadU8();
         uint typeCount = r.ReadU32();
         var dbOverrides = new List<int>();
+        var dbCells = new List<DatabaseCell>();
         for (int t = 0; t < typeCount; t++)
         {
             int unk = r.ReadI32();
@@ -410,9 +420,10 @@ public sealed class LegacySaveImporter
             }
             for (int row = 0; row < typeRowCount; row++)
             {
-                foreach (uint def in cfg)
+                for (int k = 0; k < cfg.Length; k++)
                 {
-                    if (def < 2000) r.ReadI32();
+                    if (cfg[k] < 2000)
+                        dbCells.Add(new DatabaseCell { Type = t, Row = row, Column = k, Value = r.ReadI32() });
                 }
                 foreach (uint def in cfg)
                 {
@@ -471,7 +482,8 @@ public sealed class LegacySaveImporter
                     ObjectsCount = (int)objectCount
                 },
                 ChoiceAnchor = [sys3, sys4],
-                DatabaseOverrides = dbOverrides
+                DatabaseOverrides = dbOverrides,
+                DatabaseCells = dbCells
             },
             NotRecoverable = NotRecoverableFields
         };

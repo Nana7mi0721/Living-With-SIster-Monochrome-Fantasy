@@ -88,7 +88,7 @@
 | 技能目标入口 | `res://tests/Smoke.tscn` | `BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`；CE159 尾段场景/效果目标门、CE162 由 pc247 生成并选中退出，目标 0 不生成、敌数 0 停 pc49/50 |
 | H 阈值数据面 | `res://tests/Smoke.tscn` | `H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`；37 个 op111 真实载荷与 59 个阈值/多条件边界点，只验证数据面 |
 | 第六轮 P2 收口 | `res://tests_gd/AudioManagerTest.tscn` / `PictureRoundtripTest.tscn` / `Smoke.tscn` | `AUDIO_MANAGER_TEST_OK checks=32`、`PICTURE_ROUNDTRIP_TEST_OK`、`H_EVENT_GATE_TEST_OK ... data_only=1`；滚轮 126 拦截、同文件流隔离、未知 soundType 告警、容器镜像与严格 effects 对拍 |
-| 自然战斗菜单桥 | `res://tests/Smoke.tscn` | `BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=2 turns=1 result=-1 pcs=338,645 save_parity=0`；CE188 菜单经 CData18/73 游标提交 8 行，前两行技能 26/25，CE253 消费前两行并生成 CE242 pc338/645；Rust 存档夹具的四轮 +1 仍未复刻 |
+| 自然战斗菜单桥/四轮 | `res://tests/Smoke.tscn` | `BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=4 turns=3 result=1 pcs=338,645,792,996 pools=3,2,3,2 save_vars=800 save_cells=16800`；导入零售存档 vars+CData 并 `PrimeLatched` 后与 Rust m11 四轮 `+1` 全等（§4.34，D-43）；`BATTLE_MATRIX_TEST_OK win=1 loss=-1 win_rounds=4 loss_rounds=10` |
 | 第七轮 P2 收口 | `res://tests_gd/GameRootTest.tscn` / `AudioManagerTest.tscn` / `Smoke.tscn` / `converter validate` | `GAME_ROOT_TEST_OK`（Generation+1、重开新游戏后 event 38 重启）、`AUDIO_MANAGER_TEST_OK checks=32`、`unknown sound type` 循环两次仅 1 条日志、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`；零售 BasicData 四文件哈希与 `work/all` 全等（D-37） |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
@@ -447,6 +447,17 @@
 - **结果**：`reports/ce253_clean.log` EXIT=0，`[Ce253DayRoute] seeded=34 saw253=true sawCaller=true rounds=2 turns=1 peak352=1 saw343=true peak342=45`，`CE253_DAY_ROUTE_TEST_OK day=5 hour=8 minute=30 rounds=2 turns=1 result=1 seeded=34`；运行约 4 秒。
 - **门禁**：`tools/godot_check.sh` 扩到 32 步，新增第 32 步 `res://tests_gd/Ce253DayRouteTest.tscn`（tee `reports/ce253_day_route.log`，grep `CE253_DAY_ROUTE_TEST_OK`）；`SMOKE_OK`。
 - **边界**：结算仍是 `v342=0` 直接判胜，不是真实伤害矩阵；`peak342=45` 来自战斗前 CE239 写入的瞬时值，CE244 看到的 `2000342` 在结算前被清零/归零路径影响，四轮 `+1` 与胜负矩阵仍未接；`track_picture` 不渲染，正式表现层仍走 `draw_picture`。
+
+### 4.34 零售存档导入、四轮 +1 与伤害/胜负矩阵（2026-11-16）
+
+- **来源**：用户 `m18183`「接着做四轮 +1、伤害/胜负矩阵」；对照 `crates/wolf-game/tests/m11_party_live_bridge.rs`。§4.33 的“四轮未接”边界由本节关闭。
+- **存档导入**：`LegacySaveImporter` 的 `RecoveredData` 新增 `[JsonIgnore] List<DatabaseCell> DatabaseCells`（`Type/Row/Column/Value`），解析循环按 cfg 列号捕获 `cfg[k] < 2000` 的 I32；`GameDatabase.ApplySavedCells` 逐格 `SetNum(DbContainer.CData, ...)`。`RunBattle` 在 `SeedBattle` 前导入 `work/retail_backup/Save/SaveData01.sav`：800 normal vars + 16,800 CData cells。导入后 f500 的 `v28=1815 v29=743 v170=379 v171=348 v172=382 v173=339 v174=348 v175=33 v392=150 v23=9 v341=5000 v349=8 v354=13` 与 Rust `m11` 的 `RTRACE start` 完全一致。
+- **RNG 对齐（关键）**：仅导入存档仍会分岔：C# 首次抽取是 `ev=506` 的 `50..300`，Rust 首次是 `ev=98 pc=16` 的 `0..32`。原因是 `load_save` 会 `auto_events.prime_latched`，C# 新建 `AutoEvents` 后没有 prime，首次 `Sync` 把 DLC 506 的已成立条件当成 false→true 边沿而启动它。`RunBattle` 在创建 `AutoEvents` 后调用 `PrimeLatched(vm.Vm)`（生产 `GameSession` 已有同样调用），随后 C#/Rust 的 57 条战斗 RNG 抽取逐条 `ev/pc/min/max/value` 全等。
+- **引擎事件**：`RunBattle` 在 `StartEvent(253)` 前启动 `48,261,269,270,271,224,225,213,214,41,241,63`（Rust `start_engine_events` 的 ENGINE_ALWAYS/AUTO_START/IMPLICIT），并设 `Rng.SetEventSeed(9)`、`445=1`、`446=4000`。
+- **结果**：`reports/bridge_matrix3.log` EXIT=0，`BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=4 turns=3 result=1 pcs=338,645,792,996 pools=3,2,3,2 save_vars=800 save_cells=16800`，与 Rust m11 的 `started_rounds=4 / first_pcs=[338,645,792,996] / pre=[5,4,3,2] / final=[3,2,3,2] / settle=(1,1)` 全等。
+- **伤害/胜负矩阵**：`RunBattle(queue, weakenParty: true)` 在导入存档后把 `v170..175=0、v28=1、v392=0`，战斗跑 10 轮（action pool 346 到 `-1`，CE242 在 queue 用尽后回退 `[1,3]`），`CE244` 走败北尾声写 `352=-1/343=1`。基线四轮 `+1` 的每轮 `v342` gauge 为 `4512,3719,1536,382` 严格下降；弱队为 `4035,3845,3270,3153,3060,2871,2753,2605,2488,2299`，直到 10 轮仍为正，因此判负来自回合/队伍崩溃而不是敌方 HP 归零。输出 `BATTLE_MATRIX_TEST_OK win=1 loss=-1 win_rounds=4 loss_rounds=10 ...`。
+- **第三态边界**：`CE244` 的 `352=-2`（pc415「全員行動不能」）需要 `345..348` 四个 action pool 全 `<=0`；双人四轮夹具中 `346` 先到 `-1` 而其他 pool 仍正，自然不可达，矩阵未覆盖，已在 D-43 记录。
+- **清理**：临时 `StepHook/PCTRACE/PPARAMS/PBLOCK/CTRACE`、Rust `RTRACE/RDRAW`、`EventVm` RDRAW 与 `dump_save_type10` 探针均已删除/还原；测试只保留 fixture 变量与最终断言。
 
 ---
 

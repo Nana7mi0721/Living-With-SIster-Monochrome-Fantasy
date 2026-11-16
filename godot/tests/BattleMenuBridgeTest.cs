@@ -43,6 +43,10 @@ public static class BattleMenuBridgeTest
         public long TurnStarts;
         public readonly List<(int Pc, int Arg)> Bodies = new();
         public int Settle;
+        public readonly int[] FinalPools = new int[4];
+        public readonly List<int> Gauges = new();
+        public int SaveVars;
+        public int SaveCells;
         public bool Decided;
         public bool Faulted;
         public string? FaultReason;
@@ -65,14 +69,28 @@ public static class BattleMenuBridgeTest
 
         var battle = RunBattle(queue);
         Check(!battle.Faulted, "battle faulted: " + battle.FaultReason);
-        Check(battle.StartedRounds == 2, $"headless fixture must run two command rounds, got {battle.StartedRounds}");
-        Check(battle.Bodies.Count == 2, $"expected two CE242 bodies, got {battle.Bodies.Count}");
-        Check(new HashSet<int>(battle.Bodies.ConvertAll(b => b.Pc)).Count == 2, "CE242 bodies must be distinct");
-        Check(battle.Bodies.ConvertAll(b => b.Arg).SequenceEqual(new[] { 1, 2 }), "menu queue must be consumed front-first");
+        Check(battle.StartedRounds == 4, $"headless fixture must run four command rounds, got {battle.StartedRounds}");
+        Check(battle.Bodies.Count == 4, $"expected four CE242 bodies, got {battle.Bodies.Count}");
+        Check(battle.Bodies.ConvertAll(b => b.Pc).SequenceEqual(new[] { 338, 645, 792, 996 }), "CE242 bodies must be 338,645,792,996");
+        Check(battle.Bodies.ConvertAll(b => b.Arg).SequenceEqual(new[] { 1, 2, 3, 4 }), "menu queue must be consumed front-first");
+        Check(battle.TurnStarts == 3, $"expected three later turn starts, got {battle.TurnStarts}");
         Check(battle.Decided, "2000343 never set");
-        Check(battle.Settle == -1, $"CE244 must settle -1 on the headless fixture, got {battle.Settle}");
+        Check(battle.Settle == 1, $"CE244 must settle +1 on the save-backed fixture, got {battle.Settle}");
+        var finalPools = new[] { battle.FinalPools[0], battle.FinalPools[1], battle.FinalPools[2], battle.FinalPools[3] };
+        Check(finalPools.SequenceEqual(new[] { 3, 2, 3, 2 }), $"final action pools must be 3,2,3,2, got {string.Join(",", finalPools)}");
 
-        GD.Print($"BATTLE_MENU_BRIDGE_TEST_OK rows={menu.Rows} real={menu.RealRows} rounds={battle.StartedRounds} turns={battle.TurnStarts} result={battle.Settle} pcs={Join(battle.Bodies.ConvertAll(b => b.Pc))} save_parity=0");
+        Check(battle.Gauges.Count == 4, $"victory must observe four round gauges, got {battle.Gauges.Count}");
+        Check(battle.Gauges.Zip(battle.Gauges.Skip(1), (a, b) => a > b).All(x => x), $"victory gauge must fall every round: {string.Join(",", battle.Gauges)}");
+
+        var defeat = RunBattle(queue, weakenParty: true);
+        Check(!defeat.Faulted, "defeat fixture faulted: " + defeat.FaultReason);
+        Check(defeat.Decided, "defeat fixture never settled");
+        Check(defeat.Settle == -1, $"weakened party must lose, got {defeat.Settle}");
+        Check(defeat.StartedRounds > 4, $"defeat must outlast the four-round budget, got {defeat.StartedRounds}");
+        Check(defeat.Gauges.Count == defeat.StartedRounds && defeat.Gauges.All(g => g > 0), $"defeat must leave enemy gauge positive: {string.Join(",", defeat.Gauges)}");
+        GD.Print($"BATTLE_MATRIX_TEST_OK win=1 loss={defeat.Settle} win_rounds={battle.StartedRounds} loss_rounds={defeat.StartedRounds} win_gauges={string.Join(",", battle.Gauges)} loss_gauges={string.Join(",", defeat.Gauges)}");
+
+        GD.Print($"BATTLE_MENU_BRIDGE_TEST_OK rows={menu.Rows} real={menu.RealRows} rounds={battle.StartedRounds} turns={battle.TurnStarts} result={battle.Settle} pcs={Join(battle.Bodies.ConvertAll(b => b.Pc))} pools={string.Join(",", finalPools)} save_vars={battle.SaveVars} save_cells={battle.SaveCells}");
     }
 
     private static MenuOutcome RunMenu()
@@ -130,34 +148,67 @@ public static class BattleMenuBridgeTest
         return outcome;
     }
 
-    private static BattleOutcome RunBattle(IReadOnlyList<int> queue)
+    private static BattleOutcome RunBattle(IReadOnlyList<int> queue, bool weakenParty = false)
     {
         var outcome = new BattleOutcome();
         var vm = new VmController();
         try
         {
             Load(vm, out var store);
+            var savePath = System.IO.Path.GetFullPath(System.IO.Path.Combine(ProjectSettings.GlobalizePath("res://"), "..", "work", "retail_backup", "Save", "SaveData01.sav"));
+            Check(System.IO.File.Exists(savePath), "retail save missing: " + savePath);
+            var save = LegacySaveImporter.ImportFile(savePath, 0);
+            int saveVars = 0;
+            foreach (var pair in save.Recovered.Variables)
+            {
+                if (int.TryParse(pair.Key, out int index)) { vm.Vm.Vars.Set(index, pair.Value); saveVars++; }
+            }
+            int saveCells = store!.ApplySavedCells(save.Recovered.DatabaseCells);
+            outcome.SaveVars = saveVars;
+            outcome.SaveCells = saveCells;
+            if (weakenParty)
+            {
+                // Keep the same save-backed fixture but strip the party's offense so
+                // the enemy gauge cannot reach zero inside the round budget; CE244
+                // then takes its defeat branch (352 = -1).
+                for (int i = 0; i < 6; i++) vm.Vm.Vars.Set(170 + i, 0);
+                vm.Vm.Vars.Set(28, 1);
+                vm.Vm.Vars.Set(392, 0);
+            }
             SeedBattle(store!);
             SeedTwoMemberParty(store!);
 
             var autoEvents = AutoEvents.FromPrograms(vm.Vm.Programs.Values);
+            autoEvents.PrimeLatched(vm.Vm);
             var wiring = new BattleWiring();
             wiring.SetAutoArm(true);
             wiring.SetEnabled(true);
             wiring.SetRoundLoop(true);
             wiring.SetMenuCommandQueue(queue);
+            vm.Vm.Rng.SetEventSeed(9);
+            // The m11 fixture raises the boss gauge; the party numbers themselves
+            // come from the retail save, not from these two variables.
             vm.Vm.Vars.Set(445, 1);
             vm.Vm.Vars.Set(446, 4000);
 
             var seen = new HashSet<int>();
+            long lastRounds = 0;
             int frame = 0;
             vm.KeyCodeProvider = _ => frame % 2 == 0 ? KeyCodes.CodeOk : KeyCodes.CodeNone;
+            // Rust m11 open_fixture_game calls start_engine_events(): the always-on
+            // system events plus the auto-start and implicit entries.
+            foreach (int id in new[] { 48, 261, 269, 270, 271, 224, 225, 213, 214, 41, 241, 63 }) vm.StartEvent(id);
             Check(vm.StartEvent(253), "CE253 failed to start");
 
             for (frame = 0; frame < 40000; frame++)
             {
                 autoEvents.Sync(vm.Vm);
                 wiring.Tick(vm.Vm, op => vm.Database(op));
+                if (wiring.StartedRounds > lastRounds)
+                {
+                    lastRounds = wiring.StartedRounds;
+                    outcome.Gauges.Add(vm.Vm.Vars.Get(342));
+                }
                 if (vm.IsWaitingForChoice()) vm.SelectChoice(0);
                 vm.StepFrame();
                 if (vm.IsWaitingForMessage()) vm.DismissMessage();
@@ -176,6 +227,7 @@ public static class BattleMenuBridgeTest
                 if (vm.Vm.Faulted) break;
             }
 
+            for (int i = 0; i < 4; i++) outcome.FinalPools[i] = vm.Vm.Vars.Get(345 + i);
             outcome.StartedRounds = wiring.StartedRounds;
             outcome.TurnStarts = wiring.TurnStarts;
         }
@@ -210,6 +262,8 @@ public static class BattleMenuBridgeTest
         int[] seeds = [100, 100, 50, 50, 20, 15, 10, 30, 30, 20, 10, 10];
         int[] columns = [20, 21, 22, 23, 24, 25, 26, 27, 28, 9, 10, 4];
         for (int i = 0; i < seeds.Length; i++) Set(store, StatusType, LeaderRow, columns[i], seeds[i]);
+        int[] gear = [20000, 30000, 30000, 30000, 30000];
+        for (int i = 0; i < gear.Length; i++) Set(store, StatusType, LeaderRow, 28 + i, gear[i]);
         Set(store, 7, 0, 0, 1);
         Set(store, 8, 0, 0, 1);
         Set(store, 8, 1, 0, 1);
@@ -228,6 +282,10 @@ public static class BattleMenuBridgeTest
         Set(store, PartyCountType, 4, 0, 2);
         Set(store, PartyTableType, 0, 1, LeaderRow);
         Set(store, PartyTableType, 0, 2, Member2Row);
+        Set(store, StatusType, Member2Row, 5, 99);
+        Set(store, StatusType, Member2Row, 6, 99);
+        Set(store, StatusType, Member2Row, 7, 1);
+        Set(store, StatusType, Member2Row, 8, 1);
 
         int[] seeds = [100, 100, 50, 50, 20, 15, 10, 30, 30, 20, 10, 10];
         int[] columns = [20, 21, 22, 23, 24, 25, 26, 27, 28, 9, 10, 4];

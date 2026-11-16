@@ -520,6 +520,17 @@ public sealed class GameDatabase
         return written;
     }
 
+    /// <summary>Overlay the numeric cells carried by a save's variable database.</summary>
+    public int ApplySavedCells(IEnumerable<LegacySaveImporter.DatabaseCell> cells)
+    {
+        int written = 0;
+        foreach (var cell in cells)
+        {
+            if (SetNum(DbContainer.CData, cell.Type, cell.Row, cell.Column, cell.Value)) written++;
+        }
+        return written;
+    }
+
     /// <summary>Command-window labels (CData type 19 column 0) used by battle seed tests.</summary>
     public int SeedBattleMenuText()
     {
