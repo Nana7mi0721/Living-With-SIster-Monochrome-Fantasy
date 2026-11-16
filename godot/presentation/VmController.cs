@@ -95,6 +95,7 @@ public partial class VmController : Node, IHost, IVmSession
     private bool _middlePressFrame;
     private GodotObject? _pictureStateTarget;
     private StringName _pictureStateMethod = "";
+    private AutoEvents? _autoEvents;
 
     /// <summary>Opcode 123 input source; the screen supplies it, the VM never guesses.</summary>
     public Func<uint, int>? KeyCodeProvider { get; set; }
@@ -264,6 +265,34 @@ public partial class VmController : Node, IHost, IVmSession
     public bool IsWaitingForChoice() => _isWaitingChoice;
     public bool IsWaitingForMessage() => _isWaitingMessage;
     public bool IsRunning() => Vm.Instances.Count > 0;
+
+    /// <summary>Start the run-condition-2 helpers once, like Game::new_game (H scene fixtures).</summary>
+    public void PrimeAutoEvents()
+    {
+        _autoEvents ??= AutoEvents.FromPrograms(Vm.Programs.Values);
+        _autoEvents.PrimeLatched(Vm);
+    }
+
+    /// <summary>Advance the auto-event latch once per frame; no-op until PrimeAutoEvents runs.</summary>
+    public void SyncAutoEvents()
+    {
+        _autoEvents?.Sync(Vm);
+    }
+
+    /// <summary>True while an instance of the event is live (H scene spawn probes).</summary>
+    public bool HasEvent(int eventId)
+    {
+        foreach (var inst in Vm.Instances)
+        {
+            if (inst.EventId == eventId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public string[] GetCurrentChoices() => _currentChoices;
 
     /// <summary>True once the core met an unhandled opcode. Presentation must stop the
@@ -538,6 +567,17 @@ public partial class VmController : Node, IHost, IVmSession
     {
         if (pressed && !_pointerPressed) _pointerPressPending = true;
         _pointerPressed = pressed;
+    }
+
+    /// <summary>
+    /// Set the held state without producing the one-frame "went down" edge. Menus that
+    /// poll opcode 124 for held==1 need this so a scripted click is not read as 2.
+    /// </summary>
+    public void SetPointerHeld(bool held)
+    {
+        _pointerPressed = held;
+        _pointerPressPending = false;
+        _pointerPressFrame = false;
     }
 
     public void SetPointerRightPressed(bool pressed)

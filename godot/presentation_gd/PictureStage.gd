@@ -188,6 +188,12 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 	return null
 
 
+func picture_rect(number: int) -> Rect2:
+	if not _cmds.has(number):
+		return Rect2()
+	return _hit_rect(number)
+
+
 func _arg(args: Array, index: int, fallback: int) -> int:
 	return int(args[index]) if index < args.size() else fallback
 

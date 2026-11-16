@@ -88,6 +88,7 @@
 | 技能目标入口 | `res://tests/Smoke.tscn` | `BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`；CE159 尾段场景/效果目标门、CE162 由 pc247 生成并选中退出，目标 0 不生成、敌数 0 停 pc49/50 |
 | H 阈值数据面 | `res://tests/Smoke.tscn` | `H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`；37 个 op111 真实载荷与 59 个阈值/多条件边界点，只验证数据面 |
 | 第六轮 P2 收口 | `res://tests_gd/AudioManagerTest.tscn` / `PictureRoundtripTest.tscn` / `Smoke.tscn` | `AUDIO_MANAGER_TEST_OK checks=32`、`PICTURE_ROUNDTRIP_TEST_OK`、`H_EVENT_GATE_TEST_OK ... data_only=1`；滚轮 126 拦截、同文件流隔离、未知 soundType 告警、容器镜像与严格 effects 对拍 |
+| H 场景端到端 | `res://tests_gd/HSceneTest.tscn` | `H_SCENE_TEST_OK checks=32 messages=7`；CE310 A/B/C（含 `var150/424`、spawn 226）、CE323（spawn 376/355/356、`var221=4`）、CE335；菜单行 1208/1210 命中框重叠，H 行需在 85% 高度按 held=1 |
 | 自然战斗菜单桥/四轮 | `res://tests/Smoke.tscn` | `BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=4 turns=3 result=1 pcs=338,645,792,996 pools=3,2,3,2 save_vars=800 save_cells=16800`；导入零售存档 vars+CData 并 `PrimeLatched` 后与 Rust m11 四轮 `+1` 全等（§4.34，D-43）；`BATTLE_MATRIX_TEST_OK win=1 loss=-1 win_rounds=4 loss_rounds=10` |
 | 第七轮 P2 收口 | `res://tests_gd/GameRootTest.tscn` / `AudioManagerTest.tscn` / `Smoke.tscn` / `converter validate` | `GAME_ROOT_TEST_OK`（Generation+1、重开新游戏后 event 38 重启）、`AUDIO_MANAGER_TEST_OK checks=32`、`unknown sound type` 循环两次仅 1 条日志、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`；零售 BasicData 四文件哈希与 `work/all` 全等（D-37） |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
@@ -459,6 +460,20 @@
 - **第三态边界**：`CE244` 的 `352=-2`（pc415「全員行動不能」）需要 `345..348` 四个 action pool 全 `<=0`；双人四轮夹具中 `346` 先到 `-1` 而其他 pool 仍正，自然不可达，矩阵未覆盖，已在 D-43 记录。
 - **清理**：临时 `StepHook/PCTRACE/PPARAMS/PBLOCK/CTRACE`、Rust `RTRACE/RDRAW`、`EventVm` RDRAW 与 `dump_save_type10` 探针均已删除/还原；测试只保留 fixture 变量与最终断言。
 
+### 4.35 H 场景端到端与菜单重叠命中框（2026-11-16）
+
+来源：用户要求进入 H 场景；Rust 参考 `crates/wolf-game/tests/m13_h_endtoend.rs`（CE310 A/B/C、CE323、CE335，共 5 个测试）。目标是在 C# 生产 VM 上不注入事件、只按真实菜单点击，走通三条 CE310 分支与两个衍生场景。
+
+- **测试宿主**：新增 `godot/tests_gd/HSceneTest.gd/.tscn`，与 `WeekendMenuTest` 同一套 `AssetDB + PictureStage + VmController`，每个场景 `_reset()` 新建 VM，`StrictMode=true`，创建后 `PrimeAutoEvents()`，连接 `PictureRequested`/`MessageRequested`。每帧 `BeginFrameInput → StepFrame → SyncAutoEvents → observe → DismissMessage/SelectChoice(0)`；`observe` 每帧记录 `HasEvent(226/355/356/376)`，因此 spawn 不会因事件结束后消失而漏断言。
+- **CE310 A/B/C**：种子 A=`16=5,18=50,22=300,424=5,14=30,102=100,63=1`，B 仅把 14 改 10，C 仅把 102 改 39。A 命中「可以哦」「一大早就开始和妹妹色色」，`var150=1`、`var424=6`、spawn 226；B 命中「确实有些累了呢」、`var150=0`；C 命中「抱歉哦，今天没那个心情呢」、`var150=0`。
+- **CE323**：种子 `16=10,21=300,18=50,22=300,102=100,23=6,103=2,221=3`，期望「就是现在，偷袭！」「被轰出去了」，spawn 376 且同时含 355/356，`var221=4`。
+- **CE335**：期望消息含 `Tips` 与「深夜」，验证深夜 CG/教程事件可跑完。
+- **根因：CE310 菜单行命中框重叠**。菜单行 slot 1200/1202/1204/1206/1208/1210 的 y 为 200/250/300/350/400/450，但每行共用 420×140 的 `base_bottan.png`，`PictureStage.picture_rect` 返回 420×140，1208（y350）与 1210（y450）的命中框在 y≈430..470 重叠。点 H 行中心 (512,450) 会先命中上一行 1208，执行 `处理5`（pc345→2199，再睡会儿），CE310 结束但无 H 消息；连续按住时 trace 为 i=0 pc188 → i=1 pc2203，H 行永远到不了。
+- **修复**：`_hold_button(1210)` 取 `picture_rect(1210)` 后点 **85% 高度**（默认 512,499），该点只在 1210 内；再用 `VmController.SetPointerHeld(true)` 置 held，`BeginFrameInput(); StepFrame()` 让 opcode124 `[1600098,12288,7]` 读到 `1`。不能用 `SetPointerPressed(true)` 再 `BeginFrameInput`：那会得到当帧按下值 `2`，而 pc374 `111 [1,1600098,1,2]` 只认 `1`。trace 确认 pc360..378 `ms=1 hover1210=1`，pc376 进入 H 分支。
+- **CE323 的 spawn 依赖 AutoEvents**：376/355/356 的 `run_condition` 为 `[2,1,2000225,1]`/`[2,1,2000149,1]`，只 `StartEvent(323)` 时 25/32；加 `PrimeAutoEvents`+每帧 `SyncAutoEvents` 后三条 spawn 全部出现。
+- **输出**：`reports/hscene9.log`、`reports/hscene_clean.log` 均 EXIT=0，`H_SCENE_TEST_OK checks=32 messages=7`；门禁扩到 33 步（第 33 步 `res://tests_gd/HSceneTest.tscn`，tee `reports/h_scene_test.log`）。
+- **边界**：CE318→CE360 的后续 H 流程未接；CE326 的深夜门只到数据面；CE310 的菜单重叠是原版素材布局问题，表现层不修改命中框，只在测试里选安全点，真实玩家点击同样会先命中上一行。
+
 ---
 
 ## 5. 下一步（M3 入口）
@@ -471,14 +486,14 @@
 6. **故障恢复**：D-13 除锁档/诊断包外已支持显式「返回标题」重建标题安全点（§4.17）；返回标题时会清 `InputRouter` 指针/帧 latch，F9 读档故障进入模态（§4.18）；存档槽级安全点回滚留 M5。
 7. **原版 `.sav` 导入**：起始/结束字节与可选 checksum 严格校验、严格 UTF-8 + replacement 告警已落地（§4.20，D-25）；零售 8 槽 `SAVE_IMPORT_OK 8/8`；回写原版 `.sav` 仍不在 M3 范围。
 8. **数据库**：`250` 的三容器读写、`.project` 标签漂移、覆盖层与扩展行已落地并由 `DATABASE_TEST_OK .../vm-250` 覆盖（§4.21，D-26）；战斗 `CE152/CE188` 的命令可用性切片已由 §4.22 接到该宿主，完整战斗回合仍需。
-9. **战斗命令切片**：`CE188→CE152→CE192` 的空库存/有道具两条线已由 `BattleCommandTest` 覆盖（§4.22，D-27）；真实回合已由 §4.24 接上 CE239/CE242，目标选择已由 §4.25/§4.26 接，伤害/胜负矩阵仍未接。
+9. **战斗命令切片**：`CE188→CE152→CE192` 的空库存/有道具两条线已由 `BattleCommandTest` 覆盖（§4.22，D-27）；真实回合已由 §4.24 接上 CE239/CE242，目标选择已由 §4.25/§4.26 接，伤害/胜负矩阵已由 §4.34 覆盖。
 10. **自动事件**：98 个并行事件已由 `AutoEvents` 调度并接入 `GameSession`，整路线同步后两侧为 149,247 步（§4.31；D-39/D-40 后，D-28 时 73,814）；HUD 读档重放之外的引擎接线仍未接。
-11. **战斗 wiring**：`CE239` 真实回合经 `CE242` 命令、`350/343/352` 结算并返回已由 `BattleWiringTest` 覆盖（§4.24，D-29）；`CE253` 自然日线、真实 `CE159` 命令 dispatch、伤害矩阵与 H 仍未接。
-12. **战斗目标选择**：`CE190/CE175` 的敌人生成/坐标倍率与 `CE162` 的敌方索引 0 选择已由 `BattleTargetTest` 覆盖（§4.25，D-30）；`CE159` 技能选择执行入口、伤害/胜负矩阵仍未接。
+11. **战斗 wiring**：`CE239` 真实回合经 `CE242` 命令、`350/343/352` 结算并返回已由 `BattleWiringTest` 覆盖（§4.24，D-29）；`CE253` 自然日线、真实 `CE159` 命令 dispatch 与伤害矩阵已由 §4.33/§4.34 覆盖，H 场景已由 §4.35 覆盖。
+12. **战斗目标选择**：`CE190/CE175` 的敌人生成/坐标倍率与 `CE162` 的敌方索引 0 选择已由 `BattleTargetTest` 覆盖（§4.25，D-30）；`CE159` 技能选择执行入口仍未接，伤害/胜负矩阵已由 §4.34 覆盖。
 13. **技能目标入口**：`CE159` 尾段（场景 1/2、目标 10..12）到 `CE162` 的生成与选中退出已由 `BattleSkillTargetTest` 覆盖（§4.26，D-31）；入口仍从 pc94 注入，生产命令链未接。
-14. **H 阈值**：37 个真实 op111 载荷与 59 个阈值/多条件边界已由 `HEventGateTest` 钉住（§4.27，D-32），输出带 `data_only=1`；只到数据面，H 场景与 CE318→CE360 仍未接。
+14. **H 阈值**：37 个真实 op111 载荷与 59 个阈值/多条件边界已由 `HEventGateTest` 钉住（§4.27，D-32），输出带 `data_only=1`；H 场景已由 §4.35 覆盖（CE310 A/B/C、CE323、CE335），CE318→CE360 与 CE326 深夜门仍未接。
 15. **第六轮审阅 P1/P2**：滚轮 126、同文件音频流隔离、未知 soundType 告警、图片容器镜像、严格 effects 对拍与 H 标记已收口（§4.28，D-33/D-34）；AutoEvents 新游戏复位按 D-33 拒绝；Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。
 16. **第七轮审阅 P1/P2**：故障返回标题重建 `GameSession`/`AutoEvents`，SE 复用缓存流，未知 soundType 按站点去重；D-35 增加 `reports/database_schema_audit.json` 静态审计并把两个 250 回退列标为 `retail-confirmed-label-absent`；零售 BasicData 哈希确认关闭 D-31（§4.29，D-36/D-37）。
-17. **自然战斗菜单桥**：`CE188` 菜单经 `CData 18/73/0` 游标提交 8 行，前两行技能 26/25；`CE253` 消费前两行并生成 `CE242` pc338/645 后 `CE244` 结算 `-1`（§4.30，D-38）。Rust 存档夹具的四轮 `+1` 仍待存档/CE143 物化，胜利与伤害矩阵仍未接。
-18. **地图语义、Autorun 与冷启动**：`op130` 按 SysDatabase type0 行号进入 SampleMapA（artifact 1005），`MapRuntime` 补 Autorun 只启动一次守卫，整路线 149,247/149,247；`ColdStartDayTest` 从标题到 day2 08:30（§4.31，D-39/D-40）；`Ce253DayRouteTest` 沿 day2/3 菜单、day4 自然 CE253 到 day5 08:30（§4.33，D-42）。四轮 `+1`、真实伤害/胜负矩阵与 H 场景仍待。
+17. **自然战斗菜单桥**：`CE188` 菜单经 `CData 18/73/0` 游标提交 8 行，前两行技能 26/25；`CE253` 消费前两行并生成 `CE242` pc338/645 后 `CE244` 结算 `-1`（§4.30，D-38）。Rust 存档夹具的四轮 `+1` 已由 §4.34 接通（导入零售 800 vars + 16,800 CData cells 与 `PrimeLatched`），`+1/-1` 矩阵已覆盖，`-2` 记为边界。
+18. **地图语义、Autorun 与冷启动**：`op130` 按 SysDatabase type0 行号进入 SampleMapA（artifact 1005），`MapRuntime` 补 Autorun 只启动一次守卫，整路线 149,247/149,247；`ColdStartDayTest` 从标题到 day2 08:30（§4.31，D-39/D-40）；`Ce253DayRouteTest` 沿 day2/3 菜单、day4 自然 CE253 到 day5 08:30（§4.33，D-42）。四轮 `+1` 与真实伤害/胜负矩阵已由 §4.34 覆盖，H 场景已由 §4.35 覆盖。
 19. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
