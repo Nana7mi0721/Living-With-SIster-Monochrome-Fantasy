@@ -204,9 +204,9 @@ func _ready() -> void:
 	add_child(root)
 	root.session.SetScriptedInput(true)
 	root.auto_advance = true
-	# Track slots and hit boxes instead of drawing: native Picture listeners crash on the
-	# long deterministic day line, while opcode 124 still queries the tracked table.
-	root.vm.QueuePictureSignals = true
+	# GameRoot already queues pictures; this long day line tracks slots and hit boxes
+	# instead of drawing Controls, while opcode 124 still queries the tracked table.
+	root.vm.TrackPicturesOnly = true
 
 	var guard := 0
 	while root.phase != "bedroom" and guard < 900:

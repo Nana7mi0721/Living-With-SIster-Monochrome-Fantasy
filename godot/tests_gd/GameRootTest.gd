@@ -3,7 +3,7 @@ extends Node
 ## bedroom through the scripted clock, saves/loads the same slot, and keeps the D-13 fault
 ## modal. The nine-band stage and VmBridge wiring from W2 stay covered here.
 
-const SIGNALS := ["PictureRequested", "SoundRequested", "MessageRequested", "MessageClosed",
+const SIGNALS := ["SoundRequested", "MessageRequested", "MessageClosed",
 	"ChoicesRequested", "TeleportRequested", "TransitionRequested", "EffectRequested"]
 
 
@@ -27,6 +27,10 @@ func _ready() -> void:
 			failures.append("GameRoot must own the nine-band stage")
 		if root.map_view == null:
 			failures.append("GameRoot must own a MapLayer for the bedroom")
+		if not root.vm.QueuePictureSignals:
+			failures.append("production GameRoot must queue picture commands")
+		if root.vm.TrackPicturesOnly:
+			failures.append("production GameRoot must render queued pictures")
 		for signal_name in SIGNALS:
 			if root.vm.get_signal_connection_list(signal_name).is_empty():
 				failures.append("VmBridge signal %s is not connected" % signal_name)

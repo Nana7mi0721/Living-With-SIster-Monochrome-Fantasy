@@ -359,6 +359,9 @@ public partial class VmController : Node, IHost, IVmSession
     /// <summary>Test hook: queue picture commands and let GDScript drain them after the VM step.</summary>
     public bool QueuePictureSignals { get; set; }
 
+    /// <summary>Test hook: drain queued pictures into track-only state instead of drawing Controls.</summary>
+    public bool TrackPicturesOnly { get; set; }
+
     /// <summary>Drain queued picture commands as a JSON array (avoids managed Variant containers).</summary>
     public string TakePicturesJson()
     {

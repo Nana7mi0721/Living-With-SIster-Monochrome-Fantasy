@@ -42,6 +42,7 @@ echo "$out" | grep -q BATTLE_WIRING_TEST_OK
 echo "$out" | grep -q BATTLE_TARGET_TEST_OK
 echo "$out" | grep -q BATTLE_SKILL_TARGET_TEST_OK
 echo "$out" | grep -q BATTLE_MENU_BRIDGE_TEST_OK
+echo "$out" | grep -q BATTLE_MATRIX_TEST_OK
 echo "$out" | grep -q H_EVENT_GATE_TEST_OK
 
 echo "[4/33] save import test"
@@ -109,9 +110,9 @@ run_gd() {
   printf '%s\n' "$out" | grep -q "$marker"
 }
 
-run_gd "14/32" InputRouterTest.tscn INPUT_ROUTER_TEST_OK
-run_gd "15/32" LayerOrderTest.tscn LAYER_ORDER_TEST_OK
-run_gd "16/32" AssetDBTest.tscn ASSETDB_TEST_OK
+run_gd "14/33" InputRouterTest.tscn INPUT_ROUTER_TEST_OK
+run_gd "15/33" LayerOrderTest.tscn LAYER_ORDER_TEST_OK
+run_gd "16/33" AssetDBTest.tscn ASSETDB_TEST_OK
 
 if [ "${LWsmf_RENDER:-0}" = "1" ]; then
   # Visual pass: the dummy renderer --headless selects has no textures, so the dialog
@@ -230,7 +231,7 @@ out_battle="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/Ce253DayRou
 printf '%s\n' "$out_battle" | tee "$IMO/reports/ce253_day_route.log"
 printf '%s\n' "$out_battle" | grep -q CE253_DAY_ROUTE_TEST_OK
 
-echo "[33/33] H scene end-to-end (CE310 A/B/C, CE323, CE335)"
+echo "[33/33] H scene end-to-end (CE310 A/B/C/outdoor, CE318, CE323, CE326, CE335)"
 out_h="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/HSceneTest.tscn 2>&1)"
 printf '%s\n' "$out_h" | tee "$IMO/reports/h_scene_test.log"
 printf '%s\n' "$out_h" | grep -q H_SCENE_TEST_OK

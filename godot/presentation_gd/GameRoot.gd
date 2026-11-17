@@ -65,6 +65,10 @@ func _ready() -> void:
 	vm = VmController.new()
 	# 发布与 CI 一律严格模式：未实现 opcode / 未知事件直接 Faulted，不允许静默跳过。
 	vm.StrictMode = true
+	# Production drains Picture() through TakePicturesJson instead of the managed
+	# PictureRequested signal: the cross-language Variant payload crashes native listeners
+	# on long deterministic runs (R8-P1-01). The signal stays declared for the frozen bridge.
+	vm.QueuePictureSignals = true
 	vm.name = "Vm"
 	# The poll mask picks the question (771 asks for the signed wheel notch) and auto_keys
 	# are the bits opcode 125 pressed on the script's behalf; both reach the core (W2-P1-03).
@@ -87,7 +91,6 @@ func _ready() -> void:
 	add_child(session)
 	session.Setup(vm, self)
 
-	vm.connect("PictureRequested", _on_picture)
 	vm.connect("SoundRequested", _on_sound)
 	vm.connect("MessageRequested", func(text: String, face: int) -> void: session.ShowMessage(text, face))
 	vm.connect("MessageClosed", func() -> void: session.NotifyMessageClosed())
@@ -140,7 +143,7 @@ func advance_frame() -> void:
 		var batch: Variant = JSON.parse_string(queued)
 		if batch is Array:
 			for p in batch:
-				if vm.QueuePictureSignals:
+				if vm.TrackPicturesOnly:
 					stage.track_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]))
 				else:
 					stage.draw_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]))
@@ -272,13 +275,6 @@ func _on_choice_chosen(index: int) -> void:
 
 
 # ---- host callbacks ------------------------------------------------------
-
-func _on_picture(number: int, action: int, file: String, text: String, args: Array) -> void:
-	# The frozen 5-arg signal omits the anchor and kind; VmController stores them for the
-	# immediately following callback. Without the anchor every 0x1000 draw lands corner-
-	# aligned (the retail menu rows are all centred).
-	stage.draw_picture(number, action, file, text, args, vm.LastPictureAnchor, vm.LastPictureKind)
-
 
 ## Opcode 124 host answer. The stage owns the geometry, so hover and the scalar fields
 ## come from one place instead of a second copy of the anchor/scale rules.

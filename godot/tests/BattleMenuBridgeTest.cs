@@ -12,11 +12,11 @@ namespace Lwsmf.Tests;
 /// Port of crates/wolf-game/tests/m11_party_live_bridge.rs: build the smallest real
 /// two-member party, drive the shipped CE188 command menu with real OK pulses, let
 /// BattleWiring harvest the CE157 registrations, then feed those rows into a real
-/// CE253 -> CE239 battle. The battle half is save-parity limited: Rust loads
-/// work/retail_backup/Save/SaveData01.sav (CE143 materializes CData type 10) and sees
-/// four command bodies settle +1, while this headless VM only has the 26 seed cells,
-/// so it settles after two real bodies with -1. Both halves still prove the live
-/// CE188 -> CE157 -> BattleWiring -> CE253 -> CE242 chain.
+/// CE253 -> CE239 battle. The battle half imports work/retail_backup/Save/SaveData01.sav
+/// (800 normal vars + 16,800 CData cells): the save-backed fixture settles four rounds
+/// at +1, the weakened-party fixture loses at -1, and a direct CE244 fixture with all
+/// four action pools empty settles -2. Together they prove the live
+/// CE188 -> CE157 -> BattleWiring -> CE253 -> CE242 -> CE244 chain.
 /// </summary>
 public static class BattleMenuBridgeTest
 {
@@ -88,7 +88,12 @@ public static class BattleMenuBridgeTest
         Check(defeat.Settle == -1, $"weakened party must lose, got {defeat.Settle}");
         Check(defeat.StartedRounds > 4, $"defeat must outlast the four-round budget, got {defeat.StartedRounds}");
         Check(defeat.Gauges.Count == defeat.StartedRounds && defeat.Gauges.All(g => g > 0), $"defeat must leave enemy gauge positive: {string.Join(",", defeat.Gauges)}");
-        GD.Print($"BATTLE_MATRIX_TEST_OK win=1 loss={defeat.Settle} win_rounds={battle.StartedRounds} loss_rounds={defeat.StartedRounds} win_gauges={string.Join(",", battle.Gauges)} loss_gauges={string.Join(",", defeat.Gauges)}");
+
+        var incap = RunCe244TripleZero();
+        Check(!incap.Faulted, "triple-zero fixture faulted: " + incap.FaultReason);
+        Check(incap.Decided, "triple-zero CE244 never settled");
+        Check(incap.Settle == -2, $"all four action pools empty must settle -2, got {incap.Settle}");
+        GD.Print($"BATTLE_MATRIX_TEST_OK win=1 loss={defeat.Settle} incap={incap.Settle} win_rounds={battle.StartedRounds} loss_rounds={defeat.StartedRounds} win_gauges={string.Join(",", battle.Gauges)} loss_gauges={string.Join(",", defeat.Gauges)}");
 
         GD.Print($"BATTLE_MENU_BRIDGE_TEST_OK rows={menu.Rows} real={menu.RealRows} rounds={battle.StartedRounds} turns={battle.TurnStarts} result={battle.Settle} pcs={Join(battle.Bodies.ConvertAll(b => b.Pc))} pools={string.Join(",", finalPools)} save_vars={battle.SaveVars} save_cells={battle.SaveCells}");
     }
@@ -230,6 +235,55 @@ public static class BattleMenuBridgeTest
             for (int i = 0; i < 4; i++) outcome.FinalPools[i] = vm.Vm.Vars.Get(345 + i);
             outcome.StartedRounds = wiring.StartedRounds;
             outcome.TurnStarts = wiring.TurnStarts;
+        }
+        catch (Exception e)
+        {
+            outcome.Faulted = true;
+            outcome.FaultReason = e.Message;
+        }
+        finally
+        {
+            vm.Free();
+        }
+        return outcome;
+    }
+
+    /// <summary>Direct CE244 settlement with all four action pools empty (352 = -2).</summary>
+    private static BattleOutcome RunCe244TripleZero()
+    {
+        var outcome = new BattleOutcome();
+        var vm = new VmController();
+        try
+        {
+            Load(vm, out var store);
+            SeedBattle(store!);
+            SeedTwoMemberParty(store!);
+            var autoEvents = AutoEvents.FromPrograms(vm.Vm.Programs.Values);
+            autoEvents.PrimeLatched(vm.Vm);
+            vm.Vm.Rng.SetEventSeed(9);
+            vm.Vm.Vars.Set(342, 100);
+            vm.Vm.Vars.Set(29, 10);
+            vm.Vm.Vars.Set(343, 0);
+            vm.Vm.Vars.Set(350, 1);
+            vm.Vm.Vars.Set(354, 11);
+            for (int i = 0; i < 4; i++) vm.Vm.Vars.Set(345 + i, 0);
+            Check(vm.StartEvent(244), "CE244 failed to start");
+            int frame = 0;
+            vm.KeyCodeProvider = _ => frame % 2 == 0 ? KeyCodes.CodeOk : KeyCodes.CodeNone;
+            for (frame = 0; frame < 600; frame++)
+            {
+                autoEvents.Sync(vm.Vm);
+                vm.StepFrame();
+                if (vm.IsWaitingForMessage()) vm.DismissMessage();
+                if (vm.Vm.Vars.Get(343) == 1 && vm.Vm.Vars.Get(350) == 0)
+                {
+                    outcome.Settle = vm.Vm.Vars.Get(352);
+                    outcome.Decided = true;
+                    break;
+                }
+                if (vm.Vm.Faulted) break;
+            }
+            outcome.StartedRounds = 0;
         }
         catch (Exception e)
         {
