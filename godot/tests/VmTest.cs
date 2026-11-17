@@ -43,6 +43,7 @@ public static class VmTest
         BattleSkillTargetTest.Run();
         BattleMenuBridgeTest.Run();
         HEventGateTest.Run();
+        ContentMatrixTest.Run();
 
         Console.WriteLine("[VmTest] ALL VM TESTS PASSED!");
     }

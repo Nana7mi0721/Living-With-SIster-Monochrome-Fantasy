@@ -225,6 +225,7 @@
 
 - 九结局其余 7 条已由 `m13_all_endings.rs` 覆盖（14 默认+2 ignored 全绿）；§4 表中标“未测/未专项”的 212–218 行以该测试为准。
 - 111 条件注入 17 项已由 `m13_random_events_injected.rs` 覆盖（3 测试全绿）；§5 第 232–233 条闭环。
+- 同一 17 项已移植到 C# `godot/tests/ContentMatrixTest.cs`：18 条运行时用例（16 个 DLC 随机事件 + 特4 海豹）+ 15 条 op111 静态门，输出 `CONTENT_MATRIX_TEST_OK cases=18 gates=15`（§4.40，D-50）；自然 111 池与九结局仍以 Rust 矩阵为准。
 - 餐厅 H 门已更正为 CE326@801–805 `var424≥3 ∧ var18≥100 ∧ var16≥1`（见 M13_H_ENDTOEND.md）；§5 第 230 条作废。
 - 正常通关 fidelity bug 已由 `7c3b728` 修复（自然通关已验证）；§5 第 234 条作废。
 
@@ -236,7 +237,7 @@
 - 农民 END：脚本完整、自然可达，但无专项断言 → 建议补 1 条 marker 断言。
 - 餐厅 H 门：已定位 CE326@801–805（var424≥3 ∧ var18≥100 ∧ var16≥1）；原「未落 CE326」结论作废，剩余差异是攻略无「妹性欲≥60」前置。
 - 乳交 var327 门：CE318 内未见 → 需夹具。
-- DLC 随机事件（#10/28/39/45/54/58/59/62/63/65/69/76/80/84/101/111 等 16 条 + 特4）：位于 CE452/460/461/465/449，条件注入（需 seed var619），未逐条自动化测试。
+- DLC 随机事件（#10/28/39/45/54/58/59/62/63/65/69/76/80/84/101/111 等 16 条 + 特4）：位于 CE452/460/461/465/449，条件注入（需 seed var619）；Rust `m13_random_events_injected.rs` 与 C# `ContentMatrixTest` 已逐条覆盖（18 用例 + 15 门，§4.40/D-50）。
 - 111 条随机事件：无逐条自动化测试（本矩阵为脚本级核对 PASS）；建议对代表性池各挑 1 条做冒烟测试。
 - 正常通关自然可达性：fidelity bug（CE251 self51 持久化），已在 M13_MAINLINE_ENDINGS 记录，属生产代码范围，未修 → 需 lead 决策。
 - 建议后续自动化：可新增表驱动测试 crates/wolf-game/tests/m13_content_matrix.rs（遍历 program.slots opcode 111 断言 H 门 (var,cmp,val)；断言 CE326@36/@38 参军门、CE305 结局 marker、CE452 EP marker、CE235/CE234/CE510–527 存在；需 WOLF_DATA_ROOT=work/all）。
