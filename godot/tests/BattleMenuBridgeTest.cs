@@ -37,6 +37,30 @@ public static class BattleMenuBridgeTest
         public string? FaultReason;
     }
 
+    private sealed class EscapeOutcome
+    {
+        public bool Saw191;
+        public bool Saw192;
+        public bool Saw65;
+        public bool Saw157;
+        public bool Saw242;
+        public bool Saw244;
+        public bool TopMenu;
+        public bool DownSent;
+        public bool EscapeFlag;
+        public bool Reached74;
+        public bool Decided;
+        public int CmdPositiveAfter;
+        public int V352;
+        public int V343;
+        public int V350;
+        public bool Faulted;
+        public string? FaultReason;
+        public string C19Dump = "";
+        public string CmdBefore = "";
+        public string CmdAfter = "";
+    }
+
     private sealed class BattleOutcome
     {
         public long StartedRounds;
@@ -88,6 +112,23 @@ public static class BattleMenuBridgeTest
         Check(defeat.Settle == -1, $"weakened party must lose, got {defeat.Settle}");
         Check(defeat.StartedRounds > 4, $"defeat must outlast the four-round budget, got {defeat.StartedRounds}");
         Check(defeat.Gauges.Count == defeat.StartedRounds && defeat.Gauges.All(g => g > 0), $"defeat must leave enemy gauge positive: {string.Join(",", defeat.Gauges)}");
+
+        var escape = RunEscape();
+        Check(!escape.Faulted, "escape fixture faulted: " + escape.FaultReason);
+        Check(escape.Saw191, "escape fixture never reached CE191");
+        Check(escape.DownSent, "escape fixture never selected the action row");
+        Check(escape.C19Dump == "[0:1,1][1:-1,1][2:0,0]", $"action window rows must be battle/escape, got {escape.C19Dump}");
+        Check(escape.Reached74, "escape selection never reached CE191 pc74");
+        Check(escape.EscapeFlag, "escape row must set 1600099 (self 699) to 1");
+        Check(!escape.Saw192, "escape must never start CE192");
+        Check(escape.Saw65, "escape still needs the CE65 window");
+        Check(!escape.Saw157, "escape must never start CE157");
+        Check(!escape.Saw242, "escape must never start CE242");
+        Check(!escape.Saw244, "escape must never start CE244");
+        Check(escape.CmdPositiveAfter == 0, $"escape must not register a command, got {escape.CmdAfter}");
+        Check(!escape.Decided, "escape must not settle the battle");
+        Check(escape.V352 == 0 && escape.V343 == 0 && escape.V350 == 0, $"escape must leave battle vars at zero, got {escape.V352}/{escape.V343}/{escape.V350}");
+        GD.Print($"BATTLE_ESCAPE_TEST_OK saw191=1 escape=1 saw192=0 ce157=0 rounds=0 v352=0");
 
         var incap = RunCe244TripleZero();
         Check(!incap.Faulted, "triple-zero fixture faulted: " + incap.FaultReason);
@@ -235,6 +276,122 @@ public static class BattleMenuBridgeTest
             for (int i = 0; i < 4; i++) outcome.FinalPools[i] = vm.Vm.Vars.Get(345 + i);
             outcome.StartedRounds = wiring.StartedRounds;
             outcome.TurnStarts = wiring.TurnStarts;
+        }
+        catch (Exception e)
+        {
+            outcome.Faulted = true;
+            outcome.FaultReason = e.Message;
+        }
+        finally
+        {
+            vm.Free();
+        }
+        return outcome;
+    }
+
+    private static string CmdSnapshot(GameDatabase store)
+    {
+        var cmd = new System.Text.StringBuilder();
+        for (int row = 0; row < 4; row++)
+            cmd.Append($"[{row}:{ReadNum(store, 14, row, 0)},{ReadNum(store, 14, row, 1)},{ReadNum(store, 14, row, 2)},{ReadNum(store, 14, row, 3)}]");
+        return cmd.ToString();
+    }
+
+    private static EscapeOutcome RunEscape()
+    {
+        var outcome = new EscapeOutcome();
+        var vm = new VmController();
+        try
+        {
+            Load(vm, out var store);
+            var savePath = System.IO.Path.GetFullPath(System.IO.Path.Combine(ProjectSettings.GlobalizePath("res://"), "..", "work", "retail_backup", "Save", "SaveData01.sav"));
+            Check(System.IO.File.Exists(savePath), "retail save missing: " + savePath);
+            var save = LegacySaveImporter.ImportFile(savePath, 0);
+            foreach (var pair in save.Recovered.Variables)
+                if (int.TryParse(pair.Key, out int index)) vm.Vm.Vars.Set(index, pair.Value);
+            store!.ApplySavedCells(save.Recovered.DatabaseCells);
+            SeedBattle(store);
+            SeedTwoMemberParty(store);
+            outcome.CmdBefore = CmdSnapshot(store);
+
+            var autoEvents = AutoEvents.FromPrograms(vm.Vm.Programs.Values);
+            autoEvents.PrimeLatched(vm.Vm);
+
+            int frame = 0;
+            int downFrame = -1;
+            int pc191 = -1;
+            bool suppressKey = false;
+            vm.KeyCodeProvider = _ =>
+            {
+                if (outcome.DownSent && frame <= downFrame + 8) return KeyCodes.CodeOk;
+                if (outcome.DownSent) return KeyCodes.CodeNone;
+                if (pc191 == 63)
+                {
+                    outcome.DownSent = true;
+                    outcome.TopMenu = true;
+                    downFrame = frame;
+                    return KeyCodes.CodeDown;
+                }
+                if (suppressKey) return KeyCodes.CodeNone;
+                return frame % 2 == 0 ? KeyCodes.CodeOk : KeyCodes.CodeNone;
+            };
+            vm.Vm.StepHook = (inst, pc) =>
+            {
+                if (inst.EventId == 191)
+                {
+                    if (pc == 0) suppressKey = true;
+                    if (pc == 58 || pc == 63)
+                    {
+                        var w = new System.Text.StringBuilder();
+                        for (int row = 0; row < 3; row++)
+                            w.Append($"[{row}:{ReadNum(store, 19, row, 1)},{ReadNum(store, 19, row, 2)}]");
+                        outcome.C19Dump = w.ToString();
+                    }
+                    if (pc == 74) outcome.Reached74 = true;
+                    if (pc == 75) outcome.EscapeFlag = inst.Self.Get(699) == 1;
+                }
+            };
+            Check(vm.StartEvent(188), "CE188 failed to start");
+
+            for (frame = 0; frame < 2000; frame++)
+            {
+                pc191 = -1;
+                foreach (var inst in vm.Vm.Instances)
+                    if (inst.EventId == 191) pc191 = inst.Pc;
+                autoEvents.Sync(vm.Vm);
+                if (vm.IsWaitingForChoice()) vm.SelectChoice(0);
+                vm.StepFrame();
+                if (vm.IsWaitingForMessage()) vm.DismissMessage();
+
+                foreach (var inst in vm.Vm.Instances)
+                {
+                    if (inst.EventId == 191)
+                    {
+                        outcome.Saw191 = true;
+                        if (outcome.C19Dump.Length == 0)
+                        {
+                            var w = new System.Text.StringBuilder();
+                            for (int row = 0; row < 3; row++)
+                                w.Append($"[{row}:{ReadNum(store, 19, row, 1)},{ReadNum(store, 19, row, 2)}]");
+                            outcome.C19Dump = w.ToString();
+                        }
+                    }
+                    else if (inst.EventId == 192) outcome.Saw192 = true;
+                    else if (inst.EventId == 65) outcome.Saw65 = true;
+                    else if (inst.EventId == 157) outcome.Saw157 = true;
+                    else if (inst.EventId == 242) outcome.Saw242 = true;
+                    else if (inst.EventId == 244) outcome.Saw244 = true;
+                }
+                if (outcome.Reached74 && frame - downFrame > 20) break;
+                if (vm.Vm.Faulted) break;
+            }
+            outcome.CmdAfter = CmdSnapshot(store);
+            for (int row = 0; row < 16; row++)
+                if (ReadNum(store, 14, row, 3) > 0) outcome.CmdPositiveAfter++;
+            outcome.V352 = vm.Vm.Vars.Get(352);
+            outcome.V343 = vm.Vm.Vars.Get(343);
+            outcome.V350 = vm.Vm.Vars.Get(350);
+            outcome.Decided = outcome.V343 == 1;
         }
         catch (Exception e)
         {

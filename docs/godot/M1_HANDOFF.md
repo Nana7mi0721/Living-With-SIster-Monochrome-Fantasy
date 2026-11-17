@@ -91,6 +91,7 @@
 | H 场景端到端 | `res://tests_gd/HSceneTest.tscn` | `H_SCENE_TEST_OK checks=92 messages=7`；CE310 A/B/C（含 `var150/424`、spawn 226）与 outdoor `@731` 门（`var150/452/456`、`var424` 1→2、`var22` 120→125、`var16` 5→4）及 `102=29` 拒绝、CE323（spawn 376/355/356、`var221=4`）、CE335、CE318 信頼 100/99→CE360 与 `var103` 半支（131/206 +2 vs +1）、CE327→CE326 自然晚餐、CE326 `@799` 门→CE502；菜单行 1208/1210 命中框重叠，H 行需在 85% 高度按 held=1 |
 | 生产图片队列与门禁 | `res://tests_gd/GameRootTest.tscn` / `res://tests_gd/Ce253DayRouteTest.tscn` / `tools/godot_check.sh` | `GAME_ROOT_TEST_OK`（Queue=true/Track=false）、`CE253_DAY_ROUTE_TEST_OK`（track 不建节点）；生产 `draw_picture` 不再走 `PictureRequested`；`LWsmf_DRAW_LONG_RUN=1` 的 windowed day1→day5 绘制跑通；14..16 标签为 /33，Smoke 显式 grep 矩阵，第 33 步列全 H（§4.38，D-47） |
 | CE244 三态 `-2` | `res://tests/Smoke.tscn` | `BATTLE_MATRIX_TEST_OK win=1 loss=-1 incap=-2`；直接 CE244 夹具（池 345..348 全空）结算 `352=-2/343=1/350=0`（§4.38，D-48） |
+| 独立逃跑分支 | `res://tests/Smoke.tscn` | `BATTLE_ESCAPE_TEST_OK saw191=1 escape=1 saw192=0 ce157=0 rounds=0 v352=0`；CE191 行动窗口 row1 `code -1` 写 `1600099`（self 699）后 BreakEvent，无 CE192/157/242/244、无正技能、战斗 vars 全 0（§4.39，D-49） |
 | 自然战斗菜单桥/四轮 | `res://tests/Smoke.tscn` | `BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=4 turns=3 result=1 pcs=338,645,792,996 pools=3,2,3,2 save_vars=800 save_cells=16800`；导入零售存档 vars+CData 并 `PrimeLatched` 后与 Rust m11 四轮 `+1` 全等（§4.34，D-43）；`BATTLE_MATRIX_TEST_OK win=1 loss=-1 win_rounds=4 loss_rounds=10` |
 | 第七轮 P2 收口 | `res://tests_gd/GameRootTest.tscn` / `AudioManagerTest.tscn` / `Smoke.tscn` / `converter validate` | `GAME_ROOT_TEST_OK`（Generation+1、重开新游戏后 event 38 重启）、`AUDIO_MANAGER_TEST_OK checks=32`、`unknown sound type` 循环两次仅 1 条日志、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`；零售 BasicData 四文件哈希与 `work/all` 全等（D-37） |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
@@ -505,7 +506,17 @@
 - **R8-P2-01 门禁**：`tools/godot_check.sh` 的 14/32..16/32 标签改 14/33..16/33；Smoke 段增加 `grep -q BATTLE_MATRIX_TEST_OK`；第 33 步描述改为 CE310 A/B/C/outdoor、CE318、CE323、CE326、CE335。
 - **CE244 第三态**：`BattleMenuBridgeTest.RunCe244TripleZero` 直接 `StartEvent(244)`，设 `342=100`、`29=10`、`350=1`、`354=11`、`345..348=0`，结算 `352=-2`、`343=1`、`350=0`；矩阵输出 `BATTLE_MATRIX_TEST_OK win=1 loss=-1 incap=-2 ...`。
 - **结果**：C# Rebuild 0 warning/0 error；`SMOKE_OK`、`GAME_ROOT_TEST_OK`、`CE253_DAY_ROUTE_TEST_OK`、`H_SCENE_TEST_OK checks=92 messages=7` 均通过。33 步 headless（`reports/r8_gate_headless3.log`）与 windowed（`reports/r8_gate_windowed3.log`）门禁均以 `GODOT_GATE_OK` 结束，EXIT=0；真实渲染逐帧绘制的 day1→day5 长跑（`reports/r8_route_draw.log`）也以 `CE253_DAY_ROUTE_TEST_OK` EXIT=0 结束。
-- **边界**：队列在整帧后统一排空，同一帧内先画图后读 124 会看到上一帧几何；现有 CE251/CE310 菜单都是跨帧轮询。CE310 六行命中框重叠仍是原版素材限制（R8-P2-02），测试只在 85% 高度点击。独立逃跑分支、第二条 101/102/BGS/白天/战斗整路线 Oracle 与 M4 内容矩阵仍未接。
+- **边界**：队列在整帧后统一排空，同一帧内先画图后读 124 会看到上一帧几何；现有 CE251/CE310 菜单都是跨帧轮询。CE310 六行命中框重叠仍是原版素材限制（R8-P2-02），测试只在 85% 高度点击。独立逃跑分支已由 §4.39/D-49 关闭；第二条 101/102/BGS/白天/战斗整路线 Oracle 与 M4 内容矩阵仍未接。
+
+### 4.39 独立逃跑分支（2026-11-17）
+
+来源：用户 m20064「继续完成未交接边界」。此前的“逃跑”只被记成 CE244 的 `-2`；实际 `-2` 是「全員行動不能」，独立逃跑在 CE191 的「行動内容」窗口。
+
+- **分支位置**：CE188→CE191；CE191 `pc58` 打开窗口 2、`pc62` 选择写 `1600015`，`pc63` 只把 `-100` 当取消重开；`pc72 111 [1,1600015,-1,2]` 命中 row1 的 `code -1`，`pc74 121 [1600099,1,0,0]` 写 `1600099=1`，`pc75 172` BreakEvent。CE192 是成员 command window（`pc147` 的 `-100/-300/-2` 只是取消/返回），CE157 只在 `pc208` 真正选技能时登记。
+- **测试**：`BattleMenuBridgeTest.RunEscape` 导入零售存档 vars+CData、`SeedBattle`+`SeedTwoMemberParty`，不接 `BattleWiring`/menu queue；`StartEvent(188)`。在 CE191 `pc63`（父实例等 CE65）发一次 `CodeDown`，随后 8 帧 `CodeOk`；`CData type19` 快照 `[0:1,1][1:-1,1][2:0,0]`，确认 row0 战斗 code 1、row1 逃跑 code -1、row2 空。
+- **槽位**：`1600099` 按 `Magic.SelfSlot` 映射为 `Self.Get(699)`（`1_600_000+N → 600+N`）；此前 `Self.Get(99)` 读到 0 是错位。
+- **结果**：`BATTLE_ESCAPE_TEST_OK saw191=1 escape=1 saw192=0 ce157=0 rounds=0 v352=0`；CData14 无正技能（`CmdPositiveAfter=0`），`Saw65` 为真，CE192/157/242/244 均未启动，`352/343/350` 保持 0 且未结算。
+- **边界**：走 opcode 123 键码层，零售鼠标→键码的 125 链不在范围；目标选择窗口的取消/左右不在本测试。
 
 ---
 
@@ -527,7 +538,7 @@
 14. **H 阈值**：37 个真实 op111 载荷与 59 个阈值/多条件边界已由 `HEventGateTest` 钉住（§4.27，D-32），输出带 `data_only=1`；H 场景已由 §4.35 覆盖（CE310 A/B/C、CE323、CE335），CE318→CE360 与 CE326 台所 H 已由 §4.36 覆盖，CE310 outdoor/CE318 半支/CE326 自然晚餐入口已由 §4.37 覆盖；`@799` 台所 H 的真实晚餐分支仍未自然到达。
 15. **第六轮审阅 P1/P2**：滚轮 126、同文件音频流隔离、未知 soundType 告警、图片容器镜像、严格 effects 对拍与 H 标记已收口（§4.28，D-33/D-34）；AutoEvents 新游戏复位按 D-33 拒绝；Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。
 16. **第七轮审阅 P1/P2**：故障返回标题重建 `GameSession`/`AutoEvents`，SE 复用缓存流，未知 soundType 按站点去重；D-35 增加 `reports/database_schema_audit.json` 静态审计并把两个 250 回退列标为 `retail-confirmed-label-absent`；零售 BasicData 哈希确认关闭 D-31（§4.29，D-36/D-37）。
-17. **自然战斗菜单桥**：`CE188` 菜单经 `CData 18/73/0` 游标提交 8 行，前两行技能 26/25；`CE253` 消费前两行并生成 `CE242` pc338/645 后 `CE244` 结算 `-1`（§4.30，D-38）。Rust 存档夹具的四轮 `+1` 已由 §4.34 接通（导入零售 800 vars + 16,800 CData cells 与 `PrimeLatched`），`+1/-1/-2` 三态矩阵已由 §4.38 覆盖；独立逃跑分支与第二条整路线 Oracle 仍未接。
+17. **自然战斗菜单桥**：`CE188` 菜单经 `CData 18/73/0` 游标提交 8 行，前两行技能 26/25；`CE253` 消费前两行并生成 `CE242` pc338/645 后 `CE244` 结算 `-1`（§4.30，D-38）。Rust 存档夹具的四轮 `+1` 已由 §4.34 接通（导入零售 800 vars + 16,800 CData cells 与 `PrimeLatched`），`+1/-1/-2` 三态矩阵已由 §4.38 覆盖；独立逃跑分支已由 §4.39/D-49 关闭，第二条整路线 Oracle 仍未接。
 18. **地图语义、Autorun 与冷启动**：`op130` 按 SysDatabase type0 行号进入 SampleMapA（artifact 1005），`MapRuntime` 补 Autorun 只启动一次守卫，整路线 149,247/149,247；`ColdStartDayTest` 从标题到 day2 08:30（§4.31，D-39/D-40）；`Ce253DayRouteTest` 沿 day2/3 菜单、day4 自然 CE253 到 day5 08:30（§4.33，D-42）。四轮 `+1` 与真实伤害/胜负矩阵已由 §4.34 覆盖，H 场景已由 §4.35 覆盖。
-19. **第八轮审阅 P1/P2**：生产 `GameRoot` 图片改走队列 + `draw_picture`，不再连 `PictureRequested`；门禁修 14..16 标签、补矩阵 grep 与第 33 步描述；CE244 三态 `-2` 用直接全空 pool 夹具覆盖（§4.38，D-47/D-48）。独立逃跑分支、第二条 101/102/BGS/白天/战斗整路线 Oracle 与 M4 内容矩阵仍未接。
+19. **第八轮审阅 P1/P2**：生产 `GameRoot` 图片改走队列 + `draw_picture`，不再连 `PictureRequested`；门禁修 14..16 标签、补矩阵 grep 与第 33 步描述；CE244 三态 `-2` 用直接全空 pool 夹具覆盖（§4.38，D-47/D-48）。独立逃跑分支已由 §4.39/D-49 关闭；第二条 101/102/BGS/白天/战斗整路线 Oracle 与 M4 内容矩阵仍未接。
 20. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。

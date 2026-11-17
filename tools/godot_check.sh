@@ -43,6 +43,7 @@ echo "$out" | grep -q BATTLE_TARGET_TEST_OK
 echo "$out" | grep -q BATTLE_SKILL_TARGET_TEST_OK
 echo "$out" | grep -q BATTLE_MENU_BRIDGE_TEST_OK
 echo "$out" | grep -q BATTLE_MATRIX_TEST_OK
+echo "$out" | grep -q BATTLE_ESCAPE_TEST_OK
 echo "$out" | grep -q H_EVENT_GATE_TEST_OK
 
 echo "[4/33] save import test"
