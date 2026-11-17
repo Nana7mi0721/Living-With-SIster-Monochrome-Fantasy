@@ -507,7 +507,7 @@
 - **R8-P2-01 门禁**：`tools/godot_check.sh` 的 14/32..16/32 标签改 14/33..16/33；Smoke 段增加 `grep -q BATTLE_MATRIX_TEST_OK`；第 33 步描述改为 CE310 A/B/C/outdoor、CE318、CE323、CE326、CE335。
 - **CE244 第三态**：`BattleMenuBridgeTest.RunCe244TripleZero` 直接 `StartEvent(244)`，设 `342=100`、`29=10`、`350=1`、`354=11`、`345..348=0`，结算 `352=-2`、`343=1`、`350=0`；矩阵输出 `BATTLE_MATRIX_TEST_OK win=1 loss=-1 incap=-2 ...`。
 - **结果**：C# Rebuild 0 warning/0 error；`SMOKE_OK`、`GAME_ROOT_TEST_OK`、`CE253_DAY_ROUTE_TEST_OK`、`H_SCENE_TEST_OK checks=92 messages=7` 均通过。33 步 headless（`reports/r8_gate_headless3.log`）与 windowed（`reports/r8_gate_windowed3.log`）门禁均以 `GODOT_GATE_OK` 结束，EXIT=0；真实渲染逐帧绘制的 day1→day5 长跑（`reports/r8_route_draw.log`）也以 `CE253_DAY_ROUTE_TEST_OK` EXIT=0 结束。
-- **边界**：队列在整帧后统一排空，同一帧内先画图后读 124 会看到上一帧几何；现有 CE251/CE310 菜单都是跨帧轮询。CE310 六行命中框重叠仍是原版素材限制（R8-P2-02），测试只在 85% 高度点击。独立逃跑分支已由 §4.39/D-49 关闭；M4 内容矩阵已由 §4.40/D-50 覆盖；第二条 101/102/BGS/白天/战斗整路线 Oracle 仍未接。
+- **边界**：队列在整帧后统一排空，同一帧内先画图后读 124 会看到上一帧几何；现有 CE251/CE310 菜单都是跨帧轮询。CE310 六行命中框重叠仍是原版素材限制（R8-P2-02），测试只在 85% 高度点击。独立逃跑分支已由 §4.39/D-49 关闭；M4 内容矩阵已由 §4.40/D-50 覆盖；第二条 101/102/BGS 整路线 Oracle 已由 §4.41/D-51 覆盖（3000 帧），单条含白天/战斗的逐指令 Oracle 仍未接。
 
 ### 4.39 独立逃跑分支（2026-11-17）
 
@@ -530,13 +530,25 @@
 - **调试坑**：未加入场景树的 `new VmController()` 不会跑 `_Ready`，`Vm.Host` 仍是 `NullHost`，`MessageRequested` 不发出且消息等待永不解除（首个失败 `#10 CE460@5 messages=[]`）；必须显式 `vm.Vm.Host = vm`。Rust 的 `drive` 不要求事件在 1200 帧内结束，C# 也不断言 `ended`；CE452@2983 会超过 1200 帧，仍以期望文本与无 fault 为准。
 - **边界**：只覆盖注入分支与 15 个门载荷；111 条自然随机池抽取、九结局、DLC 商店/EP 全链仍以 Rust 矩阵为准。用例窗口上限 1200 帧，事件若更长只验证到窗口内的文本。
 
+### 4.41 第二条整路线 Oracle：3000 帧 101/102/BGS（2026-11-17）
+
+来源：用户 m20704「继续完成剩余未交接边界」。原 1500 帧路线只含标题菜单一次选择，没有 op101/op102 与 BGS。
+
+- **C# 模式**：`godot/tests/RouteTraceTest.cs` 增加 `LWsmf_ROUTE2=1`；`Frames=3000`、route 名 `title_newgame_bedroom3000`、输出 `reports/csharp_route2_trace.json`。1500 帧的 phase/map 断言只在非 route2 生效，save/load 状态回路保留。
+- **Rust 侧**：`wolf-cli route --root work/all --frames 3000` 写 `reports/rust_route2_trace.json`；冻结为 `oracle/fixtures/main_route2_rust_trace.json.gz`（2.3 MB，Python gzip 生成，Windows MSYS 无 `gzip`）。
+- **结果**：两侧 401,997 steps、49,361 个带 effect step；`ROUTE_DIFF_OK: 401997/401997 steps matched 100% (frames 3000/3000)`（`reports/route2_trace_diff.json`）。C# 输出 `[RouteTraceTest] steps=401997 frames=3000 effects_steps=49361 phase=bedroom map=1005 leader=62,35 faulted=False unhandled=0` 与 `ROUTE_TRACE_TEST_OK`（`reports/route2_trace_test.log`）。
+- **内容**：op101=39、op102=6、op124=21,295、op130=2；sound BGS play=1、BGM play/stop=5/2、SE=2。路线从 TitleMap event 2 经新游戏到 SampleMapA 卧室，第 3000 帧仍在 day1 bedroom。
+- **门禁**：`tools/godot_check.sh` 第 27 步内追加 27b：`LWsmf_ROUTE2=1` headless 跑 `RouteTraceTest.tscn`、grep `ROUTE_TRACE_TEST_OK`、diff route2 夹具；不增加 33 步计数。
+- **边界**：route2 不含 CE251/CE310 白天图片菜单与 CE253/CE239 战斗，因此白天/战斗仍由 `Ce253DayRouteTest` 端到端覆盖（§4.33），没有并进同一条逐指令 Oracle。白天菜单需要 opcode124 的 PictureState 与指针，Rust route host 当前没有屏幕/资产几何；这是后续若要合并整路线的主要工作。
+- **调试坑**：Rust `m9_full_route` 的 day1 夜间菜单在本次环境未打开（`CE245` 缺失），因此没有用它做 milestone 对拍；route2 仍以 opcode 级 diff 为准。
+
 ---
 
 ## 5. 下一步（M3 入口）
 
 1. ~~**输入与 UI 骨架**：InputRouter、9 级图层、101/102 自绘与字体度量~~（W2 Day 2–4 已完成，见 §4.5；第三轮审阅 P1 交互/存档缺陷见 §4.6；D-13/D-14 与 KeyCodes/缓存/传送收敛见 §4.7）；GameRoot 已接管标题→新游戏→卧室→F5/F9（§4.8），`project.godot` 主场景已切到 `GameRoot.tscn`（§4.9），旧表现层已退役（§4.13）。
 2. **地图呈现**：tile 图层与地形通行已接通（§4.8）；MapChip 为引擎通用素材，正片未使用，调色板占位仅回归辅助；OVERVIEW 保留。
-3. **整段 trace**：SampleMapA 事件 0 的 418 帧逐指令对拍（§4.5/§4.9，2461/2461）与整路线 1500 帧（§4.31，149247/149247，map1005）均已打通；整路线只覆盖标题菜单 1 次选择，白天 101/102 消息/选择仍靠单独用例。
+3. **整段 trace**：SampleMapA 事件 0 的 418 帧逐指令对拍（§4.5/§4.9，2461/2461）与整路线 1500 帧（§4.31，149247/149247，map1005）均已打通；1500 帧整路线只覆盖标题菜单 1 次选择；3000 帧 route2 已补 101/102/BGS（§4.41，401997/401997），白天菜单与战斗的逐指令整路线仍靠单独用例。
 4. **日程/时间**：确定性时钟与 30 天就寝链已打通（§4.10）；HUD 时间已由 `CE217` 的 6200 真实渲染（§4.14）；白天 `CE251/CE310` 的图片菜单点击、确认与日程/体力推进已由 §4.16 端到端覆盖；从冷启动进入白天已由 `ColdStartDayTest` 覆盖到 day2 08:30（§4.31）。
 5. **输入权限**：`123/126` 已按官方三态/设备分支实现并由两侧单测覆盖（§4.15，D-20）；表现层已按 §4.18 接线（D-23）；`123` mask 的逐位表与 `126` target 的具体键对应仍待编辑器差分，不阻塞本作。
 6. **故障恢复**：D-13 除锁档/诊断包外已支持显式「返回标题」重建标题安全点（§4.17）；返回标题时会清 `InputRouter` 指针/帧 latch，F9 读档故障进入模态（§4.18）；存档槽级安全点回滚留 M5。
@@ -550,7 +562,7 @@
 14. **H 阈值**：37 个真实 op111 载荷与 59 个阈值/多条件边界已由 `HEventGateTest` 钉住（§4.27，D-32），输出带 `data_only=1`；H 场景已由 §4.35 覆盖（CE310 A/B/C、CE323、CE335），CE318→CE360 与 CE326 台所 H 已由 §4.36 覆盖，CE310 outdoor/CE318 半支/CE326 自然晚餐入口已由 §4.37 覆盖；`@799` 台所 H 的真实晚餐分支仍未自然到达。
 15. **第六轮审阅 P1/P2**：滚轮 126、同文件音频流隔离、未知 soundType 告警、图片容器镜像、严格 effects 对拍与 H 标记已收口（§4.28，D-33/D-34）；AutoEvents 新游戏复位按 D-33 拒绝；Data type0 列错位与 `.sav` 生产严格入口写入契约（D-35）。
 16. **第七轮审阅 P1/P2**：故障返回标题重建 `GameSession`/`AutoEvents`，SE 复用缓存流，未知 soundType 按站点去重；D-35 增加 `reports/database_schema_audit.json` 静态审计并把两个 250 回退列标为 `retail-confirmed-label-absent`；零售 BasicData 哈希确认关闭 D-31（§4.29，D-36/D-37）。
-17. **自然战斗菜单桥**：`CE188` 菜单经 `CData 18/73/0` 游标提交 8 行，前两行技能 26/25；`CE253` 消费前两行并生成 `CE242` pc338/645 后 `CE244` 结算 `-1`（§4.30，D-38）。Rust 存档夹具的四轮 `+1` 已由 §4.34 接通（导入零售 800 vars + 16,800 CData cells 与 `PrimeLatched`），`+1/-1/-2` 三态矩阵已由 §4.38 覆盖；独立逃跑分支已由 §4.39/D-49 关闭，第二条整路线 Oracle 仍未接。
+17. **自然战斗菜单桥**：`CE188` 菜单经 `CData 18/73/0` 游标提交 8 行，前两行技能 26/25；`CE253` 消费前两行并生成 `CE242` pc338/645 后 `CE244` 结算 `-1`（§4.30，D-38）。Rust 存档夹具的四轮 `+1` 已由 §4.34 接通（导入零售 800 vars + 16,800 CData cells 与 `PrimeLatched`），`+1/-1/-2` 三态矩阵已由 §4.38 覆盖；独立逃跑分支已由 §4.39/D-49 关闭；第二条 101/102/BGS 整路线 Oracle 已由 §4.41/D-51 覆盖，单条含白天/战斗的逐指令 Oracle 仍未接。
 18. **地图语义、Autorun 与冷启动**：`op130` 按 SysDatabase type0 行号进入 SampleMapA（artifact 1005），`MapRuntime` 补 Autorun 只启动一次守卫，整路线 149,247/149,247；`ColdStartDayTest` 从标题到 day2 08:30（§4.31，D-39/D-40）；`Ce253DayRouteTest` 沿 day2/3 菜单、day4 自然 CE253 到 day5 08:30（§4.33，D-42）。四轮 `+1` 与真实伤害/胜负矩阵已由 §4.34 覆盖，H 场景已由 §4.35 覆盖。
-19. **第八轮审阅 P1/P2**：生产 `GameRoot` 图片改走队列 + `draw_picture`，不再连 `PictureRequested`；门禁修 14..16 标签、补矩阵 grep 与第 33 步描述；CE244 三态 `-2` 用直接全空 pool 夹具覆盖（§4.38，D-47/D-48）。独立逃跑分支已由 §4.39/D-49 关闭；M4 内容矩阵的 17 项条件注入已由 §4.40/D-50 以 C# 表驱动覆盖；第二条 101/102/BGS/白天/战斗整路线 Oracle 仍未接。
+19. **第八轮审阅 P1/P2**：生产 `GameRoot` 图片改走队列 + `draw_picture`，不再连 `PictureRequested`；门禁修 14..16 标签、补矩阵 grep 与第 33 步描述；CE244 三态 `-2` 用直接全空 pool 夹具覆盖（§4.38，D-47/D-48）。独立逃跑分支已由 §4.39/D-49 关闭；M4 内容矩阵的 17 项条件注入已由 §4.40/D-50 以 C# 表驱动覆盖；第二条 101/102/BGS 整路线 Oracle 已由 §4.41/D-51 覆盖（3000 帧），单条含白天/战斗的逐指令 Oracle 仍未接。
 20. 决策变化先更新 `docs/godot/DECISIONS.md`，再改实现与本文档。
