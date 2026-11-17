@@ -41,6 +41,7 @@ func _ready() -> void:
 	check(vm.LoadPrograms(""), "programs load")
 	vm.StrictMode = true
 	vm.SetPictureStateProvider(stage, "picture_state")
+	vm.QueuePictureSignals = false  # legacy signal path under test
 	vm.PictureRequested.connect(_on_picture)
 	vm.MessageRequested.connect(_on_message)
 

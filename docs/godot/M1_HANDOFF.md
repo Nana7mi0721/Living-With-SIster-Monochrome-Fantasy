@@ -89,11 +89,11 @@
 | H 阈值数据面 | `res://tests/Smoke.tscn` | `H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`；37 个 op111 真实载荷与 59 个阈值/多条件边界点，只验证数据面 |
 | 第六轮 P2 收口 | `res://tests_gd/AudioManagerTest.tscn` / `PictureRoundtripTest.tscn` / `Smoke.tscn` | `AUDIO_MANAGER_TEST_OK checks=32`、`PICTURE_ROUNDTRIP_TEST_OK`、`H_EVENT_GATE_TEST_OK ... data_only=1`；滚轮 126 拦截、同文件流隔离、未知 soundType 告警、容器镜像与严格 effects 对拍 |
 | H 场景端到端 | `res://tests_gd/HSceneTest.tscn` | `H_SCENE_TEST_OK checks=92 messages=7`；CE310 A/B/C（含 `var150/424`、spawn 226）与 outdoor `@731` 门（`var150/452/456`、`var424` 1→2、`var22` 120→125、`var16` 5→4）及 `102=29` 拒绝、CE323（spawn 376/355/356、`var221=4`）、CE335、CE318 信頼 100/99→CE360 与 `var103` 半支（131/206 +2 vs +1）、CE327→CE326 自然晚餐、CE326 `@799` 门→CE502；菜单行 1208/1210 命中框重叠，H 行需在 85% 高度按 held=1 |
-| 生产图片队列与门禁 | `res://tests_gd/GameRootTest.tscn` / `res://tests_gd/Ce253DayRouteTest.tscn` / `tools/godot_check.sh` | `GAME_ROOT_TEST_OK`（Queue=true/Track=false）、`CE253_DAY_ROUTE_TEST_OK`（track 不建节点）；生产 `draw_picture` 不再走 `PictureRequested`；`LWsmf_DRAW_LONG_RUN=1` 的 windowed day1→day5 绘制跑通；14..16 标签为 /33，Smoke 显式 grep 矩阵，第 33 步列全 H（§4.38，D-47） |
+| 生产图片队列与门禁 | `res://tests_gd/GameRootTest.tscn` / `res://tests_gd/Ce253DayRouteTest.tscn` / `tools/godot_check.sh` | `GAME_ROOT_TEST_OK`（Queue=true/Track=false）、`CE253_DAY_ROUTE_TEST_OK`（track 不建节点）；生产 `draw_picture` 不再走 `PictureRequested`；`LWsmf_DRAW_LONG_RUN=1` 的 windowed day1→day5 绘制跑通；14..16 标签为 /34，Smoke 显式 grep 矩阵，第 33 步列全 H（§4.38，D-47；R10-A1 新增第 34 步信号压测） |
 | CE244 三态 `-2` | `res://tests/Smoke.tscn` | `BATTLE_MATRIX_TEST_OK win=1 loss=-1 incap=-2`；直接 CE244 夹具（池 345..348 全空）结算 `352=-2/343=1/350=0`（§4.38，D-48） |
 | 独立逃跑分支 | `res://tests/Smoke.tscn` | `BATTLE_ESCAPE_TEST_OK saw191=1 escape=1 saw192=0 ce157=0 rounds=0 v352=0`；CE191 行动窗口 row1 `code -1` 写 `1600099`（self 699）后 BreakEvent，无 CE192/157/242/244、无正技能、战斗 vars 全 0（§4.39，D-49） |
 | 自然战斗菜单桥/四轮 | `res://tests/Smoke.tscn` | `BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=4 turns=3 result=1 pcs=338,645,792,996 pools=3,2,3,2 save_vars=800 save_cells=16800`；导入零售存档 vars+CData 并 `PrimeLatched` 后与 Rust m11 四轮 `+1` 全等（§4.34，D-43）；`BATTLE_MATRIX_TEST_OK win=1 loss=-1 win_rounds=4 loss_rounds=10` |
-| C# 条件注入内容矩阵 | `res://tests/Smoke.tscn` | `CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`；16 个 DLC 随机事件 + 特4 海豹的注入分支与 15 条 op111 门载荷，5 条 DLC 外部门显式登记，按 Rust `m13_random_events_injected.rs` 表驱动移植（§4.40/§4.42，D-50/D-52） |
+| C# 条件注入内容矩阵 | `res://tests/Smoke.tscn` | `CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`；16 个 DLC 随机事件 + 特4 海豹的注入分支与 15 条 op111 门载荷，5 条 DLC 外部门显式登记，C# 与 Rust 测试共读 `oracle/fixtures/content_matrix_injected.json`（§4.40/§4.42/§4.43，D-50/D-52） |
 | 第七轮 P2 收口 | `res://tests_gd/GameRootTest.tscn` / `AudioManagerTest.tscn` / `Smoke.tscn` / `converter validate` | `GAME_ROOT_TEST_OK`（Generation+1、重开新游戏后 event 38 重启）、`AUDIO_MANAGER_TEST_OK checks=32`、`unknown sound type` 循环两次仅 1 条日志、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`；零售 BasicData 四文件哈希与 `work/all` 全等（D-37） |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
 
@@ -550,6 +550,16 @@
 - **R7-NEW-04**：`IVmSession` 增 `ResetSessionState()`；`VmController` 实现为 `Vm.Vars.Clear()` + `Vm.ResetInputPermissions()` + `DatabaseStore.ClearOverlays()`；`GameDatabase.ClearOverlays()` 清 `_cells/_texts/_rowCounts`；`GameSessionController.Rebuild()` 在 `Setup` 前调用。`GameRootTest` 在故障时种 `var123=456` 与 `126` 移动禁止，重启后断言变量归零、`BasicMoveDeny/BasicAllDeny/DeviceDeny` 全清。
 - **R8-P1-01 剩余边界**：`ChoicesRequested`/`EffectRequested`/`CommonEventCalled` 仍用托管数组的 `EmitSignal`；生产每帧排空，暂无长跑复现，保留为已知边界。
 - **验证**：C# Rebuild 0 warning/0 error；`SMOKE_OK`（含 `CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`）、`PICTURE_ROUNDTRIP_TEST_OK`、`GAME_ROOT_TEST_OK`；33 步 headless（`reports/r9_gate_headless.log`）与 windowed（`reports/r9_gate_windowed.log`）均 `GODOT_GATE_OK`、EXIT=0，末段含 `CE253_DAY_ROUTE_TEST_OK day=5 … seeded=34` 与 `H_SCENE_TEST_OK checks=92 messages=7`。
+
+### 4.43 M4 前阶段 A：信号队列收口、矩阵单一真源与 DECISIONS 减负（2026-11-17）
+
+来源：用户 m18936 的两阶段加固计划，阶段 A。
+
+- **A1 工作区**：4 份 `m3_round6/7/8/9_review*.md` 移到仓库外 `E:/Study/github program/_m3_reviews/`，删除 `CON` 设备文件，`git status --porcelain` 为空。
+- **A1 信号**：`VmController.QueuePictureSignals` 默认 `true`，只有仍消费旧 `PictureRequested` 的定点测试（`DayMenuTest`/`HSceneTest`/`WeekendMenuTest`）在连接前显式设 `false`；删除 `CommonEventCalled` 的 [Signal] delegate 与 emit，`CommonEventCall(int,int[],string[])` 保留空方法维持冻结的 IHost 契约（全仓库无监听者）。新增 `SignalStressTest`：断言默认 true 与 `has_signal("CommonEventCalled")==false`，500 次 `ShowChoices` 与 500 次 `Effect` 跨 C#/GDScript 边界，输出 `SIGNAL_STRESS_TEST_OK choices=500 effects=500`。`tools/godot_check.sh` 步骤标签全部 `/33]`→`/34]`，末尾新增 `[34/34]`。
+- **A2 矩阵单一真源**：`oracle/fixtures/content_matrix_injected.json`（10,710 B）定义 18 条用例（16 DLC + 特4-a/b，含 label/name/ce/pc/self/globals/expected/gate/max_frames/alias_of）、15 条 op111 gates（ce/pc/triples）与 5 条 `external_gates`；`godot/tests/ContentMatrixTest.cs` 用 `System.Text.Json` 读取，`crates/wolf-game/tests/m13_random_events_injected.rs` 用 `serde_json` 读取（`crates/wolf-game/Cargo.toml` 增 `[dev-dependencies] serde_json = "1"`）。C# 输出 `CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`，Rust `cargo test -p wolf-game --test m13_random_events_injected` 2 passed。
+- **A5 决策减负**：`docs/godot/DECISIONS.md` 只保留跨模块架构/契约决策；D-22/D-27/D-30/D-31/D-32/D-34/D-36/D-38/D-43/D-44/D-45/D-46/D-48/D-49/D-50/D-51 的单次测试夹具记录下沉到本文档 §4.16/4.22/4.25/4.26/4.27/4.28/4.29/4.30/4.34/4.35/4.36/4.37/4.38/4.39/4.40/4.41，文件首部保留 ID→章节索引；D-51 的 route2 已撤除，不再作为决策依据。
+- **验证（代码级）**：C# Rebuild 0 warning/0 error；`SMOKE_OK`（含新矩阵 marker）；Rust 矩阵测试 2 passed；34 步双模式门禁均 `GODOT_GATE_OK`、`GATE_EXIT=0`（`reports/r10a_gate_headless.log` / `reports/r10a_gate_windowed.log`），含 `SIGNAL_STRESS_TEST_OK choices=500 effects=500`、`SMOKE_OK`、`CE253_DAY_ROUTE_TEST_OK day=5 ...`、`H_SCENE_TEST_OK checks=92 messages=7`。
 
 ---
 

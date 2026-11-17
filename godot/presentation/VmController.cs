@@ -11,7 +11,7 @@ namespace Lwsmf.Presentation;
 /// C# core and the presentation layer.
 /// Emission: PictureRequested, SoundRequested, MessageRequested, MessageClosed,
 /// ChoicesRequested, ChoiceSelected, TeleportRequested, TransitionRequested,
-/// CommonEventCalled, EffectRequested, EventFinished.
+/// EffectRequested, EventFinished.
 /// Queries/commands: GetVar/SetVar, GetStrVar/SetStrVar, IsWaitingForChoice,
 /// IsWaitingForMessage, IsRunning, GetCurrentChoices, SelectChoice, DismissMessage,
 /// StepFrame/StepFrames.
@@ -43,9 +43,6 @@ public partial class VmController : Node, IHost, IVmSession
 
     [Signal]
     public delegate void TransitionRequestedEventHandler(int kind, int flags);
-
-    [Signal]
-    public delegate void CommonEventCalledEventHandler(int target, int[] args);
 
     [Signal]
     public delegate void EffectRequestedEventHandler(int kind, int duration, int[] args);
@@ -346,9 +343,10 @@ public partial class VmController : Node, IHost, IVmSession
         return null;
     }
 
+    // Part of the frozen IHost contract; common-event routing stays inside EventVm and
+    // has no presentation listener, so this no longer emits a signal (R10-A1).
     public void CommonEventCall(int target, int[] args, string[] strings)
     {
-        EmitSignal(SignalName.CommonEventCalled, target, args);
     }
 
     /// <summary>Test hook: stop emitting the signal while still tracking picture state.</summary>
@@ -356,8 +354,9 @@ public partial class VmController : Node, IHost, IVmSession
 
     private readonly System.Collections.Generic.List<PictureCmd> _pictureQueue = new();
 
-    /// <summary>Test hook: queue picture commands and let GDScript drain them after the VM step.</summary>
-    public bool QueuePictureSignals { get; set; }
+    /// <summary>Queue picture commands as JSON for the presentation layer. Defaults on; set
+    /// false only in focused tests that still consume the legacy PictureRequested signal.</summary>
+    public bool QueuePictureSignals { get; set; } = true;
 
     /// <summary>Test hook: drain queued pictures into track-only state instead of drawing Controls.</summary>
     public bool TrackPicturesOnly { get; set; }

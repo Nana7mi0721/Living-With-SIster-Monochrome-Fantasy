@@ -67,7 +67,7 @@ func _ready() -> void:
 	vm.StrictMode = true
 	# Production drains Picture() through TakePicturesJson instead of the managed
 	# PictureRequested signal: the cross-language Variant payload crashes native listeners
-	# on long deterministic runs (R8-P1-01). The signal stays declared for the frozen bridge.
+	# on long deterministic runs (R8-P1-01). QueuePictureSignals defaults on (R10-A1).
 	vm.QueuePictureSignals = true
 	vm.name = "Vm"
 	# The poll mask picks the question (771 asks for the signed wheel notch) and auto_keys

@@ -56,6 +56,7 @@ func _reset() -> void:
 	vm.StrictMode = true
 	vm.PrimeAutoEvents()
 	vm.SetPictureStateProvider(stage, "picture_state")
+	vm.QueuePictureSignals = false  # legacy signal path under test
 	vm.PictureRequested.connect(_on_picture)
 	vm.MessageRequested.connect(_on_message)
 	_messages.clear()
