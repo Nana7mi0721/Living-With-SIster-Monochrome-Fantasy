@@ -31,6 +31,10 @@ func _ready() -> void:
 			failures.append("production GameRoot must queue picture commands")
 		if root.vm.TrackPicturesOnly:
 			failures.append("production GameRoot must render queued pictures")
+		if root._consume_picture_queue("[{\"bad\":1}"):
+			failures.append("a malformed picture batch must report failure")
+		if not root._consume_picture_queue("[]"):
+			failures.append("an empty picture batch must report success")
 		for signal_name in SIGNALS:
 			if root.vm.get_signal_connection_list(signal_name).is_empty():
 				failures.append("VmBridge signal %s is not connected" % signal_name)
@@ -187,6 +191,11 @@ func _ready() -> void:
 			failures.append("diagnostics export must write a file")
 		else:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(diagnostics))
+		# R7-NEW-04: a rebuilt session must not inherit the previous run's vars or input policy.
+		root.vm.SetVar(123, 456)
+		root.vm.ApplyInputPermission(0x0102)
+		if root.vm.BasicMoveDeny == 0:
+			failures.append("test setup must deny movement input before the restart")
 		# D-13 recovery: a held click latched at fault time must not survive into the title.
 		root.router.pointer_pressed = true
 		root.router._click_latch = true
@@ -209,6 +218,10 @@ func _ready() -> void:
 		# AutoEvents latch. Replaying the retail title -> new-game chain must re-arm event 38.
 		if root.session.Generation != generation_before + 1:
 			failures.append("restart_after_fault must rebuild the GameSession (generation %d)" % root.session.Generation)
+		if root.vm.GetVar(123) != 0:
+			failures.append("restart_after_fault must clear session variables")
+		if root.vm.BasicMoveDeny != 0 or root.vm.BasicAllDeny != 0 or root.vm.DeviceDeny:
+			failures.append("restart_after_fault must reset the 126 input policy")
 		root.session.SetScriptedInput(true)
 		var replay_guard := 0
 		while root.phase != "bedroom" and replay_guard < 900:

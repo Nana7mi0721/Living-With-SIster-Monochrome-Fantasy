@@ -44,6 +44,8 @@ public sealed class Variables
     public List<int> SnapshotSysNums() => new(_sysNums);
     public List<string> SnapshotSysStrings() => new(_sysStrings);
 
+    public void Clear() => Restore(null, null, null, null);
+
     public void Restore(List<int>? nums, List<string>? strings, List<int>? sysNums, List<string>? sysStrings)
     {
         _nums.Clear();

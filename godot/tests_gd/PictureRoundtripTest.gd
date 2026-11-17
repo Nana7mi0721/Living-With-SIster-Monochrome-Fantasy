@@ -30,6 +30,8 @@ func _ready() -> void:
 	if _stage.picture_count() != 0:
 		failures.append("clear_pictures left %d slots" % _stage.picture_count())
 	var empty: Image = await _capture()
+	if not _stage._base_sizes.is_empty():
+		failures.append("clear_pictures left %d base-size entries" % _stage._base_sizes.size())
 
 	_apply(commands)
 	await _settle()
@@ -72,6 +74,36 @@ func _ready() -> void:
 		_stage.draw_picture(88, 1, "", "", [0, 0, 0, 0, 255, 210, 210, -50], 0)
 		if unmirrored != null and not is_equal_approx(mirrored.size.x, unmirrored.size.x):
 			failures.append("a move must keep the source size instead of scaling twice")
+		if str(_stage._cmds[88].get("file", "")) != "SystemFile/WindowBase.png":
+			failures.append("a move with no file must keep the slot's source")
+
+	# R9-P1-02: a snapshot carries kind, and a restore must replay it instead of guessing.
+	var special = _stage.draw_picture(91, 0, "SystemFile/WindowBase.png", "",
+		[0, 0, 0, 0, 255, 120, 120, 100], 0, 3)
+	if special == null:
+		failures.append("kind=3 picture did not draw")
+	var snapshots: Array = _stage.picture_snapshots()
+	var special_base: Vector2 = _stage._base_sizes[91]
+
+	# R9-P2-01: track-mode must mirror draw-mode for an empty move and preserve identity.
+	var cmd_count := _stage._cmds.size()
+	_stage.track_picture(92, 1, "", "", [0, 0, 0, 0, 255, 100, 100, 100], 0, -1)
+	if _stage._cmds.has(92) or _stage._base_sizes.has(92):
+		failures.append("a track-mode move into an empty slot must not create a picture")
+	_stage.track_picture(91, 1, "", "", [0, 0, 0, 0, 255, 130, 130, 100], 0, -1)
+	if str(_stage._cmds[91].get("file", "")) != "SystemFile/WindowBase.png":
+		failures.append("a track-mode move must keep the slot's source")
+	if int(_stage._cmds[91].get("kind", -1)) != 3:
+		failures.append("a track-mode move must keep the slot's kind")
+	if _stage._base_sizes[91] != special_base:
+		failures.append("a track-mode move must keep the slot's base size")
+	if _stage._cmds.size() != cmd_count:
+		failures.append("track-mode move changed the slot count")
+
+	_stage.clear_pictures()
+	_stage.restore_pictures(snapshots)
+	if int(_stage._cmds.get(91, {}).get("kind", -1)) != 3:
+		failures.append("restore_pictures must replay the saved kind")
 
 	for failure in failures:
 		printerr("PICTURE_ROUNDTRIP_FAIL " + failure)

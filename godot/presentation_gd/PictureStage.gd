@@ -93,8 +93,9 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 		# created a ghost sprite the script never drew (W2-P1-04).
 		if not _pictures.has(number):
 			return null
-		_apply_picture_geometry(_pictures[number], number, file, args, anchor)
-		_store_cmd(number, action, file, text, args, anchor, kind)
+		var moved := _merged_move(number, file, text, args, anchor, kind)
+		_apply_picture_geometry(_pictures[number], number, str(moved["file"]), moved["args"], int(moved["anchor"]))
+		_store_cmd(number, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]))
 		return _pictures[number]
 
 	var node := _build_picture(number, file, text, args, anchor, kind)
@@ -111,6 +112,25 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 	_base_sizes[number] = node.get_meta("base_size", node.size)
 	_store_cmd(number, action, file, text, args, anchor, kind)
 	return node
+
+
+## A move carries geometry, not a new source. Keep the slot's existing file/text/kind and
+## base size so a track-mode move cannot overwrite the sprite identity with a 420x140 stub.
+func _merged_move(number: int, file: String, text: String, args: Array, anchor: int, kind: int) -> Dictionary:
+	var prev: Dictionary = _cmds.get(number, {})
+	var merged_file := file if not file.is_empty() else str(prev.get("file", ""))
+	var merged_text := text if not text.is_empty() else str(prev.get("text", ""))
+	var merged_args: Array = args if not args.is_empty() else prev.get("args", [])
+	var merged_kind := kind if kind >= 0 else int(prev.get("kind", -1))
+	if merged_kind < 0:
+		merged_kind = 2 if merged_file.is_empty() and not merged_text.is_empty() else 0
+	return {
+		"file": merged_file,
+		"text": merged_text,
+		"args": merged_args,
+		"anchor": anchor,
+		"kind": merged_kind,
+	}
 
 
 func _store_cmd(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int) -> void:
@@ -235,6 +255,14 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 		_cmds.erase(number)
 		_base_sizes.erase(number)
 		return
+	if action == 1:
+		if not _cmds.has(number):
+			return
+		var moved := _merged_move(number, file, text, args, anchor, kind)
+		_store_cmd(number, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]))
+		if not _base_sizes.has(number):
+			_base_sizes[number] = Vector2(420, 140)
+		return
 	if kind < 0:
 		kind = 2 if file.is_empty() and not text.is_empty() else 0
 	var backdrop := number < 0 or number >= 12000
@@ -347,6 +375,7 @@ func clear_pictures() -> void:
 			node.queue_free()
 	_pictures.clear()
 	_cmds.clear()
+	_base_sizes.clear()
 
 
 ## Snapshot of the live picture slots, one dictionary per slot in ascending number order.
@@ -370,4 +399,4 @@ func restore_pictures(entries: Array) -> void:
 			continue
 		var cmd: Dictionary = entry
 		draw_picture(int(cmd.get("number", 0)), int(cmd.get("action", 0)), str(cmd.get("file", "")),
-			str(cmd.get("text", "")), cmd.get("args", []), int(cmd.get("anchor", 0)))
+			str(cmd.get("text", "")), cmd.get("args", []), int(cmd.get("anchor", 0)), int(cmd.get("kind", -1)))

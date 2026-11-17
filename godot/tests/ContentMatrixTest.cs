@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Godot;
 using Lwsmf.Core;
 using Lwsmf.Presentation;
@@ -24,6 +25,8 @@ public static class ContentMatrixTest
         public int Pc;
         public string Expected = "";
         public string Label = "";
+        /// <summary>Matrix row that renders the same script block; not an independent case.</summary>
+        public string AliasOf = "";
     }
 
     private static readonly Case[] Cases =
@@ -42,7 +45,7 @@ public static class ContentMatrixTest
         new() { Ce = 461, Selfs = [], Globals = [11, 10, 619, 1], Pc = 1409, Expected = "用炸弹把委托人都炸飞了", Label = "#76" },
         new() { Ce = 461, Selfs = [621, 0], Globals = [619, 1], Pc = 460, Expected = "和加奈一起锻炼了", Label = "#80" },
         new() { Ce = 461, Selfs = [610, 4, 620, 0], Globals = [619, 1], Pc = 1081, Expected = "喵——", Label = "#84" },
-        new() { Ce = 461, Selfs = [623, 0], Globals = [565, 1, 619, 1], Pc = 258, Expected = "和香澄美一起寻找素材了", Label = "#101" },
+        new() { Ce = 461, Selfs = [623, 0], Globals = [565, 1, 619, 1], Pc = 258, Expected = "和香澄美一起寻找素材了", Label = "#101", AliasOf = "#63" },
         new() { Ce = 461, Selfs = [610, 8], Globals = [619, 1], Pc = 1433, Expected = "今天可真忙啊", Label = "#111" },
         new() { Ce = 437, Selfs = [611, 0], Globals = [533, 1, 535, 0], Pc = 22, Expected = "海豹驱除作战", Label = "特4-a" },
         new() { Ce = 438, Selfs = [], Globals = [533, 1, 449, 1], Pc = 82, Expected = "海豹跃出水面", Label = "特4-b" },
@@ -68,9 +71,29 @@ public static class ContentMatrixTest
         (438, 32, [2_000_449, 1, 1]),
     ];
 
+    // R9-P2-03: the DLC row-selection gate for these five rows lives outside the event
+    // (var619 is tested by the caller), so they have no in-event opcode 111 payload to pin.
+    private static readonly string[] ExternalGates = ["#39", "#54", "#58", "#62", "#69"];
+
     public static void Run()
     {
         Check(Cases.Length == 18, $"expected 18 cases, got {Cases.Length}");
+        int unique = Cases.Count(c => c.AliasOf.Length == 0);
+        Check(unique == 17, $"expected 17 unique script blocks, got {unique}");
+        foreach (var alias in Cases.Where(c => c.AliasOf.Length > 0))
+        {
+            var baseCase = Cases.FirstOrDefault(c => c.Label == alias.AliasOf);
+            Check(baseCase != null, $"{alias.Label}: alias target {alias.AliasOf} missing");
+            Check(alias.Ce == baseCase!.Ce && alias.Pc == baseCase.Pc && alias.Expected == baseCase.Expected
+                  && alias.Selfs.SequenceEqual(baseCase.Selfs) && alias.Globals.SequenceEqual(baseCase.Globals),
+                $"{alias.Label}: aliased row diverged from {alias.AliasOf}");
+        }
+        foreach (string label in ExternalGates)
+        {
+            Check(Cases.Any(c => c.Label == label && c.AliasOf.Length == 0),
+                $"external-gate row {label} missing from the case table");
+        }
+
         var path = Path.Combine(DataDirectory(), "programs.json");
         foreach (var gate in Gates) CheckGate(path, gate);
 
@@ -79,7 +102,7 @@ public static class ContentMatrixTest
             Drive(path, c);
         }
 
-        GD.Print($"CONTENT_MATRIX_TEST_OK cases={Cases.Length} gates={Gates.Length}");
+        GD.Print($"CONTENT_MATRIX_TEST_OK cases={Cases.Length} unique={unique} gates={Gates.Length} external={ExternalGates.Length}");
     }
 
     private static void Drive(string programsPath, Case c)

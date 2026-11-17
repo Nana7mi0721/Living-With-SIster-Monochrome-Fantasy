@@ -204,6 +204,14 @@ public sealed class GameDatabase
         return tables[dbType].Fields.Length;
     }
 
+    /// <summary>Drop every runtime 250 write (cells, texts, row counts) and return to .dat data.</summary>
+    public void ClearOverlays()
+    {
+        _cells.Clear();
+        _texts.Clear();
+        _rowCounts.Clear();
+    }
+
     /// <summary>Current row count, including a runtime 250 row-count write.</summary>
     public int RowCount(DbContainer container, int dbType)
     {

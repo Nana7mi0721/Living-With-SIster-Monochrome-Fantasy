@@ -26,6 +26,8 @@ public interface IVmSession
     void StepFrame();
     void StopAll();
     void ResetDiagnostics();
+    /// <summary>D-33/R7-NEW-04: clear session-scoped database overlays, vars and input policy.</summary>
+    void ResetSessionState();
     bool IsWaitingForChoice();
     bool IsWaitingForMessage();
     string[] GetCurrentChoices();

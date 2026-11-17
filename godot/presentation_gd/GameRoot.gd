@@ -122,6 +122,24 @@ func _process(delta: float) -> void:
 
 
 ## One deterministic frame; tests call this directly instead of waiting on the clock.
+## R9-P1-01: a malformed picture batch must never vanish silently. The VM already keeps
+## running, so report the frame and continue; StrictMode still surfaces the fault through
+## the VM when the script itself fails.
+func _consume_picture_queue(queued: String) -> bool:
+	if queued.is_empty():
+		return true
+	var batch: Variant = JSON.parse_string(queued)
+	if not batch is Array:
+		push_error("picture queue JSON is not an array: %s" % queued.left(120))
+		return false
+	for p in batch:
+		if vm.TrackPicturesOnly:
+			stage.track_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]))
+		else:
+			stage.draw_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]))
+	return true
+
+
 func advance_frame() -> void:
 	if phase == "failed" or faulted:
 		return
@@ -139,14 +157,7 @@ func advance_frame() -> void:
 	vm.BeginFrameInput()
 	session.AdvanceFrame()
 	var queued := str(vm.TakePicturesJson())
-	if not queued.is_empty():
-		var batch: Variant = JSON.parse_string(queued)
-		if batch is Array:
-			for p in batch:
-				if vm.TrackPicturesOnly:
-					stage.track_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]))
-				else:
-					stage.draw_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]))
+	_consume_picture_queue(queued)
 	frames = session.Frames
 	phase = session.Phase
 	# A fault stops the deterministic clock: replaying the frame would only refault and

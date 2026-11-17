@@ -559,6 +559,8 @@ public partial class VmController : Node, IHost, IVmSession
 
     /// <summary>Test/probe bridge for a raw opcode 126 argument (target bits + state bits).</summary>
     public void ApplyInputPermission(uint raw) => Vm.ApplyInputPermission(raw);
+    public uint BasicMoveDeny => Vm.BasicMoveDeny;
+    public bool DeviceDeny => Vm.DeviceDeny;
 
     public void SetPointer(float x, float y)
     {
@@ -667,6 +669,17 @@ public partial class VmController : Node, IHost, IVmSession
     /// End every running script; GDScript cannot reach the EventVm property (Vm).
     public void StopAll() => Vm.StopAll();
     public void ResetDiagnostics() => Vm.ResetDiagnostics();
+
+    /// <summary>
+    /// D-33/R7-NEW-04: a rebuilt session must not inherit the previous run's 250 overlays,
+    /// variables or 126 input policy. AutoEvents is session-scoped; these live on the VM.
+    /// </summary>
+    public void ResetSessionState()
+    {
+        Vm.Vars.Clear();
+        Vm.ResetInputPermissions();
+        DatabaseStore?.ClearOverlays();
+    }
 
     /// Start a common event by id. The real starter returns Instance, a project type that
     /// GDScript cannot marshal, so the presentation layer gets a bool (W3 Day 1).

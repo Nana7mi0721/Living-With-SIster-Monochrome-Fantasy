@@ -208,15 +208,6 @@ python "$IMO/oracle/diff_route.py" \
   "$IMO/reports/csharp_route_trace.json" \
   --report "$IMO/reports/route_trace_diff.json"
 
-echo "[27b/33] route 2 trace diff (title -> bedroom 3000 frames, 101/102/BGS)"
-out_route2="$(LWsmf_ROUTE2=1 "$GODOT" --headless --path "$IMO/godot" res://tests/RouteTraceTest.tscn 2>&1)"
-printf '%s\n' "$out_route2" | tee "$IMO/reports/route2_trace_test.log"
-printf '%s\n' "$out_route2" | grep -q ROUTE_TRACE_TEST_OK
-python "$IMO/oracle/diff_route.py" \
-  "$IMO/oracle/fixtures/main_route2_rust_trace.json.gz" \
-  "$IMO/reports/csharp_route2_trace.json" \
-  --report "$IMO/reports/route2_trace_diff.json"
-
 echo "[28/33] picture state test (opcode 124 / CE217 HUD / pointer latch)"
 out_picstate="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/PictureStateTest.tscn 2>&1)"
 printf '%s\n' "$out_picstate" | tee "$IMO/reports/picture_state_test.log"

@@ -67,6 +67,7 @@ public partial class GameSessionController : Node
     public bool Rebuild()
     {
         if (_vm == null || _ui == null) return false;
+        _vm.ResetSessionState();
         Setup(_vm, _ui, _savePath);
         return true;
     }

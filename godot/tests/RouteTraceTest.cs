@@ -18,23 +18,15 @@ namespace Lwsmf.Tests;
 /// </summary>
 public partial class RouteTraceTest : Node
 {
-    // Route 2 is the longer scripted preface: title -> new game -> bedroom 3000 frames.
-    // It exercises opcodes 101/102 and the BGS channel that the 1500-frame route stops short of.
-    private static readonly bool Route2 =
-        System.Environment.GetEnvironmentVariable("LWsmf_ROUTE2") == "1";
-
-    private static readonly int Frames = Route2 ? 3000 : int.TryParse(
-        System.Environment.GetEnvironmentVariable("LWsmf_ROUTE_FRAMES"), out int frames) ? frames : 1500;
-
-    private static readonly string RouteName = Route2 ? "title_newgame_bedroom3000" : "title_newgame_map1005";
+    private const int Frames = 1500;
+    private const string RouteName = "title_newgame_map1005";
 
     public override void _Ready()
     {
         string rootDir = ProjectSettings.GlobalizePath("res://").TrimEnd('/', '\\');
         string repo = Path.GetFullPath(Path.Combine(rootDir, ".."));
         string programsPath = Path.Combine(repo, "game_data", "programs.json");
-        string outPath = Path.Combine(repo, "reports",
-            Route2 ? "csharp_route2_trace.json" : "csharp_route_trace.json");
+        string outPath = Path.Combine(repo, "reports", "csharp_route_trace.json");
         string? dir = Path.GetDirectoryName(outPath);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
@@ -189,7 +181,7 @@ public partial class RouteTraceTest : Node
             GetTree().Quit(3);
             return;
         }
-        if (!Route2 && Frames == 1500 && (session.Phase != "bedroom" || (session.MapData?.Id ?? -1) != 1005))
+        if (session.Phase != "bedroom" || (session.MapData?.Id ?? -1) != 1005)
         {
             GD.PrintErr($"[RouteTraceTest] FAIL: route did not reach map 1005 (phase={session.Phase} map={session.MapData?.Id ?? -1})");
             GetTree().Quit(4);

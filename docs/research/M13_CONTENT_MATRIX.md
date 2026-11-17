@@ -225,7 +225,7 @@
 
 - 九结局其余 7 条已由 `m13_all_endings.rs` 覆盖（14 默认+2 ignored 全绿）；§4 表中标“未测/未专项”的 212–218 行以该测试为准。
 - 111 条件注入 17 项已由 `m13_random_events_injected.rs` 覆盖（3 测试全绿）；§5 第 232–233 条闭环。
-- 同一 17 项已移植到 C# `godot/tests/ContentMatrixTest.cs`：18 条运行时用例（16 个 DLC 随机事件 + 特4 海豹）+ 15 条 op111 静态门，输出 `CONTENT_MATRIX_TEST_OK cases=18 gates=15`（§4.40，D-50）；自然 111 池与九结局仍以 Rust 矩阵为准。
+- 同一 17 项已移植到 C# `godot/tests/ContentMatrixTest.cs`：18 条运行时用例（16 个 DLC 随机事件 + 特4 海豹）+ 15 条 op111 静态门，输出 `CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`（§4.40/§4.42，D-50/D-52）；自然 111 池与九结局仍以 Rust 矩阵为准。
 - 餐厅 H 门已更正为 CE326@801–805 `var424≥3 ∧ var18≥100 ∧ var16≥1`（见 M13_H_ENDTOEND.md）；§5 第 230 条作废。
 - 正常通关 fidelity bug 已由 `7c3b728` 修复（自然通关已验证）；§5 第 234 条作废。
 
