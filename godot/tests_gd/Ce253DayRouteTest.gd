@@ -9,12 +9,15 @@ var _saw253 := false
 var _peak352 := 0
 var _saw343 := false
 var _peak342 := 0
+var _yield_frames := false
 
 ## CE244 writes 343/352 only while it is live, then the post-battle epilogue clears
 ## them, so observe every frame instead of sampling after the fight.
 func step() -> void:
 	root.advance_frame()
 	observe_battle()
+	if _yield_frames:
+		await get_tree().process_frame
 
 func observe_battle() -> void:
 	if root.session.BattleSawDispatch:
@@ -47,20 +50,20 @@ func click_at(x: int, y: int) -> void:
 	mouse_move(x, y)
 	for _i in 5:
 		mouse_button(x, y, true)
-		step()
+		await step()
 	for _i in 5:
 		mouse_button(x, y, false)
-		step()
+		await step()
 
 func tick(n: int) -> void:
 	for _i in n:
-		step()
+		await step()
 
 func wait_picture(number: int, limit: int) -> bool:
 	for _i in limit:
 		if int(root.stage.picture_state(number, 9)) == 1:
 			return true
-		step()
+		await step()
 	# One final look after the last advance.
 	return int(root.stage.picture_state(number, 9)) == 1
 
@@ -69,7 +72,7 @@ func wait_clock(day: int, hour: int, minute: int, limit: int) -> bool:
 		if int(root.vm.GetVar(160)) == day and int(root.vm.GetVar(4)) == hour \
 				and int(root.vm.GetVar(5)) >= minute:
 			return true
-		step()
+		await step()
 	return int(root.vm.GetVar(160)) == day and int(root.vm.GetVar(4)) == hour \
 		and int(root.vm.GetVar(5)) >= minute
 
@@ -80,8 +83,8 @@ func close_pictures() -> void:
 ## Real CE251 row-0 click: hover, press five frames, release, then wait for the command
 ## latch and the dinner/evening transition.
 func select_day_row(day: int) -> void:
-	check(wait_picture(1201, 2200), "day %d CE251 menu appears" % day)
-	check(wait_picture(1200, 400), "day %d CE251 row button appears" % day)
+	check(await wait_picture(1201, 2200), "day %d CE251 menu appears" % day)
+	check(await wait_picture(1200, 400), "day %d CE251 row button appears" % day)
 	check(int(root.vm.GetVar(160)) == day and int(root.vm.GetVar(4)) >= 8,
 		"day %d menu starts in the morning" % day)
 	var before_command := int(root.vm.GetVar(48))
@@ -89,25 +92,25 @@ func select_day_row(day: int) -> void:
 	var row_x := int(root.stage.picture_state(1200, 0))
 	var row_y := int(root.stage.picture_state(1200, 1))
 	mouse_move(row_x, row_y)
-	tick(12)
+	await tick(12)
 	for _i in 6:
 		mouse_button(row_x, row_y, true)
-		step()
+		await step()
 	for _i in 5:
 		mouse_button(row_x, row_y, false)
-		step()
+		await step()
 	close_pictures()
 	var latched := false
 	for _i in 2600:
 		if int(root.vm.GetVar(48)) != before_command:
 			latched = true
 			break
-		step()
+		await step()
 	check(latched, "day %d row-0 click latches a command" % day)
 
 func spend_day(day: int) -> void:
 	var before_energy := int(root.vm.GetVar(14))
-	select_day_row(day)
+	await select_day_row(day)
 	var evening := false
 	var ce251 := true
 	for _i in 3200:
@@ -115,7 +118,7 @@ func spend_day(day: int) -> void:
 		if int(root.vm.GetVar(4)) >= 17 and not ce251:
 			evening = true
 			break
-		step()
+		await step()
 	check(evening, "day %d command reaches the evening" % day)
 	print("[Ce253DayRoute] day %d after-latch ce251=%s clock=%d:%d" % [
 		day, str(ce251), int(root.vm.GetVar(4)), int(root.vm.GetVar(5))])
@@ -127,11 +130,11 @@ func spend_day(day: int) -> void:
 		if not root.session.HasEvent(300) and not root.session.HasEvent(326) and int(root.vm.GetVar(4)) >= 18:
 			settled = true
 			break
-		step()
+		await step()
 	check(settled, "day %d dinner settles" % day)
 	print("[Ce253DayRoute] day %d dinner settled clock=%d:%d" % [
 		day, int(root.vm.GetVar(4)), int(root.vm.GetVar(5))])
-	check(wait_picture(120, 2600), "day %d evening sister appears" % day)
+	check(await wait_picture(120, 2600), "day %d evening sister appears" % day)
 
 ## Real night menu: hover picture 120, Decide, click 今天先休息吧, answer 是, then wait
 ## for the next 08:30. Auto-pick is off for the gesture so the choice stays inspectable.
@@ -144,37 +147,40 @@ func sleep_to_next_morning(day: int) -> void:
 		if int(root.vm.GetVar(160)) == day and int(root.vm.GetVar(4)) >= 18:
 			evening = true
 			break
-		step()
+		await step()
 	check(evening, "day %d reaches the evening" % day)
-	var has_pic := wait_picture(120, 600)
+	var has_pic := await wait_picture(120, 600)
 	# Later days rebuild page 0 from pc1 when dinner ends, so give that autorun
 	# time to reach the key wait before acting.
 	if day > 1:
 		for _i in 6000:
 			if root.session.HasEvent(245):
 				break
-			step()
-	check(has_pic or wait_picture(120, 600), "day %d night portrait appears" % day)
+			await step()
+	var portrait := has_pic
+	if not portrait:
+		portrait = await wait_picture(120, 600)
+	check(portrait, "day %d night portrait appears" % day)
 	check(int(root.vm.GetVar(160)) == day and int(root.vm.GetVar(4)) >= 18,
 		"day %d night starts in the evening" % day)
 	root.session.SetAutoPickChoice(false)
 	var sx := int(root.stage.picture_state(120, 0) if root.stage.picture_state(120, 0) != null else 240)
 	var sy := int(root.stage.picture_state(120, 1) if root.stage.picture_state(120, 1) != null else 340)
 	mouse_move(sx, sy)
-	tick(8)
+	await tick(8)
 	root._on_action()
-	tick(40)
+	await tick(40)
 	for _i in 400:
 		if root.session.HasEvent(245):
 			break
-		step()
-	click_at(512, 450)
+		await step()
+	await click_at(512, 450)
 	var got_choice := false
 	for _i in 500:
 		if root.choice.is_open:
 			got_choice = true
 			break
-		step()
+		await step()
 	check(got_choice, "day %d sleep choice opens" % day)
 	if got_choice:
 		check(root.choice.options.size() == 2 and root.choice.options[0] == "是" \
@@ -192,11 +198,11 @@ func sleep_to_next_morning(day: int) -> void:
 				break
 			if _i % 2 == 0:
 				root._on_action()
-			step()
+			await step()
 			observe_battle()
 		check(morning, "day %d reaches day %d 08:30" % [day, day + 1])
 	else:
-		check(wait_clock(day + 1, 8, 30, 3200), "day %d reaches day %d 08:30" % [day, day + 1])
+		check(await wait_clock(day + 1, 8, 30, 3200), "day %d reaches day %d 08:30" % [day, day + 1])
 
 func _ready() -> void:
 	var script = load("res://presentation_gd/GameRoot.gd")
@@ -204,13 +210,17 @@ func _ready() -> void:
 	add_child(root)
 	root.session.SetScriptedInput(true)
 	root.auto_advance = true
-	# GameRoot already queues pictures; this long day line tracks slots and hit boxes
-	# instead of drawing Controls, while opcode 124 still queries the tracked table.
-	root.vm.TrackPicturesOnly = true
+	# GameRoot already queues pictures; by default this long day line tracks slots and
+	# hit boxes instead of drawing Controls, while opcode 124 still queries the tracked
+	# table. LWsmf_DRAW_LONG_RUN=1 keeps the production draw path and yields one rendered
+	# frame per test step, for a real-renderer soak.
+	_yield_frames = OS.get_environment("LWsmf_DRAW_LONG_RUN") == "1"
+	root.set_process(not _yield_frames)
+	root.vm.TrackPicturesOnly = not _yield_frames
 
 	var guard := 0
 	while root.phase != "bedroom" and guard < 900:
-		step()
+		await step()
 		guard += 1
 	check(root.phase == "bedroom", "reached bedroom phase")
 	check(root.session.MapId == 1005, "new game entered SampleMapA artifact 1005")
@@ -220,21 +230,21 @@ func _ready() -> void:
 
 	root.vm.SetVar(295, 0)
 	root.vm.SetVar(68, 0)
-	sleep_to_next_morning(1)
-	spend_day(2)
+	await sleep_to_next_morning(1)
+	await spend_day(2)
 	if not failures.is_empty():
 		_finish()
 		return
-	sleep_to_next_morning(2)
+	await sleep_to_next_morning(2)
 	if not failures.is_empty():
 		_finish()
 		return
-	spend_day(3)
+	await spend_day(3)
 	# Seed before the day-4 morning dispatch: CE253 can launch on the 08:30 tick itself.
 	var seeded := int(root.vm.SeedBattle(1, 1))
 	check(seeded >= 26, "battle_seed numeric cells written")
 	print("[Ce253DayRoute] data9 ", root.vm.DescribeBattleData())
-	sleep_to_next_morning(3)
+	await sleep_to_next_morning(3)
 	check(int(root.vm.GetVar(160)) == 4 and int(root.vm.GetVar(4)) == 8 \
 		and int(root.vm.GetVar(5)) == 30, "day 4 08:30 after two natural days")
 	check(int(root.vm.GetVar(6)) == 3, "day 4 is Thursday")
@@ -252,11 +262,11 @@ func _ready() -> void:
 		return
 
 	# The day still has to be spent normally after the morning battle.
-	spend_day(4)
+	await spend_day(4)
 	if not failures.is_empty():
 		_finish()
 		return
-	sleep_to_next_morning(4)
+	await sleep_to_next_morning(4)
 	check(int(root.vm.GetVar(160)) == 5 and int(root.vm.GetVar(4)) == 8 \
 		and int(root.vm.GetVar(5)) >= 30, "post-battle story reaches day 5 08:30")
 	if failures.is_empty():
