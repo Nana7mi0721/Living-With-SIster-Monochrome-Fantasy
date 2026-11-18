@@ -36,6 +36,7 @@ internal static class M13Harness
     {
         var vm = new VmController();
         vm.Vm.Host = vm;
+        vm.StrictMode = true;
         if (!vm.LoadPrograms(ProgramsPath()))
             throw new Exception("M13: cannot load programs.json");
         return vm;

@@ -120,9 +120,9 @@ run_gd() {
   printf '%s\n' "$out" | grep -q "$marker"
 }
 
-run_gd "14/34" InputRouterTest.tscn INPUT_ROUTER_TEST_OK
-run_gd "15/34" LayerOrderTest.tscn LAYER_ORDER_TEST_OK
-run_gd "16/34" AssetDBTest.tscn ASSETDB_TEST_OK
+run_gd "14/35" InputRouterTest.tscn INPUT_ROUTER_TEST_OK
+run_gd "15/35" LayerOrderTest.tscn LAYER_ORDER_TEST_OK
+run_gd "16/35" AssetDBTest.tscn ASSETDB_TEST_OK
 
 if [ "${LWsmf_RENDER:-0}" = "1" ]; then
   # Visual pass: the dummy renderer --headless selects has no textures, so the dialog
