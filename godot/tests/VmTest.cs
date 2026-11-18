@@ -45,6 +45,9 @@ public static class VmTest
         BattleNaturalLoopTest.Run();
         HEventGateTest.Run();
         ContentMatrixTest.Run();
+        M13AllEndingsTest.Run();
+        M13RandomEventsTest.Run();
+        Op150NegativeScaleScanTest.Run();
 
         Console.WriteLine("[VmTest] ALL VM TESTS PASSED!");
     }

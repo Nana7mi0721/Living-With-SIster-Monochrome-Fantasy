@@ -1271,17 +1271,41 @@ public sealed class EventVm
         return null;
     }
 
-    /// <summary>Kill one coroutine, waking any parent that was waiting for it.</summary>
+    /// <summary>Kill one coroutine and every coroutine it spawned, waking any parent that was waiting for it.</summary>
     public void StopInstance(int id)
     {
         var inst = FindInstance(id);
         if (inst == null) return;
-        PersistCommonSelf(inst);
-        Instances.Remove(inst);
+
+        // Descendants die with their ancestor: a child coroutine without its caller
+        // has nobody left to return to. This matters when a map page transitions:
+        // the old page may be parked in a 210 call chain (CE4 -> CE245 -> ... -> CE329),
+        // and leaving the chain alive leaks a whole story event into the next page.
+        var doomed = new HashSet<int> { id };
+        bool grew = true;
+        while (grew)
+        {
+            grew = false;
+            foreach (var other in Instances)
+            {
+                if (doomed.Contains(other.Id)) continue;
+                if (other.ParentId.HasValue && doomed.Contains(other.ParentId.Value))
+                {
+                    doomed.Add(other.Id);
+                    grew = true;
+                }
+            }
+        }
+
+        foreach (var other in Instances)
+        {
+            if (doomed.Contains(other.Id)) PersistCommonSelf(other);
+        }
+        Instances.RemoveAll(other => doomed.Contains(other.Id));
         for (int i = 0; i < Instances.Count; i++)
         {
             var other = Instances[i];
-            if (other.Wait.Kind == WaitStateKind.Child && other.Wait.ChildId == id) other.Wait.Clear();
+            if (other.Wait.Kind == WaitStateKind.Child && doomed.Contains(other.Wait.ChildId)) other.Wait.Clear();
         }
     }
 
@@ -1321,7 +1345,7 @@ public sealed class EventVm
         for (int i = Instances.Count - 1; i >= 0; i--)
         {
             var inst = Instances[i];
-            if (inst.Pc >= inst.Program.Len && inst.Wait.Kind == WaitStateKind.None)
+            if (inst.Pc >= inst.Program.Len && inst.Wait.Kind == WaitStateKind.None && !inst.RetainAfterFinish)
             {
                 // Deliver return value to parent
                 if (inst.ParentId.HasValue && inst.ReturnTo.HasValue)

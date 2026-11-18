@@ -69,5 +69,8 @@ public sealed class Instance
     public List<LoopCtx> Loops { get; } = new();
     public int? ReturnTo { get; set; }
 
+    /// <summary>Map page instances outlive their program until MapRuntime copies the self bank.</summary>
+    public bool RetainAfterFinish { get; set; }
+
     public bool IsRunnable => Wait.Kind == WaitStateKind.None;
 }

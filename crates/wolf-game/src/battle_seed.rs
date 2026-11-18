@@ -24,7 +24,7 @@
 //! rows all 0; type18 row4 all 0 — so a save merge would be a no-op and the constants
 //! below are what actually make the line boot).
 
-use crate::db::Container;
+use crate::db::{Container, Databases};
 use crate::Game;
 
 /// One numeric `CData` cell seeded into the engine cell layer.
@@ -147,6 +147,7 @@ pub const COMMAND_MENU_TEXT: [TextCell; 8] = [
 /// docs/research/M7_BATTLE_MENU_DB.md), so the visible window stays blank until that
 /// engine fix lands. Keeping the labels here means the fix only needs the write path,
 /// not more data.
+#[allow(dead_code)]
 pub fn seed_menu_text(game: &mut Game) -> usize {
     let mut written = 0;
     for cell in COMMAND_MENU_TEXT {
@@ -164,6 +165,13 @@ pub fn seed_menu_text(game: &mut Game) -> usize {
 /// (`m6_battle_commands.rs`) asserts an empty inventory leaves real attacks unselectable,
 /// so seeding stays behind this explicit entry point.
 pub fn seed(game: &mut Game) -> usize {
+    seed_databases(&mut game.databases)
+}
+
+/// Writes the same battle seed into a bare database host. The headless route
+/// runner drives the VM without a [`Game`], so it shares this exact data table
+/// instead of duplicating the 26 numeric cells and 8 menu labels.
+pub fn seed_databases(databases: &mut Databases) -> usize {
     use std::collections::BTreeMap;
     let mut rows: BTreeMap<(i32, i32), Vec<(i32, i32)>> = BTreeMap::new();
     for cell in seed_cells() {
@@ -173,13 +181,13 @@ pub fn seed(game: &mut Game) -> usize {
     }
     let mut written = 0;
     for ((db_type, row), columns) in rows {
-        written += game
-            .databases
-            .seed_numbers(Container::CData, db_type, row, &columns);
+        written += databases.seed_numbers(Container::CData, db_type, row, &columns);
     }
     // The command-menu labels are the string half of the same table. They do not add to
     // the returned numeric-cell count (kept at 26 so m7_battle_seed's documented
     // "1 party + 1 enemy + 8 slots + 12 stats + 1 item + 3 weapons" invariant stays exact).
-    let _labels = seed_menu_text(game);
+    for cell in COMMAND_MENU_TEXT {
+        databases.set_text(Container::CData, cell.db_type, cell.row, cell.column, cell.value);
+    }
     written
 }

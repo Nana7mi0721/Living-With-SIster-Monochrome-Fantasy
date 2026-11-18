@@ -545,7 +545,7 @@ public sealed class GameSession
         LegacySaveImporter.SlotResult slot;
         try
         {
-            slot = LegacySaveImporter.ImportFile(path, slotIndex);
+            slot = LegacySaveImporter.ImportFile(path, slotIndex, rejectBadChecksum: true);
         }
         catch (Exception ex)
         {

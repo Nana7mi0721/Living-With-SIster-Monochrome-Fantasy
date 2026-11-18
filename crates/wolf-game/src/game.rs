@@ -51,7 +51,8 @@ mod battle_seed;
 #[path = "battle_wiring.rs"]
 mod battle_wiring;
 
-use battle_wiring::BattleWiring;
+pub use battle_seed::seed_databases as seed_battle_databases_into;
+pub use battle_wiring::BattleWiring;
 
 /// The event the game opens with in this build (the "original title screen A").
 pub const TITLE_EVENT: u32 = 42;
@@ -979,6 +980,11 @@ impl Game {
     /// real attacks unselectable, so seeding is left to the battle entry point / tests.
     pub fn seed_battle_databases(&mut self) -> usize {
         battle_seed::seed(self)
+    }
+
+    /// The same battle seed applied to a bare database host (headless route oracle).
+    pub fn seed_battle_databases_into(databases: &mut Databases) -> usize {
+        battle_seed::seed_databases(databases)
     }
 
     /// Turns the rebuilt battle command-phase wiring on or off (M7 task-34).

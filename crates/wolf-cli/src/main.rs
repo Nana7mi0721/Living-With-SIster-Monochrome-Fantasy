@@ -375,6 +375,7 @@ fn main() -> ExitCode {
     match command.as_deref() {
         Some("verify") => run_verify(&root),
         Some("route") => route::run_route(&root, frames),
+        Some("route-full") => route::run_full_route(&root),
         Some("precompile") => run_precompile(&root),
         Some("blocks") => run_blocks(&root, map.as_deref(), event, page),
         Some("capture") => match map.as_deref() {

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://cm4fullroute0lwsmf"]
+
+[ext_resource type="Script" path="res://tests/M4FullRouteTraceTest.cs" id="1_m4route"]
+
+[node name="M4FullRouteTraceTest" type="Node"]
+script = ExtResource("1_m4route")

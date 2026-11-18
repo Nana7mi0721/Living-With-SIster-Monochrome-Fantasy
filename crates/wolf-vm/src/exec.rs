@@ -960,6 +960,7 @@ pub struct Vm {
     /// Variable snapshots taken before the most recent traced instruction.
     /// Ordinary/system values first, then the instance's self bank.
     trace_before: Option<(
+        InstanceId,
         Vec<(i32, i32)>,
         Vec<(i32, String)>,
         Vec<(i32, i32)>,
@@ -1819,6 +1820,7 @@ fn compare(lhs: i32, rhs: i32, operator: i32) -> bool {
 fn finalize_trace(
     trace: &mut Option<Vec<StepTraceEntry>>,
     before: &mut Option<(
+        InstanceId,
         Vec<(i32, i32)>,
         Vec<(i32, String)>,
         Vec<(i32, i32)>,
@@ -1828,7 +1830,7 @@ fn finalize_trace(
     self_vars: &SelfVars,
     host: &mut dyn Host,
 ) {
-    let Some((before_vars, before_strs, before_self, before_self_strs)) = before.take() else {
+    let Some((_before_instance, before_vars, before_strs, before_self, before_self_strs)) = before.take() else {
         return;
     };
     let Some(entry) = trace.as_mut().and_then(|log| log.last_mut()) else {
@@ -1943,6 +1945,7 @@ fn execute(
     event: EventId,
     trace: &mut Option<Vec<StepTraceEntry>>,
     trace_before: &mut Option<(
+        InstanceId,
         Vec<(i32, i32)>,
         Vec<(i32, String)>,
         Vec<(i32, i32)>,
@@ -1982,22 +1985,29 @@ fn execute(
             _ => 0,
         };
         if let Some(log) = trace.as_mut() {
-            if let (Some(entry), Some((before_vars, before_strs, before_self, before_self_strs))) =
+            if let (Some(entry), Some((before_instance, before_vars, before_strs, before_self, before_self_strs))) =
                 (log.last_mut(), trace_before.as_ref())
             {
-                entry.vars = diff_snapshots(
-                    before_vars,
-                    &vars.trace_snapshot(),
-                    before_self,
-                    &inst.self_vars.trace_snapshot(),
-                );
-                entry.str_vars = diff_str_snapshots(
-                    before_strs,
-                    &vars.trace_str_snapshot(),
-                    before_self_strs,
-                    &inst.self_vars.trace_str_snapshot(),
-                );
-                entry.effects = host.take_trace_effects();
+                // The snapshot belongs to the coroutine that ran the previous
+                // instruction. When a new instance starts, do not diff against
+                // the old instance's self bank: the first instruction of every
+                // new instance must be compared with its own fresh bank, exactly
+                // like the C# StepHook per-instance snapshot.
+                if *before_instance == inst.id {
+                    entry.vars = diff_snapshots(
+                        before_vars,
+                        &vars.trace_snapshot(),
+                        before_self,
+                        &inst.self_vars.trace_snapshot(),
+                    );
+                    entry.str_vars = diff_str_snapshots(
+                        before_strs,
+                        &vars.trace_str_snapshot(),
+                        before_self_strs,
+                        &inst.self_vars.trace_str_snapshot(),
+                    );
+                    entry.effects = host.take_trace_effects();
+                }
             }
             log.push(StepTraceEntry {
                 frame,
@@ -2009,6 +2019,7 @@ fn execute(
                 effects: Vec::new(),
             });
             *trace_before = Some((
+                inst.id,
                 vars.trace_snapshot(),
                 vars.trace_str_snapshot(),
                 inst.self_vars.trace_snapshot(),
