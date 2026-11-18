@@ -585,6 +585,11 @@ public sealed class GameSession
             }
         }
         _vm.Vm.Vars.Restore(numbers, null, null, null);
+        if (data.ChoiceAnchor is { Length: >= 2 })
+        {
+            _vm.Vm.Vars.SetSys(3, data.ChoiceAnchor[0]);
+            _vm.Vm.Vars.SetSys(4, data.ChoiceAnchor[1]);
+        }
 
         _vm.Vm.CommonSelf.Clear();
         foreach (KeyValuePair<int, int[]> pair in data.CommonSelfNumbers)

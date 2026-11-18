@@ -124,7 +124,17 @@ public partial class SaveImportTest : Node
             return false;
         }
 
-        GD.Print("SAVE_IMPORT_VALIDATION_OK checksum=strict start=strict utf8=warn-once");
+        var pictureWarnings = new List<string>();
+        string pictureText = LegacySaveImporter.DecodePictureText(
+            new byte[] { 0xFF, 0xFE, 0 }, pictureWarnings, "picture_test");
+        if (!pictureText.Contains('\uFFFD') || pictureWarnings.Count != 1
+            || !pictureWarnings[0].Contains("invalid UTF-8"))
+        {
+            GD.PrintErr($"SAVE_IMPORT_VALIDATION_FAILED: picture UTF-8 warnings={pictureWarnings.Count} text={pictureText.Length}");
+            return false;
+        }
+
+        GD.Print("SAVE_IMPORT_VALIDATION_OK checksum=strict start=strict utf8=warn-once picture-utf8=warn-once");
         return true;
     }
 }

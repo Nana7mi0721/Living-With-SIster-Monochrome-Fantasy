@@ -583,6 +583,16 @@
 - **B3 SaveData08**（`M13_SLOT=8 M13_DAYS=30`）：after-load day90 00:42，pic294 关闭 H 场景后 7:45 到 day91；`M13_MAINLINE_ENDINGS_TEST_OK slot=8 stages=[10, 28, 29] v492=1 frames=35411`，stage28 at day95/step32055，self51 4→0，贺词命中。
 - **边界**：stage11 是 day25 的 CE301 分支，day90 存档自然流程不可达；两档最终都按 stage28→29→10 收口，测试断言 stage10。
 
+### 4.46 R10 四项小修与 M13 门禁（2026-11-18）
+
+来源：第十轮审阅四项小修（R10-P2-02 / P2-01 / P3-01、P3-02、P3-03）。
+
+- **R10-P2-02 读档选择锚点与图片文本**：`GameSession.LoadRetailSave` 在 `Vars.Restore` 后把 `data.ChoiceAnchor[0..1]` 写回 `Sys3/Sys4`；`LegacySaveImporter.DecodePictureText` 增加可选 `warnings`/`field` 参数，严格 UTF-8 解码失败时走 replacement 并只记一条 `invalid UTF-8, replacement applied`。`M13MainlineEndingsTest.load_slot()` 读档后断言 `GetSys(3)==512`、`GetSys(4)==240`（slot1）/`280`（slot8）；`SaveImportTest` 增加坏字节断言，`SAVE_IMPORT_VALIDATION_OK ... picture-utf8=warn-once`，8/8 存档通过。
+- **R10-P2-01 自然战斗严格模式**：`BattleNaturalLoopTest` 的 `vm.Vm.StrictMode` 由 false 改为 true；胜利 `BATTLE_NATURAL_LOOP_TEST_OK rows=8 real=2 rounds=2 turns=1 result=1 pcs=338,645 args=1,2 gauge=0 hp=3745 ce143=True ce159=True ce162=True`、败北 `BATTLE_NATURAL_DEFEAT_TEST_OK rows=8 rounds=4 turns=3 result=-1`，`SMOKE_OK` 通过。
+- **R10-P3-01 门禁标签**：`tools/godot_check.sh` 的 14..16 标签 `/33` 改 `/34`，`grep -n "/33"` 为空。
+- **R10-P3-02 Rust 外部门校验**：`crates/wolf-game/tests/m13_random_events_injected.rs` 增 `external_gates` 存在性/长度 5/标签存在/非别名断言，与 C# `ContentMatrixTest` 共读同一夹具；Rust 18 case 全 OK，`RUST_EXIT=0`。
+- **R10-P3-03 M13 条件门**：`tools/godot_check.sh` 末尾 `GODOT_GATE_OK` 前新增条件段：`work/retail_backup/Save/SaveData01.sav` 存在时依次跑 `M13_SLOT=1` 与 `M13_SLOT=8`（`M13_DAYS=30`），日志 `reports/m13_mainline_endings_slot${slot}.log`，grep `M13_MAINLINE_ENDINGS_TEST_OK slot=$slot`；缺失则打印 `[M13] skipped`。M13 两档均通过：`slot=1 ... frames=29384`、`slot=8 ... frames=35411`，exit 0。
+
 ---
 
 ## 5. 下一步（M3 入口）

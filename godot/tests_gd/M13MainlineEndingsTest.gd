@@ -143,6 +143,9 @@ func load_slot() -> bool:
 	print_state("after-load")
 	check(root.phase == "bedroom", "retail save enters bedroom")
 	check(int(root.vm.GetVar(160)) == 90, "retail save starts on day 90")
+	var anchor_y := 240 if slot == 1 else 280
+	check(int(root.vm.GetSys(3)) == 512 and int(root.vm.GetSys(4)) == anchor_y,
+		"retail save restores ChoiceAnchor Sys3/Sys4")
 	return true
 
 func wait_picture(number: int, limit: int) -> bool:

@@ -421,7 +421,7 @@ public sealed class LegacySaveImporter
                     Kind = isText == 1 ? 2 : isWin == 1 ? 4 : 0,
                     Action = 0,
                     File = isText == 1 ? "" : picName,
-                    Text = isText == 1 ? DecodePictureText(picBytes) : "",
+                    Text = isText == 1 ? DecodePictureText(picBytes, warnings, $"picture[{picId}] text") : "",
                     Anchor = anchor,
                     Args =
                     [
@@ -530,7 +530,8 @@ public sealed class LegacySaveImporter
         };
     }
 
-    private static string DecodePictureText(byte[] bytes)
+    internal static string DecodePictureText(byte[] bytes, List<string>? warnings = null,
+        string field = "picture_text")
     {
         var sb = new StringBuilder();
         int i = 0;
@@ -540,7 +541,7 @@ public sealed class LegacySaveImporter
             {
                 int len = CharLen(bytes[i]);
                 if (i + len > bytes.Length) len = bytes.Length - i;
-                sb.Append(Encoding.UTF8.GetString(bytes, i, len));
+                AppendDecodedText(sb, bytes, i, len, warnings, field);
                 i += len;
                 continue;
             }
@@ -579,6 +580,20 @@ public sealed class LegacySaveImporter
             i += 1 + total;
         }
         return sb.ToString();
+    }
+
+    private static void AppendDecodedText(StringBuilder sb, byte[] bytes, int offset, int length,
+        List<string>? warnings, string field)
+    {
+        try
+        {
+            sb.Append(StrictUtf8.GetString(bytes, offset, length));
+        }
+        catch (DecoderFallbackException)
+        {
+            warnings?.Add($"{field} at 0x{offset:X4}: invalid UTF-8, replacement applied");
+            sb.Append(Encoding.UTF8.GetString(bytes, offset, length));
+        }
     }
 
     private static int CharLen(byte first) => first switch

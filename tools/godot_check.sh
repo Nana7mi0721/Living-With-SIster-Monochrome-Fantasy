@@ -112,9 +112,9 @@ run_gd() {
   printf '%s\n' "$out" | grep -q "$marker"
 }
 
-run_gd "14/33" InputRouterTest.tscn INPUT_ROUTER_TEST_OK
-run_gd "15/33" LayerOrderTest.tscn LAYER_ORDER_TEST_OK
-run_gd "16/33" AssetDBTest.tscn ASSETDB_TEST_OK
+run_gd "14/34" InputRouterTest.tscn INPUT_ROUTER_TEST_OK
+run_gd "15/34" LayerOrderTest.tscn LAYER_ORDER_TEST_OK
+run_gd "16/34" AssetDBTest.tscn ASSETDB_TEST_OK
 
 if [ "${LWsmf_RENDER:-0}" = "1" ]; then
   # Visual pass: the dummy renderer --headless selects has no textures, so the dialog
@@ -242,5 +242,17 @@ echo "[34/34] signal stress test (ChoicesRequested/EffectRequested marshalling)"
 out_signal="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/SignalStressTest.tscn 2>&1)"
 printf '%s\n' "$out_signal" | tee "$IMO/reports/signal_stress_test.log"
 printf '%s\n' "$out_signal" | grep -q SIGNAL_STRESS_TEST_OK
+
+# Retail saves are gitignored test data; run the M13 mainline regression only when present.
+if [ -f "$IMO/work/retail_backup/Save/SaveData01.sav" ]; then
+  echo "[M13] mainline retail-save endings (SaveData01/SaveData08)"
+  for slot in 1 8; do
+    out_m13="$(M13_SLOT="$slot" M13_DAYS=30 "$GODOT" --headless --path "$IMO/godot" res://tests_gd/M13MainlineEndingsTest.tscn 2>&1)"
+    printf '%s\n' "$out_m13" | tee "$IMO/reports/m13_mainline_endings_slot${slot}.log"
+    printf '%s\n' "$out_m13" | grep -q "M13_MAINLINE_ENDINGS_TEST_OK slot=$slot"
+  done
+else
+  echo "[M13] skipped: work/retail_backup/Save/SaveData01.sav missing"
+fi
 
 echo "GODOT_GATE_OK"

@@ -184,7 +184,7 @@ public static class BattleNaturalLoopTest
         store = vm.DatabaseStore!;
         Check(store != null, "database store missing");
         vm.Vm.Host = vm;
-        vm.Vm.StrictMode = false;
+        vm.Vm.StrictMode = true;
     }
 
     private static void SeedBattle(GameDatabase store)

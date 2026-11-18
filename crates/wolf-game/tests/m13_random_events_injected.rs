@@ -149,6 +149,14 @@ fn injected_cases_reach_expected_block() {
     assert_eq!(cases.len(), 18, "expected 18 cases");
     let unique = cases.iter().filter(|c| c.alias_of.is_empty()).count();
     assert_eq!(unique, 17, "expected 17 unique script blocks");
+    let external = root["external_gates"].as_array().expect("external_gates");
+    assert_eq!(external.len(), 5, "expected 5 external-gate labels");
+    for label in external {
+        let label = label.as_str().expect("external-gates label string");
+        let case = cases.iter().find(|c| c.label == label)
+            .unwrap_or_else(|| panic!("external-gate row {label} missing from case table"));
+        assert!(case.alias_of.is_empty(), "external-gate row {label} must not be an alias");
+    }
     for alias in cases.iter().filter(|c| !c.alias_of.is_empty()) {
         let base = cases.iter().find(|c| c.label == alias.alias_of)
             .unwrap_or_else(|| panic!("{}: alias target {} missing", alias.label, alias.alias_of));
