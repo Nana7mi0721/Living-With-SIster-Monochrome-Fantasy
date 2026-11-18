@@ -8,6 +8,7 @@ extends Control
 
 const STEP := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 8
+const SetupWizardScript := preload("res://presentation_gd/SetupWizard.gd")
 
 var vm: VmController
 var session: GameSessionController
@@ -30,11 +31,21 @@ var _status_lines: Array[String] = []
 var _fault_root: Control
 var _fault_reason: Label
 var _fault_hint: Label
+var _fault_recover_button: Button
 var _diagnostics_path := ""
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# M5-C: an exported build without game_data opens the local conversion wizard instead
+	# of failing with a missing programs.json. The wizard runs converter all beside the exe.
+	if not SetupWizardScript.data_ready():
+		phase = "setup"
+		var wizard = SetupWizardScript.new()
+		wizard.name = "SetupWizard"
+		wizard.setup_completed.connect(_on_setup_completed)
+		add_child(wizard)
+		return
 	assets = AssetDB.new()
 
 	stage = PictureStage.new(assets)
@@ -110,8 +121,12 @@ func _ready() -> void:
 	phase = session.Phase
 
 
+func _on_setup_completed() -> void:
+	get_tree().call_deferred("reload_current_scene")
+
+
 func _process(delta: float) -> void:
-	if phase == "failed" or faulted:
+	if phase == "failed" or phase == "setup" or faulted:
 		return
 	_accumulator += delta
 	var guard := 0
@@ -141,7 +156,7 @@ func _consume_picture_queue(queued: String) -> bool:
 
 
 func advance_frame() -> void:
-	if phase == "failed" or faulted:
+	if phase == "failed" or phase == "setup" or faulted:
 		return
 	if auto_advance and message.is_open():
 		message.confirm()
@@ -444,14 +459,14 @@ func _on_message_text() -> String:
 
 ## F5 saves, F9 loads (retail keys); both are F5/F9 in TitleScreen too.
 func _unhandled_input(event: InputEvent) -> void:
-	if faulted or not (event is InputEventKey):
+	if faulted or phase == "setup" or not (event is InputEventKey):
 		return
 	var key := event as InputEventKey
 	if not key.pressed or key.echo:
 		return
 	if key.keycode == KEY_F5:
 		if session.SaveGame():
-			status("saved %s" % session.SavePath)
+			status("saved %s (main)" % session.SavePath)
 		else:
 			status("save refused (not in a bedroom map)")
 		get_viewport().set_input_as_handled()
@@ -462,7 +477,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			status("load faulted")
 			report_fault(vm.FaultReason)
 		elif loaded:
-			status("loaded %s" % session.SavePath)
+			status("loaded %s from %s" % [session.SavePath, session.LoadedFrom])
 		else:
 			status("load failed")
 		get_viewport().set_input_as_handled()
@@ -491,6 +506,8 @@ func report_fault(reason: String) -> void:
 	choice.close()
 	message.close()
 	_build_fault_modal()
+	if _fault_recover_button != null:
+		_fault_recover_button.disabled = not session.HasSave
 	_fault_reason.text = reason if not reason.is_empty() else "unhandled opcode"
 	status("FAULT: %s" % reason)
 	push_error("GameRoot faulted: %s" % reason)
@@ -498,11 +515,16 @@ func report_fault(reason: String) -> void:
 
 ## Save slots are write-locked while faulted; TitleScreen.SaveGame enforces the same rule.
 func can_save() -> bool:
-	return not faulted and phase != "failed"
+	return not faulted and phase != "failed" and phase != "setup"
 
 
 func fault_modal_visible() -> bool:
 	return _fault_root != null and _fault_root.visible
+
+
+## M5-D: true when the fault modal offers an enabled return-to-save button.
+func fault_recover_available() -> bool:
+	return _fault_recover_button != null and not _fault_recover_button.disabled
 
 
 func diagnostics_path() -> String:
@@ -578,9 +600,59 @@ func restart_after_fault() -> bool:
 	return true
 
 
+## M5-D: leave the fault latch by rebuilding the session and loading the latest save slot.
+## Unlike restart_after_fault this keeps progress. A failed load keeps the fault modal and
+## the original fault state, and never writes a save.
+func recover_to_last_save() -> bool:
+	if not faulted:
+		return false
+	if not session.HasSave:
+		if _fault_hint != null:
+			_fault_hint.text = "没有可用的最近存档。"
+		status("fault recovery failed: no save")
+		return false
+	vm.StopAll()
+	vm.ResetDiagnostics()
+	vm.ResetPointer()
+	# Same phantom-click hygiene as restart_after_fault (round-5 review P1).
+	router.pointer_pressed = false
+	router.right_pressed = false
+	router.middle_pressed = false
+	router.clear_frame_latches()
+	message.close()
+	choice.close()
+	stage.clear_pictures()
+	audio.reset()
+	map_view.visible = false
+	# D-33: AutoEvents is session-scoped, so always load through a rebuilt session.
+	if not session.Rebuild():
+		phase = "faulted"
+		if _fault_hint != null:
+			_fault_hint.text = "回到最近存档失败：无法重建会话。"
+		status("fault recovery failed: rebuild")
+		return false
+	if not session.LoadGame():
+		phase = "faulted"
+		if _fault_hint != null:
+			_fault_hint.text = "回到最近存档失败：存档不可用。"
+		status("fault recovery failed: load")
+		return false
+	faulted = false
+	if _fault_root != null:
+		_fault_root.visible = false
+	_diagnostics_path = ""
+	frames = session.Frames
+	_accumulator = 0.0
+	phase = "bedroom"
+	status("fault recovery: loaded last save")
+	return true
+
+
 func _build_fault_modal() -> void:
 	if _fault_root != null:
 		_fault_root.visible = true
+		if _fault_recover_button != null:
+			_fault_recover_button.disabled = not session.HasSave
 		return
 	_fault_root = Control.new()
 	_fault_root.name = "FaultModal"
@@ -635,6 +707,12 @@ func _build_fault_modal() -> void:
 	export_button.text = "导出诊断包"
 	export_button.pressed.connect(export_diagnostics)
 	buttons.add_child(export_button)
+	var recover_button := Button.new()
+	recover_button.text = "回到最近存档（若存在）"
+	recover_button.disabled = not session.HasSave
+	recover_button.pressed.connect(recover_to_last_save)
+	buttons.add_child(recover_button)
+	_fault_recover_button = recover_button
 	var restart_button := Button.new()
 	restart_button.text = "返回标题（放弃当前进度）"
 	restart_button.pressed.connect(restart_after_fault)

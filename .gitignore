@@ -30,4 +30,6 @@ __pycache__/
 /godot/.mono/
 /godot/bin/
 /godot/obj/
+/godot/build/
+/dist/
 *.csproj.user

@@ -1,8 +1,8 @@
 # Godot 重制版（现行入口）
 
-> 状态：**M1 已完成 (2026-11-14) / 进入 M2 主循环与 UI**
+> 状态：**M0–M5 已完成（2026-11-18）**
 >
-> 最后整理：2026-11-15
+> 最后整理：2026-11-18
 >
 > 引擎：Godot 4.7.2 stable Mono (.NET 8.0)，Windows x64。
 > 本目录是 Godot 重制阶段的唯一技术规范与文档入口。
@@ -11,7 +11,7 @@
 
 | 顺序 | 文档 | 用途 |
 | --- | --- | --- |
-| 1 | [`DECISIONS.md`](DECISIONS.md) | 已拍板决策（D-01..D-18）、`.sav` 边界、技术栈口径 |
+| 1 | [`DECISIONS.md`](DECISIONS.md) | 已拍板决策（D-01..D-52）、`.sav` 边界、技术栈口径 |
 | 2 | [`PLAN.md`](PLAN.md) | M0–M5 总体路线、当前阶段任务与退出标准 |
 | 3 | [`M1_HANDOFF.md`](M1_HANDOFF.md) | **M1 验收交接**：切片运行链、存读档续跑、证据与边界 |
 | 4 | [`M0_HANDOFF.md`](M0_HANDOFF.md) | **M0 验收交接文档**：环境门禁、对账证据、`.sav` 导入、Oracle 对拍 |
@@ -19,7 +19,9 @@
 | 6 | [`OPCODE_TEST_PLAN.md`](OPCODE_TEST_PLAN.md) | Top 5 高频 opcode（`401, 210, 121, 111, 180`）测试与执行规约 |
 | 7 | [`LEGACY_RUST_AUDIT.md`](LEGACY_RUST_AUDIT.md) | 22 项旧 Rust 缺陷与 Godot 护栏 |
 | 8 | [`../../oracle/TRACE_CONTRACT.md`](../../oracle/TRACE_CONTRACT.md) | Rust Oracle 与 Godot EventVM 对拍格式规范 |
-| 9 | [`../README.md`](../README.md) | 全仓文档总索引 |
+| 9 | [`M5_HANDOFF.md`](M5_HANDOFF.md) | **M5 收口交接**：转换引导、发布包、性能证据、存档回退与 90 天 soak |
+| 10 | [`RELEASE.md`](RELEASE.md) | **M5-A 发布说明**：导出预设、打包脚本、版权审计与实测记录 |
+| 11 | [`../README.md`](../README.md) | 全仓文档总索引 |
 
 ## 2. 当前技术结论
 
@@ -34,7 +36,7 @@
 
 ## 3. 当前状态
 
-**已完成（M0 + M1）**
+**已完成（M0–M4，历史摘要）**
 
 - M0：Godot 4.7.2 .NET 骨架、Python 数据管道 550/73/169,831 对账、8 槽 `.sav` 导入、Oracle 契约与 CE42 对拍、172 项 SHA256。详见 [`M0_HANDOFF.md`](M0_HANDOFF.md)。
 - M1：C# EventVM、MINSTD PRNG、事件调度/等待/调用栈、地图事件页运行、101/102 消息选择、地图行走/碰撞/PlayerTouch。
@@ -76,9 +78,18 @@
 - 第七轮 P2 与 D-35 审计（2026-11-15）：故障返回标题由 `GameSessionController.Rebuild()` 重建会话与 AutoEvents，`GameRootTest` 断言 `Generation+1` 且重开新游戏后 event 38 重启；`AudioManager` 仅 BGM/BGS 复制流，SE 用缓存；`EventVm` 未知 soundType 每站点只告警一次。`converter/validate.py` 增写 `reports/database_schema_audit.json`，`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`（§4.29，D-36）；随后零售 `BasicData.wolf` 四文件哈希与 `work/all` 全等，关闭 D-31（D-37）。
 
 - C# 条件注入内容矩阵（2026-11-17）：`ContentMatrixTest` 按 Rust `m13_random_events_injected.rs` 表驱动 18 条运行时用例（16 个 DLC 随机事件 + 特4 海豹）与 15 条 op111 静态门，输出 `CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`；5 条 DLC 外部门显式登记；111 自然随机池与九结局已于 2026-11-18 由 `M13RandomEventsTest`/`M13AllEndingsTest` 迁入 C#（`M13_RANDOM_EVENTS_TEST_OK cases=23 gates=8 sweep=38 checked=19624 dynamic=12 allowed=8`、`M13_ALL_ENDINGS_TEST_OK cases=15 gates=7`），Rust 矩阵仅保留为 Oracle（§4.40/§4.42，D-50/D-52）。
-- 35 道门槛全绿（`GODOT_GATE_OK`，headless 与 `LWsmf_RENDER=1` 双模式）；`SAVE_LOAD_TEST_OK 98/98`、`SAVE_IMPORT_OK 8/8`、`SAVE_IMPORT_VALIDATION_OK`、`AUDIO_MANAGER_TEST_OK checks=32`、`CLOCK_TEST_OK checks=11`、`SLEEP_SOAK_TEST_OK days=30 checks=61`、`MAP_RUNTIME_TEST_OK 56/56`、`MAP_MESSAGE_TEST_OK 14/14`、`PICTURE_ROUNDTRIP_TEST_OK`、`TERRAIN_TEST_OK`、`MAP_LAYER_TEST_OK`、`SESSION_PARITY_TEST_OK checks=10`、`TRACE_DIFF_OK 2461/2461`、`ROUTE_DIFF_OK 149247/149247`、`PICTURE_STATE_TEST_OK checks=37`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`、`DATABASE_TEST_OK .../vm-250`、`BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`、`AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`、`BATTLE_WIRING_TEST_OK rounds=1 result=-1 ce242_pc=415`、`BATTLE_TARGET_TEST_OK selected=1 control_pc=49 enemy_hp=100`、`BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`、`H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`、`CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`、`BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=4 turns=3 result=1 pcs=338,645,792,996 pools=3,2,3,2 save_vars=800 save_cells=16800`、`BATTLE_MATRIX_TEST_OK win=1 loss=-1 incap=-2 win_rounds=4 loss_rounds=10`、`BATTLE_ESCAPE_TEST_OK saw191=1 escape=1 saw192=0 ce157=0 rounds=0 v352=0`、`H_SCENE_TEST_OK checks=92 messages=7`、`GAME_ROOT_TEST_OK`、`SIGNAL_STRESS_TEST_OK choices=500 effects=500`、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`、`COLD_START_DAY_TEST_OK day=2 hour=8 minute=30 weekday=1 pictures=60`、`CE253_DAY_ROUTE_TEST_OK day=5 hour=8 minute=30 rounds=2 turns=1 result=1 seeded=34`、`M13_ALL_ENDINGS_TEST_OK cases=15 gates=7`、`M13_RANDOM_EVENTS_TEST_OK cases=23 gates=8 sweep=38 checked=19624 dynamic=12 allowed=8`、`OP150_NEGATIVE_SCALE_SCAN_OK total=20425 sentinel=474 negative=63 draw=57 move=6 text=0 m100=53 m200=7 m1300=3`、`M4_FULL_ROUTE_TRACE_TEST_OK steps=939630 day=5 hour=8 minute=30 save_load=ok map=1005`、`ROUTE_DIFF_OK 939630/939630`。详见 [`M1_HANDOFF.md`](M1_HANDOFF.md)。
+- 38 道门槛全绿（M5 新增 setup wizard + 两个性能探针）（`GODOT_GATE_OK`，headless 与 `LWsmf_RENDER=1` 双模式）；`SAVE_LOAD_TEST_OK 107/107`、`SAVE_IMPORT_OK 8/8`、`SAVE_IMPORT_VALIDATION_OK`、`AUDIO_MANAGER_TEST_OK checks=32`、`CLOCK_TEST_OK checks=11`、`SLEEP_SOAK_TEST_OK days=30 checks=61`、`MAP_RUNTIME_TEST_OK 56/56`、`MAP_MESSAGE_TEST_OK 14/14`、`PICTURE_ROUNDTRIP_TEST_OK`、`TERRAIN_TEST_OK`、`MAP_LAYER_TEST_OK`、`SESSION_PARITY_TEST_OK checks=10`、`TRACE_DIFF_OK 2461/2461`、`ROUTE_DIFF_OK 149247/149247`、`PICTURE_STATE_TEST_OK checks=37`、`DAY_MENU_TEST_OK checks=13`、`WEEKEND_MENU_TEST_OK checks=9`、`DATABASE_TEST_OK .../vm-250`、`BATTLE_COMMAND_TEST_OK control_real=0 seeded_real=1`、`AUTO_EVENTS_TEST_OK count=4 start=3 resume=2 gated=1`、`BATTLE_WIRING_TEST_OK rounds=1 result=-1 ce242_pc=415`、`BATTLE_TARGET_TEST_OK selected=1 control_pc=49 enemy_hp=100`、`BATTLE_SKILL_TARGET_TEST_OK selected=1 no_target=1 no_enemy_pc=50`、`H_EVENT_GATE_TEST_OK gates=37 boundaries=59 data_only=1`、`CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`、`BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=4 turns=3 result=1 pcs=338,645,792,996 pools=3,2,3,2 save_vars=800 save_cells=16800`、`BATTLE_MATRIX_TEST_OK win=1 loss=-1 incap=-2 win_rounds=4 loss_rounds=10`、`BATTLE_ESCAPE_TEST_OK saw191=1 escape=1 saw192=0 ce157=0 rounds=0 v352=0`、`H_SCENE_TEST_OK checks=92 messages=7`、`GAME_ROOT_TEST_OK`、`SIGNAL_STRESS_TEST_OK choices=500 effects=500`、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`、`COLD_START_DAY_TEST_OK day=2 hour=8 minute=30 weekday=1 pictures=60`、`CE253_DAY_ROUTE_TEST_OK day=5 hour=8 minute=30 rounds=2 turns=1 result=1 seeded=34`、`M13_ALL_ENDINGS_TEST_OK cases=15 gates=7`、`M13_RANDOM_EVENTS_TEST_OK cases=23 gates=8 sweep=38 checked=19624 dynamic=12 allowed=8`、`OP150_NEGATIVE_SCALE_SCAN_OK total=20425 sentinel=474 negative=63 draw=57 move=6 text=0 m100=53 m200=7 m1300=3`、`M4_FULL_ROUTE_TRACE_TEST_OK steps=939630 day=5 hour=8 minute=30 save_load=ok map=1005`、`ROUTE_DIFF_OK 939630/939630`。详见 [`M1_HANDOFF.md`](M1_HANDOFF.md)。
 
-**下一步（M3）**
+**M5 收口（已完成，2026-11-18）**
+
+- 转换器一键入口与安装引导：`converter/cli.py stage all` + `converter/convert.bat`；`SetupWizard.gd` 在数据缺失时接管 `GameRoot`，选择零售目录并后台转换后自动重载。真实 `work/all` 转换 `CONVERT_ALL_OK files=18 assets=276`，validate 69/69；`SETUP_WIZARD_TEST_OK`、`GAME_ROOT_TEST_OK`。
+- 存档槽回退：主档损坏回退 `.bak`，读档失败保留当前卧室，`recover_to_last_save()` 重建会话且不写新档；`SAVE_LOAD_TEST_OK 107/107`。
+- 性能：`PERFORMANCE_CORE_OK ... avg_ms=0.1257 p95=0.1213`；窗口 strict `PERFORMANCE_FRAME_STRICT_OK avg_ms=4.166 p95=4.167 fps=240.0`（RTX 5060 Laptop，OpenGL 3.3）。
+- 发布：`tools/package_release.sh` 已 staging `dist/Lwsmf-win64/`（`Lwsmf.exe` 109,372,928 B、`Lwsmf.pck` 84,588 B、`data_Lwsmf_windows_x86_64/` 186 files，总计 206 files / 189,666,077 bytes）；`RELEASE_PACKAGE_OK`、`COPYRIGHT_AUDIT_OK`；发布程序集已剔除 C# 测试类型（`Lwsmf.dll`=237,056 B，测试符号 0）。
+- 90 天 soak：修复 day83 CE305→CE239 战斗链，`SLEEP_SOAK_TEST_OK days=90 checks=181`。
+- 证据与边界详见 [`M5_HANDOFF.md`](M5_HANDOFF.md)。
+
+**历史任务清单（M2/M3，已完成）**
 
 - 整段切片（标题→新游戏→SampleMapA 1005）已冻结成 1500 帧整路线 Oracle（149,247/149,247，含 AutoEvents；op101=39、op102=6 与 BGS 均在这 1500 帧内）；route2 3000 帧经 R9-P2-02 复核为卧室空转假增量，已由 §4.41/D-52 撤除；冷启动→day1 18:30→day2 08:30 已有 `ColdStartDayTest`，自然日线到 day5 08:30 已有 `Ce253DayRouteTest`；白天/战斗尚未并入同一条逐指令 Oracle，save/load 的逐指令对拍仍待补。
 - 白天 `CE251/CE310` 工作菜单的图片点击、确认与日程/体力推进已端到端覆盖（§4.16）；从冷启动进入白天已由 `ColdStartDayTest` 覆盖到 day2 08:30（§4.31）。`123/126` 已按官方三态/设备分支实现并接到表现层（逐位表待编辑器差分，见 §4.15/D-20、§4.18/D-23）；Faulted 已支持显式返回标题重建安全点（§4.17），存档槽级回退留 M5；原版 `.sav` 导入已做起始/结束字节、可选 checksum 与严格 UTF-8 告警（§4.20/D-25）；`250` 数据库宿主已落地（§4.21/D-26）；CE188/CE152 命令可用性切片已接（§4.22/D-27），CE239/CE242 真实回合 wiring 也已接（§4.24/D-29）；CE253 自然日线、真实 CE159 命令 dispatch、伤害矩阵与 H 仍待（CE162 直启由 §4.25/D-30 接，CE159 尾段由 §4.26/D-31 接；H 阈值数据面由 §4.27/D-32 接，H 场景与 CE318→CE360 仍待；第六轮 P2 的滚轮 126、音频流隔离、未知 soundType、图片镜像与严格 effects 已由 §4.28/D-34 收口，`101` 未读完取消与零售字体仍待运行时/零售证据，Data type0 列错位经零售哈希确认不存在（D-37）；第七轮已重建故障后会话、收敛 SE 复制与 soundType 去重，并补 `database_schema_audit.json`（§4.29，D-36），文本槽负缩放经全量 op150 扫描确认无生产触发（63 处真实负缩放全部为 image kind 0/3）；CE188→CE157 菜单桥已接通（§4.30/D-38），headless 夹具只到 2 轮 `-1`，四轮 `+1` 需零售存档/CE143 物化）。

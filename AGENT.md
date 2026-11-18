@@ -2,7 +2,7 @@
 
 本文件面向在本仓库工作的 AI coding agent（Lead 与子代理），补充 `docs/README.md`（文档总索引）与 `docs/godot/` 下的当前入口。旧 `docs/archive/rust/NEW_SESSION_START_RUST_2026-11-04.md`、旧 HANDOFF 和旧研究只作历史证据。
 
-> **当前阶段（2026-11-15）：Godot 重制版 M2 已收口，进入 M3（战斗与 H）。**
+> **当前阶段（2026-11-18）：Godot 重制版 M0–M5 已完成。**
 > 当前入口是 [`docs/godot/README.md`](docs/godot/README.md)、
 > [`docs/godot/M1_HANDOFF.md`](docs/godot/M1_HANDOFF.md)、
 > [`docs/godot/DECISIONS.md`](docs/godot/DECISIONS.md) 与
@@ -33,13 +33,13 @@
 
 ## 4. 集成与验收入口
 
-> Godot 交付门禁 30 道，headless 与窗口模式双跑；任一道失败即不是可交付状态。
+> Godot 交付门禁 38 道，headless 与窗口模式双跑；任一道失败即不是可交付状态。
 > Rust 命令只用于维护开发期 Oracle，不能代替 Godot 数据/行为/画面验收。
 
 ```bash
 cd '/e/Study/github program/imoto life'
 DOTNET_ROOT=E:/Study/tools/dotnet8 /e/Study/tools/dotnet8/dotnet build godot/Lwsmf.csproj -v:minimal
-bash tools/godot_check.sh   # 预期 GODOT_GATE_OK（12/12）
+bash tools/godot_check.sh   # 预期 GODOT_GATE_OK（38/38）
 ```
 
 Rust Oracle（仅开发期）：

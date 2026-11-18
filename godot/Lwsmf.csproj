@@ -7,4 +7,9 @@
     <RootNamespace>Lwsmf</RootNamespace>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
+
+  <!-- Release export must not ship test-only C# types; Debug keeps them for the gate. -->
+  <ItemGroup Condition="'$(Configuration)' == 'ExportRelease'">
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
 </Project>

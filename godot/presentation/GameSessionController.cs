@@ -88,6 +88,12 @@ public partial class GameSessionController : Node
     public void AdvanceFrame() => _session?.AdvanceFrame();
     public bool SaveGame() => _session?.SaveGame() ?? false;
     public bool LoadGame() => _session?.LoadGame() ?? false;
+    /// <summary>M5-D: same load entry point, kept distinct for callers that want the status line.</summary>
+    public bool LoadGameWithStatus() => _session?.LoadGame() ?? false;
+    /// <summary>True when the last successful load came from the .bak rotation.</summary>
+    public bool LoadedFromBackup => _session?.LoadedFromBackup ?? false;
+    /// <summary>"main", "backup" or "none" for the last load attempt.</summary>
+    public string LoadedFrom => _session?.LoadedFromName ?? "none";
     public bool LoadRetailSave(string path, int slotIndex = 0) =>
         _session?.LoadRetailSave(path, slotIndex) ?? false;
     public void MoveLeader(int dx, int dy, int facing) => _session?.MoveLeader(dx, dy, facing);

@@ -139,6 +139,10 @@ public sealed class GameSession
     public bool ScriptedInput { get; set; }
     public bool AutoPickChoice { get; set; } = true;
     public bool HasSave => _savePath.Length > 0 && SaveCodec.Exists(_savePath);
+    /// <summary>File that supplied the last successful <see cref="LoadGame"/> call.</summary>
+    public SaveSlotSource LoadedFrom { get; private set; } = SaveSlotSource.None;
+    public bool LoadedFromBackup => LoadedFrom == SaveSlotSource.Backup;
+    public string LoadedFromName => SaveCodec.SourceName(LoadedFrom);
 
     /// <summary>Record a fatal data error without starting the VM.</summary>
     public void Fail(string reason)
@@ -472,25 +476,54 @@ public sealed class GameSession
         return true;
     }
 
+    /// <summary>
+    /// Load slot 01, preferring the main file and falling back to its .bak rotation.
+    /// <see cref="LoadedFrom"/> records which file won so F5/F9 can say "main" or "backup".
+    /// A missing or unreadable slot (and a slot whose map left programs.json) leaves the
+    /// live bedroom untouched; a late fault is rolled back to the pre-load snapshot.
+    /// </summary>
     public bool LoadGame()
     {
-        SaveState? state;
-        try
-        {
-            state = SaveCodec.Read(_savePath);
-        }
-        catch (IOException ex)
-        {
-            _view.SetStatus("load failed: " + ex.Message);
-            return false;
-        }
-
+        LoadedFrom = SaveSlotSource.None;
+        SaveReadResult read = SaveCodec.ReadWithSource(_savePath);
+        SaveState? state = read.State;
         if (state == null)
         {
             _view.SetStatus("load: slot 01 missing or unreadable");
             return false;
         }
 
+        // M5-D: resolve the destination before touching the live VM, so a stale slot
+        // cannot strand the player outside any map.
+        if (!CanEnterMap(state.MapId))
+        {
+            _view.SetStatus($"load failed: map {state.MapId} missing from programs.json");
+            return false;
+        }
+
+        SaveState? rollback = Phase == "bedroom" && !_vm.Faulted ? BuildSaveState() : null;
+        if (!ApplyLoadedState(state))
+        {
+            if (rollback != null && RestoreAfterFailedLoad(rollback))
+            {
+                _view.SetStatus($"load failed: kept map {rollback.MapId} at {rollback.LeaderX},{rollback.LeaderY}");
+            }
+            return false;
+        }
+
+        LoadedFrom = read.Source;
+        // EnterMap -> ShowMap clears the layer, so the saved slots are replayed after it.
+        _view.RestorePictures(state.Pictures);
+        // Audio last: the map load above may start its own track, and the slot wins.
+        _view.RestoreAudio(state.Audio);
+        _view.SetStatus($"loaded slot 01 from {SaveCodec.SourceName(read.Source)} (map {state.MapId} {state.LeaderX},{state.LeaderY})");
+        UpdateMapHud(false);
+        return true;
+    }
+
+    /// <summary>Apply a slot that already passed the codec gates and the map-file check.</summary>
+    private bool ApplyLoadedState(SaveState state)
+    {
         _vm.Vm.StopAll();
         _vm.Map = null;
         _mapRuntime = null;
@@ -525,13 +558,25 @@ public sealed class GameSession
             return false;
         }
         if (Phase == "failed") return false;
-        // EnterMap -> ShowMap clears the layer, so the saved slots are replayed after it.
-        _view.RestorePictures(state.Pictures);
-        // Audio last: the map load above may start its own track, and the slot wins.
-        _view.RestoreAudio(state.Audio);
-        _view.SetStatus($"loaded slot 01 (map {state.MapId} {state.LeaderX},{state.LeaderY})");
-        UpdateMapHud(false);
+        // A load into a freshly rebuilt session (fault recovery) must resume the clock.
+        _started = true;
         return true;
+    }
+
+    /// <summary>Best-effort rollback after a late load failure; diagnostics must not latch.</summary>
+    private bool RestoreAfterFailedLoad(SaveState snapshot)
+    {
+        _vm.ResetDiagnostics();
+        return ApplyLoadedState(snapshot);
+    }
+
+    /// <summary>True when programs.json resolves the slot's map exactly like EnterMap.</summary>
+    private bool CanEnterMap(int mapId)
+    {
+        string mapPath = _vm.MapPath(mapId);
+        return mapPath.Length > 0
+            ? ProgramLoader.LoadMap(_dataPath, mapPath, null) != null
+            : ProgramLoader.LoadMap(_dataPath, "", mapId) != null;
     }
 
     /// <summary>

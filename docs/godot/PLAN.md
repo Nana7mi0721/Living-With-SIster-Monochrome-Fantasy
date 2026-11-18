@@ -2,9 +2,9 @@
 
 > 状态：**现行**
 >
-> 更新：2026-11-14
+> 更新：2026-11-18
 >
-> 当前阶段：**M1 已完成 (2026-11-14) / 进入 M2 主循环与 UI**
+> 当前阶段：**M0–M5 已完成（2026-11-18）**
 >
 > 决策前置：[`DECISIONS.md`](DECISIONS.md)
 
@@ -160,6 +160,19 @@ oracle/                    # Rust trace/夹具/对拍脚本；开发期
 - [x] M4 三门槛 B4/B5（2026-11-18）：`M13AllEndingsTest` 覆盖 7 个结局族与 CE326→CE405 长链（`M13_ALL_ENDINGS_TEST_OK cases=15 gates=7`），`M13RandomEventsTest` 覆盖 111 自然随机池、调用目标全扫、死链 allow-list 与门/池 sweep（`M13_RANDOM_EVENTS_TEST_OK cases=23 gates=8 sweep=38 checked=19624 dynamic=12 allowed=8`）；`M4FullRouteTraceTest` 冷启动→CE251/CE253→day5 08:30 全量对拍 `M4_FULL_ROUTE_TRACE_TEST_OK steps=939630 day=5 hour=8 minute=30 save_load=ok map=1005`，门禁新增 `[35/35]` 与 Rust gz 夹具 diff `ROUTE_DIFF_OK 939630/939630`；`Op150NegativeScaleScanTest` 全量扫描 `game_data/programs.json`（common+map）`OP150_NEGATIVE_SCALE_SCAN_OK total=20425 sentinel=474 negative=63 draw=57 move=6 text=0 m100=53 m200=7 m1300=3`，63 处真实负缩放全部为 image kind 0/3，文本槽负缩放无生产触发；生产读档 `GameSession.cs:548` 显式 `rejectBadChecksum:true`。
 - 未完成边界：逐指令 Oracle 现有两条线——SampleMapA 事件 0 的 418 帧（2461 步）与整路线 1500 帧（149,247 步，map1005）；整路线只含标题菜单 1 次选择，但 op101=39、op102=6 与 BGS 均在其中；save/load 只做状态回路而不逐指令对拍；`wait` 与未建模的 130/160/290 转场不入 effects；MapChip 为引擎通用素材，正片未使用（D-21）；30 天 soak 只走就寝/日历链，白天 `CE251/CE310` 图片菜单已由 §4.16 端到端覆盖，冷启动→day1 18:30→day2 08:30 已由 `ColdStartDayTest` 覆盖（§4.31），但未跑完整 30 天；旧表现层已退役（§4.13）；`123/126` 已按官方三态/设备分支实现（§4.15，D-20），但 `123` mask 的逐位表与 `126` target 的具体键/设备对应仍待编辑器二进制差分；战斗侧命令可用性由 CE188/CE152 覆盖，真实回合由 CE239/CE242 wiring 覆盖（§4.24），`CE253` 自然日线与伤害/胜负矩阵已由 §4.33/§4.34 覆盖，真实 `CE159` 命令 dispatch 已由 §4.44 的无存档 CE188→CE159→CE162 链路覆盖（`CE162` 直启仍由 §4.25 覆盖，`CE159` 尾段仍由 §4.26 覆盖）；98 个自动事件已接入 `GameSession`（§4.23，D-28），标题菜单合成仍未接；H 阈值数据面由 §4.27/D-32 覆盖，CE310/323/335 剧情调用已由 §4.35/D-44 覆盖，CE318→CE360 与 CE326 台所 H 已由 §4.36/D-45 覆盖，CE310 outdoor/CE318 半支/CE326 自然晚餐入口已由 §4.37/D-46 覆盖（自然只到 CE326 生成，`@799` H 仍用夹具；`var327` 非 CE318 门）；第六轮 P2 的滚轮 126、音频流隔离、未知 soundType、图片镜像与严格 effects 已收口（§4.28，D-34），`101` 未读完取消与零售字体仍待运行时/零售证据；Data type0 的 `col2`/`col3` 已由零售 BasicData 哈希确认无列错位（D-37）；`database_schema_audit.json` 记录 18 列/44 行结构与 `効果対象`/`使用可能シーン` 回退列，不据此改列（D-36）；文本槽负缩放（R7-NEW-03）经全量 op150 扫描确认无生产触发（63 处真实负缩放全部为 image kind 0/3）；CE188→CE157 菜单桥已用游标 harvest 接通；零售存档导入（800 vars + 16,800 CData cells）与 `PrimeLatched` 后 CE253 已跑满四轮 `+1`，弱队场景 10 轮 `-1`（§4.34/D-43）；地图语义（D-39）与 Autorun 守卫（D-40）已收口，`SaveLoadTest`/`MapMessageTest` 的事件 4 page4 条件为 63=1/62=0/464=0/60=0（§4.31）。页切换时 `StartsOnPage` 已随新页复位（D-41，`11d071d`）；生产 `Ce253DayRouteTest` 已自然走到 day5 08:30，CE253→CE239→CE242 自然触发并跑 2 轮，CE244 以 `v342=0` 直接判胜（瞬态 `352=1/343=1`，战后清零），真实伤害矩阵/四轮 `+1` 已接（§4.34/D-43），第三态 `-2` 已由直接 CE244 全空 pool 夹具覆盖（§4.38/D-48），独立逃跑分支已由 §4.39/D-49 关闭；M4 内容矩阵的 17 项条件注入已由 §4.40/D-50 以 C# 表驱动覆盖；111 自然随机池与九结局已由 `M13RandomEventsTest`/`M13AllEndingsTest` 迁入 C#，Rust 矩阵仅作 Oracle；101/102/BGS 由 1500 帧 route1 覆盖（op101=39、op102=6 与 BGS 均在其中）；route2 3000 帧经 R9-P2-02 复核为卧室空转假增量，已由 §4.41/D-52 撤除。单条含白天/战斗的逐指令 Oracle 仍未接。
 
+## 4.5 M5 收口与发布（2026-11-18）
+
+> 交接证据与边界：[M5_HANDOFF.md](M5_HANDOFF.md)
+
+- [x] 转换器一键入口：`converter/cli.py` 的 `stage all` 严格按 manifest → programs → database → map-tiles → validate 执行，任一阶段失败立即停止；`converter/convert.bat` 自动定位仓库根。`python -m pytest converter/tests -q` = 38 passed / 54 subtests；真实 `work/all` 转换输出 `CONVERT_ALL_OK files=18 assets=276`，validate 69/69。
+- [x] 安装引导：`godot/presentation_gd/SetupWizard.gd` 检查 7 个 BasicData 文件与 MapData 至少一个 `.mps`，支持路径选择、后台调用 converter 与状态轮询；`GameRoot._ready()` 在数据缺失时进入 `setup` 阶段，完成后 deferred reload。`SETUP_WIZARD_TEST_OK`、`GAME_ROOT_TEST_OK`。
+- [x] 存档槽回退：`SaveCodec.ReadWithSource` 主档损坏时读 `.bak`；`GameSession.LoadGame` 预检失败保留 live bedroom；`GameRoot.recover_to_last_save()` 重建会话后读档且不写新档。`SAVE_LOAD_TEST_OK 107/107`。
+- [x] 性能证据：C# core 探针 `PERFORMANCE_CORE_OK startup_ms=754.790 frames=600 avg_ms=0.1257 p50=0.0713 p95=0.1213 max=12.6358 gc_mb=51.421 static_mb=24.179`；窗口 strict 帧探针 `PERFORMANCE_FRAME_STRICT_OK avg_ms=4.166 p95=4.167 fps=240.0`（OpenGL 3.3，RTX 5060 Laptop）。headless 帧探针受引擎主循环 6.9 ms 地板限制，仅作回归基线。
+- [x] 发布打包：`godot/export_presets.cfg`（Windows Desktop、x86_64、`custom_template/release` 留空使用 `4.7.2.stable.mono`、`dotnet/embed_build_outputs=false`）；`godot/Lwsmf.csproj` 的 `ExportRelease` 剔除 `tests/**/*.cs`，发布 `Lwsmf.dll`=237,056 B 且测试符号 0；`tools/package_release.sh` 生成 `dist/Lwsmf-win64/game/Lwsmf.exe`（109,372,928 B）、`Lwsmf.pck`（84,588 B）、`data_Lwsmf_windows_x86_64/`（186 files）、`converter/` 与 `README.txt`；`COPYRIGHT_AUDIT_OK files=206 bytes=189666077 forbidden=0`、`RELEASE_PACKAGE_OK`，clean/bad/missing 三类夹具均通过。
+- [x] 90 天 soak：修复 day83 CE305→CE239 剧情链缺少 `BattleWiring` 导致的假失败（`TraceRecorderHost.DatabaseProvider` + database/battle wiring），`SLEEP_SOAK_TEST_OK days=90 checks=181`；day83→100 剧情跳天按合法时钟校验。
+- [x] 最终 .NET 导出与 staging：mono 模板 `4.7.2.stable.mono/windows_release_x86_64.exe`（109,513,728 B）已就位；`RELEASE_PACKAGE_OK`，`dist/Lwsmf-win64` 共 206 files / 189,666,077 bytes。
+- [x] 38 道门禁 headless + `LWsmf_RENDER=1` 双跑与 30 天默认 soak 最终确认：双跑均 `GODOT_GATE_OK` 38/38；headless 30 天 `SLEEP_SOAK_TEST_OK days=30 checks=61`。
+
 ## 5. 测试与验收
 
 | 层 | 测试 | 通过标准 |
@@ -168,10 +181,11 @@ oracle/                    # Rust trace/夹具/对拍脚本；开发期
 | L2 行为 | C# headless VM trace vs Rust Oracle | 核心路线/随机事件/战斗/H 变量与副作用一致 |
 | L3 表现 | Godot 场景截图、输入注入、多帧状态 | 无截断/重叠/闪烁/立绘丢失；关键图有 diff |
 | L4 内容 | 550 事件、111 随机事件、9 结局、DLC、NG+、30/90 天 soak | 覆盖矩阵全部有状态，无静默未测 |
+| L5 发布 | 38 道门禁、converter all、打包与版权审计、性能探针 | Windows x64 包可运行；发布树不含原版素材；性能证据可复现 |
 
 第一版 DoD：数据一致、行为一致、表现一致；像素级一致作为后续优化目标。
 
-## 6. 下一步
+## 6. 历史任务清单（M1–M4，已完成）
 
 M1 已完成，M2 W1 审计修复、W2 Day-1 第二轮审计止血、W2 Day 2–5 表现层/逐指令对拍、W3 Day-1 第三轮审阅 P1 修复、W3 Day-2 核心收敛、W3 Day-3 地图呈现、W3 Day-4 GameSession 接管、W3 Day-5 主场景与 vars/effects trace、W4 Day1-4 音频三轨与确定性时钟、第四轮审阅加固、整路线 Oracle、图片状态/指针桥、旧表现层退役、`123/126` 输入权限状态模型、白天菜单端到端、AutoEvents 调度器、SysDatabase 地图语义/Autorun 守卫/冷启动日线已完成（2026-11-15）：
 

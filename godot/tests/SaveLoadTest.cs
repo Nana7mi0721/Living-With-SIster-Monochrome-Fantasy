@@ -247,8 +247,8 @@ public partial class SaveLoadTest : Node
         Check(SaveCodec.FromJson(savedJson.Replace("\"schema_version\": 1", "\"schema_version\": 0")) == null,
             "schema_version 0 must be rejected");
 
-        // Corrupt main + good .bak: Read must fall back, and the backup must survive
-        // a rewrite attempt from the corrupt file.
+        // Corrupt main + good .bak: ReadWithSource must fall back, and the backup must
+        // survive a rewrite attempt from the corrupt file.
         var beforeBackup = SaveCodec.Read(savePath);
         Check(beforeBackup != null, "slot 01 must be readable before backup test");
         if (beforeBackup != null) SaveCodec.Write(savePath, beforeBackup);
@@ -256,10 +256,35 @@ public partial class SaveLoadTest : Node
         if (beforeBackup != null)
         {
             File.WriteAllText(savePath, "{ broken");
+            var readResult = SaveCodec.ReadWithSource(savePath);
+            Check(readResult.State != null, "corrupt main must recover from .bak");
+            Check(readResult.Source == SaveSlotSource.Backup, "read must report the backup source");
+            Check(readResult.State?.MapId == 1005 && readResult.State?.Vars.Count > 0,
+                "backup must restore the saved map and vars");
+            // The live session must expose the source and remain playable after the fallback.
+            Check(session.LoadGame(), "LoadGame must succeed from the .bak fallback");
+            Check(session.LoadedFrom == SaveSlotSource.Backup && session.LoadedFromBackup,
+                "session must report the backup slot");
+            Check(session.Phase == "bedroom", "backup load must leave a playable bedroom");
+            Check(view.Status.Contains("from backup"), "status must name the backup slot");
+
             var recovered = SaveCodec.Read(savePath);
-            Check(recovered != null, "corrupt main must recover from .bak");
-            Check(recovered?.MapId == 1005 && recovered?.Vars.Count > 0, "backup must restore the saved map and vars");
+            Check(recovered != null, "Read compatibility API must recover from .bak");
             if (recovered != null) SaveCodec.Write(savePath, recovered);
+
+            // Both files corrupt: a failed load must not disturb the live bedroom.
+            string phaseBefore = session.Phase;
+            int mapBefore = session.MapData?.Id ?? -1;
+            string leaderBefore = $"{session.LeaderX},{session.LeaderY}";
+            File.WriteAllText(savePath, "{ broken");
+            File.WriteAllText(savePath + ".bak", "{ broken");
+            Check(!session.LoadGame(), "LoadGame must fail when both slots are corrupt");
+            Check(session.Phase == phaseBefore && (session.MapData?.Id ?? -1) == mapBefore
+                && $"{session.LeaderX},{session.LeaderY}" == leaderBefore,
+                "a failed load must keep the live bedroom");
+            // Restore both slots for the rotation-protection checks below.
+            SaveCodec.Write(savePath, recovered!);
+            SaveCodec.Write(savePath, recovered!);
         }
 
         // A corrupt main must never clobber the last good backup.
@@ -278,6 +303,9 @@ public partial class SaveLoadTest : Node
         File.Delete(savePath);
         Check(session.HasSave, "a lone .bak must still count as an existing slot");
         Check(SaveCodec.Read(savePath) != null, "a lone .bak must be loadable");
+        var loneResult = SaveCodec.ReadWithSource(savePath);
+        Check(loneResult.State != null && loneResult.Source == SaveSlotSource.Backup,
+            "a missing main must load from the backup source");
         var restoredState = SaveCodec.Read(savePath);
         if (restoredState != null) SaveCodec.Write(savePath, restoredState);
 

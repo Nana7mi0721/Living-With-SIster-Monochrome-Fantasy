@@ -24,6 +24,9 @@ public sealed class TraceRecorderHost : IHost
     /// <summary>Optional deterministic menu driver; null keeps the fixed reply (oracle mode).</summary>
     public Func<string[], ChoiceReply>? ChoiceSelector { get; set; }
 
+    /// <summary>Optional database provider for battle/event tests that need real CData reads.</summary>
+    public Func<DbOp, DbValue?>? DatabaseProvider { get; set; }
+
     // Waiting is scheduling, not an effect: the Rust trace does not record it, so
     // neither does this host (the two step traces must agree literally).
     public void Wait(uint frames) { }
@@ -119,7 +122,7 @@ public sealed class TraceRecorderHost : IHost
             ["value"] = op.Source?.Num ?? 0
         };
         PendingEffects.Add(eff);
-        return null;
+        return DatabaseProvider?.Invoke(op);
     }
 
     public void CommonEventCall(int target, int[] args, string[] strings)

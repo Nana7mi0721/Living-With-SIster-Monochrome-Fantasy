@@ -11,6 +11,7 @@ func _ready() -> void:
 	print("GAME_ROOT_TEST_START")
 	var failures: Array[String] = []
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://save_01.json"))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://save_01.json.bak"))
 	var script = load("res://presentation_gd/GameRoot.gd")
 	if script == null:
 		failures.append("GameRoot.gd did not load")
@@ -38,6 +39,13 @@ func _ready() -> void:
 		for signal_name in SIGNALS:
 			if root.vm.get_signal_connection_list(signal_name).is_empty():
 				failures.append("VmBridge signal %s is not connected" % signal_name)
+
+		# M5-D: with no slot on disk, a fault must not offer save recovery.
+		root.report_fault("no save probe")
+		if root.fault_recover_available():
+			failures.append("fault recovery must be unavailable without a save")
+		if not root.restart_after_fault():
+			failures.append("restart_after_fault should clear the no-save probe")
 
 		# 124 must reach the production picture stage through VmController's provider; the
 		# pointer also stays inert (-1,-1) until a real mouse event arrives (D-09).
@@ -168,7 +176,26 @@ func _ready() -> void:
 			var restored_bgs: Dictionary = root.audio.current_track(AudioManager.CHANNEL_BGS)
 			if int(restored_bgs.get("loop_point", -1)) != 60 or int(restored_bgs.get("volume", -1)) != 30:
 				failures.append("the restored BGS track lost loop point/volume")
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
+			# M5-D: a corrupt main slot must fall back to .bak, and the session must say so.
+			if not root.session.SaveGame():
+				failures.append("second SaveGame should succeed before the backup test")
+			var bak_path: String = save_path + ".bak"
+			if not FileAccess.file_exists(bak_path):
+				failures.append("a second save must rotate a .bak slot")
+			var corrupt_main := FileAccess.open(save_path, FileAccess.WRITE)
+			if corrupt_main == null:
+				failures.append("could not open the main slot to corrupt it")
+			else:
+				corrupt_main.store_string("{ broken")
+				corrupt_main.close()
+			if not root.session.LoadGame():
+				failures.append("LoadGame must recover from .bak when the main slot is corrupt")
+			if not root.session.LoadedFromBackup:
+				failures.append("LoadGame must expose the backup source (got %s)" % root.session.LoadedFrom)
+			if root.session.Phase != "bedroom" or root.session.MapId != 1005:
+				failures.append("the backup load must leave a playable bedroom")
+			if not root.session.SaveGame():
+				failures.append("rewriting a clean main slot after the backup test should succeed")
 			root.session.SetScriptedInput(false)
 
 		# D-13: a core fault must latch the modal, stop the clock and lock save slots.
@@ -231,6 +258,31 @@ func _ready() -> void:
 			failures.append("rebuilt session never reached the bedroom (got %s)" % root.phase)
 		elif root.session.AutoEventStarts(38) < 1:
 			failures.append("rebuilt session must re-arm one-shot auto event 38 (starts %d)" % root.session.AutoEventStarts(38))
+
+		# M5-D: a fault can return to the newest save without rewriting the slot.
+		if root.phase == "bedroom":
+			if not root.session.SaveGame():
+				failures.append("SaveGame before the fault-recovery test should succeed")
+			var save_text_before := FileAccess.get_file_as_string(root.session.SavePath)
+			root.report_fault("unhandled opcode 999 at event 1 pc 0")
+			if not root.fault_recover_available():
+				failures.append("fault recovery must be available when a save exists")
+			if not root.recover_to_last_save():
+				failures.append("recover_to_last_save must succeed from a fault")
+			if root.faulted:
+				failures.append("recover_to_last_save must clear the fault latch")
+			if root.phase != "bedroom":
+				failures.append("recover_to_last_save must land in the bedroom (got %s)" % root.phase)
+			if root.fault_modal_visible():
+				failures.append("recover_to_last_save must hide the fault modal")
+			if root.session.MapId != 1005:
+				failures.append("recover_to_last_save must load the saved map")
+			var status: Array[String] = root.status_lines()
+			if status.is_empty() or not status[-1].contains("fault recovery: loaded last save"):
+				failures.append("recover_to_last_save must report a recovery status line")
+			if FileAccess.get_file_as_string(root.session.SavePath) != save_text_before:
+				failures.append("fault recovery must not rewrite the save slot")
+
 		root.queue_free()
 	if failures.is_empty():
 		print("GAME_ROOT_TEST_OK")

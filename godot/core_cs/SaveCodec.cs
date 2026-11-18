@@ -217,6 +217,33 @@ public sealed class SaveState
     [JsonPropertyName("dialogue")] public SavedDialogue? Dialogue { get; set; }
 }
 
+/// <summary>Which file supplied a decoded slot: the main slot or its .bak rotation.</summary>
+public enum SaveSlotSource
+{
+    None = 0,
+    Main = 1,
+    Backup = 2,
+}
+
+/// <summary>
+/// Observable result of <see cref="SaveCodec.ReadWithSource"/>: the payload plus the file
+/// it came from. The status line must be able to say "backup" when the main slot was
+/// corrupt or missing.
+/// </summary>
+public readonly struct SaveReadResult
+{
+    public SaveReadResult(SaveState? state, SaveSlotSource source)
+    {
+        State = state;
+        Source = source;
+    }
+
+    public SaveState? State { get; }
+    public SaveSlotSource Source { get; }
+    public bool Ok => State != null;
+    public string SourceName => SaveCodec.SourceName(Source);
+}
+
 public static class SaveCodec
 {
     /// <summary>Hard ceiling for one slot; user:// files above it are not parsed.</summary>
@@ -469,12 +496,29 @@ public static class SaveCodec
         }
     }
 
-    public static SaveState? Read(string path)
+    /// <summary>
+    /// Read the slot and report which file supplied it. A corrupt or missing main slot
+    /// falls back to the .bak rotation; <see cref="Read"/> stays the state-only API.
+    /// </summary>
+    public static SaveReadResult ReadWithSource(string path)
     {
-        var state = ReadOne(path);
-        if (state != null) return state;
-        return ReadOne(path + ".bak");
+        SaveState? main = ReadOne(path);
+        if (main != null) return new SaveReadResult(main, SaveSlotSource.Main);
+        SaveState? backup = ReadOne(path + ".bak");
+        return backup != null
+            ? new SaveReadResult(backup, SaveSlotSource.Backup)
+            : new SaveReadResult(null, SaveSlotSource.None);
     }
+
+    public static SaveState? Read(string path) => ReadWithSource(path).State;
+
+    /// <summary>Stable lower-case label used by F5/F9 status lines and fault hints.</summary>
+    public static string SourceName(SaveSlotSource source) => source switch
+    {
+        SaveSlotSource.Main => "main",
+        SaveSlotSource.Backup => "backup",
+        _ => "none",
+    };
 
     /// <summary>True when a slot or its backup exists (title menu shows SAVE).</summary>
     public static bool Exists(string path)
