@@ -4,8 +4,8 @@
 
 ## 1. 状态
 
-- 阶段/日期：M5 收口与发布 / 2026-11-18（已完成）
-- 仓库 HEAD：`bce18a1` 之后的 M5 收口提交（提交号见 `git log -1 --oneline`）
+- 阶段/日期：M5 收口与发布 / 2026-11-18（已完成；R12 修复 2026-11-19）
+- 仓库 HEAD：`e954ecc`（M5 收口发布；R12 修复见后续提交，未重新打包）
 - Godot 版本/渲染器：Godot 4.7.2 stable Mono（.NET 8.0），Windows x64；运行使用 Compatibility / OpenGL 3.3
 - 数据根/夹具：`work/all`（零售 BasicData 副本）、`game_data/`；`work/retail_backup/Save` 为可选 M13 零售存档回归
 - 是否可复现：是；命令见 §3
@@ -16,7 +16,8 @@
   - `godot/Lwsmf.csproj`：`ExportRelease` 配置排除 `tests/**/*.cs`，发布程序集不含测试类型；Debug 仍保留测试供门禁。
   - `godot/export_presets.cfg`：Windows Desktop / x86_64；`custom_template/release` 留空以使用已安装的 `4.7.2.stable.mono` 模板；`dotnet/embed_build_outputs=false`，发布时必须携带 `game/data_Lwsmf_windows_x86_64/` 运行时目录。
   - `tools/package_release.sh` 在导出前临时生成 `godot/Lwsmf.sln` 并在退出时删除，仓库不保留 solution 文件。
-  - `godot/presentation_gd/SetupWizard.gd`：首次运行数据检查、零售目录选择、后台转换、完成后重载；`GameRoot.gd` 在 `phase="setup"` 时暂停正常游戏流程。
+  - `godot/presentation_gd/SetupWizard.gd`：首次运行数据检查、零售目录选择、后台转换（Windows 优先 `converter/convert.bat`，重试前清理状态文件）、完成后重载；`GameRoot.gd` 在 `phase="setup"` 时暂停正常游戏流程。
+  - `godot/presentation/AppPaths.cs`、`godot/presentation_gd/AppPaths.gd`：统一编辑器/导出包根目录解析；导出构建按 exe 所在目录定位 `game_data`，修复导出后 `programs.json`/`database.json`/`map_tiles.json` 解析失败。
   - `godot/core_cs/SaveCodec.cs`、`GameSession.cs`、`GameSessionController.cs`、`presentation_gd/GameRoot.gd`：主档损坏回退 `.bak`、读档失败保留 live bedroom、`recover_to_last_save()` 重建会话且不写新档。
   - `godot/core_cs/TraceRecorderHost.cs`：新增 `DatabaseProvider` 委托，供 soak 的 database/battle wiring 使用。
   - `godot/tests/SleepSoakTest.cs`：day83 剧情战接入 `BattleWiring` 与 `GameDatabase`，修复 90 天 soak 的假失败。

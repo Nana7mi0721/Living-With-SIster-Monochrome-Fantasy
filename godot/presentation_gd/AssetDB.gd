@@ -1,5 +1,7 @@
 class_name AssetDB
 extends RefCounted
+
+const AppPaths := preload("res://presentation_gd/AppPaths.gd")
 ## WOLF asset database for the GDScript presentation layer (W2 Day 3).
 ##
 ## Two jobs: resolve a WOLF logical path ("Picture/face01.png") against the unpacked
@@ -45,13 +47,13 @@ func _init(p_root: String = "") -> void:
 
 
 static func default_root() -> String:
-	return ProjectSettings.globalize_path("res://").path_join("../work/all").simplify_path()
+	return AppPaths.package_root().path_join("work/all").simplify_path()
 
 
 ## Non-copyright 18x18 PNG / silent WAV tree used when the retail install is absent.
 ## Regenerate with `python tools/make_asset_stub.py`.
 static func fallback_root() -> String:
-	return ProjectSettings.globalize_path("res://tests/fixtures/asset_stub")
+	return AppPaths.resource_root().path_join("tests/fixtures/asset_stub")
 
 
 ## Recursively index the tree: relative path and bare basename, both lowercase.

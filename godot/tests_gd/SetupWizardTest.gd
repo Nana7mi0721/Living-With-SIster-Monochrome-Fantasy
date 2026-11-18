@@ -27,6 +27,17 @@ func _ready() -> void:
 			failures.append("conversion command is incomplete: %s" % cmd)
 		if script.find_convert_launcher().is_empty():
 			failures.append("converter launcher should be discoverable in this checkout")
+		var wizard = script.new()
+		add_child(wizard)
+		await get_tree().process_frame
+		var panel = wizard.get_node_or_null("SetupCenter/SetupPanel")
+		if panel == null:
+			failures.append("SetupCenter/SetupPanel is missing")
+		else:
+			var rect: Rect2 = panel.get_global_rect()
+			if rect.position.x < 0.0 or rect.position.y < 0.0 or rect.end.x > 1024.0 or rect.end.y > 576.0:
+				failures.append("setup panel outside 1024x576 viewport: %s" % str(rect))
+		wizard.queue_free()
 	print("SETUP_WIZARD_TEST_" + ("OK" if failures.is_empty() else "FAILED"))
 	for f in failures:
 		print("FAIL: " + f)

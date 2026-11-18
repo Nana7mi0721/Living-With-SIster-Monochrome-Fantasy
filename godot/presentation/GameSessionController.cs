@@ -109,8 +109,7 @@ public partial class GameSessionController : Node
 
     public void Fail(string reason) => _session?.Fail(reason);
 
-    private static string DefaultDataPath() => Path.GetFullPath(Path.Combine(
-        ProjectSettings.GlobalizePath("res://"), "..", "game_data", "programs.json"));
+    private static string DefaultDataPath() => Path.Combine(AppPaths.GameDataDir(), "programs.json");
 
     // ProjectSettings owns the user:// mapping; the core session layer writes plain OS paths.
     private static string DefaultSavePath() => ProjectSettings.GlobalizePath("user://save_01.json");

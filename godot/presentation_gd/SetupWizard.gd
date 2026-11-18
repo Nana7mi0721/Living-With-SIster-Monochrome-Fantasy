@@ -7,6 +7,7 @@ extends Control
 
 signal setup_completed
 
+const AppPaths := preload("res://presentation_gd/AppPaths.gd")
 const DATA_FILES := ["manifest.json", "programs.json", "database.json", "map_tiles.json"]
 const RETAIL_FILES := [
 	"BasicData/CommonEvent.dat",
@@ -30,17 +31,15 @@ var _log_file := ""
 
 ## App directory differs between the editor (res://) and an exported build (exe folder).
 static func app_dir() -> String:
-	if OS.has_feature("template"):
-		return OS.get_executable_path().get_base_dir()
-	return ProjectSettings.globalize_path("res://")
+	return AppPaths.resource_root()
 
 
 static func package_root() -> String:
-	return app_dir().path_join("..").simplify_path()
+	return AppPaths.package_root()
 
 
 static func data_dir() -> String:
-	return package_root().path_join("game_data")
+	return AppPaths.game_data_dir()
 
 
 static func converter_dir() -> String:
@@ -99,11 +98,18 @@ static func find_convert_launcher() -> String:
 static func build_convert_command(root: String) -> String:
 	var out := data_dir()
 	var py := "python"
-	if OS.get_name() == "Windows":
-		py = "py -3"
 	return "%s -m converter all --root \"%s\" --out \"%s\" --reports \"%s\"" % [
 		py, root, out, package_root().path_join("reports")
 	]
+
+
+## Prefer the shipped batch launcher on Windows so Python discovery stays in convert.bat.
+static func _launch_command(root: String, launcher: String) -> String:
+	if OS.get_name() == "Windows" and launcher.to_lower().ends_with(".bat"):
+		return "call \"%s\" --root \"%s\" --out \"%s\" --reports \"%s\"" % [
+			launcher, root, data_dir(), package_root().path_join("reports")
+		]
+	return build_convert_command(root)
 
 
 func _ready() -> void:
@@ -119,11 +125,15 @@ func _build_ui() -> void:
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
 
+	var center := CenterContainer.new()
+	center.name = "SetupCenter"
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
+
 	var panel := PanelContainer.new()
-	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	panel.name = "SetupPanel"
 	panel.custom_minimum_size = Vector2(760, 0)
-	panel.position = Vector2(132, 56)
-	add_child(panel)
+	center.add_child(panel)
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 28)
@@ -155,6 +165,7 @@ func _build_ui() -> void:
 	_root_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	path_row.add_child(_root_edit)
 	_browse = FileDialog.new()
+	_browse.visible = false
 	_browse.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 	_browse.access = FileDialog.ACCESS_FILESYSTEM
 	_browse.title = "选择原版 Data 目录（包含 BasicData/MapData）"
@@ -222,10 +233,12 @@ func start_conversion() -> bool:
 	if launcher.is_empty():
 		_status.text = "未找到 converter/。请把发布包与 converter 目录放在一起，或按下面的手动命令运行。"
 		return false
-	var command := build_convert_command(root)
+	var command := _launch_command(root, launcher)
 	var base := package_root()
 	_status_file = ProjectSettings.globalize_path("user://setup_conversion_status.txt")
 	_log_file = ProjectSettings.globalize_path("user://setup_conversion.log")
+	if FileAccess.file_exists(_status_file):
+		DirAccess.remove_absolute(_status_file)
 	# cmd.exe keeps the conversion off the render thread; the status file is the
 	# completion latch polled by _process.
 	var shell := "cmd.exe" if OS.get_name() == "Windows" else "bash"

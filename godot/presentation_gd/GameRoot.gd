@@ -9,6 +9,7 @@ extends Control
 const STEP := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 8
 const SetupWizardScript := preload("res://presentation_gd/SetupWizard.gd")
+const AppPaths := preload("res://presentation_gd/AppPaths.gd")
 
 var vm: VmController
 var session: GameSessionController
@@ -418,7 +419,7 @@ func _on_session_map(map_id: int, leader_x: int, leader_y: int) -> void:
 	if not map_view.cell_hovered.is_connected(_on_map_cell_hovered):
 		map_view.cell_hovered.connect(_on_map_cell_hovered)
 	map_view.visible = true
-	var path := ProjectSettings.globalize_path("res://").path_join("../game_data/map_tiles.json").simplify_path()
+	var path := AppPaths.package_root().path_join("game_data/map_tiles.json").simplify_path()
 	if not map_view.load_from_file(path, map_id):
 		status("map layer missing for map %d" % map_id)
 	map_view.set_leader_cell(Vector2i(leader_x, leader_y))

@@ -109,8 +109,8 @@ public partial class VmController : Node, IHost, IVmSession
     {
         if (string.IsNullOrEmpty(path))
         {
-            string rootDir = ProjectSettings.GlobalizePath("res://").TrimEnd('/', '\\');
-            path = Path.GetFullPath(Path.Combine(rootDir, "..", "game_data", "programs.json"));
+            string rootDir = AppPaths.PackageRoot();
+            path = Path.GetFullPath(Path.Combine(rootDir, "game_data", "programs.json"));
         }
 
         if (!File.Exists(path))
@@ -127,8 +127,8 @@ public partial class VmController : Node, IHost, IVmSession
         GD.Print($"[VmController] Loaded {programs.Count} common event programs.");
 
         string dataDir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".";
-        string projectRoot = ProjectSettings.GlobalizePath("res://").TrimEnd('/', '\\');
-        string basicDir = Path.GetFullPath(Path.Combine(projectRoot, "..", "work", "all", "BasicData"));
+        string projectRoot = AppPaths.PackageRoot();
+        string basicDir = Path.GetFullPath(Path.Combine(projectRoot, "work", "all", "BasicData"));
         string databasePath = Path.Combine(dataDir, "database.json");
         DatabaseStore = GameDatabase.Load(databasePath, basicDir);
         if (DatabaseStore == null)
