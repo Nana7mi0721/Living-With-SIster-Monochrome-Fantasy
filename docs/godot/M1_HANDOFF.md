@@ -93,6 +93,7 @@
 | CE244 三态 `-2` | `res://tests/Smoke.tscn` | `BATTLE_MATRIX_TEST_OK win=1 loss=-1 incap=-2`；直接 CE244 夹具（池 345..348 全空）结算 `352=-2/343=1/350=0`（§4.38，D-48） |
 | 独立逃跑分支 | `res://tests/Smoke.tscn` | `BATTLE_ESCAPE_TEST_OK saw191=1 escape=1 saw192=0 ce157=0 rounds=0 v352=0`；CE191 行动窗口 row1 `code -1` 写 `1600099`（self 699）后 BreakEvent，无 CE192/157/242/244、无正技能、战斗 vars 全 0（§4.39，D-49） |
 | 自然战斗菜单桥/四轮 | `res://tests/Smoke.tscn` | `BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=4 turns=3 result=1 pcs=338,645,792,996 pools=3,2,3,2 save_vars=800 save_cells=16800`；导入零售存档 vars+CData 并 `PrimeLatched` 后与 Rust m11 四轮 `+1` 全等（§4.34，D-43）；`BATTLE_MATRIX_TEST_OK win=1 loss=-1 win_rounds=4 loss_rounds=10` |
+| 无外部 .sav 自然战斗闭环 | `res://tests/Smoke.tscn` | `BATTLE_NATURAL_LOOP_TEST_OK rows=8 real=2 rounds=2 turns=1 result=1 pcs=338,645 args=1,2 gauge=0 hp=3745 ce143=True ce159=True ce162=True save_vars=0 save_cells=0`；`BATTLE_NATURAL_DEFEAT_TEST_OK rows=8 rounds=4 turns=3 result=-1 gauge=0 hp=0 save_vars=0 save_cells=0`；CE188→CE143/CE159/CE162→CE239/CE242/CE244 不导入 SaveData01（§4.44） |
 | C# 条件注入内容矩阵 | `res://tests/Smoke.tscn` | `CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`；16 个 DLC 随机事件 + 特4 海豹的注入分支与 15 条 op111 门载荷，5 条 DLC 外部门显式登记，C# 与 Rust 测试共读 `oracle/fixtures/content_matrix_injected.json`（§4.40/§4.42/§4.43，D-50/D-52） |
 | 第七轮 P2 收口 | `res://tests_gd/GameRootTest.tscn` / `AudioManagerTest.tscn` / `Smoke.tscn` / `converter validate` | `GAME_ROOT_TEST_OK`（Generation+1、重开新游戏后 event 38 重启）、`AUDIO_MANAGER_TEST_OK checks=32`、`unknown sound type` 循环两次仅 1 条日志、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`；零售 BasicData 四文件哈希与 `work/all` 全等（D-37） |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
@@ -560,6 +561,16 @@
 - **A2 矩阵单一真源**：`oracle/fixtures/content_matrix_injected.json`（10,710 B）定义 18 条用例（16 DLC + 特4-a/b，含 label/name/ce/pc/self/globals/expected/gate/max_frames/alias_of）、15 条 op111 gates（ce/pc/triples）与 5 条 `external_gates`；`godot/tests/ContentMatrixTest.cs` 用 `System.Text.Json` 读取，`crates/wolf-game/tests/m13_random_events_injected.rs` 用 `serde_json` 读取（`crates/wolf-game/Cargo.toml` 增 `[dev-dependencies] serde_json = "1"`）。C# 输出 `CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`，Rust `cargo test -p wolf-game --test m13_random_events_injected` 2 passed。
 - **A5 决策减负**：`docs/godot/DECISIONS.md` 只保留跨模块架构/契约决策；D-22/D-27/D-30/D-31/D-32/D-34/D-36/D-38/D-43/D-44/D-45/D-46/D-48/D-49/D-50/D-51 的单次测试夹具记录下沉到本文档 §4.16/4.22/4.25/4.26/4.27/4.28/4.29/4.30/4.34/4.35/4.36/4.37/4.38/4.39/4.40/4.41，文件首部保留 ID→章节索引；D-51 的 route2 已撤除，不再作为决策依据。
 - **验证（代码级）**：C# Rebuild 0 warning/0 error；`SMOKE_OK`（含新矩阵 marker）；Rust 矩阵测试 2 passed；34 步双模式门禁均 `GODOT_GATE_OK`、`GATE_EXIT=0`（`reports/r10a_gate_headless.log` / `reports/r10a_gate_windowed.log`），含 `SIGNAL_STRESS_TEST_OK choices=500 effects=500`、`SMOKE_OK`、`CE253_DAY_ROUTE_TEST_OK day=5 ...`、`H_SCENE_TEST_OK checks=92 messages=7`。
+
+### 4.44 无外部 .sav 自然战斗闭环（2026-11-18）
+
+来源：阶段 B1。
+
+- **测试**：新增 `godot/tests/BattleNaturalLoopTest.cs`，从真实 `CE188` 两成员菜单开始，先让 `CE143` 从 CData 0 物化 CData 10，经 `CE159`/`CE162` 技能与目标链，再把前两条菜单命令交给 `CE239 → CE242 → CE244`。整个测试不导入 `work/retail_backup/Save/SaveData01.sav`，不写 `save_vars`/`save_cells`。
+- **胜利**：`BATTLE_NATURAL_LOOP_TEST_OK rows=8 real=2 rounds=2 turns=1 result=1 pcs=338,645 args=1,2 gauge=0 hp=3745 ce143=True ce159=True ce162=True save_vars=0 save_cells=0`。
+- **败北**：同一菜单/技能链改用原始 Boss 敌行，`BATTLE_NATURAL_DEFEAT_TEST_OK rows=8 rounds=4 turns=3 result=-1 gauge=0 hp=0 save_vars=0 save_cells=0`。
+- **逃跑**：`BattleMenuBridgeTest.RunEscape` 去掉零售存档导入，`BATTLE_ESCAPE_TEST_OK saw191=1 escape=1 saw192=0 ce157=0 rounds=0 v352=0` 仍通过，证明逃跑不进入 CE242/CE244、可直接返回地图态。
+- **边界**：`BattleNaturalLoopTest` 的弱敌/Boss 行是测试夹具，不是零售平衡；它直接启动 `CE239`，`CE253` 自然日线 dispatch 仍由 `Ce253DayRouteTest` 覆盖（§4.33）。生产代码未改，只改测试与 Smoke 注册。
 
 ---
 

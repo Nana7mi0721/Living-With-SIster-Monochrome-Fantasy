@@ -42,6 +42,7 @@ public static class VmTest
         BattleTargetTest.Run();
         BattleSkillTargetTest.Run();
         BattleMenuBridgeTest.Run();
+        BattleNaturalLoopTest.Run();
         HEventGateTest.Run();
         ContentMatrixTest.Run();
 

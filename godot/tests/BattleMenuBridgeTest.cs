@@ -304,15 +304,11 @@ public static class BattleMenuBridgeTest
         try
         {
             Load(vm, out var store);
-            var savePath = System.IO.Path.GetFullPath(System.IO.Path.Combine(ProjectSettings.GlobalizePath("res://"), "..", "work", "retail_backup", "Save", "SaveData01.sav"));
-            Check(System.IO.File.Exists(savePath), "retail save missing: " + savePath);
-            var save = LegacySaveImporter.ImportFile(savePath, 0);
-            foreach (var pair in save.Recovered.Variables)
-                if (int.TryParse(pair.Key, out int index)) vm.Vm.Vars.Set(index, pair.Value);
-            store!.ApplySavedCells(save.Recovered.DatabaseCells);
-            SeedBattle(store);
-            SeedTwoMemberParty(store);
-            outcome.CmdBefore = CmdSnapshot(store);
+            var db = store!;
+            // Escape is a menu-only branch: it must not need the retail save.
+            SeedBattle(db);
+            SeedTwoMemberParty(db);
+            outcome.CmdBefore = CmdSnapshot(db);
 
             var autoEvents = AutoEvents.FromPrograms(vm.Vm.Programs.Values);
             autoEvents.PrimeLatched(vm.Vm);
@@ -344,7 +340,7 @@ public static class BattleMenuBridgeTest
                     {
                         var w = new System.Text.StringBuilder();
                         for (int row = 0; row < 3; row++)
-                            w.Append($"[{row}:{ReadNum(store, 19, row, 1)},{ReadNum(store, 19, row, 2)}]");
+                            w.Append($"[{row}:{ReadNum(db, 19, row, 1)},{ReadNum(db, 19, row, 2)}]");
                         outcome.C19Dump = w.ToString();
                     }
                     if (pc == 74) outcome.Reached74 = true;
@@ -372,7 +368,7 @@ public static class BattleMenuBridgeTest
                         {
                             var w = new System.Text.StringBuilder();
                             for (int row = 0; row < 3; row++)
-                                w.Append($"[{row}:{ReadNum(store, 19, row, 1)},{ReadNum(store, 19, row, 2)}]");
+                                w.Append($"[{row}:{ReadNum(db, 19, row, 1)},{ReadNum(db, 19, row, 2)}]");
                             outcome.C19Dump = w.ToString();
                         }
                     }
@@ -385,9 +381,9 @@ public static class BattleMenuBridgeTest
                 if (outcome.Reached74 && frame - downFrame > 20) break;
                 if (vm.Vm.Faulted) break;
             }
-            outcome.CmdAfter = CmdSnapshot(store);
+            outcome.CmdAfter = CmdSnapshot(db);
             for (int row = 0; row < 16; row++)
-                if (ReadNum(store, 14, row, 3) > 0) outcome.CmdPositiveAfter++;
+                if (ReadNum(db, 14, row, 3) > 0) outcome.CmdPositiveAfter++;
             outcome.V352 = vm.Vm.Vars.Get(352);
             outcome.V343 = vm.Vm.Vars.Get(343);
             outcome.V350 = vm.Vm.Vars.Get(350);
