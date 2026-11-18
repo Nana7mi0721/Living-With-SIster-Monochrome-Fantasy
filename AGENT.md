@@ -51,7 +51,7 @@ cargo build -q -p wolf-cli
 ./target/debug/wolf-cli.exe verify   # 预期 PASS 70, pending 0
 ```
 
-- 提交信息用 `git commit -F work/_commit_*.txt`；**每次提交后必须立即推送**：`git -c http.sslBackend=openssl push origin master`（网络/凭据失败时保留本地提交并报告，不重写历史）。
+- 提交信息用 `git commit -F work/_commit_*.txt`；**每次提交后必须立即推送**：`git -c credential.helper=wincred push origin master`（网络/凭据失败时保留本地提交并报告，不重写历史）。
 - 不跑 `git clean`；不杀用户/编辑器启动的进程；不通过 shell 启动 Godot。
 - 集成前 Lead 必须检查 `git status` / `git diff`，确认没有临时探针文件被误提交。
 - 每次交付必须保持工作树可解释：只允许 3 个永久 scratch、`docs/gpt调研/`（用户资料）和明确声明的临时文件。
