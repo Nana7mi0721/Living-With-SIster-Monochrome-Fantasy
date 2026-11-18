@@ -90,10 +90,13 @@ public sealed class LegacySaveImporter
             return ReadBytes(len);
         }
 
-        public string ReadMemDataString(int size, string field = "")
+        public string ReadMemDataString(int size, string field = "") =>
+            ReadMemDataString(size, field, out _);
+
+        public string ReadMemDataString(int size, string field, out byte[] raw)
         {
             int at = Position;
-            byte[] raw = ReadMemData(size);
+            raw = ReadMemData(size);
             if (raw.Length == 0) return "";
             int len = raw.Length;
             if (raw[^1] == 0) len--;
@@ -143,6 +146,12 @@ public sealed class LegacySaveImporter
         [JsonPropertyName("choice_anchor")] public int[] ChoiceAnchor { get; set; } = [512, 240];
         [JsonPropertyName("database_overrides")] public List<int> DatabaseOverrides { get; set; } = [];
         [JsonIgnore] public List<DatabaseCell> DatabaseCells { get; set; } = [];
+        /// <summary>Event id -> CSelf0..99 numbers (SavePart3 list table).</summary>
+        [JsonIgnore] public Dictionary<int, int[]> CommonSelfNumbers { get; set; } = [];
+        /// <summary>Event id -> CSelf5..9 strings (SavePart3 slot table).</summary>
+        [JsonIgnore] public Dictionary<int, string[]> CommonSelfStrings { get; set; } = [];
+        /// <summary>Complete SavePart5 picture records for a real load (not the summary view).</summary>
+        [JsonIgnore] public List<SavedPicture> PictureStates { get; set; } = [];
     }
 
     public sealed class DatabaseCell
@@ -330,16 +339,22 @@ public sealed class LegacySaveImporter
         uint mds1Count = r.ReadU32();
         for (int i = 0; i < mds1Count; i++) r.ReadMemData(4);
         uint listCount = r.ReadU32();
+        var commonSelfNumbers = new Dictionary<int, int[]>();
         for (int i = 0; i < listCount; i++)
         {
             byte lc = r.ReadU8();
-            for (int j = 0; j < lc; j++) r.ReadU32();
+            var words = new int[lc];
+            for (int j = 0; j < lc; j++) words[j] = r.ReadI32();
+            commonSelfNumbers[i] = words;
         }
         uint slotCount = r.ReadU32();
+        var commonSelfStrings = new Dictionary<int, string[]>();
         for (int i = 0; i < slotCount; i++)
         {
             byte sc = r.ReadU8();
-            for (int j = 0; j < sc; j++) r.ReadMemData(4);
+            var strs = new string[sc];
+            for (int j = 0; j < sc; j++) strs[j] = r.ReadMemDataString(4, "common_self");
+            commonSelfStrings[i] = strs;
         }
 
         // SavePart4
@@ -355,16 +370,19 @@ public sealed class LegacySaveImporter
         // SavePart5 (Picture table)
         ushort p5Var1 = r.ReadU16();
         var pictures = new List<PictureSummary>();
+        var pictureStates = new List<SavedPicture>();
         if ((p5Var1 & 0x8000) == 0)
         {
             for (int i = 0; i < p5Var1; i++)
             {
                 uint picId = r.ReadU32();
-                r.ReadU8(); r.ReadU8(); r.ReadU16();
+                r.ReadU8(); r.ReadU8();
+                ushort anchor = r.ReadU16();
                 byte isText = r.ReadU8();
                 byte isWin = r.ReadU8();
-                string picName = r.ReadMemDataString(2, "picture_name");
-                for (int k = 0; k < 12; k++) r.ReadU32();
+                string picName = r.ReadMemDataString(2, "picture_name", out byte[] picBytes);
+                var vars7_18 = new int[12];
+                for (int k = 0; k < 12; k++) vars7_18[k] = r.ReadI32();
                 for (int k = 0; k < 6; k++) r.ReadU32();
                 for (int k = 0; k < 18; k++) r.ReadU32();
                 r.ReadU8(); r.ReadU8(); r.ReadU8();
@@ -391,6 +409,26 @@ public sealed class LegacySaveImporter
                     IsText = isText == 1,
                     IsWindow = isWin == 1,
                     Name = picName
+                });
+
+                // SavedPicture.Args keeps the PictureStage layout: args[4]=opacity,
+                // args[5]/[6]=x/y, args[7]=scale, args[8]=fade, args[9]=pattern.
+                // SavePart5 vars7_18 uses a different order (x,y,w,h,pattern,opacity,
+                // blend,?,fade,scale,vscale,?).
+                pictureStates.Add(new SavedPicture
+                {
+                    Number = (int)picId,
+                    Kind = isText == 1 ? 2 : isWin == 1 ? 4 : 0,
+                    Action = 0,
+                    File = isText == 1 ? "" : picName,
+                    Text = isText == 1 ? DecodePictureText(picBytes) : "",
+                    Anchor = anchor,
+                    Args =
+                    [
+                        0, vars7_18[2], vars7_18[3], vars7_18[6],
+                        vars7_18[5], vars7_18[0], vars7_18[1], vars7_18[9],
+                        vars7_18[8], vars7_18[4], vars7_18[10], 0
+                    ]
                 });
             }
         }
@@ -483,11 +521,73 @@ public sealed class LegacySaveImporter
                 },
                 ChoiceAnchor = [sys3, sys4],
                 DatabaseOverrides = dbOverrides,
-                DatabaseCells = dbCells
+                DatabaseCells = dbCells,
+                CommonSelfNumbers = commonSelfNumbers,
+                CommonSelfStrings = commonSelfStrings,
+                PictureStates = pictureStates
             },
             NotRecoverable = NotRecoverableFields
         };
     }
+
+    private static string DecodePictureText(byte[] bytes)
+    {
+        var sb = new StringBuilder();
+        int i = 0;
+        while (i < bytes.Length && bytes[i] != 0)
+        {
+            if (bytes[i] != 1)
+            {
+                int len = CharLen(bytes[i]);
+                if (i + len > bytes.Length) len = bytes.Length - i;
+                sb.Append(Encoding.UTF8.GetString(bytes, i, len));
+                i += len;
+                continue;
+            }
+            if (i + 2 > bytes.Length) break;
+            int total = bytes[i + 1];
+            if (total < 2 || i + 1 + total > bytes.Length)
+            {
+                i += 2;
+                continue;
+            }
+            int payload = i + 2;
+            switch (total)
+            {
+                case 2 when bytes[payload] == 5:
+                    sb.Append("\\E");
+                    break;
+                case 4:
+                {
+                    int size = bytes[payload] - 10;
+                    if (size is >= 1 and <= 96) sb.Append("\\f[").Append(size).Append(']');
+                    break;
+                }
+                case 5:
+                {
+                    int size = bytes[payload + 2] - 14;
+                    if (size is >= 0 and <= 96) sb.Append("\\f[").Append(size).Append(']');
+                    break;
+                }
+                case 6 when bytes[payload] == 2:
+                {
+                    int index = bytes[payload + 3] - 14;
+                    if (index is >= 0 and <= 30) sb.Append("\\c[").Append(index).Append(']');
+                    break;
+                }
+            }
+            i += 1 + total;
+        }
+        return sb.ToString();
+    }
+
+    private static int CharLen(byte first) => first switch
+    {
+        <= 0x7f => 1,
+        >= 0xc0 and <= 0xdf => 2,
+        >= 0xe0 and <= 0xef => 3,
+        _ => 4
+    };
 
     private static void SkipObject(SaveReader r)
     {

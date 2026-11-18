@@ -126,7 +126,7 @@ pic 293“兴奋”、pic 294 `Picture/endbutton.png`），v62=1；纯喂 OK 不
 2. 再连续喂 OK，引擎自然过渡到 **day91 07:45**（未改任何存档变量，纯输入驱动）。
 
 之后与 SaveData01 完全同一套逐日 play_day/sleep 逻辑，结果（M13_SLOT=8，2.77s）：
-start_day=91、days_driven=5、frames=9264、**stage28 首帧 (day95,f164)**、stage 集合 **{11,28,29}**、
+start_day=91、days_driven=5、frames=9264、**stage28 首帧 (day95,f164)**、stage 集合 **{10,28,29}**、
 var366 1→2、**var492=1、warnings=0**、同样抓到“恭喜您完成了整个故事剧情”贺词。
 ⇒ **两张最远零售档（SaveData01 与 SaveData08）在修复后都能无需注入自然通关。**
 
@@ -177,7 +177,7 @@ SelfVars magic 1_000_000 + group*100_000 + slot → 扁平 group*100 + slot。
   - **SaveData01**（day90 21:40）：自然驱动 day91→day95（days_driven=5、frames≈8966），
     self51 4→3→2→1→0，stage28 首帧 (day95,f164)，触发 stage28→29，var492=1、warnings=0。
   - **SaveData08**（day90 00:42 深夜 H 场景）：先点 pic 294 结束场景再推进到 day91 晨，
-    同样 day91→day95（frames≈9264），stage28 首帧 (day95,f164)，stage 集合 {11,28,29}，
+    同样 day91→day95（frames≈9264），stage28 首帧 (day95,f164)，stage 集合 {10,28,29}，
     var492=1、warnings=0。两档均实测抓到“恭喜您完成了整个故事剧情”贺词。
   - 配合 load→save 未游玩时 part3 逐字节不变（m12 8/8），存档一致性未破坏。
 - **API 分层（实现注记）**：持久路径 = 脚本 opcode 210 调用（exec.rs spawn_child 从 common_self 播种，

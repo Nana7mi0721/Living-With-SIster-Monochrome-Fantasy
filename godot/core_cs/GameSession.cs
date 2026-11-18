@@ -36,6 +36,8 @@ public interface IVmSession
     void DismissMessage();
     void RestoreDialogue(string? message, string[] choices);
     DbValue? Database(DbOp op);
+    /// <summary>Apply the 250 retail database overlay cells captured by the importer.</summary>
+    void ApplySavedCells(IReadOnlyList<LegacySaveImporter.DatabaseCell> cells);
 }
 
 /// <summary>
@@ -532,6 +534,102 @@ public sealed class GameSession
         return true;
     }
 
+    /// <summary>
+    /// Load a retail <c>.sav</c> into a live bedroom session. The save's 800 normal variables,
+    /// common-event self banks (Part3), picture layer (Part5) and 250 DB overlay cells are
+    /// restored; map 1 (SampleMapA) is used and event 0 (new-game setup) is skipped so the
+    /// loaded day is not reset to day 1. This mirrors Rust's <c>resume(slot)</c> path.
+    /// </summary>
+    public bool LoadRetailSave(string path, int slotIndex = 0)
+    {
+        LegacySaveImporter.SlotResult slot;
+        try
+        {
+            slot = LegacySaveImporter.ImportFile(path, slotIndex);
+        }
+        catch (Exception ex)
+        {
+            _view.SetStatus("retail load failed: " + ex.Message);
+            return false;
+        }
+
+        if (!slot.ChecksumOk)
+        {
+            _view.SetStatus("retail load: checksum mismatch");
+            return false;
+        }
+
+        LegacySaveImporter.RecoveredData data = slot.Recovered;
+        _vm.Vm.StopAll();
+        _vm.ResetSessionState();
+        _vm.Map = null;
+        _mapRuntime = null;
+        _map = null;
+        _messageOpen = false;
+        _hasChoices = false;
+        _actionPressed = false;
+        _pendingLoad = false;
+        _teleports.Clear();
+
+        Frames = (int)data.PlayTime.Frames;
+        _leaderX = 0;
+        _leaderY = 0;
+        _facing = 2;
+
+        var numbers = new List<int>(Enumerable.Repeat(0, 800));
+        foreach (KeyValuePair<string, int> pair in data.Variables)
+        {
+            if (int.TryParse(pair.Key, out int index) && index >= 0 && index < numbers.Count)
+            {
+                numbers[index] = pair.Value;
+            }
+        }
+        _vm.Vm.Vars.Restore(numbers, null, null, null);
+
+        _vm.Vm.CommonSelf.Clear();
+        foreach (KeyValuePair<int, int[]> pair in data.CommonSelfNumbers)
+        {
+            var bank = new SelfVars();
+            bool any = false;
+            for (int i = 0; i < pair.Value.Length; i++)
+            {
+                if (pair.Value[i] == 0) continue;
+                bank.Set(600 + i, pair.Value[i]);
+                any = true;
+            }
+            if (any) _vm.Vm.CommonSelf[pair.Key] = bank;
+        }
+        foreach (KeyValuePair<int, string[]> pair in data.CommonSelfStrings)
+        {
+            if (!_vm.Vm.CommonSelf.TryGetValue(pair.Key, out SelfVars? bank))
+            {
+                bank = new SelfVars();
+                _vm.Vm.CommonSelf[pair.Key] = bank;
+            }
+            for (int i = 0; i < pair.Value.Length; i++)
+            {
+                if (!string.IsNullOrEmpty(pair.Value[i])) bank.SetStr(605 + i, pair.Value[i]);
+            }
+        }
+
+        _vm.ApplySavedCells(data.DatabaseCells);
+        _view.ClearPictures();
+        EnterMap(1, null, null, skipEventId: 0);
+        if (_vm.Faulted)
+        {
+            _view.SetStatus("retail load faulted: " + _vm.FaultReason);
+            return false;
+        }
+        if (Phase == "failed") return false;
+
+        EnsureAutoEvents().PrimeLatched(_vm.Vm);
+        _view.RestorePictures(data.PictureStates);
+        _started = true;
+        _view.SetStatus($"loaded retail save {slot.File} (map 1 day {_vm.Vm.Vars.Get(160)})");
+        UpdateMapHud(false);
+        return true;
+    }
+
     private void StartNewGameNow()
     {
         Phase = "newgame";
@@ -609,7 +707,8 @@ public sealed class GameSession
         }
     }
 
-    private void EnterMap(int mapId, Dictionary<int, SelfVars>? selfVars = null, SaveState? restore = null)
+    private void EnterMap(int mapId, Dictionary<int, SelfVars>? selfVars = null, SaveState? restore = null,
+        int? skipEventId = null)
     {
         _vm.Vm.StopAll();
         _vm.Map = null;
@@ -650,6 +749,16 @@ public sealed class GameSession
                 {
                     state.InstanceId = null;
                 }
+            }
+        }
+        if (skipEventId is int skipped)
+        {
+            MapEventState? state = _mapRuntime.Events.FirstOrDefault(e => e.Def.Id == skipped);
+            if (state != null)
+            {
+                state.Runs = false;
+                state.Active = null;
+                state.InstanceId = null;
             }
         }
         _view.ShowMap(_map, _mapRuntime, _leaderX, _leaderY);

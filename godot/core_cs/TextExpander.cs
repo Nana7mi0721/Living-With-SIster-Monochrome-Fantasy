@@ -72,8 +72,8 @@ public static class TextExpander
 
             case "cself" or "self" or "cself_s" or "self_s":
             {
-                string s = inst.Self.GetStr(index);
-                replacement = string.IsNullOrEmpty(s) ? inst.Self.Get(index).ToString() : s;
+                string s = inst.Self.GetStr(inst.Program.SelfBase + index);
+                replacement = string.IsNullOrEmpty(s) ? inst.Self.Get(inst.Program.SelfBase + index).ToString() : s;
                 return true;
             }
 

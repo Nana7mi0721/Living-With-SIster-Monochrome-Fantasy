@@ -94,6 +94,7 @@
 | 独立逃跑分支 | `res://tests/Smoke.tscn` | `BATTLE_ESCAPE_TEST_OK saw191=1 escape=1 saw192=0 ce157=0 rounds=0 v352=0`；CE191 行动窗口 row1 `code -1` 写 `1600099`（self 699）后 BreakEvent，无 CE192/157/242/244、无正技能、战斗 vars 全 0（§4.39，D-49） |
 | 自然战斗菜单桥/四轮 | `res://tests/Smoke.tscn` | `BATTLE_MENU_BRIDGE_TEST_OK rows=8 real=2 rounds=4 turns=3 result=1 pcs=338,645,792,996 pools=3,2,3,2 save_vars=800 save_cells=16800`；导入零售存档 vars+CData 并 `PrimeLatched` 后与 Rust m11 四轮 `+1` 全等（§4.34，D-43）；`BATTLE_MATRIX_TEST_OK win=1 loss=-1 win_rounds=4 loss_rounds=10` |
 | 无外部 .sav 自然战斗闭环 | `res://tests/Smoke.tscn` | `BATTLE_NATURAL_LOOP_TEST_OK rows=8 real=2 rounds=2 turns=1 result=1 pcs=338,645 args=1,2 gauge=0 hp=3745 ce143=True ce159=True ce162=True save_vars=0 save_cells=0`；`BATTLE_NATURAL_DEFEAT_TEST_OK rows=8 rounds=4 turns=3 result=-1 gauge=0 hp=0 save_vars=0 save_cells=0`；CE188→CE143/CE159/CE162→CE239/CE242/CE244 不导入 SaveData01（§4.44） |
+| M13 主线结局 B2/B3 | `res://tests_gd/M13MainlineEndingsTest.tscn` | `M13_MAINLINE_ENDINGS_TEST_OK slot=1 stages=[10, 28, 29] v492=1 frames=29384`（SaveData01）；`M13_MAINLINE_ENDINGS_TEST_OK slot=8 stages=[10, 28, 29] v492=1 frames=35411`（SaveData08 深夜档）；两档均自然走到 stage28→29 并抓到“恭喜”贺词（§4.45） |
 | C# 条件注入内容矩阵 | `res://tests/Smoke.tscn` | `CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`；16 个 DLC 随机事件 + 特4 海豹的注入分支与 15 条 op111 门载荷，5 条 DLC 外部门显式登记，C# 与 Rust 测试共读 `oracle/fixtures/content_matrix_injected.json`（§4.40/§4.42/§4.43，D-50/D-52） |
 | 第七轮 P2 收口 | `res://tests_gd/GameRootTest.tscn` / `AudioManagerTest.tscn` / `Smoke.tscn` / `converter validate` | `GAME_ROOT_TEST_OK`（Generation+1、重开新游戏后 event 38 重启）、`AUDIO_MANAGER_TEST_OK checks=32`、`unknown sound type` 循环两次仅 1 条日志、`DATABASE_SCHEMA_AUDIT_OK fields=18 rows=44 findings=3 needs_retail=0`；零售 BasicData 四文件哈希与 `work/all` 全等（D-37） |
 | 渲染核对 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | `reports/dialog_draw.png`、`picture_roundtrip.png` 可查看；`GODOT_GATE_OK` |
@@ -571,6 +572,16 @@
 - **败北**：同一菜单/技能链改用原始 Boss 敌行，`BATTLE_NATURAL_DEFEAT_TEST_OK rows=8 rounds=4 turns=3 result=-1 gauge=0 hp=0 save_vars=0 save_cells=0`。
 - **逃跑**：`BattleMenuBridgeTest.RunEscape` 去掉零售存档导入，`BATTLE_ESCAPE_TEST_OK saw191=1 escape=1 saw192=0 ce157=0 rounds=0 v352=0` 仍通过，证明逃跑不进入 CE242/CE244、可直接返回地图态。
 - **边界**：`BattleNaturalLoopTest` 的弱敌/Boss 行是测试夹具，不是零售平衡；它直接启动 `CE239`，`CE253` 自然日线 dispatch 仍由 `Ce253DayRouteTest` 覆盖（§4.33）。生产代码未改，只改测试与 Smoke 注册。
+
+### 4.45 M13 主线结局 B2/B3：零售存档自然通关（2026-11-18）
+
+来源：阶段 B2/B3。
+
+- **测试**：新增 `godot/tests_gd/M13MainlineEndingsTest.gd`（+ `.tscn`），按 `M13_SLOT` 驱动 SaveData01（B2）与 SaveData08（B3）；不注入 CE305，靠逐日 `play_day`/`sleep_to_next_morning` 自然推进到 stage28→29。
+- **读档**：`GameSession.LoadRetailSave` 恢复 800 vars、Part3 common-self 数字/字符串银行、250 个 CData overlay、Part5 图片状态，`EnterMap(1, ..., skipEventId:0)` 跳过新游戏 setup；`LegacySaveImporter` 新增 CommonSelfNumbers/CommonSelfStrings/PictureStates，`VmController.GetEventSelf*` 提供 live/bank 观测，`TextExpander` 的 self/cself 读取改为 `Program.SelfBase+index`。
+- **B2 SaveData01**（`M13_SLOT=1 M13_DAYS=30`）：after-load day90 21:40，次日 7:45 到 day91；`M13_MAINLINE_ENDINGS_TEST_OK slot=1 stages=[10, 28, 29] v492=1 frames=29384`，stage28 at day95/step26085，self51 4→0，贺词命中。
+- **B3 SaveData08**（`M13_SLOT=8 M13_DAYS=30`）：after-load day90 00:42，pic294 关闭 H 场景后 7:45 到 day91；`M13_MAINLINE_ENDINGS_TEST_OK slot=8 stages=[10, 28, 29] v492=1 frames=35411`，stage28 at day95/step32055，self51 4→0，贺词命中。
+- **边界**：stage11 是 day25 的 CE301 分支，day90 存档自然流程不可达；两档最终都按 stage28→29→10 收口，测试断言 stage10。
 
 ---
 

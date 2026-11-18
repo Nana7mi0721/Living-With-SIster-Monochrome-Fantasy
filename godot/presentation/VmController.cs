@@ -254,6 +254,28 @@ public partial class VmController : Node, IHost, IVmSession
     public int GetVar(int varId) => Vm.Vars.Get(varId);
     public void SetVar(int varId, int value) => Vm.Vars.Set(varId, value);
 
+    /// <summary>Live instance self slot, falling back to the persisted common-self bank.</summary>
+    public int GetEventSelf(int eventId, int slot)
+    {
+        foreach (var inst in Vm.Instances)
+        {
+            if (inst.EventId == eventId) return inst.Self.Get(slot);
+        }
+        if (Vm.CommonSelf.TryGetValue(eventId, out SelfVars? bank)) return bank.Get(slot);
+        return -1;
+    }
+
+    /// <summary>All live instance self slots for an event (test telemetry: stage28/29 coexist).</summary>
+    public int[] GetEventSelfAll(int eventId, int slot)
+    {
+        var values = new List<int>();
+        foreach (var inst in Vm.Instances)
+        {
+            if (inst.EventId == eventId) values.Add(inst.Self.Get(slot));
+        }
+        return values.ToArray();
+    }
+
     public int GetSys(int sysId) => Vm.Vars.GetSys(sysId);
     public void SetSys(int sysId, int value) => Vm.Vars.SetSys(sysId, value);
     public string GetStrVar(int varId) => Vm.Vars.GetStr(varId);
@@ -678,6 +700,12 @@ public partial class VmController : Node, IHost, IVmSession
         Vm.Vars.Clear();
         Vm.ResetInputPermissions();
         DatabaseStore?.ClearOverlays();
+    }
+
+    /// <summary>Apply retail SavePart3 database overlay cells to the shared database.</summary>
+    public void ApplySavedCells(IReadOnlyList<LegacySaveImporter.DatabaseCell> cells)
+    {
+        DatabaseStore?.ApplySavedCells(cells);
     }
 
     /// Start a common event by id. The real starter returns Instance, a project type that

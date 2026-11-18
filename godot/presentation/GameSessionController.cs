@@ -31,6 +31,8 @@ public partial class GameSessionController : Node
     public int LeaderY => _session?.LeaderY ?? 0;
     public int Facing => _session?.Facing ?? 2;
     public int MapId => _session?.MapData?.Id ?? -1;
+    public int GetEventSelf(int eventId, int slot) => _vm?.GetEventSelf(eventId, slot) ?? -1;
+    public int[] GetEventSelfAll(int eventId, int slot) => _vm?.GetEventSelfAll(eventId, slot) ?? Array.Empty<int>();
     public string SavePath => _session?.SavePath ?? "";
     public bool MessageOpen => _session?.MessageOpen ?? false;
     public bool HasChoices => _session?.HasChoices ?? false;
@@ -86,6 +88,8 @@ public partial class GameSessionController : Node
     public void AdvanceFrame() => _session?.AdvanceFrame();
     public bool SaveGame() => _session?.SaveGame() ?? false;
     public bool LoadGame() => _session?.LoadGame() ?? false;
+    public bool LoadRetailSave(string path, int slotIndex = 0) =>
+        _session?.LoadRetailSave(path, slotIndex) ?? false;
     public void MoveLeader(int dx, int dy, int facing) => _session?.MoveLeader(dx, dy, facing);
     public void PressActionKey() => _session?.PressActionKey();
     public void PickChoice(int index) => _session?.PickChoice(index);
