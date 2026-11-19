@@ -2,6 +2,8 @@ class_name AssetDB
 extends RefCounted
 
 const AppPaths := preload("res://presentation_gd/AppPaths.gd")
+const MediaPakReader := preload("res://presentation/MediaPakReader.cs")
+const MEDIA_PREFIX := "media://"
 ## WOLF asset database for the GDScript presentation layer (W2 Day 3).
 ##
 ## Two jobs: resolve a WOLF logical path ("Picture/face01.png") against the unpacked
@@ -28,6 +30,10 @@ var evictions: int = 0
 
 var _files: Dictionary = {}      # lowercase relative path -> absolute path
 var _basenames: Dictionary = {}  # lowercase basename -> absolute path
+var media_pak_path := ""
+var media_pak = null              # MediaPakReader, or null when no pack is present
+var _media_files: Dictionary = {}      # lowercase relative path -> canonical pack path
+var _media_basenames: Dictionary = {}  # lowercase basename -> canonical pack path
 var _cache: Dictionary = {}      # key -> Resource
 var _sizes: Dictionary = {}      # key -> bytes
 var _lru: Array[String] = []     # oldest first
@@ -37,13 +43,16 @@ func _init(p_root: String = "") -> void:
 	var explicit_root := p_root != ""
 	root_dir = p_root if explicit_root else default_root()
 	_index()
+	_open_media_pack()
 	# CI has no retail work/all (DECISIONS D-11/D-13). Only the implicit default root may
 	# fall back to the committed stub tree; an explicit root (tests, custom installs)
-	# must keep reporting its real contents so a miss stays a miss.
-	if not explicit_root and _files.is_empty():
+	# must keep reporting its real contents so a miss stays a miss. A pack counts as
+	# install contents even when the loose tree has no files at all.
+	if not explicit_root and _files.is_empty() and media_pak == null:
 		root_dir = fallback_root()
 		using_fallback = true
 		_index()
+		_open_media_pack()
 
 
 static func default_root() -> String:
@@ -96,13 +105,19 @@ func resolve(logical: String) -> String:
 	var key := logical.replace("\\", "/").lstrip("/").to_lower()
 	if _files.has(key):
 		return _files[key]
+	if _media_files.has(key):
+		return MEDIA_PREFIX + str(_media_files[key])
 	var base := key.get_basename()
 	for ext in TEXTURE_EXTENSIONS + AUDIO_EXTENSIONS:
 		if _files.has(base + ext):
 			return _files[base + ext]
+		if _media_files.has(base + ext):
+			return MEDIA_PREFIX + str(_media_files[base + ext])
 	var bare := key.get_file().get_basename()
 	if _basenames.has(bare):
 		return _basenames[bare]
+	if _media_basenames.has(bare):
+		return MEDIA_PREFIX + str(_media_basenames[bare])
 	return ""
 
 
@@ -116,7 +131,11 @@ func texture(logical: String) -> Texture2D:
 	var path := resolve(logical)
 	if path.is_empty():
 		return null
-	var image := Image.load_from_file(path)
+	var image: Image = null
+	if path.begins_with(MEDIA_PREFIX):
+		image = _image_from_media(path)
+	else:
+		image = Image.load_from_file(path)
 	if image == null:
 		return null
 	var tex := ImageTexture.create_from_image(image)
@@ -135,24 +154,105 @@ func audio(logical: String) -> AudioStream:
 	if path.is_empty():
 		return null
 	var stream: AudioStream = null
-	match path.get_extension().to_lower():
-		"ogg":
-			stream = AudioStreamOggVorbis.load_from_file(path)
-		"mp3":
-			stream = AudioStreamMP3.load_from_file(path)
-		"wav":
-			stream = AudioStreamWAV.load_from_file(path)
+	var size := 0
+	if path.begins_with(MEDIA_PREFIX):
+		var bytes := _bytes_from_media(path)
+		if bytes.is_empty():
+			return null
+		match path.get_extension().to_lower():
+			"ogg":
+				stream = AudioStreamOggVorbis.load_from_buffer(bytes)
+			"mp3":
+				stream = AudioStreamMP3.load_from_buffer(bytes)
+			"wav":
+				stream = AudioStreamWAV.load_from_buffer(bytes)
+		size = bytes.size()
+	else:
+		match path.get_extension().to_lower():
+			"ogg":
+				stream = AudioStreamOggVorbis.load_from_file(path)
+			"mp3":
+				stream = AudioStreamMP3.load_from_file(path)
+			"wav":
+				stream = AudioStreamWAV.load_from_file(path)
+		# get_length() reads the header only; get_file_as_bytes() pulled the whole file a
+		# second time after the loader had already read it (W2-P2-01).
+		var file := FileAccess.open(path, FileAccess.READ)
+		if file != null:
+			size = int(file.get_length())
+			file.close()
 	if stream == null:
 		return null
-	# get_length() reads the header only; get_file_as_bytes() pulled the whole file a
-	# second time after the loader had already read it (W2-P2-01).
-	var size := 0
-	var file := FileAccess.open(path, FileAccess.READ)
-	if file != null:
-		size = int(file.get_length())
-		file.close()
 	_store(key, stream, size)
 	return stream
+
+
+func is_media_pack_open() -> bool:
+	return media_pak != null
+
+
+func media_pak_count() -> int:
+	return media_pak.Count if media_pak != null else 0
+
+
+## Opens <root>/media.pak, or the path in LWsmf_MEDIA_PAK when that is set.
+## A pack is optional: an absent or malformed pack leaves the loose tree in charge.
+func _open_media_pack() -> void:
+	media_pak = null
+	media_pak_path = ""
+	_media_files.clear()
+	_media_basenames.clear()
+	var candidates: Array[String] = []
+	var override := OS.get_environment("LWsmf_MEDIA_PAK")
+	if not override.is_empty():
+		candidates.append(override)
+	candidates.append(root_dir.path_join("media.pak"))
+	for candidate in candidates:
+		if not FileAccess.file_exists(candidate):
+			continue
+		var reader = MediaPakReader.new()
+		if reader.Open(candidate):
+			media_pak = reader
+			media_pak_path = candidate
+			for entry in reader.Paths():
+				var key := str(entry).to_lower()
+				_media_files[key] = str(entry)
+				var bare := key.get_file().get_basename()
+				if not _media_basenames.has(bare):
+					_media_basenames[bare] = str(entry)
+			return
+		push_warning("AssetDB: cannot open media pack %s: %s" % [candidate, reader.LastError])
+
+
+func _bytes_from_media(path: String) -> PackedByteArray:
+	if media_pak == null:
+		return PackedByteArray()
+	var bytes = media_pak.Read(path.substr(MEDIA_PREFIX.length()))
+	if bytes == null:
+		return PackedByteArray()
+	return bytes
+
+
+func _image_from_media(path: String) -> Image:
+	var bytes := _bytes_from_media(path)
+	if bytes.is_empty():
+		return null
+	var image := Image.new()
+	var error := OK
+	match path.get_extension().to_lower():
+		"png":
+			error = image.load_png_from_buffer(bytes)
+		"jpg", "jpeg":
+			error = image.load_jpg_from_buffer(bytes)
+		"webp":
+			error = image.load_webp_from_buffer(bytes)
+		"bmp":
+			error = image.load_bmp_from_buffer(bytes)
+		"tga":
+			error = image.load_tga_from_buffer(bytes)
+		_:
+			return null
+	return image if error == OK else null
 
 
 func has_cached(logical: String) -> bool:

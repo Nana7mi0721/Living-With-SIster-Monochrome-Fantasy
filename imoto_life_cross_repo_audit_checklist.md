@@ -7,7 +7,9 @@
 
 ## 0. 2026-11-19 落地状态与勘误（优先于下文旧快照）
 
-> R14（基线 `c553d04`，审阅报告 `imoto_life_c553d04_review_and_roadmap.md`）：R13 的 7 项全部闭环；本轮修 `track_picture` 命令存储顺序（同槽换图误判 redraw）、150 HasSpan 门控、`scale_y` 纵向镜像、窗口 RNG 熵与回标题重播种。`PictureStateTest` 现为 checks=107。
+> R14（基线 `c553d04`，审阅报告 `imoto_life_c553d04_review_and_roadmap.md`）：R13 的 7 项全部闭环；R14 修 `track_picture` 命令存储顺序（同槽换图误判 redraw）、150 HasSpan 门控、`scale_y` 纵向镜像、窗口 RNG 熵与回标题重播种。`PictureStateTest` 现为 checks=107。
+>
+> media.pak（本轮）：新增 `godot/presentation/MediaPakReader.cs`，按 Rust `crates/wolf-format/src/media_pack.rs` 实现 `WOLFMPK1` 头/索引、offset-indexed splitmix64 XOR、CRC-32 与扩展探测；`AssetDB.gd` 自动读 `<root>/media.pak` 或 env `LWsmf_MEDIA_PAK`，`resolve()` 对 pack-only 资源返回 `media://`。`AssetDBTest` 用 3 条 tiny fixture 与真实 1202 条 `work/all/media.pak` 验证。
 
 > 本节记录实际落地结果。下文的“当前代码现状”是审计当时的快照，**已过时**；两者冲突时以本节和 Rust 参考实现为准。
 
@@ -23,14 +25,16 @@
 - **CommonSelf**：只在实例结束/停止落库，不做实时广播。
 - **表现层**：160/161/162 TransitionState + GameRoot 黑色三角波 overlay；MapLayer 改 `MOUSE_FILTER_PASS` 且不再 `accept_event`。
 - **PictureStage**：150 fade/slide/erase-fade、hide、blend、独立 `scale_y`、负号固定屏层按原生尺寸（只有 `>=12000` 全屏）；290 per-picture 特效 0..5/7..10；`stage.tick()` 已接入每帧。R14 补齐：`track_picture` 先快照前态、`_begin_draw` 后再 `_store_cmd`（否则同槽换图误判 redraw）；`HasSpan` 只在 head bit 0x0100_0000 时把 erase args[3] / hide args[0] 当范围终点；负 `scale_y` 纵向镜像。R13 补齐：tone 默认 `[100,100,100]` 且只读 `TONE_PRESENT`，`_tone_color` 按 `picture.rs:1063-1097` 逐位实现；同槽仅 kind/file/text 且位置相同时继承 shake/zoom/breath/pattern；`_hit_rect` 含 `effect_offset` 与真实尺寸；分格 sprite-sheet 用 AtlasTexture，PATTERN 真正切 cell；blend 材质缓存、MUL 强制 alpha=1；tick 只推进有动画的槽。162 转场等待已补 `return Signal.Blocked`。150 head flags 已落地：`scale_mode=(head>>20)&0xF`（3=独立 scale_y）、`keep_shift=head&0x00400000`、`relative=head&0x00010000`；`_begin_draw` 接收前态，换图也能相对定位。
+- **media.pak**：新增 `godot/presentation/MediaPakReader.cs`（`[GlobalClass]` RefCounted）：32 字节明文头、64 字节 splitmix64 XOR 流、16 字节对齐 body、尾部混淆 index、CRC-32 校验、大小写不敏感与 png/jpg/bmp/jpeg/webp 扩展探测；`AssetDB.gd` 在 loose 文件之后查 pack，`media://` 路径用 Image/audio buffer 解码；env `LWsmf_MEDIA_PAK` 可覆盖默认 `<root>/media.pak`。`AssetDBTest` 覆盖 tiny pack 与真实 1202 条 pack。
 - **前端**：F11 全屏、F4 200 条消息回顾（有 `Nameplate.speaker` 时拼人名）、回标题确认、`_modal_release_guard` 释放守卫；标题页隐藏「返回标题」按钮；`MapLayer` 默认关闭调试色块/leader（`LWsmf_SHOW_MAP_DEBUG=1` 恢复），格子数据与点击不变；F5/F9 增加 1.5 秒 Toast。
 - **RNG**：`WolfRng.FromEnvironment` 在 `WOLF_LIVE_RNG` 非 0 时用 `EventSeed` 时钟扰动；窗口启动与回标题重建后都调用 `_seed_live_rng_if_windowed()`，seed = `int(Time.get_unix_time_from_system()*1000.0) ^ Time.get_ticks_usec()`。判断必须用 `DisplayServer.get_name() != "headless"`（`OS.has_feature("headless")` 在 `--headless` 下仍为 false，误用会让 CI 随机化）；headless/CI 保持固定 seed，`WOLF_LIVE_RNG=0` 可关闭窗口扰动（对齐 Rust `M25_LIVE_UX.md`）。
 
 ### 已验证
 
 - `PictureStateTest` checks=107（含 HasSpan、track 换图、纵向镜像）、`GameRootTest`、`LayerOrderTest`、`MapLayerTest` checks=18、`Smoke` / `ALL VM TESTS PASSED`、`SessionParityTest` checks=10 frames=418、route diff 149247/149247（100%）均通过。
-- 完整 headless 门禁 `reports/gate_headless.log`：`GODOT_GATE_OK`、`EXIT=0`、38/38；M13 slot1 `frames=34437`、slot8 `frames=34631`。
-- 渲染门禁 `reports/gate_render.log`（`LWsmf_RENDER=1`）：`GODOT_GATE_OK`、`EXIT=0`、38/38；M13 slot1 `frames=34437`、slot8 `frames=34631`，与 headless 完全一致；`PERFORMANCE_FRAME_STRICT_OK avg_ms=4.297 p95_ms=4.547 fps=232.7`。
+- `AssetDBTest` `ASSETDB_TEST_OK`：tiny `media_pack_tiny.pak` 3 条，以及真实 `work/all/media.pak` 1202 条；`SystemFile/WindowBase.png`、`SystemGraphic/TitleGraphic.png`、`Picture/album_000.png`、`SystemFile/[SE]Enter.ogg`、`BGM/Gentle_Lounge_2.ogg` 均可从 pack 解码。
+- 完整 headless 门禁 `reports/gate_headless.log`：`GODOT_GATE_OK`、`EXIT=0`、38/38；M13 slot1 `frames=34437`、slot8 `frames=34631`；`PERFORMANCE_FRAME_OK avg_ms=6.923 p95_ms=6.944 fps=144.5`。
+- 渲染门禁 `reports/gate_render.log`（`LWsmf_RENDER=1`）：`GODOT_GATE_OK`、`EXIT=0`、38/38；M13 slot1 `frames=34437`、slot8 `frames=34631`，与 headless 完全一致；`PERFORMANCE_FRAME_STRICT_OK avg_ms=4.125 p95_ms=4.167 fps=242.4`。
 - 注：M13 的 780 帧差异不是代码回归——在干净 `5dd6956` worktree（junction 同一份 `work/` 数据）重跑 slot1 得到 `frames=34437`、`stage28_at=95/31081`，与当前完全一致；历史 35217 无法复现，推断来自不同数据/运行环境。
 
 ### 仍未完成/已知偏差
@@ -39,6 +43,7 @@
 - 150 span 标志（head&0x01000000）已门控；单槽 erase/hide 不再误擦邻槽；
 - 125 TTL 偏差、211 参数扩展、140 tempo/loopPoint 属长期对齐项；
 - UX 仍缺 F8 nearest/linear、初始窗口尺寸/缩放模式；backlog 人名依赖目前无事件写入的 `Nameplate.speaker`；
+- `Kagura/Kagura.png`、`Kagura/Disc.png`、`Kagura/inusuku.png` 在零售 `work/Data` 与 media.pak 中都不存在（公共事件 549 slots 6/24/44 引用）；标题仍会显示 missing asset 占位，属数据缺口，不是 MediaPakReader 问题；
 - 未生成 release 包（本阶段明确不做）。
 
 ## 一、两个仓库的定位与架构差异（防误判边界）

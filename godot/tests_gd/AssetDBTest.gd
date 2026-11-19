@@ -2,6 +2,7 @@ extends Node
 ## W2 Day 3 acceptance: the asset cache is bounded by its byte budget and loads .wav.
 
 const TEMP_DIR := "user://assetdb_test"
+const MediaPakReader := preload("res://presentation/MediaPakReader.cs")
 
 
 func _ready() -> void:
@@ -40,8 +41,40 @@ func _ready() -> void:
 	if not (stub.audio("Sound/stub.wav") is AudioStreamWAV):
 		failures.append("stub wav should decode")
 	if not FileAccess.file_exists(AssetDB.default_root().path_join("SystemFile/WindowBase.png")):
-		if not real.using_fallback:
+		if not real.using_fallback and not real.is_media_pack_open():
 			failures.append("missing retail root must fall back to the stub tree")
+
+	# 1c. The committed tiny media pack exercises the Rust pack format end to end:
+	# header, offset-indexed XOR stream, CRC-32 and extension probing.
+	var pack_path := ProjectSettings.globalize_path("res://tests/fixtures/media_pack_tiny.pak")
+	var reader = MediaPakReader.new()
+	if not reader.Open(pack_path):
+		failures.append("media pack should open: %s" % reader.LastError)
+	else:
+		if reader.Count != 3:
+			failures.append("tiny media pack should hold 3 entries (got %d)" % reader.Count)
+		var bytes = reader.Read("SystemFile/WindowBase.png")
+		if bytes.size() != 85 or bytes.slice(0, 8).hex_encode() != "89504e470d0a1a0a":
+			failures.append("media pack PNG bytes should match the stub image")
+		if reader.Read("SystemFile/WindowBase").size() != 85:
+			failures.append("media pack should probe a missing extension")
+		if reader.Has("no/such.png"):
+			failures.append("media pack should miss an absent path")
+
+	# 1d. AssetDB resolves and decodes through the pack when LWsmf_MEDIA_PAK points at it.
+	OS.set_environment("LWsmf_MEDIA_PAK", pack_path)
+	var packed := AssetDB.new(base)
+	OS.set_environment("LWsmf_MEDIA_PAK", "")
+	if not packed.is_media_pack_open():
+		failures.append("AssetDB should open LWsmf_MEDIA_PAK")
+	elif packed.media_pak_count() != 3:
+		failures.append("AssetDB should index all pack entries")
+	if not packed.resolve("Picture/face01.png").begins_with("media://"):
+		failures.append("AssetDB should resolve a pack-only picture")
+	if packed.texture("Picture/face01.png") == null:
+		failures.append("AssetDB should decode a picture from the pack")
+	if not (packed.audio("SE/test.wav") is AudioStreamWAV):
+		failures.append("AssetDB should decode audio from the pack")
 
 	# 2. The 384 MB default matches DECISIONS D-09.
 	if AssetDB.DEFAULT_BUDGET_BYTES != 384 * 1024 * 1024:
