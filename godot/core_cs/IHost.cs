@@ -22,6 +22,12 @@ public sealed class PictureCmd
     public int[] Args { get; init; } = Array.Empty<int>();
     public byte Anchor { get; init; }
     public int[] Animate { get; init; } = Array.Empty<int>();
+    /// <summary>Head bits 20..23. Mode 3 means SCALE_Y is independent; otherwise it follows SCALE.</summary>
+    public byte ScaleMode { get; init; }
+    /// <summary>Head bit 0x0040_0000: a redraw keeps the running 290 shift.</summary>
+    public bool KeepShift { get; init; }
+    /// <summary>Head bit 0x0001_0000: X/Y are offsets from the slot's current position.</summary>
+    public bool Relative { get; init; }
 }
 
 public enum SoundChannel

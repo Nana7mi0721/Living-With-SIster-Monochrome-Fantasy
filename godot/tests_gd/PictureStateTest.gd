@@ -216,6 +216,28 @@ func _ready() -> void:
 	check(stage.picture_state(1201, 3) == int(stage._base_size_for(1201).y),
 		"field 3 returns the measured text height")
 
+	# 150 head flags: keep_shift preserves the running 290 shift across a redraw.
+	stage.draw_picture(1370, 0, "", "flag base", [0, 1, 1, 1, 255, 100, 120, 100, 0], 0, 2)
+	stage.effect(2, 10, [0, 10, 1370, 1370, 10, 20, 0])
+	stage.draw_picture(1370, 0, "", "flag base", [0, 1, 1, 1, 255, 100, 120, 100, 0], 0, 2, [], {"keep_shift": true})
+	check(stage._states[1370]["shift"] == [10, 20], "keep_shift carries the 290 shift")
+	stage.draw_picture(1370, 0, "", "flag base", [0, 1, 1, 1, 255, 100, 120, 100, 0], 0, 2)
+	check(stage._states[1370]["shift"] == [0, 0], "a draw without keep_shift drops the shift")
+
+	# relative X/Y are offsets from the slot's current screen pose.
+	stage.draw_picture(1371, 0, "", "relative base", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1371, 0, "", "relative next", [0, 1, 1, 1, 255, 50, 20, 100, 0], 0, 2, [], {"relative": true})
+	var relative_target: Dictionary = stage._states[1371]["target"]
+	check(relative_target["x"] == UiSkin.unit(100) + UiSkin.unit(50), "relative draw adds the raw x offset")
+	check(relative_target["y"] == UiSkin.unit(100) + UiSkin.unit(20), "relative draw adds the raw y offset")
+
+	# scale_mode 3 reads SCALE_Y (args[16]); every other mode copies SCALE into it.
+	var scale_args := [0, 1, 1, 1, 255, 100, 100, 200, 0, 0, 0, 0, 0, 100, 100, 100, 50]
+	stage.draw_picture(1372, 0, "", "scale mode 3", scale_args, 0, 2, [], {"scale_mode": 3})
+	check(int(stage._states[1372]["target"]["scale_y"]) == 50, "scale_mode 3 keeps scale_y independent")
+	stage.draw_picture(1373, 0, "", "scale mode 0", scale_args, 0, 2)
+	check(int(stage._states[1373]["target"]["scale_y"]) == 200, "default mode copies scale into scale_y")
+
 	# Tone defaults to the WOLF neutral 100, not 255 (picture.rs TONE_NEUTRAL).
 	stage.draw_picture(1340, 0, "", "tone probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
 	check(stage._states[1340]["tone"] == [100, 100, 100], "unmarked tone defaults to 100")

@@ -46,6 +46,10 @@ var _origin := Vector2i.ZERO
 var _tile_layers: Array[TileMapLayer] = []
 var _leader := ColorRect.new()
 var _leader_cell := Vector2i.ZERO
+# The palette blocks are a compatibility/debug view; the retail bedrooms and events are
+# full-screen picture art. Keep the nodes (tests and 124 hover) but draw nothing unless
+# the diagnostic switch is on.
+var _debug_visuals := OS.get_environment("LWsmf_SHOW_MAP_DEBUG") == "1"
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(SCREEN_SIZE)
@@ -58,6 +62,7 @@ func _ready() -> void:
 	_leader.color = Color(1.0, 0.86, 0.30, 0.95)
 	_leader.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_leader.z_index = 10
+	_leader.visible = _debug_visuals
 	if _leader.get_parent() == null:
 		add_child(_leader)
 	_update_leader_position()
@@ -200,6 +205,7 @@ func _build_tiles() -> void:
 		node.tile_set = tileset
 		node.z_index = layer_index
 		node.position = Vector2(_origin)
+		node.modulate = Color(1, 1, 1, 1.0 if _debug_visuals else 0.0)
 		add_child(node)
 		_tile_layers.append(node)
 		if layer_index >= _layers.size():
@@ -217,6 +223,7 @@ func _build_tiles() -> void:
 	if is_instance_valid(_leader):
 		move_child(_leader, -1)
 		_leader.z_index = 10
+		_leader.visible = _debug_visuals
 		_update_leader_position()
 
 func origin() -> Vector2i:

@@ -45,6 +45,8 @@ var _modal_release_guard := false
 var _fullscreen := false
 var _windowed_position := Vector2i.ZERO
 var _windowed_size := Vector2i.ZERO
+var _toast_label: Label
+var _toast_until := 0
 
 var phase := "boot"
 var frames := 0
@@ -168,6 +170,7 @@ func _on_setup_completed() -> void:
 
 
 func _process(delta: float) -> void:
+	_tick_toast()
 	if phase == "failed" or phase == "setup" or faulted:
 		return
 	_accumulator += delta
@@ -191,10 +194,15 @@ func _consume_picture_queue(queued: String) -> bool:
 		return false
 	for p in batch:
 		var animate: Array = p.get("animate", [])
+		var flags := {
+			"scale_mode": int(p.get("scale_mode", 0)),
+			"keep_shift": bool(p.get("keep_shift", false)),
+			"relative": bool(p.get("relative", false)),
+		}
 		if vm.TrackPicturesOnly:
-			stage.track_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]), animate)
+			stage.track_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]), animate, flags)
 		else:
-			stage.draw_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]), animate)
+			stage.draw_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]), animate, flags)
 	return true
 
 
@@ -385,8 +393,12 @@ func _on_message(text: String, face: int) -> void:
 	# 1 means window-only, >= 2 selects the SysDB24 bust. A plain message must still open
 	# the window; MessageWindow also handles a first-line @n on its own.
 	message.open(text, face if face > 0 else 0)
-	# Backlog is memory-only, never saved: a reload starts a fresh history.
-	_push_backlog(message.full_text)
+	# Backlog is memory-only, never saved: a reload starts a fresh history. The nameplate
+	# is written by the event handler before the message opens; prefix it when present.
+	var entry := message.full_text
+	if nameplate != null and not nameplate.speaker.is_empty():
+		entry = "%s: %s" % [nameplate.speaker, entry]
+	_push_backlog(entry)
 
 
 func _on_message_closed() -> void:
@@ -585,19 +597,24 @@ func _unhandled_input(event: InputEvent) -> void:
 	if key.keycode == KEY_F5:
 		if session.SaveGame():
 			status("saved %s (main)" % session.SavePath)
+			_show_toast("已保存")
 		else:
 			status("save refused (not in a bedroom map)")
+			_show_toast("仅卧室可保存")
 		get_viewport().set_input_as_handled()
 	elif key.keycode == KEY_F9:
 		var loaded := session.LoadGame()
 		frames = session.Frames
 		if vm.Faulted:
 			status("load faulted")
+			_show_toast("读档失败")
 			report_fault(vm.FaultReason)
 		elif loaded:
 			status("loaded %s from %s" % [session.SavePath, session.LoadedFrom])
+			_show_toast("已读档")
 		else:
 			status("load failed")
+			_show_toast("读档失败")
 		get_viewport().set_input_as_handled()
 
 
@@ -614,6 +631,20 @@ func _build_play_ui() -> void:
 	_title_button.visible = false
 	_title_button.pressed.connect(request_return_to_title)
 	add_child(_title_button)
+	_toast_label = Label.new()
+	_toast_label.name = "Toast"
+	_toast_label.position = Vector2(312, 64)
+	_toast_label.size = Vector2(400, 40)
+	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_toast_label.add_theme_font_size_override("font_size", 18)
+	_toast_label.add_theme_color_override("font_color", Color(1, 0.94, 0.75))
+	_toast_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_toast_label.add_theme_constant_override("outline_size", 4)
+	_toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toast_label.z_index = 95
+	_toast_label.visible = false
+	add_child(_toast_label)
 	_build_title_confirm()
 
 
@@ -623,6 +654,21 @@ func _sync_play_ui() -> void:
 	if _title_button == null:
 		return
 	_title_button.visible = not faulted and phase != "title" and phase != "setup" and phase != "failed"
+
+
+func _show_toast(text: String) -> void:
+	if _toast_label == null:
+		return
+	_toast_label.text = text
+	_toast_label.visible = true
+	_toast_until = Time.get_ticks_msec() + 1500
+
+
+func _tick_toast() -> void:
+	if _toast_label == null or not _toast_label.visible:
+		return
+	if Time.get_ticks_msec() >= _toast_until:
+		_toast_label.visible = false
 
 
 func _build_title_confirm() -> void:

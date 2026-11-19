@@ -85,7 +85,7 @@ func band_order() -> Array:
 	return BAND_ORDER.duplicate()
 
 
-func draw_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int = 0, kind: int = -1, animate: Array = []) -> Control:
+func draw_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int = 0, kind: int = -1, animate: Array = [], flags: Dictionary = {}) -> Control:
 	if action == 2:
 		_start_erase(number, args)
 		return null
@@ -105,8 +105,8 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 		if move_anchor == 0 and not prev_cmd.is_empty():
 			move_anchor = int(prev_cmd.get("anchor", 0))
 		var moved := _merged_move(number, file, text, args, move_anchor, kind)
-		_begin_move(number, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate)
-		_store_cmd(number, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate)
+		_begin_move(number, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
+		_store_cmd(number, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
 		return _pictures[number]
 
 	var prev_state: Dictionary = _states.get(number, {}).duplicate(true)
@@ -132,8 +132,8 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 	_base_sizes[number] = node.get_meta("base_size", node.size)
 	if redraws and not prev_state.is_empty():
 		_states[number] = prev_state
-	_begin_draw(number, file, text, args, anchor, kind, animate)
-	_store_cmd(number, action, file, text, args, anchor, kind, animate)
+	_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
+	_store_cmd(number, action, file, text, args, anchor, kind, animate, flags)
 	return node
 
 
@@ -156,7 +156,7 @@ func _merged_move(number: int, file: String, text: String, args: Array, anchor: 
 	}
 
 
-func _store_cmd(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array = []) -> void:
+func _store_cmd(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array = [], flags: Dictionary = {}) -> void:
 	_cmds[number] = {
 		"kind": kind,
 		"action": action,
@@ -165,6 +165,7 @@ func _store_cmd(number: int, action: int, file: String, text: String, args: Arra
 		"args": args.duplicate(),
 		"anchor": anchor,
 		"animate": animate.duplicate(),
+		"flags": flags.duplicate(true),
 	}
 
 
@@ -361,7 +362,7 @@ func _hit_rect(number: int) -> Rect2:
 ## Queue mode: keep the slot table and hit boxes current without adding nodes. Opcode 124
 ## still needs existence, coordinates and hover, but the managed Picture signal crashes
 ## native listeners on long deterministic runs.
-func track_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array = []) -> void:
+func track_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array = [], flags: Dictionary = {}) -> void:
 	if action == 2:
 		_start_erase(number, args)
 		return
@@ -375,8 +376,8 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 		if move_anchor == 0:
 			move_anchor = int(_cmds[number].get("anchor", 0))
 		var moved := _merged_move(number, file, text, args, move_anchor, kind)
-		_begin_move(number, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate)
-		_store_cmd(number, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate)
+		_begin_move(number, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
+		_store_cmd(number, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
 		if not _base_sizes.has(number):
 			_base_sizes[number] = Vector2(420, 140)
 		return
@@ -391,9 +392,9 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 		base = _measure_text(text)["size"]
 	else:
 		base = Vector2(420, 140)
-	_store_cmd(number, action, file, text, args, anchor, kind, animate)
+	_store_cmd(number, action, file, text, args, anchor, kind, animate, flags)
 	_base_sizes[number] = base
-	_begin_draw(number, file, text, args, anchor, kind, animate)
+	_begin_draw(number, file, text, args, anchor, kind, animate, flags)
 
 
 func _build_picture(number: int, file: String, text: String, args: Array, anchor: int, kind: int) -> Control:
@@ -496,7 +497,7 @@ func _apply_picture_geometry(holder: Control, number: int, file: String, args: A
 	holder.scale = Vector2(-1.0 if mirrored else 1.0, 1.0)
 
 
-func _pose_from_args(args: Array, anchor: int) -> Dictionary:
+func _pose_from_args(args: Array, anchor: int, flags: Dictionary = {}) -> Dictionary:
 	# UNCHANGED (-1000000) means "leave this field alone"; a fresh Draw falls back to the
 	# slot defaults, while _begin_move patches these six fields back to the live pose.
 	var opacity := _arg(args, 4, 255)
@@ -517,7 +518,7 @@ func _pose_from_args(args: Array, anchor: int) -> Dictionary:
 	var blend := _arg(args, 8, 0)
 	if blend == UNCHANGED:
 		blend = 0
-	return {
+	var pose := {
 		"opacity": clampi(opacity, 0, 255),
 		"x": UiSkin.unit(x),
 		"y": UiSkin.unit(y),
@@ -526,6 +527,27 @@ func _pose_from_args(args: Array, anchor: int) -> Dictionary:
 		"blend": blend,
 		"anchor": anchor,
 	}
+	_apply_scale_mode(pose, args, flags)
+	return pose
+
+
+## picture.rs merge_args: SCALE is copied into SCALE_Y unless head bits 20..23 select
+## mode 3, which is the only mode that reads the independent SCALE_Y slot (args[16]).
+func _apply_scale_mode(target: Dictionary, args: Array, flags: Dictionary) -> void:
+	if int(flags.get("scale_mode", 0)) == 3:
+		return
+	if args.size() > 7 and int(args[7]) == UNCHANGED:
+		return
+	target["scale_y"] = int(target.get("scale", 100))
+
+
+## picture.rs picture_args: relative X/Y are offsets from the slot's current screen pose.
+## UiSkin.unit converts the raw word, so the offset is added after conversion.
+func _apply_relative_pose(target: Dictionary, base: Dictionary, args: Array) -> void:
+	if args.size() > 5 and int(args[5]) != UNCHANGED:
+		target["x"] = int(base.get("x", 0)) + UiSkin.unit(int(args[5]))
+	if args.size() > 6 and int(args[6]) != UNCHANGED:
+		target["y"] = int(base.get("y", 0)) + UiSkin.unit(int(args[6]))
 
 
 func _merge_unchanged(target: Dictionary, current: Dictionary, args: Array) -> void:
@@ -552,8 +574,8 @@ func _tone_from_args(args: Array) -> Array:
 	return tone
 
 
-func _new_state(args: Array, anchor: int, base: Vector2) -> Dictionary:
-	var pose := _pose_from_args(args, anchor)
+func _new_state(args: Array, anchor: int, base: Vector2, flags: Dictionary = {}) -> Dictionary:
+	var pose := _pose_from_args(args, anchor, flags)
 	return {
 		"age": 0,
 		"fade": 0,
@@ -580,11 +602,23 @@ func _new_state(args: Array, anchor: int, base: Vector2) -> Dictionary:
 
 ## Draw replaces the slot. A redraw at the same place keeps the breathing/zoom/shake phase;
 ## a redraw at a different place slides from the old pose (picture.rs advance/replace).
-func _begin_draw(number: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array) -> void:
-	var prev: Dictionary = _states.get(number, {})
+func _begin_draw(number: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array, flags: Dictionary = {}, previous: Dictionary = {}) -> void:
+	# A draw frees the slot before rebuilding it, so a non-redraw must receive the old pose
+	# explicitly: relative offsets and keep_shift refer to the picture that was on screen.
+	var prev: Dictionary = previous if not previous.is_empty() else _states.get(number, {})
 	var prev_cmd: Dictionary = _cmds.get(number, {})
 	var base: Vector2 = _base_sizes.get(number, Vector2.ZERO)
-	var state := _new_state(args, anchor, base)
+	var state := _new_state(args, anchor, base, flags)
+	# picture.rs picture_args: relative draws offset from the old pose even when the
+	# graphic changes; a fresh slot has no old pose and therefore uses the raw value.
+	if bool(flags.get("relative", false)) and not prev.is_empty():
+		_apply_relative_pose(state["target"], prev.get("current", {}), args)
+		state["current"]["x"] = int(state["target"]["x"])
+		state["current"]["y"] = int(state["target"]["y"])
+	# picture.rs keep_shift (head bit 0x0040_0000) is the only carried animation field
+	# that survives a full redraw apart from the same-position phase carry.
+	if bool(flags.get("keep_shift", false)) and not prev.is_empty():
+		state["shift"] = (prev.get("shift", [0, 0]) as Array).duplicate()
 	# Draw replaces the slot. Only the same kind/file/text is a redraw; everything else
 	# starts from the new command (picture.rs 1369-1371).
 	var redraws := not prev.is_empty() and not prev_cmd.is_empty() \
@@ -632,13 +666,16 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 
 ## Move changes geometry in place and may fade from the current alpha. anchor==0 means
 ## "leave the anchor alone" on a move (picture.rs 150 handling).
-func _begin_move(number: int, _file: String, _text: String, args: Array, anchor: int, _kind: int, animate: Array) -> void:
+func _begin_move(number: int, _file: String, _text: String, args: Array, anchor: int, _kind: int, animate: Array, flags: Dictionary = {}) -> void:
 	var state: Dictionary = _states.get(number, {})
 	if state.is_empty():
 		var cmd: Dictionary = _cmds.get(number, {})
 		state = _new_state(cmd.get("args", []), int(cmd.get("anchor", anchor)), _base_sizes.get(number, Vector2.ZERO))
-	var target := _pose_from_args(args, anchor)
+	var target := _pose_from_args(args, anchor, flags)
 	_merge_unchanged(target, state["current"], args)
+	if bool(flags.get("relative", false)):
+		_apply_relative_pose(target, state.get("current", {}), args)
+	_apply_scale_mode(target, args, flags)
 	state["target"] = target
 	var fade := clampi(_arg(args, 0, 0), 0, FADE_MAX)
 	var fade_from := int(state["current"].get("opacity", 255))
@@ -896,17 +933,22 @@ func _tone_color(state: Dictionary) -> Color:
 	for channel in 3:
 		var base := clampi(int(tone[channel]) + int(corr[channel]), 0, 200)
 		var value := clampi((base * 255 + 50) / 100, 0, 255)
+		# picture.rs tone_byte / percent_times_duration: every colour effect contributes
+		# a percent ramp with denominator 100*duration. BLINK adds, the rest multiply.
 		for effect in state.get("effects", []):
 			var fx: Dictionary = effect
 			var duration := maxi(1, int(fx.get("duration", 1)))
 			var phase := int(fx.get("age", 0)) % duration
 			var target: Array = fx.get("target", [0, 0, 0])
 			if int(fx.get("kind", 0)) == 5:
-				value = (255 * (base * duration + int(target[channel]) * (duration - phase)) + 50 * duration) / (100 * duration)
+				var blink := base * duration + int(target[channel]) * (duration - phase)
+				value = int((255 * blink + 50 * duration) / (100 * duration))
 			else:
 				var from_value := 100 + int(target[channel])
-				var percent := from_value + (100 - from_value) * phase / duration
-				value = (value * percent + 50) / 100
+				var numerator := from_value * (duration - phase) + 100 * phase
+				var denominator := 100 * duration
+				value = int((value * numerator + denominator / 2) / denominator)
+			value = clampi(value, 0, 255)
 		out[channel] = clampf(float(value) / 255.0, 0.0, 1.0)
 	return out
 

@@ -877,7 +877,10 @@ public sealed class EventVm
                         Text = text,
                         Args = args,
                         Anchor = anchor,
-                        Animate = animate
+                        Animate = animate,
+                        ScaleMode = (byte)((head >> 20) & 0x0F),
+                        KeepShift = (head & 0x0040_0000) != 0,
+                        Relative = (head & 0x0001_0000) != 0
                     };
 
                     Host.Picture(cmd);
