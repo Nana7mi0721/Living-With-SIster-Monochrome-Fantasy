@@ -23,6 +23,12 @@ var router: InputRouter
 
 var audio: AudioManager
 
+# Whole-screen fade for 160/161/162: a black ColorRect above the stage, driven by
+# the same 1/60 s clock as the VM (Rust transition.rs brightness/alpha).
+var _transition_rect: ColorRect
+var _transition_frames := 0
+var _transition_elapsed := 0
+
 var phase := "boot"
 var frames := 0
 var auto_advance := false
@@ -51,6 +57,13 @@ func _ready() -> void:
 
 	stage = PictureStage.new(assets)
 	add_child(stage)
+
+	_transition_rect = ColorRect.new()
+	_transition_rect.color = Color(0, 0, 0, 0)
+	_transition_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_transition_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_transition_rect.visible = false
+	add_child(_transition_rect)
 
 	message = MessageWindow.new(assets)
 	stage.layer(PictureStage.LAYER_MESSAGE_FRAME).add_child(message)
@@ -170,10 +183,12 @@ func advance_frame() -> void:
 	vm.SetPointerPressed(router.pointer_pressed)
 	vm.SetPointerRightPressed(router.right_pressed)
 	vm.SetPointerMiddlePressed(router.middle_pressed)
+	vm.SetFrameWheel(router.wheel_notch())
 	vm.BeginFrameInput()
 	session.AdvanceFrame()
 	var queued := str(vm.TakePicturesJson())
 	_consume_picture_queue(queued)
+	_tick_transition()
 	frames = session.Frames
 	phase = session.Phase
 	# A fault stops the deterministic clock: replaying the frame would only refault and
@@ -355,7 +370,34 @@ func _on_teleport(target: int, map_id: int, x: int, y: int, options: int) -> voi
 
 
 func _on_transition(kind: int, flags: int) -> void:
-	status("transition kind=%d flags=%d" % [kind, flags])
+	# Rust transition.rs: kind < 0 is the shipped hard cut (CE48's [-1, 0x1000A]);
+	# otherwise the low byte of flags is the fade length, zero meaning one frame.
+	if kind < 0:
+		_transition_frames = 0
+		_transition_elapsed = 0
+		_transition_rect.color.a = 0.0
+		_transition_rect.visible = false
+		status("transition kind=%d flags=%d (hard cut)" % [kind, flags])
+		return
+	_transition_frames = maxi(1, flags & 0xFF)
+	_transition_elapsed = 0
+	_transition_rect.visible = true
+	_transition_rect.color.a = 0.0
+	status("transition kind=%d flags=%d (fade %d frames)" % [kind, flags, _transition_frames])
+
+
+## Black triangle wave: 0 -> 1 at the midpoint -> 0, then the overlay hides.
+func _tick_transition() -> void:
+	if _transition_frames <= 0:
+		return
+	var t := clampf(float(_transition_elapsed) / float(_transition_frames), 0.0, 1.0)
+	_transition_rect.color.a = 1.0 - absf(2.0 * t - 1.0)
+	_transition_elapsed += 1
+	if _transition_elapsed > _transition_frames:
+		_transition_frames = 0
+		_transition_elapsed = 0
+		_transition_rect.color.a = 0.0
+		_transition_rect.visible = false
 
 
 func _on_effect(kind: int, duration: int, _args: Array) -> void:

@@ -24,6 +24,8 @@ public interface IVmSession
     bool Faulted { get; }
     string FaultReason { get; }
     void StepFrame();
+    /// <summary>Fire one queued opcode 211 reservation when the foreground is idle.</summary>
+    void StartReservedEvent();
     void StopAll();
     void ResetDiagnostics();
     /// <summary>D-33/R7-NEW-04: clear session-scoped database overlays, vars and input policy.</summary>
@@ -206,6 +208,7 @@ public sealed class GameSession
         _battleWiring.Tick(_vm.Vm, op => _vm.Database(op));
         _vm.StepFrame();
         ApplyPending();
+        _vm.StartReservedEvent();
         UpdateMapHud(false);
     }
 

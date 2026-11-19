@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Godot;
 using Lwsmf.Core;
 
@@ -93,6 +94,14 @@ public partial class VmController : Node, IHost, IVmSession
     private GodotObject? _pictureStateTarget;
     private StringName _pictureStateMethod = "";
     private AutoEvents? _autoEvents;
+
+    // 124 engine_state telemetry: wheel notch for this frame plus per-frame pointer motion.
+    private int _wheelDelta;
+    private float _pointerDeltaX;
+    private float _pointerDeltaY;
+    private float _prevPointerX = -1f;
+    private float _prevPointerY = -1f;
+    private readonly Queue<(int EventId, int[] Args, string[] Strings)> _reservedEvents = new();
 
     /// <summary>Opcode 123 input source; the screen supplies it, the VM never guesses.</summary>
     public Func<uint, int>? KeyCodeProvider { get; set; }
@@ -202,6 +211,7 @@ public partial class VmController : Node, IHost, IVmSession
 
         Vm.StepFrame();
         Map?.StartPending(Vm);
+        _wheelDelta = 0;
     }
 
     public void StepFrames(int count)
@@ -540,7 +550,50 @@ public partial class VmController : Node, IHost, IVmSession
         return answer.AsInt32();
     }
 
-    public int? CharacterState(int target, int field) => null;
+    /// <summary>
+    /// Opcode 124 0x1000/0x1200. Target -2 is WOLF's mouse sentinel (tile and pixel
+    /// coordinates); other positives address map events (map_runtime.rs character_state).
+    /// </summary>
+    public int? CharacterState(int target, int field)
+    {
+        const int tilePx = 16;
+        if (target == -2)
+        {
+            // -2 is the party leader (game.rs character_state), not the mouse.
+            return field switch
+            {
+                0 => LeaderX,
+                1 => LeaderY,
+                2 => LeaderX * 2,
+                3 => LeaderY * 2,
+                4 => 0,
+                5 => LeaderFacing,
+                6 or 8 => LeaderX * tilePx + tilePx / 2,
+                7 or 9 => (LeaderY + 1) * tilePx,
+                10 => -1,
+                _ => null,
+            };
+        }
+        if (target < 0) return null;
+        var ev = Map?.Events.FirstOrDefault(e => e.Def.Id == target);
+        if (ev == null) return null;
+        int direction = ev.Active is int page && page >= 0 && page < ev.Def.Pages.Count
+            ? ev.Def.Pages[page].Direction
+            : 2;
+        return field switch
+        {
+            0 => ev.Def.X,
+            1 => ev.Def.Y,
+            2 => ev.Def.X * 2,
+            3 => ev.Def.Y * 2,
+            4 => 0,
+            5 => direction,
+            6 or 8 => ev.Def.X * tilePx + tilePx / 2,
+            7 or 9 => (ev.Def.Y + 1) * tilePx,
+            10 => ev.Def.Id,
+            _ => null,
+        };
+    }
 
     /// <summary>
     /// Opcode 124 0x3000. WOLF reports the three mouse buttons as a tri-state:
@@ -551,10 +604,20 @@ public partial class VmController : Node, IHost, IVmSession
     {
         return field switch
         {
+            // game.rs 6898-6900: the static map id and BGM id are 0 and -1.
+            0 => 0,
+            1 => -1,
             7 => TriState(_pointerPressed, _pointerPressFrame),
             8 => TriState(_rightPressed, _rightPressFrame),
             9 => TriState(_middlePressed, _middlePressFrame),
-            _ => 0,
+            10 => _wheelDelta,
+            11 => (int)_pointerDeltaX,
+            12 => (int)_pointerDeltaY,
+            20 => (int)PointerX,
+            21 => (int)PointerY,
+            // Unknown fields have no answer (game.rs returns None), so 124 must not
+            // store a fabricated 0; field 18 in particular falls through to EventVm.
+            _ => null,
         };
     }
 
@@ -565,6 +628,8 @@ public partial class VmController : Node, IHost, IVmSession
     public int PictureStateBridge(int number, int field) => PictureState(number, field) ?? int.MinValue;
 
     public int EngineStateBridge(int field) => EngineState(field) ?? int.MinValue;
+
+    public int CharacterStateBridge(int target, int field) => CharacterState(target, field) ?? int.MinValue;
 
     public int KeyCode(uint mask) => KeyCodeAuto(mask, 0);
 
@@ -588,6 +653,9 @@ public partial class VmController : Node, IHost, IVmSession
         PointerX = x;
         PointerY = y;
     }
+
+    /// <summary>Wheel notch sampled by the router once per frame (124 field 10).</summary>
+    public void SetFrameWheel(int notch) => _wheelDelta = notch;
 
     public void SetPointerPressed(bool pressed)
     {
@@ -632,6 +700,10 @@ public partial class VmController : Node, IHost, IVmSession
         _middlePressed = false;
         _middlePressPending = false;
         _middlePressFrame = false;
+        _prevPointerX = -1f;
+        _prevPointerY = -1f;
+        _pointerDeltaX = 0f;
+        _pointerDeltaY = 0f;
     }
 
     /// <summary>Turn the latched press into this frame's answer, once per 1/60 s step.</summary>
@@ -643,6 +715,19 @@ public partial class VmController : Node, IHost, IVmSession
         _rightPressPending = false;
         _middlePressFrame = _middlePressPending;
         _middlePressPending = false;
+
+        if (_prevPointerX < 0f || _prevPointerY < 0f)
+        {
+            _pointerDeltaX = 0f;
+            _pointerDeltaY = 0f;
+        }
+        else
+        {
+            _pointerDeltaX = PointerX - _prevPointerX;
+            _pointerDeltaY = PointerY - _prevPointerY;
+        }
+        _prevPointerX = PointerX;
+        _prevPointerY = PointerY;
     }
 
     /// <summary>Scripted sessions answer every poll with the OK key (legacy title-path parity).</summary>
@@ -700,6 +785,9 @@ public partial class VmController : Node, IHost, IVmSession
         Vm.Vars.Clear();
         Vm.ResetInputPermissions();
         DatabaseStore?.ClearOverlays();
+        // Returning to the title drops every pending 211 reservation; a rebuilt
+        // session must not fire the previous run's queued events (game.rs queue).
+        _reservedEvents.Clear();
     }
 
     /// <summary>Apply retail SavePart3 database overlay cells to the shared database.</summary>
@@ -717,7 +805,32 @@ public partial class VmController : Node, IHost, IVmSession
         EmitSignal(SignalName.EffectRequested, kind, duration, args);
     }
 
-    public void Reserve(int target) { }
+    public void Reserve(int target) => Reserve(target, Array.Empty<int>(), Array.Empty<string>());
+
+    /// <summary>Pending 211 reservations, for diagnostics and tests.</summary>
+    public int PendingReserveCount => _reservedEvents.Count;
+
+    /// <summary>Opcode 211: queue one common event; the frame scheduler fires it when idle.</summary>
+    public void Reserve(int target, int[] args, string[] strings)
+    {
+        _reservedEvents.Enqueue((target, args ?? Array.Empty<int>(), strings ?? Array.Empty<string>()));
+    }
+
+    /// <summary>
+    /// exec.rs frame tail: at most one reservation per frame, and only while no
+    /// non-parallel instance is still running or blocked.
+    /// </summary>
+    public void StartReservedEvent()
+    {
+        if (_reservedEvents.Count == 0) return;
+        if (Vm.ForegroundBusy()) return;
+        var next = _reservedEvents.Dequeue();
+        var inst = Vm.StartEventWithArgs(next.EventId, next.Args, next.Strings);
+        if (inst == null)
+        {
+            GD.PushError($"211 Reserve: event {next.EventId} is not in programs.json");
+        }
+    }
 
     public void Log(string message)
     {

@@ -50,7 +50,9 @@ var _leader_cell := Vector2i.ZERO
 func _ready() -> void:
 	custom_minimum_size = Vector2(SCREEN_SIZE)
 	size = Vector2(SCREEN_SIZE)
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	# PASS, not STOP: the map must not swallow clicks aimed at picture buttons drawn
+	# above it (PictureStage is IGNORE, InputRouter only sees _unhandled_input).
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	_leader.name = "Leader"
 	_leader.size = Vector2(TILE_SIZE - 2, TILE_SIZE - 2)
 	_leader.color = Color(1.0, 0.86, 0.30, 0.95)
@@ -256,4 +258,4 @@ func _gui_input(event: InputEvent) -> void:
 		if cell.x < 0:
 			return
 		cell_clicked.emit(cell)
-		accept_event()
+		# No accept_event(): the same click still reaches InputRouter's pointer latch.

@@ -33,8 +33,12 @@ public sealed class EventVm
     /// <summary>Latest unimplemented-opcode error, also the save-blocking fault reason.</summary>
     public string? FaultReason { get; private set; }
     public bool Faulted => FaultReason != null;
-    /// <summary>Auto-input mask requested by opcode 125.</summary>
+    /// <summary>Auto-input mask requested by opcode 125, in WOLF editor key layout.</summary>
     public uint AutoKeys { get; private set; }
+    /// <summary>Remaining frames the 125 injection stays available (0/1/2).</summary>
+    private int _autoKeysTtl;
+    /// <summary>Coroutines that already consumed the current 125 injection.</summary>
+    private readonly HashSet<int> _autoKeysDelivered = new();
     /// <summary>126 state 1: these keys stop walking but still reach 123.</summary>
     public uint BasicMoveDeny { get; private set; }
     /// <summary>126 state 2: these keys stop both walking and 123.</summary>
@@ -57,6 +61,7 @@ public sealed class EventVm
     /// </summary>
     public void ApplyInputPermission(uint raw)
     {
+        // exec.rs InputState: the low byte is already the port's host-bit layout.
         uint target = raw & InputTargetMask;
         uint state = (raw >> 8) & 0x3;
         if ((raw & InputDeviceFlag) != 0)
@@ -86,6 +91,8 @@ public sealed class EventVm
     public void ResetInputPermissions()
     {
         AutoKeys = 0;
+        _autoKeysTtl = 0;
+        _autoKeysDelivered.Clear();
         BasicMoveDeny = 0;
         BasicAllDeny = 0;
         DeviceDeny = false;
@@ -106,6 +113,15 @@ public sealed class EventVm
     private int _nextInstanceId = 1;
     private readonly Dictionary<string, int> _titleToId = new(StringComparer.Ordinal);
     private readonly HashSet<int> _freshInstanceIds = new();
+
+    // Transition setting installed by opcode 160 and consumed by 161/162
+    // (Rust crates/wolf-vm/src/exec.rs:910-937).
+    private int _transitionKind;
+    private int _transitionFlags;
+    private bool _transitionPrepared;
+
+    /// <summary>True between 161 PrepareTransition and 162 ExecuteTransition.</summary>
+    public bool TransitionPrepared => _transitionPrepared;
 
     public void RegisterProgram(Program program)
     {
@@ -205,6 +221,69 @@ public sealed class EventVm
         instance.Self.Restore(null, null);
         _freshInstanceIds.Add(instance.Id);
         return instance;
+    }
+
+    /// <summary>Start a common event with 211-style call arguments bound before its first slot.</summary>
+    public Instance? StartEventWithArgs(int eventId, int[] args, string[] strings, bool parallel = false)
+    {
+        var inst = CreateInstance(eventId);
+        if (inst == null) return null;
+        inst.IsParallel = parallel;
+        for (int i = 0; i < args.Length; i++)
+        {
+            inst.Self.Set(Magic.SelfArgBase + i, args[i]);
+        }
+        for (int k = 0; k < strings.Length; k++)
+        {
+            inst.Self.SetStr(Magic.SelfArgBase + 5 + k, strings[k]);
+        }
+        return inst;
+    }
+
+    /// <summary>exec.rs run_instances: last live foreground event, +500000 for common events.</summary>
+    private int? ForegroundEventId()
+    {
+        for (int i = Instances.Count - 1; i >= 0; i--)
+        {
+            var other = Instances[i];
+            if (other.IsParallel) continue;
+            if (other.Pc >= other.Program.Len && other.Wait.Kind == WaitStateKind.None) continue;
+            return other.Program.SelfBase == Program.CommonSelfBase ? other.EventId + 500_000 : other.EventId;
+        }
+        return null;
+    }
+
+    /// <summary>exec.rs foreground_busy: a non-parallel instance that has not finished or is blocked.</summary>
+    public bool ForegroundBusy()
+    {
+        foreach (var inst in Instances)
+        {
+            if (inst.IsParallel) continue;
+            if (inst.Pc < inst.Program.Len || inst.Wait.Kind != WaitStateKind.None) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Common-event call addresses: 500000+/600100+ offsets, including relative calls.</summary>
+    public static int? ResolveCallTarget(int raw, int callerEventId)
+    {
+        // exec.rs 210/211: both ranges carry an absolute event id, not a
+        // caller-relative offset (raw - 600_000, not raw - 600_100).
+        if (raw >= 500_000 && raw < 600_000) return raw - 500_000;
+        if (raw >= 600_000 && raw < 700_000) return raw - 600_000;
+        return raw >= 0 ? raw : null;
+    }
+
+    /// <summary>
+    /// exec.rs store_common_self: a finished/stopped common event folds its bank
+    /// back so the next invocation starts from the final values. A running
+    /// instance never sees another instance's writes.
+    /// </summary>
+    private void PersistCommonSelf(Instance inst)
+    {
+        if (_freshInstanceIds.Contains(inst.Id)) return;
+        if (inst.Program.SelfBase != Program.CommonSelfBase) return;
+        CommonSelf[inst.EventId] = inst.Self.Clone();
     }
 
     /// <summary>Decode the operand table shared by 210 and 300 (exec.rs call_arguments).</summary>
@@ -342,6 +421,8 @@ public sealed class EventVm
                 0x300 => current * value,
                 0x400 => value == 0 || (current == int.MinValue && value == -1) ? (value == 0 ? current : int.MinValue) : current / value,
                 0x500 => value == 0 ? current : current % value,
+                // exec.rs compound(): 0x600/0x700 are unary transforms that leave the
+                // target's current value alone, never lower/upper bounds of the operand.
                 0x600 => current,
                 0x700 => current,
                 0x800 => current < 0 ? (current == int.MinValue ? int.MaxValue : -current) : current,
@@ -369,6 +450,7 @@ public sealed class EventVm
         };
     }
 
+    /// <summary>exec.rs 121: bits 0..7 are editor flags the Rust oracle masks off; only bits 8..11 select the transform.</summary>
     public void ExecuteSetVariable(int[] args, Instance inst)
     {
         int target = args[0];
@@ -513,52 +595,7 @@ public sealed class EventVm
                 case ControlKind.LoopEnd:
                 {
                     // Reached loop end -> decrement and loop or exit
-                    int blockIdx = ctrl.BlockIndex;
-                    int loopPos = -1;
-                    for (int i = inst.Loops.Count - 1; i >= 0; i--)
-                    {
-                        if (inst.Loops[i].Block == blockIdx)
-                        {
-                            loopPos = i;
-                            break;
-                        }
-                    }
-                    if (loopPos >= 0)
-                    {
-                        // LoopCtx is a struct: mutate the list element itself, never a copy,
-                        // or a counted loop never reaches its last iteration.
-                        long rem = inst.Loops[loopPos].Remaining;
-                        bool again;
-                        if (rem < 0)
-                        {
-                            again = true; // 170/176 unconditional loop heads
-                        }
-                        else if (rem > 1)
-                        {
-                            var ctx = inst.Loops[loopPos];
-                            ctx.Remaining = rem - 1;
-                            inst.Loops[loopPos] = ctx;
-                            again = true;
-                        }
-                        else
-                        {
-                            again = false;
-                        }
-                        if (again)
-                        {
-                            inst.Pc = prog.Blocks[blockIdx].Head + 1;
-                        }
-                        else
-                        {
-                            // Rust close_loop truncates everything from the matching frame up.
-                            inst.Loops.RemoveRange(loopPos, inst.Loops.Count - loopPos);
-                            inst.Pc = prog.Blocks[blockIdx].EndTarget(prog.Len);
-                        }
-                    }
-                    else
-                    {
-                        inst.Pc++;
-                    }
+                    CloseLoop(prog, inst, ctrl.BlockIndex);
                     continue;
                 }
                 case ControlKind.LabelJump:
@@ -645,7 +682,11 @@ public sealed class EventVm
                     // The mask is a composite UI selector, not a set of allowed keys;
                     // 126 is applied to the key code the host answers with.
                     uint mask = slot.Params.Length > 1 ? (uint)slot.Params[1] : 0;
-                    int key = FilterKeyCode(Host.KeyCodeAuto(mask, AutoKeys));
+                    bool autoAvailable = AutoKeys != 0 && !_autoKeysDelivered.Contains(inst.Id);
+                    bool autoConsumed = autoAvailable && KeyCodes.AcceptsWolfBits(mask, AutoKeys);
+                    uint effectiveAuto = autoAvailable ? AutoKeys : 0;
+                    int key = FilterKeyCode(Host.KeyCodeAuto(mask, effectiveAuto));
+                    if (autoConsumed) _autoKeysDelivered.Add(inst.Id);
                     StoreNum(inst, target, key);
                     inst.Pc++;
                     break;
@@ -657,7 +698,16 @@ public sealed class EventVm
                     int field = slot.Params.Length >= 4 ? slot.Params[3] : (slot.Params.Length > 2 ? slot.Params[2] : 0);
                     int? val = sub switch
                     {
-                        0x3000 => field == 18 ? inst.EventId + 500_000 : Host.EngineState(field),
+                        0x3000 => field switch
+                        {
+                            // exec.rs 2887-2901: field 17 is the running common-event id
+                            // (-1 for a map event); field 18 prefers the host's foreground
+                            // answer, then the last foreground coroutine, then this instance.
+                            17 => inst.Program.SelfBase == Program.CommonSelfBase ? inst.EventId : -1,
+                            18 => Host.EngineState(18) ?? ForegroundEventId() ??
+                                (inst.Program.SelfBase == Program.CommonSelfBase ? inst.EventId + 500_000 : inst.EventId),
+                            _ => Host.EngineState(field),
+                        },
                         0x1000 or 0x1200 => Host.CharacterState(slot.Params.Length >= 4 ? EvalNum(slot.Params[2], inst) : 0, field),
                         0x4000 or 0x4400 => Host.PictureState(slot.Params.Length >= 4 ? EvalNum(slot.Params[2], inst) : 0, field),
                         _ => null
@@ -669,12 +719,20 @@ public sealed class EventVm
                     inst.Pc++;
                     break;
                 }
+                case 176:
+                    // exec.rs 170|176: unconditional loop heads. The jump table has
+                    // already pushed the loop via Control.Block; reaching here means
+                    // a hand-made Program without one, so fall through.
+                    inst.Pc++;
+                    break;
                 case 130:
                 {
-                    int target = slot.Params.Length > 0 ? slot.Params[0] : -1;
+                    // exec.rs 130: raw layout is target, x, y, map, options; none of
+                    // these are dereferenced.
+                    int target = slot.Params.Length > 0 ? slot.Params[0] : 0;
                     int x = slot.Params.Length > 1 ? slot.Params[1] : 0;
                     int y = slot.Params.Length > 2 ? slot.Params[2] : 0;
-                    int map = slot.Params.Length > 3 ? slot.Params[3] : -1;
+                    int map = slot.Params.Length > 3 ? slot.Params[3] : 0;
                     int options = slot.Params.Length > 4 ? slot.Params[4] : 0;
                     Host.Teleport(target, map, x, y, options);
                     inst.Wait.WaitForFrames(1);
@@ -722,7 +780,7 @@ public sealed class EventVm
                     {
                         file = "";
                         volume = 0;
-                        frames = slot.Params.Length <= 5 ? (slot.Params.Length > 1 ? slot.Params[1] : 0) : 0;
+                        frames = slot.Params.Length <= 5 && slot.Params.Length > 1 ? slot.Params[1] : 0;
                         action = SoundAction.Stop;
                     }
 
@@ -788,7 +846,11 @@ public sealed class EventVm
                     for (int i = 0; i < argsCount; i++)
                     {
                         int raw = slot.Params[2 + i];
-                        if (((uint)raw & 0x0F00_0000) != 0)
+                        int body = raw & 0x0FFF_FFFF;
+                        // Only a flagged packed value whose body would otherwise decode as a
+                        // self/var/string address must stay raw. Negative picture sentinels,
+                        // packed RGB colors and opaque DB magic are all safe through EvalNum.
+                        if (((uint)raw & 0x0F00_0000) != 0 && body >= Magic.SelfBase && body < Magic.StrBase)
                         {
                             args[i] = raw;
                         }
@@ -818,9 +880,30 @@ public sealed class EventVm
                 }
                 case 160 or 161 or 162:
                 {
+                    // Rust exec.rs:2354-2383 keeps one TransitionState for the whole game:
+                    // 160 installs the setting, 161 freezes the drawn screen, and 162 runs
+                    // the fade and blocks for the low byte of flags (zero means one frame).
                     int kind = slot.Params.Length > 0 ? slot.Params[0] : 0;
                     int flags = slot.Params.Length > 1 ? slot.Params[1] : 0;
-                    Host.Transition(kind, flags);
+                    if (slot.Opcode == 160)
+                    {
+                        _transitionKind = kind;
+                        _transitionFlags = flags;
+                        Host.Transition(kind, flags);
+                        inst.Pc++;
+                        break;
+                    }
+                    if (slot.Opcode == 161)
+                    {
+                        _transitionPrepared = true;
+                        Host.Transition(_transitionKind, _transitionFlags);
+                        inst.Pc++;
+                        break;
+                    }
+                    _transitionPrepared = false;
+                    int frames = Math.Max(1, _transitionFlags & 0xFF);
+                    Host.Transition(_transitionKind, _transitionFlags);
+                    inst.Wait.WaitForFrames((uint)frames);
                     inst.Pc++;
                     break;
                 }
@@ -857,12 +940,7 @@ public sealed class EventVm
                     {
                         rawTarget = EvalNum(rawTarget, inst);
                     }
-                    int? targetEvent = rawTarget switch
-                    {
-                        >= 500000 and < 600000 => rawTarget - 500000,
-                        >= 600000 and < 700000 => rawTarget - 600000,
-                        _ => null
-                    };
+                    int? targetEvent = ResolveCallTarget(rawTarget, inst.EventId);
                     if (targetEvent == null)
                     {
                         // exec.rs 210: only the two call-address ranges are valid targets.
@@ -918,6 +996,7 @@ public sealed class EventVm
                         break;
                     }
                     Host.CommonEventCall(targetEvent.Value, childArgs, childStrings);
+                    child.IsParallel = inst.IsParallel;
                     for (int i = 0; i < childArgs.Length; i++)
                     {
                         child.Self.Set(Magic.SelfArgBase + i, childArgs[i]);
@@ -979,12 +1058,15 @@ public sealed class EventVm
                     {
                         rawReserve = EvalNum(rawReserve, inst);
                     }
-                    int reserveTarget = rawReserve >= 500000 && rawReserve < 600000
-                        ? rawReserve - 500000
-                        : rawReserve >= 600000 && rawReserve < 700000
-                            ? rawReserve - 600000
+                    // exec.rs 211: the two call ranges are absolute ids; anything
+                    // else is used as-is after clamping to 0 (no rejection).
+                    int reserveTarget = rawReserve >= 500_000 && rawReserve < 600_000
+                        ? rawReserve - 500_000
+                        : rawReserve >= 600_000 && rawReserve < 700_000
+                            ? rawReserve - 600_000
                             : Math.Max(0, rawReserve);
-                    Host.Reserve(reserveTarget);
+                    var (reserveArgs, reserveStrings, _) = DecodeCallArguments(slot, inst);
+                    Host.Reserve(reserveTarget, reserveArgs, reserveStrings);
                     inst.Pc++;
                     break;
                 }
@@ -1091,9 +1173,14 @@ public sealed class EventVm
                     inst.Pc++;
                     break;
                 case 125:
-                    AutoKeys = slot.Params.Length > 0 ? (uint)slot.Params[0] : 0;
+                {
+                    uint bits = slot.Params.Length > 0 ? (uint)slot.Params[0] & 0xFF : 0;
+                    AutoKeys = bits;
+                    _autoKeysTtl = bits != 0 ? 2 : 0;
+                    _autoKeysDelivered.Clear();
                     inst.Pc++;
                     break;
+                }
                 case 126:
                     ApplyInputPermission(slot.Params.Length > 0 ? (uint)slot.Params[0] : 0);
                     inst.Pc++;
@@ -1101,7 +1188,7 @@ public sealed class EventVm
                 case 151:
                 {
                     int color = slot.Params.Length > 0 ? slot.Params[0] : 0;
-                    int frames = slot.Params.Length > 1 ? slot.Params[1] : 0;
+                    int frames = slot.Params.Length > 1 ? EvalNum(slot.Params[1], inst) : 0;
                     Host.ChangeColor(color, frames);
                     inst.Pc++;
                     break;
@@ -1156,6 +1243,7 @@ public sealed class EventVm
                         inst.Pc++;
                         break;
                     }
+                    child.IsParallel = inst.IsParallel;
                     // 210 and 300 both reach a common event; the trace/side-effect host must
                     // see the call either way (round-4 review: 300 was silently missing it).
                     Host.CommonEventCall(callee.Id, callArgs, callStrings);
@@ -1214,6 +1302,22 @@ public sealed class EventVm
         int budget = 200_000;
         RunInstances(ref budget);
         ReapFinished();
+        // 125 auto input lives for up to two frames, and each coroutine may
+        // consume it once per injection (exec.rs step_frame).
+        if (_autoKeysTtl > 0)
+        {
+            _autoKeysTtl--;
+            if (_autoKeysTtl == 0)
+            {
+                AutoKeys = 0;
+                _autoKeysDelivered.Clear();
+            }
+        }
+        else
+        {
+            AutoKeys = 0;
+            _autoKeysDelivered.Clear();
+        }
     }
 
     public void PollWaits()
@@ -1301,6 +1405,10 @@ public sealed class EventVm
         {
             if (doomed.Contains(other.Id)) PersistCommonSelf(other);
         }
+        foreach (var other in Instances)
+        {
+            if (doomed.Contains(other.Id)) _freshInstanceIds.Remove(other.Id);
+        }
         Instances.RemoveAll(other => doomed.Contains(other.Id));
         for (int i = 0; i < Instances.Count; i++)
         {
@@ -1312,18 +1420,56 @@ public sealed class EventVm
     /// <summary>Drop every coroutine (map switch / teleport).</summary>
     public void StopAll()
     {
-        foreach (var inst in Instances) PersistCommonSelf(inst);
+        _freshInstanceIds.Clear();
         Instances.Clear();
     }
 
-    private void PersistCommonSelf(Instance inst)
+    /// <summary>Shared 498/176 logic: count down or jump back to the matching loop head.</summary>
+    private static void CloseLoop(Program prog, Instance inst, int blockIdx)
     {
-        // Fresh synthetic events never write their bank back; drop the marker here so the
-        // set cannot grow across generations.
-        if (_freshInstanceIds.Remove(inst.Id)) return;
-        if (inst.Program.SelfBase == Program.CommonSelfBase)
+        int loopPos = -1;
+        for (int i = inst.Loops.Count - 1; i >= 0; i--)
         {
-            CommonSelf[inst.EventId] = inst.Self.Clone();
+            if (inst.Loops[i].Block == blockIdx)
+            {
+                loopPos = i;
+                break;
+            }
+        }
+        if (loopPos < 0)
+        {
+            inst.Pc++;
+            return;
+        }
+
+        // LoopCtx is a struct: mutate the list element itself, never a copy,
+        // or a counted loop never reaches its last iteration.
+        long rem = inst.Loops[loopPos].Remaining;
+        bool again;
+        if (rem < 0)
+        {
+            again = true; // 170 unconditional loop head
+        }
+        else if (rem > 1)
+        {
+            var ctx = inst.Loops[loopPos];
+            ctx.Remaining = rem - 1;
+            inst.Loops[loopPos] = ctx;
+            again = true;
+        }
+        else
+        {
+            again = false;
+        }
+        if (again)
+        {
+            inst.Pc = prog.Blocks[blockIdx].Head + 1;
+        }
+        else
+        {
+            // Rust close_loop truncates everything from the matching frame up.
+            inst.Loops.RemoveRange(loopPos, inst.Loops.Count - loopPos);
+            inst.Pc = prog.Blocks[blockIdx].EndTarget(prog.Len);
         }
     }
 
@@ -1361,7 +1507,9 @@ public sealed class EventVm
                     }
                 }
 
+                // exec.rs reap_finished: capture the bank before dropping it.
                 PersistCommonSelf(inst);
+                _freshInstanceIds.Remove(inst.Id);
 
                 // Wake parent
                 if (inst.ParentId.HasValue)

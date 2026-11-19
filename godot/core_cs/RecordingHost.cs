@@ -14,6 +14,8 @@ public class RecordingHost : NullHost
     public readonly List<SoundCmd> Sounds = new();
     public readonly List<EffectCall> Effects = new();
     public readonly List<CallRecord> Calls = new();
+    /// <summary>Opcode 211 reservations with their decoded call arguments.</summary>
+    public readonly List<CallRecord> Reservations = new();
     public readonly List<TeleportRecord> Teleports = new();
     public readonly List<string> Logs = new();
     public readonly List<int[]> PartyCalls = new();
@@ -75,6 +77,9 @@ public class RecordingHost : NullHost
         }
         public override string ToString() => $"teleport target={Target} map={Map} x={X} y={Y} options={Options}";
     }
+
+    public override void Reserve(int target, int[] args, string[] strings)
+        => Reservations.Add(new CallRecord(target, args, strings));
 
     public override void Picture(PictureCmd cmd) => Pictures.Add(cmd);
     public override void Sound(SoundCmd cmd) => Sounds.Add(cmd);

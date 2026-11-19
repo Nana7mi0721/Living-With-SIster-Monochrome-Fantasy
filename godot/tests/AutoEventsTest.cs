@@ -44,10 +44,10 @@ public static class AutoEventsTest
 
         vm.StepFrame();
         var replayed = auto.Sync(vm);
-        Check(replayed.Started == 2, $"only the two HUD painters may replay, got {replayed.Started}");
+        Check(replayed.Started == 2, $"only the 216/217 HUD painters replay while true, got {replayed.Started}");
         Check(replayed.Stopped == 0, "a true condition must not stop a painter");
         Check(auto.IsRunning(vm, 216) && auto.IsRunning(vm, 217), "HUD painters must be live again");
-        Check(!auto.IsRunning(vm, 38), "a one-shot event may not restart without a new edge");
+        Check(!auto.IsRunning(vm, 38), "edge-triggered event 38 must not restart while its condition still holds");
 
         vm.Vars.Set(3, 0);
         var closed = auto.Sync(vm);
@@ -62,14 +62,14 @@ public static class AutoEventsTest
         Check(handover.Stopped == 1, $"350 leaving 1 must stop CE242, stopped={handover.Stopped}");
         Check(!auto.IsRunning(vm, 242), "CE242 must not run in the action phase");
 
-        // D-33: StopAll keeps the edge latch, matching Rust's session-scoped
-        // AutoEvents. A still-true one-shot must not be re-armed by clearing state.
+        // StopAll clears the coroutines but the edge latch stays true: only the HUD
+        // painters (the replay allow-list) come back, matching Rust sync.
         vm.Vars.Set(3, 1);
         auto.Sync(vm);
         vm.StopAll();
         var afterStopAll = auto.Sync(vm);
-        Check(afterStopAll.Started == 2, $"only the HUD painters may resume after StopAll, started={afterStopAll.Started}");
-        Check(!auto.IsRunning(vm, 38), "StopAll must not re-arm the still-true one-shot event 38");
+        Check(afterStopAll.Started == 2, $"only the replay allow-list must resume after StopAll, started={afterStopAll.Started}");
+        Check(!auto.IsRunning(vm, 38), "StopAll must not re-arm edge-triggered event 38 while its latch is true");
 
         var primedVm = new EventVm();
         Program AddPrime(int id, int run, int op, int variable, int value)
@@ -89,10 +89,10 @@ public static class AutoEventsTest
         primedVm.Vars.Set(3, 1);
         primedVm.Vars.Set(350, 1);
         primed.PrimeLatched(primedVm);
-        Check(primedVm.Instances.Count == 1, $"prime must start only the HUD painter, got {primedVm.Instances.Count}");
+        Check(primedVm.Instances.Count == 1, $"prime must start only the replay allow-list event, got {primedVm.Instances.Count}");
         var afterPrime = primed.Sync(primedVm);
-        Check(afterPrime.Started == 0, $"primed conditions must not fire fresh edges, started={afterPrime.Started}");
-        Check(!primed.IsRunning(primedVm, 242), "prime must not wake the battle command event");
+        Check(afterPrime.Started == 0, $"already-live primed events must not start twice, started={afterPrime.Started}");
+        Check(!primed.IsRunning(primedVm, 242), "prime must leave the edge-triggered battle command event to BattleWiring");
 
         Console.WriteLine($"AUTO_EVENTS_TEST_OK count={auto.EventCount} start={opened.Started} resume={replayed.Started} gated={gated.Started}");
     }

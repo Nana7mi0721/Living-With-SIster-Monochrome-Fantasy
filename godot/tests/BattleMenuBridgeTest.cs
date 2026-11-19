@@ -224,7 +224,9 @@ public static class BattleMenuBridgeTest
             SeedBattle(store!);
             SeedTwoMemberParty(store!);
 
-            var autoEvents = AutoEvents.FromPrograms(vm.Vm.Programs.Values);
+            // Isolated battle fixture: the two resident HUD painters repaint map
+            // state every frame and would overwrite the battle command bootstrap.
+            var autoEvents = AutoEvents.FromPrograms(vm.Vm.Programs.Values.Where(p => p.Id != 216 && p.Id != 217));
             autoEvents.PrimeLatched(vm.Vm);
             var wiring = new BattleWiring();
             wiring.SetAutoArm(true);

@@ -25,5 +25,6 @@ public class GDScriptHost : IHost
     public int KeyCode(uint mask) => 0;
     public void Effect(int kind, int duration, int[] args) => GD.Print($"Host.Effect(kind={kind}, duration={duration})");
     public void Reserve(int target) => GD.Print($"Host.Reserve({target})");
+    public void Reserve(int target, int[] args, string[] strings) => Reserve(target);
     public void Log(string message) => GD.Print($"[Log] {message}");
 }

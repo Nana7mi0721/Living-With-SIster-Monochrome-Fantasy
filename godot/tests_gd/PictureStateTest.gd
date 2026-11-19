@@ -98,6 +98,36 @@ func _ready() -> void:
 	vm.BeginFrameInput()
 	check(vm.EngineStateBridge(9) == 0, "middle release clears field 9")
 
+	# 124 field 10 is the wheel notch for this frame only; 11/12 are pointer motion,
+	# 20/21 the raw logical position (crates/wolf-game/src/game.rs engine_state).
+	vm.SetFrameWheel(3)
+	check(vm.EngineStateBridge(10) == 3, "wheel notch is visible before the step")
+	vm.SetPointer(100, 100)
+	vm.BeginFrameInput()
+	check(vm.EngineStateBridge(10) == 3, "BeginFrameInput does not consume the wheel")
+	check(vm.EngineStateBridge(11) == -412, "field 11 reports pointer dx")
+	check(vm.EngineStateBridge(12) == -130, "field 12 reports pointer dy")
+	check(vm.EngineStateBridge(20) == 100, "field 20 reports pointer x")
+	check(vm.EngineStateBridge(21) == 100, "field 21 reports pointer y")
+	vm.StepFrame()
+	check(vm.EngineStateBridge(10) == 0, "the wheel notch is one-frame only")
+
+	# 124 0x1000 target -2 is the party leader (not the mouse): tile, precise x2,
+	# facing and pixel centre/feet (game.rs character_state / tilemap.rs helpers).
+	vm.LeaderX = 10
+	vm.LeaderY = 20
+	vm.LeaderFacing = 1
+	check(vm.CharacterStateBridge(-2, 0) == 10, "leader tile x")
+	check(vm.CharacterStateBridge(-2, 1) == 20, "leader tile y")
+	check(vm.CharacterStateBridge(-2, 2) == 20, "leader precise x is tile*2")
+	check(vm.CharacterStateBridge(-2, 3) == 40, "leader precise y is tile*2")
+	check(vm.CharacterStateBridge(-2, 5) == 1, "leader facing")
+	check(vm.CharacterStateBridge(-2, 6) == 168, "leader centre px")
+	check(vm.CharacterStateBridge(-2, 8) == 168, "leader field 8 mirrors centre px")
+	check(vm.CharacterStateBridge(-2, 7) == 336, "leader feet px")
+	check(vm.CharacterStateBridge(-2, 10) == -1, "leader is not a map event")
+	check(vm.CharacterStateBridge(-3, 0) == -2147483647 - 1, "party member 1 is unanswered")
+
 	# Run the real CE217 clock event and assert the live HUD text picture arrives.
 	vm.SetVar(4, 8)
 	vm.SetVar(5, 30)

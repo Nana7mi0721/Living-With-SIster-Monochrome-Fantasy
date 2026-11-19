@@ -168,8 +168,8 @@ public interface IHost
     /// <summary>290 Effect: <paramref name="kind"/> is the high nibble of arg0.</summary>
     void Effect(int kind, int duration, int[] args);
 
-    /// <summary>211 Reserve: preload a common event without calling it.</summary>
-    void Reserve(int target);
+    /// <summary>211 Reserve: preload a common event with its call arguments without calling it.</summary>
+    void Reserve(int target, int[] args, string[] strings) { }
 
     /// <summary>201 SetMoveRoute: apply (or queue) a route on <paramref name="target"/>.</summary>
     void MoveRoute(int target, MoveRouteData route) { }
@@ -235,5 +235,6 @@ public class NullHost : IHost
     public virtual int KeyCode(uint mask) => 0;
     public virtual void Effect(int kind, int duration, int[] args) { }
     public virtual void Reserve(int target) { }
+    public virtual void Reserve(int target, int[] args, string[] strings) => Reserve(target);
     public virtual void Log(string message) { }
 }

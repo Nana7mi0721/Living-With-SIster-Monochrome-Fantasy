@@ -25,8 +25,10 @@ public readonly struct AutoSyncReport
 /// <summary>
 /// Scheduler for run_condition == 2 common events, plus the two battle events
 /// (242/243) that the data gates on 2000350 but never calls. Mirrors the Rust
-/// engine's auto_events.rs: conditions are edge-triggered, except the HUD
-/// drawing events 216/217, which are replayed while their condition holds.
+/// engine's auto_events.rs: the scheduler is edge-triggered, so a coroutine that
+/// ended on its own is not restarted while its condition stays true. The two HUD
+/// painters 216/217 are the allow-listed exception and are replayed every frame.
+/// Event 43 is skipped here because this port's title menu is TitleMap event 2.
 /// </summary>
 public sealed class AutoEvents
 {
@@ -73,19 +75,15 @@ public sealed class AutoEvents
         return new AutoEvents(events);
     }
 
-    /// <summary>Seed the latched state after a load and start the HUD painters once.</summary>
+    /// <summary>Seed the latched state after a load, then replay the HUD painters once.</summary>
     public void PrimeLatched(EventVm vm)
     {
         if (!Enabled) return;
         foreach (var ev in _events)
         {
-            bool now = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
-            _latched[ev.Id] = now;
-            if (!now || !ev.ResumeOnLoad) continue;
-            if (Live(vm, ev.Id)) continue;
-            var inst = vm.CreateInstance(ev.Id);
-            if (inst != null) _running[ev.Id] = inst.Id;
+            _latched[ev.Id] = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
         }
+        Sync(vm);
     }
 
     public AutoSyncReport Sync(EventVm vm)
@@ -95,37 +93,29 @@ public sealed class AutoEvents
         foreach (var ev in _events)
         {
             bool now = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
+            // Another subsystem may own a live instance of the same event (battle
+            // command events 242/243). Treat it as alive so we never double-start it.
+            bool alive = IsEventLive(vm, ev.Id);
             bool before = _latched.TryGetValue(ev.Id, out bool latched) && latched;
-            if (ev.ResumeOnLoad && now)
-            {
-                // A just-finished coroutine can still be in Instances until the
-                // next VM step reaps it; only a parked/live one suppresses a restart.
-                if (!Live(vm, ev.Id))
-                {
-                    var inst = vm.CreateInstance(ev.Id);
-                    if (inst != null)
-                    {
-                        _running[ev.Id] = inst.Id;
-                        _starts[ev.Id] = StartsFor(ev.Id) + 1;
-                        started++;
-                        TraceStart(ev.Id, inst.Id);
-                    }
-                }
-            }
-            else if (now && !before)
+            // Rust auto_events.rs:252 — the scheduler is edge-triggered. Only the
+            // 216/217 HUD painters are replayed while their condition holds, because
+            // their rendered text must replace the SavePart5 snapshot after a load.
+            bool shouldStart = ev.ResumeOnLoad && now ? !alive : now && !before;
+            if (shouldStart)
             {
                 var inst = vm.CreateInstance(ev.Id);
                 if (inst != null)
                 {
+                    inst.IsParallel = true;
                     _running[ev.Id] = inst.Id;
                     _starts[ev.Id] = StartsFor(ev.Id) + 1;
                     started++;
                     TraceStart(ev.Id, inst.Id);
                 }
             }
-            else if (!now && before)
+            else if (!now && _running.Remove(ev.Id, out int instanceId))
             {
-                if (_running.Remove(ev.Id, out int instanceId) && vm.FindInstance(instanceId) != null)
+                if (vm.FindInstance(instanceId) != null)
                 {
                     vm.StopInstance(instanceId);
                     stopped++;
@@ -158,7 +148,7 @@ public sealed class AutoEvents
         if (Trace) Console.Error.WriteLine($"[AutoEvents] stop event {eventId} instance {instanceId}");
     }
 
-    private static bool Live(EventVm vm, int eventId)
+    private static bool IsEventLive(EventVm vm, int eventId)
     {
         foreach (var inst in vm.Instances)
         {

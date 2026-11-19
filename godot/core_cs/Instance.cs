@@ -72,5 +72,8 @@ public sealed class Instance
     /// <summary>Map page instances outlive their program until MapRuntime copies the self bank.</summary>
     public bool RetainAfterFinish { get; set; }
 
+    /// <summary>Parallel scheduler instance (exec.rs Instance::is_parallel): never blocks the 211 foreground check.</summary>
+    public bool IsParallel { get; set; }
+
     public bool IsRunnable => Wait.Kind == WaitStateKind.None;
 }

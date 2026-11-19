@@ -16,6 +16,10 @@ public static class VmTest
         TestOpcode121DivideByZero();
         TestOpcode121RandomRange();
         TestOpcode121RangeWrite();
+        TestOpcode121FlagSemantics();
+        TestOpcode211ReserveArguments();
+        TestOpcode124EventIdentity();
+        TestCallTargetResolution();
         TestOpcode111ConditionAndEscape();
         TestOpcode180WaitFrames();
         TestOpcode210CallChildAndReturn();
@@ -707,6 +711,124 @@ public static class VmTest
             throw new Exception($"unknown sound type should keep the BGM fallback, got {host.Sounds[0].Channel}");
         if (!host.Logs.Exists(l => l.Contains("unknown sound type 3")))
             throw new Exception("unknown sound type must be logged instead of silently remapped");
+    }
+
+    private static void TestOpcode121FlagSemantics()
+    {
+        Console.WriteLine("  Testing Opcode 121 (editor flag bits are masked, exec.rs compound)...");
+        var vm = new EventVm();
+        vm.RegisterProgram(Program.FromSlots(1, "Test", new List<Slot>()));
+        var inst = vm.CreateInstance(1)!;
+
+        // Bits 0..7 are editor flags the Rust oracle masks off; only bits 12..15 pick
+        // the binary operator and bits 8..11 the transform.
+        vm.Vars.Set(0, 3);
+        vm.ExecuteSetVariable([2_000_000, 1, 2, 0x3300], inst);
+        if (vm.Vars.Get(0) != 0)
+            throw new Exception($"TC-121 integer division expected 0, got {vm.Vars.Get(0)}");
+        vm.Vars.Set(0, 3);
+        vm.ExecuteSetVariable([2_000_000, 1, 2, 0x3302], inst);
+        if (vm.Vars.Get(0) != 0)
+            throw new Exception($"TC-121 flag 0x02 must not enable real division, got {vm.Vars.Get(0)}");
+
+        // No 0x01 clamp: 999999 + 999999 wraps nowhere and stores 1999998.
+        vm.Vars.Set(1, 0);
+        vm.ExecuteSetVariable([2_000_001, 999_999, 999_999, 0x0101], inst);
+        if (vm.Vars.Get(1) != 1_999_998)
+            throw new Exception($"TC-121 clamp flag must be ignored, got {vm.Vars.Get(1)}");
+
+        // No 0x04 literal flag: the operand is still evaluated as Var 0 (9).
+        vm.Vars.Set(0, 9);
+        vm.ExecuteSetVariable([2_000_002, 2_000_000, 0, 0x0004], inst);
+        if (vm.Vars.Get(2) != 9)
+            throw new Exception($"TC-121 literal flag must be ignored, got {vm.Vars.Get(2)}");
+
+        // 0x600 is a unary transform of the target's current value, not max(cur, value).
+        vm.Vars.Set(4, 1);
+        vm.ExecuteSetVariable([2_000_004, 5, 0, 0x0600], inst);
+        if (vm.Vars.Get(4) != 1)
+            throw new Exception($"TC-121 0x600 must keep current value, got {vm.Vars.Get(4)}");
+
+        // 0x800 is abs(current), not abs(value).
+        vm.Vars.Set(6, -7);
+        vm.ExecuteSetVariable([2_000_006, 3, 0, 0x0800], inst);
+        if (vm.Vars.Get(6) != 7)
+            throw new Exception($"TC-121 0x800 must abs the current value, got {vm.Vars.Get(6)}");
+
+        // 0x10000 batch count is an evaluated operand: +1 across Var 10..12.
+        vm.Vars.Set(10, 0);
+        vm.Vars.Set(11, 0);
+        vm.Vars.Set(12, 0);
+        vm.ExecuteSetVariable([2_000_010, 1, 0, 0x10100, 2], inst);
+        if (vm.Vars.Get(10) != 1 || vm.Vars.Get(11) != 1 || vm.Vars.Get(12) != 1 || vm.Vars.Get(13) != 0)
+            throw new Exception($"TC-121 batch failed: {vm.Vars.Get(10)},{vm.Vars.Get(11)},{vm.Vars.Get(12)},{vm.Vars.Get(13)}");
+    }
+
+    private static void TestOpcode211ReserveArguments()
+    {
+        Console.WriteLine("  Testing Opcode 211 (Reserve queue keeps call arguments)...");
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        // Caller 100 with the relative call address 600101 -> common event 101.
+        var status = 2 | (1 << 4) | (1 << 12);
+        var slots = new List<Slot>
+        {
+            Slot.Command(211, [600_101, status, 11, 22, 0], ["", "hello"]),
+            Slot.Command(172)
+        };
+        vm.RegisterProgram(Program.FromSlots(100, "Reserver", slots));
+        vm.CreateInstance(100);
+        vm.StepFrame();
+
+        if (host.Reservations.Count != 1)
+            throw new Exception($"211 expected one reservation, got {host.Reservations.Count}");
+        var rec = host.Reservations[0];
+        if (rec.Target != 101)
+            throw new Exception($"211 target expected 101, got {rec.Target}");
+        if (rec.Args.Length != 2 || rec.Args[0] != 11 || rec.Args[1] != 22)
+            throw new Exception($"211 args mismatch: [{string.Join(",", rec.Args)}]");
+        if (rec.Strings.Length != 1 || rec.Strings[0] != "hello")
+            throw new Exception($"211 strings mismatch: [{string.Join(",", rec.Strings)}]");
+    }
+
+    private static void TestOpcode124EventIdentity()
+    {
+        Console.WriteLine("  Testing Opcode 124 field 17/18 (running event identity)...");
+        var fgSlots = new List<Slot>
+        {
+            Slot.Command(180, [10]), // keep the foreground common event alive and blocked
+            Slot.Command(172)
+        };
+        var bgSlots = new List<Slot>
+        {
+            Slot.Command(124, [2_000_000, 0x3000, 17]), // this common event id
+            Slot.Command(124, [2_000_001, 0x3000, 18]), // last foreground event + 500000
+            Slot.Command(172)
+        };
+        var vm = new EventVm();
+        vm.RegisterProgram(Program.FromSlots(100, "fg", fgSlots));
+        vm.RegisterProgram(Program.FromSlots(200, "bg", bgSlots));
+        vm.CreateInstance(100);
+        var bg = vm.CreateInstance(200)!;
+        bg.IsParallel = true;
+        vm.StepFrame();
+        if (vm.Vars.Get(0) != 200)
+            throw new Exception($"124 field 17 expected 200, got {vm.Vars.Get(0)}");
+        if (vm.Vars.Get(1) != 500_100)
+            throw new Exception($"124 field 18 expected 500100, got {vm.Vars.Get(1)}");
+    }
+
+    private static void TestCallTargetResolution()
+    {
+        Console.WriteLine("  Testing common-event call target resolution...");
+        if (EventVm.ResolveCallTarget(500_050, 9) != 50)
+            throw new Exception("500050 must resolve to event 50");
+        if (EventVm.ResolveCallTarget(600_101, 100) != 101)
+            throw new Exception("600101 from caller 100 must resolve to 101");
+        if (EventVm.ResolveCallTarget(600_094, 270) != 94)
+            throw new Exception("600094 from caller 270 must resolve to 264");
+        if (EventVm.ResolveCallTarget(-7, 1) != null)
+            throw new Exception("negative targets must be rejected");
     }
 
     private sealed class KeyHost : RecordingHost

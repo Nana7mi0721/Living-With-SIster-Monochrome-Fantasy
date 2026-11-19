@@ -102,7 +102,9 @@ public static class BattleNaturalLoopTest
                 SetData(store, 9, 0, 4, 10); SetData(store, 9, 0, 5, 5);
             }
 
-            var autoEvents = AutoEvents.FromPrograms(vm.Vm.Programs.Values);
+            // Isolated battle fixture: keep the resident HUD painters out.
+            var autoEvents = AutoEvents.FromPrograms(vm.Vm.Programs.Values.Where(p => p.Id != 38 && p.Id != 216 && p.Id != 217));
+            autoEvents.PrimeLatched(vm.Vm);
             var wiring = new BattleWiring();
             wiring.SetAutoArm(true);
             wiring.SetEnabled(true);
