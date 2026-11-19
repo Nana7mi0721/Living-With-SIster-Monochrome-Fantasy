@@ -48,6 +48,7 @@ var _pictures: Dictionary = {}  # number -> Control
 var _cmds: Dictionary = {}     # number -> draw command, for save/restore (W3 Day4)
 var _base_sizes: Dictionary = {}  # number -> unscaled hit-box source size
 var _states: Dictionary = {}   # number -> animation/effect state (fade, slide, 290)
+var _blend_materials: Dictionary = {}  # blend mode -> shared CanvasItemMaterial
 
 
 func _init(p_assets: AssetDB = null) -> void:
@@ -109,6 +110,14 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 		return _pictures[number]
 
 	var prev_state: Dictionary = _states.get(number, {}).duplicate(true)
+	var prev_cmd: Dictionary = _cmds.get(number, {})
+	# picture.rs 1369-1371: only the SAME graphic is a redraw. A different image in the
+	# same slot is a fresh picture and must not inherit the old one's shake/breath/zoom
+	# or slide in from the old position.
+	var redraws := not prev_cmd.is_empty() \
+		and int(prev_cmd.get("kind", -1)) == kind \
+		and str(prev_cmd.get("file", "")) == file \
+		and str(prev_cmd.get("text", "")) == text
 	var node := _build_picture(number, file, text, args, anchor, kind)
 	_free_picture(number)
 	if node == null:
@@ -121,7 +130,7 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 	band.add_child(node)
 	_pictures[number] = node
 	_base_sizes[number] = node.get_meta("base_size", node.size)
-	if not prev_state.is_empty():
+	if redraws and not prev_state.is_empty():
 		_states[number] = prev_state
 	_begin_draw(number, file, text, args, anchor, kind, animate)
 	_store_cmd(number, action, file, text, args, anchor, kind, animate)
@@ -200,6 +209,9 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 	if field == 8:
 		if not exists:
 			return -1
+		var state: Dictionary = _states.get(number, {})
+		if bool(state.get("hidden", false)):
+			return 0
 		return 1 if _hit_rect(number).has_point(pointer) else 0
 	if field == 9:
 		return 1 if exists else 0
@@ -212,11 +224,15 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 	var pose: Dictionary = state.get("current", {})
 	match field:
 		0:
-			return int(pose.get("x", UiSkin.unit(_arg(args, 5, 0))))
+			# game.rs 6825: 124 asks where the picture is drawn now, effects included.
+			return int(pose.get("x", UiSkin.unit(_arg(args, 5, 0)))) + int(_effect_offset(state).x)
 		1:
-			return int(pose.get("y", UiSkin.unit(_arg(args, 6, 0))))
+			return int(pose.get("y", UiSkin.unit(_arg(args, 6, 0)))) + int(_effect_offset(state).y)
 		2, 3:
-			return int(pose.get("scale", UiSkin.unit(_arg(args, 7, 100))))
+			# game.rs 6827-6850 returns the picture's real width/height (text metrics,
+			# window box or native texture size), not the scale percentage.
+			var base := _base_size_for(number, cmd)
+			return int(base.x) if field == 2 else int(base.y)
 		4:
 			return _arg(args, 9, 0)
 		5:
@@ -224,6 +240,74 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 		10:
 			return 1 if kind == 2 or kind == 4 else -1
 	return null
+
+
+func _effect_offset(state: Dictionary) -> Vector2:
+	var shift: Array = state.get("shift", [0, 0])
+	var offset := Vector2(float(shift[0]), float(shift[1]))
+	var shake: Variant = state.get("shake", null)
+	if shake != null:
+		var period := maxi(1, int(shake.get("period", 1)))
+		var sign := 1.0 if (int(shake.get("elapsed", 0)) / period) % 2 == 0 else -1.0
+		var raw: Array = shake.get("offset", [0, 0])
+		offset += Vector2(float(raw[0]) * sign, float(raw[1]) * sign)
+	return offset
+
+
+func _base_size_for(number: int, cmd: Dictionary = {}) -> Vector2:
+	if cmd.is_empty():
+		cmd = _cmds.get(number, {})
+	if cmd.is_empty():
+		return Vector2.ZERO
+	var args: Array = cmd.get("args", [])
+	var kind: int = int(cmd.get("kind", 0))
+	if kind == 2 or kind == 4:
+		return Vector2(maxi(0, _arg(args, 1, 0)), maxi(0, _arg(args, 2, 0)))
+	if kind == 3 and _arg(args, 1, 0) > 2 and _arg(args, 2, 0) > 2:
+		return Vector2(_arg(args, 1, 0), _arg(args, 2, 0))
+	var holder: Control = _pictures.get(number)
+	if holder != null:
+		return holder.get_meta("base_size", holder.size)
+	var remembered: Vector2 = _base_sizes.get(number, Vector2.ZERO)
+	if remembered != Vector2.ZERO:
+		return remembered
+	var file := str(cmd.get("file", ""))
+	if not file.is_empty() and assets != null and assets.texture(file) != null:
+		return _texture_cell_size(assets.texture(file), _arg(args, 1, 1), _arg(args, 2, 1))
+	var text := str(cmd.get("text", ""))
+	if not text.is_empty():
+		return _measure_text(text)["size"]
+	return Vector2(420, 140)
+
+
+func _texture_cell_size(texture: Texture2D, columns: int, rows: int) -> Vector2:
+	var full := texture.get_size()
+	if columns <= 1 and rows <= 1:
+		return full
+	var cell := Vector2(floor(full.x / maxi(1, columns)), floor(full.y / maxi(1, rows)))
+	if cell.x < 1.0 or cell.y < 1.0:
+		return full
+	return cell
+
+
+func _cell_region(full: Vector2, columns: int, rows: int, pattern_cell: int) -> Rect2:
+	var cell := _texture_cell_size_from(full, columns, rows)
+	var index := maxi(1, pattern_cell) - 1
+	var column := index % maxi(1, columns)
+	var row := index / maxi(1, columns)
+	if row >= maxi(1, rows):
+		column = 0
+		row = 0
+	return Rect2(column * cell.x, row * cell.y, cell.x, cell.y)
+
+
+func _texture_cell_size_from(full: Vector2, columns: int, rows: int) -> Vector2:
+	if columns <= 1 and rows <= 1:
+		return full
+	var cell := Vector2(floor(full.x / maxi(1, columns)), floor(full.y / maxi(1, rows)))
+	if cell.x < 1.0 or cell.y < 1.0:
+		return full
+	return cell
 
 
 func picture_rect(number: int) -> Rect2:
@@ -237,25 +321,16 @@ func _arg(args: Array, index: int, fallback: int) -> int:
 
 
 func _hit_rect(number: int) -> Rect2:
-	var cmd: Dictionary = _cmds[number]
+	var cmd: Dictionary = _cmds.get(number, {})
+	if cmd.is_empty():
+		return Rect2()
 	var args: Array = cmd.get("args", [])
-	var kind: int = int(cmd.get("kind", 0))
 	var anchor: int = int(cmd.get("anchor", 0))
 	if number >= 12000:
 		return Rect2(Vector2.ZERO, SCREEN_SIZE)
-	var base := Vector2.ZERO
-	if kind == 2 or kind == 4:
-		base = Vector2(maxi(0, _arg(args, 1, 0)), maxi(0, _arg(args, 2, 0)))
-	elif kind == 3 and _arg(args, 1, 0) > 2 and _arg(args, 2, 0) > 2:
-		base = Vector2(_arg(args, 1, 0), _arg(args, 2, 0))
-	else:
-		var holder: Control = _pictures.get(number)
-		if holder != null:
-			base = holder.get_meta("base_size", holder.size)
-		else:
-			base = _base_sizes.get(number, Vector2.ZERO)
-		if base == Vector2.ZERO:
-			return Rect2()
+	var base := _base_size_for(number, cmd)
+	if base == Vector2.ZERO:
+		return Rect2()
 	var state: Dictionary = _states.get(number, {})
 	var pose: Dictionary = state.get("current", {})
 	var scale_percent: int = int(pose.get("scale", UiSkin.unit(_arg(args, 7, 100))))
@@ -265,7 +340,22 @@ func _hit_rect(number: int) -> Rect2:
 	var size := base * Vector2(scale_factor, scale_y_factor)
 	var x: int = int(pose.get("x", UiSkin.unit(_arg(args, 5, 0))))
 	var y: int = int(pose.get("y", UiSkin.unit(_arg(args, 6, 0))))
-	return Rect2(UiSkin.anchor_position(anchor, x, y, size), size)
+	var position := UiSkin.anchor_position(anchor, x, y, size)
+	# The hit box is the rectangle the renderer draws: zoom around its centre and the
+	# running 290 shift/shake (picture.rs picture_rect -> destination -> transform).
+	var zoom: Variant = state.get("zoom", null)
+	if zoom != null:
+		var k := _zoom_percent(zoom) / 100.0
+		var centre_raw: Array = zoom.get("centre", [0, 0])
+		var centre := Vector2(float(centre_raw[0]), float(centre_raw[1]))
+		position = centre + (position - centre) * k
+		size *= k
+	var breath: Variant = state.get("breath", null)
+	if breath != null:
+		var growth := _breath_growth(breath)
+		size *= Vector2(1.0 + growth.x / 100.0, 1.0 + growth.y / 100.0)
+	position += _effect_offset(state)
+	return Rect2(position, size)
 
 
 ## Queue mode: keep the slot table and hit boxes current without adding nodes. Opcode 124
@@ -296,7 +386,7 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 	if kind == 2 or kind == 4:
 		base = Vector2(maxi(0, _arg(args, 1, 0)), maxi(0, _arg(args, 2, 0)))
 	elif not file.is_empty() and assets != null and assets.texture(file) != null:
-		base = assets.texture(file).get_size()
+		base = _texture_cell_size(assets.texture(file), _arg(args, 1, 1), _arg(args, 2, 1))
 	elif not text.is_empty():
 		base = _measure_text(text)["size"]
 	else:
@@ -322,9 +412,22 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 	var backdrop := number >= 12000
 	var size: Vector2
 	if texture != null:
-		size = SCREEN_SIZE if backdrop else texture.get_size()
+		var columns := maxi(1, _arg(args, 1, 1))
+		var rows := maxi(1, _arg(args, 2, 1))
+		size = SCREEN_SIZE if backdrop else _texture_cell_size(texture, columns, rows)
+		var shown := texture
+		if not backdrop and (columns > 1 or rows > 1):
+			# File pictures use window-width/height as a sprite-sheet grid and RESERVED
+			# as the one-based cell (picture.rs merge_args 2116-2130).
+			var atlas := AtlasTexture.new()
+			atlas.atlas = texture
+			atlas.region = _cell_region(texture.get_size(), columns, rows, maxi(1, _arg(args, 3, 1)))
+			shown = atlas
+			holder.set_meta("pattern_atlas", atlas)
+		holder.set_meta("split_columns", columns)
+		holder.set_meta("split_rows", rows)
 		var rect := TextureRect.new()
-		rect.texture = texture
+		rect.texture = shown
 		rect.size = size
 		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED if backdrop else TextureRect.STRETCH_KEEP_ASPECT
@@ -433,6 +536,22 @@ func _merge_unchanged(target: Dictionary, current: Dictionary, args: Array) -> v
 			target[key] = current.get(key, target[key])
 
 
+## WOLF tones are percentages with 100 as neutral (picture.rs TONE_NEUTRAL), and the
+## three tone slots are padding unless raw arg 12 marks them with TONE_PRESENT. Reading
+## them unconditionally painted unmarked draws with tone 255 (a 2.55x over-bright base)
+## and made the type 1 colour correction unable to darken anything.
+func _tone_from_args(args: Array) -> Array:
+	var tone: Array = [100, 100, 100]
+	var format_flag := _arg(args, 10, 0)
+	if (format_flag & 0x02000000) != 0:
+		tone = [
+			clampi(_arg(args, 13, 100), 0, 200),
+			clampi(_arg(args, 14, 100), 0, 200),
+			clampi(_arg(args, 15, 100), 0, 200),
+		]
+	return tone
+
+
 func _new_state(args: Array, anchor: int, base: Vector2) -> Dictionary:
 	var pose := _pose_from_args(args, anchor)
 	return {
@@ -451,11 +570,9 @@ func _new_state(args: Array, anchor: int, base: Vector2) -> Dictionary:
 		"zoom": null,
 		"breath": null,
 		"pattern": null,
-		"tone": [
-			clampi(_arg(args, 13, 255), 0, 255),
-			clampi(_arg(args, 14, 255), 0, 255),
-			clampi(_arg(args, 15, 255), 0, 255),
-		],
+		"pattern_index": maxi(1, _arg(args, 3, 1)),
+		"split": [maxi(1, _arg(args, 1, 1)), maxi(1, _arg(args, 2, 1))],
+		"tone": _tone_from_args(args),
 		"hidden": false,
 		"base_size": base,
 	}
@@ -463,29 +580,43 @@ func _new_state(args: Array, anchor: int, base: Vector2) -> Dictionary:
 
 ## Draw replaces the slot. A redraw at the same place keeps the breathing/zoom/shake phase;
 ## a redraw at a different place slides from the old pose (picture.rs advance/replace).
-func _begin_draw(number: int, _file: String, _text: String, args: Array, anchor: int, _kind: int, animate: Array) -> void:
+func _begin_draw(number: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array) -> void:
 	var prev: Dictionary = _states.get(number, {})
+	var prev_cmd: Dictionary = _cmds.get(number, {})
 	var base: Vector2 = _base_sizes.get(number, Vector2.ZERO)
 	var state := _new_state(args, anchor, base)
-	if not prev.is_empty():
-		state["effects"] = prev.get("effects", []).duplicate(true)
-		state["color_corr"] = prev.get("color_corr", [0, 0, 0]).duplicate()
-		state["shift"] = prev.get("shift", [0, 0]).duplicate()
+	# Draw replaces the slot. Only the same kind/file/text is a redraw; everything else
+	# starts from the new command (picture.rs 1369-1371).
+	var redraws := not prev.is_empty() and not prev_cmd.is_empty() \
+		and int(prev_cmd.get("kind", -1)) == kind \
+		and str(prev_cmd.get("file", "")) == file \
+		and str(prev_cmd.get("text", "")) == text
+	if not redraws:
+		var fade := clampi(_arg(args, 0, 0), 0, FADE_MAX)
+		if fade > 0:
+			state["fade"] = fade
+			state["fade_from"] = 0
+			state["fade_start"] = 0
+			state["current"]["opacity"] = 0
+		_states[number] = state
+		_render_picture(number)
+		return
+	# picture.rs 1394-1425: the animation carry-over is same graphic AND same position.
+	# A placement change rebuilds the slot and keeps the tween semantics instead.
+	var same_position := _pose_position(prev.get("target", {})) == _pose_position(state["target"])
+	if same_position:
 		state["shake"] = null if prev.get("shake", null) == null else prev["shake"].duplicate(true)
 		state["zoom"] = null if prev.get("zoom", null) == null else prev["zoom"].duplicate(true)
 		state["breath"] = null if prev.get("breath", null) == null else prev["breath"].duplicate(true)
 		state["pattern"] = null if prev.get("pattern", null) == null else prev["pattern"].duplicate(true)
-		state["age"] = int(prev.get("age", 0))
-		state["hidden"] = false
-	var fade := clampi(_arg(args, 0, 0), 0, FADE_MAX)
-	if fade > 0:
-		state["fade"] = fade
-		state["fade_from"] = 0
-		state["fade_start"] = int(state["age"])
-		state["current"]["opacity"] = 0
+	# A redraw never fades in again and never loses its alpha: with no OPACITY slot the
+	# command keeps whatever alpha was on screen (picture.rs 1426-1433).
+	state["fade"] = 0
+	var has_opacity := args.size() > 4 and int(args[4]) != UNCHANGED
+	if not has_opacity:
+		state["target"]["opacity"] = int(prev["current"].get("opacity", 255))
 	var duration := _animate_duration(animate)
-	var moved := not prev.is_empty() and _pose_position(prev.get("target", {})) != _pose_position(state["target"])
-	if duration > 0 and moved:
+	if duration > 0 and not same_position:
 		state["current"] = prev["current"].duplicate(true)
 		state["transition"] = {
 			"from": prev["current"].duplicate(true),
@@ -495,8 +626,6 @@ func _begin_draw(number: int, _file: String, _text: String, args: Array, anchor:
 		}
 	else:
 		state["current"] = state["target"].duplicate(true)
-		if fade > 0:
-			state["current"]["opacity"] = 0
 	_states[number] = state
 	_render_picture(number)
 
@@ -604,8 +733,24 @@ func _pose_position(pose: Dictionary) -> Vector2i:
 ## Advance every slot once per frame: slide transition, fade ramp, then the 290 effects.
 func tick() -> void:
 	for number in _states.keys():
-		if _states.has(number):
+		if not _states.has(number):
+			continue
+		var state: Dictionary = _states[number]
+		if _state_animating(state):
 			_advance_picture(number)
+
+
+## A static slot does not need a transform pass every frame. Only slots with a live tween
+## or 290 effect are advanced and re-rendered.
+func _state_animating(state: Dictionary) -> bool:
+	if state.is_empty() or bool(state.get("hidden", false)):
+		return false
+	if int(state.get("fade", 0)) > 0:
+		return true
+	for key in ["transition", "shake", "zoom", "breath", "pattern"]:
+		if state.get(key, null) != null:
+			return true
+	return not (state.get("effects", []) as Array).is_empty()
 
 
 func _advance_picture(number: int) -> void:
@@ -717,14 +862,35 @@ func _render_picture(number: int) -> void:
 	node.position = position
 	node.pivot_offset = size * 0.5
 	node.scale = Vector2(-1.0 if int(pose.get("scale", 100)) < 0 else 1.0, 1.0)
+	var blend := int(pose.get("blend", 0))
 	var tint := _tone_color(state)
 	tint.a = clampf(float(pose.get("opacity", 255)) / 255.0, 0.0, 1.0)
+	# WOLF blend 3 is multiply; retail forces the alpha to 255 so the modulation
+	# multiplies RGB without also dimming by the slot opacity (GameView.gd:99-100).
+	if (blend & 0xF) == 3:
+		tint.a = 1.0
 	node.modulate = tint
-	_apply_blend(node, int(pose.get("blend", 0)))
+	_apply_pattern_cell(node, state)
+	_apply_blend(node, blend)
+
+
+func _apply_pattern_cell(node: Control, state: Dictionary) -> void:
+	var atlas: Variant = node.get_meta("pattern_atlas", null) if node.has_meta("pattern_atlas") else null
+	if atlas == null or not (atlas is AtlasTexture):
+		return
+	var columns := maxi(1, int(node.get_meta("split_columns", 1)))
+	var rows := maxi(1, int(node.get_meta("split_rows", 1)))
+	var pattern: Variant = state.get("pattern", null)
+	var cell := int(state.get("pattern_index", 1))
+	if pattern != null:
+		cell = int(pattern.get("cell", cell))
+	var region := _cell_region((atlas as AtlasTexture).atlas.get_size(), columns, rows, cell)
+	if (atlas as AtlasTexture).region != region:
+		(atlas as AtlasTexture).region = region
 
 
 func _tone_color(state: Dictionary) -> Color:
-	var tone: Array = state.get("tone", [255, 255, 255])
+	var tone: Array = state.get("tone", [100, 100, 100])
 	var corr: Array = state.get("color_corr", [0, 0, 0])
 	var out := Color(1, 1, 1, 1)
 	for channel in 3:
@@ -746,20 +912,23 @@ func _tone_color(state: Dictionary) -> Color:
 
 
 func _apply_blend(node: Control, blend: int) -> void:
-	if blend == 0:
+	var mode := blend & 0xF
+	if mode == 0:
 		node.material = null
 		return
-	var material := CanvasItemMaterial.new()
-	match blend & 0xF:
-		1:
-			material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-		2:
-			material.blend_mode = CanvasItemMaterial.BLEND_MODE_SUB
-		3:
-			material.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
-		_:
-			material.blend_mode = CanvasItemMaterial.BLEND_MODE_MIX
-	node.material = material
+	if not _blend_materials.has(mode):
+		var material := CanvasItemMaterial.new()
+		match mode:
+			1:
+				material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+			2:
+				material.blend_mode = CanvasItemMaterial.BLEND_MODE_SUB
+			3:
+				material.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
+			_:
+				material.blend_mode = CanvasItemMaterial.BLEND_MODE_MIX
+		_blend_materials[mode] = material
+	node.material = _blend_materials[mode]
 
 
 ## Opcode 290. Args: [head, duration, lo, hi, v1, v2, v3]; the range is inclusive and may
@@ -839,21 +1008,26 @@ func _apply_effect(state: Dictionary, kind: int, duration: int, args: Array) -> 
 						"elapsed": 0,
 					}
 		8, 9, 10:
-			var current: Variant = state.get("pattern", null)
-			var base := 0
-			if current != null:
-				base = int(current.get("cell", 0))
-			state["pattern"] = {
-				"kind": kind,
-				"from": v[0],
-				"to": v[1],
-				"interval": maxi(1, duration),
-				"base": base,
-				"cell": base,
-				"direction": 1,
-				"done": false,
-				"elapsed": 0,
-			}
+			# action time 0 is the stop spelling; a one-frame loop would alternate
+			# cells at frame rate (picture.rs 1679-1686).
+			if duration <= 0:
+				state["pattern"] = null
+			else:
+				var current: Variant = state.get("pattern", null)
+				var base := int(state.get("pattern_index", 1))
+				if current != null:
+					base = int(current.get("base", base))
+				state["pattern"] = {
+					"kind": kind,
+					"from": v[0],
+					"to": v[1],
+					"interval": maxi(1, duration),
+					"base": base,
+					"cell": v[0],
+					"direction": 1,
+					"done": false,
+					"elapsed": 0,
+				}
 
 
 func _step_pattern(pattern: Dictionary) -> void:

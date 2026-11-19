@@ -720,10 +720,16 @@ public sealed class EventVm
                     break;
                 }
                 case 176:
-                    // exec.rs 170|176: unconditional loop heads. The jump table has
-                    // already pushed the loop via Control.Block; reaching here means
-                    // a hand-made Program without one, so fall through.
-                    inst.Pc++;
+                    // exec.rs 3150-3158: ContinueLoop closes the innermost loop. It is
+                    // not a block head (program.rs 293), so Program must not push a
+                    // frame here; a hand-made Program without one just advances.
+                    if (inst.Loops.Count == 0)
+                    {
+                        Host.Log($"[EventVm] continue-loop 176 without a loop at event {inst.EventId} pc {inst.Pc}");
+                        inst.Pc++;
+                        break;
+                    }
+                    CloseLoop(prog, inst, inst.Loops[^1].Block);
                     break;
                 case 130:
                 {
@@ -905,7 +911,10 @@ public sealed class EventVm
                     Host.Transition(_transitionKind, _transitionFlags);
                     inst.Wait.WaitForFrames((uint)frames);
                     inst.Pc++;
-                    break;
+                    // exec.rs 3131-3141 returns Signal::Blocked after arming the wait;
+                    // a plain break let the same frame run the instructions that were
+                    // supposed to be hidden behind the fade.
+                    return Signal.Blocked;
                 }
                 case 171:
                 {

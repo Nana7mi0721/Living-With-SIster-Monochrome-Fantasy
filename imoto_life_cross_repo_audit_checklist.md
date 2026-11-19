@@ -12,28 +12,28 @@
 ### 已完成
 
 - **AutoEvents**：最终采用**边沿触发** + `PrimeLatched`，仅 `RESUME_ON_LOAD={216,217}` 每次 replay；242/243 仍是 gated call only。原文“电平触发”与 Rust `auto_events.rs` 不符，**不要**再改成每帧重启。
-- **Opcode 176**：`Program` 仍把 170/176/179 作为循环头；`EventVm` 的 case 176 只 `Pc++` 落空（Rust `exec.rs:2384`）。原文“176 是 ContinueLoop”错误。
+- **Opcode 176**：2026-11-19 R13 复核推翻旧结论：Rust `program.rs:293` 只把 111/112/102/170/179 建成 `BlockKind::Loop` 头，**不含 176**；`exec.rs:3150-3158` 的 case 176 在有循环时 `close_loop`、否则 log 后 `pc+=1`。`Program.cs` 已删除 176 块头，`EventVm.cs` 的 case 176 已改为 `ContinueLoop`。原文“176 是循环头”和“176 只 Pc++”都不准确。
 - **150 / 151 / 130 / 140**：150 图片参数按掩码与 Self 段保留 raw，其余 EvalNum；151 frames 已 EvalNum；130 按 raw `target,x,y,map,options`；140 raw volume/frames 等。
 - **125 / 126**：125 低 8 位 AutoKeys + 2 帧 TTL + 每实例一次投递（C# 有意偏差，Rust 无 TTL）；126 直接用 host 位布局，不做 WOLF 位转换。
 - **211**：已实现预约队列、绝对 target 映射、前台空闲时每帧弹一个、`ResetSessionState` 清空。
-- **124**：EngineState 0/1/7/8/9/10/11/12/20/21 与 field 17/18；CharacterState 全字段（-2 为队伍领队）；PictureState field 2/3 **保持百分比**（Rust `game.rs:3302`，原文“真实像素”错误）。
+- **124**：EngineState 0/1/7/8/9/10/11/12/20/21 与 field 17/18；CharacterState 全字段（-2 为队伍领队）；PictureState field 0/1 = 坐标 + `effect_offset`（shift+shake），field 2/3 = **真实绘制宽高**（文本尺寸/窗口/纹理或分格 cell，Rust `game.rs:6809-6851`），field 8 对 hidden 返回 0。此前“2/3 保持百分比”是旧快照误读。
 - **121**：低 8 位编辑器 flag 全部无意义；0x600/0x700 恒等 current，0x800 abs(current)，0xC00 sqrt(max(value,0))*1000；600000+ 调用是绝对映射，不是相对 caller。
 - **CommonSelf**：只在实例结束/停止落库，不做实时广播。
 - **表现层**：160/161/162 TransitionState + GameRoot 黑色三角波 overlay；MapLayer 改 `MOUSE_FILTER_PASS` 且不再 `accept_event`。
-- **PictureStage**：150 fade/slide/erase-fade、hide、blend、独立 `scale_y`、负号固定屏层按原生尺寸（只有 `>=12000` 全屏）；290 per-picture 特效 0..5/7..10；`stage.tick()` 已接入每帧。
+- **PictureStage**：150 fade/slide/erase-fade、hide、blend、独立 `scale_y`、负号固定屏层按原生尺寸（只有 `>=12000` 全屏）；290 per-picture 特效 0..5/7..10；`stage.tick()` 已接入每帧。R13 补齐：tone 默认 `[100,100,100]` 且只读 `TONE_PRESENT`；同槽仅 kind/file/text 且位置相同时继承 shake/zoom/breath/pattern；`_hit_rect` 含 `effect_offset` 与真实尺寸；分格 sprite-sheet 用 AtlasTexture，PATTERN 真正切 cell；blend 材质缓存、MUL 强制 alpha=1；tick 只推进有动画的槽。162 转场等待已补 `return Signal.Blocked`。
 - **前端**：F11 全屏、F4 200 条消息回顾、回标题确认、`_modal_release_guard` 释放守卫。
-- **RNG**：默认仍固定 seed，`WOLF_LIVE_RNG` 为显式 opt-in 时钟扰动（对齐 Rust 默认确定、环境变量 opt-in 的策略）。
+- **RNG**：`WolfRng.FromEnvironment` 在 `WOLF_LIVE_RNG` 非 0 时用 `EventSeed` 时钟扰动；窗口启动默认调用 `vm.SetEventSeed(Time.get_ticks_usec())`，但判断必须用 `DisplayServer.get_name() != "headless"`（`OS.has_feature("headless")` 在 `--headless` 下仍为 false，误用会让 CI 随机化）；headless/CI 保持固定 seed，`WOLF_LIVE_RNG=0` 可关闭窗口扰动（对齐 Rust `M25_LIVE_UX.md`）。
 
 ### 已验证
 
-- `PictureStateTest` checks=82、`GameRootTest`、`LayerOrderTest`、`MapLayerTest` checks=18、`Smoke` / `ALL VM TESTS PASSED` 均通过。
+- `PictureStateTest` checks=96、`GameRootTest`、`LayerOrderTest`、`MapLayerTest` checks=18、`Smoke` / `ALL VM TESTS PASSED`、`SessionParityTest` checks=10 frames=418、route diff 149247/149247（100%）均通过。
 - 完整 headless 门禁 `reports/gate_headless.log`：`GODOT_GATE_OK`、`EXIT=0`、38/38；M13 slot1 `frames=34437`、slot8 `frames=34631`。
 - 渲染门禁 `reports/gate_render.log`（`LWsmf_RENDER=1`）：`GODOT_GATE_OK`、`EXIT=0`、38/38；M13 帧数与 headless 完全一致。
 - 注：上一轮门禁 M13 为 35217/35411，本轮少 780 帧；两轮断言均通过、route diff 100%，差异来源未逐帧定位。
 
 ### 仍未完成/已知偏差
 
-- 290 颜色/pattern 为近似，PATTERN 未真正切 sprite-sheet cell；150 keep-shift(0x400000) 与 relative draw 未做；
+- 290 颜色公式仍为近似（PATTERN 已通过 AtlasTexture 真正切 sprite-sheet cell）；150 keep-shift(0x400000) 与 relative draw 未做；
 - 125 TTL 偏差、211 参数扩展、140 tempo/loopPoint 属长期对齐项；
 - 未生成 release 包（本阶段明确不做）。
 

@@ -642,6 +642,9 @@ public partial class VmController : Node, IHost, IVmSession
 
     public int CharacterStateBridge(int target, int field) => CharacterState(target, field) ?? int.MinValue;
 
+    /// <summary>Windowed play opts into the live event RNG; headless fixtures stay fixed.</summary>
+    public void SetEventSeed(uint eventSeed) => Vm.Rng.SetEventSeed(eventSeed);
+
     public int KeyCode(uint mask) => KeyCodeAuto(mask, 0);
 
     /// <summary>

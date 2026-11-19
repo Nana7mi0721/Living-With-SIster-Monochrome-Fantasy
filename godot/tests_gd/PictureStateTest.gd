@@ -210,6 +210,55 @@ func _ready() -> void:
 	check(int(moved_state["scale"]) == 150 and int(moved_state["opacity"]) == 128,
 		"150 move still applies supplied scale/opacity")
 
+	# R13: picture_state fields 2/3 are the real drawing extent, not scale percent.
+	check(stage.picture_state(1201, 2) == int(stage._base_size_for(1201).x),
+		"field 2 returns the measured text width")
+	check(stage.picture_state(1201, 3) == int(stage._base_size_for(1201).y),
+		"field 3 returns the measured text height")
+
+	# Tone defaults to the WOLF neutral 100, not 255 (picture.rs TONE_NEUTRAL).
+	stage.draw_picture(1340, 0, "", "tone probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	check(stage._states[1340]["tone"] == [100, 100, 100], "unmarked tone defaults to 100")
+
+	# A different graphic in the same slot is a fresh picture: the old flash must not
+	# bleed into it (picture.rs 1369-1371 compares kind/file/text).
+	stage.draw_picture(1341, 0, "", "inherit a", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.effect(0, 5, [0, 5, 1341, 1341, 100, 100, 100])
+	stage.draw_picture(1341, 0, "", "inherit b", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	check((stage._states[1341]["effects"] as Array).is_empty(), "different text does not inherit effects")
+	check(int(stage._states[1341]["current"]["opacity"]) == 255, "fresh graphic starts fully opaque")
+
+	# Hidden slots never hover, even under the pointer.
+	check(stage.picture_state(1320, 8, Vector2(UiSkin.unit(100), UiSkin.unit(100))) == 0,
+		"hidden picture does not hover")
+
+	# 290 shift moves the reported origin and the hit box.
+	var shifted_x := int(stage._states[1302]["current"]["x"]) + 10
+	check(stage.picture_state(1302, 0) == shifted_x, "field 0 includes the 290 shift")
+
+	# A split sheet draws one cell and reports/renders that cell's extent.
+	var sheet: Texture2D = assets.texture("SystemFile/WindowBase.png")
+	if sheet != null:
+		stage.draw_picture(1360, 0, "SystemFile/WindowBase.png", "",
+			[0, 2, 1, 2, 255, 100, 100, 100, 0], 0, 0)
+		var cell_w: float = floor(sheet.get_size().x / 2.0)
+		check(absf(stage._base_sizes[1360].x - cell_w) < 0.01, "split sheet uses one cell width")
+		var sheet_holder: Control = stage._pictures.get(1360)
+		var rect: TextureRect = (sheet_holder.get_child(0) as TextureRect) if sheet_holder != null else null
+		check(rect != null and rect.texture is AtlasTexture and (rect.texture as AtlasTexture).region.position.x == cell_w,
+			"split sheet is cropped to the second cell")
+		check(stage.effect(8, 2, [0, 2, 1360, 1360, 1, 2, 0]), "290 pattern accepts a split picture")
+		check(int(stage._states[1360]["pattern"]["cell"]) == 1, "pattern starts at its first cell")
+		stage.tick()
+		stage.tick()
+		check(int(stage._states[1360]["pattern"]["cell"]) == 2, "pattern advances one held cell")
+		check((rect.texture as AtlasTexture).region.position.x == cell_w, "pattern renders its second cell")
+
+	# Multiply blend forces alpha 1 so RGB modulation is not also dimmed.
+	stage.draw_picture(1361, 0, "", "mul probe", [0, 1, 1, 1, 128, 100, 100, 100, 3], 0, 2)
+	var mul_holder: Control = stage._pictures.get(1361)
+	check(mul_holder != null and absf(mul_holder.modulate.a - 1.0) < 0.01, "multiply blend keeps alpha at 1")
+
 	if failures == 0:
 		print("PICTURE_STATE_TEST_OK checks=%d" % checks)
 		get_tree().quit(0)

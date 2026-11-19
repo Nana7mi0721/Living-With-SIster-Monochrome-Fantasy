@@ -76,6 +76,10 @@ func _ready() -> void:
 	add_child(stage)
 
 	_transition_rect = ColorRect.new()
+	# PictureStage draws its bands with z_as_relative=false at z_index 10..50, so a
+	# default z_index 0 overlay stayed behind every picture and the fade was invisible.
+	# 60 sits above the cursor band and below the 90+ front-end UI.
+	_transition_rect.z_index = 60
 	_transition_rect.color = Color(0, 0, 0, 0)
 	_transition_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_transition_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -146,11 +150,17 @@ func _ready() -> void:
 		phase = "failed"
 		push_error("GameRoot: programs.json missing")
 		return
+	# Rust boots windowed play with live event RNG (M25_LIVE_UX.md); headless/CI keeps
+	# the fixed stream so route and parity fixtures stay deterministic. WOLF_LIVE_RNG=0
+	# opts a windowed run back out.
+	if DisplayServer.get_name() != "headless" and OS.get_environment("WOLF_LIVE_RNG") != "0":
+		vm.SetEventSeed(Time.get_ticks_usec() & 0xFFFFFFFF)
 	if not session.StartTitle():
 		phase = "failed"
 		push_error("GameRoot: title event missing")
 		return
 	phase = session.Phase
+	_sync_play_ui()
 
 
 func _on_setup_completed() -> void:
@@ -218,6 +228,7 @@ func advance_frame() -> void:
 	_tick_transition()
 	frames = session.Frames
 	phase = session.Phase
+	_sync_play_ui()
 	# A fault stops the deterministic clock: replaying the frame would only refault and
 	# could walk state past the point the player is allowed to save (DECISIONS D-13).
 	if vm.Faulted:
@@ -600,9 +611,18 @@ func _build_play_ui() -> void:
 	_title_button.size = Vector2(120, 30)
 	_title_button.focus_mode = Control.FOCUS_NONE
 	_title_button.z_index = 90
+	_title_button.visible = false
 	_title_button.pressed.connect(request_return_to_title)
 	add_child(_title_button)
 	_build_title_confirm()
+
+
+## The return-to-title shortcut belongs to a running game only; on the title screen it
+## would sit on top of the native menu.
+func _sync_play_ui() -> void:
+	if _title_button == null:
+		return
+	_title_button.visible = not faulted and phase != "title" and phase != "setup" and phase != "failed"
 
 
 func _build_title_confirm() -> void:
@@ -853,6 +873,7 @@ func confirm_return_to_title() -> bool:
 	frames = 0
 	_accumulator = 0.0
 	phase = "title"
+	_sync_play_ui()
 	status("returned to title (progress abandoned, save untouched)")
 	return true
 
@@ -1000,6 +1021,7 @@ func restart_after_fault() -> bool:
 	frames = 0
 	_accumulator = 0.0
 	phase = "title"
+	_sync_play_ui()
 	_arm_modal_release_guard()
 	status("fault recovery: returned to title")
 	return true

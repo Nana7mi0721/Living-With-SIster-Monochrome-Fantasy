@@ -97,7 +97,6 @@ public sealed class Program
                 case 112:
                 case 102:
                 case 170:
-                case 176:
                 case 179:
                 {
                     var kind = opcode switch

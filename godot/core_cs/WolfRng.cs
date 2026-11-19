@@ -43,7 +43,11 @@ public sealed class WolfRng
         var live = Environment.GetEnvironmentVariable("WOLF_LIVE_RNG");
         if (string.IsNullOrEmpty(live) || live == "0")
             return new WolfRng();
-        return new WolfRng(unchecked((uint)Environment.TickCount64));
+        // The event stream is the one opcode randomness actually drains: seeding only
+        // _state left NextEventDraw on EventSeedDefault, so a live session still replayed
+        // the same draws. FromEventSeed seeds the state with the fixed retail default and
+        // the event stream with the clock, matching how the Rust side jitters its cursor.
+        return FromEventSeed(unchecked((uint)Environment.TickCount64));
     }
 
     public uint State => _state;
