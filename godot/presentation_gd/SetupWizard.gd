@@ -1,9 +1,9 @@
 extends Control
-## M5 first-run setup: when game_data is missing, explain the local conversion path,
-## validate the retail Data root, and run converter all in the background.
+## M5 first-run setup: when game_data is missing or incomplete, explain the local
+## conversion path, validate the retail Data root, and run converter all in the background.
 ##
-## The wizard never ships or copies retail assets; it only points at the player's own
-## unpacked Data tree and runs the local Python converter.
+## A complete release package ships game_data/ and work/all; this wizard is the fallback
+## for incomplete copies and only points at the player's own unpacked Data tree.
 
 signal setup_completed
 
@@ -147,12 +147,12 @@ func _build_ui() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "首次运行：需要生成 game_data"
+	title.text = "首次运行：需要生成或修复 game_data"
 	title.add_theme_font_size_override("font_size", 24)
 	column.add_child(title)
 
 	var intro := Label.new()
-	intro.text = "本重制版不附带原版素材。请选择你合法持有的原版 Data 目录（包含 BasicData 与 MapData 的解包目录），本地转换器只会生成兼容数据，不会上传或分发任何原版文件。"
+	intro.text = "本发布包已自带 game_data 与运行素材；如数据缺失或不完整，可选择你合法持有的原版 Data 目录（包含 BasicData 与 MapData）在本地重新生成。转换器不会上传或分发原版文件。"
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.custom_minimum_size = Vector2(0, 54)
 	column.add_child(intro)

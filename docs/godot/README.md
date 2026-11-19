@@ -1,8 +1,8 @@
 # Godot 重制版（现行入口）
 
-> 状态：**M0–M5 已完成（2026-11-18）**
+> 状态：**M0–M5 已完成（2026-11-18；2026-11-19 发布策略调整）**
 >
-> 最后整理：2026-11-18
+> 最后整理：2026-11-19
 >
 > 引擎：Godot 4.7.2 stable Mono (.NET 8.0)，Windows x64。
 > 本目录是 Godot 重制阶段的唯一技术规范与文档入口。
@@ -11,7 +11,7 @@
 
 | 顺序 | 文档 | 用途 |
 | --- | --- | --- |
-| 1 | [`DECISIONS.md`](DECISIONS.md) | 已拍板决策（D-01..D-52）、`.sav` 边界、技术栈口径 |
+| 1 | [`DECISIONS.md`](DECISIONS.md) | 已拍板决策（D-01..D-53）、`.sav` 边界、技术栈口径 |
 | 2 | [`PLAN.md`](PLAN.md) | M0–M5 总体路线、当前阶段任务与退出标准 |
 | 3 | [`M1_HANDOFF.md`](M1_HANDOFF.md) | **M1 验收交接**：切片运行链、存读档续跑、证据与边界 |
 | 4 | [`M0_HANDOFF.md`](M0_HANDOFF.md) | **M0 验收交接文档**：环境门禁、对账证据、`.sav` 导入、Oracle 对拍 |
@@ -20,7 +20,7 @@
 | 7 | [`LEGACY_RUST_AUDIT.md`](LEGACY_RUST_AUDIT.md) | 22 项旧 Rust 缺陷与 Godot 护栏 |
 | 8 | [`../../oracle/TRACE_CONTRACT.md`](../../oracle/TRACE_CONTRACT.md) | Rust Oracle 与 Godot EventVM 对拍格式规范 |
 | 9 | [`M5_HANDOFF.md`](M5_HANDOFF.md) | **M5 收口交接**：转换引导、发布包、性能证据、存档回退与 90 天 soak |
-| 10 | [`RELEASE.md`](RELEASE.md) | **M5-A 发布说明**：导出预设、打包脚本、版权审计与实测记录 |
+| 10 | [`RELEASE.md`](RELEASE.md) | **M5-A 发布说明**：导出预设、打包脚本、发布审计与实测记录 |
 | 11 | [`../README.md`](../README.md) | 全仓文档总索引 |
 
 ## 2. 当前技术结论
@@ -85,8 +85,9 @@
 - 转换器一键入口与安装引导：`converter/cli.py stage all` + `converter/convert.bat`；`SetupWizard.gd` 在数据缺失时接管 `GameRoot`，选择零售目录并后台转换后自动重载。真实 `work/all` 转换 `CONVERT_ALL_OK files=18 assets=276`，validate 69/69；`SETUP_WIZARD_TEST_OK`、`GAME_ROOT_TEST_OK`。
 - 存档槽回退：主档损坏回退 `.bak`，读档失败保留当前卧室，`recover_to_last_save()` 重建会话且不写新档；`SAVE_LOAD_TEST_OK 107/107`。
 - 性能：`PERFORMANCE_CORE_OK ... avg_ms=0.1257 p95=0.1213`；窗口 strict `PERFORMANCE_FRAME_STRICT_OK avg_ms=4.166 p95=4.167 fps=240.0`（RTX 5060 Laptop，OpenGL 3.3）。
-- 发布：`tools/package_release.sh` 已 staging `dist/Lwsmf-win64/`（`Lwsmf.exe` 109,372,928 B、`Lwsmf.pck` 84,588 B、`data_Lwsmf_windows_x86_64/` 186 files，总计 206 files / 189,666,077 bytes）；`RELEASE_PACKAGE_OK`、`COPYRIGHT_AUDIT_OK`；发布程序集已剔除 C# 测试类型（`Lwsmf.dll`=237,056 B，测试符号 0）。
+- 发布（2026-11-18 旧无素材包证据；2026-11-19 已改为自带素材）：`tools/package_release.sh` 已 staging `dist/Lwsmf-win64/`（`Lwsmf.exe` 109,372,928 B、`Lwsmf.pck` 84,588 B、`data_Lwsmf_windows_x86_64/` 186 files，总计 206 files / 189,666,077 bytes）；`RELEASE_PACKAGE_OK`、`COPYRIGHT_AUDIT_OK`；发布程序集已剔除 C# 测试类型（`Lwsmf.dll`=237,056 B，测试符号 0）。
 - 90 天 soak：修复 day83 CE305→CE239 战斗链，`SLEEP_SOAK_TEST_OK days=90 checks=181`。
+- 发布策略（2026-11-19）：取消“发布包不含原版素材”限制；`tools/package_release.sh` staging `game_data/` 与 `work/all/`（不含 `save/`），`tools/release_audit.py` 校验必需程序、数据和 manifest 全部 assets；本批未重新打包，`dist/` 仍是旧包。
 - 证据与边界详见 [`M5_HANDOFF.md`](M5_HANDOFF.md)。
 
 **历史任务清单（M2/M3，已完成）**

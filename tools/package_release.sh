@@ -55,6 +55,13 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   exit 2
 fi
 
+for required in game_data work/all; do
+  if [ ! -d "$ROOT/$required" ]; then
+    echo "ERROR: $required/ not found; release package must be self-contained." >&2
+    exit 2
+  fi
+done
+
 mkdir -p "$LOG_DIR" "$ROOT/dist"
 mkdir -p "$STAGE/game"
 
@@ -103,6 +110,22 @@ for extra in "$EXPORT_DIR"/*; do
   cp -a "$extra" "$STAGE/game/"
 done
 
+echo "== staging game data =="
+if [ ! -d "$ROOT/game_data" ]; then
+  echo "ERROR: game_data/ not found; run converter/cli.py stage all first." >&2
+  exit 1
+fi
+cp -a "$ROOT/game_data" "$STAGE/game_data"
+
+echo "== staging runtime assets =="
+if [ ! -d "$ROOT/work/all" ]; then
+  echo "ERROR: work/all/ not found; the release package requires runtime assets." >&2
+  exit 1
+fi
+mkdir -p "$STAGE/work"
+cp -a "$ROOT/work/all" "$STAGE/work/all"
+rm -rf "$STAGE/work/all/save"
+
 echo "== staging converter =="
 if [ -d "$ROOT/converter" ]; then
   cp -a "$ROOT/converter" "$STAGE/converter"
@@ -117,19 +140,29 @@ cat > "$STAGE/README.txt" <<'EOF'
 LWSMF Remake - Windows x64 发布包
 =================================
 
-本发布包只包含重制版程序、转换器与说明文件，不包含任何原版零售素材。
-请使用你合法持有的原版游戏数据，在本机运行转换器生成兼容数据。
+本发布包自带重制版程序、已转换的 game_data 与运行所需素材，正常游玩无需安装 Python，也无需先转换。
+如需重新转换或排查数据，可使用本包内的本地转换器。
 
 目录结构
 --------
 game\Lwsmf.exe      重制版主程序（Godot 4.7.2 .NET / Windows x64）
 game\Lwsmf.pck      游戏数据包
 game\data_Lwsmf_windows_x86_64\  .NET 运行时与程序集（必须与 Lwsmf.exe 同目录）
-converter\          本地数据转换器（Python 源码）
-game_data\          首次转换后生成；本发布包不附带
+game_data\          已转换的游戏数据（manifest/programs/database/map_tiles）
+work\all\          运行所需素材（BasicData/MapChip/MapData/SystemFile；不含 save）
+converter\          可选：本地数据转换器（Python 源码）
+reports\            可选：转换报告
 
 首次运行
 --------
+直接运行：
+
+   game\Lwsmf.exe
+
+如果 game_data 缺失或不完整，程序会打开首次运行向导；也可以手动执行下面的重新转换步骤。
+
+重新转换（可选）
+----------------
 1. 安装 Python 3.10+，确保命令行可运行 python。
 2. 准备原版 Data 目录（该目录应直接包含 BasicData\ 与 MapData\，不是游戏安装根目录）。
 3. 在本发布包根目录（与 game、converter 同级）打开命令提示符，执行：
@@ -137,16 +170,10 @@ game_data\          首次转换后生成；本发布包不附带
    converter\convert.bat --root "D:\你的原版\Data" --out game_data --reports reports
 
    也可以先 cd 到本目录后运行 converter\convert.bat，按提示填写路径。
-4. 看到 CONVERT_ALL_OK 后，运行：
-
-   game\Lwsmf.exe
+4. 看到 CONVERT_ALL_OK 后，重新运行 game\Lwsmf.exe。
 
 转换器只读取你本机指定的原版目录，在本地写入 game_data\ 与 reports\，不会上传或分发原版文件。
 如果提示缺少 BasicData\Game.dat 等文件，说明 --root 指向的不是解包后的 Data 目录。
-
-重新转换
---------
-可安全地重新运行 converter\convert.bat；它会覆盖 game_data\ 中由它生成的 JSON 文件。
 EOF
 
 echo "== swapping package into dist =="
@@ -158,7 +185,7 @@ fi
 mv "$STAGE" "$OUT"
 STAGE=""
 
-echo "== copyright audit =="
-"$PYTHON_BIN" "$ROOT/tools/copyright_audit.py" --dist "$OUT"
+echo "== release audit =="
+"$PYTHON_BIN" "$ROOT/tools/release_audit.py" --dist "$OUT"
 
 echo "RELEASE_PACKAGE_OK dist=$OUT"

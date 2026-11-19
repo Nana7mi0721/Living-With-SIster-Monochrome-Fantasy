@@ -40,7 +40,7 @@
 | 文档 | 状态 | 内容 |
 | --- | --- | --- |
 | [`godot/README.md`](godot/README.md) | 现行 | Godot 阶段唯一入口、当前状态、维护规则 |
-| [`godot/DECISIONS.md`](godot/DECISIONS.md) | 现行 | D-01..D-15 定稿决策、`.sav` 边界、废止旧方案 |
+| [`godot/DECISIONS.md`](godot/DECISIONS.md) | 现行 | D-01..D-53 定稿决策、`.sav` 边界、发布素材策略、废止旧方案 |
 | [`godot/PLAN.md`](godot/PLAN.md) | 现行 | M0–M5 路线、M0/M1 退出（已完成）、M2 入口 |
 | [`godot/M1_HANDOFF.md`](godot/M1_HANDOFF.md) | 现行 | M1 验收交接：切片运行链、存档续跑、证据与边界 |
 | [`godot/M0_HANDOFF.md`](godot/M0_HANDOFF.md) | 现行 | M0 验收交接：环境门限、对账、.sav 导入、Oracle 对拍 |
