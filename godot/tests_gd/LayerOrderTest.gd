@@ -57,13 +57,38 @@ func _ready() -> void:
 		if not is_equal_approx(centred.position.x, expected_x):
 			failures.append("anchor 1 x should be %.1f (got %.1f)" % [expected_x, centred.position.x])
 
-	# 6. A backdrop picture covers the whole screen regardless of its size.
-	var backdrop := stage.draw_picture(12000, 0, "", "text", [])
-	if backdrop != null:
-		if backdrop.size != PictureStage.SCREEN_SIZE:
-			failures.append("backdrop should be 1024x576 (got %s)" % str(backdrop.size))
-		if backdrop.position != Vector2.ZERO:
-			failures.append("backdrop should sit at the origin")
+	# 6. A system-numbered picture is placed by its own args, not by a full-screen rule:
+	#    the 606x35 title hint bar must keep its size (stretching it to 1024x576 turned it
+	#    into one giant glyph on the retail title screen).
+	var system := stage.draw_picture(12001, 0, "SystemFile/Missing.png", "", [0, 0, 0, 0, 255, 512, 520, 100], 1)
+	if system != null:
+		if system.size != Vector2(420, 140):
+			failures.append("a missing system asset keeps its placeholder size (got %s)" % str(system.size))
+		var expected_system_x := 512.0 - system.size.x * 0.5
+		if not is_equal_approx(system.position.x, expected_system_x):
+			failures.append("system picture should anchor on (512,520) (got %.1f)" % system.position.x)
+
+	# 7. Same-band pictures paint in slot-number order even when drawn out of order.
+	var late := stage.draw_picture(13000, 0, "", "LATE", [])
+	var early := stage.draw_picture(12050, 0, "", "EARLY", [])
+	if late != null and early != null:
+		var band := stage.layer(PictureStage.LAYER_SCENE_PICTURE)
+		if band.get_children().find(early) > band.get_children().find(late):
+			failures.append("band 10 must order pictures by slot number")
+
+	# 8. A window picture is an 18x18 nine-patch stretched to its box size (args 1/2), not a
+	#    sprite-sheet cut down to one 18x18 cell.
+	var panel := stage.draw_picture(12060, 0, "", "", [0, 300, 200, 0, 255, 100, 100, 100], 0, 3)
+	if panel == null or panel.get_child_count() == 0:
+		failures.append("window picture drew no child")
+	elif not (panel.get_child(0) is NinePatchRect):
+		failures.append("window picture must be a NinePatchRect")
+	else:
+		if panel.size != Vector2(300, 200):
+			failures.append("window picture size should come from args 1/2 (got %s)" % str(panel.size))
+		var nine := panel.get_child(0) as NinePatchRect
+		if nine.patch_margin_left != UiSkin.WINDOW_CORNER:
+			failures.append("window nine-patch margin should be %d" % UiSkin.WINDOW_CORNER)
 
 	if failures.is_empty():
 		print("LAYER_ORDER_TEST_OK")

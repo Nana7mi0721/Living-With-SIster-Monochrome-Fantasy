@@ -473,8 +473,10 @@ func _choice_position() -> Vector2:
 	var y := 220
 	var sys3: int = vm.GetSys(3)
 	var sys4: int = vm.GetSys(4)
-	x = sys3 if sys3 > 0 else x
-	y = sys4 if sys4 > 0 and sys4 < 900 else y
+	# WOLF's default is -1; any other negative value is a deliberate off-screen slot
+	# (Sys3/Sys4 = -1000 parks the window), so only -1 may fall back to the centre (L4).
+	x = sys3 if sys3 != -1 else x
+	y = sys4 if sys4 != -1 else y
 	return Vector2(x, y)
 
 
@@ -563,7 +565,8 @@ func _on_message_text() -> String:
 	return message.full_text
 
 
-## F5 saves, F9 loads, F11 toggles fullscreen, F4 opens the message backlog.
+## F5 saves, F9 loads, F11 toggles fullscreen, F4 opens the message backlog,
+## F12 opens the return-to-title confirm.
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey):
 		return
@@ -581,6 +584,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			close_backlog()
 		else:
 			open_backlog()
+		get_viewport().set_input_as_handled()
+		return
+	if key.keycode == KEY_F12:
+		# The shortcut used to be a permanent 120x30 button at (892,8), covering the
+		# top-right gold counter (audit L5); it is keyboard-only now.
+		request_return_to_title()
 		get_viewport().set_input_as_handled()
 		return
 	if key.keycode == KEY_ESCAPE and (_backlog_open or _title_confirm_open):
@@ -653,7 +662,9 @@ func _build_play_ui() -> void:
 func _sync_play_ui() -> void:
 	if _title_button == null:
 		return
-	_title_button.visible = not faulted and phase != "title" and phase != "setup" and phase != "failed"
+	# The button is kept for the confirm flow but never shown as a persistent overlay:
+	# it sat on the top-right gold counter during play (audit L5). F12 opens the confirm.
+	_title_button.visible = false
 
 
 func _show_toast(text: String) -> void:

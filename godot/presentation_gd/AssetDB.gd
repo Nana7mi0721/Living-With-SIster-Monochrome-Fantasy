@@ -17,6 +17,16 @@ const MEDIA_PREFIX := "media://"
 
 const DEFAULT_BUDGET_BYTES := 384 * 1024 * 1024
 const TEXTURE_EXTENSIONS: Array[String] = [".png", ".jpg", ".jpeg", ".bmp", ".webp"]
+## Bare-basename fallback order. Both the unpacked tree and the pack hold the same art in
+## several folders (SystemGraphic/TitleGraphic.png vs the WOLF sample in SystemFile,
+## hword/word_effect* vs picture/word_effect*), so first-walk-wins made the result depend
+## on directory iteration order (audit L7). Earlier entries win.
+const DIR_PRIORITY: Array[String] = [
+	"systemgraphic",
+	"hword",
+	"systemfile",
+	"picture",
+]
 const AUDIO_EXTENSIONS: Array[String] = [".ogg", ".mp3", ".wav"]
 
 var root_dir: String
@@ -30,10 +40,12 @@ var evictions: int = 0
 
 var _files: Dictionary = {}      # lowercase relative path -> absolute path
 var _basenames: Dictionary = {}  # lowercase basename -> absolute path
+var _basename_rank: Dictionary = {}  # lowercase basename -> DIR_PRIORITY rank of the winner
 var media_pak_path := ""
 var media_pak = null              # MediaPakReader, or null when no pack is present
 var _media_files: Dictionary = {}      # lowercase relative path -> canonical pack path
 var _media_basenames: Dictionary = {}  # lowercase basename -> canonical pack path
+var _media_basename_rank: Dictionary = {}  # lowercase basename -> rank of the winner
 var _cache: Dictionary = {}      # key -> Resource
 var _sizes: Dictionary = {}      # key -> bytes
 var _lru: Array[String] = []     # oldest first
@@ -69,6 +81,7 @@ static func fallback_root() -> String:
 func _index() -> void:
 	_files.clear()
 	_basenames.clear()
+	_basename_rank.clear()
 	var dir := DirAccess.open(root_dir)
 	if dir == null:
 		return
@@ -91,10 +104,19 @@ func _index_dir(dir: DirAccess, prefix: String) -> void:
 			var abs_path := root_dir.path_join(rel)
 			_files[rel.to_lower()] = abs_path
 			var base := entry.get_basename().to_lower()
-			if not _basenames.has(base):
+			var rank := _dir_rank(rel)
+			if not _basenames.has(base) or rank < int(_basename_rank.get(base, 1 << 30)):
 				_basenames[base] = abs_path
+				_basename_rank[base] = rank
 		entry = dir.get_next()
 	dir.list_dir_end()
+
+
+## 0 is the most preferred directory; DIR_PRIORITY.size() means "no preference".
+static func _dir_rank(logical: String) -> int:
+	var dir := logical.replace("\\", "/").get_base_dir().to_lower()
+	var index := DIR_PRIORITY.find(dir)
+	return index if index >= 0 else DIR_PRIORITY.size()
 
 
 ## Resolve a WOLF logical path to an absolute file, or "" when the install lacks it.
@@ -107,6 +129,14 @@ func resolve(logical: String) -> String:
 		return _files[key]
 	if _media_files.has(key):
 		return MEDIA_PREFIX + str(_media_files[key])
+	# Event 354 paints the word-effect art as Picture/word_effect*, but the retail art lives
+	# in hword/word_effect*. Try the sibling folder before the bare-basename fallback (L7).
+	if key.begins_with("picture/word_effect"):
+		var alias := "hword/" + key.get_file()
+		if _files.has(alias):
+			return _files[alias]
+		if _media_files.has(alias):
+			return MEDIA_PREFIX + str(_media_files[alias])
 	var base := key.get_basename()
 	for ext in TEXTURE_EXTENSIONS + AUDIO_EXTENSIONS:
 		if _files.has(base + ext):
@@ -202,6 +232,7 @@ func _open_media_pack() -> void:
 	media_pak_path = ""
 	_media_files.clear()
 	_media_basenames.clear()
+	_media_basename_rank.clear()
 	var candidates: Array[String] = []
 	var override := OS.get_environment("LWsmf_MEDIA_PAK")
 	if not override.is_empty():
@@ -218,8 +249,10 @@ func _open_media_pack() -> void:
 				var key := str(entry).to_lower()
 				_media_files[key] = str(entry)
 				var bare := key.get_file().get_basename()
-				if not _media_basenames.has(bare):
+				var rank := _dir_rank(key)
+				if not _media_basenames.has(bare) or rank < int(_media_basename_rank.get(bare, 1 << 30)):
 					_media_basenames[bare] = str(entry)
+					_media_basename_rank[bare] = rank
 			return
 		push_warning("AssetDB: cannot open media pack %s: %s" % [candidate, reader.LastError])
 

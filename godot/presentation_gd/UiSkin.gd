@@ -14,11 +14,15 @@ const BASE_FONT_SIZE := 20
 ## The unpacked tree ships no font, so fall back to a system CJK face. Order matters:
 ## Yu Gothic UI is the retail-feeling Windows face, MS Gothic its bitmap-era ancestor.
 const FONT_NAMES: Array[String] = [
+	# Simplified-Chinese first: the shipped script text is Chinese, and a Japanese face
+	# first would leave the retail HUD glyphs in their JP forms (audit L6).
+	"Microsoft YaHei UI",
+	"Microsoft YaHei",
+	"Noto Sans CJK SC",
 	"Yu Gothic UI",
 	"MS Gothic",
 	"Meiryo",
 	"Noto Sans CJK JP",
-	"Noto Sans CJK SC",
 	"Noto Sans",
 	"sans-serif",
 ]

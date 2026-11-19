@@ -9,8 +9,9 @@ extends Control
 ##        < Nameplate 30 < ChoicePanel 40 < ChoiceText 41 < Cursor 50
 ##
 ## Pictures are keyed by their WOLF slot number. Draw replaces the slot, Move updates it,
-## Erase/Hide frees it. System backdrops (number >= 12000) always cover the whole 1024x576
-## screen; a negative slot is a screen-layer picture but keeps its native texture size.
+## Erase/Hide frees it. Every slot keeps its native size scaled by the 150 percentage, the
+## same placement law as Picture::destination in the Rust engine; a system number is not a
+## full-screen rule of its own.
 
 const LAYER_MAP := 0
 const LAYER_SCENE_PICTURE := 10
@@ -128,6 +129,7 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 		push_warning("draw_picture %d band missing (layers=%d)" % [number, layers.size()])
 		return null
 	band.add_child(node)
+	_sort_band_by_number(band)
 	_pictures[number] = node
 	_base_sizes[number] = node.get_meta("base_size", node.size)
 	if redraws and not prev_state.is_empty():
@@ -255,6 +257,25 @@ func _effect_offset(state: Dictionary) -> Vector2:
 	return offset
 
 
+func _sort_band_by_number(band: Control) -> void:
+	# WOLF repaints a layer in slot-number order; tree order is insertion order, so a later
+	# redraw of a low-numbered backdrop would otherwise cover the sprites above it (L1).
+	var keys: Array[int] = []
+	var by_key: Dictionary = {}
+	for child in band.get_children():
+		var name := String(child.name)
+		if not name.begins_with("Pic"):
+			continue
+		var slot := name.substr(3).to_int()
+		keys.append(slot)
+		by_key[slot] = child
+	keys.sort()
+	var index := 0
+	for key in keys:
+		band.move_child(by_key[key], index)
+		index += 1
+
+
 func _base_size_for(number: int, cmd: Dictionary = {}) -> Vector2:
 	if cmd.is_empty():
 		cmd = _cmds.get(number, {})
@@ -264,7 +285,7 @@ func _base_size_for(number: int, cmd: Dictionary = {}) -> Vector2:
 	var kind: int = int(cmd.get("kind", 0))
 	if kind == 2 or kind == 4:
 		return Vector2(maxi(0, _arg(args, 1, 0)), maxi(0, _arg(args, 2, 0)))
-	if kind == 3 and _arg(args, 1, 0) > 2 and _arg(args, 2, 0) > 2:
+	if (kind == 3 or kind == 4) and _arg(args, 1, 0) > 0 and _arg(args, 2, 0) > 0:
 		return Vector2(_arg(args, 1, 0), _arg(args, 2, 0))
 	var holder: Control = _pictures.get(number)
 	if holder != null:
@@ -327,8 +348,6 @@ func _hit_rect(number: int) -> Rect2:
 		return Rect2()
 	var args: Array = cmd.get("args", [])
 	var anchor: int = int(cmd.get("anchor", 0))
-	if number >= 12000:
-		return Rect2(Vector2.ZERO, SCREEN_SIZE)
 	var base := _base_size_for(number, cmd)
 	if base == Vector2.ZERO:
 		return Rect2()
@@ -385,8 +404,8 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 		kind = 2 if file.is_empty() and not text.is_empty() else 0
 	var prev_state: Dictionary = _states.get(number, {}).duplicate(true)
 	var base := Vector2.ZERO
-	if kind == 2 or kind == 4:
-		base = Vector2(maxi(0, _arg(args, 1, 0)), maxi(0, _arg(args, 2, 0)))
+	if kind == 3 or kind == 4:
+		base = Vector2(maxi(0, _arg(args, 1, 18)), maxi(0, _arg(args, 2, 18)))
 	elif not file.is_empty() and assets != null and assets.texture(file) != null:
 		base = _texture_cell_size(assets.texture(file), _arg(args, 1, 1), _arg(args, 2, 1))
 	elif not text.is_empty():
@@ -405,22 +424,41 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 	holder.name = "Pic%d" % number
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+	var is_window := kind == 3 or kind == 4
 	var texture: Texture2D = null
 	if not file.is_empty() and assets != null:
 		texture = assets.texture(file)
-		# The retail title art (Picture/title01.jpg, SystemGraphic/TitleGraphic*.jpg) is not
-		# in the unpacked tree; fall back to the SystemFile title graphic.
-		if texture == null and (number >= 12000 or file.contains("SystemGraphic/Title")):
-			texture = assets.texture("SystemFile/TitleGraphic.png")
+		# The retail title art lives in Picture.wolf; an install whose unpacked tree lacks
+		# it still ships the SystemGraphic banner. The old fallback pointed at the 320x240
+		# WOLF editor sample in SystemFile, which painted the sample title (audit report).
+		if texture == null and not is_window \
+				and (number == 12000 or file.begins_with("Picture/title") or file.begins_with("SystemGraphic/Title")):
+			texture = assets.texture("SystemGraphic/TitleGraphic.png")
 
-	var backdrop := number >= 12000
 	var size: Vector2
-	if texture != null:
+	if is_window:
+		# 150 args[1]/args[2] are the window box width and height, not a sprite-sheet grid
+		# (picture.rs 19). The skin is the named file, or the default WindowBase panel,
+		# drawn as the retail 18x18 nine-patch so a 300x200 box is a panel, not an 18x18 dot.
+		size = Vector2(maxi(1, _arg(args, 1, 18)), maxi(1, _arg(args, 2, 18)))
+		if texture == null and assets != null:
+			texture = assets.texture(UiSkin.WINDOW_BASE)
+		var nine := NinePatchRect.new()
+		nine.texture = texture
+		nine.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		holder.add_child(nine)
+		nine.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var corner := UiSkin.WINDOW_CORNER
+		nine.patch_margin_left = corner
+		nine.patch_margin_top = corner
+		nine.patch_margin_right = corner
+		nine.patch_margin_bottom = corner
+	elif texture != null:
 		var columns := maxi(1, _arg(args, 1, 1))
 		var rows := maxi(1, _arg(args, 2, 1))
-		size = SCREEN_SIZE if backdrop else _texture_cell_size(texture, columns, rows)
+		size = _texture_cell_size(texture, columns, rows)
 		var shown := texture
-		if not backdrop and (columns > 1 or rows > 1):
+		if columns > 1 or rows > 1:
 			# File pictures use window-width/height as a sprite-sheet grid and RESERVED
 			# as the one-based cell (picture.rs merge_args 2116-2130).
 			var atlas := AtlasTexture.new()
@@ -432,11 +470,13 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 		holder.set_meta("split_rows", rows)
 		var rect := TextureRect.new()
 		rect.texture = shown
-		rect.size = size
 		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED if backdrop else TextureRect.STRETCH_KEEP_ASPECT
+		# The holder owns the placed size; every later 150 Move / 290 zoom / breath edit
+		# changes holder.size, so the child fills it instead of freezing the first draw (L2).
+		rect.stretch_mode = TextureRect.STRETCH_SCALE
 		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		holder.add_child(rect)
+		rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	elif not text.is_empty():
 		# Opcode 150 text pictures are the retail HUD (CE217 draws 6200 as "8:30" at
 		# x=140,y=7 anchored top-right). Rendering them as a placeholder swallowed the
@@ -452,21 +492,30 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 		label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		label.add_theme_font_override("font", UiSkin.font())
 		label.add_theme_font_size_override("font_size", int(layout["font_size"]))
+		# Retail picture text carries a contrasting rim; without it white tokens vanish
+		# against the white title art (audit L6).
+		label.add_theme_constant_override("outline_size", 2)
+		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
 		holder.add_child(label)
 	else:
 		size = Vector2(420, 140)
-		var box := ColorRect.new()
-		box.color = UiSkin.placeholder_color(number, file)
-		box.size = size
-		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		holder.add_child(box)
-		var label := Label.new()
-		label.text = "picture %d (text)" % number if file.is_empty() else "%s\n(missing asset)" % file
-		label.position = Vector2(10, 10)
-		label.size = size - Vector2(20, 20)
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.add_theme_font_size_override("font_size", 13)
-		holder.add_child(label)
+		# A missing asset must not paint an opaque block over the scene in a shipped
+		# build; the debug build keeps the visible box so authors notice (audit L6).
+		if OS.is_debug_build():
+			var box := ColorRect.new()
+			box.color = UiSkin.placeholder_color(number, file)
+			box.size = size
+			box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			holder.add_child(box)
+			var label := Label.new()
+			label.text = "picture %d (text)" % number if file.is_empty() else "%s\n(missing asset)" % file
+			label.position = Vector2(10, 10)
+			label.size = size - Vector2(20, 20)
+			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			label.add_theme_font_size_override("font_size", 13)
+			holder.add_child(label)
+		else:
+			push_warning("missing picture asset: %s (slot %d) left blank" % [file, number])
 
 	holder.set_meta("base_size", size)
 	_apply_picture_geometry(holder, number, file, args, anchor, size)
@@ -479,7 +528,6 @@ func _apply_picture_geometry(holder: Control, number: int, file: String, args: A
 	var y: int = UiSkin.unit(int(args[6])) if args.size() > 6 else 288
 	var scale_percent: int = UiSkin.unit(int(args[7])) if args.size() > 7 else 100
 	var scale_y_percent: int = int(args[16]) if args.size() > 16 else 100
-	var backdrop := number >= 12000
 	var base_size := known_size
 	if base_size == Vector2.ZERO:
 		# On a move the holder already sits at its scaled size; without the remembered
@@ -489,10 +537,9 @@ func _apply_picture_geometry(holder: Control, number: int, file: String, args: A
 	var mirrored := scale_percent < 0
 	var scale := 1.0 if scale_percent == 0 else absf(scale_percent) / 100.0
 	var scale_y := 1.0 if scale_y_percent == 0 else absf(scale_y_percent) / 100.0
-	# A backdrop always covers the whole logical screen, whatever its source size.
-	var final_size := SCREEN_SIZE if backdrop else base_size * Vector2(scale, scale_y)
+	var final_size := base_size * Vector2(scale, scale_y)
 	holder.size = final_size
-	holder.position = Vector2.ZERO if backdrop else UiSkin.anchor_position(anchor, x, y, final_size)
+	holder.position = UiSkin.anchor_position(anchor, x, y, final_size)
 	holder.modulate = Color(1, 1, 1, clampf(opacity, 0, 255) / 255.0)
 	# Mirroring the container covers text and placeholder slots too; a TextureRect-only
 	# flip left every non-texture picture unmirrored (R5-P2-07).
@@ -876,11 +923,10 @@ func _render_picture(number: int) -> void:
 	node.visible = true
 	var pose: Dictionary = state["current"]
 	var base: Vector2 = _base_sizes.get(number, state.get("base_size", Vector2.ZERO))
-	var backdrop := number >= 12000
 	var scale_x := 1.0 if int(pose.get("scale", 100)) == 0 else absf(float(pose.get("scale", 100))) / 100.0
 	var scale_y := 1.0 if int(pose.get("scale_y", 100)) == 0 else absf(float(pose.get("scale_y", 100))) / 100.0
-	var size := SCREEN_SIZE if backdrop else base * Vector2(scale_x, scale_y)
-	var position := Vector2.ZERO if backdrop else UiSkin.anchor_position(int(pose.get("anchor", 0)), int(pose["x"]), int(pose["y"]), size)
+	var size := base * Vector2(scale_x, scale_y)
+	var position := UiSkin.anchor_position(int(pose.get("anchor", 0)), int(pose["x"]), int(pose["y"]), size)
 	var zoom: Variant = state.get("zoom", null)
 	if zoom != null:
 		var z: Dictionary = zoom
