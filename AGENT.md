@@ -51,6 +51,7 @@ cargo build -q -p wolf-cli
 ./target/debug/wolf-cli.exe verify   # 预期 PASS 70, pending 0
 ```
 
+- 提交身份固定为仓库拥有者 `Nana7mi0721 <linxin070410@gmail.com>`：在仓库内执行 `git config user.name 'Nana7mi0721'` 与 `git config user.email 'linxin070410@gmail.com'`（或按命令传入 `git -c user.name='Nana7mi0721' -c user.email='linxin070410@gmail.com' commit ...`）；不要使用旧身份 `imoto lead <lead@imoto.local>`。
 - 提交信息用 `git commit -F work/_commit_*.txt`；**每次提交后必须立即推送**：`git -c credential.helper=wincred push origin master`（网络/凭据失败时保留本地提交并报告，不重写历史）。
 - 不跑 `git clean`；不杀用户/编辑器启动的进程；不通过 shell 启动 Godot。
 - 集成前 Lead 必须检查 `git status` / `git diff`，确认没有临时探针文件被误提交。
@@ -106,5 +107,5 @@ git worktree list
 
 ## 7. 协作授权与外部核实
 
-- **提交/推送无需逐次征求用户同意，且每次提交后直接推送**：Lead 在完成当前批次、通过验收门禁并检查 `git status` / `git diff` 后，可自行 commit，并在同一批次内立即 push；提交信息与分支沿用 §4。推送失败时保留本地提交，报告凭据或网络原因，不重写历史。
+- **提交/推送无需逐次征求用户同意，且每次提交后直接推送**：Lead 在完成当前批次、通过验收门禁并检查 `git status` / `git diff` 后，可自行 commit，并在同一批次内立即 push；提交身份与提交信息沿用 §4（作者/提交者统一为 `Nana7mi0721 <linxin070410@gmail.com>`）。推送失败时保留本地提交，报告凭据或网络原因，不重写历史。
 - **需要联网核实的问题默认交给用户用 Gemini 调研**：Lead 不自行展开大规模网络检索；把问题、已核实事实、需要的证据和期望输出写成清单交给用户。仅当问题能在本仓库、Rust Oracle 或已抓取资料内确认时才自行查证。
