@@ -1,0 +1,2 @@
+known type counts: [('CDataBase.json', 25), ('DataBase.json', 24), ('SysDatabase.json', 26)]
+total 250 in closure=1664 runtime-only-label=0

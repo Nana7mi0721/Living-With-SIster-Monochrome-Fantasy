@@ -1,0 +1,17 @@
+M3: battle dump tooling + CE242/CE243 gated scheduler + slice A verified
+
+- wolf-cli: new `dump` subcommand drives a real Game/Databases with
+  --var/--self/--db/--print-var/--print-self, so database row-count writes
+  and variable values are observable (run --event's TraceHost only counts).
+- wolf-vm: add Vm::instance_mut and re-export InstanceId (needed to seed a
+  coroutine's self variables from the CLI).
+- wolf-game auto_events: GATED_CALL_ONLY = [242, 243] brings the condvar-gated
+  run_condition==0 battle events into the edge-triggered scheduler
+  (tracked 96 -> 98; both dormant at boot because 2000350 == 0). Tests updated.
+- docs: HANDOFF_M3 section 5 item 3 and BATTLE.md now record the empirical
+  result: slice A PASS (CE189's six row=-2 writes resolve through labels to
+  types 10-15; row_count == SV28 == 77; zero unanswered). Slice B is BLOCKED:
+  CE188 parks in CE65 player-command input and 17 equipment/enemy label columns
+  are missing from CDataBase.json, so 2000352 is never written. Slice C visuals
+  already render (61.4% non-black, work/out/battle.png). BASELINE auto_events
+  tracked 98 with gated_call_only [242,243].

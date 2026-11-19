@@ -1,0 +1,18 @@
+BasicData: 149 files total
+icons: 134 files, 168667 B
+non-icon files (15):
+     5532175 CommonEvent.dat
+      174721 DataBase.project
+      170977 CDataBase.project
+       94967 DataBase.dat
+       81832 CDataBase.dat
+       60786 TileSetData.dat
+       35972 SysDatabase.project
+       29273 Game.dat
+       15400 apple.png
+       11607 SysDatabase.dat
+        3354 EncodedIconList.xxxxx
+        2417 SysDataBaseBasic.project
+         438 SysDataBaseBasic.dat
+         416 MapTree.dat
+          75 MapTreeOpenStatus.dat

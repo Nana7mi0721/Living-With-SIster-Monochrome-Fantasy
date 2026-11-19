@@ -1,0 +1,13 @@
+=== code 210/211 with MAGIC arg[0] (dynamic event id) ===
+CE70 [X[移]パラメータ増減] pc95 code210 args=[1600010, 0] strs=[]
+CE118 [X[移]アイテム使用効果処理] pc237 code211 args=[1600012, 0] strs=[]
+CE119 [X[移]技能使用効果処理] pc377 code211 args=[1600012, 0] strs=[]
+CE127 [X[移]メニュー起動] pc136 code210 args=[1600024, 0] strs=[]
+CE127 [X[移]メニュー起動] pc148 code210 args=[1600024, 0] strs=[]
+CE127 [X[移]メニュー起動] pc158 code210 args=[1600024, 0] strs=[]
+CE127 [X[移]メニュー起動] pc168 code210 args=[1600024, 0] strs=[]
+CE165 [X[戦]┗単体処理] pc50 code210 args=[1600011, 0] strs=[]
+CE168 [X[戦]変身判定] pc104 code210 args=[1600048, 0] strs=[]
+CE183 [X[戦]技能エフェクト描画] pc24 code210 args=[1600037, 0] strs=[]
+CE188 [X◆戦闘処理] pc254 code210 args=[1600030, 0] strs=[]
+CE197 [X┃┗◆１行動ループ] pc92 code210 args=[1600012, 0] strs=[]

@@ -1,0 +1,44 @@
+#10     2 site(s) in 2 event(s): {'c549': 1, 'm2': 1}
+    c549 slot 63   Erase kind=0 args=[20] strs=[]
+    m2 slot 28   Draw  kind=0 args=[0, 1, 1, 1, 255, 0, 0, 100, 0] strs=['Kagura/bg.png']
+
+#11     2 site(s) in 1 event(s): {'c549': 2}
+    c549 slot 6    Draw  kind=0 args=[20, 1, 1, 1, 255, 0, 0, 100, 0] strs=['Kagura/Kagura.png']
+    c549 slot 20   Erase kind=0 args=[20] strs=[]
+
+#12     2 site(s) in 1 event(s): {'c549': 2}
+    c549 slot 24   Draw  kind=0 args=[20, 1, 1, 1, 255, 0, 0, 100, 0] strs=['Kagura/Disc.png']
+    c549 slot 38   Erase kind=0 args=[20] strs=[]
+
+#13     2 site(s) in 1 event(s): {'c549': 2}
+    c549 slot 44   Draw  kind=0 args=[20, 1, 1, 1, 255, 0, 0, 100, 0] strs=['Kagura/inusuku.png']
+    c549 slot 58   Erase kind=0 args=[20] strs=[]
+
+#12000  3 site(s) in 1 event(s): {'m2': 3}
+    m2 slot 75   Draw  kind=0 args=[0, 1, 1, 1, 255, 0, 0, 100, 0] strs=['SystemGraphic/TitleGraphic.png']
+    m2 slot 77   Draw  kind=0 args=[0, 1, 1, 1, 255, 0, 0, 100, 0] strs=['Picture/title01.jpg']
+    m2 slot 95   Erase kind=0 args=[30, 5] strs=[]
+
+#12001  2 site(s) in 1 event(s): {'m2': 2}
+    m2 slot 78   Draw  kind=0 args=[0, 1, 1, 1, 255, 512, 520, 100, 0] strs=['SystemFile/Button01.png']
+    m2 slot 94   Erase kind=0 args=[0] strs=[]
+
+#12500  4 site(s) in 2 event(s): {'c94': 2, 'c131': 2}
+    c94 slot 128  Erase kind=0 args=[0, 0, 0, 12502] strs=[]
+    c94 slot 251  Draw  kind=4 args=[0, 300, 200, 1, 255, 855, 200, 100, 0, 1600008, 33554432, 8, 0, 100, 100, 100] strs=[]
+    c131 slot 260  Erase kind=0 args=[0, 0, 0, 12502] strs=[]
+    c131 slot 278  Erase kind=0 args=[0, 0, 0, 12502] strs=[]
+
+#12501  1 site(s) in 1 event(s): {'c94': 1}
+    c94 slot 252  Draw  kind=2 args=[0, 1, 1, 1, 255, 715, 115, 100, 0, 0, 33554432, 8, 0, 100, 100, 100] strs=['欢迎来到Ver2.0DLC！\n烦请注意\n存档的第一栏\n为自动存档所使用\n第一栏已有存档数据时，\n请先读取该存档，\n重新保存至合适的位置。']
+
+#12502  8 site(s) in 1 event(s): {'c131': 8}
+    c131 slot 77   Erase kind=1 args=[0] strs=[]
+    c131 slot 81   Draw  kind=1 args=[0, 1, 1, 1, 255, 855, 430, 25, 0, 3000005] strs=[]
+    c131 slot 107  Erase kind=1 args=[0] strs=[]
+    c131 slot 111  Draw  kind=1 args=[0, 1, 1, 1, 255, 855, 430, 25, 0, 3000005] strs=[]
+    c131 slot 137  Erase kind=1 args=[0] strs=[]
+    c131 slot 141  Draw  kind=1 args=[0, 1, 1, 1, 255, 855, 430, 25, 0, 3000005] strs=[]
+    c131 slot 167  Erase kind=1 args=[0] strs=[]
+    c131 slot 171  Draw  kind=1 args=[0, 1, 1, 1, 255, 855, 430, 25, 0, 3000005] strs=[]
+

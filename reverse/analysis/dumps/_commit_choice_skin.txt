@@ -1,0 +1,14 @@
+M2: paint the choice window with the grey SystemFile skin
+
+The choice panel took its default skin from SystemGraphic/WindowBase.png, a
+navy-gradient sample asset that no script or SysDatabase row references. That
+made every prompt purple.
+
+The game's SysDatabase window-image row names SystemFile/WindowBase.png for the
+choice window ("x option-window image"). Switch window::SKIN to that file; the
+18x18 nine-slice still has a 3 px border and CORNER stays 3.
+
+Also correct the OPCODE_101 / M2_SLICE / UNVERIFIED notes that had mistaken our
+own SystemGraphic render for a retail screenshot, and add a unit test pinning
+the default skin. Verified with capture --event 4 (map SampleMapA): the panel is
+now a translucent grey at (27,31,32) over black instead of navy.

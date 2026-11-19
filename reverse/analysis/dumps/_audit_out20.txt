@@ -1,0 +1,23 @@
+live assets: 2689 files / 608156264 B
+  images: 2506 files / 312870884 B
+  audio : 183 files / 295285380 B
+  other : 0 files / 0 B
+
+image pixels: total 1106149163 px (1.11 Gpx) across 2506 readable images, 0 unreadable
+   1024^2 atlas =  1048576 px  -> needs 1054.9 sheets
+   2048^2 atlas =  4194304 px  -> needs  263.7 sheets
+   4096^2 atlas = 16777216 px  -> needs   65.9 sheets
+   8192^2 atlas = 67108864 px  -> needs   16.5 sheets
+  16384^2 atlas = 268435456 px  -> needs    4.1 sheets
+
+biggest images by pixels:
+  11501568 px (1536x7488) BattleEffect/warp_640.png
+   7776000 px (3600x2160) BattleEffect/pipo-btleffect155.png
+   6656000 px (1024x6500) cg/staff.png
+   5308416 px (9216x576) DLC_data/dlc_kasumi07_kuchi.png
+   5308416 px (9216x576) DLC_data/dlc_kasumi04_eye.png
+   4718592 px (8192x576) DLC_data/dlc_kasumi06_eye.png
+   4718592 px (8192x576) DLC_data/dlc_kasumi04_kuchi.png
+   4718592 px (8192x576) DLC_data/dlc_imouto10_kuchi.png
+   4128768 px (7168x576) DLC_data/dlc_kasumi06_kuchi.png
+   4128768 px (7168x576) DLC_data/dlc_kasumi05_eye.png

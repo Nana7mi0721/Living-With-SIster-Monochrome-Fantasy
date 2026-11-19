@@ -1,0 +1,4214 @@
+{
+ "maps": {
+  "TitleMap.mps": {
+   "w": 53,
+   "h": 30,
+   "tileset": 4,
+   "has_tiles": true,
+   "layers": 3,
+   "title": "なし",
+   "events": [
+    {
+     "id": 2,
+     "name": "新タイトル用イベント",
+     "x": 24,
+     "y": 9,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 1,
+       "conds": [],
+       "cmds": 133,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    }
+   ],
+   "slots": 133
+  },
+  "SampleMapA.mps": {
+   "w": 64,
+   "h": 36,
+   "tileset": 4,
+   "has_tiles": true,
+   "layers": 3,
+   "title": "なし",
+   "events": [
+    {
+     "id": 0,
+     "name": "ニューゲーム処理",
+     "x": 30,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 1000000,
+         "value": 0,
+         "var_name": "self0",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 846,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 1,
+     "name": "妹クリック判定（夜",
+     "x": 63,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000069,
+         "value": 1,
+         "var_name": "v69",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000025,
+         "value": 0,
+         "var_name": "v25",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000026,
+         "value": 0,
+         "var_name": "v26",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000302,
+         "value": 0,
+         "var_name": "v302",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 113,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000065,
+         "value": 1,
+         "var_name": "v65",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000025,
+         "value": 0,
+         "var_name": "v25",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000026,
+         "value": 0,
+         "var_name": "v26",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000340,
+         "value": 0,
+         "var_name": "v340",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 17,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 2,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000064,
+         "value": 1,
+         "var_name": "v64",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000025,
+         "value": 0,
+         "var_name": "v25",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000026,
+         "value": 0,
+         "var_name": "v26",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000302,
+         "value": 0,
+         "var_name": "v302",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 17,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1,
+      2
+     ],
+     "dead": [],
+     "combos": 2187
+    },
+    {
+     "id": 2,
+     "name": "妹クリック判定",
+     "x": 63,
+     "y": 1,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000065,
+         "value": 1,
+         "var_name": "v65",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 15,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000064,
+         "value": 1,
+         "var_name": "v64",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000167,
+         "value": 0,
+         "var_name": "v167",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 15,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 27
+    },
+    {
+     "id": 3,
+     "name": "ロード後の処理",
+     "x": 0,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000302,
+         "value": 2,
+         "var_name": "v302",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 65,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000302,
+         "value": 2,
+         "var_name": "v302",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000065,
+         "value": 1,
+         "var_name": "v65",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 48,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 12
+    },
+    {
+     "id": 4,
+     "name": "メニュー処理",
+     "x": 30,
+     "y": 3,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000068,
+         "value": 1,
+         "var_name": "v68",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000069,
+         "value": 1,
+         "var_name": "v69",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000062,
+         "value": 0,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 342,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000298,
+         "value": 1,
+         "var_name": "v298",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 28,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 2,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000067,
+         "value": 1,
+         "var_name": "v67",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000302,
+         "value": 0,
+         "var_name": "v302",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000464,
+         "value": 0,
+         "var_name": "v464",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 66,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 3,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000057,
+         "value": 1,
+         "var_name": "v57",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000302,
+         "value": 0,
+         "var_name": "v302",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000464,
+         "value": 0,
+         "var_name": "v464",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 66,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 4,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000063,
+         "value": 1,
+         "var_name": "v63",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000062,
+         "value": 0,
+         "var_name": "v62",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000464,
+         "value": 0,
+         "var_name": "v464",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000060,
+         "value": 0,
+         "var_name": "v60",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 116,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "dead": [],
+     "combos": 59049
+    },
+    {
+     "id": 5,
+     "name": "デバック用",
+     "x": 63,
+     "y": 33,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 1000000,
+         "value": 9,
+         "var_name": "self0",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 1100006,
+         "value": 957,
+         "var_name": "self100006",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 387,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 16
+    },
+    {
+     "id": 6,
+     "name": "スキル取得関係",
+     "x": 2,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000026,
+         "value": 1,
+         "var_name": "v26",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000615,
+         "value": 0,
+         "var_name": "v615",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 1167,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000026,
+         "value": 1,
+         "var_name": "v26",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000295,
+         "value": 2,
+         "var_name": "v295",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 1053,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 36
+    },
+    {
+     "id": 7,
+     "name": "戦判定表示",
+     "x": 63,
+     "y": 3,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000340,
+         "value": 1,
+         "var_name": "v340",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000350,
+         "value": 0,
+         "var_name": "v350",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000343,
+         "value": 0,
+         "var_name": "v343",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000035,
+         "value": 0,
+         "var_name": "v35",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 359,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 81
+    },
+    {
+     "id": 8,
+     "name": "戦クリック処理",
+     "x": 63,
+     "y": 4,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000340,
+         "value": 1,
+         "var_name": "v340",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000350,
+         "value": 0,
+         "var_name": "v350",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 3,
+         "var": 2000035,
+         "value": 0,
+         "var_name": "v35",
+         "op_name": "<="
+        }
+       ],
+       "cmds": 683,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 1100009,
+         "value": 1,
+         "var_name": "self100009",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 3,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 2,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 1100009,
+         "value": 2,
+         "var_name": "self100009",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 3,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 3,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 1100009,
+         "value": 3,
+         "var_name": "self100009",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 3,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 4,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 1100009,
+         "value": 4,
+         "var_name": "self100009",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 3,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 5,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 1100009,
+         "value": 5,
+         "var_name": "self100009",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 3,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 6,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 1100009,
+         "value": 6,
+         "var_name": "self100009",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 3,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 7,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 1100009,
+         "value": 7,
+         "var_name": "self100009",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 3,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 8,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 1100009,
+         "value": 8,
+         "var_name": "self100009",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 5,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+     ],
+     "dead": [],
+     "combos": 270
+    },
+    {
+     "id": 9,
+     "name": "■深夜UI表示1",
+     "x": 0,
+     "y": 35,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000140,
+         "value": 0,
+         "var_name": "v140",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000164,
+         "value": 0,
+         "var_name": "v164",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000364,
+         "value": 0,
+         "var_name": "v364",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 611,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 2,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 236,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 2,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 3,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 185,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 3,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 4,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 141,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 4,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 5,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 287,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 5,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 6,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 91,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 6,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 7,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 208,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 7,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 8,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 128,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 8,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 9,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 197,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 9,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 10,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 256,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "dead": [],
+     "combos": 324
+    },
+    {
+     "id": 10,
+     "name": "■深夜UI表示2",
+     "x": 1,
+     "y": 35,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 11,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 290,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 12,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 90,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 2,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 13,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 89,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 3,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 14,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 86,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 4,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 15,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 88,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 5,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 16,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 87,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+     ],
+     "dead": [],
+     "combos": 9
+    },
+    {
+     "id": 11,
+     "name": "■深夜UI判定",
+     "x": 3,
+     "y": 35,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000168,
+         "value": 0,
+         "var_name": "v168",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000364,
+         "value": 0,
+         "var_name": "v364",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 2613,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 0,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000302,
+         "value": 1,
+         "var_name": "v302",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 1,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 81
+    },
+    {
+     "id": 12,
+     "name": "ゲームオーバー",
+     "x": 29,
+     "y": 3,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000298,
+         "value": 1,
+         "var_name": "v298",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 8,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 13,
+     "name": "デバック用だよ",
+     "x": 63,
+     "y": 35,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [],
+       "cmds": 2,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 14,
+     "name": "■深夜UI処理",
+     "x": 4,
+     "y": 35,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        }
+       ],
+       "cmds": 143,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 0,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000302,
+         "value": 1,
+         "var_name": "v302",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 1,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 9
+    },
+    {
+     "id": 15,
+     "name": "サブメニュー処理",
+     "x": 1,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000009,
+         "value": 0,
+         "var_name": "v9",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000067,
+         "value": 0,
+         "var_name": "v67",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000063,
+         "value": 0,
+         "var_name": "v63",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000057,
+         "value": 0,
+         "var_name": "v57",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 295,
+       "fresh": true,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000009,
+         "value": 0,
+         "var_name": "v9",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000067,
+         "value": 2,
+         "var_name": "v67",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000063,
+         "value": 0,
+         "var_name": "v63",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 268,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 2,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000009,
+         "value": 0,
+         "var_name": "v9",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000057,
+         "value": 2,
+         "var_name": "v57",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000063,
+         "value": 0,
+         "var_name": "v63",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 268,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 3,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000060,
+         "value": 0,
+         "var_name": "v60",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 45,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0,
+      1,
+      2,
+      3
+     ],
+     "dead": [],
+     "combos": 2025
+    },
+    {
+     "id": 16,
+     "name": "■お触り判定設定",
+     "x": 6,
+     "y": 35,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        }
+       ],
+       "cmds": 493,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 17,
+     "name": "カーソル変更",
+     "x": 3,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        }
+       ],
+       "cmds": 189,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 18,
+     "name": "■■処理さわる右",
+     "x": 0,
+     "y": 33,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 5,
+         "var": 2000061,
+         "value": 32,
+         "var_name": "v61",
+         "op_name": "!="
+        },
+        {
+         "slot": 2,
+         "op": 5,
+         "var": 2000061,
+         "value": 33,
+         "var_name": "v61",
+         "op_name": "!="
+        }
+       ],
+       "cmds": 1781,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 0,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000302,
+         "value": 1,
+         "var_name": "v302",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 1,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 45
+    },
+    {
+     "id": 19,
+     "name": "□深夜表情の表示",
+     "x": 0,
+     "y": 31,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000165,
+         "value": 1,
+         "var_name": "v165",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000125,
+         "value": 0,
+         "var_name": "v125",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000126,
+         "value": 0,
+         "var_name": "v126",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000166,
+         "value": 0,
+         "var_name": "v166",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 982,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 81
+    },
+    {
+     "id": 20,
+     "name": "■■深夜処理衣服",
+     "x": 1,
+     "y": 33,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        }
+       ],
+       "cmds": 2003,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 21,
+     "name": "■■処理さわる左",
+     "x": 2,
+     "y": 33,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000364,
+         "value": 0,
+         "var_name": "v364",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 1484,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 0,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000302,
+         "value": 1,
+         "var_name": "v302",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 1,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 27
+    },
+    {
+     "id": 22,
+     "name": "■中央クリック処理",
+     "x": 7,
+     "y": 35,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000060,
+         "value": 0,
+         "var_name": "v60",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 3,
+         "var": 2000138,
+         "value": 99,
+         "var_name": "v138",
+         "op_name": "<="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000139,
+         "value": 0,
+         "var_name": "v139",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 2631,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000060,
+         "value": 6,
+         "var_name": "v60",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000139,
+         "value": 0,
+         "var_name": "v139",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 275,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 2,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000124,
+         "value": 1,
+         "var_name": "v124",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000139,
+         "value": 0,
+         "var_name": "v139",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 327,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 3,
+       "trigger": 0,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000302,
+         "value": 1,
+         "var_name": "v302",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 1,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1,
+      2,
+      3
+     ],
+     "dead": [],
+     "combos": 1944
+    },
+    {
+     "id": 23,
+     "name": "■例外処理監視",
+     "x": 9,
+     "y": 35,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000064,
+         "value": 1,
+         "var_name": "v64",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000060,
+         "value": 0,
+         "var_name": "v60",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000302,
+         "value": 0,
+         "var_name": "v302",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 123,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 27
+    },
+    {
+     "id": 24,
+     "name": "■例外処理実行",
+     "x": 10,
+     "y": 35,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000060,
+         "value": 2,
+         "var_name": "v60",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 5,
+         "var": 2000060,
+         "value": 1,
+         "var_name": "v60",
+         "op_name": "!="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000124,
+         "value": 0,
+         "var_name": "v124",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 152,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000060,
+         "value": 3,
+         "var_name": "v60",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 5,
+         "var": 2000060,
+         "value": 1,
+         "var_name": "v60",
+         "op_name": "!="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000124,
+         "value": 0,
+         "var_name": "v124",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 712,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 2,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000060,
+         "value": 5,
+         "var_name": "v60",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000124,
+         "value": 0,
+         "var_name": "v124",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000460,
+         "value": 0,
+         "var_name": "v460",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 192,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 3,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000060,
+         "value": 6,
+         "var_name": "v60",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 24,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 4,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000060,
+         "value": 4,
+         "var_name": "v60",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 5,
+         "var": 2000060,
+         "value": 1,
+         "var_name": "v60",
+         "op_name": "!="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000124,
+         "value": 0,
+         "var_name": "v124",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 266,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 5,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000060,
+         "value": 4,
+         "var_name": "v60",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 5,
+         "var": 2000437,
+         "value": 1,
+         "var_name": "v437",
+         "op_name": "!="
+        },
+        {
+         "slot": 2,
+         "op": 1,
+         "var": 2000124,
+         "value": 1,
+         "var_name": "v124",
+         "op_name": ">="
+        }
+       ],
+       "cmds": 158,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 6,
+       "trigger": 0,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000060,
+         "value": 4,
+         "var_name": "v60",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 5,
+         "var": 2000060,
+         "value": 1,
+         "var_name": "v60",
+         "op_name": "!="
+        },
+        {
+         "slot": 2,
+         "op": 1,
+         "var": 2000124,
+         "value": 1,
+         "var_name": "v124",
+         "op_name": ">="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 1000000,
+         "value": 99,
+         "var_name": "self0",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 251,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+     ],
+     "dead": [],
+     "combos": 1152
+    },
+    {
+     "id": 25,
+     "name": "深夜終了処理",
+     "x": 63,
+     "y": 34,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000140,
+         "value": 0,
+         "var_name": "v140",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000060,
+         "value": 0,
+         "var_name": "v60",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000364,
+         "value": 0,
+         "var_name": "v364",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000123,
+         "value": 0,
+         "var_name": "v123",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 34,
+       "fresh": true,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000123,
+         "value": 1,
+         "var_name": "v123",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000437,
+         "value": 0,
+         "var_name": "v437",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000469,
+         "value": 0,
+         "var_name": "v469",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 26,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 2,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000123,
+         "value": 1,
+         "var_name": "v123",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000437,
+         "value": 0,
+         "var_name": "v437",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000139,
+         "value": 1,
+         "var_name": "v139",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000469,
+         "value": 1,
+         "var_name": "v469",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 26,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0,
+      1,
+      2
+     ],
+     "dead": [],
+     "combos": 3888
+    },
+    {
+     "id": 26,
+     "name": "■■挿入浅い",
+     "x": 4,
+     "y": 33,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        }
+       ],
+       "cmds": 1507,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 27,
+     "name": "■■挿入深い",
+     "x": 5,
+     "y": 33,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        }
+       ],
+       "cmds": 2314,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 28,
+     "name": "■■挿入アナル",
+     "x": 6,
+     "y": 33,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        }
+       ],
+       "cmds": 1864,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 29,
+     "name": "パンツアイコン表示",
+     "x": 0,
+     "y": 29,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000439,
+         "value": 0,
+         "var_name": "v439",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000069,
+         "value": 1,
+         "var_name": "v69",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000295,
+         "value": 0,
+         "var_name": "v295",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000627,
+         "value": 0,
+         "var_name": "v627",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 18,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 81
+    },
+    {
+     "id": 30,
+     "name": "攻撃メータ処理",
+     "x": 1,
+     "y": 29,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000305,
+         "value": 1,
+         "var_name": "v305",
+         "op_name": ">="
+        }
+       ],
+       "cmds": 51,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000306,
+         "value": 1,
+         "var_name": "v306",
+         "op_name": ">="
+        }
+       ],
+       "cmds": 50,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 9
+    },
+    {
+     "id": 31,
+     "name": "深夜セーブ表示",
+     "x": 63,
+     "y": 5,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000127,
+         "value": 1,
+         "var_name": "v127",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 2,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000110,
+         "value": 1,
+         "var_name": "v110",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 2,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 2,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000110,
+         "value": 0,
+         "var_name": "v110",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000127,
+         "value": 0,
+         "var_name": "v127",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 2,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 3,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000124,
+         "value": 1,
+         "var_name": "v124",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 2,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1,
+      2,
+      3
+     ],
+     "dead": [],
+     "combos": 144
+    },
+    {
+     "id": 32,
+     "name": "パンツ詳細表示監視",
+     "x": 2,
+     "y": 29,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000439,
+         "value": 1,
+         "var_name": "v439",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 156,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 33,
+     "name": "挿入抜く",
+     "x": 1,
+     "y": 31,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000460,
+         "value": 1,
+         "var_name": "v460",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 336,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 34,
+     "name": "スピーカー表示",
+     "x": 5,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000069,
+         "value": 1,
+         "var_name": "v69",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000062,
+         "value": 0,
+         "var_name": "v62",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 50,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 9
+    },
+    {
+     "id": 35,
+     "name": "音量調整",
+     "x": 6,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000069,
+         "value": 1,
+         "var_name": "v69",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000464,
+         "value": 0,
+         "var_name": "v464",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 48,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 9
+    },
+    {
+     "id": 36,
+     "name": "射精クリック",
+     "x": 7,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000124,
+         "value": 1,
+         "var_name": "v124",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 17,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 37,
+     "name": "射精処理監視",
+     "x": 11,
+     "y": 35,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000064,
+         "value": 1,
+         "var_name": "v64",
+         "op_name": ">="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000060,
+         "value": 0,
+         "var_name": "v60",
+         "op_name": "=="
+        },
+        {
+         "slot": 2,
+         "op": 2,
+         "var": 2000302,
+         "value": 0,
+         "var_name": "v302",
+         "op_name": "=="
+        },
+        {
+         "slot": 3,
+         "op": 2,
+         "var": 2000437,
+         "value": 0,
+         "var_name": "v437",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 40,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 81
+    },
+    {
+     "id": 38,
+     "name": "自動射精実行処理",
+     "x": 12,
+     "y": 35,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000437,
+         "value": 1,
+         "var_name": "v437",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 64,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 39,
+     "name": "■■尻コキ",
+     "x": 63,
+     "y": 32,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 1,
+         "var": 2000062,
+         "value": 1,
+         "var_name": "v62",
+         "op_name": ">="
+        }
+       ],
+       "cmds": 285,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    }
+   ],
+   "slots": 31083
+  },
+  "SampleMapA_1.mps": {
+   "w": 64,
+   "h": 36,
+   "tileset": 4,
+   "has_tiles": true,
+   "layers": 3,
+   "title": "なし",
+   "events": [
+    {
+     "id": 1,
+     "name": "クリック範囲設定",
+     "x": 63,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [],
+       "cmds": 68,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 2,
+     "name": "カーソル重なり判定",
+     "x": 63,
+     "y": 1,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000009,
+         "value": 0,
+         "var_name": "v9",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 176,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 3,
+     "name": "基本メニュー実行処理",
+     "x": 63,
+     "y": 2,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [],
+       "cmds": 109,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 4,
+     "name": "会話メニュー処理",
+     "x": 30,
+     "y": 3,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000030,
+         "value": 1,
+         "var_name": "v30",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000048,
+         "value": 0,
+         "var_name": "v48",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 487,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000049,
+         "value": 1,
+         "var_name": "v49",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 139,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 27
+    },
+    {
+     "id": 5,
+     "name": "カード選択処理",
+     "x": 61,
+     "y": 1,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000046,
+         "value": 2,
+         "var_name": "v46",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 162,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000046,
+         "value": 1,
+         "var_name": "v46",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 6,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 4
+    },
+    {
+     "id": 6,
+     "name": "セーブアイコン",
+     "x": 1,
+     "y": 33,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000003,
+         "value": 1,
+         "var_name": "v3",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 7,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 7,
+     "name": "スキル詳細表示",
+     "x": 61,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000014,
+         "value": 1,
+         "var_name": "v14",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 1708,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000014,
+         "value": 2,
+         "var_name": "v14",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 812,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 2,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000014,
+         "value": 2,
+         "var_name": "v14",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 2,
+         "var": 2000155,
+         "value": 1,
+         "var_name": "v155",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 789,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1,
+      2
+     ],
+     "dead": [],
+     "combos": 12
+    },
+    {
+     "id": 8,
+     "name": "戦闘カード選択処理",
+     "x": 61,
+     "y": 2,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000061,
+         "value": 2,
+         "var_name": "v61",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 316,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000061,
+         "value": 1,
+         "var_name": "v61",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 6,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 4
+    },
+    {
+     "id": 9,
+     "name": "敵の行動表示",
+     "x": 1,
+     "y": 31,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000170,
+         "value": 2,
+         "var_name": "v170",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 292,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 4
+    },
+    {
+     "id": 10,
+     "name": "バフ関連表示",
+     "x": 1,
+     "y": 2,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000170,
+         "value": 2,
+         "var_name": "v170",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 92,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 4
+    },
+    {
+     "id": 11,
+     "name": "戦闘カード説明",
+     "x": 3,
+     "y": 2,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000170,
+         "value": 2,
+         "var_name": "v170",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 575,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 4
+    },
+    {
+     "id": 12,
+     "name": "ゲームオーバー",
+     "x": 29,
+     "y": 3,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000298,
+         "value": 1,
+         "var_name": "v298",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 8,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    }
+   ],
+   "slots": 5752
+  },
+  "Map003.mps": {
+   "w": 70,
+   "h": 170,
+   "tileset": 4,
+   "has_tiles": true,
+   "layers": 3,
+   "title": "なし",
+   "events": [
+    {
+     "id": 0,
+     "name": "画像消去",
+     "x": 29,
+     "y": 17,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000000,
+         "value": 1,
+         "var_name": "v0",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 2,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 1,
+     "name": "ニューゲーム処理",
+     "x": 30,
+     "y": 17,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 1,
+       "conds": [],
+       "cmds": 43,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    }
+   ],
+   "slots": 45
+  },
+  "Map024.mps": {
+   "w": 53,
+   "h": 30,
+   "tileset": 4,
+   "has_tiles": false,
+   "layers": 0,
+   "title": "なし",
+   "events": [
+    {
+     "id": 0,
+     "name": "画像消去",
+     "x": 0,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 1,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000000,
+         "value": 1,
+         "var_name": "v0",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 3,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    }
+   ],
+   "slots": 3
+  },
+  "Map031.mps": {
+   "w": 53,
+   "h": 30,
+   "tileset": 0,
+   "has_tiles": false,
+   "layers": 0,
+   "title": "なし",
+   "events": [
+    {
+     "id": 0,
+     "name": "ロード時の自動処理",
+     "x": 15,
+     "y": 8,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 1,
+       "conds": [],
+       "cmds": 63,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    }
+   ],
+   "slots": 63
+  },
+  "SampleMapB.mps": {
+   "w": 30,
+   "h": 30,
+   "tileset": 0,
+   "has_tiles": true,
+   "layers": 3,
+   "title": "なし",
+   "events": [
+    {
+     "id": 0,
+     "name": "敵エンカウントEV",
+     "x": 7,
+     "y": 11,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 3,
+       "conds": [],
+       "cmds": 2,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 1,
+     "name": "市松模様解説男",
+     "x": 13,
+     "y": 14,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 0,
+       "conds": [],
+       "cmds": 5,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 2,
+     "name": "Aへの場所移動",
+     "x": 11,
+     "y": 26,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 3,
+       "conds": [],
+       "cmds": 4,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 3,
+     "name": "お店",
+     "x": 19,
+     "y": 13,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 0,
+       "conds": [],
+       "cmds": 9,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 4,
+     "name": "コモン解説",
+     "x": 16,
+     "y": 17,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 0,
+       "conds": [],
+       "cmds": 4,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 5,
+     "name": "回復所",
+     "x": 21,
+     "y": 13,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 0,
+       "conds": [],
+       "cmds": 12,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    }
+   ],
+   "slots": 36
+  },
+  "Dungeon.mps": {
+   "w": 40,
+   "h": 30,
+   "tileset": 0,
+   "has_tiles": true,
+   "layers": 3,
+   "title": "なし",
+   "events": [
+    {
+     "id": 0,
+     "name": "入口場所移動",
+     "x": 7,
+     "y": 29,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 3,
+       "conds": [],
+       "cmds": 5,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 1,
+     "name": "回復人",
+     "x": 18,
+     "y": 15,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 0,
+       "conds": [],
+       "cmds": 12,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 2,
+     "name": "敵エンカウント処理",
+     "x": 21,
+     "y": 13,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 3,
+       "conds": [],
+       "cmds": 2,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 3,
+     "name": "宝箱",
+     "x": 7,
+     "y": 5,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 0,
+       "conds": [],
+       "cmds": 38,
+       "fresh": true,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 0,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 1100000,
+         "value": 1,
+         "var_name": "self100000",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 1,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 4,
+     "name": "店の人",
+     "x": 20,
+     "y": 17,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 0,
+       "conds": [],
+       "cmds": 21,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    }
+   ],
+   "slots": 79
+  },
+  "Map002.mps": {
+   "w": 100,
+   "h": 30,
+   "tileset": 4,
+   "has_tiles": true,
+   "layers": 3,
+   "title": "なし",
+   "events": [
+    {
+     "id": 0,
+     "name": "マップ表示",
+     "x": 0,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [],
+       "cmds": 11,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 1,
+     "name": "光エフェクト",
+     "x": 1,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [],
+       "cmds": 11,
+       "fresh": true,
+       "dead": false
+      }
+     ],
+     "fresh": 0,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 1
+    },
+    {
+     "id": 3,
+     "name": "爆弾",
+     "x": 4,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000009,
+         "value": 1,
+         "var_name": "v9",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 16,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000009,
+         "value": 2,
+         "var_name": "v9",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 144,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 4
+    },
+    {
+     "id": 4,
+     "name": "エフェクトリセット",
+     "x": 5,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000022,
+         "value": 1,
+         "var_name": "v22",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 4,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0
+     ],
+     "dead": [],
+     "combos": 3
+    },
+    {
+     "id": 5,
+     "name": "接近攻撃",
+     "x": 6,
+     "y": 0,
+     "pages": [
+      {
+       "page": 0,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000034,
+         "value": 1,
+         "var_name": "v34",
+         "op_name": "=="
+        },
+        {
+         "slot": 1,
+         "op": 3,
+         "var": 2000004,
+         "value": 1,
+         "var_name": "v4",
+         "op_name": "<="
+        }
+       ],
+       "cmds": 16,
+       "fresh": false,
+       "dead": false
+      },
+      {
+       "page": 1,
+       "trigger": 2,
+       "conds": [
+        {
+         "slot": 0,
+         "op": 2,
+         "var": 2000034,
+         "value": 2,
+         "var_name": "v34",
+         "op_name": "=="
+        }
+       ],
+       "cmds": 214,
+       "fresh": false,
+       "dead": false
+      }
+     ],
+     "fresh": null,
+     "live": [
+      0,
+      1
+     ],
+     "dead": [],
+     "combos": 12
+    }
+   ],
+   "slots": 416
+  }
+ },
+ "totals": {
+  "events": 73,
+  "pages": 134,
+  "slots": 37610,
+  "opcodes": {
+   "103": 1477,
+   "111": 3701,
+   "401": 5555,
+   "150": 3709,
+   "0": 7052,
+   "499": 3785,
+   "180": 643,
+   "122": 49,
+   "221": 21,
+   "121": 4908,
+   "420": 1279,
+   "179": 34,
+   "498": 37,
+   "210": 2017,
+   "290": 170,
+   "170": 3,
+   "123": 172,
+   "213": 293,
+   "212": 63,
+   "140": 243,
+   "101": 1153,
+   "126": 22,
+   "102": 63,
+   "250": 71,
+   "112": 21,
+   "421": 47,
+   "172": 433,
+   "124": 466,
+   "174": 5,
+   "99": 3,
+   "104": 8,
+   "125": 6,
+   "105": 1,
+   "300": 6,
+   "220": 2,
+   "270": 2,
+   "130": 8,
+   "201": 73,
+   "161": 1,
+   "162": 1,
+   "151": 7
+  },
+  "triggers": {
+   "1": 26,
+   "2": 90,
+   "0": 14,
+   "3": 4
+  },
+  "flags": {
+   "32": 324,
+   "33": 173,
+   "17": 25,
+   "49": 3,
+   "16": 2,
+   "81": 7,
+   "80": 2
+  }
+ },
+ "teleports": [
+  {
+   "file": "Map003.mps",
+   "event": 1,
+   "name": "ニューゲーム処理",
+   "page": 0,
+   "pc": 28,
+   "args": [
+    -1,
+    62,
+    38,
+    1,
+    1
+   ]
+  },
+  {
+   "file": "Map031.mps",
+   "event": 0,
+   "name": "ロード時の自動処理",
+   "page": 0,
+   "pc": 0,
+   "args": [
+    -1,
+    22,
+    18,
+    27,
+    16
+   ]
+  },
+  {
+   "file": "SampleMapB.mps",
+   "event": 2,
+   "name": "Aへの場所移動",
+   "page": 0,
+   "pc": 1,
+   "args": [
+    -1,
+    15,
+    1,
+    1,
+    0
+   ]
+  },
+  {
+   "file": "Dungeon.mps",
+   "event": 0,
+   "name": "入口場所移動",
+   "page": 0,
+   "pc": 3,
+   "args": [
+    -1,
+    34,
+    12,
+    1,
+    32
+   ]
+  },
+  {
+   "file": "Map002.mps",
+   "event": 3,
+   "name": "爆弾",
+   "page": 0,
+   "pc": 7,
+   "args": [
+    -2,
+    2000007,
+    1100005,
+    0,
+    1
+   ]
+  },
+  {
+   "file": "Map002.mps",
+   "event": 3,
+   "name": "爆弾",
+   "page": 0,
+   "pc": 7,
+   "args": [
+    -2,
+    2000007,
+    1100005,
+    0,
+    1
+   ]
+  },
+  {
+   "file": "Map002.mps",
+   "event": 5,
+   "name": "接近攻撃",
+   "page": 0,
+   "pc": 7,
+   "args": [
+    -2,
+    2000007,
+    1100005,
+    0,
+    1
+   ]
+  },
+  {
+   "file": "Map002.mps",
+   "event": 5,
+   "name": "接近攻撃",
+   "page": 0,
+   "pc": 7,
+   "args": [
+    -2,
+    2000007,
+    1100005,
+    0,
+    1
+   ]
+  }
+ ]
+}

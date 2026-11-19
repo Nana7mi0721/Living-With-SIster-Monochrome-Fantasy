@@ -1,0 +1,4 @@
+Lolita.ttf               glyphs= 35898  CJK-unified=20908  kana= 189  has_妹=True has_A=True
+GenJyuuGothicXPB.ttf     glyphs= 17737  CJK-unified=12721  kana= 189  has_妹=True has_A=True
+MSGOTHIC.TTF             glyphs= 12307  CJK-unified=11480  kana= 177  has_妹=True has_A=True
+07yasashi.ttf            glyphs= 14963  CJK-unified=12204  kana= 182  has_妹=True has_A=True

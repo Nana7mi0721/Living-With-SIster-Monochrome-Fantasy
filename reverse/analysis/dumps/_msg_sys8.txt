@@ -1,0 +1,25 @@
+M2: unify every text path on Sys8
+
+Sys8 is the font size WOLF shares between messages, choices and text
+pictures (work/yado.txt 56-79), and common event 48 writes it as 20 in
+this game. Until now three paths disagreed: the message window already
+used Sys8, text pictures were painted at choice::TEXT_PX = 22 and the
+choice panel measured its own options at whatever constant it held.
+
+- Game::font_px() reads Sys8 (clamped 8..=64, falling back to the
+  message default before event 48 has run) and Game::sys(i) exposes a
+  single system variable for diagnostics.
+- choice::TEXT_PX drops 22 -> 20 so the VM-less fallback equals the
+  value the game actually runs at, and size/build are parameterised by
+  font_px with new layout_at_sized / overlay_at_sized entry points.
+- the CLI capture and play loops draw the choice overlay and every text
+  picture at game.font_px(), so panel and glyphs can never drift again.
+
+Measured on capture --map-run SampleMapA --event 0 --frames 600: choice
+panel 242x148 at (512,240) with 8 glyph rows of 214 px, the nine-char
+option 微风吹拂而过的麦田 fits without wrapping, 19 quads + 4 text
+pictures, 33.4% non-black, 46,370 instructions, 0 warnings.
+
+Also: the Sys20/22/26/27 probe shows the choice margins are never written
+(both 0), so choice::PADDING stays a design default, and Sys22 = 1 means
+the engine's arrow cursor mode is on.

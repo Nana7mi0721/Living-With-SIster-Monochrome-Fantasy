@@ -1,0 +1,15 @@
+M6: drive the bedroom sleep menu through a whole day rollover
+
+The night-time sister click page of SampleMapA event 1 writes variable 63
+when the player clicks her; that opens the メニュー処理 sleep page and its
+three-way choice (恶作剧 / 轻轻把被子盖好 / 今天还是睡吧). Choosing the last
+option, then 是的, calls common event 329 (就寝処理) and advances 18:30 day
+1 to 08:30 day 2 (Tuesday).
+
+Add m6_mainline.rs::the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day,
+which drives the canonical new-game entry for 1500 frames, seeds the var 63
+flag at the point event 1 writes it, asserts both prompts, and checks the
+next morning. Document that the sleep menu event chain is now exercised and
+that only the ev1 pointer hit-test is not synthesised headlessly.
+
+Tests: cargo test -q --workspace green; wolf-cli verify PASS 70/0.

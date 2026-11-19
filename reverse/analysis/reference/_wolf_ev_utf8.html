@@ -1,0 +1,1409 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+<HEAD>
+<META http-equiv="Content-Type" content="text/html; charset=Shift_JIS">
+<META name="GENERATOR" content="IBM WebSphere Studio Homepage Builder Version 7.0.1.0 for Windows">
+<META http-equiv="Content-Style-Type" content="text/css">
+<TITLE>YADOT-WOLF イベント制御</TITLE>
+<meta name="robots" content="nofollow">
+<STYLE type="text/css">
+<!--
+ A { text-decoration: none ;}
+-->
+</STYLE>
+<BASE target="">
+<BASE target="g/page.htm">
+<LINK rel="stylesheet" href="g/page.css" type="text/css">
+</HEAD>
+<BODY style="font-family: ＭＳ ゴシック" bgcolor="#000e3c" text="#ffffff" link="#00ff00" vlink="#00ff00" background="../../../page/back-g_w.png" alink="#00ff00">
+<CENTER>
+<TABLE border="0">
+  <TBODY>
+    <TR>
+      <TD><FONT color="#00ffff"><A name="top">ＷＯＬＦ ＲＰＧエディター(ウディタ)[3.688]／イベントコマンド</A></FONT><A href="../../" target="_top">【サイトトップへ戻る】</A><BR>
+      <FONT size="+2" color="#ffff00">■イベント制御</FONT><BR>
+      （更新：2026/04/03）<BR>
+      <BR>
+      <BR>
+      <FONT color="#a0dcff">イベントコマンド【イベント制御】</FONT>について解説します。<BR>
+      <BR>
+      <IMG src="001.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <TABLE cellpadding="5">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000099" align="center">ショートカット</TD>
+          </TR>
+          <TR>
+            <TD bgcolor="#000000">
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD><FONT size="+1"><A href="#nani" target="_self">■イベントコマンド【イベント制御】とは？</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#sys" target="_self">■システム変数の一覧</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_loop" target="_self">■設定画面の説明：ループ処理関連</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_chara_dousa" target="_self">■設定画面の説明：キャラ動作指定</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_transition" target="_self">■設定画面の説明：[トランジション準備(画面停止)][トランジション実行]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_ev_idou" target="_self">■設定画面の説明：[処理中のＥｖ移動ＯＮ][ＯＦＦ]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_end" target="_self">■設定画面の説明：[タイトル画面へ][ゲーム終了]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_teisi" target="_self">■設定画面の説明：[ピクチャ[↑0]以外停止][停止解除]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_chuudan" target="_self">■設定画面の説明：[イベント処理中断]</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_transition_sitei" target="_self">■設定画面の説明：トランジションの指定</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_ichiji_shoukyo" target="_self">■設定画面の説明：イベントの一時消去</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_wait" target="_self">■設定画面の説明：ウェイト</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_label" target="_self">■設定画面の説明：ラベル処理</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#loop_500" target="_self">■「1フレームあたりの処理が500万回を越えました！」のエラーについて</A></FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#a0dcff">【イベント制御】</FONT>の使用例は別ページに記載しています。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../1710_rei_ev/" target="_blank">【イベント制御の使用例を開く】</A><BR>
+      <BR>
+      <HR>
+      <A name="nani">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■イベント制御とは？</FONT><BR>
+      <BR>
+      <FONT color="#a0dcff">【イベント制御】</FONT>には「ループ処理」「キャラクターの動作指定」「ウェイト」など、<BR>
+      様々な設定が用意されています。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#a0dcff">【トランジションの指定】【イベントの一時消去】【ウェイト】</FONT>のフレーム時間の設定や、<BR>
+      <FONT color="#a0dcff">【回数付きループ】</FONT>のループ回数の設定などでは、<BR>
+      「<A href="../../03_hen/0009_hen_x/" target="_blank">変数呼び出し値</A>」を使って<FONT color="#ffff00">変数の値</FONT>で数値を設定する事ができます。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../../03_hen/0009_hen_x/" target="_blank">【「変数呼び出し値」の説明を見る】</A><BR>
+      <BR>
+      <FONT color="#00ffff">▼通常変数[2]でループ回数を設定する場合</FONT><BR>
+      <IMG src="03_0002_030.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="../../03_hen/0002_hen_tuujou/c030.txt" target="_blank">【イベントコード表示】</A><BR>
+            <BR>
+            <FONT color="#ffff00">■回数付きループ [ V2[] ]回<BR>
+ |■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="sys">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■システム変数の一覧</FONT><BR>
+      <BR>
+      <FONT color="#a0dcff">【イベント制御】</FONT>に関連する「システム変数」の一覧です。<BR>
+      変数名をクリックすると詳細情報を見る事ができます。<BR>
+      <BR>
+      <A href="../../03_hen/0004_hen_sys/" target="_blank">【システム変数の説明ページを見る】</A><BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">システム変数</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT size="+1"><A href="../../03_hen/0007_hen_sys77-/index.htm#sys120" target="_blank">120:ﾘｾｯﾄ履歴 0=ﾅｼ/1=F12/2=ｺﾏﾝﾄﾞ</A></FONT></TD>
+            <TD>0＝ゲームを開始して一度もリセットされていない。<BR>
+            1＝[Ｆ１２]を押してリセット。<BR>
+            2＝イベントで[タイトル画面へ戻る]でリセット。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen">　</A>　<A name="gamen_loop">　</A><BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：ループ処理関連</FONT><BR>
+      <BR>
+      <IMG src="020_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      ループは<FONT color="#ffff00">同じ処理を何度も実行させたい時</FONT>に使います。<BR>
+      <BR>
+      例えば以下のような設定を行う事で、<BR>
+      <FONT color="#00ffff">左クリックか決定キーが押されるまではループし続ける</FONT>と言った処理を作る事ができます。<BR>
+      <BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><A href="c020_0.txt" target="_blank">【イベントコード表示(マップ)】</A><A href="c020_1.txt" target="_blank">【イベントコード表示(コモン)】</A><BR>
+            <BR>
+            <FONT color="#ffff00">■ループ開始<BR>
+ |■ウェイト：1 フレーム<BR>
+ |■キー入力：このEvのｾﾙﾌ変数0 /  [新押し時のみ]  マウス 左ｸﾘｯｸ(20)<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf0 が 1 以上<BR>
+ |-◇分岐： 【1】  [ このEvのSelf0  が  1 以上  ]の場合↓<BR>
+            ||■ループ中断<BR>
+            ||■<BR>
+ |◇分岐終了◇<BR>
+ |■キー入力：このEvのｾﾙﾌ変数0 /  [新押し時のみ]  決定(10)<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf0 が 1 以上<BR>
+ |-◇分岐： 【1】  [ このEvのSelf0  が  1 以上  ]の場合↓<BR>
+            ||■ループ中断<BR>
+            ||■<BR>
+ |◇分岐終了◇<BR>
+ |■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">[ループ(繰り返し)]</FONT>の設定は、ループを終了させる設定が無いと、半永久的にループが続きます。<BR>
+      <BR>
+      <FONT color="#00ffff">[回数付きループ]</FONT>の場合は、指定した回数だけループします。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">[ループ中断]</FONT>は<FONT color="#ffff00">現在実行中のループから抜け出す時</FONT>に使います。<BR>
+      <BR>
+      以下のように、ループが<FONT color="#ff96ff">二重</FONT>に設定されている場合は、<BR>
+      それぞれのループ内で<FONT color="#a0e1ff">【ループ中断】</FONT>を実行させる必要があります。<BR>
+      <BR>
+      <FONT color="#00ffff">▼これでは１つ目のループから抜け出す事ができないため、半永久的にループし続けます。</FONT><BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■ループ開始<FONT color="#00ffff">（１つ目のループ）</FONT><BR>
+            |■変数操作: このEvのSelf0 = 0 + 0<BR>
+            |■ループ開始<FONT color="#ff96ff">（２つ目のループ）</FONT><BR>
+            ||■変数操作: このEvのSelf0 += 1 + 0<BR>
+            ||■条件分岐(数値): 【1】 このEvのSelf0 が 10 以上<BR>
+            || |<FONT color="#ff96ff">■ループ中断（２つ目のループから抜け出す）</FONT><BR>
+ || |■<BR>
+ ||◇分岐終了◇<BR>
+ ||■<BR>
+            |◇ループここまで◇◇<BR>
+            |■<BR>
+            ◇ループここまで◇◇<BR>
+            ■</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼以下の場合は、２つの条件分岐の条件を満たせばループから抜け出せます。</FONT><BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■ループ開始<FONT color="#00ffff">（１つ目のループ）</FONT><BR>|■変数操作: このEvのSelf0 = 0 + 0<BR>
+            |■ループ開始<FONT color="#ff96ff">（２つ目のループ）</FONT><BR>
+            ||■変数操作: このEvのSelf0 += 1 + 0<BR>
+            ||■条件分岐(数値): 【1】 このEvのSelf0 が 10 以上<BR>
+            || |<FONT color="#ff96ff">■ループ中断（２つ目のループから抜け出す）</FONT><BR>
+ || |■<BR>
+ ||◇分岐終了◇<BR>
+ ||■<BR>
+            |◇ループここまで◇◇<BR>
+            ||■変数操作: このEvのSelf1 += 1 + 0<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf1 が 10 以上<BR>
+            ||<FONT color="#00ffff">■ループ中断（１つ目のループから抜け出す）</FONT><BR>
+            ||■<BR>
+            |◇分岐終了◇<BR>
+            |■<BR>
+            ◇ループここまで◇◇<BR>
+            ■</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      もしも複数のループから一気に抜け出したい時には<FONT color="#a0e1ff">【ラベル】</FONT>を使ってください。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■ループ開始<BR>|■変数操作: このEvのSelf0 = 0 + 0<BR>
+            |■ループ開始<BR>
+            ||■変数操作: このEvのSelf0 += 1 + 0<BR>
+            ||■条件分岐(数値): 【1】 このEvのSelf0 が 10 以上<BR>
+            <FONT color="#ff8080">|||●ラベルに飛ぶ 【ループ終了】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞<BR>
+</FONT>|||■<BR>
+ ||◇分岐終了◇<BR>
+ ||■<BR>
+ |◇ループここまで◇◇<BR>
+            |■ウェイト：1 フレーム<BR>
+ |■<BR>
+            ◇ループここまで◇◇</FONT><BR>
+            <FONT color="#ff8080">●ラベル地点 【ループ終了】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">[ループ開始へ]（ループ開始へ戻る）</FONT>を実行した場合は、<BR>
+      現在実行中のループの「<FONT color="#ffff00">■ループ開始</FONT>」まで戻ります。<BR>
+      <BR>
+      以下の場合は、２つ目のループ開始に戻ります。<BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■ループ開始<BR>|■変数操作: このEvのSelf0 = 0 + 0<BR>
+            |■ループ開始<FONT color="#00ffff">←ここに戻る</FONT><BR>||■変数操作: このEvのSelf0 += 1 + 0<BR>
+            ||■条件分岐(数値): 【1】 このEvのSelf0 が 10 以上<BR>
+            || |<FONT color="#00ffff">■ループ開始へ戻る</FONT><BR>
+ || |■<BR>
+ ||◇分岐終了◇<BR>
+ ||■<BR>
+            |◇ループここまで◇◇<BR>
+            |■<BR>
+            ◇ループここまで◇◇<BR>
+            ■</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#a0e1ff">【回数付きループ】</FONT>の場合は、<FONT color="#a0e1ff">【ループ開始へ戻る】</FONT>を実行してもしなくても、<BR>
+      設定されたループ回数だけループします。<BR>
+      <BR>
+      <FONT color="#00ffff">▼この場合は<FONT color="#a0e1ff">【ループ開始へ戻る】</FONT>を実行してもしなくても１０回ループします。</FONT><BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■回数付きループ [ 10 ]回<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf0 が 10 以上<BR>
+            ||<FONT color="#00ffff">■ループ開始へ戻る<BR>
+            </FONT>||■<BR>
+            |◇分岐終了◇<BR>
+            |■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT size="+2" color="#00ffff">■回数付きループのループ回数を変数で設定</FONT><BR>
+      <BR>
+      <A href="../../03_hen/0009_hen_x/" target="_blank">変数呼び出し値</A>を使う事で、<FONT color="#a0e1ff">【回数付きループ】</FONT>のループ回数を変数で設定する事ができます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼マップイベントのセルフ変数[0]（変数呼び出し値「1100000」）でループ回数を設定した場合</FONT><BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■回数付きループ [ このEvのSelf0 ]回<BR>
+            |■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      なお、ループ回数は<FONT color="#ff96ff">ループ開始時</FONT>に設定されるため、例えば…<BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■変数操作: このEvのSelf0 = 10 + 0<BR>
+■回数付きループ [ このEvのSelf0 ]回<BR>
+            |■変数操作: このEvのSelf0 = 0 + 0<BR>
+            |■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と、ループ回数（10回）を設定した変数の値をループ内で「0」に変えても、<BR>
+      ループ回数は「10回」で処理されます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT size="+2" color="#00ffff">■回数付きループのループ回数を「0回」にした場合</FONT><BR>
+      <BR>
+      <FONT color="#a0e1ff">【回数付きループ】</FONT>のループ回数を「0回」にした場合は、ループ内の処理が<FONT color="#ffff00">実行されなくなります。</FONT><BR>
+      <BR>
+      この仕様を利用して、「0回」にしたループ内に<FONT color="#00ffff">デバッグ用の設定</FONT>を置き、<BR>
+      デバッグする時には「1回」に変えて、一時的にループ内の処理が実行できるようにする使い方ができます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼<FONT color="#3cf096">コモンイベント[086:X[移]┗ お店内部情報更新]</FONT>の<FONT color="#b4ff64">68行目</FONT>にあるデバッグ用の設定</FONT><BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■回数付きループ [ 0 ]回<BR>
+ |■デバッグ文:\cself[27] - \cself[39] &lt;\cdb[19:\cself[22]:2]&gt;<BR>
+ |■<BR>
+◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      ループ回数を「0回→1回」「1回→0回」に変える方法は…<BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■回数付きループ [ 0 ]回</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      を選択した上で…<BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">●ダブルクリックやスペースバーを押して設定画面を開いて変える。<BR>
+            </FONT>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">●右クリック→「この回数ループを0回→1回に変える(処理する)」で変える。<FONT color="#00ffff"><BR>
+            </FONT></FONT>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">●[Ｑ]キーを押して変える。</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      のいずれかの方法で変える事ができます。<BR>
+      <BR>
+      なお、ループ回数が「0回」でも<FONT color="#a0e1ff">【ラベル】</FONT>を使ってループ内へ移動している場合は、<BR>
+      ループ内の処理が実行されます。<BR>
+      <BR>
+      例えば<FONT color="#3cf096">コモンイベント[070:X[移]パラメータ増減]</FONT>の<FONT color="#b4ff64">690行目</FONT>にある以下のイベント処理では、<BR>
+      <FONT color="#a0e1ff">【ラベル】</FONT>で移動した時のみ、ループ内の処理が実行されます。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#64ff64">■回数付きループ [ 0 ]回<BR>
+      <FONT color="#ffa0a0">|●ラベル地点 【メッセージ表示】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+      |▼ ここでメッセージ表示を行う。<BR>
+      |▼ （ただし経験値だけはその場で一度経験値入手メッセージを表示している）</FONT><BR>
+      <FONT color="#ffff00">|■文章:@1\n\&gt;\cself[9]<BR>
+      |■イベント処理中断<BR>
+      |■<BR>◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT size="+2" color="#00ffff">■折りたたみと展開</FONT><BR>
+      <BR>
+      イベントコマンド表示欄にて「<FONT color="#ffff00">■ループ開始</FONT>」や「<FONT color="#ffff00">■回数付きループ</FONT>」をクリックして選択し、<BR>
+      <FONT color="#00ffff">[Ｅ]キー</FONT>を押すか、右クリックのメニューで「<FONT color="#00ffff">折りたたむ/展開する</FONT>」を選択すると、<BR>
+      イベントコマンドの表示を<FONT color="#ffa0a0">省略する事ができ、</FONT>必要な設定のみを画面上に表示する事ができます。<BR>
+      <BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000">
+            <TABLE cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■ループ開始<FONT color="#00ffff">←クリックで選択して[Ｅ]キーを押す</FONT><BR>
+ |■ウェイト：1 フレーム<BR>
+ |■キー入力：このEvのｾﾙﾌ変数0 /  [新押し時のみ]  マウス 左ｸﾘｯｸ(20)<BR>
+                  |■条件分岐(数値): 【1】 このEvのSelf0 が 1 以上<BR>
+ |-◇分岐： 【1】  [ このEvのSelf0  が  1 以上  ]の場合↓<BR>
+ | |■ループ中断<BR>
+ | |■<BR>
+ |◇分岐終了◇<BR>
+ |■キー入力：このEvのｾﾙﾌ変数0 /  [新押し時のみ]  決定(10)<BR>
+                  |■条件分岐(数値): 【1】 このEvのSelf0 が 1 以上<BR>
+ |-◇分岐： 【1】  [ このEvのSelf0  が  1 以上  ]の場合↓<BR>
+                  ||■ループ中断<BR>
+                  ||■<BR>
+ |◇分岐終了◇<BR>
+ |■<BR>
+                  ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            </TD>
+          </TR>
+          <TR>
+            <TD align="center"><FONT color="#00ffff">▼ 折りたたむ ▼　　▲ 展開する ▲</FONT></TD>
+          </TR>
+          <TR>
+            <TD bgcolor="#000000">
+            <TABLE cellpadding="12">
+              <TBODY>
+                <TR>
+                  <TD><FONT color="#ffff00">■ループ開始<BR>
+                  <FONT color="#00ffff">| ＋[折りたたむ] 14行　■ウェイト：1フレーム　...　(ダブルクリックで展開)</FONT><BR>
+                  ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT size="+2" color="#00ffff">■「ラベル」を使って「回数付きループ」の中へ移動した場合</FONT><BR>
+      <BR>
+      <FONT color="#a0e1ff">【ラベル】</FONT>を使って以下のように<FONT color="#a0e1ff">【回数付きループ】</FONT>の<FONT color="#ffff00">外からループ内</FONT>へ移動した場合は、<BR>
+      ループ回数の設定は無効となり、<FONT color="#ffff00">１回のみの処理</FONT>になります。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ff8080">●ラベルに飛ぶ 【ループ内へ移動】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞</FONT><BR>
+            <FONT color="#ffff00">■回数付きループ [ 10 ]回<BR>
+            <FONT color="#ff8080">|●ラベル地点 【ループ内へ移動】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            |■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      以下のように、同じループ内で<FONT color="#a0e1ff">【ラベル】</FONT>を使って移動している場合は、<BR>
+      <FONT color="#a0e1ff">【ラベル】</FONT>でジャンプしてもしなくても１０回のループが実行されます。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■回数付きループ [ 10 ]回<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf0 が 0 と同じ<BR>
+            |-◇分岐： 【1】 [ このEvのSelf0 が 0 と同じ ]の場合↓<BR>
+            <FONT color="#ff8080">||●ラベルに飛ぶ 【ループ内へ移動】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞</FONT><BR>
+            ||■<BR>
+ |◇分岐終了◇<BR>
+            <FONT color="#ff8080">|●ラベル地点 【ループ内へ移動】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            |■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT size="+2" color="#00ffff">■イベント処理数についての補足</FONT><BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■回数付きループ [ 10 ]回<BR>
+            |■変数操作: このEvのSelf0 += 1 + 0<BR>
+ |■<BR>
+◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った設定のイベント処理数は「31」になりますが…<BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■回数付きループ [ 10 ]回<BR>
+            |■変数操作: このEvのSelf0 += 1 + 0<BR>
+            |<FONT color="#00ffff">■ループ開始へ戻る</FONT><BR>
+            |■<BR>
+◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と、ループの最後に<FONT color="#a0e1ff">【ループ開始へ戻る】</FONT>を設定した場合のイベント処理数は「21」となり、<BR>
+      ループ１回につきイベント処理数を１減らす事ができます。<BR>
+      <BR>
+      但し、イベント処理数が減ったからと言って、処理落ちが軽減するまでにはならないので、<BR>
+      <FONT color="#ffa0a0">「1フレームあたりの処理が500万回を越えました！」</FONT>のエラーが発生するような状況以外では、<BR>
+      無理にループの最後に<FONT color="#a0e1ff">【ループ開始へ戻る】</FONT>を設定する必要はありません。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_chara_dousa">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：キャラ動作指定</FONT><BR>
+      <BR>
+      <IMG src="021_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <FONT color="#00ffff">[■キャラ動作指定]</FONT>は、主人公やマップイベントなどのキャラクターを歩かせたり、<BR>
+      向きを変えたり、ジャンプさせたりする時に使います。<BR>
+      <BR>
+      <A href="../1701_ev_dousa/" target="_blank">「キャラクターの動作指定の画面説明を見る】</A><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      キャラ動作指定は、文章の表示やウェイトの設定があると実行されます。<BR>
+      <BR>
+      そのため…<BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■動作指定：主人公 / 下 / 下 / 下 / 下<BR>
+■動作指定：このイベント / 下向<BR>
+            ■文章:もう行くのかい？</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った設定があった場合、文章の表示と同時に主人公が移動します。<BR>
+      <BR>
+      この設定を「<FONT color="#00ffff">主人公が４歩移動してから文章を表示する</FONT>」とする場合は…<BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■動作指定：主人公 / 下 / 下 / 下 / 下<BR>■動作完了までウェイト<BR>
+            ■動作指定：このイベント / 下向<BR>
+■文章:もう行くのかい？</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言ったように、<FONT color="#00ffff">[→完了までウェイト]</FONT>を設定してください。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      マップイベントの移動ルートに動作設定がある状態で、<BR>
+      このキャラ動作指定を設定した場合は、<FONT color="#ffff00">キャラ動作指定の方が優先的に実行されます。</FONT><BR>
+      <BR>
+      キャラ動作指定の動作が終了すると、再び移動ルートの動作設定が実行されます。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_transition">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[トランジション準備(画面停止)][トランジション実行]</FONT><BR>
+      <BR>
+      <IMG src="022_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <FONT color="#00ffff">[トランジション準備(画面停止)]</FONT>を実行すると、ゲーム画面の描画が停止します。<BR>
+      イメージとしては、ビデオ再生時の「一時停止」に近い感じになります。<BR>
+      <BR>
+      この<FONT color="#00ffff">[トランジション準備(画面停止)]</FONT>の実行中は、ゲーム画面の描画が停止しますが、<BR>
+      イベント処理や主人公の移動処理などは通常通りに処理されます。<BR>
+      <BR>
+      そのため、文章の表示などもゲーム画面上には文章は表示されませんが、<BR>
+      文章のキー待ち処理などは通常通りに処理されます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">[トランジション準備(画面停止)]</FONT>で停止した場合は、<BR>
+      <FONT color="#00ffff">[トランジション実行]</FONT>を実行する事で、ゲーム画面の描画が再開されます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      なお、<FONT color="#00ffff">[トランジション実行]</FONT>を実行した時の画面の表示方法は、<BR>
+      <FONT color="#ffff00">[トランジションの指定]</FONT>の設定によって決まります。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_ev_idou">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[処理中のＥｖ移動ＯＮ][ＯＦＦ]</FONT><BR>
+      <BR>
+      <IMG src="023_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      「決定キーで実行」や「自動実行」などの<FONT color="#ffff00">並列実行以外</FONT>でイベントを実行している場合、<BR>
+      通常はマップイベントの移動が停止しますが、この<FONT color="#00ffff">[処理中のＥｖ移動ＯＮ]</FONT>を実行すると、<BR>
+      並列実行以外のイベントを実行している間もマップイベントが移動し続けます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#ffff00">[■キャラ動作指定]</FONT>を使ってマップイベントを動かしている場合は、<BR>
+      ＯＮ/ＯＦＦに関係なく、移動し続けます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      初期設定は「ＯＦＦ」なので、ＯＮが良い場合は<FONT color="#00ffff">[処理中のＥｖ移動ＯＮ]</FONT>を実行してしてください。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      ＯＮにした設定を再びＯＦＦに戻す場合は、<FONT color="#00ffff">[ＯＦＦ]</FONT>を実行してください。<BR>
+      <BR>
+      なお、ＯＮになると、別のマップへ移動してもＯＮのままになるため、<BR>
+      マップごとにＯＮ／ＯＦＦを切り替える場合は、場所移動時にＯＮ／ＯＦＦを切り替えるか、<BR>
+      マップごとに以下のマップイベントを設定してＯＮ／ＯＦＦを切り替えてください。<BR>
+      <BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD>　<FONT color="#00ffff">▼別のマップから来たら自動的にＯＮ</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c023_0.txt" target="_blank">【イベントコード表示】</A><BR>
+            <BR>
+            <FONT size="+2" color="#ffa064">■マップイベント「Ev移動ON」</FONT><BR>
+                  <BR>
+            <FONT color="#00ffff">起動条件：</FONT>並列実行<BR>
+            <FONT color="#00ffff">起動条件変数：</FONT>なし<BR>
+                  <BR>
+                  <FONT color="#ffff00">■イベント処理中のEv移動ON<BR>
+                  ■イベントの一時消去：このEv (0フレーム)<BR>
+                  ■</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            </TD>
+            <TD height="10"></TD>
+            <TD>　<FONT color="#00ffff">▼別のマップから来たら自動的にＯＦＦ</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c023_1.txt" target="_blank">【イベントコード表示】</A><BR>
+            <BR>
+            <FONT size="+2" color="#ffa064">■マップイベント「Ev移動OFF」</FONT><BR>
+                  <BR>
+            <FONT color="#00ffff">起動条件：</FONT>並列実行<BR>
+            <FONT color="#00ffff">起動条件変数：</FONT>なし<BR>
+                  <BR>
+                  <FONT color="#ffff00">■イベント処理中のEv移動OFF<BR>
+                  ■イベントの一時消去：このEv (0フレーム)<BR>
+                  ■</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_end">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[タイトル画面へ][ゲーム終了]</FONT><BR>
+      <BR>
+      <IMG src="024_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <FONT color="#00ffff">[タイトル画面へ]</FONT>を実行すると、<BR>
+      ゲームを起動した時と同じ状態（変数の値が全て初期化された状態）で、<BR>
+      「<FONT color="#ffff00">ゲーム開始位置</FONT>」からゲームが始まります。<BR>
+      <BR>
+      なお、タイトル画面へ移動した後に、<BR>
+      <A href="../../03_hen/0007_hen_sys77-/index.htm#sys120" target="_blank">システム変数[120:ﾘｾｯﾄ履歴 0=ﾅｼ/1=F12/2=[ﾀｲﾄﾙ画面へ]ｺﾏﾝﾄﾞ]</A>の値を調べると、<BR>
+      ゲームを起動してタイトル画面を表示したのか、<BR>
+      [F12]キーを押してタイトル画面を表示したのか、<BR>
+      <FONT color="#00ffff">[タイトル画面へ]</FONT>を使ってタイトル画面を表示したのかが分かります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">[ゲーム終了]</FONT>を実行すると、ゲーム画面が閉じられて、ゲームが強制終了します。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_teisi">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[ピクチャ[↑0]以外停止][停止解除]</FONT><BR>
+      <BR>
+      <IMG src="025_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <FONT color="#00ffff">[ピクチャ[↑0]以外停止]</FONT>を実行すると、ゲーム画面の描画が停止します。<BR>
+      <BR>
+      ゲーム画面の描画を停止する仕様は<FONT color="#00ffff">[トランジション準備(画面停止)]</FONT>に似ていますが、<BR>
+      以下のような違いがあります。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center">　</TD>
+            <TD align="center"><FONT color="#00ffff">[トランジション準備(画面停止)]</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">[ピクチャ[↑0]以外停止]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">マップ上の描画</FONT></TD>
+            <TD valign="top" align="center"><FONT color="#ff96ff">停止</FONT></TD>
+            <TD align="center"><FONT color="#ff96ff">停止</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">ピクチャ[-1以下]の描画</FONT></TD>
+            <TD valign="top" align="center"><FONT color="#ff96ff">停止</FONT></TD>
+            <TD align="center"><FONT color="#ff96ff">停止</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">ピクチャ[0以上]の描画</FONT></TD>
+            <TD valign="top" align="center"><FONT color="#ff96ff">停止</FONT></TD>
+            <TD align="center"><FONT color="#ffff00">実行</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">文章・選択肢の描画</FONT></TD>
+            <TD valign="top" align="center"><FONT color="#ff96ff">停止</FONT></TD>
+            <TD align="center"><FONT color="#ffff00">実行</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">イベント処理</FONT></TD>
+            <TD valign="top" align="center"><FONT color="#ffff00">実行</FONT></TD>
+            <TD align="center"><FONT color="#ffff00">実行</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">[トランジション準備(画面停止)]</FONT>と同様に、停止した時のゲーム画面のままになりますが、<BR>
+      <FONT color="#00ffff">[ピクチャ[↑0]以外停止]</FONT>の場合は、<FONT color="#ffff00">停止中でもピクチャ[0]以上の表示が更新されます。</FONT><BR>
+      <BR>
+      但し停止する時にピクチャ[0]以上を表示している場合は、<BR>
+      停止した時のピクチャ[0]以上と現在のピクチャ[0]以上の<FONT color="#00ffff">両方が表示される状態</FONT>となり、<BR>
+      同じピクチャ番号の画像が<FONT color="#ffff00">二重に表示される状態</FONT>になります。<BR>
+      <BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">▼[ピクチャ[↑0]以外停止]を実行</FONT></TD>
+            <TD></TD>
+            <TD><FONT color="#00ffff">▼ピクチャ0を移動すると停止時のピクチャ0も表示される</FONT></TD>
+          </TR>
+          <TR>
+            <TD><IMG src="025_1.png" width="320" height="240" border="0"></TD>
+            <TD><IMG src="../../page/ya_ao_6.png" width="31" height="31" border="0"></TD>
+            <TD><IMG src="025_2.png" width="320" height="240" border="0"></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      もしも停止する時にピクチャ[0]以上の画像が表示されないようにする場合は、<BR>
+      一度ピクチャ[0]以上の画像を消去してから<FONT color="#00ffff">[ピクチャ[↑0]以外停止]</FONT>を実行する必要があります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      セーブデータのロード直後に<FONT color="#00ffff">[ピクチャ[↑0]以外停止]</FONT>を実行すると真っ暗のままになる事があるため、<BR>
+      数フレームのウェイトを実行してから停止した方が良いでしょう。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_chuudan">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：[イベント処理中断]</FONT><BR>
+      <BR>
+      <IMG src="026_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      イベントコマンドの処理を途中で終了させる時に使います。<BR>
+      <BR>
+      例えば…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■文章:あいうえお<BR>
+            ■条件分岐(数値): 【1】 このEvのSelf0 が 0 と同じ<BR>
+            -◇分岐： 【1】 [ このEvのSelf0 が 0 と同じ ]の場合↓<BR>
+ |■文章:かきくけこ<BR>
+ |■<BR>
+◇分岐終了◇<BR>
+            ■文章:さしすせそ</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った設定で「<FONT color="#00ffff">セルフ変数[0]＝0</FONT>」の場合は、<BR>
+      <FONT color="#ffff00">「あいうえお」→「かきくけこ」→「さしすせそ」</FONT>と表示されます。<BR>
+      <BR>
+      しかし…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■文章:あいうえお<BR>
+            ■条件分岐(数値): 【1】 このEvのSelf0 が 0 と同じ <BR>
+            -◇分岐： 【1】 [ このEvのSelf0 が 0 と同じ ]の場合↓<BR>
+ |■文章:かきくけこ<BR>
+            |<FONT color="#00ffff">■イベント処理中断</FONT><BR>
+            |■<BR>
+◇分岐終了◇<BR>
+            ■文章:さしすせそ</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った設定で「<FONT color="#00ffff">セルフ変数[0]＝0</FONT>」の場合は、<BR>
+      <FONT color="#ffff00">「あいうえお」→「かきくけこ」</FONT>と表示されて<FONT color="#ff96ff">「さしすせそ」は表示されません。</FONT><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#a0e1ff">【イベントの挿入】</FONT>で別のイベントを呼び出している場合で、<BR>
+      呼び出し先のイベント内で<FONT color="#a0e1ff">【イベント処理中断】</FONT>を実行した場合は、<BR>
+      呼び出し元のイベントへ処理が戻り、呼び出し元のイベントの処理が続きます。<BR>
+      <BR>
+      <IMG src="02_1800_011.png" width="629" height="216" border="0"><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      「自動実行」や「並列実行」の中で<FONT color="#a0e1ff">【イベント処理中断】</FONT>を実行した場合は、<BR>
+      起動条件を満たしている限り、<FONT color="#ffff00">何度も0行目から処理が再開されます。</FONT><BR>
+      <BR>
+      「自動実行」や「並列実行」の処理を止める場合は、<FONT color="#ffa0a0">起動条件を満たさない</FONT>ようにしてください。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_transition_sitei">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：トランジションの指定</FONT><BR>
+      <BR>
+      <IMG src="027_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <FONT color="#00ffff">[トランジション実行]</FONT>を実行した時や<FONT color="#a0dcff">【場所移動】</FONT>を実行した時のゲーム画面の表示切り替え方法を設定します。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">[トランジションの指定]</FONT>の設定は、一度設定すると他の設定に変えるまでは同じ設定のままになります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      初期設定は<A href="../../05_kihon/0048_shokika/" target="_blank">コモンイベント[048:X[共]基本ｼｽﾃﾑ自動初期化]</A>の中にあります。<BR>
+      <BR>
+      <FONT color="#00ffff">▼コモンイベント[048:X[共]基本ｼｽﾃﾑ自動初期化]の設定</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c027_0.txt" target="_blank">【イベントコード表示】<BR>
+            <BR>
+            </A><FONT color="#ffff00">■ﾄﾗﾝｼﾞｼｮﾝﾀｲﾌﾟ指定： [単純切替] 10ﾌﾚｰﾑ（ｳｪｲﾄ有り）</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      この<A href="../../05_kihon/0048_shokika/" target="_blank">コモンイベント[048:X[共]基本ｼｽﾃﾑ自動初期化]</A>と同じ設定を行えば、<BR>
+      初期設定に戻す事ができます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      画面の表示切替方法は、<FONT color="#ffc83c">システムＤＢ[11:ﾄﾗﾝｼﾞｼｮﾝﾀｲﾌﾟ]</FONT>で設定します。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../../03_hen/1100_db_sys/index.htm#11t" target="_blank">【システムＤＢ[11:ﾄﾗﾝｼﾞｼｮﾝﾀｲﾌﾟ]の説明を見る】</A><BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_ichiji_shoukyo">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：イベントの一時消去</FONT><BR>
+      <BR>
+      <IMG src="028_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      マップイベント内で<FONT color="#a0e1ff">【イベントの一時消去】</FONT>を実行すると、マップイベントがマップ上から消えます。<BR>
+      <BR>
+      消えたマップイベントは、一度別のマップへ移動して、元のマップへ戻ってくると復活します。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      「自動実行」や「並列実行」で<FONT color="#a0e1ff">【イベントの一時消去】</FONT>を実行すると、イベント処理を停止させる事ができます。<BR>
+      <BR>
+      しかし別のマップから戻ってくると、再びイベントが実行するので、<BR>
+      オープニングなどの１回しか実行したくないイベントでは、この<FONT color="#a0e1ff">【イベントの一時消去】</FONT>は使えません。<BR>
+      <BR>
+      １回しか実行しないイベントを止める場合は、起動条件に変数を設定して、<BR>
+      変数の値が条件を満たさないようにしてください。<BR>
+      <BR>
+      <A href="../../01_shoshin/1011_1kai/index.htm" target="_blank">【１回だけ自動的に実行するイベントの解説ページを開く】</A><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">[対象]</FONT>の設定は、変数の値でも設定する事ができます。<BR>
+      <BR>
+      変数の値には、対象とするマップイベントのイベントＩＤを設定してください。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      コモンイベント内で実行すると「<FONT color="#ffa0a0">コモンイベントを一時消去することはできません。</FONT>」のエラーが表示されます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff" size="+2">■「このイベント」とイベントを指定する設定との違い</FONT><BR>
+      <BR>
+      マップイベント「Ev0」の中で<FONT color="#a0e1ff">【イベントの一時消去】</FONT>を実行して「Ev0」自身を消す場合…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■イベントの一時消去：このEv (0フレーム)</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      のように「このイベント」で設定する方法と…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■イベントの一時消去：Ev 0 (0フレーム)</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      のように「Ev0」を指定して設定する方法があります。<BR>
+      <BR>
+      一見どちらでも良いように思えますが、例えば…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■文章:あいうえお<BR>
+            ■イベントの一時消去：このEv (0フレーム)<BR>
+            ■文章:かきくけこ</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った設定を「このイベント」で設定した場合は、<BR>
+      「かきくけこ」が表示されずにイベント処理が中断します。<BR>
+      <BR>
+      一方…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■文章:あいうえお<BR>
+            ■イベントの一時消去：Ev 0 (0フレーム)<BR>
+■文章:かきくけこ</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と「Ev0」を指定して設定した場合は、<BR>
+      イベント処理が中断しないで「かきくけこ」が表示されます。<BR>
+      <BR>
+      このように一見どちらでも良いと思える設定でも、処理結果が変わってくる事があります。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_wait">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：ウェイト</FONT><BR>
+      <BR>
+      <IMG src="029_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      設定した時間だけ、イベントコマンドの処理を停止させます。<BR>
+      <BR>
+      停止時間は<FONT color="#ffff00">フレーム単位</FONT>で設定します。<BR>
+      <BR>
+      １フレームの時間は「<FONT color="#00ffff">ゲームの基本設定</FONT>」の「<FONT color="#00ffff">ゲームの処理ＦＰＳ</FONT>」の設定によっても異なりますが、<BR>
+      初期設定の「60FPS」の場合は「1秒＝60フレーム」になります。<BR>
+      <BR>
+      なお、処理落ちなどによって「1秒＝60フレーム」にならない事もあります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT size="+2" color="#00ffff">■ウェイト中の他のイベントの実行について</FONT><BR>
+      <BR>
+      「決定キーで実行」「自動実行」「プレイヤーから接触」「イベントと接触」の中で<BR>
+      ウェイトを実行した場合は、ウェイト中は「並列実行」のみが実行されます。<BR>
+      <BR>
+      「並列実行」の中でウェイトを実行した場合は、<BR>
+      ウェイトを実行した「並列実行」以外の全てのイベントが実行されます。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_label">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：ラベル処理</FONT><BR>
+      <BR>
+      <IMG src="030_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      次に実行するイベントコマンドの位置を変える時に使います。<BR>
+      <BR>
+      例えば以下の設定では、選択肢の「<FONT color="#ffff00">◇選択肢：【3】 説明 の場合↓</FONT>」の処理が終わった後に、<BR>
+      再び選択肢が表示されるようにラベルを設定しています。<BR>
+      <BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ff8080">●ラベル地点 【選択肢最初】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            <FONT color="#ffff00">■文章選択肢:/ 【1】ノーマルモード / 【2】ハードモード / 【3】説明 / 【4】ゲーム終了<BR>
+            -◇選択肢：【1】 ノーマルモード                           の場合↓<BR>
+            |■変数操作: V1-0[ゲーム難易度] = 0 + 0<BR>
+            |■<BR>
+            -◇選択肢：【2】 ハードモード                             の場合↓<BR>
+            |■変数操作: V1-0[ゲーム難易度] = 1 + 0<BR>
+            |■<BR>
+            -◇選択肢：【3】 説明 の場合↓<BR>
+            |■文章:〜説明文〜<BR>
+            <FONT color="#ff8080">|●ラベルに飛ぶ 【選択肢最初】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞</FONT><BR>
+            |■<BR>
+            -◇選択肢：【4】 ゲーム終了                               の場合↓<BR>
+            |■ゲーム終了<BR>
+            |■<BR>
+            ◇分岐終了◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      ラベルの文字には、<FONT color="#00ffff">特殊文字「\v[]」「\s[]」</FONT>などが使えます。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../0101_tokushumoji/" target="_blank">【「特殊文字」の説明を見る】</A><BR>
+      <BR>
+      特殊文字を使う事で、例えばパーティの人数に応じて、ラベルの移動先を変えるような設定ができます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼パーティ人数（可変ＤＢ[18:基本ｼｽﾃﾑ用変数]のデータ[4:現在パーティー人数]の値）によって、<BR>
+      　移動するラベルの位置が変わります。</FONT><BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ff8080">●ラベルに飛ぶ 【人数\cdb[18:4:0]】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞<BR>
+            ●ラベル地点 【人数1】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            <FONT color="#ffff00">■文章:１人だけしかいないのか。<BR>
+            ■イベント処理中断<BR>
+            <FONT color="#ff8080">●ラベル地点 【人数2】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            ■文章:２人いるのか。<BR>
+            ■イベント処理中断<BR>
+            <FONT color="#ff8080">●ラベル地点 【人数3】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            ■文章:３人いるのか。<BR>
+            ■イベント処理中断<FONT color="#ff8080"><BR>
+            ●ラベル地点 【人数4】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            ■文章:４人もいるのか。<BR>■イベント処理中断<BR>
+            <FONT color="#ff8080">●ラベル地点 【人数5】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            ■文章:５人は多いな〜。<BR>■イベント処理中断<BR>
+            <FONT color="#ff8080">●ラベル地点 【人数6】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            ■文章:満員御礼じゃの〜。</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">存在しないラベル</FONT>への移動設定は<FONT color="#ff96ff">無効</FONT>となり、何も処理されません。(エラーも発生しません)<BR>
+      <BR>
+      <FONT color="#00ffff">▼パーティ人数が６人の時だけラベルへ移動します。</FONT><BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ff8080">●ラベルに飛ぶ 【人数\cdb[18:4:0]】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞<BR>
+            </FONT><FONT color="#ffff00">■文章:まだ満員では無いな。<BR>■イベント処理中断<BR>
+            <FONT color="#ff8080">●ラベル地点 【人数6】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            ■文章:満員御礼じゃの〜。</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      同じラベル名が複数ある場合は、一番上にあるラベルへ移動します。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      ラベルは<FONT color="#ffff00">同じイベントコマンド表示欄の中だけ</FONT>で機能します。<BR>
+      <BR>
+      別のイベントにあるラベルや別のページにあるラベルへ移動させる事はできません。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT size="+2" color="#00ffff">■「[！]注意」に書かれている内容について</FONT><BR>
+      <BR>
+      <IMG src="030_1.png" width="592" height="335" border="0"><BR>
+      <BR>
+      「<FONT color="#00ffff">上記以外</FONT>」の設定がある<FONT color="#a0e1ff">【条件分岐】</FONT>に<FONT color="#a0e1ff">【ラベル地点】</FONT>を置いた場合、<BR>
+      「<FONT color="#ffff00">条件分岐内のイベント＋上記以外のイベント</FONT>」が実行します。<BR>
+      <BR>
+      例えば以下の設定では、セルフ変数[0]の値によって、<BR>
+      「あいうえお」「かきくけこ」「さしすせそ」のいずれかが表示されます。<BR>
+      <BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■条件分岐(数値): 【1】 このEvのSelf0 が 1 と同じ 【2】 このEvのSelf0 が
+            2 と同じ<BR>
+            -◇分岐： 【1】 [ このEvのSelf0 が 1 と同じ ]の場合↓<BR>
+            |■文章:あいうえお<BR>
+            |■<BR>
+            -◇分岐： 【2】 [ このEvのSelf0 が 2 と同じ ]の場合↓<BR>
+            |■文章:かきくけこ<BR>
+            |■<BR>
+            -◇上記以外<BR>
+            |■文章:さしすせそ<BR>
+            |■<BR>
+            ◇分岐終了◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      しかし以下のように、ラベルで条件分岐内へ移動させた場合は、<BR>
+      <FONT color="#00ffff">「あいうえお」</FONT>のあとに<FONT color="#00ffff">「さしすせそ」</FONT>も表示してしまいます。<BR>
+      <BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ff8080">●ラベルに飛ぶ 【分岐内へ移動】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞<BR>
+</FONT><FONT color="#ffff00">■条件分岐(数値): 【1】 このEvのSelf0 が 1 と同じ 【2】 このEvのSelf0 が
+            2 と同じ<BR>
+            -◇分岐： 【1】 [ このEvのSelf0 が 1 と同じ ]の場合↓<BR>
+            <FONT color="#ff8080">|●ラベル地点 【分岐内へ移動】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            |■文章:あいうえお<BR>
+            |■<BR>
+            -◇分岐： 【2】 [ このEvのSelf0 が 2 と同じ ]の場合↓<BR>
+            |■文章:かきくけこ<BR>
+            |■<BR>
+            -◇上記以外<BR>
+            |■文章:さしすせそ<FONT color="#00ffff">←これも実行してしまう</FONT><BR>
+            |■<BR>
+            ◇分岐終了◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      もしも「<FONT color="#00ffff">上記以外</FONT>」がある条件分岐内にラベルで移動させる場合は、以下のように設定してください。<BR>
+      <BR>
+      <FONT color="#00ffff">▼設定例１</FONT><BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ff8080">●ラベルに飛ぶ 【分岐内へ移動】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞<BR>
+            </FONT><FONT color="#ffff00">■条件分岐(数値): 【1】 このEvのSelf0 が 1 と同じ 【2】 このEvのSelf0 が
+            2 と同じ<BR>
+            -◇分岐： 【1】 [ このEvのSelf0 が 1 と同じ ]の場合↓<BR>
+            <FONT color="#ff8080">|●ラベル地点 【分岐内へ移動】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            |■文章:あいうえお<BR>
+            <FONT color="#ff8080">|●ラベルに飛ぶ 【分岐終了】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞</FONT><BR>
+            |■<BR>
+            -◇分岐： 【2】 [ このEvのSelf0 が 2 と同じ ]の場合↓<BR>
+            |■文章:かきくけこ<BR>
+            |■<BR>
+            -◇上記以外<BR>
+            |■文章:さしすせそ<BR>
+            |■<BR>
+            ◇分岐終了◇</FONT><BR>
+            <FONT color="#ff8080">●ラベル地点 【分岐終了】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼設定例２</FONT><BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ff8080">●ラベルに飛ぶ 【分岐内へ移動】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞</FONT><BR>
+            <FONT color="#ffff00">■回数付きループ [ 1 ]回<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf0 が 1 と同じ 【2】 このEvのSelf0
+            が 2 と同じ<BR>
+ |-◇分岐： 【1】  [ このEvのSelf0  が  1 と同じ  ]の場合↓<BR>
+            <FONT color="#ff8080">||●ラベル地点 【分岐内へ移動】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+ ||■文章:あいうえお<BR>
+ ||■ループ中断<BR>
+ ||■<BR>
+ |-◇分岐： 【2】  [ このEvのSelf0  が  2 と同じ  ]の場合↓<BR>
+ ||■文章:かきくけこ<BR>
+ ||■<BR>
+ |-◇上記以外<BR>
+ ||■文章:さしすせそ<BR>
+ ||■<BR>
+ |◇分岐終了◇<BR>
+ |■<BR>
+◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="loop_500">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■「1フレームあたりの処理が500万回を越えました！」のエラーについて</FONT><BR>
+      <BR>
+      ループ処理やラベル処理を使ってイベントを設定した場合、<BR>
+      <FONT color="#ffa0a0">「1フレームあたりの処理が500万回を越えました！」</FONT>のエラーが発生する事があります。<BR>
+      <BR>
+      <IMG src="06_1000_500000_001.png" width="640" height="480" border="0"><BR>
+      <BR>
+      例えば…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■ループ開始<BR>
+ |■キー入力：このEvのｾﾙﾌ変数0 /  [新押し時のみ]  マウス 左ｸﾘｯｸ(20)<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf0 が 1 以上<BR>
+ |-◇分岐： 【1】  [ このEvのSelf0  が  1 以上  ]の場合↓<BR>
+            ||■ループ中断<BR>
+            ||■<BR>
+ |◇分岐終了◇<BR>
+ |■キー入力：このEvのｾﾙﾌ変数0 /  [新押し時のみ]  決定(10)<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf0 が 1 以上<BR>
+ |-◇分岐： 【1】  [ このEvのSelf0  が  1 以上  ]の場合↓<BR>
+            ||■ループ中断<BR>
+            ||■<BR>
+ |◇分岐終了◇<BR>
+ |■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った設定を行うと、<BR>
+      <FONT color="#ffa0a0">「1フレームあたりの処理が500万回を越えました！」</FONT>のエラーが発生します。<BR>
+      <BR>
+      エラーが発生しないようにするためには…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■ループ開始<BR>
+            <FONT color="#00ffff">|■ウェイト：1 フレーム</FONT><BR>
+ |■キー入力：このEvのｾﾙﾌ変数0 /  [新押し時のみ]  マウス 左ｸﾘｯｸ(20)<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf0 が 1 以上<BR>
+ |-◇分岐： 【1】  [ このEvのSelf0  が  1 以上  ]の場合↓<BR>
+            ||■ループ中断<BR>
+            ||■<BR>
+ |◇分岐終了◇<BR>
+ |■キー入力：このEvのｾﾙﾌ変数0 /  [新押し時のみ]  決定(10)<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf0 が 1 以上<BR>
+ |-◇分岐： 【1】  [ このEvのSelf0  が  1 以上  ]の場合↓<BR>
+            ||■ループ中断<BR>
+            ||■<BR>
+ |◇分岐終了◇<BR>
+ |■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言ったように、ウェイトを設定する必要があります。<BR>
+      <BR>
+      同様にラベルを使ったループ処理でも…
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ff8080">●ラベル地点 【最初へ戻る】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            <FONT color="#ffff00">■キー入力：このEvのｾﾙﾌ変数0 / [新押し時のみ] マウス 左ｸﾘｯｸ(20)<BR>
+            ■条件分岐(数値): 【1】 このEvのSelf0 が 0 と同じ<BR>
+            -◇分岐： 【1】 [ このEvのSelf0 が 0 と同じ ]の場合↓<BR>
+            |■キー入力：このEvのｾﾙﾌ変数0 / [新押し時のみ] 決定(10)<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf0 が 0 と同じ<BR>
+            |-◇分岐： 【1】 [ このEvのSelf0 が 0 と同じ]の場合↓<BR>
+            <FONT color="#ff8080">||●ラベルに飛ぶ 【最初へ戻る】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞</FONT><BR>
+            ||■<BR>
+            |◇分岐終了◇<BR>
+            |■<BR>
+            ◇分岐終了◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った設定を行うと、エラーが発生するため…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ff8080">●ラベル地点 【最初へ戻る】　＜＜＜＜＜＜＜＜＜＜＜＜＜＜★</FONT><BR>
+            <FONT color="#00ffff">■ウェイト：1 フレーム</FONT><BR>
+            <FONT color="#ffff00">■キー入力：このEvのｾﾙﾌ変数0 / [新押し時のみ] マウス 左ｸﾘｯｸ(20)<BR>
+            ■条件分岐(数値): 【1】 このEvのSelf0 が 0 と同じ<BR>
+            -◇分岐： 【1】 [ このEvのSelf0 が 0 と同じ ]の場合↓<BR>
+            |■キー入力：このEvのｾﾙﾌ変数0 / [新押し時のみ] 決定(10)<BR>
+            |■条件分岐(数値): 【1】 このEvのSelf0 が 0 と同じ<BR>
+            |-◇分岐： 【1】 [ このEvのSelf0 が 0 と同じ]の場合↓<BR>
+            <FONT color="#ff8080">||●ラベルに飛ぶ 【最初へ戻る】　＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞＞</FONT><BR>
+            ||■<BR>
+            |◇分岐終了◇<BR>
+            |■<BR>
+            ◇分岐終了◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言ったように、ウェイトを設定する必要があります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#ffa0a0">「1フレームあたりの処理が500万回を越えました！」</FONT>のエラーについては、<BR>
+      以下のページにて詳しい説明を見る事ができます。<BR>
+      <BR>
+      <A href="../../06_bug/1000_500000/" target="_blank">【エラー｢1フレームあたりの処理が500万回を越えました！｣の説明を見る】</A><BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <BR>
+      <FONT size="+2" color="#ffff00">◎関連ページ</FONT><BR>
+      <BR>
+      <A href="../0000_ibekoma_nani/" target="_top">◆「イベントコマンド」って何？</A><BR>
+      <A href="../0100_bunshou/" target="_top">┣◆文章の表示</A><BR>
+      <A href="../0101_tokushumoji/" target="_top">┃┗◆特殊文字</A><BR>
+      <A href="../0200_sentakushi/" target="_top">┣◆選択肢</A><BR>
+      <A href="../0210_rei_sentakushi/" target="_top">┃┗◆【使用例】選択肢</A><BR>
+      <A href="../0300_hensuu/" target="_top">┣◆変数操作</A><BR>
+      <A href="../0301_enzansi/" target="_top">┃┗◆演算子について</A><BR>
+      <A href="../0400_db/" target="_top">┣◆ＤＢ操作</A><BR>
+      <A href="../0500_mojiretsu/" target="_top">┣◆文字列操作</A><BR>
+      <A href="../0510_rei_mojiretsu/" target="_top">┃┗◆【使用例】文字列操作</A><BR>
+      <A href="../0600_hensuu_plus/" target="_top">┣◆変数操作＋</A><BR>
+      <A href="../0601_xy/" target="_top">┃┣◆「Ｘ座標･Ｙ座標」と「画面Ｘ座標･画面Ｙ座標」の違い</A><BR>
+      <A href="../0610_rei_hensuu_plus_chara/" target="_top">┃┣◆【使用例】変数操作＋の｢キャラ｣と｢位置｣</A><BR>
+      <A href="../0611_rei_hensuu_plus_picture/" target="_top">┃┗◆【使用例】変数操作＋の｢ピクチャ｣と｢その他｣</A><BR>
+      <A href="../0700_jouken_hen/" target="_top">┣◆条件(数値)</A><BR>
+      <A href="../0800_jouken_moji/" target="_top">┣◆条件(文字列)</A><BR>
+      <A href="../0900_key/" target="_top">┣◆キー入力</A><BR>
+      <A href="../0910_rei_key/" target="_top">┃┗◆【使用例】キー入力</A><BR>
+      <A href="../1000_picture/" target="_top">┣◆ピクチャ</A><BR>
+      <A href="../1001_hyoujikeisiki/" target="_top">┃┗◆表示形式(通常･加算･減算･乗算)について</A><BR>
+      <A href="../1100_effect/" target="_top">┣◆エフェクト</A><BR>
+      <A href="../1101_effect_z/" target="_top">┃┣◆「Ｚオーダー」について</A><BR>
+      <A href="../1110_rei_effect/" target="_top">┃┗◆【使用例】エフェクト</A><BR>
+      <A href="../1200_sound/" target="_top">┣◆サウンド</A><BR>
+      <A href="../1300_save_load/" target="_top">┣◆セーブ･ロード操作</A><BR>
+      <A href="../1400_party/" target="_top">┣◆パーティ画像</A><BR>
+      <A href="../1500_chip/" target="_top">┣◆チップ処理</A><BR>
+      <A href="../1510_rei_chip/" target="_top">┃┗◆【使用例】チップ処理</A><BR>
+      <A href="../1600_bashoidou/" target="_top">┣◆場所移動</A><BR>
+      <FONT color="#ffff00">┣◆イベント制御</FONT><BR>
+      <A href="../1701_ev_dousa/" target="_top">┃┣◆キャラクターの動作指定</A><BR>
+      <A href="../1710_rei_ev/" target="_top">┃┗◆【使用例】イベント制御</A><BR>
+      <A href="../1800_com/" target="_top">┣◆コモンイベント</A><BR>
+      <A href="../1900_dl/" target="_top">┣◆ダウンロード</A><BR>
+      <A href="../2000_pro/" target="_top">┗◆プロ版機能</A><BR>
+      　<A href="../2010_pro_hikisuu/" target="_top">┗◆起動時の引数について</A></TD>
+    </TR>
+  </TBODY>
+</TABLE>
+</CENTER>
+<DIV style="position: relative; top: 20px" align="center">
+<HR>
+<A href="../../" target="_top">YADOT-WOLFトップ</A>　　<A href="http://kkni.net/" target="_blank">気紛れな空間へ戻る</A>　　<A href="../../../page/mail.htm" target="_blank">メール</A><BR>
+　</DIV>
+</BODY>
+</HTML>

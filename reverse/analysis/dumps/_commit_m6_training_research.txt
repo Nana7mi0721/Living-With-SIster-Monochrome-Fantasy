@@ -1,0 +1,14 @@
+M6: natural training menu test and night/ev1 research
+
+- add crates/wolf-game/tests/m6_training_menu.rs: the bedroom 钻研 icon +
+  Decide opens event 245 (力量锻炼/空挥/冥想); each option spends the
+  afternoon (18:30 -> 20:00), costs energy and raises its stat, 0 warnings.
+- record the measured deltas in docs/HANDOFF_M4.md and docs/BASELINE.json
+  (natural_training).
+- add docs/research/M6_NIGHT_FLOW.md: bedroom hover picture 120 + Decide
+  opens CE245; var295 tip gate and the CE328 pre-pc700 abort block a full
+  click-only next-day route.
+- add docs/research/EV1_NIGHT_SISTER.md: ev1 page2 is gated by var64 (not
+  var63); var63 is page2's output; var64 is written only by CE328.
+
+cargo test -q --workspace green; wolf-cli verify PASS 70/0.

@@ -1,0 +1,19 @@
+HSCENE P1/P2: capture --map composite, 160/162 fade, word_effect fallback
+
+- capture --map now drives a real Game: start_pages installs the tile layer
+  and starts the map's automatic pages, so the picture layer composites on
+  top of the tiles exactly like the scripted capture. Both paths share
+  drive_capture_frames / build_capture_frame / render_capture_frame, and
+  --map now accepts --pointer / --press-frame / --key-frame / --load-save.
+  (docs/HSCENE.md 4.3 P1)
+- New ScreenTransition (crates/wolf-game/src/transition.rs): kind -1 stays a
+  hard cut; kind >= 0 ramps a full-screen fade over transition.frames()
+  (flags & 0xFF) that dims both tile and picture layers in both render paths.
+  Wired through GameHost::transition; ticked in Game::frame; folded into
+  apply_screen_tint alongside the 151 tint. Unit tests cover the ramp.
+  (docs/HSCENE.md 4.4 P1)
+- Assets resolve the author's Picture/word_effect* typo to hword/word_effect*
+  with a visible "asset fallback: ..." diagnostic; strictly scoped, every
+  other missing asset is still fatal. Noted in docs/UNVERIFIED.md. (4.6 P2)
+
+Tests: cargo test -q --workspace all green (wolf-game 219 passed).

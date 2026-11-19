@@ -1,0 +1,10 @@
+docs: correct the fictional NPC walking-animation gap
+
+The shipped six registered maps are point-and-click: all 115 event pages
+have empty graphic ids, and interaction is 150 Picture hotspots plus 124
+hover checks. Across the 9 .mps files, 133/134 pages use fixed route_mode
+and every route length is 0. The 73 scripted 201 Move commands only cover
+the isolated Map002 bomb/approach sample and invisible Map003/Map031
+positioning. M11's eight-way walking and ActionKey work is engine-generic
+input coverage, not a retail content gap, so remove it from the M12
+backlog and record the retail scope in M11_NPC_INTERACTION.md.

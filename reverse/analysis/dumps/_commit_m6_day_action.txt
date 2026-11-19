@@ -1,0 +1,14 @@
+M6: execute the CE251 day command and spend the day
+
+The morning day-command menu (CE251) is a custom picture-button list:
+hover first, hold the mouse for a few frames, then answer its 102
+confirmation. A bare one-frame click only shows the description.
+
+Extend the bedtime-chain integration test to drive the first button
+(学习会) after the day-2 morning: hover 512,230 for 10 frames, hold for
+5, then release. CE251 finishes with time 08:30 -> 17:00, var4=17,
+var5=0, var48=2, study var171 6 -> 14 (+8) and energy var14 140 -> 120
+(-20), 0 warnings, 161211 instructions.
+
+Update HANDOFF_M4 section 4.6/6 and BASELINE.json (day_action,
+screenshots, remaining) with the measured evidence.

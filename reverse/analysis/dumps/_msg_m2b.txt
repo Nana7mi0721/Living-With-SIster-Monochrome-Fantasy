@@ -1,0 +1,32 @@
+M2: 250 写路径、移动插值、离屏裁剪、12 个常时协程、.project 名字
+
+数据库（250）
+- 方向 = flags & 0x1000（置位为读，清零为写），容器 = (flags>>8)&3，op = (flags>>4)&7
+- DbOp 带 container/direction/op/type_label/field_label/source/destination；写指令不回写源变量
+- 游戏侧 combine_cell 实现 assign/add/sub/mul/div/rem/max/min 的读-改-写，除零保留原值
+- wolf-format 新增 .project 名字精确走查（DataBase/CDataBase/SysDatabase 三个都走到 EOF）
+  以及 type_name/field_name/row_name；FORMAT_SPEC 新增 §6.8
+
+图片层
+- 移动尾部帧数是插值时长：Pose/Transition/Screen::advance，由 Game::frame 每帧推进
+  3,365 条移动里 328 条真的带时长（2..16 帧），其余瞬移；MAX_TRANSITION_FRAMES 600
+- 离屏裁剪 picture::on_screen：碰不到屏幕的图片不产出 quad、不打包皮肤
+  第三方气泡库的 19 个控件停在 (-2784,2880)，选择态 38->10 quad，消息态 37->9 quad
+
+引擎协程
+- ENGINE_ALWAYS 10 个 + AUTO_START 241 + IMPLICIT 63 = 12 个；新增 Game.engine_always
+  与 wolf-cli --engine-events 做 A/B
+- 271 复测后恢复启动：控件现在落到库自己的停车场并被裁掉，标题帧与不启动它逐像素相同
+
+文本与消息
+- TextItem 的 alpha 真的生效了（Attrs 用 Color::rgba，文字与描边一起淡出），标题帧不变
+- 101 消息关闭时通知宿主（poll_waits 先 close_message 再清等待），不再残留 Sys12=1
+
+文档
+- docs/ENGINE_EVENTS.md（新增，923 行）§10 落地记录与逐事件 A/B
+- docs/OPCODE_250.md（新增，886 行）读/写/容器/op 与标签解析
+- docs/OPCODE_290.md 重写为 v2：11 个效果类型从 Editor.exe 读出，图片号是闭区间
+- docs/M2_SLICE.md 与 docs/BASELINE.json 刷新到本批实测数字
+
+验证：cargo test -q --workspace 全绿；wolf-cli verify PASS 63/63；
+标题帧 716 对零售 mean abs 0.012 / max 1 / psnr 67.20 dB 不变。

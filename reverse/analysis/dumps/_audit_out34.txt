@@ -1,0 +1,39 @@
+install total 117 files / 2174964407 B
+  root   23 files / 1357874454 B
+  Data   27 files / 784939370 B
+
+-- top-level files by size --
+  1308781184  Living With Sister Monochrome Fantasy CN Patch v5 with Cosplay DLC.exe
+    11949844  Lolita.ttf
+    11575152  GenJyuuGothicXPB.ttf
+     7329792  GamePro.exe
+     7329792  Game.exe
+     4170144  MSGOTHIC.TTF
+     2355728  07yasashi.ttf
+     2127872  Config.exe
+      387664  ScreenShot_2026_1028_21_22_56.png
+      387628  ScreenShot_2026_1028_21_23_07.png
+      332123  ScreenShot_2026_1028_21_22_48.png
+      332047  ScreenShot_2026_1028_21_21_35.png
+      147456  GuruguruSMF4.dll
+      122852  ScreenShot_2026_1028_21_22_46.png
+      122852  ScreenShot_2026_1028_21_21_32.png
+      102445  ScreenShot_2026_1028_21_22_43.png
+       93314  index.html
+       93310  index.1.html
+       75160  ScreenShot_2026_1028_21_21_28.png
+       57216  PixelifySans-VariableFont_wght.ttf
+         526  Script.vdf
+         289  Game.ini
+          64  dlc.dat
+
+-- fonts anywhere in install --
+   2355728  07yasashi.ttf                                                a297ba75b7d0
+  11575152  GenJyuuGothicXPB.ttf                                         be401bb87e76
+  11949844  Lolita.ttf                                                   559b2f1c068d
+   4170144  MSGOTHIC.TTF                                                 c90b0c573bcd
+     57216  PixelifySans-VariableFont_wght.ttf                           1b471de1ff39
+   2355728  Data\07yasashi.ttf                                           a297ba75b7d0
+   2355728  Data\07yasashisagoshitsukubo-rudo.ttf                        a297ba75b7d0
+  11575152  Data\08gothic.ttf                                            be401bb87e76
+  11575152  Data\08YuanRougoshitsukubo-rudo.ttf                          be401bb87e76

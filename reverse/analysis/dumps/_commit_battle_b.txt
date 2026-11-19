@@ -1,0 +1,12 @@
+M3: battle slice B CDataBase out-of-schema column reads return engine defaults
+
+Game::database now answers a read whose column lies past the table's own
+declared field count with the engine default empty cell (numeric 0 / ""),
+counted in the new GameStats.database_out_of_schema, instead of recording it
+as an unanswered access. Row-past-count reads keep the existing unanswered
+semantics (a cleared row's value is genuinely unknown).
+
+CE188 slice-B diagnostics drop from 21 distinct / 17 unanswered to 5 / 1
+(the remaining one is an intentional row-past read). Unit test
+a_column_past_the_field_count_reads_as_the_empty_cell covers it; wolf-game
+213 tests pass. Docs updated (HANDOFF_M3 section 5 item 3, BATTLE section 5.2).

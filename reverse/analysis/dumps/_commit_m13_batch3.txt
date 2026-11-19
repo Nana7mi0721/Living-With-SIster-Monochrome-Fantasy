@@ -1,0 +1,17 @@
+M13 batch3: read-load auto-events prime fix + visual baseline + P1-E re-audit
+
+- Fix: AutoEvents::prime_latched seeds latched state from loaded variables;
+  savegame::apply calls it after rebuilding part5, so a save load no longer
+  fabricates run_condition==2 edges (506 DLC eye overlay -6 is gone). Loaded
+  runtime state is presented by the SavePart5 snapshot; real edges still fire.
+- Tests: new m13_auto_events_load.rs (2 passed); m7_hauto_events updated to
+  prime semantics (2 passed); 15 RNG-sensitive fixtures pin set_event_seed
+  in-test with assertions unchanged (18 targets 0 failed); rng.rs untouched.
+- Visual: h_overlay baseline re-recorded after fix (peak 7->0, live 86->84,
+  quads 257->254, atlas 42->39, glyphs 59->60, nonblack 527568->527714;
+  two captures byte-identical); only h_overlay baseline changed.
+- P1-E re-audit: retail save frames slots1-7 all metrics improved; slot8 only
+  HUD +1 glyph while scene improved; eye overlay gone. See P1E audit §11.
+- Docs: HANDOFF_M13 §6.2, PLAN §4.6, README/research index, BASELINE batch3.
+- Gate: 144 test-result blocks / 863 passed / 0 failed / 14 ignored;
+  wolf-cli verify --root work/all (no env) PASS 70/0, EXIT 0.

@@ -1,0 +1,50 @@
+== MapChip  files=102
+   [A]Dirt1-Dirt2_pipo.png                  (16, 80) P
+   [A]Dirt1-Dirt3_pipo.png                  (16, 80) P
+   [A]Dirt1-Dirt4_pipo.png                  (16, 80) P
+   [A]Dirt1_pipo.png                        (16, 80) P
+   [A]Dirt2_pipo.png                        (16, 80) P
+== CharaChip  files=91
+   [Animal]Cat_pochi.png                    (120, 72) P
+   [Animal]Chameleon_Uroboros.png           (120, 112) RGBA
+   [Animal]Chicken.png                      (120, 64) RGBA
+   [Animal]Cow_pochi.png                    (168, 96) P
+   [Animal]Crow1_pochi.png                  (132, 72) P
+== SystemGraphic  files=28
+   CharaShade_8dir.png                      (144, 128) RGBA
+   CursorBase.png                           (12, 12) RGBA
+   Text_Pause.png                           (17, 90) RGBA
+   TitleGraphic.jpg                         (1024, 576) RGB
+   TitleGraphic.png                         (1024, 576) RGB
+== EnemyGraphic  files=118
+   GD_Bahamut(Silver).png                   (211, 146) RGBA
+   GD_Bahamut.png                           (210, 147) RGBA
+   GD_Basilisk(Red).png                     (114, 116) RGBA
+   GD_Basilisk.png                          (113, 101) RGBA
+   GD_Bat.png                               (62, 60) RGBA
+== FIcon  files=10
+   くしゃくしゃ.png                               (256, 32) P
+   はてな.png                                  (256, 32) P
+   びっくり.png                                 (256, 32) P
+   ぴかーん.png                                 (256, 32) P
+   ハート.png                                  (256, 32) P
+== Fog_BackGround  files=10
+   [BackGround]night1_pipo.jpg              (320, 240) RGB
+   [BackGround]night2_pipo.jpg              (320, 240) RGB
+   [BackGround]night3_pipo.jpg              (320, 240) RGB
+   [BackGround]sky1_pipo.jpg                (320, 240) RGB
+   [BackGround]sky2_pipo.jpg                (320, 240) RGB
+== extensions
+   png     2777 files     226.2 MB
+   jpg      903 files     191.3 MB
+   mp3      172 files      80.4 MB
+   ogg      163 files     227.2 MB
+   wolf      23 files     722.0 MB
+   wav       23 files       3.7 MB
+   dat        9 files       5.5 MB
+   mps        9 files       1.2 MB
+   ttf        4 files      26.6 MB
+   project     4 files       0.4 MB
+   txt        1 files       0.0 MB
+   xxxxx      1 files       0.0 MB
+   ico        1 files       0.0 MB

@@ -1,0 +1,79 @@
+=== EXTERNAL callers of battle entries (outside closure) ===
+CE239: 104 external: CE253[┣地域貢献]pc174; CE253[┣地域貢献]pc177; CE253[┣地域貢献]pc180; CE253[┣地域貢献]pc185; CE253[┣地域貢献]pc188; CE253[┣地域貢献]pc191; CE256[■討伐依頼]pc131; CE256[■討伐依頼]pc157; CE256[■討伐依頼]pc183; CE256[■討伐依頼]pc213; CE256[■討伐依頼]pc239; CE256[■討伐依頼]pc265
+CE28: 0 external: 
+CE37: 0 external: 
+CE188: 1 external: CE37[◇ランダムエンカウント処理 ]pc53
+CE177: 0 external: 
+CE187: 0 external: 
+CE134: 0 external: 
+CE203: 0 external: 
+
+=== 150 Picture file names in battle closure (top 40) ===
+    11  Picture/battle_member01b.png
+    10  Picture/battle_member02b.png
+     9  Picture/battle_member03b.png
+     8  <SQUARE>
+     8  <SQUARE>FRAME
+     8  \f[12]▼
+     7  <GRADX-744-400>
+     7  \f[12]■
+     5  \E\c[0]\f[16]S+
+     5  \E\c[0]\f[16]S
+     5  \E\c[0]\f[16]A+
+     5  \E\c[0]\f[16]A
+     5  \E\c[0]\f[16]B+
+     5  \E\c[0]\f[16]B
+     5  \E\c[0]\f[16]C+
+     5  \E\c[0]\f[16]C
+     5  \E\c[0]\f[16]D+
+     5  \E\c[0]\f[16]D
+     5  \E\c[0]\f[16]E+
+     5  \E\c[0]\f[16]E
+     5  Picture/battle_member01a.png
+     5  Picture/member_00_s.png
+     5  Picture/battle_member02a.png
+     5  Picture/battle_member04b.png
+     4  \f[\cself[18]]\space[0]
+     4  <GRADX-999-274>
+     4  cg/battle_bg1.png
+     4  Picture/battle_member01d.png
+     3  \f[\cself[19]]\cself[5]
+     3  <GRADX-999-247>
+     3  \f[\cself[38]]\E\-[1]\cself[9]
+     3  cg/blackscreen.jpg
+     3  Picture/battle_member03a.png
+     3  Picture/member_03_s.png
+     3  Picture/member_02_s.png
+     3  Picture/sd_icon06.png
+     3  \f[12]□
+     3  Picture/battle_member03d.png
+     3  Picture/battle_member02d.png
+     2  <GRADY-779-111>
+  ... total distinct=211 total 150 cmds=390
+
+=== 140 Sound in closure (top 30) ===
+    10  code140 SE/status03.mp3
+     3  code140 \cself[9]
+     3  code140 \cself[8]
+     3  code140 SE/[Effect]SHUWAAAN3_panop.ogg
+     2  code140 SE/magic-statusup2.mp3
+     2  code140 SE/deden.mp3
+     1  code140 BGM/soul_engage_loop.ogg
+     1  code140 BGM/The_End_of_Destruction.ogg
+     1  code140 BGM/Die_Letzte_Revolution.ogg
+     1  code140 BGM/straightcontrast.ogg
+     1  code140 BGM/p_egg_loop.ogg
+     1  code140 BGM/RAIN_&_Co.ogg
+     1  code140 BGM/nemesis_loop.ogg
+     1  code140 BGM/Tenseness.ogg
+     1  code140 SE/enemy-advent1.mp3
+     1  code140 SE/swish1_3.mp3
+     1  code140 SE/sword-slash3.mp3
+     1  code140 SE/arrow01.mp3
+     1  code140 BGM/Across_-Battle_Results-.ogg
+     1  code140 BGM/We_are_Going.ogg
+     1  code140 SE/magic-cure3.mp3
+     1  code140 SE/heal02.mp3
+     1  code140 SE/knife-stab-2.mp3
+     1  code140 SE/hit_se.mp3
+  total distinct=24

@@ -1,0 +1,13 @@
+M6: prove the sleep event rolls the game into the next morning
+
+CE329 (就寝処理) is the real day-rollover routine. Started headlessly with
+vars 4=18:30, 160=3, 6=1 it advances to 08:30 on day 4 (Wednesday): var4
+18 -> 7 (f76) -> 8 (f186), var5 30 -> 45 -> 0 -> 15 -> 30, var160 3 -> 4,
+var6 1 -> 2, with 0 warnings and 15618 instructions. The same run captures
+work/out/m6_sleep.png (91.4% non-black, 6 sounds, sister says 早上好。).
+
+CE217 時刻表示 only wraps minutes/hours/weekdays; the day counter increments
+inside CE329. The player-facing route is SampleMapA ev4 メニュー処理 page4
+pc98/101 (210 [500329,1,0/1], menu state vars 63/62/464/60); the bedroom slice
+does not expose that menu yet, so engine-level cross-day rollover is proven
+and the playable menu entry remains open.

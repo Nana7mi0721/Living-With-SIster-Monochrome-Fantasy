@@ -1,0 +1,76 @@
+== マップ設定  fields=[{'name': 'マップファイル名', 'stringArgs': ['MapData']}, {'name': 'BGM番号(リスト読込)', 'stringArgs': ['無し', 'イベントに任せる', 'ﾌｧｲﾙ名で指定']}, {'name': 'BGS番号(リスト読込)', 'stringArgs': ['無し', 'イベントに任せる', 'ﾌｧｲﾙ名で指定']}, {'name': 'ル—プ:1横2縦3両方', 'stringArgs': ['ループ無し', '横のみループ', '縦のみループ', '縦横ループ']}, {'name': '遠景番号', 'stringArgs': ['<なし>', '<変化なし>', 'ﾌｧｲﾙ名で指定']}, {'name': 'BGMﾌｧｲﾙ名[BGM番号=-3]'}, {'name': 'BGSﾌｧｲﾙ名[BGS番号=-3]'}, {'name': '遠景ﾌｧｲﾙ名[遠景番号=-3]'}]
+   {'name': 'タイトル', 'data': [{'name': 'マップファイル名', 'value': 'MapData/TitleMap.mps'}, {'name': 'BGM番号(リスト読込)', 'value': 4294967295}, {'name': 'BGS番号(リスト読込)', 'value': 4294967295}, {'name': 'ル—プ:1横2縦3両方', 'value': 0}, {'name': '遠景番号', 'value': 4294967295}, {'name': 'BGMﾌｧｲﾙ名[BGM番号=-3]', 'value': ''}, {'name': 'BGSﾌｧｲﾙ名[BGS番号=-3]', 'value': ''}, {'name': '遠景ﾌｧｲﾙ名[遠景番号=-3]', 'value': ''}]}
+   {'name': '自宅1', 'data': [{'name': 'マップファイル名', 'value': 'MapData/SampleMapA.mps'}, {'name': 'BGM番号(リスト読込)', 'value': 4294967294}, {'name': 'BGS番号(リスト読込)', 'value': 4294967295}, {'name': 'ル—プ:1横2縦3両方', 'value': 0}, {'name': '遠景番号', 'value': 2}, {'name': 'BGMﾌｧｲﾙ名[BGM番号=-3]', 'value': ''}, {'name': 'BGSﾌｧｲﾙ名[BGS番号=-3]', 'value': ''}, {'name': '遠景ﾌｧｲﾙ名[遠景番号=-3]', 'value': ''}]}
+== BGMリスト  fields=[{'name': 'ファイル名', 'stringArgs': ['BGM']}, {'name': '再生音量[%] 標準100'}, {'name': '再生周波数[%]'}, {'name': 'ループ開始位置(ms)/キ—±'}]
+   {'name': 'タウン', 'data': [{'name': 'ファイル名', 'value': ''}, {'name': '再生音量[%] 標準100', 'value': 80}, {'name': '再生周波数[%]', 'value': 100}, {'name': 'ループ開始位置(ms)/キ—±', 'value': 0}]}
+   {'name': 'スタッフロール', 'data': [{'name': 'ファイル名', 'value': ''}, {'name': '再生音量[%] 標準100', 'value': 100}, {'name': '再生周波数[%]', 'value': 100}, {'name': 'ループ開始位置(ms)/キ—±', 'value': 0}]}
+== BGSリスト  fields=[{'name': 'ファイル名', 'stringArgs': ['BGM']}, {'name': '再生音量[%]'}, {'name': '再生周波数[%]'}, {'name': 'ループ開始位置(ms)'}]
+   {'name': '小川', 'data': [{'name': 'ファイル名', 'value': 'SE/stream.ogg'}, {'name': '再生音量[%]', 'value': 70}, {'name': '再生周波数[%]', 'value': 0}, {'name': 'ループ開始位置(ms)', 'value': 0}]}
+   {'name': '波', 'data': [{'name': 'ファイル名', 'value': 'BGM/wave1.mp3'}, {'name': '再生音量[%]', 'value': 50}, {'name': '再生周波数[%]', 'value': 0}, {'name': 'ループ開始位置(ms)', 'value': 0}]}
+== SEリスト  fields=[{'name': 'ファイル名', 'stringArgs': ['SE']}, {'name': '再生音量[%]'}, {'name': '再生周波数[%]'}, {'name': 'メモリ解放モード', 'stringArgs': ['解放しない', '再生後、解放する']}]
+   {'name': '[システム]決定音', 'data': [{'name': 'ファイル名', 'value': 'SystemFile/[SE]Enter.ogg'}, {'name': '再生音量[%]', 'value': 90}, {'name': '再生周波数[%]', 'value': 100}, {'name': 'メモリ解放モード', 'value': 0}]}
+   {'name': '[システム]カーソル移動', 'data': [{'name': 'ファイル名', 'value': 'SystemFile/[SE]Cursor.ogg'}, {'name': '再生音量[%]', 'value': 50}, {'name': '再生周波数[%]', 'value': 120}, {'name': 'メモリ解放モード', 'value': 0}]}
+== 文字列変数名  fields=[]
+   {'name': '一時文字列', 'data': []}
+   {'name': '肩書', 'data': []}
+== システム文字列  fields=[]
+   {'name': ' -----', 'data': []}
+   {'name': '決定ｷｰ名[ｷｰﾎﾞｰﾄﾞ]', 'data': []}
+== システム変数名  fields=[]
+   {'name': '顔ｸﾞﾗﾌｨｯｸ番号', 'data': []}
+   {'name': 'ﾒｯｾｰｼﾞｳｨﾝﾄﾞｳ X座標', 'data': []}
+== 位置設定リスト  fields=[{'name': 'マップID'}, {'name': 'X座標(マップ位置)'}, {'name': 'Y座標(マップ位置)'}]
+   {'name': '初期位置', 'data': [{'name': 'マップID', 'value': 0}, {'name': 'X座標(マップ位置)', 'value': 4294967295}, {'name': 'Y座標(マップ位置)', 'value': 0}]}
+   {'name': '', 'data': [{'name': 'マップID', 'value': 0}, {'name': 'X座標(マップ位置)', 'value': 0}, {'name': 'Y座標(マップ位置)', 'value': 0}]}
+== キャラクター画像  fields=[{'name': '読込ファイル名', 'stringArgs': ['キャラチップ']}]
+   {'name': '※空データ', 'data': [{'name': '読込ファイル名', 'value': ''}]}
+   {'name': 'キリマンジャロ歩く', 'data': [{'name': '読込ファイル名', 'value': ''}]}
+== キャラ影グラフィック名  fields=[{'name': '読込ファイル名', 'stringArgs': ['SystemFile']}]
+   {'name': '人間·通常サイズ影', 'data': [{'name': '読込ファイル名', 'value': 'SystemFile/shadow64TX.png'}]}
+   {'name': '影なし', 'data': [{'name': '読込ファイル名', 'value': ''}]}
+== ウィンドウ画像  fields=[{'name': '画像ファイル名', 'stringArgs': ['BasicGraphic']}, {'name': '縦分割数(一部のみ)'}]
+   {'name': '○入力待ちポ—ズ画像', 'data': [{'name': '画像ファイル名', 'value': ''}, {'name': '縦分割数(一部のみ)', 'value': 0}]}
+   {'name': '×選択肢ウィンドウ画像', 'data': [{'name': '画像ファイル名', 'value': 'SystemFile/WindowBase.png'}, {'name': '縦分割数(一部のみ)', 'value': 0}]}
+== トランジションタイプ  fields=[{'name': 'ファイル名(モノクロ)', 'stringArgs': ['BasicGraphic']}]
+   {'name': '横フェード', 'data': [{'name': 'ファイル名(モノクロ)', 'value': 'SystemFile/[Transition]Fade.png'}]}
+== 文字色  fields=[{'name': '赤(0-255)'}, {'name': '緑(0-255)'}, {'name': '青(0-255)'}]
+   {'name': 'デフォルト色', 'data': [{'name': '赤(0-255)', 'value': 255}, {'name': '緑(0-255)', 'value': 255}, {'name': '青(0-255)', 'value': 255}]}
+   {'name': '青色', 'data': [{'name': '赤(0-255)', 'value': 140}, {'name': '緑(0-255)', 'value': 175}, {'name': '青(0-255)', 'value': 255}]}
+== 遠景画像  fields=[{'name': '画像ファイル名', 'stringArgs': ['Picture']}, {'name': 'X移動速度'}, {'name': 'Y移動速度'}, {'name': 'マップと位置連動する？', 'stringArgs': ['位置連動あり', '位置連動なし']}]
+   {'name': '自宅', 'data': [{'name': '画像ファイル名', 'value': 'cg/bg01.jpg'}, {'name': 'X移動速度', 'value': 0}, {'name': 'Y移動速度', 'value': 0}, {'name': 'マップと位置連動する？', 'value': 1}]}
+   {'name': '草原', 'data': [{'name': '画像ファイル名', 'value': 'cg/bg_07_guild_a.jpg'}, {'name': 'X移動速度', 'value': 0}, {'name': 'Y移動速度', 'value': 0}, {'name': 'マップと位置連動する？', 'value': 1}]}
+== 通常変数名  fields=[]
+   {'name': 'SAVE', 'data': []}
+   {'name': 'マウス操作', 'data': []}
+== 予備変数1  fields=[]
+   {'name': '', 'data': []}
+   {'name': '', 'data': []}
+== 予備変数2  fields=[]
+   {'name': 'ジャンプ高度', 'data': []}
+   {'name': 'ジャンプ最高度', 'data': []}
+== 予備変数3  fields=[]
+   {'name': '', 'data': []}
+   {'name': '', 'data': []}
+== 予備変数4  fields=[]
+   {'name': ' ', 'data': []}
+== 予備変数5  fields=[]
+   {'name': '', 'data': []}
+== 予備変数6  fields=[]
+   {'name': '', 'data': []}
+== 予備変数7  fields=[]
+   {'name': '画面中心X', 'data': []}
+   {'name': '画面中心Y', 'data': []}
+== 予備変数8  fields=[]
+   {'name': '', 'data': []}
+== 予備変数9  fields=[]
+   {'name': '', 'data': []}
+   {'name': '', 'data': []}
+== 顔グラフィック名  fields=[{'name': '顔画像ファイル', 'stringArgs': ['']}]
+   {'name': 'ウィンドウ表示なし', 'data': [{'name': '顔画像ファイル', 'value': ''}]}
+   {'name': 'ウィンドウのみ', 'data': [{'name': '顔画像ファイル', 'value': ''}]}
+==   fields=[{'name': ''}]
+   {'name': '', 'data': [{'name': '', 'value': ''}]}
+==   fields=[{'name': ''}]
+   {'name': '', 'data': [{'name': '', 'value': ''}]}
+==   fields=[{'name': ''}]
+   {'name': '', 'data': [{'name': '', 'value': ''}]}

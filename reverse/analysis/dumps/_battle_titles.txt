@@ -1,0 +1,11 @@
+239	run=0	len=1108	argn=4	■戦闘呼び出し
+243	run=0	len=1316	argn=0	┣敵の行動
+188	run=0	len=262	argn=4	X◆戦闘処理
+179	run=0	len=420	argn=2	X[戦]敵キャラ_単体描画
+31	run=0	len=159	argn=2	◆[戦闘用]ダメージ処理
+143	run=0	len=256	argn=3	X[戦]主人公DB→戦闘DBコピー
+149	run=0	len=46	argn=2	X[戦]戦闘DB→主人公DBへ戻す
+171	run=0	len=128	argn=2	X[戦]敵撃破処理
+172	run=0	len=124	argn=1	X[戦]敵/味方·勝敗判定
+182	run=0	len=113	argn=1	X[戦]戦闘メッセージ表示
+238	run=0	len=74	argn=1	バトルカットイン表示

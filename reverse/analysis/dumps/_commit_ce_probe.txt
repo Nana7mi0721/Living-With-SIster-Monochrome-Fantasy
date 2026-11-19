@@ -1,0 +1,10 @@
+M3: dump --var accepts magic var addresses; record battle slice C probe
+
+normalise_var_addr maps 2_000_000+n back to flat slot n so dump --var 2000350=1
+and --var 350=1 are equivalent (previously only the flat slot worked).
+
+docs/BATTLE.md 5.3 gains an empirical slice-C note: seeding 2000350=1 in a real
+Game starts CE242 via the gated scheduler (peak coroutines 6->7, CE242 290
+effect), but CE242's command-input script parks on a no-map 201 SetMoveRoute and
+its 13 opcode-123 key polls, so the 2000350 0->1->2->0 machine is not yet driven.
+HANDOFF_M3 item 3 records the same.

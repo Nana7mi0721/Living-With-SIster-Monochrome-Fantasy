@@ -1,0 +1,27 @@
+wolf-cli run --map SampleMapA --event 33 --frames 600
+  data root : work/full
+  map       MapData/SampleMapA.mps 64x36 tile(s), 40 event(s)
+  event     [33] 挿入抜く at (1, 31), 1 page(s)
+  page 0    trigger 2 graphic "" chip 4294967295 slots 336
+  slots     336
+
+  140 sound    Se Play SE/decision22.mp3 vol=0 frames=0
+  150 picture  #7000 kind 0 Erase file= text= args=[0, 0, 0, 8100]
+
+  frames run       1
+  instructions     21
+  peak coroutines  1
+  messages         0
+  choices          0
+  pictures         1
+  sounds           1
+  database ops     0
+  move routes      0
+  teleports        0
+  transitions      0
+  party ops        0
+  scrolls          0
+  effects          0
+  save/load        0
+  reserves         0
+  pro features     0

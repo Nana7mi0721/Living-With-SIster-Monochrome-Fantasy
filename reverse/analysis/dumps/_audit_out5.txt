@@ -1,0 +1,7 @@
+scene/ refs: 0   word/ refs: 0
+
+== DataBase enemy graphic fields (type 9) ==
+name 敵キャラ個体デ—タ rows 100
+ row0 {"name": "テスト", "data": [{"name": "敵キャラ名", "value": "テスト"}, {"name": "画像ファイル", "value": "Picture/enemy_020.png"}, {"name": "戦力幅+", "value": 50}, {"name": "戦力幅-", "value": 200}, {"name": "戦力最大値", "value": 10000}, {"name": "戦力最小値", "value": 8000}, {"name": "ソロバトル", "value": 2}, {"name": "補正攻撃力", "value": 0}, {"name": "補正防御力", "value": 0}]}
+ row1 {"name": "离群小野猪", "data": [{"name": "敵キャラ名", "value": "离群小野猪"}, {"name": "画像ファイル", "value": "Picture/enemy_001.png"}, {"name": "戦力幅+", "value": 5}, {"name": "戦力幅-", "value": 5}, {"name": "戦力最大値", "value": 40}, {"name": "戦力最小値", "value": 30}, {"name": "ソロバトル", "value": 0}, {"name": "補正攻撃力", "value": 0}, {"name": "補正防御力", "value": 0}]}
+ row2 {"name": "小野猪", "data": [{"name": "敵キャラ名", "value": "小野猪"}, {"name": "画像ファイル", "value": "Picture/enemy_002.png"}, {"name": "戦力幅+", "value": 25}, {"name": "戦力幅-", "value": 25}, {"name": "戦力最大値", "value": 150}, {"name": "戦力最小値", "value": 100}, {"name": "ソロバトル", "value": 0}, {"name": "補正攻撃力", "value": 0}, {"name": "補正防御力", "value": 0}]}

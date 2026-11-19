@@ -1,0 +1,7 @@
+docs: add M10 handoff and baseline workstreams
+
+- HANDOFF_M10 records the landed opcode 111 reference semantics,
+  compound() 0x600/0x700/0x800 fix, the 12-test rebaseline and M10
+  residual work
+- NEW_SESSION_START now points at HANDOFF_M10
+- BASELINE.json gains m10_workstreams evidence

@@ -1,0 +1,6 @@
+M6: prove a second playable action and consecutive actions
+
+- m6_mainline: clicking the 钻研 icon (195,475) floats 「自主训练提升各项能力。」;
+  a new test clicks 读书 then 钻研 in the same game and asserts both texts
+- docs: HANDOFF_M4 §4.6 lists both icons + both commands, ARCHITECTURE M6 row,
+  NEW_SESSION status, BASELINE m6_mainline.second_action

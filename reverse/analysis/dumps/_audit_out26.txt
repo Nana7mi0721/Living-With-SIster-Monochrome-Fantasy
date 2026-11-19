@@ -1,0 +1,26 @@
+== SystemGraphic: live 8 ==
+     358497 SystemGraphic/TitleGraphic.jpg  <- common ev42#20; common ev42#30
+     424764 SystemGraphic/TitleGraphic.png  <- map Map003.json ev1#19; map TitleMap.json ev2#84; map Map003.mps ev1; map TitleMap.mps ev2
+     324826 SystemGraphic/TitleGraphic1.jpg  <- common ev42#37; common ev42#67
+     314916 SystemGraphic/TitleGraphic2.jpg  <- common ev42#40; common ev42#71
+     304294 SystemGraphic/TitleGraphic3.jpg  <- common ev42#43; common ev42#75
+     310515 SystemGraphic/TitleGraphic4.jpg  <- common ev42#48; common ev42#81
+     303241 SystemGraphic/TitleGraphic5.jpg  <- common ev42#51; common ev42#85
+     337568 SystemGraphic/TitleGraphic6.jpg  <- common ev42#17; common ev42#27
+
+== TitleGraphic1..6 / title01 status ==
+  Picture/title01.jpg                      live   common ev305#3408; map Map003.json ev1#16; map TitleMap.json ev2#87
+  SystemGraphic/TitleGraphic.jpg           live   common ev42#20; common ev42#30
+  SystemGraphic/TitleGraphic.png           live   map Map003.json ev1#19; map TitleMap.json ev2#84; map Map003.mps ev1
+  SystemGraphic/TitleGraphic1.jpg          live   common ev42#37; common ev42#67
+  SystemGraphic/TitleGraphic2.jpg          live   common ev42#40; common ev42#71
+  SystemGraphic/TitleGraphic3.jpg          live   common ev42#43; common ev42#75
+  SystemGraphic/TitleGraphic4.jpg          live   common ev42#48; common ev42#81
+  SystemGraphic/TitleGraphic5.jpg          live   common ev42#51; common ev42#85
+  SystemGraphic/TitleGraphic6.jpg          live   common ev42#17; common ev42#27
+
+== Kagura live 4 ==
+     87298 Kagura/Disc.png <- common ev549#24
+     70940 Kagura/Kagura.png <- common ev549#6
+      2650 Kagura/bg.png <- map TitleMap.json ev2#28; map TitleMap.mps ev2
+    122843 Kagura/inusuku.png <- common ev549#44

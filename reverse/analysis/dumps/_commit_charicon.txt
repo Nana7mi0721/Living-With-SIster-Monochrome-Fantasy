@@ -1,0 +1,7 @@
+feat(cli): use charicon as the Windows program and window icon
+
+Bundle `assets/charicon.png` (from the game's Data/SystemFile) and
+`assets/wolf-cli.ico` (eight sizes). A Windows build script locates the
+SDK rc.exe and links the icon resource into wolf-cli.exe; it warns and
+continues when rc.exe is unavailable. The same PNG is decoded into a
+winit window icon so the title bar/taskbar match Explorer.

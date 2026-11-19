@@ -1,0 +1,41 @@
+    let mut items: Vec<TextItem> = texts
+        .iter()
+        .map(|text| TextItem::new(text.text.clone(), text.rect, choice::TEXT_PX).with_alpha(text.alpha))
+        .collect();
+    // The engine draws 101 message text itself: the frame comes from common event 63 as
+    // ordinary pictures, the glyphs come from here. Only the newest message is visible,
+    // which is the order the interpreter produces.
+    if let Some(message) = game.messages.last() {
+        let vars = game.message_vars();
+        let layout = wolf_game::message::layout(&message.text, &vars, message.frames);
+        let preview: String = message.text.chars().take(60).collect();
+        let typing = if layout.typing { ", typing" } else { "" };
+        let cursor = layout
+            .cursor
+            .map_or(String::new(), |at| format!(", cursor at [{:.0},{:.0}]", at[0], at[1]));
+        println!(
+            "  message   : {} row(s), {}/{} char(s), font {:.0} at [{:.0},{:.0}], wrap {:.0}{}{}",
+            layout.rows.len(),
+            layout.typed,
+            layout.total,
+            layout.font_px,
+            vars.x,
+            vars.y,
+            vars.wrap_width(),
+            typing,
+            cursor
+        );
+        println!("    text    : {preview:?}");
+        for row in &layout.rows {
+            items.push(TextItem::new(row.text.clone(), row.rect, layout.font_px));
+        }
+        if let Some(at) = layout.cursor {
+            let box_w = layout.font_px * 2.0;
+            items.push(TextItem::new(
+                "▼",
+                [at[0], at[1], box_w, layout.line_height],
+                layout.font_px,
+            ));
+        }
+    }
+    renderer.draw_text(&items);

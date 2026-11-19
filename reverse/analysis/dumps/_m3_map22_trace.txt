@@ -1,0 +1,28 @@
+wolf-cli run --map SampleMapA --event 22 --frames 200
+  data root : work/full
+  map       MapData/SampleMapA.mps 64x36 tile(s), 40 event(s)
+  event     [22] ■中央クリック処理 at (7, 35), 4 page(s)
+  page 0    trigger 2 graphic "" chip 4294967295 slots 2631
+  page 1    trigger 2 graphic "" chip 4294967295 slots 275
+  page 2    trigger 2 graphic "" chip 4294967295 slots 327
+  page 3    trigger 0 graphic "" chip 4294967295 slots 1
+  slots     2631
+
+
+  frames run       1
+  instructions     48
+  peak coroutines  1
+  messages         0
+  choices          0
+  pictures         0
+  sounds           0
+  database ops     0
+  move routes      0
+  teleports        0
+  transitions      0
+  party ops        0
+  scrolls          0
+  effects          0
+  save/load        0
+  reserves         0
+  pro features     0

@@ -1,0 +1,32 @@
+DIALOGUE: 12027 message strings, 192273 chars total, longest=226
+ESCAPES top20: []
+
+DataBase: 40 types, 723 rows. top: [('目標テキスト', 101), ('敵キャラ個体デ—タ', 100), ('技能', 44), ('┣ 属性耐性', 42), ('敵グループ', 41), ('アイテム', 40), ('武器', 40), ('防具', 40), ('┣ 敵行動AI', 40), ('┗ 状態耐性', 40), ('┗ アニメーション', 34), ('┗装備タイプ', 25), ('状態設定', 24), ('ランダム肩書', 22)]
+
+CDataBase: 30 types, 723 rows. top: [('万能ウィンドウ一時DB', 200), ('×┣ コマンド処理リスト', 100), ('基本システム用変数', 100), ('┣ 属性耐性', 40), ('┣所持アイテム個数', 40), ('戦闘時一時ステータス', 40), ('┣ 主人公行動AI', 22), ('×主人公一時DB', 20), ('主人公ステータス', 17), ('メンバー情報', 17), ('┣ 技能習得Lv', 16), ('┣ 状態耐性', 16), ('┗ 状態リスト', 16), ('× お店一時処理用', 15)]
+
+SysDatabase: 28 types, 1632 rows. top: [('通常変数名', 800), ('キャラクター画像', 300), ('システム変数名', 150), ('システム文字列', 80), ('遠景画像', 80), ('マップ設定', 50), ('文字列変数名', 30), ('文字色', 30), ('SEリスト', 20), ('BGMリスト', 16), ('顔グラフィック名', 12), ('位置設定リスト', 10), ('予備変数9', 10), ('予備変数2', 7)]
+  1.4.0               199 files     33.7 MB
+  BGM                  49 files    248.5 MB
+  BalloonBase_CafeLatte     13 files      0.1 MB
+  BasicData           151 files      6.4 MB
+  BattleEffect         92 files    113.7 MB
+  CharaChip            91 files      0.3 MB
+  DLC_data            633 files    155.2 MB
+  EnemyGraphic        118 files      2.6 MB
+  FIcon                10 files      0.0 MB
+  Fog_BackGround       10 files      0.1 MB
+  Kagura                4 files      0.3 MB
+  MapChip             102 files      0.8 MB
+  MapData               9 files      1.2 MB
+  Picture             539 files     27.0 MB
+  SE                  273 files     22.5 MB
+  SystemFile           32 files      0.7 MB
+  SystemGraphic        28 files      2.9 MB
+  cg                  596 files    124.2 MB
+  cutin               223 files      7.2 MB
+  hscene              327 files     22.8 MB
+  hword               119 files      0.6 MB
+  scene               327 files      0.7 MB
+  word                119 files      0.0 MB
+dlc.dat missing

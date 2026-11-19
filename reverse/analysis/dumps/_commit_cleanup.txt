@@ -1,0 +1,4 @@
+docs: record post-P2 disk cleanup
+
+- clean target/, tools/*/target, unreferenced work/out artifacts, and temp probe binaries
+- document before/after sizes and preserved data roots in HANDOFF_M13 §11

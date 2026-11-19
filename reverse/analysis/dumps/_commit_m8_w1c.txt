@@ -1,0 +1,28 @@
+M8 W1-c: settle the real day-4 battle and reach day 5 with no injection
+
+CE242's arg0 is the acting character slot, not the battle context. The rebuilt
+wiring forwarded 2000354 (enemy/battle type, read by CE242 pc91..pc129) as
+self1600000, so on the genuine day-4 replay (party power 132 -> CE253 low branch
+passes context 0) CE242 took its DLC branch and died before the action block;
+2000350 stuck at 1 and CE239 parked at pc13.
+
+- battle_wiring.rs: supply slot 1 (the seeded one-member party's leader).
+  Evidence: CE239 pc581 seeds 2000496=4 (the action) before the phase;
+  `wolf-cli dump --event 242 --self 600=1` settles 2000352=1/2000343=1 while
+  --self 600=0 never calls CE244.
+- m7_day4_playable: rewritten from the blocker audit to the M8 acceptance run.
+  Day1->day4 genuine schedule, forced CE253 -> CE239, CE244 settles, CE239
+  returns, CE251 resumes at 16:00, CE300 walks to 17:00, CE326 dinner ends
+  ~18:00, natural night menu (hover-sister + Decide, 今天先休息吧 -> 是, CE329)
+  -> day 5 08:30 (var160=5, var6=4, var4=8, var5=30), warnings 0, frames 8008.
+  No settlement variable is injected (only var295/var68 input normalisation).
+- m7_battle_playable: accept the new state sequence ([0,1,0], immediate win)
+  and assert CE242 reaches the action block.
+- docs/research/M8_BATTLE_SETTLE.md (new), M7_DAY4_PLAYABLE.md superseded
+  note, M8_BACKLOG.md status, BASELINE.json m8_workstreams.
+
+Evidence:
+  WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m7_day4_playable
+  WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m7_battle_playable
+  WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m6_week_loop
+  wolf-cli verify -> PASS 70 / pending 0

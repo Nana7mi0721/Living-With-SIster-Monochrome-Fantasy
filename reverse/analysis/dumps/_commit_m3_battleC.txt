@@ -1,0 +1,17 @@
+M3: battle slice C observability docs + 101 window skin doc fix
+
+- docs/BASELINE.json battle_slice: slice_c now records the observable state
+  machine evidence (dump --event 242 --frames 400 --var 2000495=2 --self 600=1
+  --watch-var 2000350 --watch-var 2000352 -> 2000350 0(f0)->1(f1)->0(f91 CE244
+  settle)->2(f94)->0(f95 CE241), 2000352 written 1 at f91 by CE244 pc315) and the
+  honest boundary; remaining notes the still-missing menu-driven entry.
+- docs/HANDOFF_M3.md: top status, item 3/5 and section 6 residuals reflect the
+  battle slice C state machine and the 101 / 290 residual status.
+- docs/OPCODE_101.md, docs/OPCODE_102.md: retract the wrong C5/C6 'fix' that
+  would change window.rs SKIN to SystemFile and CORNER to 6. Both 18x18 skins
+  pixel-measured: 3 px ring + 12x12 body (18 = 3+12+3), so CORNER=3 and
+  SKIN=SystemGraphic (blue, used by the 102 choice panel) are correct; the 101
+  message window carries its own SystemFile skin via its 150 picture.
+- crates/wolf-game/src/window.rs: module-doc paragraph guarding that decision.
+
+No behaviour change; wolf-cli verify PASS 63/0 and cargo test --workspace green.

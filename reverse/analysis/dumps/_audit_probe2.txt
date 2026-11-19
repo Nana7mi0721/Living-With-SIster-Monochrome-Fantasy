@@ -1,0 +1,3 @@
+<class 'dict'> 9
+keys ['Dungeon.mps', 'Map002.mps', 'Map003.mps', 'Map024.mps', 'Map031.mps', 'SampleMapA.mps', 'SampleMapA_1.mps', 'SampleMapB.mps', 'TitleMap.mps']
+sample raw: None

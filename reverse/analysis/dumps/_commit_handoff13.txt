@@ -1,0 +1,5 @@
+docs: add M13 handoff and point the index at it
+
+- docs/HANDOFF_M13.md: content-parity first acceptance, two bug fixes, evidence and remaining list.
+- docs/README.md: current milestone → M13; HANDOFF_M13 current, HANDOFF_M12 archived.
+- PLAN.md §4.6: M13 progress summary.

@@ -1,0 +1,10 @@
+boot closure: 61 common events, maps [('TitleMap.mps', 2)]
+M1 boot assets: 28 files / 18126094 B
+   BGM                       2   14521535
+   SystemGraphic             8    2678621
+   DLC_data                 10     317837
+   Kagura                    4     283731
+   Picture                   1     280653
+   CharaChip                 1      16337
+   SE                        1      14338
+   SystemFile                1      13042

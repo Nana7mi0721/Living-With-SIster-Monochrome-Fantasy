@@ -1,0 +1,84 @@
+== op124 (SetVariableEx) arg1 flag values
+  flags=4096 (0x1000) argc=4 x37
+  flags=4608 (0x1200) argc=4 x1
+  flags=12288 (0x3000) argc=3 x174
+  flags=16384 (0x4000) argc=4 x359
+  flags=17408 (0x4400) argc=4 x8
+== op124 samples
+  ev36 pc193 ints=[1600041, 16384, 1600021, 3]
+  ev37 pc2 ints=[1600020, 4096, -2, 2]
+  ev37 pc3 ints=[1600021, 4096, -2, 3]
+  ev41 pc12 ints=[1600010, 12288, 8]
+  ev41 pc13 ints=[1600011, 12288, 7]
+  ev41 pc14 ints=[1600012, 12288, 9]
+  ev41 pc15 ints=[1600013, 12288, 10]
+  ev43 pc30 ints=[1600010, 16384, 3, 8]
+  ev43 pc39 ints=[1600011, 16384, 4, 8]
+  ev43 pc48 ints=[1600012, 16384, 5, 8]
+  ev63 pc135 ints=[1600010, 16384, 1600021, 3]
+  ev63 pc136 ints=[1600011, 16384, 1600021, 2]
+  ev63 pc145 ints=[1600010, 17408, 1600021, 2]
+  ev63 pc146 ints=[1600011, 17408, 1600021, 3]
+
+== op124 arg2/arg3 pairs top
+  [((16384, 8), 230), ((16384, 9), 84), ((16384, 2), 19), ((4096, 6), 16), ((4096, 7), 16), ((16384, 3), 12), ((16384, 4), 6), ((17408, 2), 4), ((17408, 3), 4), ((16384, 0), 4), ((4096, 2), 2), ((4096, 3), 2), ((16384, 10), 2), ((16384, 1), 1), ((16384, 5), 1), ((4096, 10), 1), ((4608, 7), 1)]
+
+== op123 (InputKey) arg1 values
+  [(1, 2), (7, 1), (16, 10), (17, 27), (32, 6), (33, 2), (48, 5), (49, 3), (64, 5), (144, 28), (145, 91), (160, 2), (176, 20), (177, 7), (183, 1), (184, 1), (241, 3), (257, 1), (512, 1), (771, 1), (784, 1)]
+== op125 arg0 / op126 arg0 full lists
+  125: [(1, 5), (2, 4), (16, 19), (32, 14), (48, 1), (64, 15), (80, 1), (128, 17), (160, 1), (192, 1), (536870914, 20)]
+  126: [(240, 3), (496, 2), (752, 1), (268435457, 3), (268435713, 1)]
+
+== op250 arg3 flag bit census (which bits set)
+  [(1, 16), (4, 251), (5, 132), (6, 95), (8, 7), (9, 817), (12, 1747), (16, 2507), (17, 71), (18, 1654)]
+== op250 arg0 type census: [(0, 386), (1, 36), (2, 93), (3, 116), (4, 118), (5, 21), (6, 31), (7, 5), (8, 88), (9, 43), (10, 211), (11, 110), (12, 17), (13, 77), (14, 69), (15, 12), (16, 78), (17, 50), (18, 556), (19, 145), (20, 52), (21, 197), (22, 7), (23, 6), (24, 12), (1600040, 4), (1600090, 52)]
+== op250 argc4 vs argc5 arg3: 
+  [((4, 4), 16), ((5, 0), 5), ((5, 4), 2571)]
+
+== op150: distinct argc per (low4, type) 
+  cmd=0 type=0 argc=11 x6955
+  cmd=0 type=0 argc=18 x20
+  cmd=0 type=0 argc=19 x1102
+  cmd=0 type=1 argc=12 x41
+  cmd=0 type=1 argc=18 x7
+  cmd=0 type=1 argc=19 x6
+  cmd=0 type=2 argc=11 x1912
+  cmd=0 type=2 argc=13 x5
+  cmd=0 type=2 argc=18 x21
+  cmd=0 type=2 argc=19 x7
+  cmd=0 type=3 argc=11 x43
+  cmd=0 type=3 argc=18 x66
+  cmd=0 type=3 argc=19 x34
+  cmd=0 type=4 argc=12 x43
+  cmd=0 type=4 argc=18 x10
+  cmd=1 type=0 argc=11 x2723
+  cmd=1 type=0 argc=13 x43
+  cmd=1 type=0 argc=14 x71
+  cmd=1 type=0 argc=15 x42
+  cmd=1 type=0 argc=18 x304
+  cmd=1 type=0 argc=19 x123
+  cmd=1 type=1 argc=13 x1
+  cmd=1 type=2 argc=11 x44
+  cmd=1 type=2 argc=13 x5
+  cmd=1 type=2 argc=18 x6
+  cmd=1 type=3 argc=19 x1
+  cmd=1 type=4 argc=13 x1
+  cmd=1 type=4 argc=15 x1
+  cmd=2 type=0 argc=3 x1675
+  cmd=2 type=0 argc=4 x64
+  cmd=2 type=0 argc=6 x898
+  cmd=2 type=1 argc=3 x12
+  cmd=2 type=1 argc=6 x1
+  cmd=2 type=2 argc=3 x99
+  cmd=2 type=2 argc=4 x21
+  cmd=2 type=2 argc=6 x52
+  cmd=2 type=3 argc=3 x9
+  cmd=2 type=4 argc=3 x3
+  cmd=2 type=4 argc=6 x1
+  cmd=3 type=0 argc=2 x46
+  cmd=3 type=0 argc=3 x40
+  cmd=3 type=1 argc=2 x14
+  cmd=3 type=2 argc=2 x7
+  cmd=3 type=3 argc=2 x105
+  cmd=3 type=4 argc=2 x31
+  cmd=3 type=4 argc=3 x1

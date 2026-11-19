@@ -1,0 +1,5 @@
+wolf-save: byte-exact serializers for parts 1, 2, 4 and 5
+
+Adds to_bytes encoders for SavePart1/2/4/5 (including their nested
+records), SaveFile::rebuild()/to_bytes_rebuilt(), and set_part1/2/4/5.
+All nine retail saves parse -> rebuild -> encrypt to the identical bytes.

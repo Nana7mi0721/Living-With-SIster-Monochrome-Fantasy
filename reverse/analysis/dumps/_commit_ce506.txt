@@ -1,0 +1,22 @@
+fix(hud): harden sprite-sheet cell clamp for the CE506 eye strip
+
+Common event 506 blinks the DLC eye overlay (picture -6, a 3x1 sheet of
+open/half/closed eyes) with pattern 1->2->3->2->1. Retail aborts there with
+"Pattern number is too large! > ID-6 Pattern 3(Max2)" whenever the sheet has
+fewer frames than the command asks for - which is exactly what the user hit at
+day 100 on the pre-v6 two-frame dlc_imouto01_eye.png. The re-installed v6 patch
+ships a 1536x576 three-frame sheet, so the shipped data is consistent again.
+
+This port has no such abort path: picture_frame falls back to the first cell for
+any index past columns*rows, so a stale/corrupt sheet degrades gracefully and is
+never read out of bounds. Document that intent and lock it with a regression test
+that also pins the whole-screen-layer placement of picture -6.
+
+- crates/wolf-game/src/picture.rs: comment on the clamp; add
+  a_sprite_sheet_draw_clamps_like_retail_ce506_eyes (3x1 patterns 1/2/3 ->
+  cells 0/512/1024, picture -6 fills 1024x576, pattern 4 on a 2-frame ghost ->
+  first cell).
+- docs/research/UI_ASSET_AUDIT.md: §7 root cause, v6 data self-consistency,
+  port immunity, regression test.
+
+No data changes. cargo test --workspace: 865 passed / 0 failed / 14 ignored.

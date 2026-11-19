@@ -1,0 +1,5 @@
+docs: refresh M6 status in the new-session prompt
+
+The bedroom training menu and night-menu input tests are now in place;
+CE328's map-context pre-pc700 abort, ev1 page2 pointer synthesis and
+longer multi-day scheduling remain open.

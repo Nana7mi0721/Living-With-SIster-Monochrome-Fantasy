@@ -1,0 +1,830 @@
+=== 250 Database accesses in battle closure, grouped by (container, typeLabel, fieldLabel) ===
+  126  CDataBase    type=18   label='基本システム用変数'              field=''                           op=0 dir=1 argc=5
+   66  CDataBase    type=18   label='基本システム用変数'              field=''                           op=0 dir=0 argc=5
+   59  CDataBase    type=21   label='基本システム用変数'              field=''                           op=0 dir=1 argc=5
+   29  CDataBase    type=20   label='基本システム用変数'              field=''                           op=0 dir=1 argc=5
+   20  CDataBase    type=21   label='基本システム用変数'              field=''                           op=0 dir=0 argc=5
+   17  CDataBase    type=0    label='主人公ステータス'               field='キャラ名'                       op=0 dir=1 argc=5
+   13  CDataBase    type=20   label='基本システム用変数'              field=''                           op=0 dir=0 argc=5
+   13  CDataBase    type=21   label='基本システム用変数'              field=''                           op=1 dir=0 argc=5
+   12  DataBase     type=8    label='状態設定'                   field=''                           op=0 dir=1 argc=5
+   12  DataBase     type=0    label='技能'                     field='┏ 効果対象\u3000\u3000\u3000 '  op=0 dir=1 argc=5
+   12  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='選択可能状態[1=可]'                op=0 dir=0 argc=5
+   11  CDataBase    type=13   label='×┣ 状態リスト'               field=''                           op=0 dir=0 argc=5
+   11  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='キャラ名'                       op=0 dir=1 argc=5
+   10  DataBase     type=3    label='武器'                     field='アイテム使用で特殊技能？  '             op=0 dir=1 argc=5
+   10  DataBase     type=4    label='防具'                     field='アイテム使用で特殊技能？  '             op=0 dir=1 argc=5
+    9  DataBase     type=2    label='アイテム'                   field='■効果のタイプ\u3000\u3000\u3000\u3000\u3000\u3000\u3000' op=0 dir=1 argc=5
+    9  DataBase     type=2    label='アイテム'                   field='┣[2]特殊技能指定時\u3000\u3000 '   op=0 dir=1 argc=5
+    9  DataBase     type=3    label='武器'                     field='┣ 発動する特殊技能  \u3000\u3000 '  op=0 dir=1 argc=5
+    9  DataBase     type=4    label='防具'                     field='┣ 発動する特殊技能 \u3000\u3000  '  op=0 dir=1 argc=5
+    9  CDataBase    type=16   label='×┣ コマンド処理リスト'           field='発動者番号'                      op=0 dir=1 argc=5
+    9  CDataBase    type=16   label='×┣ コマンド処理リスト'           field='発動技能'                       op=0 dir=1 argc=5
+    9  DataBase     type=9    label=''                       field=''                           op=0 dir=1 argc=5
+    8  DataBase     type=17   label='画像/音声設定'                field='ウィンドウ画像ファイル'                op=0 dir=1 argc=5
+    8  CDataBase    type=2    label='┗ 状態リスト'                field=''                           op=0 dir=0 argc=5
+    7  DataBase     type=17   label='画像/音声設定'                field='カーソル画像ファイル'                 op=0 dir=1 argc=5
+    7  CDataBase    type=19   label='万能ウィンドウ一時DB'            field=''                           op=0 dir=1 argc=5
+    7  CDataBase    type=0    label='主人公ステータス'               field='レベル'                        op=0 dir=1 argc=5
+    7  CDataBase    type=14   label='×┣ 状態リスト'               field=''                           op=0 dir=1 argc=5
+    7  CDataBase    type=21   label='万能ウィンドウ一時DB'            field='選択可能状態[1=可]'                op=0 dir=0 argc=5
+    7  DataBase     type=0    label='技能'                     field='使用可能シーン'                    op=0 dir=1 argc=5
+    7  CDataBase    type=16   label='×┣ コマンド処理リスト'           field='受け側番号'                      op=0 dir=0 argc=5
+    7  CDataBase    type=16   label='×┣ コマンド処理リスト'           field='受け側番号'                      op=0 dir=1 argc=5
+    6  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field=''                           op=0 dir=0 argc=5
+    6  CDataBase    type=11   label='×┣ 属性耐性計算結果'            field=''                           op=0 dir=0 argc=5
+    6  CDataBase    type=12   label='×┣ 状態耐性計算結果'            field=''                           op=0 dir=0 argc=5
+    6  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みMaxHP'              op=0 dir=1 argc=5
+    6  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='HP'                         op=0 dir=1 argc=5
+    6  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='SP'                         op=0 dir=1 argc=5
+    6  CDataBase    type=14   label='×┣ 状態リスト'               field=''                           op=0 dir=0 argc=5
+    6  DataBase     type=0    label='技能'                     field='┗ 消費ポイント\u3000\u3000 '      op=0 dir=1 argc=5
+    5  DataBase     type=13   label='用語設定'                   field='[ステ—タス]HP名称'                op=0 dir=1 argc=5
+    5  DataBase     type=14   label='用語設定'                   field='[ステ—タス]HP名称'                op=0 dir=1 argc=5
+    5  DataBase     type=8    label='状態設定'                   field='これ以外の全ステ状態を···'             op=0 dir=1 argc=5
+    5  CDataBase    type=13   label='×┣ 状態リスト'               field=''                           op=0 dir=1 argc=5
+    5  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みMaxHP'              op=0 dir=1 argc=5
+    5  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='項目文'                        op=0 dir=0 argc=5
+    5  DataBase     type=0    label='技能'                     field='┏ 消費するものは？'                 op=0 dir=1 argc=5
+    5  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='項目コード'                      op=0 dir=0 argc=5
+    5  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]使用武器番号'                 op=0 dir=1 argc=5
+    4  CDataBase    type=0    label='主人公ステータス'               field=''                           op=7 dir=0 argc=5
+    4  CDataBase    type=0    label='主人公ステータス'               field=''                           op=6 dir=0 argc=5
+    4  CDataBase    type=0    label='主人公ステータス'               field='HP'                         op=0 dir=0 argc=5
+    4  DataBase     type=13   label='用語設定'                   field='[ステ—タス]SP名称'                op=0 dir=1 argc=5
+    4  DataBase     type=14   label='用語設定'                   field='[ステ—タス]SP名称'                op=0 dir=1 argc=5
+    4  CDataBase    type=1    label='┣ 技能習得Lv'               field=''                           op=0 dir=1 argc=5
+    4  CDataBase    type=2    label='┗ 状態リスト'                field=''                           op=0 dir=1 argc=5
+    4  DataBase     type=18   label='システム設定'                 field='装備可能欄数'                     op=0 dir=1 argc=5
+    4  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='HP'                         op=0 dir=1 argc=5
+    4  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みMaxSP'              op=0 dir=1 argc=5
+    4  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='キャラクタ番号[1万以上は敵]'            op=0 dir=1 argc=5
+    4  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='HP'                         op=0 dir=0 argc=5
+    4  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='SP'                         op=0 dir=0 argc=5
+    4  DataBase     type=0    label='技能'                     field='発動アイテム要する?[消費]'             op=0 dir=1 argc=5
+    4  DataBase     type=2    label='アイテム'                   field='アイテム名'                      op=0 dir=1 argc=5
+    4  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='残り個数/消費ポイント'                op=0 dir=0 argc=5
+    4  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='説明文'                        op=0 dir=0 argc=5
+    4  CDataBase    type=2    label='┣ 主人公行動AI'              field=''                           op=0 dir=1 argc=5
+    4  DataBase     type=10   label='┣ 敵行動AI'                field=''                           op=0 dir=1 argc=5
+    4  CDataBase    type=18   label='×┗ お宝リスト'               field=''                           op=0 dir=0 argc=5
+    4  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='キャラクタ番号[1万以上は敵]'            op=0 dir=1 argc=5
+    3  CDataBase    type=18   label='基本システム用変数'              field=''                           op=1 dir=0 argc=5
+    3  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxHP'              op=0 dir=1 argc=5
+    3  CDataBase    type=0    label='主人公ステータス'               field=''                           op=0 dir=1 argc=5
+    3  CDataBase    type=5    label='┗ 状態リスト'                field=''                           op=0 dir=1 argc=5
+    3  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxSP'              op=0 dir=1 argc=5
+    3  DataBase     type=14   label='用語設定'                   field='[ステ—タス]攻撃力'                 op=0 dir=1 argc=5
+    3  DataBase     type=14   label='用語設定'                   field='[ステ—タス]防御力'                 op=0 dir=1 argc=5
+    3  DataBase     type=14   label='用語設定'                   field='[ステ—タス]精神攻撃力'               op=0 dir=1 argc=5
+    3  DataBase     type=14   label='用語設定'                   field='[ステ—タス]精神防御力'               op=0 dir=1 argc=5
+    3  DataBase     type=14   label='用語設定'                   field='[ステ—タス]敏捷性'                 op=0 dir=1 argc=5
+    3  DataBase     type=14   label='用語設定'                   field='[ステ—タス]命中率'                 op=0 dir=1 argc=5
+    3  DataBase     type=14   label='用語設定'                   field='[ステ—タス]回避率'                 op=0 dir=1 argc=5
+    3  DataBase     type=14   label='用語設定'                   field='[ステ—タス]クリティカル率'             op=0 dir=1 argc=5
+    3  CDataBase    type=0    label='主人公ステータス'               field='現Lvの必要経験値'                  op=0 dir=1 argc=5
+    3  CDataBase    type=0    label='主人公ステータス'               field='HP'                         op=6 dir=0 argc=5
+    3  DataBase     type=18   label='システム設定'                 field='ステータス状態の表示方法'               op=0 dir=1 argc=5
+    3  CDataBase    type=21   label='×主人公一時DB'               field='[一時]移動時ステの有無'               op=0 dir=0 argc=5
+    3  DataBase     type=8    label='状態設定'                   field='状態の表示方法'                    op=0 dir=1 argc=5
+    3  CDataBase    type=0    label='主人公ステータス'               field='装備中の武器'                     op=0 dir=1 argc=5
+    3  CDataBase    type=0    label='主人公ステータス'               field='装備中の防具1'                    op=0 dir=1 argc=5
+    3  CDataBase    type=0    label='主人公ステータス'               field='装備中の防具2'                    op=0 dir=1 argc=5
+    3  CDataBase    type=0    label='主人公ステータス'               field='装備中の防具3'                    op=0 dir=1 argc=5
+    3  CDataBase    type=0    label='主人公ステータス'               field='装備中の防具4'                    op=0 dir=1 argc=5
+    3  CDataBase    type=0    label='主人公ステータス'               field='装備中の防具5'                    op=0 dir=1 argc=5
+    3  CDataBase    type=0    label='主人公ステータス'               field='装備中の防具6'                    op=0 dir=1 argc=5
+    3  CDataBase    type=0    label='主人公ステータス'               field='装備中の防具7'                    op=0 dir=1 argc=5
+    3  DataBase     type=3    label='武器'                     field='クリティカル率[%]増減'               op=1 dir=1 argc=5
+    3  CDataBase    type=11   label='×┣ 属性耐性計算結果'            field=''                           op=2 dir=0 argc=5
+    3  CDataBase    type=12   label='×┣ 状態耐性計算結果'            field=''                           op=2 dir=0 argc=5
+    3  DataBase     type=8    label='状態設定'                   field='カウンター有？[技能選択]'              op=0 dir=1 argc=5
+    3  CDataBase    type=19   label='万能ウィンドウ一時DB'            field=''                           op=0 dir=0 argc=5
+    3  DataBase     type=6    label='戦闘コマンド'                 field='コマンド選択時の効果'                 op=0 dir=1 argc=5
+    3  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='付与文字列[前]'                   op=0 dir=0 argc=4
+    3  DataBase     type=0    label='技能'                     field='先制·後攻行動オプション'               op=0 dir=1 argc=5
+    3  CDataBase    type=14   label='×┣ コマンド処理リスト'           field='受け側番号'                      op=0 dir=0 argc=5
+    3  DataBase     type=0    label='技能'                     field='┏ 何に影響する？             '     op=0 dir=1 argc=5
+    3  DataBase     type=0    label='技能'                     field='┣ 攻撃力影響度[%]        '        op=0 dir=1 argc=5
+    3  DataBase     type=0    label='技能'                     field='┣ 精神力影響度[%]        '        op=0 dir=1 argc=5
+    3  CDataBase    type=12   label='×┣ 属性耐性計算結果'            field=''                           op=0 dir=1 argc=5
+    3  CDataBase    type=12   label='×┣ 属性耐性計算結果'            field=''                           op=1 dir=1 argc=5
+    3  CDataBase    type=18   label='×┗ お宝リスト'               field='[入手アイテム数]'                  op=1 dir=1 argc=5
+    3  CDataBase    type=18   label='×┗ お宝リスト'               field=''                           op=1 dir=0 argc=5
+    3  CDataBase    type=18   label='×┗ お宝リスト'               field='[入手アイテム数]'                  op=1 dir=0 argc=5
+    3  CDataBase    type=15   label='×┣ コマンド処理リスト'           field='発動敏捷性'                      op=0 dir=1 argc=5
+    3  CDataBase    type=16   label='×┣ コマンド処理リスト'           field='発動技能'                       op=0 dir=0 argc=5
+    2  CDataBase    type=4    label='┣所持アイテム個数'              field=''                           op=0 dir=1 argc=5
+    2  DataBase     type=18   label='システム設定'                 field='アイテム最大所持数'                  op=0 dir=1 argc=5
+    2  CDataBase    type=5    label='┣所持武器個数'                field=''                           op=0 dir=1 argc=5
+    2  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='付与文字列[後]'                   op=1 dir=1 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field=''                           op=1 dir=0 argc=5
+    2  DataBase     type=17   label='システム設定'                 field='移動時の戦闘不能の扱い'                op=0 dir=1 argc=5
+    2  CDataBase    type=5    label='┗ 状態リスト'                field=''                           op=0 dir=0 argc=5
+    2  DataBase     type=17   label='システム設定'                 field='[戦闘]ゲ—ムオ—バ—時のEv'            op=0 dir=1 argc=5
+    2  DataBase     type=14   label='用語設定'                   field='[ステ—タス]レベル'                 op=0 dir=1 argc=5
+    2  DataBase     type=14   label='用語設定'                   field='[ステ—タス]経験値の名前'              op=0 dir=1 argc=5
+    2  DataBase     type=0    label='技能'                     field='技能の名前'                      op=0 dir=1 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='種別(戦or移動中)'                 op=0 dir=1 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='このステ状態が重なると↓'               op=0 dir=1 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='┗ 次はこの状態になる'                op=0 dir=1 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='戦闘不能として···'                 op=0 dir=1 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='最低持続ターン[-1:永久]'             op=0 dir=1 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='持続ターン変動幅[±]'                op=0 dir=1 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='ステ—タス全回復で解除？'               op=0 dir=1 argc=5
+    2  DataBase     type=18   label='システム設定'                 field='移動時の戦闘不能の扱い'                op=0 dir=1 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='特殊技能制限'                     op=0 dir=1 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='表示名'                        op=1 dir=1 argc=5
+    2  CDataBase    type=3    label='パーティー情報'                field=''                           op=0 dir=0 argc=5
+    2  CDataBase    type=1600040 label=''                       field=''                           op=0 dir=1 argc=5
+    2  CDataBase    type=1600040 label=''                       field=''                           op=0 dir=0 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='HP'                         op=0 dir=1 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='SP'                         op=0 dir=1 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='肩書き'                        op=1 dir=1 argc=5
+    2  DataBase     type=13   label='用語設定'                   field='[ステ—タス]レベル'                 op=1 dir=1 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='基本攻撃力'                      op=0 dir=1 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='基本防御力'                      op=0 dir=1 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='基本精神攻撃'                     op=0 dir=1 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='基本精神防御'                     op=0 dir=1 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='基本敏捷性'                      op=0 dir=1 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='基本命中率[%]'                   op=0 dir=1 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='基本回避率[%]'                   op=0 dir=1 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='クリティカル率[%]'                 op=0 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='MaxHP変化値'                   op=1 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='MaxSP変化値'                   op=1 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='攻撃力増減'                      op=1 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='防御力増減'                      op=1 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='精神攻撃増減'                     op=1 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='精神防御増減'                     op=1 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='敏捷性増減'                      op=1 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='命中率[%]増減'                   op=1 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='回避率[%]増減'                   op=1 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field='MaxHP変化値'                   op=1 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field='MaxSP変化値'                   op=1 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field='攻撃力増減'                      op=1 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field='防御力増減'                      op=1 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field='精神攻撃増減'                     op=1 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field='精神防御増減'                     op=1 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field='敏捷性増減'                      op=1 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field='命中率[%]増減'                   op=1 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field='回避率[%]増減'                   op=1 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field='クリティカル率[%]増減'               op=1 dir=1 argc=5
+    2  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxHP'              op=6 dir=0 argc=5
+    2  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxSP'              op=6 dir=0 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='MaxHP変化率[%]'                op=3 dir=1 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='MaxSP変化率[%]'                op=3 dir=1 argc=5
+    2  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='HP'                         op=6 dir=0 argc=5
+    2  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='HP'                         op=0 dir=0 argc=5
+    2  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みMaxSP'              op=0 dir=1 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='SP'                         op=7 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み攻撃力'                op=0 dir=1 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み防御力'                op=0 dir=1 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み精神攻撃'               op=0 dir=1 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み精神防御'               op=0 dir=1 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み敏捷性'                op=0 dir=1 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='キャラ名'                       op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='画像ファイル'                     op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='最大HP'                       op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='最大SP'                       op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本攻撃力'                      op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本防御力'                      op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本精神攻撃'                     op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本精神防御'                     op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本敏捷性'                      op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本命中率[%]'                   op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本回避率[%]'                   op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本クリティカル率[%]'               op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='キャラクタ番号[1万以上は敵]'            op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド1]'                    op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド2]'                    op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド3]'                    op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド4]'                    op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド5]'                    op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド6]'                    op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド7]'                    op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド8]'                    op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【戦闘不能？】'                    op=0 dir=0 argc=5
+    2  DataBase     type=7    label='属性名の設定'                 field=''                           op=0 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field=''                           op=0 dir=1 argc=5
+    2  DataBase     type=9    label='敵キャラ個体デ—タ'              field='最大HP'                       op=0 dir=1 argc=5
+    2  DataBase     type=9    label='敵キャラ個体デ—タ'              field='最大SP'                       op=0 dir=1 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='HPタ—ン増減[%]'                 op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='HPタ—ン増減[固定値]'               op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='SPタ—ン増減[%]'                 op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='SPタ—ン増減[固定値]'               op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みMaxHP'              op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みMaxSP'              op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み攻撃力'                op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み防御力'                op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み精神攻撃'               op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み精神防御'               op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み敏捷性'                op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み命中率'                op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み回避率'                op=0 dir=0 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みクリティカル率'            op=0 dir=0 argc=5
+    2  DataBase     type=8    label='状態設定'                   field='行動制限時文章(空欄:ナシ'              op=0 dir=1 argc=5
+    2  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='【戦闘不能？】'                    op=0 dir=0 argc=5
+    2  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='【戦闘不能？】'                    op=6 dir=0 argc=5
+    2  CDataBase    type=4    label='┗ 状態リスト'                field=''                           op=0 dir=0 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='SP'                         op=0 dir=0 argc=5
+    2  DataBase     type=6    label='戦闘コマンド'                 field='使用不能になる条件'                  op=0 dir=1 argc=5
+    2  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【特殊技能制限】1=封印'               op=3 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='武器の名前'                      op=0 dir=1 argc=5
+    2  DataBase     type=4    label='防具'                     field='防具の名前'                      op=0 dir=1 argc=5
+    2  CDataBase    type=14   label='×┣ コマンド処理リスト'           field=''                           op=0 dir=0 argc=5
+    2  CDataBase    type=20   label='基本システム用変数'              field=''                           op=6 dir=0 argc=5
+    2  CDataBase    type=15   label='×┣ コマンド処理リスト'           field='発動者番号'                      op=0 dir=0 argc=5
+    2  CDataBase    type=15   label='×┣ コマンド処理リスト'           field='発動敏捷性'                      op=0 dir=0 argc=5
+    2  CDataBase    type=15   label='×┣ コマンド処理リスト'           field='発動技能'                       op=0 dir=0 argc=5
+    2  DataBase     type=0    label='技能'                     field='技能が実行されるタイミング'              op=0 dir=1 argc=5
+    2  DataBase     type=2    label='アイテム'                   field='効果対象'                       op=0 dir=1 argc=5
+    2  DataBase     type=0    label='技能'                     field='アニメーション'                    op=0 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='攻撃アニメーション'                  op=0 dir=1 argc=5
+    2  DataBase     type=0    label='技能'                     field='付与属性'                       op=0 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='付与属性1'                      op=0 dir=1 argc=5
+    2  DataBase     type=3    label='武器'                     field='付与属性2'                      op=0 dir=1 argc=5
+    2  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='画像ファイル'                     op=0 dir=1 argc=5
+    2  DataBase     type=1    label=''                       field=''                           op=1 dir=1 argc=5
+    2  CDataBase    type=18   label='×┗ お宝リスト'               field='取得経験値'                      op=0 dir=1 argc=5
+    2  CDataBase    type=18   label='×┗ お宝リスト'               field='取得金額'                       op=0 dir=1 argc=5
+    2  CDataBase    type=18   label='×┗ お宝リスト'               field=''                           op=0 dir=1 argc=5
+    2  DataBase     type=14   label='用語設定'                   field='[戦闘] 逃走コマンド名'               op=0 dir=1 argc=5
+    2  CDataBase    type=22   label='万能ウィンドウ一時DB'            field='項目文'                        op=0 dir=0 argc=5
+    2  CDataBase    type=22   label='万能ウィンドウ一時DB'            field='選択可能状態[1=可]'                op=0 dir=0 argc=5
+    2  CDataBase    type=22   label='万能ウィンドウ一時DB'            field='項目コード'                      op=0 dir=0 argc=5
+    2  CDataBase    type=0    label='主人公ステータス'               field='AIで自動行動する？'                 op=0 dir=1 argc=5
+    2  CDataBase    type=20   label='基本システム用変数'              field=''                           op=2 dir=1 argc=5
+    2  CDataBase    type=16   label='×┣ コマンド処理リスト'           field='発動敏捷性'                      op=0 dir=0 argc=5
+    2  CDataBase    type=16   label='×┣ コマンド処理リスト'           field='発動者番号'                      op=0 dir=0 argc=5
+    2  DataBase     type=2    label='アイテム'                   field='使用時文章[戦](人名~'               op=0 dir=1 argc=5
+    2  CDataBase    type=21   label='基本システム用変数'              field=''                           op=3 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='決定 効果音ファイル'                 op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='キャンセル 効果音ファイル'              op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='カーソル 効果音ファイル'               op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='ブザー 効果音ファイル'                op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='装備時 効果音ファイル'                op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='装備解除 効果音ファイル'               op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='メニュー開く 効果音ファイル'             op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='メニュー閉じ 効果音ファイル'             op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='セーブ音 効果音ファイル'               op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='ロード音 効果音ファイル'               op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='購入時 効果音ファイル'                op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='売却時 効果音ファイル'                op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='戦闘行動 効果音ファイル'               op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='ダメージ 効果音ファイル'               op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='撃破時 効果音ファイル'                op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='戦闘開始 効果音ファイル'               op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='戦闘入手 効果音ファイル'               op=0 dir=1 argc=5
+    1  DataBase     type=16   label='画像/音声設定'                field='レベルアップ 効果音ファイル'             op=0 dir=1 argc=5
+    1  DataBase     type=17   label='システム設定'                 field='アイテム最大所持数'                  op=0 dir=1 argc=5
+    1  CDataBase    type=4    label='┣所持アイテム個数'              field=''                           op=1 dir=0 argc=5
+    1  CDataBase    type=4    label='┣所持アイテム個数'              field=''                           op=6 dir=0 argc=5
+    1  CDataBase    type=4    label='┣所持アイテム個数'              field=''                           op=7 dir=0 argc=5
+    1  CDataBase    type=4    label='┣所持アイテム個数'              field=''                           op=2 dir=1 argc=5
+    1  CDataBase    type=5    label='┣所持武器個数'                field=''                           op=1 dir=0 argc=5
+    1  CDataBase    type=5    label='┣所持武器個数'                field=''                           op=6 dir=0 argc=5
+    1  CDataBase    type=5    label='┣所持武器個数'                field=''                           op=7 dir=0 argc=5
+    1  CDataBase    type=5    label='┣所持武器個数'                field=''                           op=2 dir=1 argc=5
+    1  CDataBase    type=6    label='┗所持防具個数'                field=''                           op=0 dir=1 argc=5
+    1  CDataBase    type=6    label='┗所持防具個数'                field=''                           op=1 dir=0 argc=5
+    1  CDataBase    type=6    label='┗所持防具個数'                field=''                           op=6 dir=0 argc=5
+    1  CDataBase    type=6    label='┗所持防具個数'                field=''                           op=7 dir=0 argc=5
+    1  CDataBase    type=6    label='┗所持防具個数'                field=''                           op=2 dir=1 argc=5
+    1  CDataBase    type=6    label='パーティー情報'                field='所持金'                        op=1 dir=0 argc=5
+    1  CDataBase    type=6    label='パーティー情報'                field='所持金'                        op=6 dir=0 argc=5
+    1  CDataBase    type=6    label='パーティー情報'                field='所持金'                        op=7 dir=0 argc=5
+    1  CDataBase    type=9    label='┗所持防具個数'                field=''                           op=0 dir=1 argc=5
+    1  CDataBase    type=18   label='基本システム用変数'              field=''                           op=6 dir=0 argc=5
+    1  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='項目文'                        op=0 dir=1 argc=5
+    1  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='残り個数/消費ポイント'                op=0 dir=1 argc=5
+    1  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='付与文字列[前]'                   op=0 dir=1 argc=5
+    1  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='選択可能状態[1=可]'                op=0 dir=1 argc=5
+    1  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='説明文'                        op=0 dir=1 argc=5
+    1  DataBase     type=19   label='システム設定'                 field='能力限界値'                      op=0 dir=1 argc=5
+    1  DataBase     type=19   label='システム設定'                 field='最大HP·SP限界値'                 op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='心'                          op=0 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='現Lvの取得経験値'                  op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='現Lvの取得経験値'                  op=6 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='現Lvの取得経験値'                  op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='現Lvの取得経験値'                  op=0 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='最大HP'                       op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='最大HP'                       op=7 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='最大HP'                       op=6 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='最大SP'                       op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='最大SP'                       op=7 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='最大SP'                       op=6 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本攻撃力'                      op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本攻撃力'                      op=7 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本攻撃力'                      op=6 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本防御力'                      op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本防御力'                      op=7 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本防御力'                      op=6 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本精神攻撃'                     op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本精神攻撃'                     op=7 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本精神攻撃'                     op=6 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本精神防御'                     op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本精神防御'                     op=7 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本精神防御'                     op=6 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本敏捷性'                      op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本敏捷性'                      op=7 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本敏捷性'                      op=6 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本命中率[%]'                   op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本命中率[%]'                   op=7 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本命中率[%]'                   op=6 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本回避率[%]'                   op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本回避率[%]'                   op=7 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='基本回避率[%]'                   op=6 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='クリティカル率[%]'                 op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='クリティカル率[%]'                 op=7 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='クリティカル率[%]'                 op=6 dir=0 argc=5
+    1  CDataBase    type=21   label='基本システム用変数'              field=''                           op=0 dir=0 argc=4
+    1  DataBase     type=19   label='システム設定'                 field='成長時パラメータを……'                op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='限界レベル'                      op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[成長]最大HP増加 /1Lv'            op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[成長]最大SP増加 /1Lv'            op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[成長]攻撃力増加 /1Lv'             op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[成長]防御力増加 /1Lv'             op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[成長]精神攻撃増加 /1Lv'            op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[成長]精神防御増加 /1Lv'            op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[成長]敏捷性増加 /1Lv'             op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[成長]命中率増加 /1Lv'             op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[成長]回避率増加 /1Lv'             op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[成長]クリティカル増加 /1Lv'          op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='必要経験値増加率[%]'                op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='必要経験値増加[固定値]'               op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='レベル'                        op=1 dir=0 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='現Lvの必要経験値'                  op=0 dir=0 argc=5
+    1  CDataBase    type=1    label='┣ 技能習得Lv'               field=''                           op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='基本システム用変数'              field=''                           op=1 dir=0 argc=4
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]次ステ—タス回復まで'             op=6 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]次ステ—タス回復まで'             op=0 dir=0 argc=5
+    1  CDataBase    type=17   label='×主人公一時DB'               field='[一時]HP自然増減値'                op=0 dir=0 argc=5
+    1  CDataBase    type=17   label='×主人公一時DB'               field='[一時]SP自然増減値'                op=0 dir=0 argc=5
+    1  CDataBase    type=17   label='×主人公一時DB'               field='[一時]封印状態？'                  op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]次ステ—タス回復まで'             op=7 dir=0 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='マップ移動中 HP増減±/1歩'            op=0 dir=1 argc=5
+    1  CDataBase    type=24   label='×主人公一時DB'               field='[一時]HP自然増減値'                op=1 dir=0 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='マップ移動中 SP増減±/1歩'            op=0 dir=1 argc=5
+    1  CDataBase    type=24   label='×主人公一時DB'               field='[一時]SP自然増減値'                op=1 dir=0 argc=5
+    1  CDataBase    type=17   label='×主人公一時DB'               field='[一時]封印状態？'                  op=6 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]次ステ—タス回復まで'             op=0 dir=1 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]次ステ—タス回復Max'            op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]状態異常名一覧'                op=0 dir=0 argc=5
+    1  CDataBase    type=3    label='パーティー情報'                field=''                           op=0 dir=1 argc=5
+    1  CDataBase    type=6    label='パーティー情報'                field='メンバー1'                      op=0 dir=0 argc=5
+    1  CDataBase    type=6    label='パーティー情報'                field='メンバー2'                      op=0 dir=0 argc=5
+    1  CDataBase    type=6    label='パーティー情報'                field='メンバー3'                      op=0 dir=0 argc=5
+    1  CDataBase    type=6    label='パーティー情報'                field='メンバー4'                      op=0 dir=0 argc=5
+    1  CDataBase    type=6    label='パーティー情報'                field='メンバー5'                      op=0 dir=0 argc=5
+    1  CDataBase    type=6    label='パーティー情報'                field='メンバー6'                      op=0 dir=0 argc=5
+    1  CDataBase    type=3    label='パーティー情報'                field='メンバー1'                      op=0 dir=1 argc=5
+    1  CDataBase    type=3    label='パーティー情報'                field='メンバー2'                      op=0 dir=1 argc=5
+    1  CDataBase    type=3    label='パーティー情報'                field='メンバー3'                      op=0 dir=1 argc=5
+    1  CDataBase    type=3    label='パーティー情報'                field='メンバー4'                      op=0 dir=1 argc=5
+    1  CDataBase    type=3    label='パーティー情報'                field='メンバー5'                      op=0 dir=1 argc=5
+    1  CDataBase    type=3    label='パーティー情報'                field='メンバー6'                      op=0 dir=1 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxHP'              op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxSP'              op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み攻撃力'                op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み防御力'                op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み精神攻撃'               op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み精神防御'               op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み敏捷性'                op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み命中率'                op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み回避率'                op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みクリティカル'             op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxHP'              op=1 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxSP'              op=1 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み攻撃力'                op=1 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み防御力'                op=1 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み精神攻撃'               op=1 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み精神防御'               op=1 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み敏捷性'                op=1 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み命中率'                op=1 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み回避率'                op=1 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みクリティカル'             op=1 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み攻撃力'                op=6 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み防御力'                op=6 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み精神攻撃'               op=6 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み精神防御'               op=6 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み敏捷性'                op=6 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み命中率'                op=6 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済み回避率'                op=6 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みクリティカル'             op=6 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxHP'              op=3 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxHP'              op=4 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxSP'              op=3 dir=0 argc=5
+    1  CDataBase    type=21   label='×主人公一時DB'               field='[一時]計算済みMaxSP'              op=4 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='HP'                         op=1 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='HP'                         op=7 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='SP'                         op=1 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='SP'                         op=6 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='最大HP'                       op=1 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='最大SP'                       op=1 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='基本攻撃力'                      op=1 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='基本防御力'                      op=1 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='基本精神攻撃'                     op=1 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='基本精神防御'                     op=1 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='基本敏捷性'                      op=1 dir=0 argc=5
+    1  CDataBase    type=12   label='×┣ 状態耐性計算結果'            field=''                           op=0 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='回復時の文章[(人名)～]'              op=0 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='発生時の文章[(人名)～]'              op=0 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='終了タイミング'                    op=0 dir=1 argc=5
+    1  CDataBase    type=13   label='×┣ 状態リスト'               field=''                           op=2 dir=0 argc=5
+    1  CDataBase    type=13   label='×┣ 状態リスト'               field=''                           op=6 dir=0 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='┏ダメ—ジ[攻撃力]で回復'              op=0 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='┗ダメ—ジ[精神攻]で回復'              op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='顔画像 [バトル·ステ—タス用]'           op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='最大HP'                       op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='最大SP'                       op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[コマンド1]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[コマンド2]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[コマンド3]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[コマンド4]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[コマンド5]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[コマンド6]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[コマンド7]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=0    label='主人公ステータス'               field='[コマンド8]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の武器'                     op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具1'                    op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具2'                    op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具3'                    op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具4'                    op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具5'                    op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具6'                    op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具7'                    op=0 dir=0 argc=5
+    1  CDataBase    type=2    label='┣ 属性耐性'                 field=''                           op=0 dir=1 argc=5
+    1  CDataBase    type=3    label='┣ 状態耐性'                 field=''                           op=0 dir=1 argc=5
+    1  CDataBase    type=4    label='┗ 状態リスト'                field=''                           op=0 dir=1 argc=5
+    1  DataBase     type=3    label='武器'                     field='┏ 戦闘コマンドの変更'                op=0 dir=1 argc=5
+    1  DataBase     type=3    label='武器'                     field='┗ 変更するコマンド\u3000\u3000'     op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='┏ 戦闘コマンドの変更'                op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='┗ 変更するコマンド\u3000\u3000'     op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='耐性/弱点属性A\u3000\u3000\u3000\u3000\u3000  ' op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='┗ 属性耐性A防御率±%'               op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='耐性/弱点属性B\u3000\u3000\u3000\u3000\u3000\u3000' op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='┗ 属性耐性B防御率±%'               op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='耐性/弱点属性C\u3000\u3000\u3000\u3000\u3000\u3000' op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='┗ 属性耐性C防御率±%'               op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='状態耐性A\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000' op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='┗ 状態耐性A防御率±%'               op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='状態耐性B\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000' op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='┗ 状態耐性B防御率±%'               op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='状態耐性C\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000' op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='┗ 状態耐性C防御率±%'               op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='敵キャラ名'                      op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='画像ファイル'                     op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='攻撃力'                        op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='防御力'                        op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='精神攻撃'                       op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='精神防御'                       op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='敏捷性'                        op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='基本命中率[%]'                   op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='基本回避率[%]'                   op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='クリティカル率[%]'                 op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='取得経験値'                      op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='取得金額'                       op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='入手アイテム\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000' op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='┗入手率[アイテム] [%]'             op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='入手武器\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000' op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='┗入手率[武器] [%]'               op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='入手防具\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000\u3000' op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='┗入手率[防具] [%]'               op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='キャラクタ番号[1万以上は敵]'            op=1 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]入手経験値'                 op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]入手金額'                  op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]入手アイテム'                op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]アイテム入手率'               op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]入手武器'                  op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]武器入手率'                 op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]入手防具'                  op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]防具入手率'                 op=0 dir=0 argc=5
+    1  DataBase     type=11   label='┣ 属性耐性'                 field=''                           op=0 dir=1 argc=5
+    1  DataBase     type=12   label='┗ 状態耐性'                 field=''                           op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の武器'                     op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具1'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具2'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具3'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具4'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具5'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具6'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='装備中の防具7'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【受ける攻撃力ダメージ率】'              op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【受ける精神攻ダメージ率】'              op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【狙われ度アップ】-1:不可'             op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【行動制限】'                     op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【特殊技能制限】1=封印'               op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【カウンタ—系状態有り】'               op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='最大HP'                       op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='最大SP'                       op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本攻撃力'                      op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本防御力'                      op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本精神攻撃'                     op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本精神防御'                     op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本敏捷性'                      op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本命中率[%]'                   op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本回避率[%]'                   op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='基本クリティカル率[%]'               op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みMaxHP'              op=1 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みMaxSP'              op=1 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み攻撃力'                op=1 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み防御力'                op=1 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み精神攻撃'               op=1 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み精神防御'               op=1 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み敏捷性'                op=1 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み命中率'                op=1 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み回避率'                op=1 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みクリティカル率'            op=1 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]使用武器番号'                 op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]MaxHP装備計算分'             op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]MaxSP装備計算分'             op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]MaxHP装備計算分'             op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]MaxSP装備計算分'             op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み命中率'                op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み回避率'                op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みクリティカル率'            op=0 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='攻撃力変化率[%]'                  op=3 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='防御力変化率[%]'                  op=3 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='精神攻撃変化率[%]'                 op=3 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='精神防御変化率[%]'                 op=3 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='敏捷度変化率[%]'                  op=3 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='命中率変化率[±%]'                 op=1 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='回避率変化率[±%]'                 op=1 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='クリティカル変化率[±%]'              op=1 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='受ける攻撃力ダメージ率'                op=3 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='受ける精神攻撃ダメージ率'               op=3 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='HP増減±[%]/1タ—ン終'             op=1 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='HP増減±[固定]/1タ—ン終'            op=1 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='SP増減±[%]/1タ—ン終'             op=1 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='SP増減±[固定値]/1タ—ン終'           op=1 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='行動制限'                       op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='行動不能時のメッセ—ジ'                op=0 dir=0 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='状態時の顔グラフィック'                op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【特殊技能制限】1=封印'               op=6 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='技能封印時のメッセ—ジ'                op=0 dir=0 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='戦闘不能として···'                 op=6 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【カウンタ—系状態有り】'               op=6 dir=0 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='受ける攻撃力ダメージ率'                op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【受ける攻撃力ダメージ率】'              op=3 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【受ける攻撃力ダメージ率】'              op=4 dir=0 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='受ける精神攻撃ダメージ率'               op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【受ける精神攻ダメージ率】'              op=3 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【受ける精神攻ダメージ率】'              op=4 dir=0 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='敵からの狙われ度'                   op=0 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='状態時の色変化:味方のみ'               op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='【受ける攻撃力ダメージ率】'              op=0 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='【受ける精神攻ダメージ率】'              op=0 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='表示色番号'                      op=0 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='【狙われ度アップ】-1:不可'             op=0 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='【行動制限】'                     op=0 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='【戦闘不能？】'                    op=7 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='一時上書き画像ファイル'                op=0 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]状態異常名一覧'                op=0 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='HP'                         op=7 dir=0 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド1]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド2]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド3]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド4]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド5]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド6]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド7]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド8]'                    op=0 dir=1 argc=5
+    1  DataBase     type=6    label='戦闘コマンド'                 field='コマンド名'                      op=0 dir=1 argc=5
+    1  DataBase     type=6    label='戦闘コマンド'                 field='コマンドの説明文'                   op=0 dir=1 argc=5
+    1  CDataBase    type=21   label='万能ウィンドウ一時DB'            field='説明文'                        op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='万能ウィンドウ一時DB'            field='項目コード'                      op=0 dir=0 argc=5
+    1  CDataBase    type=21   label='万能ウィンドウ一時DB'            field='残り個数/消費ポイント'                op=0 dir=0 argc=5
+    1  CDataBase    type=6    label='┣所持アイテム個数'              field=''                           op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field=''                           op=0 dir=1 argc=5
+    1  CDataBase    type=4    label='┣所持アイテム個数'              field='所持個数'                       op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='説明文[2行まで可]'                 op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='使用可能な場面'                    op=0 dir=1 argc=5
+    1  DataBase     type=3    label='武器'                     field=''                           op=0 dir=1 argc=5
+    1  CDataBase    type=5    label='┣所持武器個数'                field='所持個数'                       op=0 dir=1 argc=5
+    1  DataBase     type=3    label='武器'                     field='武器の説明[2行まで可]'               op=0 dir=1 argc=5
+    1  CDataBase    type=6    label='┗所持防具個数'                field='所持個数'                       op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='防具の説明[2行まで可]'               op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='説明'                         op=0 dir=1 argc=5
+    1  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='付与文字列[前]'                   op=1 dir=0 argc=5
+    1  CDataBase    type=23   label='×主人公一時DB'               field='[記憶]戦闘時技能位置'                op=0 dir=1 argc=5
+    1  CDataBase    type=23   label='×主人公一時DB'               field='[記憶]戦闘時アイテム位置'              op=0 dir=1 argc=5
+    1  CDataBase    type=23   label='×主人公一時DB'               field='[記憶]戦闘時コマンド位置'              op=0 dir=1 argc=5
+    1  CDataBase    type=23   label='×主人公一時DB'               field='[記憶]戦闘時技能位置'                op=0 dir=0 argc=5
+    1  CDataBase    type=23   label='×主人公一時DB'               field='[記憶]戦闘時アイテム位置'              op=0 dir=0 argc=5
+    1  CDataBase    type=23   label='×主人公一時DB'               field='[記憶]戦闘時コマンド位置'              op=0 dir=0 argc=5
+    1  CDataBase    type=20   label='基本システム用変数'              field=''                           op=2 dir=0 argc=5
+    1  CDataBase    type=15   label='×┣ コマンド処理リスト'           field='受け側番号'                      op=0 dir=0 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='行動回数'                       op=0 dir=1 argc=5
+    1  CDataBase    type=14   label='×┣ コマンド処理リスト'           field='発動技能'                       op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='使用時SE'                      op=0 dir=1 argc=5
+    1  DataBase     type=17   label='システム設定'                 field='[戦闘]通常ダメージ値'                op=0 dir=1 argc=5
+    1  DataBase     type=17   label='システム設定'                 field='[戦闘]通常防御有効度'                op=0 dir=1 argc=5
+    1  DataBase     type=17   label='システム設定'                 field='[戦闘]クリティカル倍率'               op=0 dir=1 argc=5
+    1  DataBase     type=17   label='システム設定'                 field='[戦闘]クリティカル防御有効度'            op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='┗[3]イベント番号指定\u3000\u3000\u3000' op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='回復するステ—タス状態1'               op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='回復するステ—タス状態2'               op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='回復するステ—タス状態3'               op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='HP回復 [最大の？%]'               op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='┗＋HP回復 [ポイント]'              op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='SP回復 [最大の？%]'               op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='┗＋SP回復 [ポイント]'              op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み攻撃力'                op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み精神攻撃'               op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='成功率[%] [-1:命中依存]'           op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み命中率'                op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='武器依存時命中補正±%'                op=1 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='相手の回避率を'                    op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み回避率'                op=2 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='失敗時文章[(対象)～]'               op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='┣ 基本効果量[固定値]\u3000 '        op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='相手の防御·精神防御を'                op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み防御力'                op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済み精神防御'               op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='クリティカル率[%] (-1:ナシ)'         op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みクリティカル率'            op=1 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='[一時]使用武器番号'                 op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='┗ ダメージ分散率± [%]    '         op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='【受ける攻撃力ダメージ率】'              op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='【受ける精神攻ダメージ率】'              op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='回復するステ—タス状態1'               op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='回復するステ—タス状態2'               op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='回復するステ—タス状態3'               op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='┗状態1付与率[%]'                 op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='付加するステ—タス状態1'               op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='┗状態2付与率[%]'                 op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='付加するステ—タス状態2'               op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='┗状態3付与率[%]'                 op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='付加するステ—タス状態3'               op=0 dir=1 argc=5
+    1  DataBase     type=3    label='武器'                     field='┗ 付与確率[%]\u3000\u3000\u3000' op=0 dir=1 argc=5
+    1  DataBase     type=3    label='武器'                     field='┏ 付与ステータス状態'                op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='与えた効果を自分に返す？'               op=0 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='┣ カウンタ—発動文[対象～'             op=0 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='┗ 技能に使用する能力\u3000\u3000'    op=0 dir=1 argc=5
+    1  CDataBase    type=14   label='×┣ コマンド処理リスト'           field='発動者番号'                      op=0 dir=0 argc=5
+    1  CDataBase    type=14   label='×┣ コマンド処理リスト'           field='発動敏捷性'                      op=0 dir=0 argc=5
+    1  CDataBase    type=14   label='×┣ コマンド処理リスト'           field='発動技能'                       op=0 dir=0 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='┣ この属性を受けたら発動'              op=0 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='┣ カウンター発動率[%]     '         op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='┏ 変身条件\u3000－－－－ '          op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='┃┗  [A値]\u3000－－－－\u3000'   op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='┣ 変身キャラ\u3000－－－－'          op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='┣ 変身オプション\u3000－－\u3000'    op=0 dir=1 argc=5
+    1  DataBase     type=9    label='敵キャラ個体デ—タ'              field='┗ 変身時Ev呼出[-1:ナシ]'           op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='使用後文章[移動]'                  op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='使用回数制限\u3000\u3000\u3000\u3000\u3000\u3000\u3000' op=0 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='┗消耗後アイテム変化する?'              op=0 dir=1 argc=5
+    1  DataBase     type=3    label='武器'                     field='┣使用時文章[移動時]\u3000  '        op=0 dir=1 argc=5
+    1  DataBase     type=3    label='武器'                     field='┗使用後のアイテム変化\u3000\u3000 '   op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='┣使用時文章[移動時]\u3000  '        op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='┗使用後のアイテム変化\u3000 \u3000'   op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='使用時文章[移動](人名~'              op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]入手経験値'                 op=0 dir=1 argc=5
+    1  CDataBase    type=18   label='×┗ お宝リスト'               field='取得経験値'                      op=1 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]入手金額'                  op=0 dir=1 argc=5
+    1  CDataBase    type=18   label='×┗ お宝リスト'               field='取得金額'                       op=1 dir=0 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]入手アイテム'                op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]アイテム入手率'               op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]入手武器'                  op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]武器入手率'                 op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]入手防具'                  op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[敵専用]防具入手率'                 op=0 dir=1 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='┏勝利条件'                      op=0 dir=1 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='┗[A値]\u3000\u3000  '        op=0 dir=1 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='┏敗北条件'                      op=0 dir=1 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='┗[B値]\u3000\u3000\u3000'    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【戦闘不能？】'                    op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【行動制限】'                     op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='【特殊技能制限】1=封印'               op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='【狙われ度アップ】-1:不可'             op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='HPタ—ン増減[%]'                 op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みMaxHP'              op=3 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='HPタ—ン増減[固定値]'               op=1 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='SPタ—ン増減[%]'                 op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]計算済みMaxSP'              op=3 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='SPタ—ン増減[固定値]'               op=1 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='表示色番号'                      op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='一時上書き画像ファイル'                op=0 dir=1 argc=5
+    1  DataBase     type=19   label='システム設定'                 field='ステ—タス 顔グラフィック倍率'            op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[一時]状態異常名一覧'                op=0 dir=1 argc=5
+    1  DataBase     type=19   label='システム設定'                 field='[戦闘]敵HPの表示'                 op=0 dir=1 argc=5
+    1  DataBase     type=19   label='システム設定'                 field='[戦闘]敵ゲージの表示'                op=0 dir=1 argc=5
+    1  DataBase     type=8    label='状態設定'                   field='状態名'                        op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='コモンEvで処理[全設定無視'             op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field=''                           op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='再生効果音'                      op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='アニメ画像ファイル'                  op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='アニメパターン総数'                  op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='アニメ画像 [ 横 ] 分割数'            op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='アニメ画像 [ 縦 ] 分割数'            op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='描画モード'                      op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='拡大率'                        op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='効果音再生ディレイ[フレ—ム]'            op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='[色]カラー補正R(±100)'            op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='[色]カラー補正G(±100)'            op=0 dir=1 argc=5
+    1  DataBase     type=1    label='┗ アニメーション'              field='[色]カラー補正B(±100)'            op=0 dir=1 argc=5
+    1  DataBase     type=1    label=''                       field=''                           op=0 dir=1 argc=5
+    1  CDataBase    type=10   label='×┏ 戦闘一時ステータス[基]'        field='キャラ名'                       op=0 dir=1 argc=5
+    1  DataBase     type=14   label='用語設定'                   field='[ステ—タス]お金の単位'               op=1 dir=1 argc=5
+    1  DataBase     type=2    label='アイテム'                   field='アイテム名'                      op=1 dir=1 argc=5
+    1  DataBase     type=3    label='武器'                     field='武器の名前'                      op=1 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='防具の名前'                      op=1 dir=1 argc=5
+    1  DataBase     type=19   label='システム設定'                 field='[戦闘]基本戦闘BGM'                op=0 dir=1 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='逃走成功率[%]'                   op=0 dir=1 argc=5
+    1  CDataBase    type=15   label='×┣ コマンド処理リスト'           field=''                           op=0 dir=0 argc=5
+    1  CDataBase    type=17   label='×┗ お宝リスト'               field=''                           op=0 dir=0 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='敵1（◇◇◇◆◇◇◇）'                op=0 dir=1 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='敵2（◇◇◆◇◇◇◇）'                op=0 dir=1 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='敵3（◇◇◇◇◆◇◇）'                op=0 dir=1 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='敵4（◇◆◇◇◇◇◇）'                op=0 dir=1 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='敵5（◇◇◇◇◇◆◇）'                op=0 dir=1 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='敵6（◆◇◇◇◇◇◇）'                op=0 dir=1 argc=5
+    1  DataBase     type=13   label='敵グループ'                  field='敵7（◇◇◇◇◇◇◆）'                op=0 dir=1 argc=5
+    1  CDataBase    type=22   label='万能ウィンドウ一時DB'            field=''                           op=0 dir=0 argc=5
+    1  DataBase     type=14   label='用語設定'                   field='[戦闘] 戦闘コマンド名'               op=0 dir=1 argc=5
+    1  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='説明文'                        op=0 dir=0 argc=4
+    1  CDataBase    type=19   label='万能ウィンドウ一時DB'            field='項目文'                        op=0 dir=0 argc=4
+    1  DataBase     type=2    label='アイテム'                   field='┃┗使用時バトルメッセ—ジ  '            op=2 dir=1 argc=5
+    1  DataBase     type=3    label='武器'                     field='┣使用時文章[戦](人名~ '             op=0 dir=1 argc=5
+    1  DataBase     type=4    label='防具'                     field='┣使用時文章[戦](人名~ '             op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='行動不能時のメッセ—ジ'                op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド1]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド2]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド3]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド4]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド5]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド6]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド7]'                    op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='[コマンド8]'                    op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='特殊技能制限の影響を…'                op=3 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='技能封印時のメッセ—ジ'                op=1 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='使用時文章[戦闘](人名~'              op=0 dir=1 argc=5
+    1  CDataBase    type=11   label='×┏ 戦闘一時ステータス[基]'        field='SP'                         op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='発動回数/武器の影響'                 op=0 dir=1 argc=5
+    1  DataBase     type=19   label='システム設定'                 field='[戦闘]敵逃走文 [対象～'              op=0 dir=1 argc=5
+    1  DataBase     type=0    label='技能'                     field='(あれば)┗イベント番号指定'             op=0 dir=1 argc=5
+    1  DataBase     type=17   label='システム設定'                 field='戦闘後のHP·SPの扱い'               op=0 dir=1 argc=5
+    1  CDataBase    type=17   label='×主人公一時DB'               field='[一時]計算済みMaxHP'              op=0 dir=1 argc=5
+    1  CDataBase    type=17   label='×主人公一時DB'               field='[一時]計算済みMaxSP'              op=0 dir=1 argc=5
+
+=== per-type totals ===
+  205  ('CDataBase', '×┏ 戦闘一時ステータス[基]', 10)
+  196  ('CDataBase', '基本システム用変数', 18)
+  158  ('CDataBase', '主人公ステータス', 0)
+  100  ('CDataBase', '×┏ 戦闘一時ステータス[基]', 11)
+   96  ('CDataBase', '基本システム用変数', 21)
+   80  ('DataBase', '状態設定', 8)
+   78  ('DataBase', '技能', 0)
+   62  ('DataBase', '防具', 4)
+   58  ('DataBase', '武器', 3)
+   53  ('CDataBase', '万能ウィンドウ一時DB', 19)
+   51  ('CDataBase', '×主人公一時DB', 21)
+   47  ('CDataBase', '基本システム用変数', 20)
+   43  ('DataBase', 'アイテム', 2)
+   41  ('DataBase', '用語設定', 14)
+   39  ('CDataBase', '×┣ コマンド処理リスト', 16)
+   28  ('DataBase', '敵キャラ個体デ—タ', 9)
+   21  ('CDataBase', '×┗ お宝リスト', 18)
+   18  ('DataBase', '画像/音声設定', 16)
+   18  ('CDataBase', '×┣ 状態リスト', 13)
+   15  ('DataBase', '画像/音声設定', 17)
+   13  ('CDataBase', '×┣ 状態リスト', 14)
+   13  ('DataBase', '┗ アニメーション', 1)
+   12  ('CDataBase', '┗ 状態リスト', 2)
+   12  ('DataBase', '敵グループ', 13)
+   11  ('DataBase', 'システム設定', 18)
+   11  ('DataBase', '用語設定', 13)
+   11  ('CDataBase', '×┣ コマンド処理リスト', 15)
+   10  ('DataBase', 'システム設定', 17)
+   10  ('CDataBase', '×┣ 状態耐性計算結果', 12)
+   10  ('CDataBase', '万能ウィンドウ一時DB', 21)
+    9  ('CDataBase', 'パーティー情報', 6)
+    9  ('CDataBase', 'パーティー情報', 3)
+    9  ('CDataBase', '×┣ 属性耐性計算結果', 11)
+    9  ('CDataBase', '×┣ コマンド処理リスト', 14)
+    9  ('DataBase', '', 9)
+    8  ('DataBase', 'システム設定', 19)
+    7  ('CDataBase', '┣所持アイテム個数', 4)
+    7  ('CDataBase', '┣所持武器個数', 5)
+    7  ('DataBase', '戦闘コマンド', 6)
+    7  ('CDataBase', '万能ウィンドウ一時DB', 22)
+    6  ('CDataBase', '┗所持防具個数', 6)
+    6  ('CDataBase', '×主人公一時DB', 17)
+    6  ('CDataBase', '×主人公一時DB', 23)
+    6  ('CDataBase', '×┣ 属性耐性計算結果', 12)
+    5  ('CDataBase', '┗ 状態リスト', 5)
+    5  ('CDataBase', '┣ 技能習得Lv', 1)
+    4  ('CDataBase', '', 1600040)
+    4  ('CDataBase', '┣ 主人公行動AI', 2)
+    4  ('DataBase', '┣ 敵行動AI', 10)
+    3  ('CDataBase', '┗ 状態リスト', 4)
+    3  ('DataBase', '', 1)
+    2  ('CDataBase', '×主人公一時DB', 24)
+    2  ('DataBase', '属性名の設定', 7)
+    1  ('CDataBase', '┗所持防具個数', 9)
+    1  ('CDataBase', '┣ 属性耐性', 2)
+    1  ('CDataBase', '┣ 状態耐性', 3)
+    1  ('DataBase', '┣ 属性耐性', 11)
+    1  ('DataBase', '┗ 状態耐性', 12)
+    1  ('CDataBase', '┣所持アイテム個数', 6)
+    1  ('CDataBase', '×┗ お宝リスト', 17)

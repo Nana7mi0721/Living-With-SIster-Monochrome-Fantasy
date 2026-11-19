@@ -1,0 +1,25 @@
+fix(hud): window gauges scale x-only so the action bar fill spans full height; add wolf-layout
+
+The action-power bar's white fill stopped short vertically: picture 6233 is a
+window <SQUARE> 150x14 whose retail save records scaleX = 62 (the AP ratio) but
+scaleY = 100. Picture has a single scale and Picture::destination applied 62% to
+both axes, so the fill drew 93 x 8.7 instead of 93 x 14.
+
+- crates/wolf-game/src/picture.rs: Picture::destination now gives window pictures
+  (kind.is_window(), which covers <SQUARE>/<GRADX>/<CIRCLE> sysgraphics and
+  windowFile/windowString) height_scale = 1.0, taking the height from the window
+  box; file/text pictures still scale uniformly. New unit test
+  a_window_gauge_scales_x_only_so_the_fill_spans_the_full_bar_height.
+- crates/wolf-cli/src/bin/wolf-layout.rs: new subcommand that dumps a common or
+  map event's 150/101 layout (x/y/scale/opacity/anchor/box), so a screen can be
+  laid out from the data instead of eyeballed. Registered in Cargo.toml.
+
+Proof: SaveData01 column x=500 -> retail W=15/G=0, before W=11/G=4, after
+W=15/G=0. 8/8 retail saves still load->save byte-identical (m12_save_full_compare
+2 passed, wolf-game lib 239 passed, m11_visual_regression 5 passed with no
+baseline drift). Workspace 864 passed / 0 failed / 14 ignored; wolf-cli verify
+PASS 70 / pending 0.
+
+Docs: docs/research/UI_LAYOUT.md (why WOLF UI is data-driven, CE216/217/226 layout
+tables, and the window-x-only scaling rule from all 8 retail part5 tables);
+HANDOFF_M13 §6.3; PLAN §4.6; docs/README status; research index.

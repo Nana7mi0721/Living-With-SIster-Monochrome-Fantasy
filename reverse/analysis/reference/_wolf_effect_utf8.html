@@ -1,0 +1,3095 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+<HEAD>
+<META http-equiv="Content-Type" content="text/html; charset=Shift_JIS">
+<META name="GENERATOR" content="IBM WebSphere Studio Homepage Builder Version 7.0.1.0 for Windows">
+<META http-equiv="Content-Style-Type" content="text/css">
+<TITLE>YADOT-WOLF エフェクト</TITLE>
+<meta name="robots" content="nofollow">
+<STYLE type="text/css">
+<!--
+ A { text-decoration: none ;}
+-->
+</STYLE>
+<BASE target="">
+<BASE target="g/page.htm">
+<LINK rel="stylesheet" href="g/page.css" type="text/css">
+</HEAD>
+<BODY style="font-family: ＭＳ ゴシック" bgcolor="#000e3c" text="#ffffff" link="#00ff00" vlink="#00ff00" background="../../../page/back-g_w.png" alink="#00ff00">
+<CENTER>
+<TABLE border="0">
+  <TBODY>
+    <TR>
+      <TD><FONT color="#00ffff"><A name="top">ＷＯＬＦ ＲＰＧエディター(ウディタ)[3.705]／イベントコマンド</A></FONT><A href="../../" target="_top">【サイトトップへ戻る】</A><BR>
+      <FONT size="+2" color="#ffff00">■エフェクト</FONT><BR>
+      （更新：2026/06/06）<BR>
+      <BR>
+      <BR>
+      <FONT color="#a0dcff">イベントコマンド【エフェクト】</FONT>について解説します。<BR>
+      <BR>
+      <IMG src="001.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <TABLE cellpadding="5">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000099" align="center">ショートカット</TD>
+          </TR>
+          <TR>
+            <TD bgcolor="#000000">
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD><FONT size="+1"><A href="#nani" target="_self">■イベントコマンド【エフェクト】とは？</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_picture_effect" target="_self">■設定画面の説明：ピクチャエフェクト</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_chara_effect" target="_self">■設定画面の説明：キャラエフェクト</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_map_effect" target="_self">■設定画面の説明：マップエフェクト</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_mask_effect" target="_self">■設定画面の説明：マスク機能</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_scroll" target="_self">■設定画面の説明：画面スクロール</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#gamen_irochou" target="_self">■設定画面の説明：画面の色調変更</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#kakusi_chara_effect" target="_self">■隠し機能：｢キャラチップ変更｣｢重ねキャラチップ変更｣の画像読込時にエフェクトを設定</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#kakusi_chara_xy" target="_self">■隠し機能：｢キャラチップ変更｣｢重ねキャラチップ変更｣の画像をＸＹ配列で設定</A></FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT size="+1"><A href="#effect_bug" target="_self">■エフェクトが正常に処理されないよくある原因</A></FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#a0dcff">【エフェクト】</FONT>の使用例は別ページに記載しています。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../1110_rei_effect/" target="_blank">【エフェクトの使用例を開く】</A><BR>
+      <BR>
+      <HR>
+      <A name="nani">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■イベントコマンド【エフェクト】とは？</FONT><BR>
+      <BR>
+      <FONT color="#a0dcff">【エフェクト】</FONT>を使うと、ピクチャやキャラクター(主人公)を光らせたり、<BR>
+      画面をスクロールさせたり、画面全体の色を変えたりする事ができます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      数値の設定には「<A href="../../03_hen/0009_hen_x/" target="_blank">変数呼び出し値</A>」を設定する事ができます。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="../../03_hen/0009_hen_x/" target="_blank">【「変数呼び出し値」の説明を見る】</A><BR>
+      <BR>
+      <FONT color="#00ffff">▼変数呼び出し値の設定が正しいかどうかは下の表示で確認してください</FONT><BR>
+      <IMG src="02_1110_210.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen">　</A>　<A name="gamen_picture_effect">　</A><BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：ピクチャエフェクト</FONT><BR>
+      <BR>
+      <IMG src="020_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      ピクチャに演出用の設定を行います。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      左上の数値入力欄にピクチャ番号を設定してください。<BR>
+      <BR>
+      チェックボックスにチェックを付けると、連番となっている複数のピクチャを同時に処理する事ができます。<BR>
+      <BR>
+      <IMG src="020_1.png" width="443" height="97" border="0"><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      この<FONT color="#a0dcff">【ピクチャエフェクト】</FONT>は、ピクチャの設定に<FONT color="#ffff00">追加する形</FONT>で設定されます。<BR>
+      <BR>
+      例えば「<FONT color="#ffff00">カラー補正</FONT>」で色を変えても、元のピクチャのカラー設定はそのままであり…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">ピクチャのカラー設定 ＋ エフェクトのカラー補正 ＝ 画面上に表示される色</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と言った形で処理されます。<BR>
+      <BR>
+      表示位置や角度なども、画面上の表示は変わりますが、元となるピクチャの表示位置や角度などは変わりません。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#a0dcff">イベントコマンド【変数操作＋】</FONT>でピクチャとマウスポインタが重なっているかどうかを調べる時には、<BR>
+      <FONT color="#a0dcff">【ピクチャエフェクト】</FONT>で変えた<FONT color="#ffff00">実際に画面に表示されている状態</FONT>で重なっているかどうかが判断されます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      「<FONT color="#00ffff">ディレイ（発動ディレイ）</FONT>」を設定すると、<FONT color="#ffff00">処理を開始する時間（実行予約）</FONT>を設定する事ができます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼この場合は10フレーム後にフラッシュが実行される</FONT><BR>
+      <IMG src="020_1_1.png" width="592" height="335" border="0"><BR>
+      <BR>
+      ディレイを設定した<FONT color="#a0dcff">【ピクチャエフェクト】</FONT>の実行予約をキャンセルしたい時には、<BR>
+      <FONT color="#b4ff64">イベントコマンド入力【ピクチャ】</FONT>にある<FONT color="#a0dcff">【ディレイリセット】</FONT>を実行してください。<BR>
+      <BR>
+      <IMG src="02_1000_034_1.png" width="592" height="335" border="0"><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#a0dcff">【ピクチャエフェクト】</FONT>は、ピクチャを消去すると<FONT color="#ffff00">自動的に全てエフェクト設定が解除</FONT>されます。<BR>
+      <BR>
+      但し<FONT color="#a0dcff">【ピクチャエフェクト】</FONT>を<FONT color="#ffa0a0">ディレイで実行予約</FONT>している場合は、ピクチャを消去しても実行予約がそのまま残るため、<BR>
+      同じピクチャ番号で再びピクチャを表示する場合は、<FONT color="#a0dcff">【ディレイリセット】</FONT>を実行した方が良いでしょう。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">設定名</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">フラッシュ</FONT></TD>
+            <TD>ピクチャを１回だけフラッシュさせます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            連続でフラッシュさせたい場合は「<FONT color="#ffa0a0">点滅Ｂ[自動フラッシュ]</FONT>」を使ってください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>赤緑青の値は「<FONT color="#ffff00">-200〜200</FONT>」の範囲で設定します。<BR>
+            <BR>
+            赤緑青の値がピクチャのカラーに一気に加算されて、<BR>
+            そして「<FONT color="#00ffff">処理時間</FONT>」が終わるまでに、徐々に元のカラーへ戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">処理時間[0]</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">明滅フラッシュ</FONT></TD>
+            <TD>ピクチャを１回だけ明滅フラッシュさせます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            連続で明滅フラッシュさせたい場合は「<FONT color="#ffa0a0">点滅Ａ[明減]</FONT>」を使ってください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>赤緑青の値は「<FONT color="#ffff00">-200〜200</FONT>」の範囲で設定します。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            赤緑青の値がピクチャのカラーに徐々に加算されて、<BR>
+            「<FONT color="#00ffff">処理時間</FONT>」の半分の時間で最大値まで変わり、<BR>
+            そして「<FONT color="#00ffff">処理時間</FONT>」が終わるまでに、徐々に元のカラーへ戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">処理時間[0]</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT color="#ffff00">カラー補正</FONT></TD>
+            <TD>ピクチャの色合いを変更します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>赤緑青の値は「<FONT color="#ffff00">-200〜200</FONT>」の範囲で設定します。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            赤緑青の値は「<FONT color="#00ffff">処理時間</FONT>」の時間をかけて徐々にピクチャのカラーに加算されます。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#000028">
+                  <TD>　</TD>
+                  <TD align="center" width="30"><FONT color="#ffa0a0">Ｒ</FONT></TD>
+                  <TD align="center" width="30"><FONT color="#80ff80">Ｇ</FONT></TD>
+                  <TD align="center" width="30"><FONT color="#a0dcff">Ｂ</FONT></TD>
+                </TR>
+                <TR bgcolor="#000028">
+                  <TD>元のピクチャのカラー</TD>
+                  <TD align="center"><FONT color="#ffa0a0">100</FONT></TD>
+                  <TD align="center"><FONT color="#80ff80">50</FONT></TD>
+                  <TD align="center"><FONT color="#a0dcff">30</FONT></TD>
+                </TR>
+                <TR bgcolor="#000028">
+                  <TD>カラー補正</TD>
+                  <TD align="center"><FONT color="#ffa0a0">-60</FONT></TD>
+                  <TD align="center"><FONT color="#80ff80">60</FONT></TD>
+                  <TD align="center"><FONT color="#a0dcff">60</FONT></TD>
+                </TR>
+                <TR bgcolor="#000028">
+                  <TD>補正後のカラー</TD>
+                  <TD align="center"><FONT color="#ffa0a0">40</FONT></TD>
+                  <TD align="center"><FONT color="#80ff80">110</FONT></TD>
+                  <TD align="center"><FONT color="#a0dcff">90</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>色の変化はピクチャを消去するまで続きます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">処理時間[0]</FONT>」を実行すると、元のカラーに戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">描画座標シフト[最終値]</FONT></TD>
+            <TD>ピクチャの表示位置を指定した距離だけ移動します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>例えば「<FONT color="#00ffff">シストＸ[100]、シフトＹ[-90]</FONT>」を実行すると、<BR>
+            「<FONT color="#00ffff">処理時間</FONT>」の時間をかけて、右に「100」、上に「90」移動します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">シストＸ[0]、シフトＹ[0]</FONT>」を実行すると、元の表示位置に戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">描画座標シフト２[角/拡大前]</FONT></TD>
+            <TD>ピクチャの表示位置を指定した距離だけ移動します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>上の「<FONT color="#ffa0a0">描画座標シフト[最終値]</FONT>」に似ていますが、<BR>
+            「<FONT color="#ffff00">描画座標シフト２[角/拡大前]</FONT>」の方は、<BR>
+            移動距離や移動方向に<FONT color="#b4ff64">角度や拡大率の設定が反映</FONT>されます。<BR>
+            <BR>
+            <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD align="center"><FONT color="#00ffff" size="+2"><B>角度[300]のピクチャの場合</B></FONT></TD>
+                  <TD valign="middle"><IMG src="020_10_0_1.png" width="136" height="96" border="0"></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD><FONT color="#ffff00">▼描画座標シフト[最終値]</FONT><BR>
+                  <TABLE border="0">
+                    <TBODY>
+                      <TR>
+                        <TD><IMG src="020_10_1_0.png" width="425" height="97" border="0"></TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  右へ40ピクセル移動します。</TD>
+                  <TD valign="middle"><IMG src="020_10_1_1.png" width="136" height="96" border="0"></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD><FONT color="#ffff00">▼描画座標シフト２[角/拡大前]</FONT><BR>
+                  <TABLE border="0">
+                    <TBODY>
+                      <TR>
+                        <TD><IMG src="020_10_2_0.png" width="425" height="97" border="0"></TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  角度「300」の方向へ40ピクセル分の距離を移動します。</TD>
+                  <TD valign="middle"><IMG src="020_10_2_1.png" width="136" height="96" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <BR>
+            <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD align="center"><FONT color="#00ffff" size="+2"><B>拡大率[横50％/縦100％]のピクチャの場合</B></FONT></TD>
+                  <TD valign="top"><IMG src="020_10_3_1.png" width="136" height="96" border="0"></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD><FONT color="#ffff00">▼描画座標シフト[最終値]</FONT><BR>
+                  <TABLE border="0">
+                    <TBODY>
+                      <TR>
+                        <TD><IMG src="020_10_1_0.png" width="425" height="97" border="0"></TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  右へ40ピクセル移動します。</TD>
+                  <TD valign="middle"><IMG src="020_10_4_1.png" width="136" height="96" border="0"></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD><FONT color="#ffff00">▼描画座標シフト２[角/拡大前]</FONT><BR>
+                  <TABLE border="0">
+                    <TBODY>
+                      <TR>
+                        <TD><IMG src="020_10_2_0.png" width="425" height="97" border="0"></TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  「40×50％」によって、右へ20ピクセル移動します。</TD>
+                  <TD valign="middle"><IMG src="020_10_5_1.png" width="136" height="96" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">拡大率補正[100(％)基準]</FONT></TD>
+            <TD>拡大率を補正します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>この補正は元の拡大率にさらに拡大率を掛けたものになります。<BR>
+            <BR>
+            例えばピクチャを表示した時の拡大率が「200」だった場合、<BR>
+            この「<FONT color="#ffff00">拡大率補正[100(％)基準]</FONT>」で「<FONT color="#00ffff">横％[120]</FONT>」を実行すると、<BR>
+            「200％×120％」で画面上は「240％」の拡大率で表示されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">横％[100]、縦％[100]</FONT>」を実行すると、元の表示サイズに戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">角度補正[±(一周3600)]</FONT></TD>
+            <TD>角度を補正します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>この補正は元の角度にさらに角度を足したものになります。<BR>
+            <BR>
+            例えばピクチャを表示した時の角度が「450」だった場合、<BR>
+            この「<FONT color="#ffff00">角度補正[±(一周3600)]</FONT>」で「<FONT color="#00ffff">角度±[150]</FONT>」を実行すると、<BR>
+            「450＋150」で画面上は「600」の角度で表示されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">角度±[0]</FONT>」を実行すると、元の角度に戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">不透明度補正[±]</FONT></TD>
+            <TD>不透明度を補正します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>この補正は元の不透明度にさらに不透明度を足したものになります。<BR>
+            <BR>
+            例えばピクチャを表示した時の不透明度が「120」だった場合、<BR>
+            この「<FONT color="#ffff00">不透明度補正[±]</FONT>」で「<FONT color="#00ffff">不透±[50]</FONT>」を実行すると、<BR>
+            「120＋50」で画面上は「170」の不透明度で表示されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">不透±[0]</FONT>」を実行すると、元の不透明度に戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">シェイク</FONT></TD>
+            <TD>ピクチャを指定した移動量で揺らします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">シェイクＸ[100]、シェイクＹ[0]、1回処理時間[60]</FONT>」を実行した場合は、<BR>
+            「60フレーム」でピクチャのＸ表示位置が「<FONT color="#ffff00">加算100→減算100</FONT>」を１往復します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">1回処理時間[0]</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT color="#ffff00">ズーム</FONT></TD>
+            <TD>ピクチャの表示を拡大縮小させます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「中心Ｘ」「中心Ｙ」には、ズームの基点となる位置を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>例えば「<FONT color="#00ffff">中心Ｘ[0]、中心Ｙ[0]</FONT>」の場合は、画面の左上が中心点となり、<BR>
+            この中心位置を基準にピクチャが拡大縮小します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+                <TR>
+                  <TD><FONT color="#00ffff">▼中心位置をＸ[0]、Ｙ[0]に設定</FONT><BR>
+                  <IMG src="020_2.png" width="320" height="240" border="0"></TD>
+                </TR>
+                <TR>
+                  <TD align="center"><FONT size="+1" color="#ffff00">▼<BR>
+                  <FONT size="+2">200％拡大</FONT><BR>
+                  ▼</FONT></TD>
+                </TR>
+                <TR>
+                  <TD><FONT color="#00ffff">▼中心位置から逃げるように拡大</FONT><BR>
+                  <IMG src="020_3.png" width="320" height="240" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「ズーム」を終了する場合は、<FONT color="#ffff00">同じ中心位置</FONT>で「<FONT color="#00ffff">拡大率[100]</FONT>」を実行してください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">点滅Ａ[明減]</FONT></TD>
+            <TD>ピクチャの色調を変えたり、戻したりを繰り返します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            １回だけ明減させたい場合は「<FONT color="#ffa0a0">明滅フラッシュ</FONT>」を使ってください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>赤緑青の値は「<FONT color="#ffff00">-200〜200</FONT>」の範囲で設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            色の変化は「<FONT color="#00ffff">間隔(0切)</FONT>」の時間で変化し、「<FONT color="#ffff00">間隔(0切)＝60</FONT>」の場合は、<BR>
+            色が変わるのに「60フレーム」、色が元に戻るのに「60フレーム」かかります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔(0切)＝0</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">点滅Ｂ[自動フラッシュ]</FONT></TD>
+            <TD>フラッシュを連続的に実行します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            １回だけフラッシュさせたい場合は「<FONT color="#ffa0a0">フラッシュ</FONT>」を使ってください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔(0切)＝0</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="5"><FONT color="#ffff00">自動拡大縮小[％]</FONT></TD>
+            <TD>拡大縮小を連続的に実行します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「横％±」「縦％±」には、ピクチャの拡大率に加算する拡大率を設定します。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            例えば、拡大率が横縦100％の時に「<FONT color="#00ffff">横％±[-20]、縦％±[100]</FONT>」を実行した場合は、<BR>
+            「<FONT color="#00ffff">横[100]×縦[100]</FONT>」が「<FONT color="#ffff00">横[80]×縦[200]</FONT>」になり、再び「<FONT color="#00ffff">横[100]×縦[100]</FONT>」に戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔(0切)</FONT>」には、変化する処理時間を設定します。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            仮に「<FONT color="#ffff00">間隔(0切)＝60</FONT>」を設定した場合は、<BR>
+            <FONT color="#ffff00">自動拡大縮小[％]</FONT>で設定した拡大率まで変わるのに「60フレーム」かかり、<BR>
+            元の拡大率に戻るのに「60フレーム」かかります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">休フレーム]</FONT>」は一度サイズが元に戻ったあとに、<BR>
+            もう一度処理を開始するまでのウェイト時間を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔(0切)＝0</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT color="#ffff00">自動パターン切替[1回]</FONT></TD>
+            <TD>指定した範囲内でパターンを１回だけ切り替えます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>例えば以下の画像の場合、パターンは「1〜24」になっています。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            <IMG src="../1000_picture/031_1.png" width="168" height="160" border="0"><BR>
+            <BR>
+            この画像で「<FONT color="#00ffff">始パタ[7]、終パタ[9]</FONT>」を設定した場合は、<BR>
+            「<FONT color="#ffff00">パターン[7]→[8]→[9]</FONT>」と表示して、パターン[9]の表示で停止し続けます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔(0切)</FONT>」は、次のパターンに切り替わる時間を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔(0切)＝0</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT color="#ffff00">自動パターン切替[ループ]</FONT></TD>
+            <TD>指定した範囲内でパターンをループで切り替えます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>例えば「<FONT color="#00ffff">始パタ[7]、終パタ[9]</FONT>」を設定した場合は、<BR>
+            「<FONT color="#ffff00">パターン[7]→[8]→[9]→[7]→[8]→[9]･･･</FONT>」と表示され続けます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔(0切)</FONT>」は、次のパターンに切り替わる時間を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔(0切)＝0</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT color="#ffff00">自動パターン切替[往復]</FONT></TD>
+            <TD>指定した範囲内でパターンを往復で切り替えます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>例えば「<FONT color="#00ffff">始パタ[7]、終パタ[9]</FONT>」を設定した場合は、<BR>
+            「<FONT color="#ffff00">パターン[7]→[8]→[9]→[8]→[7]→[8]→[9]→[8]→[7]･･･</FONT>」と表示され続けます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔(0切)</FONT>」は、次のパターンに切り替わる時間を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔(0切)＝0</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">全エフェクト解除[↑全部]</FONT></TD>
+            <TD>上記にあるエフェクトを実行中の場合は、全て処理を中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">ディレイ</FONT>を設定している<FONT color="#a0dcff">【ピクチャエフェクト】</FONT>の実行予約をキャンセルする場合は、<BR>
+            ピクチャの設定画面にある<FONT color="#a0dcff">【ディレイリセット】</FONT>を実行してください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">ピクチャのコピー</FONT></TD>
+            <TD>ピクチャの設定を別のピクチャ番号に複製します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>複製は、ピクチャの設定（ファイルアドレス、表示位置、拡大率、角度など）の他に、<BR>
+            エフェクトやＺオーダーなども複製されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">ピクチャのＩＤ移動</FONT></TD>
+            <TD>別のピクチャ番号に変えます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">ピクチャ番号[2]</FONT>」「<FONT color="#00ffff">移動元[1]</FONT>」の場合は、<BR>
+            ピクチャ番号「1」が「2」に変わり、ピクチャ番号「1」は消去されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT color="#ffff00"><A name="gamen_picture_effect_z">Ｚオーダーを変更</A></FONT></TD>
+            <TD>ピクチャを表示する時の奥行きの位置（Ｚオーダー）を設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../1101_effect_z/index.htm" target="_blank">【別ページにあるＺオーダーの説明も見る】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>通常のピクチャは、<FONT color="#00ffff">大きいピクチャ番号の方がゲーム画面の前面</FONT>に表示されますが、<BR>
+            この「<FONT color="#ffff00">Ｚオーダーを変更</FONT>」を使ってＺオーダーの値を大きくすると、<BR>
+            大きいピクチャ番号の画像の上に、小さいピクチャ番号の画像を表示する事ができます。<BR>
+            <BR>
+            <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD align="center"><FONT color="#00ffff">Ｚオーダーの重なりイメージ</FONT></TD>
+                  <TD align="center"><FONT color="#00ffff">ゲーム画面</FONT></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD><IMG src="020_9_0_0.png" width="320" height="240" border="0"></TD>
+                  <TD><IMG src="020_9_0_1.png" width="320" height="240" border="0"></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD><IMG src="020_9_1_0.png" width="320" height="240" border="0"></TD>
+                  <TD><IMG src="020_9_1_1.png" width="320" height="240" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <BR>
+            ピクチャを表示した時には、<FONT color="#00ffff">Ｚオーダー[0]</FONT>で表示されます。<BR>
+            <BR>
+            <FONT color="#00ffff">Ｚオーダー[1]</FONT>に変えると、<FONT color="#ffff00">Ｚオーダー[0以下]のピクチャより上</FONT>に表示されます。<BR>
+            <BR>
+            <FONT color="#00ffff">Ｚオーダー[-1]</FONT>に変えると、<FONT color="#ffff00">Ｚオーダー[0以上]のピクチャより下</FONT>に表示されます。<BR>
+            <BR>
+            同じＺオーダーの場合は、従来通りにピクチャ番号の大きい方が前面に表示されます。<BR>
+            <BR>
+            <FONT color="#00ffff">Ｚオーダー[0以外]</FONT>を設定したピクチャを消去して、<BR>
+            再び同じピクチャ番号で表示した場合は、<FONT color="#00ffff">Ｚオーダー[0]</FONT>で表示されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>Ｚオーダーは「2000000000」や「-2000000000」などの桁数が多い数値も設定できるので、<BR>
+            「このピクチャは絶対に一番上に表示したい」と言った場合は、<BR>
+            大きな数値のＺオーダーを設定してください。<BR>
+            <BR>
+            なお、Ｚオーダーを100万以上にする場合は、一度変数にＺオーダーの値を保存し、<BR>
+            その変数を「<A href="../../03_hen/0009_hen_x/index.htm" target="_blank">変数呼び出し値</A>」で呼び出す形で設定する必要があります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>Ｚオーダーは、ピクチャ番号「<FONT color="#b4ff64">-40万以下</FONT>」「<FONT color="#b4ff64">-399999〜-300000</FONT>」「<FONT color="#b4ff64">-299999〜-200000</FONT>」<BR>「<FONT color="#b4ff64">-199999〜-100000</FONT>」「<FONT color="#b4ff64">-99999〜-1</FONT>」「<FONT color="#b4ff64">0〜99999</FONT>」「<FONT color="#b4ff64">10万以上</FONT>」の中で<BR>
+            <FONT color="#ffff00">それぞれで独立した処理になる</FONT>ため、例えば<FONT color="#b4ff64">ピクチャ番号[-1]</FONT>のＺオーダーを大きくしても、<BR>
+            <FONT color="#00ffff">ピクチャ番号「-99999〜-1」の中での表示順位が上がるだけ</FONT>であり、<BR>
+            ピクチャ番号「<FONT color="#b4ff64">0〜99999</FONT>」や「<FONT color="#b4ff64">10万以上</FONT>」で表示したピクチャの上には表示されません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT color="#ffff00">変換/色相彩度明度</FONT></TD>
+            <TD><FONT color="#00ffff">色相、彩度、明度</FONT>を変換します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            この変換は「<FONT color="#ffa0a0">変換系のみ全解除</FONT>」を実行するまで維持されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">色相</FONT>を変えると、画像で使われている色が「<FONT color="#ffa0a0">赤系</FONT>→<FONT color="#3cf096">緑系</FONT>→<FONT color="#a0dcff">青系</FONT>」と変化します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                  <TD></TD>
+                  <TD></TD>
+                  <TD></TD>
+                  <TD></TD>
+                </TR>
+                <TR>
+                  <TD>
+                  <TABLE cellpadding="5" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                      <TR bgcolor="#00003c">
+                  <TD align="center">　</TD>
+                  <TD align="center"><FONT color="#ffc83c">色1</FONT></TD>
+                  <TD align="center"><FONT color="#ffc83c">色2</FONT></TD>
+                  <TD align="center"><FONT color="#ffc83c">色3</FONT></TD>
+                </TR>
+                      <TR bgcolor="#00003c">
+                  <TD align="right"><FONT color="#ffa0a0">Ｒ</FONT></TD>
+                  <TD align="right">50</TD>
+                  <TD align="right">0</TD>
+                  <TD align="right">0</TD>
+                </TR>
+                      <TR bgcolor="#00003c">
+                  <TD align="right"><FONT color="#3cf096">Ｇ</FONT></TD>
+                  <TD align="right">0</TD>
+                  <TD align="right">150</TD>
+                  <TD align="right">0</TD>
+                </TR>
+                      <TR bgcolor="#00003c">
+                  <TD align="right"><FONT color="#a0dcff">Ｂ</FONT></TD>
+                  <TD align="right">0</TD>
+                  <TD align="right">0</TD>
+                  <TD align="right">255</TD>
+                </TR>
+                    </TBODY>
+            </TABLE>
+                  </TD>
+                  <TD><IMG src="../../page/ya_ao_6.png" width="31" height="31" border="0"></TD>
+                  <TD>
+                  <TABLE cellpadding="5" bgcolor="#666666" cellspacing="2">
+                    <TBODY>
+                      <TR bgcolor="#00003c">
+                        <TD align="center">　</TD>
+                        <TD align="center"><FONT color="#ffc83c">色1</FONT></TD>
+                        <TD align="center"><FONT color="#ffc83c">色2</FONT></TD>
+                        <TD align="center"><FONT color="#ffc83c">色3</FONT></TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#ffa0a0">Ｒ</FONT></TD>
+                        <TD align="center">↓</TD>
+                        <TD align="center">↓</TD>
+                        <TD align="right">255</TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#3cf096">Ｇ</FONT></TD>
+                        <TD align="right">50</TD>
+                        <TD align="center">↓</TD>
+                        <TD align="center">↓</TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#a0dcff">Ｂ</FONT></TD>
+                        <TD align="center">↓</TD>
+                        <TD align="right">150</TD>
+                        <TD align="center">↓</TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  </TD>
+                  <TD><IMG src="../../page/ya_ao_6.png" width="31" height="31" border="0"></TD>
+                  <TD>
+                  <TABLE cellpadding="5" bgcolor="#666666" cellspacing="2">
+                    <TBODY>
+                      <TR bgcolor="#00003c">
+                        <TD align="center">　</TD>
+                        <TD align="center"><FONT color="#ffc83c">色1</FONT></TD>
+                        <TD align="center"><FONT color="#ffc83c">色2</FONT></TD>
+                        <TD align="center"><FONT color="#ffc83c">色3</FONT></TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#ffa0a0">Ｒ</FONT></TD>
+                        <TD align="center">↓</TD>
+                        <TD align="right">150</TD>
+                        <TD align="center">↓</TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#3cf096">Ｇ</FONT></TD>
+                        <TD align="center">↓</TD>
+                        <TD align="center">↓</TD>
+                        <TD align="right">255</TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#a0dcff">Ｂ</FONT></TD>
+                        <TD align="right">50</TD>
+                        <TD align="center">↓</TD>
+                        <TD align="center">↓</TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  </TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <BR>
+            <IMG src="020_4_0.png" width="576" height="256" border="0"><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>設定値は「360」で一周します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">彩度</FONT>を変えると、色の鮮やかさ（色の強さ）が変わります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            数値は「-255〜255」の間で設定できます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="020_4_1.png" width="384" height="134" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">明度</FONT>を変えると、色の明るさが変わります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            数値は「-255〜255」の間で設定できます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="020_4_2.png" width="384" height="134" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="5"><FONT color="#ffff00">変換/モノトーン</FONT></TD>
+            <TD><FONT color="#00ffff">色相、彩度、明度</FONT>を変換します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            この変換は「<FONT color="#ffa0a0">変換系のみ全解除</FONT>」を実行するまで維持されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>上の「<FONT color="#ffa0a0">変換/色相彩度明度</FONT>」に似ていますが、こちらの方は<FONT color="#ffff00">全体を同系色</FONT>に変えます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            例えば「<FONT color="#00ffff">色相[0]</FONT>」にすると、全体が<FONT color="#ffa0a0">赤系</FONT>に統一されます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                  <TD></TD>
+                  <TD></TD>
+                </TR>
+                <TR>
+                  <TD>
+                  <TABLE cellpadding="5" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                      <TR bgcolor="#00003c">
+                  <TD align="center">　</TD>
+                  <TD align="center"><FONT color="#ffc83c">色1</FONT></TD>
+                  <TD align="center"><FONT color="#ffc83c">色2</FONT></TD>
+                  <TD align="center"><FONT color="#ffc83c">色3</FONT></TD>
+                </TR>
+                      <TR bgcolor="#00003c">
+                  <TD align="right"><FONT color="#ffa0a0">Ｒ</FONT></TD>
+                  <TD align="right">50</TD>
+                  <TD align="right">0</TD>
+                  <TD align="right">0</TD>
+                </TR>
+                      <TR bgcolor="#00003c">
+                  <TD align="right"><FONT color="#3cf096">Ｇ</FONT></TD>
+                  <TD align="right">0</TD>
+                  <TD align="right">150</TD>
+                  <TD align="right">0</TD>
+                </TR>
+                      <TR bgcolor="#00003c">
+                  <TD align="right"><FONT color="#a0dcff">Ｂ</FONT></TD>
+                  <TD align="right">0</TD>
+                  <TD align="right">0</TD>
+                  <TD align="right">255</TD>
+                </TR>
+                    </TBODY>
+            </TABLE>
+                  </TD>
+                  <TD><IMG src="../../page/ya_ao_6.png" width="31" height="31" border="0"></TD>
+                  <TD>
+                  <TABLE cellpadding="5" bgcolor="#666666" cellspacing="2">
+                    <TBODY>
+                      <TR bgcolor="#00003c">
+                        <TD align="center">　</TD>
+                        <TD align="center"><FONT color="#ffc83c">色1</FONT></TD>
+                        <TD align="center"><FONT color="#ffc83c">色2</FONT></TD>
+                        <TD align="center"><FONT color="#ffc83c">色3</FONT></TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#ffa0a0">Ｒ</FONT></TD>
+                        <TD align="right">50</TD>
+                        <TD align="right">150</TD>
+                        <TD align="right">255</TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#3cf096">Ｇ</FONT></TD>
+                        <TD align="right">0</TD>
+                        <TD align="right">0</TD>
+                        <TD align="right">0</TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#a0dcff">Ｂ</FONT></TD>
+                        <TD align="right">0</TD>
+                        <TD align="right">0</TD>
+                        <TD align="right">0</TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  </TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">色相</FONT>を変えると「<FONT color="#ffa0a0">赤系</FONT>→<FONT color="#3cf096">緑系</FONT>→<FONT color="#a0dcff">青系</FONT>」と変化し、「360」で一周します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="020_5_0.png" width="576" height="256" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">彩度</FONT>を変えると、色の鮮やかさ（色の強さ）が変わります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            数値は「-255〜255」の間で設定できます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="020_5_1.png" width="384" height="134" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#00ffff">明度</FONT>を変えると、色の明るさが変わります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            数値は「-255〜255」の間で設定できます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="020_5_2.png" width="384" height="134" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">変換/ぼかし</FONT></TD>
+            <TD>画像をぼかす変換処理を実行します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            この変換は「<FONT color="#ffa0a0">変換系のみ全解除</FONT>」を実行するまで維持されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>数値は「1〜16」の間で設定できます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="020_6_0.png" width="512" height="128" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>ぼかした状態で画像を分割すると、<BR>
+            分割した境目にある色が<FONT color="#ffff00">混ざり合った状態で分割されます。</FONT><BR>
+            <BR>
+            例えば下図ような１枚の画像を「<FONT color="#ffff00">変換/ぼかし＝16</FONT>」にすると、<BR>
+            ２色の境目が混ざり合った状態になります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                  <TD></TD>
+                  <TD></TD>
+                </TR>
+                <TR>
+                  <TD><IMG src="020_6_1.png" width="128" height="64" border="0"></TD>
+                  <TD><IMG src="../../page/ya_ao_6.png" width="31" height="31" border="0"></TD>
+                  <TD><IMG src="020_6_2.png" width="128" height="64" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <BR>
+            この混じった状態で「横分割＝2」で表示すると、<BR>
+            ２色の境目が混ざり合った状態で分割されます。<BR>
+            <BR>
+            <FONT color="#00ffff">▼「横分割＝2」でパターン[1][2]を交互に表示した場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD align="center"></TD>
+                  <TD></TD>
+                  <TD align="center"></TD>
+                </TR>
+                <TR>
+                  <TD align="center"><FONT color="#ffff00" size="-1">ぼかし無し</FONT></TD>
+                  <TD></TD>
+                  <TD align="center"><FONT color="#ffff00" size="-1">ぼかし有り</FONT></TD>
+                </TR>
+                <TR>
+                  <TD align="center"><IMG src="020_6_3.gif" width="64" height="64" border="0"></TD>
+                  <TD width="10"></TD>
+                  <TD align="center"><IMG src="020_6_4.gif" width="64" height="64" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">変換/階調反転</FONT></TD>
+            <TD>階調を反転します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="020_7_0.png" width="161" height="64" border="0"><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            この変換は「<FONT color="#ffa0a0">変換系のみ全解除</FONT>」を実行するまで維持されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>処理としては「<FONT color="#00ffff">255−ＲＧＢ値＝反転した値</FONT>」になります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            例えば「Ｒ100」の場合は「255−100＝155」で「Ｒ155」になります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                  <TD></TD>
+                  <TD></TD>
+                </TR>
+                <TR>
+                  <TD>
+                  <TABLE cellpadding="5" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                      <TR bgcolor="#00003c">
+                  <TD align="center">　</TD>
+                  <TD align="center"><FONT color="#ffc83c">色1</FONT></TD>
+                  <TD align="center"><FONT color="#ffc83c">色2</FONT></TD>
+                  <TD align="center"><FONT color="#ffc83c">色3</FONT></TD>
+                </TR>
+                      <TR bgcolor="#00003c">
+                  <TD align="right"><FONT color="#ffa0a0">Ｒ</FONT></TD>
+                  <TD align="right">255</TD>
+                  <TD align="right">0</TD>
+                  <TD align="right">100</TD>
+                </TR>
+                      <TR bgcolor="#00003c">
+                  <TD align="right"><FONT color="#3cf096">Ｇ</FONT></TD>
+                  <TD align="right">150</TD>
+                  <TD align="right">0</TD>
+                  <TD align="right">100</TD>
+                </TR>
+                      <TR bgcolor="#00003c">
+                  <TD align="right"><FONT color="#a0dcff">Ｂ</FONT></TD>
+                  <TD align="right">50</TD>
+                  <TD align="right">0</TD>
+                  <TD align="right">100</TD>
+                </TR>
+                    </TBODY>
+            </TABLE>
+                  </TD>
+                  <TD><IMG src="../../page/ya_ao_6.png" width="31" height="31" border="0"></TD>
+                  <TD>
+                  <TABLE cellpadding="5" bgcolor="#666666" cellspacing="2">
+                    <TBODY>
+                      <TR bgcolor="#00003c">
+                        <TD align="center">　</TD>
+                        <TD align="center"><FONT color="#ffc83c">色1</FONT></TD>
+                        <TD align="center"><FONT color="#ffc83c">色2</FONT></TD>
+                        <TD align="center"><FONT color="#ffc83c">色3</FONT></TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#ffa0a0">Ｒ</FONT></TD>
+                        <TD align="right">0</TD>
+                        <TD align="right">255</TD>
+                        <TD align="right">155</TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#3cf096">Ｇ</FONT></TD>
+                        <TD align="right">105</TD>
+                        <TD align="right">255</TD>
+                        <TD align="right">155</TD>
+                      </TR>
+                      <TR bgcolor="#00003c">
+                        <TD align="right"><FONT color="#a0dcff">Ｂ</FONT></TD>
+                        <TD align="right">205</TD>
+                        <TD align="right">255</TD>
+                        <TD align="right">155</TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  </TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">変換/レベル補正</FONT></TD>
+            <TD>レベル補正を実行します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            この変換は「<FONT color="#ffa0a0">変換系のみ全解除</FONT>」を実行するまで維持されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>表示見本の左上の数値は「元ＭＩＮ」「元ＭＡＸ」「新ＭＩＮ」「新ＭＡＸ」になります。<BR>
+            <BR>
+            <IMG src="020_8_0_255_0_255.png" width="160" height="120" border="0"><IMG src="020_8_60_255_0_255.png" width="160" height="120" border="0"><IMG src="020_8_120_255_0_255.png" width="160" height="120" border="0"><IMG src="020_8_180_255_0_255.png" width="160" height="120" border="0"><BR>
+            <BR>
+            <IMG src="020_8_0_255_0_255.png" width="160" height="120" border="0"><IMG src="020_8_0_180_0_255.png" width="160" height="120" border="0"><IMG src="020_8_0_120_0_255.png" width="160" height="120" border="0"><IMG src="020_8_0_60_0_255.png" width="160" height="120" border="0"><BR>
+            <BR>
+            <IMG src="020_8_0_255_0_255.png" width="160" height="120" border="0"><IMG src="020_8_0_255_60_255.png" width="160" height="120" border="0"><IMG src="020_8_0_255_120_255.png" width="160" height="120" border="0"><IMG src="020_8_0_255_180_255.png" width="160" height="120" border="0"><BR>
+            <BR>
+            <IMG src="020_8_0_255_0_255.png" width="160" height="120" border="0"><IMG src="020_8_0_255_0_180.png" width="160" height="120" border="0"><IMG src="020_8_0_255_0_120.png" width="160" height="120" border="0"><IMG src="020_8_0_255_0_60.png" width="160" height="120" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">変換系のみ全解除</FONT></TD>
+            <TD>変換系のエフェクトを全て解除します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">[動画]再生速度％[0:停]</FONT></TD>
+            <TD>再生中の動画の再生速度（パーセント）を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>0以下を設定すると、動画が停止します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>動作テストをしてみた所、100％を超える設定（1.5倍速など）を行うと、<BR>
+            設定通りに再生速度が速くなりましたが、<BR>
+            50％などの低速にすると動画によっては映像が停止して、<BR>
+            音声のみが50％の速度で流れる状態になりました。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            理由は不明ですが、もしかすると低速再生は処理負担が大きくなるのかもしれません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">[動画]再生位置変更[ﾐﾘ秒]</FONT></TD>
+            <TD>再生中の動画の再生位置を「ミリ秒（1秒＝1000ミリ秒）」で変更します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>マイナス値や総再生時間を超える再生位置を設定しても、何も変化はありません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>総再生時間は<FONT color="#a0dcff">【変数操作＋】</FONT>の「ピクチャ」にある「<FONT color="#00ffff">総再生時間</FONT>」で取得できます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">[動画]音声％変更</FONT></TD>
+            <TD>再生中の動画の音量（パーセント）を変更します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>動画の音量は、まず<FONT color="#a0dcff">【ピクチャ表示】</FONT>で動画を再生する時に、<BR>
+            <A href="../../03_hen/0007_hen_sys77-/index.htm#sys100" target="_blank">システム変数[100:BGM音量補正[%]]</A>の設定により、基本となる音量が決定します。<BR>
+            そして動画再生中の音量は、この「<FONT color="#ffff00">[動画]音声％変更</FONT>」で調整します。<BR>
+            <BR>
+            例えば「<FONT color="#00ffff">システム変数[100]＝50</FONT>」「<FONT color="#ffff00">[動画]音声％変更＝50</FONT>」を設定した場合は、<BR>
+            元々動画にあった音量の25％（50％×50％）の音量で再生されます。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#ffff00">※変換系のエフェクトは、文字列表示、図形、動画では使用できません。</FONT><BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_chara_effect">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：キャラエフェクト</FONT><BR>
+      <BR>
+      <IMG src="021_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      主人公やマップイベントに演出用の設定を行います。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      キャラクターの選択項目の下の方に<FONT color="#00ffff">数値タイプの変数</FONT>があります。<BR>
+      <BR>
+      <IMG src="021_1_0.png" width="592" height="506" border="0"><BR>
+      <BR>
+      変数に以下の値を設定する事で、処理するキャラクターを指定する事ができます。<BR>
+      <BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">変数の値</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">対象となるキャラ</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center" rowspan="2"><FONT color="#ffff00">0以上</FONT></TD>
+            <TD>マップイベントのイベントＩＤを設定する事で、<BR>
+            そのマップイベントが対象になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>存在しないイベントＩＤの場合は、イベントは実行されず、何も起きません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center" rowspan="3"><FONT color="#ffff00">-1</FONT></TD>
+            <TD><FONT color="#a0dcff">【キャラエフェクト】</FONT>を実行したマップイベントが対象になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>マップイベントからコモンイベントを呼び出している場合は、<BR>
+      呼び出し元のマップイベントが対象になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>マップイベントから呼び出していないコモンイベントで実行した場合は、<BR>イベントは実行されず、何も起きません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-2</FONT></TD>
+            <TD>主人公（パーティの先頭にいるキャラ）</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-3</FONT></TD>
+            <TD>仲間１</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-4</FONT></TD>
+            <TD>仲間２</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-5</FONT></TD>
+            <TD>仲間３</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-6</FONT></TD>
+            <TD>仲間４</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffff00">-7</FONT></TD>
+            <TD>仲間５</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼イベントＩＤ[3]をフラッシュさせる場合</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000000"><A href="c021_0.txt" target="_blank">【イベントコード表示】</A><BR>
+            <BR>
+            <FONT color="#ffff00">■変数操作: このEvのSelf0 = 3 + 0<BR>
+            ■キャラエフェクト：ｷｬﾗ[このEvのSelf0][フラッシュ] R200/G-100/B-100 (10)ﾌﾚｰﾑ</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      マップイベントの場合は、別のマップへ移動して戻ってくると、初期の状態に戻ります。<BR>
+      <BR>
+      主人公の場合は、別のマップへ移動しても<FONT color="#ffff00">フラッシュ</FONT>などは継続しますが、<FONT color="#ffff00">ピクセル移動</FONT>は継続しません。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">設定名</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="6"><FONT color="#ffff00">ピクセル移動</FONT></TD>
+            <TD>指定したピクセル量だけ移動させます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>処理としては<FONT color="#ffff00">表示位置をずらしている状態</FONT>であり、通常の移動処理とは異なります。<BR>
+            <BR>
+            例えば「<FONT color="#ffff00">ピクセル移動</FONT>」で移動しても<FONT color="#00ffff">移動アニメは表示されません。</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            もしも「<FONT color="#ffff00">ピクセル移動</FONT>」の移動時に移動アニメを実行したい時には…<BR>
+            <TABLE border="0" cellpadding="12" bgcolor="#00003c">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">■キャラエフェクト：主人公[移動アニメ強制] =&gt; ON</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            を実行してください。<BR>
+            <BR>
+            また「<FONT color="#ffff00">ピクセル移動</FONT>」の移動では、キャラの向きが変わらないため、<BR>
+            もしも移動方向に合わせてキャラの向きを変えたい場合は、<BR>
+            移動方向に合わせて向きが変わる並列実行の設定が必要です。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>マップイベントの実行などは<FONT color="#00ffff">0.5マス単位</FONT>で処理されます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            ピクセル移動量が「0.5マス分」を移動すると、0.5マスの座標位置が変わります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>１ピクセルでも通行不能のマスとぶつかる場合は、移動する事ができません。<BR>
+            <BR>
+            <FONT color="#00ffff">▼左に１ピクセルずれているため、この場合は上に移動する事ができない</FONT><BR>
+            <IMG src="05_0039_010.png" width="128" height="188" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>マップイベントを「<FONT color="#ffff00">ピクセル移動</FONT>」で<FONT color="#00ffff">0.5マスの境目辺り</FONT>に移動させると、<BR>
+            当たり判定の範囲がずれているように感じる事があります。<BR>
+            <BR>
+            <FONT color="#00ffff">▼下図の場合は、<FONT color="#ff8080">赤い枠</FONT>が当たり判定の範囲になります</FONT><BR>
+            <IMG src="021_2.png" width="96" height="96" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD><FONT color="#a0dcff">【変数操作＋】</FONT>にある「<FONT color="#00ffff">ピクセル補正値X [0〜(半ﾀｲﾙ-1)]</FONT>」を使うと、<BR>
+            現在のピクセル移動量が分かります。<BR>
+            <BR>
+            「<A href="../../03_hen/0009_hen_x/" target="_blank">変数呼び出し値</A><FONT color="#00ffff">(「9180007」など)</FONT>」を使っても値の取得ができます。<BR>
+            <BR>
+            <FONT color="#00ffff">▼主人公のピクセル補正値を変数呼び出し値で取得する設定例</FONT><BR>
+            <TABLE border="0" cellpadding="8" bgcolor="#00003c">
+        <TBODY>
+          <TR>
+            <TD><A href="c021_1.txt" target="_blank">【イベントコード表示】</A><BR>
+                  <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+                  <FONT color="#ffff00">■変数操作: このEvのSelf0 = 主人公のXﾋﾟｸｾﾙ補正値 + 0<BR>
+                  ■変数操作: このEvのSelf1 = 主人公のYﾋﾟｸｾﾙ補正値 + 0<BR>
+                  ■デバッグ文:補正値X：\self[0]  補正値Y：\self[1]</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="5"><FONT color="#ffff00">フラッシュ</FONT></TD>
+            <TD>キャラクターをフラッシュさせます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>赤緑青の値は「<FONT color="#ffff00">-100〜100</FONT>」の範囲で設定します。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            プラス値なら明るくなり、マイナス値なら暗くなります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffa0a0">赤[-100]</FONT>、<FONT color="#80ff80">緑[-100]</FONT>、<FONT color="#a0dcff">青[-100]</FONT>」を実行すると<FONT color="#999999">真っ黒</FONT>になり、<BR>「<FONT color="#ffa0a0">赤[100]</FONT>、<FONT color="#80ff80">緑[100]</FONT>、<FONT color="#a0dcff">青[100]</FONT>」を実行すると真っ白になり、<BR>「<FONT color="#ffa0a0">赤[100]</FONT>、<FONT color="#80ff80">緑[-100]</FONT>、<FONT color="#a0dcff">青[-100]</FONT>」を実行すると<FONT color="#ff8080">真っ赤</FONT>になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>処理として、赤緑青の設定値に一気に色を変えたあとに、<BR>
+            「<FONT color="#00ffff">処理時間</FONT>」の時間をかけて徐々に元の色に戻します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">処理時間[0]</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT color="#ffff00">シェイク</FONT></TD>
+            <TD>キャラクターを指定した移動範囲で揺らします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>例えば「<FONT color="#00ffff">シェイクＸ[10]、シェイクＹ[0]</FONT>」を実行すると、<BR>
+            指定したキャラクターが「10ピクセル」右に移動し、再び元の位置に戻ります。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            Ｘ[-10]などのマイナス値の場合は、左に移動し、元の位置に戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>仮に「<FONT color="#00ffff">1回処理時間[10]</FONT>」の場合は、<BR>
+            「10フレーム」をかけて「<FONT color="#ffff00">Ｘ[0]→[10]→[0]</FONT>」と１往復します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">処理時間[0]</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT color="#ffff00">点滅Ａ[明減]</FONT></TD>
+            <TD>キャラクターの色調を変えたり、戻したりを繰り返します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>赤緑青の設定値は「<FONT color="#ffff00">-100〜100</FONT>」の範囲で設定します。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            プラス値なら明るくなり、マイナス値なら暗くなります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>例えば「<FONT color="#ffa0a0">赤[0]</FONT>、<FONT color="#80ff80">緑[0]</FONT>、<FONT color="#a0dcff">青[100]</FONT>」の場合で「<FONT color="#00ffff">間隔[60]</FONT>」の場合は、<BR>
+            60フレームの時間をかけて青の色の強さが「<FONT color="#ffff00">[0]→[＋100]→[0]</FONT>」となります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔[0]</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="5"><FONT color="#ffff00">点滅Ｂ[自動フラッシュ]</FONT></TD>
+            <TD>キャラクターのフラッシュを連続的に実行します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>赤緑青の設定値は「<FONT color="#ffff00">-100〜100</FONT>」の範囲で設定します。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            プラス値なら明るくなり、マイナス値なら暗くなります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>処理として、赤緑青の設定値に一気に色を変えたあとに、<BR>
+            「<FONT color="#00ffff">処理時間</FONT>」の時間をかけて徐々に元の色に戻し、再び一気に色を変えます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「点滅Ａ[明減]」との違いは「<FONT color="#ffa0a0">赤[0]</FONT>、<FONT color="#80ff80">緑[0]</FONT>、<FONT color="#a0dcff">青[100]</FONT>」で比べた場合、<BR>
+            「点滅Ａ[明減]」の方は、徐々に青が強くなり、徐々に青が弱くなります。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            「点滅Ｂ[自動フラッシュ]」の方は、一気に青が強くなり、徐々に青が弱くなります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">間隔[0]</FONT>」を実行すると、処理が中断します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">不透明度補正[±]</FONT></TD>
+            <TD>不透明度を補正します。<BR>
+            <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            例えば元の不透明度が「100」の時にこの「<FONT color="#ffff00">不透明度補正[±]</FONT>」で「50」を設定すると、<BR>
+            画面上の表示の不透明度が「150」になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">強制ピクチャパターン上書[0:ﾅｼ]</FONT></TD>
+            <TD>指定したパターン番号の表示に変え、そのパターン番号で固定化します。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            <IMG src="02_1000_031_1.png" width="168" height="160" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">パターン[0]</FONT>」を実行すると、通常のパターン表示に戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">移動アニメ強制</FONT></TD>
+            <TD>ＯＮにすると、停止中でも移動アニメを表示します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">向き変更</FONT></TD>
+            <TD>向いている方向を変更します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD bgcolor="#000078" align="center">７<BR>
+                  <IMG src="../0600_hensuu_plus/023_m7.png" width="28" height="40" border="0"></TD>
+                  <TD bgcolor="#780000" align="center">８<BR>
+                  <IMG src="../0600_hensuu_plus/023_m8.png" width="28" height="40" border="0"></TD>
+                  <TD bgcolor="#000078" align="center">９<BR>
+                  <IMG src="../0600_hensuu_plus/023_m9.png" width="28" height="40" border="0"></TD>
+                </TR>
+                <TR>
+                  <TD bgcolor="#780000" align="center">４<BR>
+                  <IMG src="../0600_hensuu_plus/023_m4.png" width="28" height="40" border="0"></TD>
+                  <TD align="center">　</TD>
+                  <TD bgcolor="#780000" align="center">６<BR>
+                  <IMG src="../0600_hensuu_plus/023_m6.png" width="28" height="40" border="0"></TD>
+                </TR>
+                <TR>
+                  <TD bgcolor="#000078" align="center">１<BR>
+                  <IMG src="../0600_hensuu_plus/023_m1.png" width="28" height="40" border="0"></TD>
+                  <TD bgcolor="#780000" align="center">２<BR>
+                  <IMG src="../0600_hensuu_plus/023_m2.png" width="28" height="40" border="0"></TD>
+                  <TD bgcolor="#000078" align="center">３<BR>
+                  <IMG src="../0600_hensuu_plus/023_m3.png" width="28" height="40" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>向きは<A href="../1701_ev_dousa/" target="_blank">【キャラクターの動作指定】</A>や「<A href="../../03_hen/0009_hen_x/" target="_blank">変数呼び出し値</A>」でも変えられます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">高さ変更</FONT></TD>
+            <TD>高さを変更します。<BR>
+            <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            <TABLE cellpadding="3">
+              <TBODY>
+                <TR>
+                  <TD bgcolor="#000099" align="center" height="20">高さ｢0｣</TD>
+                  <TD></TD>
+                  <TD bgcolor="#660000" align="center">高さ｢20｣</TD>
+                </TR>
+                <TR>
+                  <TD><IMG src="../../03_hen/0009_hen_x/043.png" width="112" height="144" border="0"></TD>
+                  <TD></TD>
+                  <TD valign="top"><IMG src="../../03_hen/0009_hen_x/044.png" width="112" height="144" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ff96ff">※当たり判定は影がある位置になります。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>高さは<A href="../1701_ev_dousa/" target="_blank">【キャラクターの動作指定】</A>や「<A href="../../03_hen/0009_hen_x/" target="_blank">変数呼び出し値</A>」でも変えられます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">待機時アニメON/OFF</FONT></TD>
+            <TD>移動していない時に、足踏みアニメーションを実行するかどうかを設定。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">※【キャラクターの動作指定】でも変更できます。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">移動アニメON/OFF</FONT></TD>
+            <TD>移動している時に、足踏みアニメーションを実行するかどうかを設定。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">※【キャラクターの動作指定】でも変更できます。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">向き固定ON/OFF</FONT></TD>
+            <TD>方向を変更しても、向きが変わらないようにするかどうかを設定。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">※【キャラクターの動作指定】でも変更できます。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">すり抜けON/OFF</FONT></TD>
+            <TD>当たり判定を無効にするかどうかを設定。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">※【キャラクターの動作指定】でも変更できます。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">前面表示ON/OFF</FONT></TD>
+            <TD>主人公やマップイベントのグラフィックの上に表示します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">▼主人公と同じマスにいる場合</FONT><BR>
+            <TABLE cellpadding="3">
+        <TBODY>
+          <TR>
+            <TD bgcolor="#000099" align="center" height="20">ＯＦＦ</TD>
+                  <TD></TD>
+                  <TD bgcolor="#660000" align="center">ＯＮ</TD>
+          </TR>
+          <TR>
+            <TD><IMG src="../../01_shoshin/1001_map_ev_set/055_0.png" width="64" height="88" border="0"></TD>
+                  <TD></TD>
+                  <TD valign="top"><IMG src="../../01_shoshin/1001_map_ev_set/055_1.png" width="64" height="88" border="0"></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">※【キャラクターの動作指定】でも変更できます。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">移動速度変更</FONT></TD>
+            <TD valign="top">移動速度を設定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">※【キャラクターの動作指定】でも変更できます。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">移動する速度は「<FONT color="#00ffff">ゲーム基本設定</FONT>」で設定した速度になります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../01_shoshin/1500_game_set/" target="_blank">【ゲーム基本設定に関するページを開く】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">移動頻度変更</FONT></TD>
+            <TD valign="top">１歩移動した後に、次に移動するまでの間隔を設定します。<BR>
+            <BR>
+            <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#00ffff">設定値</FONT></TD>
+                  <TD align="center"><FONT color="#00ffff">0</FONT></TD>
+                  <TD align="center"><FONT color="#00ffff">1</FONT></TD>
+                  <TD align="center"><FONT color="#00ffff">2</FONT></TD>
+                  <TD align="center"><FONT color="#00ffff">3</FONT></TD>
+                  <TD align="center"><FONT color="#00ffff">4</FONT></TD>
+                  <TD align="center"><FONT color="#00ffff">5</FONT></TD>
+                  <TD align="center"><FONT color="#00ffff">6</FONT></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">待機時間(フレーム)</FONT></TD>
+                  <TD align="center">0</TD>
+                  <TD align="center">20</TD>
+                  <TD align="center">80</TD>
+                  <TD align="center">180</TD>
+                  <TD align="center">320</TD>
+                  <TD align="center">500</TD>
+                  <TD align="center">720</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <BR>
+            <FONT color="#00ffff">※【キャラクターの動作指定】でも変更できます。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">アニメ頻度変更</FONT></TD>
+            <TD valign="top">キャラクターを足踏みさせる時の画像の切り替え速度を設定します。<BR>
+            <BR>
+            <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+                <TR bgcolor="#00003c">
+            <TD valign="top"><FONT color="#00ffff">設定値</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">0</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">1</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">2</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">3</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">4</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">5</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">6</FONT></TD>
+          </TR>
+                <TR bgcolor="#00003c">
+            <TD valign="top"><FONT color="#ffff00">切替時間(フレーム)</FONT></TD>
+            <TD align="center">1</TD>
+            <TD align="center">9</TD>
+            <TD align="center">14</TD>
+            <TD align="center">22</TD>
+            <TD align="center">33</TD>
+            <TD align="center">81</TD>
+            <TD align="center">113</TD>
+          </TR>
+              </TBODY>
+      </TABLE>
+            <BR>
+            <FONT color="#00ffff">※【キャラクターの動作指定】でも変更できます。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">半/全歩移動に設定</FONT></TD>
+            <TD>「<FONT color="#ffff00">半歩(0.5マス移動)</FONT>」と「<FONT color="#ffff00">全歩(１マス移動)</FONT>」を切り替える時に使います。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">※【キャラクターの動作指定】でも変更できます。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">パターン変更[1-5]</FONT></TD>
+            <TD>「<FONT color="#ffff00">パターン1</FONT>」「<FONT color="#ffff00">パターン2</FONT>」などを切り替える時に使います。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">※【キャラクターの動作指定】でも変更できます。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">キャラチップ変更</FONT></TD>
+            <TD>キャラチップを変更します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>パーティメンバーの入れ替えが行われると、初期設定のキャラチップに戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="3"><FONT color="#ffff00">重ねキャラチップ変更</FONT></TD>
+            <TD>キャラクターの表裏に別の画像を重ねて表示する事ができ、<BR>
+            例えば手に剣を持たせたり、頭に猫耳を付けたりする事ができます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">▼剣のキャラチップを重ねた時</FONT><BR>
+            <IMG src="021_4.png" width="128" height="56" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>レイヤー[0]はキャラクターの本体画像の変更となり、<BR>
+            レイヤー[-1以下]はキャラクターの裏側、<BR>
+            レイヤー[1以上]はキャラクターの表側の表示になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>パーティメンバーの入れ替えが行われると、重ねキャラチップは全て消去されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT color="#ffff00">ピクチャをリンク</FONT></TD>
+            <TD>キャラクターの移動に合わせて、ピクチャを移動させます。<BR>
+            <BR>
+            以下の見本画像は、主人公を対象にピクチャをリンクした時の表示例です。<BR>
+            <BR>
+            <TABLE cellpadding="10" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">をキャラの表に</FONT></TD>
+                  <TD valign="top"><IMG src="021_3_1.png" width="128" height="136" border="0"></TD>
+                  <TD valign="top">主人公の前に表示します。<BR>
+                  <BR>
+                  主人公より画面の下にいるキャラは、<BR>
+                  ピクチャの前に表示されます。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">をキャラの裏に</FONT></TD>
+                  <TD valign="top"><IMG src="021_3_2.png" width="128" height="136" border="0"></TD>
+                  <TD valign="top">主人公の後ろに表示します。<BR>
+                  <BR>
+                  主人公より画面の上にいるキャラは、<BR>
+                  ピクチャの後ろに表示されます。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">を影レイヤーに</FONT></TD>
+                  <TD valign="top"><IMG src="021_3_3.png" width="128" height="136" border="0"></TD>
+                  <TD valign="top">キャラの下に表示します。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">ピクチャのまま</FONT></TD>
+                  <TD valign="top"><IMG src="021_3_4.png" width="128" height="136" border="0"></TD>
+                  <TD valign="top">ピクチャの仕様のまま表示します。<BR>
+                  <BR>
+                  左の見本はピクチャ[1]で表示して<BR>
+                  いるので、キャラが隠れていますが、<BR>
+                  ピクチャ[-200000]などにすると、<BR>
+                  キャラの下にピクチャが表示されます。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">をリンク解除</FONT></TD>
+                  <TD valign="top" colspan="2">指定したピクチャ番号のリンクを解除します。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">全リンク解除</FONT></TD>
+                  <TD valign="top" colspan="2">全てのピクチャのリンクを解除します。</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            リンクを解除してもピクチャの表示はそのまま残るので、<BR>
+            ピクチャを表示する必要が無くなった場合は、<BR>
+            リンクの解除と共に<FONT color="#a0dcff">【ピクチャ消去】</FONT>も実行した方が良いでしょう。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            なおリンクを解除せずに<FONT color="#a0dcff">【ピクチャ消去】</FONT>を実行した場合は、<BR>
+            次に同じピクチャ番号で表示した時には、リンクが残った状態になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#ffff00">ＸＹズーム連動</FONT>」「<FONT color="#ffff00">ＸＹ連動のみ</FONT>」は、<BR>
+            <FONT color="#a0dcff">【マップエフェクト】</FONT>でマップを拡大縮小した時に、<BR>
+            マップの拡大率に合わせてピクチャのサイズを変えるかどうかを設定します。<BR>
+            <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">ＸＹズーム連動</FONT></TD>
+                  <TD>マップの拡大率と連動させる</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">ＸＹ連動のみ</FONT></TD>
+                  <TD>そのままのサイズで表示</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>ピクチャの表示位置は、キャラクターの左右中央で、足の下が基点になります。<BR>
+            （キャラクターの画面Ｘ座標、画面Ｙ座標の位置と同じ）<BR>
+            <BR>
+            <FONT color="#00ffff">▼ピクチャを「Ｘ＝0」「Ｙ＝0」「位置＝左上」で表示した時</FONT><BR>
+            <IMG src="021_3_0.png" width="96" height="88" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>マップイベントにピクチャをリンクした場合は、<BR>
+            別のマップへ移動するとリンクの設定が全て解除されます。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            しかしピクチャの画像はそのまま画面上に残るので、<BR>
+            場所移動をする時には<FONT color="#a0dcff">【ピクチャ消去】</FONT>を実行する必要があります。<BR>
+            <BR>
+            なお、主人公や仲間のリンクは別のマップへ移動してもそのまま残ります。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_map_effect">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：マップエフェクト</FONT><BR>
+      <BR>
+      <IMG src="022_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      マップのズームやシェイクを実行します。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">設定名</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="6"><FONT color="#ffff00">ズーム</FONT></TD>
+            <TD>画面の表示を拡大縮小させます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>中心Ｘ、中心Ｙは、ズームの基点となる位置を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>例えば「<FONT color="#00ffff">中心Ｘ[0]、中心Ｙ[0]</FONT>」の場合は、画面の左上が中心点となり、<BR>
+            この中心点を基にマップが拡大縮小します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>サンプルゲームで最初の挨拶の時に画面がズームしますが、<BR>
+            これは<FONT color="#a0dcff">【マップエフェクト】</FONT>を使ってズームしています。<BR>
+            <BR>
+            <FONT color="#00ffff">▼サンプルゲームのズーム設定</FONT><BR>
+            <TABLE border="0" cellpadding="12" bgcolor="#00003c">
+              <TBODY>
+                <TR>
+                  <TD><FONT color="#ffff00">■マップエフェクト：[ズーム] 中心X 160 / 中心Y 120 / 200％ (10)ﾌﾚｰﾑ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <BR>
+                  <FONT color="#00ffff">▼処理結果</FONT><BR>
+                  <IMG src="022_1.png" width="320" height="240" border="0"><BR>
+            <BR>
+            <HR width="80%">
+            <BR>
+            なお、「<FONT color="#00ffff">中心Ｘ[160]、中心Ｙ[120]</FONT>」の設定は、<BR>
+            ゲーム画面のサイズが「320×240[x2]」の時に、画面の中央へズームさせる時の設定です。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            ゲーム画面のサイズが「320×240[x2]」以外である場合は、<BR>
+            画面の中央となる「中心Ｘ」「中心Ｙ」の数値も変わります。<BR>
+            <BR>
+            以下のように設定すると、<BR>
+            現在のゲーム画面のサイズに合わせて画面の中央となる「中心Ｘ」「中心Ｙ」が設定されます。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            <TABLE border="0" cellpadding="8" bgcolor="#00003c">
+              <TBODY>
+                <TR>
+                  <TD><A href="c022_0.txt" target="_blank">【イベントコード表示】</A><BR>
+                  <TABLE border="0">
+                    <TBODY>
+                      <TR>
+                        <TD></TD>
+                      </TR>
+                    </TBODY>
+                  </TABLE>
+                  <FONT color="#ffff00">■変数操作: このEvのSelf0 = Sys116:[読]画面サイズＸ / 2<BR>
+                  ■変数操作: このEvのSelf1 = Sys117:[読]画面サイズＹ / 2<BR>
+                  ■マップエフェクト：[ズーム] 中心X このEvのSelf0 / 中心Y このEvのSelf1
+                  / 200％ (10)ﾌﾚｰﾑ</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>拡大率を<FONT color="#ffff00">100％未満</FONT>にすると、100％の時に表示されない地形チップは黒くなります。<BR>
+            <BR>
+            <FONT color="#00ffff">▼画面中央を中心点にして、拡大率70％で表示した場合</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="022_2.png" width="642" height="512" border="0"><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">※プロ版では縮小しても黒くなりません。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">拡大率[100]</FONT>」を実行すると元に戻ります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="4"><FONT color="#ffff00">シェイク</FONT></TD>
+            <TD>キャラクターを含めたマップ全体を揺らします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">横ゆれor縦ゆれ</FONT>」「<FONT color="#00ffff">[強さ](画面が動く幅)</FONT>」「<FONT color="#00ffff">[速度](画面のスクロール速度)</FONT>」「<FONT color="#00ffff">処理時間</FONT>」を設定すると、<BR>
+            その設定に合わせてシェイクが実行されます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">処理時間</FONT>」の時間が経過すると、シェイクの処理は終了しますが、<BR>
+            シェイクの途中で処理を停止させる場合は「<FONT color="#00ffff">ゆれ停止</FONT>」を実行してください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">処理時間</FONT>」を「100000」以上にすると、<FONT color="#ffff00">無限に実行されます。</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      以下は<FONT color="#ffff00">プロ版</FONT>で使用できる機能です。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">[P]フィルタ(F)を全リセット</FONT></TD>
+            <TD valign="top">下にある「F」が付いた処理を終了させます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">[P]マップF/色彩明[重!]</FONT></TD>
+            <TD valign="top">ピクチャエフェクトの「<FONT color="#ffa0a0">変換/色相彩度明度</FONT>」と同じ処理をマップ上で実行します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">※ピクチャや文章の表示などは対象外です。（下２つも同様）</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">[P]マップF/モノトーン[重!]</FONT></TD>
+            <TD valign="top">ピクチャエフェクトの「<FONT color="#ffa0a0">変換/モノトーン</FONT>」と同じ処理をマップ上で実行します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">[P]マップF/ぼかし[超重!]</FONT></TD>
+            <TD valign="top">ピクチャエフェクトの「<FONT color="#ffa0a0">変換/ぼかし</FONT>」と同じ処理をマップ上で実行します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">[P]全体F/色彩明[重!]</FONT></TD>
+            <TD valign="top">ピクチャエフェクトの「<FONT color="#ffa0a0">変換/色相彩度明度</FONT>」と同じ処理をゲーム画面上で実行します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">※ピクチャや文章の表示なども変化します。（下２つも同様）</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">[P]全体F/モノトーン[重]</FONT></TD>
+            <TD valign="top">ピクチャエフェクトの「<FONT color="#ffa0a0">変換/モノトーン</FONT>」と同じ処理をゲーム画面上で実行します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">[P]全体F/ぼかし[超重!]</FONT></TD>
+            <TD valign="top">ピクチャエフェクトの「<FONT color="#ffa0a0">変換/ぼかし</FONT>」と同じ処理をゲーム画面上で実行します。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_mask_effect">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：マスク機能</FONT><BR>
+      <BR>
+      <IMG src="025_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      マスク機能は、ピクチャやマップイベントなどを<FONT color="#ffff00">指定した画面位置のみで見えるようにする時</FONT>に使います。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff">▼サンプルゲームの表示例</FONT><BR>
+      <IMG src="025_1_0.png" width="640" height="480" border="0"><BR>
+      <BR>
+      上図の場合は、真ん中の大きなキャラを<FONT color="#00ffff">マスク機能</FONT>で表示しており、<FONT color="#ffff00">斜めの表示範囲のみ表示する設定</FONT>になっています。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      マスク機能で表示する画像の表示範囲は、<FONT color="#ffff00">白黒の設定</FONT>を行います。<BR>
+      <BR>
+      <IMG src="025_1_1.png" width="890" height="170" border="0"><BR>
+      <BR>
+      この白黒の設定は…<BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#00ffff">黒＝マスク表示の画像が見える。</FONT>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">
+      白＝マスク表示の画像が見えない。</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      となっており、実際に白と黒の２色に塗られた画像ファイルを読み込んで設定します。<BR>
+      <BR>
+      複数の白黒画像を読み込んで、白を足したり、黒を足したりする事ができるため、<BR>
+      サンプルゲームの表示例のように、徐々に黒を増やしてマスクＯＮの画像の見える範囲を広げるような設定もできます。<BR>
+      <BR>
+      なお、白黒の設定状況は<FONT color="#ffff00">ゲーム画面上には表示されない</FONT>ので、制作者が記憶しておく必要があります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      以下は「<FONT color="#ffff00">マップのマスクをＯＮ</FONT>」を実行した時の表示例です。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000050">
+            <TD align="center"><FONT size="-1" color="#00ffff">処理内容</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">白黒の状態</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">ゲーム画面</FONT></TD>
+          </TR>
+          <TR bgcolor="#000050">
+            <TD valign="top">ゲーム開始時は「画面全体が黒」になっているので、<BR>
+            「<FONT color="#ffff00">マップのマスクをＯＮ</FONT>」を実行しても、<BR>
+            全てが見えている状態になります。</TD>
+            <TD valign="top"><IMG src="025_1_10.png" width="200" height="150" border="0"></TD>
+            <TD valign="top"><IMG src="025_1_20.png" width="200" height="150" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000050">
+            <TD valign="top">「<FONT color="#ffff00">マスクを全面[非表示]で塗りつぶす</FONT>」を実行。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            マスクをＯＮにしたマップは全て見えない状態になります。</TD>
+            <TD valign="top"><IMG src="025_1_11.png" width="200" height="150" border="0"></TD>
+            <TD valign="top"><IMG src="025_1_21.png" width="200" height="150" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000050">
+            <TD valign="top">下図を「<FONT color="#ffff00">の表示範囲(黒)をマウスに追加</FONT>」で３か所に設定。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="025_1_01.png" width="120" height="120" border="0"></TD>
+            <TD valign="top"><IMG src="025_1_12.png" width="200" height="150" border="0"></TD>
+            <TD valign="top"><IMG src="025_1_22.png" width="200" height="150" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000050">
+            <TD valign="top">下図を「<FONT color="#ffff00">の非表示範囲(白)をマスクに追加</FONT>」で<BR>
+            真ん中と右の黒の間に設定。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <IMG src="025_1_02.png" width="120" height="120" border="0"></TD>
+            <TD valign="top"><IMG src="025_1_13.png" width="200" height="150" border="0"></TD>
+            <TD valign="top"><IMG src="025_1_23.png" width="200" height="150" border="0"></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">設定名</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">マスク機能全リセット(停止)</FONT></TD>
+            <TD>マスクＯＮの設定を全てＯＦＦにして、画面全体を黒で塗りつぶします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">マスクを全面[表示]で塗りつぶす</FONT></TD>
+            <TD>画面全体を黒で塗りつぶし、マスクＯＮの画像が<FONT color="#00ffff">全て見える状態</FONT>にします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD nowrap>ゲーム開始時は「画面全体が黒」になっているので、<BR>
+            ゲーム開始時に「<FONT color="#ffff00">マスクを全面[表示]で塗りつぶす</FONT>」を実行しても効果はありません。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" nowrap><FONT color="#ffff00">マスクを全面[非表示]で塗りつぶす</FONT></TD>
+            <TD>画面全体を白で塗りつぶし、マスクＯＮの画像が<FONT color="#00ffff">全て見えない状態</FONT>にします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">の表示範囲(黒)をマウスに追加</FONT></TD>
+            <TD>黒を追加して、マスクＯＮの画像が見える範囲を増やします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>ゲーム開始時は「画面全体が黒」になっているので、<BR>
+            「<FONT color="#ffff00">の表示範囲(黒)をマウスに追加</FONT>」を設定しても変化がありません。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            「<FONT color="#ffff00">の表示範囲(黒)をマウスに追加</FONT>」で設定した所だけが見えるようにする場合は、<BR>
+            まずは「<FONT color="#ffa0a0">マスクを全面[非表示]で塗りつぶす</FONT>」で画面全体を白で塗りつぶし、<BR>
+            その上で「<FONT color="#ffff00">の表示範囲(黒)をマウスに追加</FONT>」を設定してください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">の非表示範囲(白)をマスクに追加</FONT></TD>
+            <TD>白を追加して、マスクＯＮの画像が見える範囲を減らします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">のＩＤのキャラのマスクＯＮ</FONT></TD>
+            <TD>マップイベントのイベントＩＤを設定するとマスク機能がＯＮとなり、<BR>
+            黒で塗りつぶした所しか見えなくなります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">▼表示例</FONT><BR>
+            <IMG src="025_2_0.png" width="48" height="48" border="0"><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD align="center"><FONT size="-1" color="#00ffff">変数の値</FONT></TD>
+                  <TD align="center"><FONT size="-1" color="#00ffff">対象となるキャラ</FONT></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">0以上</FONT></TD>
+                  <TD>設定したイベントＩＤのマップイベント</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-1</FONT></TD>
+                  <TD>「<FONT color="#ffff00">のＩＤのキャラのマスクＯＮ</FONT>」を実行したマップイベント</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-2</FONT></TD>
+                  <TD>主人公（パーティの先頭にいる者）</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-3</FONT></TD>
+                  <TD>仲間１</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-4</FONT></TD>
+                  <TD>仲間２</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-5</FONT></TD>
+                  <TD>仲間３</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-6</FONT></TD>
+                  <TD>仲間４</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-7</FONT></TD>
+                  <TD>仲間５</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">のＩＤの全キャラのマスク解除</FONT></TD>
+            <TD>マップイベントのイベントＩＤを設定するとマスク機能がＯＦＦとなり、<BR>
+            マスクの白黒設定に関係なく、マップイベントの全体が見える状態になります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD align="center"><FONT size="-1" color="#00ffff">変数の値</FONT></TD>
+                  <TD align="center"><FONT size="-1" color="#00ffff">対象となるキャラ</FONT></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">0以上</FONT></TD>
+                  <TD>設定したイベントＩＤのマップイベント</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-1</FONT></TD>
+                  <TD>「<FONT color="#ffff00">のＩＤの全キャラのマスク解除</FONT>」を実行したマップイベント</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-2</FONT></TD>
+                  <TD>主人公（パーティの先頭にいる者）</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-3</FONT></TD>
+                  <TD>仲間１</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-4</FONT></TD>
+                  <TD>仲間２</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-5</FONT></TD>
+                  <TD>仲間３</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-6</FONT></TD>
+                  <TD>仲間４</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top" align="center"><FONT color="#ffff00">-7</FONT></TD>
+                  <TD>仲間５</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">マップのマスクＯＮ</FONT></TD>
+            <TD>黒で塗りつぶした範囲のみ、マップが表示されるようにします。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#00ffff">▼表示例（主人公の周りだけ「黒」で塗りつぶし）</FONT><BR>
+            <IMG src="025_3_0.png" width="322" height="242" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">マップのマスク解除</FONT></TD>
+            <TD>マップのマスク機能をＯＦＦにして、<BR>
+            マスクの白黒設定に関係なく、マップ全体が見える状態にします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">のピクチャＩＤのマスクＯＮ</FONT></TD>
+            <TD>指定したピクチャのマウス機能をＯＮにして、<BR>
+            黒で塗りつぶした範囲のみ表示させます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">のピクチャＩＤのマスク解除</FONT></TD>
+            <TD>指定したピクチャのマウス機能をＯＦＦにして、<BR>
+            マスクの白黒設定に関係なく、全てが見える状態にします。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <TABLE border="0" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">のＩＤのキャラのマスクＯＮ</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">のＩＤの全キャラのマスク解除</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">のピクチャＩＤのマスクＯＮ</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">のピクチャＩＤのマスク解除</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      これらの設定では、<IMG src="025_2_1.png" width="237" height="30" border="0">のチェックボックスにチェックを付ける事で、<BR>
+      複数のマップイベントや複数のピクチャのマスク設定を一括で設定する事ができます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      「白黒設定」「マップのＯＮ」「ピクチャのＯＮ」は、別のマップへ移動しても継続しますが、<BR>
+      「<FONT color="#00ffff">マップイベントのＯＮ</FONT>」は別のマップへ移動すると<FONT color="#ffff00">全てＯＦＦ</FONT>になります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff" size="+2">▼ゲーム画面のサイズ[320×240[x2]]の白黒の画像サイズについて</FONT><BR>
+      <BR>
+      ゲーム画面のサイズ<FONT color="#a0dcff">[320×240[x2]]</FONT>でマスクの白黒画像を設定する場合は、<BR>
+      準備する白黒の画像サイズは<FONT color="#ffff00">200％のサイズ</FONT>で準備してください。<BR>
+      <BR>
+      例えば<FONT color="#a0dcff">[320×240[x2]]</FONT>のゲーム画面のサイズと同じサイズの白黒画像を準備する場合は、<BR>
+      <FONT color="#ffff00">640×480ピクセル</FONT>で準備してください。<BR>
+      <BR>
+      なお、白黒画像の設定位置は「<FONT color="#00ffff">320×240</FONT>」の基準で設定するため、<BR>
+      ゲーム画面の中央に白黒を設定する場合は「X＝160」「Y＝120」で設定してください。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#00ffff" size="+2">▼白黒画像の色設定について</FONT><BR>
+      <BR>
+      白黒画像に<FONT color="#00ffff">カラー</FONT>が設定されている場合は、ＲＧＢの<FONT color="#00ffff">Ｂの値</FONT>で「<FONT color="#ffff00">0＝黒</FONT>」「<FONT color="#ffff00">1以上＝白</FONT>」が判断されます。<BR>
+      <BR>
+      例えば下図の場合は、上の方は「<FONT color="#ffff00">Ｂ＝0</FONT>」、下の方は「<FONT color="#ffff00">Ｂ＝1</FONT>」になっています。<BR>
+      <BR>
+      <IMG src="025_4_0.png" width="640" height="480" border="0"><BR>
+      <BR>
+      マップのマスク設定がＯＮの時に、上図の色配置でマスクの「黒」を設定すると、<BR>
+      ゲーム画面の上半分のみが「黒（マップ画面が見える状態）」となります。<BR>
+      <BR>
+      <IMG src="025_4_1.png" width="640" height="480" border="0"><BR>
+      <BR>
+      黒の画像を準備したのに、マスクの黒として処理されない場合は、<BR>
+      もしかするとＲＧＢのＢが「<FONT color="#00ffff">1以上</FONT>」になっている可能性があります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      マスク機能に関する情報は別ページにも記載しています。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD><A href="../../09_en/0300_mask/" target="_blank">【マスク機能を使うを開く】</A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_scroll">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：画面スクロール</FONT><BR>
+      <BR>
+      <IMG src="023_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      画面スクロールに関する設定を行います。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT size="-1" color="#00ffff">設定名</FONT></TD>
+            <TD align="center"><FONT size="-1" color="#00ffff">説明</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="7"><FONT color="#ffff00">画面を移動</FONT></TD>
+            <TD>画面をスクロールさせます。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>[Ｘ]には横方向の移動距離、[Ｙ]には縦方向の移動距離を設定します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>ＸＹを両方設定する事で、斜め方向のスクロールも可能です。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            例えば「<FONT color="#00ffff">Ｘ[6]、Ｙ[-6]</FONT>」を設定すると、右上方向へスクロールします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>移動距離の設定は、0.5マス移動の設定でも<FONT color="#ffff00">１マス単位</FONT>になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">速度</FONT>」は１マス分をスクロールする時間を設定します。<BR>
+            この速度はキャラクターの移動速度と同じ速度設定になります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../../01_shoshin/1500_game_set/index.htm#gamen_ido_sokudo" target="_blank">【ゲームの基本設定の移動速度の設定画面を確認する】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">移動完了までウェイト</FONT>」を設定すると、画面スクロールが終わるまで、<BR>
+            この<FONT color="#a0dcff">【画面スクロール】</FONT>を実行したイベントコマンドの所で処理が一時停止します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">ピクセル単位</FONT>」を設定すると、移動距離の設定がピクセル単位になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">主人公に戻す</FONT></TD>
+            <TD>「<FONT color="#00ffff">画面を移動</FONT>」で移動した画面を主人公が画面の中央になるように戻します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>「<FONT color="#00ffff">スクロールロック</FONT>」で画面をロックしている時にこの「<FONT color="#ffff00">主人公に戻す</FONT>」を実行すると、<BR>
+            主人公が画面の中央になるように画面がスクロールしますが、<FONT color="#ff96ff">画面のロックは解除されません。</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">縦横スクロールロック</FONT></TD>
+            <TD>主人公が移動しても画面の表示が固定になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">横スクロールロック</FONT></TD>
+            <TD>主人公が移動しても画面の表示が横方向のみ固定になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">縦スクロールロック</FONT></TD>
+            <TD>主人公が移動しても画面の表示が縦方向のみ固定になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">ロック解除</FONT></TD>
+            <TD>「<FONT color="#00ffff">スクロールロック</FONT>」でロックされた状態を解除します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>ロックを解除しても<FONT color="#ff96ff">画面はそのままになります。</FONT><BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            もしもロックを解除した時に、主人公が画面の中央に表示されるようにしたい時には…<BR>
+            <TABLE cellpadding="12" bgcolor="#00003c">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■画面スクロール：スクロールロック解除<BR>
+                  ■画面スクロール：主人公に戻す 1倍速 [ｳｪｲﾄ]</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+            と言ったように「<FONT color="#00ffff">主人公に戻す</FONT>」も一緒に実行してください。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="gamen_irochou">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■設定画面の説明：画面の色調変更</FONT><BR>
+      <BR>
+      <IMG src="024_0.png" width="592" height="335" border="0"><BR>
+      <BR>
+      画面全体の色調を変える時に使います。<BR>
+      <BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT color="#ffc83c">夕方のような画面</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">夜のような画面</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><FONT color="#ffa0a0">赤[100]</FONT>　<FONT color="#80ff80">緑[80]</FONT>　<FONT color="#a0dcff">青[80]</FONT></TD>
+            <TD align="center"><FONT color="#ffa0a0">赤[40]</FONT>　<FONT color="#80ff80">緑[40]</FONT>　<FONT color="#a0dcff">青[60]</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><IMG src="024_1.png" width="320" height="240" border="0"></TD>
+            <TD><IMG src="024_2.png" width="320" height="240" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" align="center"><A href="c024_0.txt" target="_blank">【イベントコード表示】</A></TD>
+            <TD align="center"><A href="c024_1.txt" target="_blank">【イベントコード表示】</A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      一度画面の色調を変えると、そのままずっと画面の色が変化した状態になります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      もしも元の画面の色に戻す場合は「<FONT color="#ffa0a0">赤[100]</FONT>　<FONT color="#80ff80">緑[100]</FONT>　<FONT color="#a0dcff">青[100]</FONT>」を実行してください。<BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <A href="c024_2.txt" target="_blank">【イベントコード表示】</A><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      「<FONT color="#00ffff">フラッシュにする</FONT>」にチェックを付けると、瞬間的に画面の色が変わり、<BR>
+      そして設定した処理時間をかけて徐々に元の画面の色に戻ります。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <FONT color="#a0dcff">【色調変更】</FONT>を<FONT color="#ff96ff">２つ同時に実行する事ができない</FONT>ため、<BR>
+      <FONT color="#a0dcff">【色調変更】</FONT>を実行している所に新たな<FONT color="#a0dcff">【色調変更】</FONT>を実行すると、新しい色調の設定に置き換わります。<BR>
+      <BR>
+      また<FONT color="#a0dcff">【色調変更:(フラッシュ)】</FONT>も<FONT color="#ff96ff">２つ同時に実行する事ができない</FONT>ため、<BR>
+      前のフラッシュが終わる前に新たな<FONT color="#a0dcff">【色調変更:(フラッシュ)】</FONT>を実行すると、<BR>
+      前のフラッシュが強制終了して、新たなフラッシュの処理のみが実行されます。<BR>
+      <BR>
+      なお<FONT color="#a0dcff">【色調変更】</FONT>と<FONT color="#a0dcff">【色調変更:(フラッシュ)】</FONT>は、２つを同時に使用しても<FONT color="#ffff00">両方とも正常に処理されます。</FONT><BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      ピクチャの表示は、<BR>
+      ピクチャ番号が「<FONT color="#ffff00">0以上</FONT>」の場合は<FONT color="#a0dcff">【色調変更】</FONT>の影響は受けませんが、<BR>
+      ピクチャ番号が「<FONT color="#00ffff">-1以下</FONT>」の場合は<FONT color="#a0dcff">【色調変更】</FONT>の影響を受け、ピクチャの表示色が変化します。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="kakusi_chara_effect">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■隠し機能：｢キャラチップ変更｣｢重ねキャラチップ変更｣の画像読込時にエフェクトを設定</FONT><BR>
+      <BR>
+      <FONT color="#a0dcff">【キャラエフェクト】</FONT>にある「<FONT color="#00ffff">キャラチップ変更</FONT>」と「<FONT color="#00ffff">重ねキャラチップ変更</FONT>」にて、<BR>
+      画像ファイルを読み込む際、「<FONT color="#00ffff">&lt;&lt; &gt;&gt;</FONT>」で囲まれた特殊な文字列を設定する事で、<BR>
+      画像の読み込み時にエフェクトの設定を行う事ができます。<BR>
+      <BR>「<FONT color="#00ffff">重ねキャラチップ変更</FONT>」の場合は、<FONT color="#ffff00">画像を読み込んだレイヤーのみにエフェクトを設定する事ができる</FONT>ので、<BR>
+      例えば「<FONT color="#00ffff">重ねキャラチップ変更</FONT>」で表示した手に持っている武器の明るさだけを暗くするような設定ができます。<BR>
+      <BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#00ffff">▼隠し機能なし</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■キャラエフェクト：主人公[重ねキャラチップ変更] ﾚｲﾔｰ 1 =&gt; [CharaChip/剣.png]</FONT></TD>
+            <TD align="center"><IMG src="100_0.png" width="48" height="56" border="0"></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#00ffff">▼隠し機能あり（明るさを[-100]）</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <FONT color="#ffff00">■キャラエフェクト：主人公[重ねキャラチップ変更] ﾚｲﾔｰ 1 =&gt; [<FONT color="#00ffff">&lt;&lt;BLI=-100&gt;&gt;</FONT>CharaChip/剣.png]</FONT></TD>
+            <TD align="center"><IMG src="100_1.png" width="48" height="56" border="0"></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      <TABLE cellpadding="6" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD align="center"><FONT color="#00ffff">&lt;&lt;&gt;&gt;の中の文字</FONT></TD>
+            <TD align="center"><FONT color="#00ffff">設定内容</FONT></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">X+=</FONT><FONT color="#00ffff">移動量</FONT></TD>
+            <TD valign="top">設定したピクセル分だけ左右に移動します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">Y+=</FONT><FONT color="#00ffff">移動量</FONT></TD>
+            <TD valign="top">設定したピクセル分だけ上下に移動します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">OPA=</FONT><FONT color="#00ffff">0〜255</FONT></TD>
+            <TD valign="top">不透明度を補正します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">OPA=</FONT><FONT color="#00ffff">0〜255</FONT></TD>
+            <TD valign="top">表示形式を指定します。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellpadding="6" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">1</FONT></TD>
+                  <TD valign="top">加算</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">2</FONT></TD>
+                  <TD valign="top">減算</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#ffff00">3</FONT></TD>
+                  <TD valign="top">乗算</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">表示形式の違いについては以下のページに説明があります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <A href="../1001_hyoujikeisiki/index.htm" target="_blank">【表示形式(通常･加算･減算･乗算)について】</A></TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">HUE=</FONT><FONT color="#00ffff">0〜359</FONT></TD>
+            <TD valign="top">色相を補正します。（360で１周）</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">色相や彩度に関しては、<BR>
+            当ページにある「<FONT color="#00ffff">ピクチャエフェクト</FONT>」の「<FONT color="#ffff00">変換/色相彩度明度</FONT>」の説明をご覧ください。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">SAT=</FONT><FONT color="#00ffff">-255〜255</FONT></TD>
+            <TD valign="top">彩度を補正します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">BLI=</FONT><FONT color="#00ffff">-255〜255</FONT></TD>
+            <TD valign="top">明るさを補正します。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">「<FONT color="#ffff00">BLI=255</FONT>」を設定すると真っ白になり、「<FONT color="#ffff00">BLI=-255</FONT>」を設定すると真っ黒になります。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">BLR=</FONT><FONT color="#00ffff">1〜16</FONT></TD>
+            <TD valign="top">ぼかします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top">ぼかしの処理は、分割する前の１枚のキャラチップの画像の時に行われるため、<BR>
+            隣りのキャラ画像と距離が近いと、隣りのぼかしと重なって表示される事があります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            また分割したキャラサイズで表示されるため、<BR>
+            分割したキャラサイズに余白が無いと、ぼかしの縁の部分が角ばった感じになります。<BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            <TABLE cellpadding="6" bgcolor="#666666" cellspacing="2">
+              <TBODY>
+                <TR bgcolor="#00003c">
+                  <TD valign="top"><FONT color="#00ffff">キャラチップの下向き部分</FONT></TD>
+                  <TD valign="top"><FONT color="#00ffff">ぼかしの表示</FONT></TD>
+                  <TD valign="top" align="center"><FONT color="#00ffff">補足</FONT></TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="middle" align="center"><IMG src="101_1a.png" width="84" height="40" border="0"></TD>
+                  <TD valign="top" align="center"><IMG src="101_0a.png" width="48" height="56" border="0"></TD>
+                  <TD valign="top">分割したキャラサイズが小さいため、<BR>
+                  ぼかしの縁が角ばっており、<BR>
+                  また隣りの画像との距離が近いため、<BR>
+                  隣りのぼかしが重なっています。</TD>
+                </TR>
+                <TR bgcolor="#00003c">
+                  <TD valign="middle" align="center"><IMG src="101_1b.png" width="168" height="60" border="0"></TD>
+                  <TD valign="top" align="center"><IMG src="101_0b.png" width="48" height="56" border="0"></TD>
+                  <TD valign="top">分割したキャラサイズが大きいため、<BR>
+                  ぼかしの縁が角ばっておらず、<BR>
+                  また隣りの画像との距離があるため、<BR>
+                  隣りのぼかしと重なっていません。</TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">HALF</FONT></TD>
+            <TD valign="top">画像サイズを２分の１にします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top" rowspan="2"><FONT color="#ffff00">QUAT</FONT></TD>
+            <TD valign="top">画像サイズを４分の１にします。</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD valign="top"><FONT color="#ffff00">HALF</FONT>も設定している場合は、<FONT color="#ffff00">QUAT</FONT>の方が優先的に実行されます。</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      複数を設定する場合は「/」で区切って設定してください。<BR>
+      <BR>
+      <TABLE cellspacing="2" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">&lt;&lt;X+=2/Y+=-3/OPA=200/MODE=1/HUE=180/SAT=50/BLI=100/BLR=1/HALF&gt;&gt;画像.png</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="kakusi_chara_xy">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■隠し機能：｢キャラチップ変更｣｢重ねキャラチップ変更｣の画像をＸＹ配列で設定</FONT><BR>
+      <BR>
+      <FONT color="#a0dcff">【キャラエフェクト】</FONT>にある「<FONT color="#00ffff">キャラチップ変更</FONT>」と「<FONT color="#00ffff">重ねキャラチップ変更</FONT>」にて、画像ファイルのアドレスを…<BR>
+      <TABLE cellspacing="2" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">&lt;XY_IMAGE/A=1/R=2/G=3/B=4/XSIZE=120/YSIZE=100&gt;</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      などと設定すると、４つのＸＹ配列に保存した不透明度とＲＧＢ値（全て[0〜255]の値）を使って、<BR>
+      キャラチップの画像を読み込みます。<BR>
+      <BR>
+      <FONT color="#00ffff">▼配列番号で設定（最初が「XY」になる）</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00" size="+2">&lt;XY_IMAGE/A=<FONT color="#a0dcff">番号</FONT>/R=<FONT color="#a0dcff">番号</FONT>/G=<FONT color="#a0dcff">番号</FONT>/B=<FONT color="#a0dcff">番号</FONT>/XSIZE=<FONT color="#a0dcff">横サイズ</FONT>/YSIZE=<FONT color="#a0dcff">縦サイズ</FONT>&gt;</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <FONT color="#00ffff">▼配列名で設定（最初が「XYN」になる）</FONT><BR>
+      <TABLE cellspacing="2" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00" size="+2">&lt;XYN_IMAGE/A=<FONT color="#a0dcff">名前</FONT>/R=<FONT color="#a0dcff">名前</FONT>/G=<FONT color="#a0dcff">名前</FONT>/B=<FONT color="#a0dcff">名前</FONT>/XSIZE=<FONT color="#a0dcff">横サイズ</FONT>/YSIZE=<FONT color="#a0dcff">縦サイズ</FONT>&gt;</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      セーブデータをロードした時には、ＸＹ配列の情報を取得して、キャラチップを再表示します。<BR>
+      <BR>
+      そのため、ＸＹ配列の中にある値は、キャラチップを表示した時に同じ状態で残してください。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      ＸＹ配列の番号や名前を<FONT color="#00ffff">設定しない</FONT>場合は、Ａは全ての値が「255」、ＲＧＢは全ての値が「0」になります。<BR>
+      <BR>
+      そのため…<BR>
+      <TABLE cellspacing="2" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">&lt;XY_IMAGE/<FONT color="#00ffff">A=</FONT>/<FONT color="#00ffff">R=</FONT>/<FONT color="#00ffff">G=</FONT>/<FONT color="#00ffff">B=</FONT>/XSIZE=32/YSIZE=24&gt;</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      とＡＲＧＢの全てで、ＸＹ配列の番号を設定しなかった場合は、<BR>
+      不透明度[255]、R[0]、G[0]、B[0]となり、32×24ピクセルの真っ黒が画像が表示されます。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      サイズを指定せず…<BR>
+      <TABLE cellspacing="2" cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">&lt;XY_IMAGE/A=1/R=2/G=3/B=4&gt;</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      と設定した場合は、ＸＹ配列の設定状況でそのままピクチャを表示します。<BR>
+      <BR>
+      例えばＸＹ配列のＸ列の数が「32」ある場合は、「32ピクセルの幅」で画像を表示します。<BR>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <A name="effect_bug">　</A>　<BR>
+      <FONT size="+2" color="#ff8080">■エフェクトが正常に処理されないよくある原因</FONT><BR>
+      <BR>
+      「<FONT color="#00ffff">【ピクチャエフェクト】の「<FONT color="#b4ff64">点滅Ａ[明減]</FONT>」を設定したが全く点滅しない</FONT>」と言ったように、<BR>
+      設定したエフェクトが正常に処理されない事があります。<BR>
+      <BR>
+      ピクチャ番号の設定が正しく、間隔の設定も「1以上」になっているのに点滅しない場合は、<BR>
+      <FONT color="#ffff00">エフェクトの連続実行が原因である可能性が高い</FONT>です。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      「<FONT color="#b4ff64">点滅Ａ[明減]</FONT>」のように「間隔」や「処理時間」の設定があるエフェクトの場合、<BR>
+      エフェクトを実行する度に<FONT color="#ffff00">処理が最初からやり直し</FONT>になります。<BR>
+      <BR>
+      そのため、例えば…<BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■ループ開始<BR>
+            |■ピクチャエフェクト：1 [点滅A(明滅)] R100/G100/B100 明滅間隔(10)ﾌﾚｰﾑ<BR>
+            |■ウェイト：1 フレーム<BR>
+            |■<FONT color="#00ffff">〜何らかの処理〜</FONT><BR>
+            |■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      のように<FONT color="#00ffff">ループ処理</FONT>の中で「<FONT color="#b4ff64">点滅Ａ[明減]</FONT>」を連続的に実行すると、<BR>
+      実行する度に点滅の処理が最初からとなり、点滅の処理が最後まで処理されなくなります。<BR>
+      <BR>
+      この症状は「間隔」や「処理時間」の設定がある<FONT color="#a0dcff">【キャラエフェクト】</FONT>や<FONT color="#a0dcff">【マップエフェクト】</FONT>でも発生します。<BR>
+      <BR>
+      <HR width="80%">
+      <BR>
+      正常に処理させるためには、エフェクトを<FONT color="#ffff00">１回だけ実行する</FONT>ように設定する必要があります。<BR>
+      <BR>
+      例えば以下のように、ループ処理を始める前に１回だけ実行する感じです。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■ピクチャエフェクト：1 [点滅A(明滅)] R100/G100/B100 明滅間隔(10)ﾌﾚｰﾑ<BR>
+            ■ループ開始<BR>
+            |■ウェイト：1 フレーム<BR>
+            |■<FONT color="#00ffff">〜何らかの処理〜</FONT><BR>
+            |■<BR>
+            ◇ループここまで◇◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="80%">
+      <BR>
+      以下のように、セルフ変数[10]の値が変わったら、１回だけ実行するような設定方法もあります。<BR>
+      <BR>
+      <TABLE cellpadding="12" bgcolor="#000000">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff00">■条件分岐(数値): 【1】 CSelf10 が CSelf11 以外<BR>
+-◇分岐： 【1】  [ CSelf10  が  CSelf11 以外  ]の場合↓<BR>
+            |■変数操作: CSelf11 = CSelf10 + 0<BR>
+            |■ピクチャエフェクト：1 [点滅A(明滅)] R100/G100/B100 明滅間隔(10)ﾌﾚｰﾑ<BR>
+            |■<BR>
+            ◇分岐終了◇</FONT></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <BR>
+      <A href="#top" target="_self">▲トップへ戻る▲</A><BR>
+      <BR>
+      <HR>
+      <BR>
+      <FONT size="+2" color="#ffff00">◎関連ページ</FONT><BR>
+      <BR>
+      <A href="../0000_ibekoma_nani/" target="_top">◆「イベントコマンド」って何？</A><BR>
+      <A href="../0100_bunshou/" target="_top">┣◆文章の表示</A><BR>
+      <A href="../0101_tokushumoji/" target="_top">┃┗◆特殊文字</A><BR>
+      <A href="../0200_sentakushi/" target="_top">┣◆選択肢</A><BR>
+      <A href="../0210_rei_sentakushi/" target="_top">┃┗◆【使用例】選択肢</A><BR>
+      <A href="../0300_hensuu/" target="_top">┣◆変数操作</A><BR>
+      <A href="../0301_enzansi/" target="_top">┃┗◆演算子について</A><BR>
+      <A href="../0400_db/" target="_top">┣◆ＤＢ操作</A><BR>
+      <A href="../0500_mojiretsu/" target="_top">┣◆文字列操作</A><BR>
+      <A href="../0510_rei_mojiretsu/" target="_top">┃┗◆【使用例】文字列操作</A><BR>
+      <A href="../0600_hensuu_plus/" target="_top">┣◆変数操作＋</A><BR>
+      <A href="../0601_xy/" target="_top">┃┣◆「Ｘ座標･Ｙ座標」と「画面Ｘ座標･画面Ｙ座標」の違い</A><BR>
+      <A href="../0610_rei_hensuu_plus_chara/" target="_top">┃┣◆【使用例】変数操作＋の｢キャラ｣と｢位置｣</A><BR>
+      <A href="../0611_rei_hensuu_plus_picture/" target="_top">┃┗◆【使用例】変数操作＋の｢ピクチャ｣と｢その他｣</A><BR>
+      <A href="../0700_jouken_hen/" target="_top">┣◆条件(数値)</A><BR>
+      <A href="../0800_jouken_moji/" target="_top">┣◆条件(文字列)</A><BR>
+      <A href="../0900_key/" target="_top">┣◆キー入力</A><BR>
+      <A href="../0910_rei_key/" target="_top">┃┗◆【使用例】キー入力</A><BR>
+      <A href="../1000_picture/" target="_top">┣◆ピクチャ</A><BR>
+      <A href="../1001_hyoujikeisiki/" target="_top">┃┗◆表示形式(通常･加算･減算･乗算)について</A><BR>
+      <FONT color="#ffff00">┣◆エフェクト</FONT><BR>
+      <A href="../1101_effect_z/" target="_top">┃┣◆「Ｚオーダー」について</A><BR>
+      <A href="../1110_rei_effect/" target="_top">┃┗◆【使用例】エフェクト</A><BR>
+      <A href="../1200_sound/" target="_top">┣◆サウンド</A><BR>
+      <A href="../1300_save_load/" target="_top">┣◆セーブ･ロード操作</A><BR>
+      <A href="../1400_party/" target="_top">┣◆パーティ画像</A><BR>
+      <A href="../1500_chip/" target="_top">┣◆チップ処理</A><BR>
+      <A href="../1510_rei_chip/" target="_top">┃┗◆【使用例】チップ処理</A><BR>
+      <A href="../1600_bashoidou/" target="_top">┣◆場所移動</A><BR>
+      <A href="../1700_ev/" target="_top">┣◆イベント制御</A><BR>
+      <A href="../1701_ev_dousa/" target="_top">┃┣◆キャラクターの動作指定</A><BR>
+      <A href="../1710_rei_ev/" target="_top">┃┗◆【使用例】イベント制御</A><BR>
+      <A href="../1800_com/" target="_top">┣◆コモンイベント</A><BR>
+      <A href="../1900_dl/" target="_top">┣◆ダウンロード</A><BR>
+      <A href="../2000_pro/" target="_top">┗◆プロ版機能</A><BR>
+      　<A href="../2010_pro_hikisuu/" target="_top">┗◆起動時の引数について</A><BR>
+      <BR>
+      <A href="../../09_en/0300_mask/" target="_top">◆マスク機能を使う</A></TD>
+    </TR>
+  </TBODY>
+</TABLE>
+</CENTER>
+<DIV style="position: relative; top: 20px" align="center">
+<HR>
+<A href="../../" target="_top">YADOT-WOLFトップ</A>　　<A href="http://kkni.net/" target="_blank">気紛れな空間へ戻る</A>　　<A href="../../../page/mail.htm" target="_blank">メール</A><BR>
+　</DIV>
+</BODY>
+</HTML>

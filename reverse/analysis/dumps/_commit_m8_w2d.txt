@@ -1,0 +1,26 @@
+M8 W2-d: drive the H forward wrapper chain from the map H button
+
+New test-only delivery; no production source changed.
+
+- crates/wolf-game/tests/m8_hscene_forward.rs (2 tests):
+  * map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate:
+    one continuous real-pointer session on SaveData08 (wipe picture 406 ->
+    map ev21 pc1072 incl. CE343/CE333; s01 picture 400 -> var62 1->2; end
+    picture 294 -> ev25 -> CE345; plus a fresh replay s04 picture 403 ->
+    stage 11). CE333's body replays 1,739 instructions and redraws pic3208 =
+    DLC_data/pose_10.png and pic4100 = hword/word_effect102.png. ev33 stays
+    gated on var460==1 because the ejaculation path needs v111>=100 (save 0)
+    then CE344/CE347; the shallow/anal insertion guards (v267, v100>=12) and
+    the end-button guard (v98>=1) are asserted exactly.
+  * sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402:
+    CE246->CE217 HUD child proven by the clock 0:42->0:52 and header text;
+    CE246 deep -> CE346 max pc 180 with a visible cutin; CE323->CE372/CE371
+    through the real toilet menu (var218 stays 2 by design); CE328->CE402
+    blocked by v104/v105==0 and v4>=21.
+  warnings 0 in both.
+- docs/research/M8_HSCENE_FORWARD.md records the event chain, gates and
+  observed output.
+
+Evidence:
+  WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m8_hscene_forward
+  (2 passed; the earlier workspace failure was the pre-final revision)

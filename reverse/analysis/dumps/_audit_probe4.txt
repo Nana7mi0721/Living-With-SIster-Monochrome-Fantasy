@@ -1,0 +1,14 @@
+n events 550
+keys ['id', 'run', 'op', 'condvar', 'condval', 'argn', 'args', 'title', 'cmds', 'memo', 'argnames', 'ret', 'cself']
+'オリジナルタイトル画面\u3000ver1.0\u3000'
+'タイトル画面用のマップのイベントでこのコモンを呼び出してください。イベント起動条件は「自動実行」に設定してください。'
+'改造自由。適当にさっくりつくっただけなので参考程度にどうぞ。'
+'もともと講座など見て回って、マップイベントで済むようなものを扱いやすいようにコモンにまとめただけなので'
+'著者表記は不要です。頑張っていいゲーム作ってね！'
+'タイトル画面のＢＧＭ設定'
+ASSET 'SystemGraphic/TitleGraphic6.jpg'
+ASSET 'SystemGraphic/TitleGraphic.jpg'
+ASSET 'SystemGraphic/TitleGraphic6.jpg'
+ASSET 'SystemGraphic/TitleGraphic.jpg'
+ASSET 'SystemGraphic/TitleGraphic1.jpg'
+ASSET 'SystemGraphic/TitleGraphic2.jpg'

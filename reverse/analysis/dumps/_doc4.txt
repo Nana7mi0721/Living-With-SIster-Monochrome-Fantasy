@@ -1,0 +1,78 @@
+
+## 8. 逐事件 / 逐页表
+
+列说明：«BT»ev«BT» = 事件号，«BT»页«BT» = 页序（页码越大优先级越高），«BT»trigger«BT» = 触发方式（0 confirm / 1 autorun / 2 parallel / 3 touch），
+«BT»条件槽 0..3«BT» = 解码后的「变量 运算符 阈值」（— = 该槽停用），«BT»槽数«BT» = 该页的指令槽数量，«BT»新 VM 激活«BT» = 按 §3 的规则是否在载入瞬间启动。
+每张表之后是该图多页事件的胜出计数（«BT»胜出«BT» = 该页在多少个枚举赋值里胜出；«BT»低页必输对«BT» = 高页同时成立时低页必输的组合对数量，含义见 §2.4）。
+
+### 8.1 «BT»MapData/TitleMap.mps«BT» —— 53×30，3 层，1 事件 / 1 页 / 133 槽
+
+@@TABLE TitleMap.mps
+
+**多页事件优先级：** @@PREC TitleMap.mps
+
+### 8.2 «BT»MapData/SampleMapA.mps«BT» —— 64×36，3 层，40 事件 / 93 页 / 31 083 槽
+
+@@TABLE SampleMapA.mps
+
+**多页事件优先级：**
+
+@@PREC SampleMapA.mps
+
+### 8.3 «BT»MapData/SampleMapA_1.mps«BT» —— 64×36，3 层，12 事件 / 17 页 / 5 752 槽
+
+@@TABLE SampleMapA_1.mps
+
+**多页事件优先级：**
+
+@@PREC SampleMapA_1.mps
+
+### 8.4 «BT»MapData/Map003.mps«BT» —— 70×170，3 层，2 事件 / 2 页 / 45 槽
+
+@@TABLE Map003.mps
+
+**多页事件优先级：** @@PREC Map003.mps
+
+### 8.5 «BT»MapData/Map024.mps«BT» —— 53×30，**无瓦片层**，1 事件 / 1 页 / 3 槽
+
+@@TABLE Map024.mps
+
+**多页事件优先级：** @@PREC Map024.mps
+
+### 8.6 «BT»MapData/Map031.mps«BT» —— 53×30，**无瓦片层**，1 事件 / 1 页 / 63 槽
+
+@@TABLE Map031.mps
+
+**多页事件优先级：** @@PREC Map031.mps
+
+### 8.7 «BT»MapData/SampleMapB.mps«BT»（控制组，未注册）—— 30×30，3 层，6 事件 / 6 页 / 36 槽
+
+@@TABLE SampleMapB.mps
+
+**多页事件优先级：** 本图 6 个事件都是单页（条件槽全空，见 §3）。
+
+---
+
+## 9. 未验证项
+
+| # | 项 | 现状 | 下一步 |
+| --: | :--- | :--- | :--- |
+| 1 | «BT»MapTree.dat«BT»（416 B）/ «BT»MapTreeOpenStatus.dat«BT» | 未解码（«BT»docs/FORMAT_SPEC.md«BT» 已留 TODO） | 新游戏的起始地图与坐标只能从这里来，必须先解 |
+| 2 | 130 的 «BT»-2«BT» 目的地 | 只在孤立地图 «BT»Map002.mps«BT» 出现 4 次；x/y 还是变量间接 | 运行期追踪 «BT»v7«BT» / «BT»self100005«BT» 才知道真目的地 |
+| 3 | 自变量高段 «BT»self100006«BT» / «BT»self100009«BT» 的写入时机 | 只知被条件读取 | 在运行时打点，确认是引擎写的还是事件写的 |
+| 4 | «BT»confirm«BT» 事件格与图片矩形的关系 | 页面无图形，玩家看到的是图片 | 「事件格点击」与「图片悬停」两套判定的交互规则未验证 |
+| 5 | Map024 / Map031 无瓦片时的渲染 | 数据结构上 «BT»layers«BT» 为空 | 移植时是黑屏还是保留上一张地图的背景，需与运行期比对 |
+
+---
+
+## 附录 A：opcode 直方图（全部 9 张地图，37 610 槽）
+
+名称取自 WolfTL «BT»WolfRPG/Command.hpp«BT»（«BT»docs/vendor/WolfTL-main«BT»），逐条参数规格见 «BT»docs/OPCODE_SPEC.md«BT»。
+「注册 6 张」列合计 37 079 槽（含 7 000 空槽），「全部 9 张」列合计 37 610 槽（含 7 052 空槽）；非空 opcode 共 **40** 个
+（与 «BT»docs/BASELINE.json«BT» 的 «BT»distinct_opcodes = 40«BT» 一致）。
+
+| opcode | 名称 | 注册 6 张 | 全部 9 张 |
+| --: | :--- | --: | --: |
+@@INC A
+
+---

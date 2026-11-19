@@ -1,0 +1,161 @@
+{
+	"default": null,
+	"files": [
+		{
+			"name": "/.gitignore",
+			"hash": "ucObixOWLWSoj6Qsug3hXPcG36Ttf6/RwgW0T6B3DvA=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 6867
+		},
+		{
+			"name": "/LICENSE",
+			"hash": "UMpLEAP2zGwZV2MVrMLpZfBiXaWoMiXwjjuKyPM/Nzs=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 1066
+		},
+		{
+			"name": "/README.md",
+			"hash": "QEvGjL+ze/WBXnrR2iF2zhD5voQp+034tkOKHcFW0Ns=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 548
+		},
+		{
+			"name": "/WolfSave.sln",
+			"hash": "hVLTJNvBS3UhrWP4D90Vvq1x1ulND+8U6UzfU+x8OuA=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 1413
+		},
+		{
+			"name": "/WolfSave.sln.licenseheader",
+			"hash": "T0tttIfQfq0OXR6aPUhi7birYBlcDNJeEgLqwFltu2o=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 1206
+		},
+		{
+			"name": "/WolfSave/3rdParty/nlohmann/json.hpp",
+			"hash": "m+pMgGbvShwgayvlo2MC+JJvf9xgh69dILQX0M8QPqY=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 919975
+		},
+		{
+			"name": "/WolfSave/Database.h",
+			"hash": "/JYHTvdNnR+Y80mDmVjzEvXpqMsZO28mZnxWsz2IWzs=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 8826
+		},
+		{
+			"name": "/WolfSave/FileWalker.h",
+			"hash": "RXVXk/OFw88vn0TiUX1N52WQeRNeCBbZMnGRSWR5OV4=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 7000
+		},
+		{
+			"name": "/WolfSave/FileWriter.h",
+			"hash": "xvIvFKGC9ln8bUruwTc1HrWWW0gq6Xmp9DM0qvSQeLI=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 4874
+		},
+		{
+			"name": "/WolfSave/JsonDumper.h",
+			"hash": "xNCQnDD8oqYr4hKm6LmmnefsVrOnfLwwiL236bHcXQA=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 7443
+		},
+		{
+			"name": "/WolfSave/JsonReader.h",
+			"hash": "pxMHIyzwbqCRC/NKra/uB+DwZ0XrJEJxcirJZd/68aY=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 7596
+		},
+		{
+			"name": "/WolfSave/MemData.h",
+			"hash": "lEoKtxkMMeMUJMDaSnoJ7CBpCYOacnNJAwENUba2JCU=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 3171
+		},
+		{
+			"name": "/WolfSave/SaveBase.h",
+			"hash": "EABQvqW0gX5WblbG6Q8Te9whUxfzL9CdYge9G9tvCKM=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 2521
+		},
+		{
+			"name": "/WolfSave/SavePart1.h",
+			"hash": "ytSAOe6KseMu8T7TetCg2LJ74400bGdFGtXdgsSl+Ss=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 14941
+		},
+		{
+			"name": "/WolfSave/SavePart2.h",
+			"hash": "AnR/rPqVZqTK5MmFWbnZ9wAm7WAEazfdFp68SmlF/Uc=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 19781
+		},
+		{
+			"name": "/WolfSave/SavePart3.h",
+			"hash": "b8LP3wf6HsGPCCpMESHnkBUztUQqkVcSsrSm5+jk7UA=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 7979
+		},
+		{
+			"name": "/WolfSave/SavePart4.h",
+			"hash": "/X6THd6e9ixv0Q1z87d4jHvCgyTPn9jlSUG/bTRt8jw=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 3549
+		},
+		{
+			"name": "/WolfSave/SavePart5.h",
+			"hash": "GFPg/c2VGN/JL6Ot6nUF33o8SxU2Pg3yHVO4qEjD5CA=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 15465
+		},
+		{
+			"name": "/WolfSave/SavePart7.h",
+			"hash": "/ApLQvYHVADsQd7aDrjVrYRZcEgU986o9yYuksqL7qE=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 2651
+		},
+		{
+			"name": "/WolfSave/Types.h",
+			"hash": "4qdscZ7Qqn9Gq/BbzXK0VrYvQWC+ql3dkJR/Cdr7tLg=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 2024
+		},
+		{
+			"name": "/WolfSave/Utils.h",
+			"hash": "CmwjKm9cYO2KZqcL9Krw/JQEzg0RMwMac3XAMQPYoSQ=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 4387
+		},
+		{
+			"name": "/WolfSave/VariableDatabase.h",
+			"hash": "YC2AgtN6k9WM6fUUpmXIXoj7wiUpE6KZPP1sCPAaSOY=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 7366
+		},
+		{
+			"name": "/WolfSave/WolfSave.cpp",
+			"hash": "y8ho3f+6tLEMJuk/UEQii5utIv+pc7W+KxlQpDj+BCg=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 2931
+		},
+		{
+			"name": "/WolfSave/WolfSave.vcxproj",
+			"hash": "xxs2QzyD2Pu7dePDLQONGwW/5Zc/gpe1nN9VgjyKY98=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 8321
+		},
+		{
+			"name": "/WolfSave/WolfSave.vcxproj.filters",
+			"hash": "k/Riny9dYeJs1agq2nk5Kvhf1zhRnPR7txQvoUxD98c=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 3103
+		},
+		{
+			"name": "/WolfSave/WolfSaveParser.h",
+			"hash": "SOBuvIoEK03xF4loIsADk0IJ/MHFtXrOYoHr24SS3hw=",
+			"time": "1985-10-26T08:15:00.000Z",
+			"size": 11689
+		}
+	]
+}

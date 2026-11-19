@@ -1,0 +1,6 @@
+M2: overlay the save variable database on load
+
+A retail save carries the whole variable database, including the player name
+that character creation wrote into CDataBase type 0 row 12. Loading a save now
+copies every row into the engine cell layer, so opcode 250 reads see the saved
+names instead of the empty .dat template.

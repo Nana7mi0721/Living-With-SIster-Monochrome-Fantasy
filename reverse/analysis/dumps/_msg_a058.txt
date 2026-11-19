@@ -1,0 +1,3 @@
+test: start the save round trip at the title screen
+
+- boot -> title menu -> new game -> 1200 frames -> save -> fresh Game load

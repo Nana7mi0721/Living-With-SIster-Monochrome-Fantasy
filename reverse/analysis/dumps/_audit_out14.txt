@@ -1,0 +1,23 @@
+== inventory ==
+work/all total: 4085 files / 1528662617 B
+  archives(.wolf): 23 / 757077610
+  unpacked data  : 4062 / 771585007
+
+== reference resolution ==
+distinct referenced paths: 3037
+  resolved: 2695 files / 608492970 B
+  missing : 342 paths
+resolved & reachable(live): 2689 / 608156264 B
+resolved but dead-only     : 6 / 336706 B
+
+== unreferenced unpacked files: 1367 / 163092037 B
+  of which assets (non BasicData/MapData): 1209 / 155483754 B
+  of which data files (BasicData/MapData) : 158 / 7608283 B
+
+== asset bucket (excludes BasicData/MapData which are game data) ==
+assets on disk: 3904 / 763976724 B
+  live (referenced by reachable code) : 2689 / 608156264 B
+  referenced only by dead code       : 6 / 336706 B
+  never referenced at all            : 1209 / 155483754 B
+  data files (BasicData+MapData)     : 158 / 7608283 B
+check sum: 771585007

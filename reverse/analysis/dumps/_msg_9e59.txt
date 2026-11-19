@@ -1,0 +1,7 @@
+M2: write a full save from the live VM state
+
+Game::save_to uses the save the game was loaded from (or Save/System.sav
+for a new game) as the map template, then copies play time, the Sys3/Sys4
+choice anchor, the 800 normal variables and every live common-event self
+variable / self string into SavePart2/3 before rebuilding the file.
+Opcode 220 mode 0 now queues this writer instead of reporting it missing.

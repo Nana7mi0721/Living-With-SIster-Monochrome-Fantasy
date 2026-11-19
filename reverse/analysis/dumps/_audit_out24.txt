@@ -1,0 +1,24 @@
+== missing by (dir, source kinds) ==
+  ('Picture', ('map',))                    138
+  ('CharaChip', ('sysdb',))                132
+  ('Picture', ('sysdb',))                  45
+  ('MapChip', ('tileset',))                9
+  ('Picture', ('common',))                 8
+  ('<<GET_FILE_EXIST>>.', ('common',))     1
+  ('..', ('common',))                      1
+  ('Save', ('common',))                    1
+  ('cg', ('common',))                      1
+  ('save', ('common',))                    1
+  ('Data', ('common',))                    1
+  ('SC1.jpg', ('common',))                 1
+  ('BGM', ('sysdb',))                      1
+  ('cg', ('sysdb',))                       1
+  ('BGM', ('db',))                         1
+
+sysdb-only missing: 179
+  also referenced directly by events: 0
+
+CharaChip referenced & present: ['CharaChip/hand3.png', 'CharaChip/look.png', 'CharaChip/talk.png', 'CharaChip/hand1.png', 'CharaChip/cursor.png', 'CharaChip/hand2.png', 'CharaChip/mushroom.png']
+
+SystemGraphic/[SE]* referenced: 0 []
+SystemFile/[SE]* referenced: 13

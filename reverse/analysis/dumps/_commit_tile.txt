@@ -1,0 +1,18 @@
+M3: draw the map tile layer and inject one-frame key presses
+
+Game now keeps the current map's TileMap, rebuilt on every start_pages()
+from the decoded TileSetData. tile_quads() emits the tile layer first;
+capture and play then append the picture layer, matching WOLF's draw
+order (tiles underneath every 150 picture).
+
+SampleMapA: 64x36 cells, 3 layers, 27,648 quads covering the whole
+1024x576 screen. The opening room is unchanged because its full-screen
+bedroom picture covers the tiles.
+
+Also adds --key-frame N:CODE (repeatable) to capture, mapping WOLF key
+codes (10 decide, 11 cancel, 12 sub, 2/4/6/8 directions) onto the host
+bit set. This is the input path the H-scene 123 polls need; mouse
+clicks cannot satisfy them.
+
+Atlas warnings are now folded into Game diagnostics in both capture and
+play, so a full or oversized page is reported instead of dropping art.

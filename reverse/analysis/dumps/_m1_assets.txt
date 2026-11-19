@@ -1,0 +1,6 @@
+# 140 raw: Bgm Play BGM/White_Base.mp3 vol=10 frames=0
+
+=== asset availability ===
+path                                         refs     roots                        size
+SystemGraphic/TitleGraphic.jpg               2        full,alldata                 full:358497B [1024, 576] alldata:358497B [1024, 576] 
+<TRI-RIGHT>                                  137      MISSING                      

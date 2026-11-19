@@ -1,0 +1,114 @@
+PAIRS (85)
+ce59             pc4     mask=16   codes=[(0, 2)]
+ce59             pc5     mask=32   codes=[(0, 2)]
+ce59             pc6     mask=64   codes=[(0, 2)]
+ce59             pc10    mask=16   codes=[(0, 5)]
+ce59             pc11    mask=32   codes=[(0, 5)]
+ce59             pc12    mask=64   codes=[(0, 5)]
+ce60             pc6     mask=16   codes=[(0, 5)]
+ce60             pc12    mask=64   codes=[(0, 5)]
+ce61             pc5     mask=16   codes=[(0, 5)]
+ce61             pc11    mask=64   codes=[(0, 5)]
+ce65             pc83    mask=177  codes=[(4, 2), (6, 2)]
+ce65             pc105   mask=177  codes=[(10, 2), (11, 2), (12, 2)]
+ce84             pc47    mask=184  codes=[(4, 2), (6, 2), (10, 2), (11, 2)]
+ce108            pc26    mask=177  codes=[(2, 2), (10, 2), (11, 2)]
+ce109            pc41    mask=241  codes=[(2, 2), (10, 2), (11, 2)]
+ce118            pc110   mask=176  codes=[(10, 2), (11, 2)]
+ce119            pc65    mask=176  codes=[(11, 2)]
+ce119            pc95    mask=176  codes=[(10, 2), (11, 2)]
+ce119            pc121   mask=176  codes=[(10, 2), (11, 2)]
+ce119            pc160   mask=176  codes=[(0, 1)]
+ce126            pc22    mask=32   codes=[(11, 2), (1600014, 5)]
+ce127            pc44    mask=48   codes=[(0, 2)]
+ce127            pc46    mask=7    codes=[(0, 2)]
+ce127            pc55    mask=32   codes=[(11, 2)]
+ce127            pc72    mask=183  codes=[(2, 2), (8, 2), (10, 2), (11, 2)]
+ce131            pc32    mask=64   codes=[(1, 1)]
+ce131            pc58    mask=771  codes=[(-1, 2), (1, 2)]
+ce131            pc89    mask=16   codes=[(10, 2)]
+ce131            pc119   mask=16   codes=[(10, 2)]
+ce131            pc149   mask=16   codes=[(10, 2)]
+ce131            pc179   mask=16   codes=[(10, 2)]
+ce131            pc201   mask=33   codes=[(2, 2), (10, 2), (11, 2)]
+ce132            pc34    mask=177  codes=[(2, 2), (10, 2), (11, 2)]
+ce132            pc352   mask=1    codes=[(0, 5), (1600022, 2)]
+ce132            pc353   mask=257  codes=[(100, 1)]
+ce132            pc426   mask=1    codes=[(0, 5), (1600022, 2)]
+ce132            pc427   mask=512  codes=[(300, 1)]
+ce132            pc514   mask=32   codes=[(0, 2)]
+ce158            pc77    mask=176  codes=[(10, 2), (11, 2)]
+ce159            pc163   mask=176  codes=[(10, 2), (11, 2)]
+ce159            pc190   mask=176  codes=[(10, 2), (11, 2)]
+ce159            pc266   mask=176  codes=[(10, 2), (11, 2)]
+ce159            pc292   mask=176  codes=[(10, 2), (11, 2)]
+ce161            pc43    mask=177  codes=[(2, 2), (4, 2), (6, 2), (8, 2), (10, 2), (11, 2)]
+ce162            pc50    mask=177  codes=[(2, 2), (4, 2), (6, 2), (8, 2), (10, 2), (11, 2)]
+ce192            pc118   mask=16   codes=[(0, 2)]
+ce212            pc149   mask=176  codes=[(-1, 2)]
+ce213            pc2     mask=784  codes=[(20, 2)]
+ce242            pc863   mask=144  codes=[(1600040, 3)]
+ce242            pc941   mask=144  codes=[(1600040, 3)]
+ce305            pc3427  mask=48   codes=[(0, 2), (10, 1)]
+ce346            pc48    mask=17   codes=[(0, 2), (10, 2)]
+ce346            pc119   mask=17   codes=[(0, 2), (10, 2)]
+ce362            pc34    mask=17   codes=[(0, 2), (10, 2)]
+ce362            pc128   mask=17   codes=[(0, 2), (10, 2)]
+ce363            pc16    mask=17   codes=[(0, 2), (10, 2)]
+ce363            pc99    mask=17   codes=[(0, 2), (10, 2)]
+ce363            pc185   mask=17   codes=[(0, 2), (10, 2)]
+ce363            pc271   mask=17   codes=[(0, 2), (10, 2)]
+ce363            pc404   mask=17   codes=[(0, 2), (10, 2)]
+ce363            pc487   mask=17   codes=[(0, 2), (10, 2)]
+ce363            pc569   mask=17   codes=[(0, 2), (10, 2)]
+ce363            pc654   mask=17   codes=[(0, 2), (10, 2)]
+ce363            pc737   mask=17   codes=[(0, 2), (10, 2)]
+ce363            pc820   mask=17   codes=[(0, 2), (10, 2)]
+ce371            pc74    mask=17   codes=[(0, 2), (10, 2)]
+ce371            pc157   mask=17   codes=[(0, 2), (10, 2)]
+ce371            pc239   mask=17   codes=[(0, 2), (10, 2)]
+ce371            pc326   mask=17   codes=[(0, 2), (10, 2)]
+ce371            pc412   mask=17   codes=[(0, 2), (10, 2)]
+ce371            pc502   mask=17   codes=[(0, 2), (10, 2)]
+ce371            pc586   mask=17   codes=[(0, 2), (10, 2)]
+ce410            pc40    mask=17   codes=[(0, 2), (10, 2)]
+ce410            pc87    mask=17   codes=[(0, 2), (10, 2)]
+ce410            pc134   mask=17   codes=[(0, 2), (10, 2)]
+ce410            pc177   mask=17   codes=[(0, 2), (10, 2)]
+ce410            pc221   mask=17   codes=[(0, 2), (10, 2)]
+ce426            pc410   mask=48   codes=[(0, 2), (10, 1)]
+ce447            pc193   mask=48   codes=[(0, 2), (10, 1)]
+ce510            pc975   mask=32   codes=[(0, 2), (11, 2)]
+ce523            pc411   mask=145  codes=[(13, 2), (14, 2)]
+ce525            pc821   mask=145  codes=[(13, 2)]
+ce549            pc10    mask=49   codes=[(0, 5)]
+ce549            pc28    mask=49   codes=[(0, 5)]
+ce549            pc48    mask=49   codes=[(0, 5)]
+
+SINGLE-BIT MASK -> CODE HISTOGRAM
+bit4  -> {0: 5, 10: 4}
+bit5  -> {0: 3, 11: 1}
+bit6  -> {0: 4, 1: 1}
+bit9  -> {300: 1}
+
+ALL MASKS -> CODE SETS
+mask 1     -> {(0, 1600022): 2}
+mask 7     -> {(0,): 1}
+mask 16    -> {(0,): 5, (10,): 4}
+mask 17    -> {(0, 10): 26}
+mask 32    -> {(0,): 3, (11, 1600014): 1, (11,): 1, (0, 11): 1}
+mask 33    -> {(2, 10, 11): 1}
+mask 48    -> {(0, 10): 3, (0,): 1}
+mask 49    -> {(0,): 3}
+mask 64    -> {(0,): 4, (1,): 1}
+mask 144   -> {(1600040,): 2}
+mask 145   -> {(13, 14): 1, (13,): 1}
+mask 176   -> {(10, 11): 8, (11,): 1, (0,): 1, (-1,): 1}
+mask 177   -> {(2, 10, 11): 2, (2, 4, 6, 8, 10, 11): 2, (4, 6): 1, (10, 11, 12): 1}
+mask 183   -> {(2, 8, 10, 11): 1}
+mask 184   -> {(4, 6, 10, 11): 1}
+mask 241   -> {(2, 10, 11): 1}
+mask 257   -> {(100,): 1}
+mask 512   -> {(300,): 1}
+mask 771   -> {(-1, 1): 1}
+mask 784   -> {(20,): 1}

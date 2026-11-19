@@ -1,0 +1,18 @@
+M3: fix opcode 130 teleport's real target,x,y,map,options layout
+
+The transfer command's raw arguments are target, x, y, map, options -
+confirmed against wolfrpg-map-parser 0.4.1 TransferCommand::parse and
+target.rs/options.rs. The old code treated arg0 as the map id and invented a
+'-1 keeps the current map' convention, so the CE42 title-menu 130 landed
+directly on SampleMapA and skipped the Map003 new-game hook.
+
+- wolf-vm: Host::teleport(target,map,x,y,options); decode arg0,arg3,arg1,arg2,arg4
+- wolf-game: MapRequest keeps target/map/x/y/options; use request.map verbatim
+- wolf-cli: TraceHost prints the new fields
+- m6 test pins both 130 hops (Map003 then SampleMapA)
+- docs: OPCODE_SPEC 5.17, BASELINE map_teleport + m6 fields, HANDOFF_M3/M4,
+  M2_SLICE, MAP_AUDIT 6.3 all corrected
+
+capture --boot (3200 frames): 92.1% non-black, 192953 instructions, two 130
+diagnostics (Map003 at 60,34 and SampleMapA at 62,38), 0 warnings.
+cargo test --workspace green; verify PASS 70.

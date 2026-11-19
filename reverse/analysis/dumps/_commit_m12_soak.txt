@@ -1,0 +1,26 @@
+M12 multi-day soak: one driver advances 30/90 days
+
+The day tests should not be one calendar day each. Add a generic driver and
+use it to cover many consecutive retail days.
+
+- battle_wiring: real battles are not only CE253 -> CE239. Extract
+  BattleWiring::real_battle_running and auto-arm on CE253 or any CE239
+  instance with a parent (CE305 / CE256 story callers). This unblocked day
+  11 in the soak; direct start_event(239) unit/probe tests have parent
+  None, so shipped-stall expectations are unchanged.
+- tests/m12_multiday_soak.rs: react to the menu actually on screen -
+  CE251 workday rows (avoid 地区贡献 when a safe row exists), CE310 weekend
+  buttons (train while energy >= 30, otherwise rest), otherwise feed OK for
+  story/battles, then the real CE329 sleep. Reaches day 31 over 11 battle
+  days, 4 complete weekends (3 CE310 actions each) and 7 weekday-menu days:
+  frames=65649 instructions=3183844 warnings=0.
+- the #[ignore] 90-day run reaches day 97, including a scripted story jump
+  day84 -> day97, 27 battle days and 23 weekend days, warnings=0. A counter
+  jump is treated as a completed stretch of calendar, not a deadlock.
+- docs: add M12_MULTIDAY_SOAK; update HANDOFF_M12 (task-105 and the
+  auto-arm correction), PLAN, README, NEW_SESSION_START, research index and
+  BASELINE (m12_multiday_soak).
+
+Tests: WOLF_DATA_ROOT=work/all cargo test -q --workspace -> 133 blocks,
+812 passed, 0 failed, 2 ignored (the new long soak); wolf-cli verify --root
+work/all -> PASS 70 / pending 0; cargo build -p wolf-cli -> EXIT 0.

@@ -1,0 +1,225 @@
+boot-only closure common events: 249
+boot-only (M1) assets: 2042 files / 569200495 B
+  BGM                    39  220455985
+  DLC_data              559  144106445
+  cg                    462   97873047
+  1.4.0                 178   31808763
+  BattleEffect           18   19431749
+  Picture               336   19382109
+  SE                     98   14054782
+  hscene                151   13480142
+  cutin                 190    6056198
+  SystemGraphic           7    2253857
+  Kagura                  3     281081
+  CharaChip               1      16337
+
+== unused SystemGraphic (19) ==
+       578 SystemGraphic/CharaShade_8dir.png
+      2980 SystemGraphic/CursorBase.png
+      3122 SystemGraphic/WindowBase.png
+      3300 SystemGraphic/WindowBase_amania.png
+      3964 SystemGraphic/[SE]Action.ogg
+      6531 SystemGraphic/[SE]Buzzer.ogg
+      4197 SystemGraphic/[SE]Cancel.ogg
+      3592 SystemGraphic/[SE]Cursor.ogg
+      9513 SystemGraphic/[SE]Damage.ogg
+     17089 SystemGraphic/[SE]Down.ogg
+     10139 SystemGraphic/[SE]Encount.ogg
+      8571 SystemGraphic/[SE]Enter.ogg
+      5653 SystemGraphic/[SE]Equip.ogg
+      4957 SystemGraphic/[SE]Get.ogg
+      4468 SystemGraphic/[SE]LevelUp.ogg
+     13553 SystemGraphic/[SE]MenuOpen.ogg
+      5879 SystemGraphic/[SE]Release.ogg
+     70292 SystemGraphic/[Transition]Fade.png
+      3128 SystemGraphic/cursol.png
+
+== unused BGM (9) ==
+     6003966 BGM/sirorenga.mp3
+     5457387 BGM/Our_Construction.ogg
+     5069232 BGM/InstaVista.ogg
+     4322741 BGM/karuizawa-birds-1.mp3
+     2004113 BGM/summer.mp3
+     1940960 BGM/you_wind.mp3
+      289728 BGM/wind1_night.mp3
+       94666 BGM/decision21.mp3
+       75216 BGM/decision27.mp3
+
+== unused Fog_BackGround (10) ==
+  Fog_BackGround/[BackGround]night1_pipo.jpg
+  Fog_BackGround/[BackGround]night2_pipo.jpg
+  Fog_BackGround/[BackGround]night3_pipo.jpg
+  Fog_BackGround/[BackGround]sky1_pipo.jpg
+  Fog_BackGround/[BackGround]sky2_pipo.jpg
+  Fog_BackGround/[BackGround]space1_pipo.jpg
+  Fog_BackGround/[BackGround]space2_pipo.jpg
+  Fog_BackGround/[BackGround]sunset1_pipo.jpg
+  Fog_BackGround/[BackGround]sunset2_pipo.jpg
+  Fog_BackGround/[Fog]Cloud_pipo.png
+
+== unused word (119) sample 8 ==
+  word/word_effect01.png
+  word/word_effect02.png
+  word/word_effect03.png
+  word/word_effect04.png
+  word/word_effect05.png
+  word/word_effect06.png
+  word/word_effect07.png
+  word/word_effect08.png
+
+== unused scene (327) sample 8 ==
+  scene/header_bar.jpg
+  scene/pai_bg01.jpg
+  scene/pose_01.png
+  scene/pose_02.png
+  scene/pose_03.png
+  scene/pose_04.png
+  scene/pose_05.png
+  scene/pose_06.png
+
+== unused EnemyGraphic (118) sample 8 ==
+  EnemyGraphic/GD_Bahamut(Silver).png
+  EnemyGraphic/GD_Bahamut.png
+  EnemyGraphic/GD_Basilisk(Red).png
+  EnemyGraphic/GD_Basilisk.png
+  EnemyGraphic/GD_Bat.png
+  EnemyGraphic/GD_Bee(Black).png
+  EnemyGraphic/GD_Bee.png
+  EnemyGraphic/GD_Bird(Rainbow).png
+
+== unused CharaChip (84) sample 10 ==
+  CharaChip/[Animal]Cat_pochi.png
+  CharaChip/[Animal]Chameleon_Uroboros.png
+  CharaChip/[Animal]Chicken.png
+  CharaChip/[Animal]Cow_pochi.png
+  CharaChip/[Animal]Crow1_pochi.png
+  CharaChip/[Animal]Crow2_pochi.png
+  CharaChip/[Animal]Dog1_pochi.png
+  CharaChip/[Animal]Dog2_pochi.png
+  CharaChip/[Animal]Dog_pochi.png
+  CharaChip/[Animal]Fox_pochi.png
+
+== unused MapChip (48) sample 10 ==
+  MapChip/[A]Dirt1-Dirt3_pipo.png
+  MapChip/[A]Dirt1-Dirt4_pipo.png
+  MapChip/[A]Dirt2_pipo.png
+  MapChip/[A]Dirt3_pipo.png
+  MapChip/[A]Dirt4_pipo.png
+  MapChip/[A]Grass1-Dirt2_pipo.png
+  MapChip/[A]Grass1-Dirt3_pipo.png
+  MapChip/[A]Grass1-Dirt4_pipo.png
+  MapChip/[A]Grass1-Grass4_pipo.png
+  MapChip/[A]Grass1_pipo.png
+
+== unused SE count/biggest 8 ==
+  count 152
+      947202 SE/hse_fukumomu.mp3
+      270432 SE/090608_017.mp3
+      184189 SE/wood_creaking1.ogg
+      173469 SE/bossyuu.mp3
+      169790 SE/[Environment]Boiling1_Komori.ogg
+      155030 SE/shock.mp3
+      144179 SE/uri_attack.ogg
+      127136 SE/ko1.mp3
+
+== unused Picture (68) sample 10 ==
+  Picture/FaceGraphic_Edy.png
+  Picture/FaceGraphic_Wolfarl.png
+  Picture/FaceGraphic_Yuichi.png
+  Picture/arrow.png
+  Picture/battle_icon_05 - 副本 - 副本.png
+  Picture/battle_icon_05 - 副本.png
+  Picture/card0042.jpg
+  Picture/card0045.jpg
+  Picture/card0046.jpg
+  Picture/character01_1.png
+
+== unused DLC_data (57) sample 8 ==
+      410130 DLC_data/dlc_yui07_04.jpg
+      361542 DLC_data/dlc_command_bg_03c.jpg
+      350621 DLC_data/dlc_command_bg_01c.jpg
+      336719 DLC_data/dlc_yui04_02.jpg
+      323289 DLC_data/dlc_command_bg_02c.jpg
+      321329 DLC_data/dlc_yui05_06.jpg
+      299990 DLC_data/dlc_yui08_11.jpg
+      295381 DLC_data/dlc_end_01_3.jpg
+
+== unused cg (55) sample 8 ==
+      414148 cg/bg_18_home.png
+      302840 cg/training_b3.jpg
+      302298 cg/map_02.jpg
+      299914 cg/training_b1.jpg
+      298529 cg/training_b2.jpg
+      275693 cg/bg_37_restaurant.jpg
+      274340 cg/event73_01.jpg
+      271837 cg/end1_02.jpg
+
+== unused 1.4.0 (18) ==
+     13031 1.4.0/comicon_01.png
+     13127 1.4.0/comicon_02.png
+     13125 1.4.0/comicon_03.png
+     13857 1.4.0/comicon_04.png
+     12625 1.4.0/comicon_05.png
+     13148 1.4.0/comicon_06.png
+     12205 1.4.0/comicon_07.png
+     12418 1.4.0/comicon_08.png
+     13053 1.4.0/comicon_09.png
+     12873 1.4.0/comicon_12.png
+     11572 1.4.0/v144_cg20_ef01.png
+      8116 1.4.0/v144_cg20_ef04.png
+    293905 1.4.0/v144_cg24_1.jpg
+    319510 1.4.0/v144_cg3_1.jpg
+    195609 1.4.0/v144_cg5_1.jpg
+    277354 1.4.0/v144_cg6_1.jpg
+    307454 1.4.0/v144_cg7_1.jpg
+    295176 1.4.0/v144_cg7_2.jpg
+
+== unused BattleEffect (48) names ==
+       53334 BattleEffect/[Magic]Circle01_panop.png
+       25264 BattleEffect/[Magic]Mist01_panop.jpg
+        2212 BattleEffect/b_sla01.png
+    18952170 BattleEffect/kaenbeam.png
+       56128 BattleEffect/pipo-btleffect003.png
+       27420 BattleEffect/pipo-btleffect005.png
+       20503 BattleEffect/pipo-btleffect010.png
+      348869 BattleEffect/pipo-btleffect011.png
+      261074 BattleEffect/pipo-btleffect012.png
+      254347 BattleEffect/pipo-btleffect021.png
+     3868795 BattleEffect/pipo-btleffect023.png
+       22280 BattleEffect/pipo-btleffect025.png
+       77556 BattleEffect/pipo-btleffect028.png
+      565336 BattleEffect/pipo-btleffect030.png
+      462659 BattleEffect/pipo-btleffect031.png
+      486293 BattleEffect/pipo-btleffect034.png
+       85603 BattleEffect/pipo-btleffect037.png
+       21318 BattleEffect/pipo-btleffect043.png
+      128154 BattleEffect/pipo-btleffect046.png
+      117392 BattleEffect/pipo-btleffect050.png
+       28795 BattleEffect/pipo-btleffect055.png
+       28556 BattleEffect/pipo-btleffect068.png
+       44902 BattleEffect/pipo-btleffect108i.png
+       81717 BattleEffect/pipo-btleffect118a.png
+       88990 BattleEffect/pipo-btleffect121.png
+      136744 BattleEffect/pipo-btleffect122.png
+      976512 BattleEffect/pipo-btleffect132.png
+     5188385 BattleEffect/pipo-btleffect133.png
+     5091710 BattleEffect/pipo-btleffect144.png
+     3072119 BattleEffect/pipo-btleffect145.png
+      935949 BattleEffect/pipo-btleffect152.png
+     2402351 BattleEffect/pipo-btleffect157.png
+      569192 BattleEffect/pipo-btleffect160.png
+    10713886 BattleEffect/pipo-btleffect162.png
+     2750266 BattleEffect/pipo-btleffect190_640.png
+     8193996 BattleEffect/pipo-btleffect191_640.png
+     3456172 BattleEffect/pipo-btleffect192_640.png
+      339160 BattleEffect/pipo-btleffect193_480.png
+      323988 BattleEffect/pipo-btleffect194_480.png
+      123321 BattleEffect/pipo-btleffect195_192.png
+     2438364 BattleEffect/pipo-btleffect201_480.png
+     9856806 BattleEffect/pipo-btleffect207_480.png
+     5004303 BattleEffect/pipo-yaame.png
+        5752 BattleEffect/water_ballet.png
+       14159 BattleEffect/water_shot1.png
+       35666 BattleEffect/water_shot2.png
+        1347 BattleEffect/water_slash.png
+     4498012 BattleEffect/wing_640.png

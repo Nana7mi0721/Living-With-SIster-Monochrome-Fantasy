@@ -1,0 +1,5 @@
+docs: restore ARCHITECTURE.md and record the M6 sleep-menu chain
+
+The previous commit rewrote docs/ARCHITECTURE.md from a truncated read and
+dropped ~950 lines. Restore the file from 23613bc and reapply only the M6
+row change (sleep menu event chain, pointer hit-test caveat).

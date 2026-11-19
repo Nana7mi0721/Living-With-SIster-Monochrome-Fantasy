@@ -1,0 +1,25 @@
+=== traced 150 ops by picture number, attributed to static sites ===
+#0
+    c42 slot 20 (num_raw=-2)     x2
+    c42 slot 30 (num_raw=-2)     x2
+
+#12005
+    c94 slot 651 (num_raw=1600021) x137
+
+=== op counts (num, action, kind) ===
+  (0, 'Draw', 0) x2
+  (0, 'Move', 2) x137
+  (0, 'Move', 0) x411
+  (12004, 'Erase', 3) x137
+  (12004, 'Set', 3) x137
+  (12005, 'Draw', 3) x137
+  (12005, 'Set', 3) x137
+  (12053, 'Draw', 2) x274
+  (12053, 'Move', 2) x274
+  (12053, 'Move', 0) x822
+  (12053, 'Set', 3) x137
+  (12054, 'Erase', 2) x137
+  (12054, 'Set', 0) x137
+  (12500, 'Draw', 4) x137
+  (12501, 'Draw', 2) x137
+  (12502, 'Draw', 1) x108

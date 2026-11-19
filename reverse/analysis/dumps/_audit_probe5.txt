@@ -1,0 +1,74 @@
+===== DataBase.json keys ['types']
+n types 40
+  0 技能 rows 44
+  1 ┗ アニメーション rows 34
+  2 アイテム rows 40
+  3 武器 rows 40
+  4 防具 rows 40
+  5 ┗装備タイプ rows 25
+  6 戦闘コマンド rows 19
+  7 属性名の設定 rows 10
+  8 状態設定 rows 24
+  9 敵キャラ個体デ—タ rows 100
+  10 ┣ 敵行動AI rows 40
+  11 ┣ 属性耐性 rows 42
+  12 ┗ 状態耐性 rows 40
+  13 敵グループ rows 41
+  14 ------------------------ rows 1
+  15 用語設定 rows 1
+  16 画像/音声設定 rows 1
+  17 システム設定 rows 1
+  18  rows 1
+  19  rows 1
+  20 ◇吹き出しアイコン rows 11
+  21  rows 1
+  22  rows 1
+  23  rows 1
+  24  rows 1
+  25 ランダム肩書 rows 22
+  26 メッセージウィンドウ種類 rows 9
+  27 探索ふきだし rows 20
+  28 目標テキスト rows 101
+  29  rows 1
+  30  rows 1
+  31  rows 1
+  32  rows 1
+  33  rows 1
+  34  rows 1
+  35  rows 1
+  36  rows 1
+  37  rows 1
+  38  rows 1
+  39  rows 1
+===== CDataBase.json keys ['types']
+n types 30
+  0 主人公ステータス rows 17
+  1 ┣ 技能習得Lv rows 16
+  2 ┣ 主人公行動AI rows 22
+  3 ┣ 属性耐性 rows 40
+  4 ┣ 状態耐性 rows 16
+  5 ┗ 状態リスト rows 16
+  6 パーティー情報 rows 1
+  7 ┣所持アイテム個数 rows 40
+  8 ┣所持武器個数 rows 10
+  9 ┗所持防具個数 rows 10
+  10 戦闘時一時ステータス rows 40
+  11 ×┣ 属性耐性計算結果 rows 11
+  12 ×┣ 状態耐性計算結果 rows 11
+  13 ×┣ 状態リスト rows 11
+  14 ×┣ コマンド処理リスト rows 100
+  15 ×┗ お宝リスト rows 1
+  16 × お店一時処理用 rows 15
+  17 ×主人公一時DB rows 20
+  18 基本システム用変数 rows 100
+  19 万能ウィンドウ一時DB rows 200
+  20 ×ドロップアイテムリスト rows 1
+  21 メンバー情報 rows 17
+  22  rows 1
+  23  rows 1
+  24  rows 1
+  25 追加キーコンフィグ設定 rows 1
+  26  rows 1
+  27 カスタム選択肢 rows 1
+  28  rows 1
+  29  rows 1

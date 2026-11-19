@@ -1,0 +1,62 @@
+scene/                 resolved    0  missing    0  sources {}
+word/                  resolved    0  missing    0  sources {}
+hword/                 resolved  103  missing    0  sources {'common': 480}
+EnemyGraphic/          resolved    0  missing    0  sources {}
+CharaChip/             resolved    7  missing  132  sources {'common': 1, 'map': 34, 'sysdb': 6}
+BattleEffect/          resolved   44  missing    0  sources {'common': 47, 'db': 31, 'map': 4}
+Fog_BackGround/        resolved    0  missing    0  sources {}
+FIcon/                 resolved   10  missing    0  sources {'db': 10}
+BalloonBase_CafeLatte/ resolved    8  missing    0  sources {'db': 32}
+MapChip/               resolved   54  missing    9  sources {'tileset': 84}
+SystemFile/            resolved   18  missing    0  sources {'map': 2, 'sysdb': 7, 'db': 21}
+SystemGraphic/         resolved    9  missing    0  sources {'common': 15, 'map': 4}
+cutin/                 resolved  208  missing    0  sources {'common': 697, 'map': 328}
+cg/                    resolved  541  missing    2  sources {'common': 2654, 'map': 348, 'sysdb': 2}
+hscene/                resolved  300  missing    0  sources {'common': 1137, 'map': 994}
+DLC_data/              resolved  576  missing    0  sources {'common': 1346, 'sysdb': 1, 'map': 12, 'db': 7}
+1.4.0/                 resolved  181  missing    0  sources {'common': 378, 'map': 8}
+Picture/               resolved  471  missing  191  sources {'common': 1353, 'map': 994, 'db': 65, 'sysdb': 2}
+SE/                    resolved  121  missing    0  sources {'common': 963, 'map': 376, 'sysdb': 17, 'db': 8}
+BGM/                   resolved   40  missing    2  sources {'common': 167, 'map': 46}
+MapData/               resolved    0  missing    0  sources {}
+
+== missing sample by prefix ==
+Picture: 191
+    Picture/attack_effect01.png  <- ['map', 'Map002.json ev5#15', 150]
+    Picture/battle_icon_end.png  <- ['map', 'SampleMapA_1.json ev8#200', 150]
+    Picture/bg_battle01.jpg  <- ['sysdb', 'type13[遠景画像] row28', 0]
+    Picture/bg_battle02.jpg  <- ['sysdb', 'type13[遠景画像] row34', 0]
+    Picture/bg_battle03.jpg  <- ['sysdb', 'type13[遠景画像] row35', 0]
+    Picture/bg_battle04.jpg  <- ['sysdb', 'type13[遠景画像] row37', 0]
+CharaChip: 132
+    CharaChip/Nereis001.png  <- ['sysdb', 'type8[キャラクター画像] row45', 0]
+    CharaChip/Nereis002.png  <- ['sysdb', 'type8[キャラクター画像] row46', 0]
+    CharaChip/atk10_l.png  <- ['sysdb', 'type8[キャラクター画像] row79', 0]
+    CharaChip/atk10_r.png  <- ['sysdb', 'type8[キャラクター画像] row22', 0]
+    CharaChip/atk11_l.png  <- ['sysdb', 'type8[キャラクター画像] row80', 0]
+    CharaChip/atk11_r.png  <- ['sysdb', 'type8[キャラクター画像] row23', 0]
+MapChip: 9
+    MapChip/b_02�b������_at�㥨02.png  <- ['tileset', 'tileset5 auto', 0]
+    MapChip/b_04�Iؑ�C_at�㥨.png  <- ['tileset', 'tileset5 auto', 0]
+    MapChip/b_06�i���u��_at01.png  <- ['tileset', 'tileset5 auto', 0]
+    MapChip/b_06�i���u��_at02.png  <- ['tileset', 'tileset5 auto', 0]
+    MapChip/b_06�i���u��_at03.png  <- ['tileset', 'tileset5 auto', 0]
+    MapChip/b_07���ƥ��at�㥨.png  <- ['tileset', 'tileset5 auto', 0]
+cg: 2
+    cg/bg01.jpg  <- ['sysdb', 'type13[遠景画像] row0', 0]
+    cg/event_14_06.jpg  <- ['common', 'ev380#760', 150]
+BGM: 2
+    BGM/Battle01_Juno.mid  <- ['db', 'type17[システム設定] row0', 0]
+    BGM/kana.mp3  <- ['sysdb', 'type1[BGMリスト] row5', 0]
+<<GET_FILE_EXIST>>.: 1
+    <<GET_FILE_EXIST>>./save/save/cself[30].jpg  <- ['common', 'ev131#74', 122]
+..: 1
+    ../save/save/cself[30].jpg  <- ['common', 'ev131#80', 122]
+Save: 1
+    Save/save/cself[12].jpg  <- ['common', 'ev131#223', 1000]
+save: 1
+    save/save1.jpg  <- ['common', 'ev435#1', 1000]
+Data: 1
+    Data/SC1.jpg  <- ['common', 'ev452#3174', 1000]
+(none): 1
+    SC1.jpg  <- ['common', 'ev452#3176', 150]

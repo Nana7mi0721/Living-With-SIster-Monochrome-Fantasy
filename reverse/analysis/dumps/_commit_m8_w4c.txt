@@ -1,0 +1,17 @@
+M8 W4-c: skip dangling map ids instead of reading the data root
+
+db::map_path now treats an empty SysDatabase type-0 path cell as an
+unregistered map. The shipped data has ids 27/32 pointing at empty rows
+(Map031's on-load 130 [-1,22,18,27,16]); the old code returned Some("") and
+switch_map tried to read the root directory itself, recording a confusing
+"cannot read <root>: os error 3" diagnostic.
+
+- crates/wolf-game/src/db.rs: map_path filters empty/whitespace paths.
+- crates/wolf-game/tests/m7_map_edge.rs: new test starts Map031's real load
+  event and asserts "130 Teleport: no map registered for id 27", no "cannot
+  read" diagnostic, warnings 0 (4/4 tests green).
+- docs/research/M7_MAP_EDGE.md + M8_BACKLOG.md updated.
+
+Evidence:
+  WOLF_DATA_ROOT=work/full cargo test -q -p wolf-game --test m7_map_edge
+  wolf-cli verify -> PASS 70 / pending 0

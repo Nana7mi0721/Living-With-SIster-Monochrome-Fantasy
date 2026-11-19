@@ -1,0 +1,21 @@
+battle-input: observable M3 battle round + headless key injection
+
+wolf-cli observability for the M3 battle state machine:
+- --watch-var ADDR (dump): print a variable whenever it changes (flat slot
+  or magic address), the direct evidence channel for the 2000350 cycle.
+- --press-every N:CODE (dump + capture, repeatable): hold a WOLF key code on
+  every Nth frame to satisfy opcode-123 poll loops whose frame cannot be
+  pre-computed; --auto-input holds decide (code 10) every frame.
+- capture accepts --var/--self seeds (Answers.seed_vars/seed_selfs).
+- Shared key_bits_for_frame() so dump and both capture paths cannot drift.
+
+Evidence: driving CE242 (heal branch) in a real headless Game with seeded
+battle flag 2000495=2 and chosen-command self600=1 makes 2000350 go
+0->1(pc14)->[CE244 settle 0]->2(pc208)->0(CE241 pc628), and CE244 writes
+2000352 = 1 (win). See docs/BATTLE.md 5.3 / docs/HANDOFF_M3.md item 3.
+Honesty boundary documented: CE242 has no static callers and needs seeded
+self600/2000495; the menu that writes 1600000 is skipped when 2000495==2.
+
+opcode 201 was already a non-blocking soft degrade in exec.rs (diagnostic
+only), so blocker (a) needed no code change; the temporary trace hook added
+during investigation was removed.

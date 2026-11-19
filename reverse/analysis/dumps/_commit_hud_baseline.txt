@@ -1,0 +1,7 @@
+fix(hud): align HUD text baseline and date/money mixed-size runs
+
+- text: lift every text run 2 px (BASELINE_NUDGE_Y) so glyph baselines match DxLib
+- textpic: share the tallest font baseline within a line so the 14 px day/money
+  suffixes sit like retail (\f[18]90\f[14]日, \f[24] \v[7] \f[14]G)
+- tests: add smaller_run_shares_the_tallest_baseline; re-record 3 visual baselines
+- docs: update UI_LAYOUT, M11 visual regression, M13 acceptance/audit notes

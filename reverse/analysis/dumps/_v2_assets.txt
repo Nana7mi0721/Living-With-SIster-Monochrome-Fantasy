@@ -1,0 +1,8 @@
+Kagura/bg.png                            | work/full 2650B 1024x576 RGB | work/alldata 2650B 1024x576 RGB
+Kagura/Kagura.png                        | work/full 70940B 1024x576 RGB | work/alldata 70940B 1024x576 RGB
+Kagura/Disc.png                          | work/full 87298B 1024x576 RGBA | work/alldata 87298B 1024x576 RGBA
+Kagura/inusuku.png                       | work/full 122843B 1003x564 RGB | work/alldata 122843B 1003x564 RGB
+SystemGraphic/TitleGraphic.png           | work/full 424764B 1024x576 RGB | work/alldata 424764B 1024x576 RGB
+Picture/title01.jpg                      | work/full MISS | work/alldata 280653B 1024x576 RGB
+SystemFile/Button01.png                  | work/full 13042B 606x35 RGBA | work/alldata 13042B 606x35 RGBA
+SE/[Action]DoorOpen_Komori.ogg           | work/full MISS | work/alldata 14338B 

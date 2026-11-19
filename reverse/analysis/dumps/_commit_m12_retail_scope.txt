@@ -1,0 +1,21 @@
+docs: scope the port to retail content only
+
+Audit work/all against the runtime and record what the retail game
+actually uses.
+
+- add docs/research/M12_RETAIL_SCOPE.md: the game is pure point-and-click
+  (6 registered maps / 115 pages with empty graphic, zero player-touch or
+  event-touch pages); 150 Picture + 124 hover is the interaction path
+- mark engine-generic but unused features as out of scope, not content
+  gaps: arrow walking/contact/ActionKey, trigger types 3/4, camera
+  scroll/281 ScrollScreen, 201 SetMoveRoute playback, parallax
+- keep save/load/title/quit/screenshot/album/DLC opcodes: 220/221/222,
+  174/175 and 1000 all have real retail call sites
+- correct TitleMap: it is the boot/splash entry -> CE549 -> CE42, not a
+  dead sample
+- update HANDOFF_M12, NEW_SESSION_START, PLAN, README, research index and
+  BASELINE (m12_retail_scope)
+
+Tests: WOLF_DATA_ROOT=work/all cargo test -q --workspace -> 128 blocks,
+803 passed, 0 failed, 1 ignored; wolf-cli verify --root work/all -> PASS
+70, pending 0.

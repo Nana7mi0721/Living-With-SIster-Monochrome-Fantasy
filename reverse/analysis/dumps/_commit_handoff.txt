@@ -1,0 +1,28 @@
+docs: hand off M12 under the content-parity completion bar
+
+The user's completion criterion is now explicit: the port's playable
+experience must match retail, and bugs must be fixed. That makes content
+coverage, not engine percentages, the acceptance target.
+
+- HANDOFF_M12 section 9: redefine completion; record the retail-save
+  boundary measured at b2da473 (8 saves, max day 90, var619 and the
+  ending flags 466/491/492/493 all zero, so no save carries an ending or
+  DLC progress); list what remains (main stages 25-30 and 9 endings, DLC
+  CE452, 111 random events, the H threshold matrix, NG+); set the
+  P0-A/B/C and P1-D/E order; record the bug policy; give the first
+  executable step (day90 save -> stage 25-27 -> 28/30 and the deadline
+  END).
+- NEW_SESSION_START: replace "only fidelity left" with the new bar and
+  the content gaps; point a fresh agent at HANDOFF section 9.
+- PLAN: note that the percentage table is engine/subsystem scope; add
+  section 4.5 with the M13 content-parity phases and move P2 behind it.
+- AGENT: update the current handoff pointer M10 -> M12.
+- BASELINE: add m12_save_stages (the eight retail saves' day, DLC and
+  ending flags, the measurement method, and the finding).
+
+This batch is docs only. The gates are the b2da473 run: 133 test-result
+blocks, 812 passed, 0 failed, 2 ignored; verify PASS 70 / pending 0.
+
+Deliberately not committed: docs/README.md and docs/research/README.md
+(user edits), docs/research/GUIDE_CONTENT_CROSSWALK.md, docs/攻略文档/,
+游戏示例图片/, and the three permanent scratch files.

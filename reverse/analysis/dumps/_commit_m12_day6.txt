@@ -1,0 +1,26 @@
+M12 day6: natural weekend schedule through Sunday's CE310 menu
+
+Continue the played day loop from day5 08:30. No production change; the
+port already drives the shipped weekend events.
+
+- add tests/m12_day6_weekend.rs: day5 (Fri) 08:30 -> two real morning
+  greetings -> CE251 workday row -> 17:00 -> dinner -> 18:30 bedroom ->
+  CE329 -> day6 (Sat) 09:30. CE310 weekend menu draws 外出/自主锻炼/
+  处理积攒的家务/努力打工/悠然自得. Clicking 自主锻炼 runs 09:30->12:00,
+  悠然自得 12:00->15:00 and again 15:00->17:00, then dinner at 18:30 and
+  CE329 -> day7 (Sun) 09:00 wake -> the same CE310 menu at 09:30.
+- record the retail geometry: weekend text pictures 1201/1203/1209 sit at
+  (512,200)/(512,250)/(512,400), not the weekday 230+50*row formula; the
+  test clicks the picture's own x/y, the rectangle 124 hit-tests.
+- weekend activity energy is PRNG/timing dependent (this path measured
+  60->40->40->60, an earlier probe 60->45->55->60), so the test asserts
+  only that 自主锻炼 spends energy and records the rest.
+- the run is deterministic for this test path: frames=11247
+  instructions=580912 warnings=0 across three consecutive runs.
+- docs: add M12_DAY6_WEEKEND; update HANDOFF_M12 (task-104), PLAN,
+  README, NEW_SESSION_START, research index and BASELINE
+  (m12_day6_weekend).
+
+Tests: WOLF_DATA_ROOT=work/all cargo test -q --workspace -> 132 blocks,
+811 passed, 0 failed, 1 ignored; wolf-cli verify --root work/all -> PASS
+70 / pending 0; cargo build -p wolf-cli -> EXIT 0.

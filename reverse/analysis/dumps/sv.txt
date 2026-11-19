@@ -1,0 +1,4 @@
+size=366146
+distinct bytes=256  top=[(3, 40891), (5, 40782), (6, 40644), (2, 40572), (1, 40458)]
+entropy=3.82 bits/byte
+first32=887eb2b64e455543005f2378457f1f791b4e2d28192d01e2a0bfe39dbaea9c8f

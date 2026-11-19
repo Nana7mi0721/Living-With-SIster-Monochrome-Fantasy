@@ -1,0 +1,7 @@
+M4: docs — audio backend/wiring status, HANDOFF_M4, BASELINE m4_audio
+
+- docs/HANDOFF_M4.md: new milestone handoff (backend APIs, wiring, verification commands, next steps, offline dep pitfalls).
+- docs/NEW_SESSION_START.md: point new sessions at HANDOFF_M4, record HEAD 270ab37 / M3 close 12ecfb6.
+- docs/ARCHITECTURE.md: M4 row marked 已达成 with commit refs.
+- docs/BASELINE.json: add m4_audio section (backend, tests, loop semantics, wiring proof).
+

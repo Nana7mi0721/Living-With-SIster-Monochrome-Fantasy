@@ -1,0 +1,7 @@
+docs(m13): add H2-H5 manual acceptance pack and sign-off form
+
+- M13_MANUAL_ACCEPTANCE.md: tracked H2-H5 sign-off table and link to review kit.
+- M13_P1E_AUTOMATED_AUDIT.md: point human-only items at work/out/h25_review (H4 8x HUD 2x comparisons, H2/H3 expected geometry, H5 28 seam clips).
+- research README: register the new doc.
+
+No source or data change; H1 already closed by prime_latched fix.

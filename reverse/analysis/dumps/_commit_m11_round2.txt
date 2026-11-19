@@ -1,0 +1,7 @@
+M11 round 2: arm the natural battle and prove the real H deep chain
+
+- battle_wiring/game: default auto-arm the CE253 battle drive; game exposes set_battle_auto_arm/battle_wiring_auto_armed
+- map_runtime/game: held-direction continuous walking (WALK_STEP_FRAMES) and ActionKey trigger pages
+- tests: m11_battle_autostart, m11_ce157_cursor, m11_hscene_bookstore, m11_hscene_ce328_branches, m11_hscene_ce328_real_cg, m11_npc_interaction, m11_party_live_bridge, m11_visual_regression
+- rebaseline m7_day5_schedule to the natural battle and the visual battle HUD to 600 active frames
+- docs: add HANDOFF_M11, m11_round2 BASELINE, README/NEW_SESSION_START/research indexes; correct the old CE157 cursor claim

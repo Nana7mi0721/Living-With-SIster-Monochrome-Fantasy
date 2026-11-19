@@ -1,0 +1,242 @@
+{
+ "ops": 3261,
+ "slots": {
+  "0": {
+   "number": 0,
+   "kind": 0,
+   "file": "SystemGraphic/TitleGraphic.jpg",
+   "text": "",
+   "x": 0,
+   "y": 0,
+   "scale": 100,
+   "opacity": 255,
+   "blend": 0,
+   "window": [
+    1,
+    1
+   ],
+   "extras": [
+    0,
+    16777216,
+    0
+   ],
+   "age": 0,
+   "birth_line": 8,
+   "ops": 549
+  },
+  "12500": {
+   "number": 12500,
+   "kind": 4,
+   "file": "",
+   "text": "",
+   "x": 855,
+   "y": 200,
+   "scale": 100,
+   "opacity": 255,
+   "blend": 0,
+   "window": [
+    300,
+    200
+   ],
+   "extras": [
+    0,
+    33554432,
+    8,
+    0,
+    100,
+    100,
+    100
+   ],
+   "age": 0,
+   "birth_line": 5948,
+   "ops": 1
+  },
+  "12501": {
+   "number": 12501,
+   "kind": 2,
+   "file": "",
+   "text": "欢迎来到Ver2.0DLC！ 烦请注意 存档的第一栏 为自动存档所使用 第一栏已…",
+   "x": 715,
+   "y": 115,
+   "scale": 100,
+   "opacity": 255,
+   "blend": 0,
+   "window": [
+    1,
+    1
+   ],
+   "extras": [
+    0,
+    33554432,
+    8,
+    0,
+    100,
+    100,
+    100
+   ],
+   "age": 0,
+   "birth_line": 5949,
+   "ops": 1
+  },
+  "12053": {
+   "number": 12053,
+   "kind": 2,
+   "file": "",
+   "text": "\\f[0]0",
+   "x": 0,
+   "y": 0,
+   "scale": 100,
+   "opacity": 255,
+   "blend": 0,
+   "window": [
+    1,
+    1
+   ],
+   "extras": [
+    0,
+    16777216,
+    0
+   ],
+   "age": 0,
+   "birth_line": 5961,
+   "ops": 5
+  },
+  "12005": {
+   "number": 12005,
+   "kind": 3,
+   "file": "<TRI-RIGHT>",
+   "text": "",
+   "x": 0,
+   "y": 0,
+   "scale": 100,
+   "opacity": 255,
+   "blend": 0,
+   "window": null,
+   "extras": [
+    0,
+    33554432,
+    0,
+    0,
+    50,
+    50,
+    100
+   ],
+   "age": 0,
+   "birth_line": 5971,
+   "ops": 1
+  },
+  "12502": {
+   "number": 12502,
+   "kind": 1,
+   "file": "",
+   "text": "",
+   "x": 855,
+   "y": 430,
+   "scale": 25,
+   "opacity": 255,
+   "blend": 0,
+   "window": [
+    1,
+    1
+   ],
+   "extras": [
+    0
+   ],
+   "age": 0,
+   "birth_line": 5930,
+   "ops": 1
+  }
+ },
+ "quads": [
+  {
+   "number": 0,
+   "kind": 0,
+   "file": "SystemGraphic/TitleGraphic.jpg",
+   "text": "",
+   "src": [
+    0,
+    0,
+    1024,
+    576
+   ],
+   "dst": [
+    0.0,
+    0.0,
+    1024.0,
+    576.0
+   ],
+   "alpha": 1.0,
+   "blend": 0
+  },
+  {
+   "number": 12005,
+   "skipped": "missing asset",
+   "file": "<TRI-RIGHT>"
+  },
+  {
+   "number": 12053,
+   "kind": 2,
+   "file": "",
+   "text": "\\f[0]0",
+   "src": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "dst": [
+    0.0,
+    0.0,
+    1.0,
+    1.0
+   ],
+   "alpha": 1.0,
+   "blend": 0
+  },
+  {
+   "number": 12500,
+   "kind": 4,
+   "file": "",
+   "text": "",
+   "src": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "dst": [
+    855.0,
+    200.0,
+    300.0,
+    200.0
+   ],
+   "alpha": 1.0,
+   "blend": 0
+  },
+  {
+   "number": 12501,
+   "kind": 2,
+   "file": "",
+   "text": "欢迎来到Ver2.0DLC！ 烦请注意 存档的第一栏 为自动存档所使用 第一栏已…",
+   "src": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "dst": [
+    715.0,
+    115.0,
+    1.0,
+    1.0
+   ],
+   "alpha": 1.0,
+   "blend": 0
+  },
+  {
+   "number": 12502,
+   "skipped": "missing asset",
+   "file": ""
+  }
+ ]
+}

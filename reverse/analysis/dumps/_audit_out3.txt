@@ -1,0 +1,89 @@
+== map -> tileset ==
+Dungeon.mps        tileset=0   w=40 h=30 nev=5 cmds=79
+Map002.mps         tileset=4   w=100 h=30 nev=5 cmds=416
+Map003.mps         tileset=4   w=70 h=170 nev=2 cmds=45
+Map024.mps         tileset=4   w=53 h=30 nev=1 cmds=3
+Map031.mps         tileset=0   w=53 h=30 nev=1 cmds=63
+SampleMapA.mps     tileset=4   w=64 h=36 nev=40 cmds=31083
+SampleMapA_1.mps   tileset=4   w=64 h=36 nev=12 cmds=5752
+SampleMapB.mps     tileset=0   w=30 h=30 nev=6 cmds=36
+TitleMap.mps       tileset=4   w=53 h=30 nev=1 cmds=133
+
+== scene/ sample ==
+327 files
+  header_bar.jpg
+  pai_bg01.jpg
+  pose_01.png
+  pose_02.png
+  pose_03.png
+  pose_04.png
+  pose_05.png
+  pose_06.png
+  pose_07.png
+  pose_08.png
+  pose_09.png
+  y_bg_001.jpg
+  y_bg_002.png
+  y_bg_002b.png
+  y_bg_003.jpg
+
+== word/ sample ==
+119 files
+  word_effect01.png
+  word_effect02.png
+  word_effect03.png
+  word_effect04.png
+  word_effect05.png
+  word_effect06.png
+  word_effect07.png
+  word_effect08.png
+  word_effect09.png
+  word_effect10.png
+  word_effect100.png
+  word_effect101.png
+  word_effect102.png
+  word_effect103.png
+  word_effect104.png
+
+== EnemyGraphic sample ==
+118 files
+  GD_Bahamut(Silver).png
+  GD_Bahamut.png
+  GD_Basilisk(Red).png
+  GD_Basilisk.png
+  GD_Bat.png
+  GD_Bee(Black).png
+  GD_Bee.png
+  GD_Bird(Rainbow).png
+  GD_Bird(Red).png
+  GD_Bird.png
+  GD_BlackDragon.png
+  GD_Buffalo.png
+  GD_Caterpillar(Red).png
+  GD_Caterpillar.png
+  GD_Chicken(Black).png
+
+== hword/ sample ==
+119 files
+  word_effect01.png
+  word_effect02.png
+  word_effect03.png
+  word_effect04.png
+  word_effect05.png
+  word_effect06.png
+  word_effect07.png
+  word_effect08.png
+  word_effect09.png
+  word_effect10.png
+
+== Fog_BackGround ==
+  [BackGround]night1_pipo.jpg
+  [BackGround]night2_pipo.jpg
+  [BackGround]night3_pipo.jpg
+  [BackGround]sky1_pipo.jpg
+  [BackGround]sky2_pipo.jpg
+  [BackGround]space1_pipo.jpg
+  [BackGround]space2_pipo.jpg
+  [BackGround]sunset1_pipo.jpg
+  [BackGround]sunset2_pipo.jpg
+  [Fog]Cloud_pipo.png

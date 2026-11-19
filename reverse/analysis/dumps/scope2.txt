@@ -1,0 +1,20 @@
+messages=12027 kana-containing=49 zh-marker-containing=5569
+samples:
+  @1
+「\cself[8]」增加了\cself[1]\cself[9]。
+  @1
+「\cself[8]」减少了\cself[1]\cself[9]。
+  \>「X[移]上部ステータス描画」コモン　エラー
+ 主人公IDが-1以下では使用できません。
+  \>「X[移]選択箇所装備コード取得」エラー：
+　装備箇所が8以下です。 　=>　\cself[1]
+　（※0～7で指定
+  \>「X[移]選択箇所装備コード設定」エラー：
+　装備箇所が8以下です。 　=>　\cself[1]
+　（※0～7で指定
+  \>「X[移]装備装着·解除」エラー：
+　装備対象者が-1以下です。 　=>　\cself[0]
+
+Picture file args=8105, referencing dirs: [('cg', 2655), ('Picture', 1375), ('DLC_data', 1270), ('hscene', 1137), ('cutin', 697), ('hword', 480), ('1.4.0', 378), ('BattleEffect', 47), ('SC1.jpg', 21), ('SystemGraphic', 14), ('\\f[\\cself[18]]\\cself[7]\\ax[\\cself[10]]\n<R>\\ay[0]\\cself[90]\\f[\\cself[17]]', 4), ('\\f[\\cself[18]]\\cself[7]\\ax[\\cself[10]]\n<R>\\ay[0]\\cself[92]\\f[\\cself[17]]', 4)]
+Picture file args NOT found in unpacked data: 72 (0.9%)
+Sound ext: [('.mp3', 902), ('.ogg', 285), ('.wav', 19), ('', 13)]

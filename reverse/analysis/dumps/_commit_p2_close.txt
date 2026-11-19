@@ -1,0 +1,6 @@
+fix(p2): package non-ASCII manifest paths and close release performance round
+
+- wolf-package: decode hand-written JSON string escapes as UTF-8 instead of Latin-1; fixes real packages where Japanese/Chinese filenames were reported both MISSING and EXTRA. Add manifest_json_round_trips_non_ascii_paths regression and include a non-ASCII file in the m11 synthetic package.
+- play: print startup breakdown for data/window/renderer/assets/font/window ready.
+- docs: rewrite M11_PACKAGING with release package, startup breakdown, bench and limitations; update PLAN P2 #8, HANDOFF_M13 §8-9 and doc indexes.
+- Gate: real work/all package 4070 files / 814,703,960 bytes, wolf-package check PACKAGE OK; cargo test --workspace 146 blocks / 878 passed / 0 failed / 14 ignored; wolf-cli verify --root work/all PASS 70 / pending 0.

@@ -1,0 +1,194 @@
+### events 88..112 titles
+
+  ev88   run=0 ncmds=308   X[移]メニュー描画
+
+  ev89   run=0 ncmds=122   X┗[移]メニューコマンド算出
+
+  ev90   run=0 ncmds=545   X[移]キャラクター欄描画
+
+  ev91   run=0 ncmds=66    X[移]キャラクタ—欄_座標算出
+
+  ev92   run=0 ncmds=43    X[移]キャラ欄_全員描画
+
+  ev93   run=0 ncmds=752   X[移]装備画面描画
+
+  ev94   run=0 ncmds=698   X[移]セーブ·ロード画面描画
+
+  ev95   run=0 ncmds=750   X[移]システム画面描画
+
+  ev96   run=0 ncmds=163   X[移]ダメ—ジ·回復ポップアップ
+
+  ev97   run=0 ncmds=46    X[移]指定キャラHP/SP回復表示
+
+  ev98   run=0 ncmds=34    X[移]指定キャラ状態付与表示
+
+  ev99   run=0 ncmds=131   X[移]残りアイテム数表示
+
+  ev100  run=0 ncmds=116   X[移]ミニウィンドウ表示
+
+  ev101  run=0 ncmds=95    X[移]メニュー時文章表示
+
+  ev102  run=0 ncmds=283   X[移]上部ステータス描画
+
+  ev103  run=0 ncmds=1     ■■【メニュー内部処理】■■
+
+  ev104  run=0 ncmds=29    X[移]選択位置主人公ID設定
+
+  ev105  run=0 ncmds=30    X[移]選択位置主人公ID取得
+
+  ev106  run=0 ncmds=47    X[移]選択箇所装備コード取得
+
+  ev107  run=0 ncmds=47    X[移]選択箇所装備コード設定
+
+  ev108  run=0 ncmds=118   X[移]キャラクタ—欄_選択実行
+
+  ev109  run=0 ncmds=403   X[移]装備欄_選択実行
+
+  ev110  run=0 ncmds=212   X[移]アイテム一覧算出
+
+  ev111  run=0 ncmds=131   X[移]技能一覧算出
+
+  ev112  run=0 ncmds=214   X[移]装備一覧算出
+
+
+### 600000-space calls with decoded param_status
+
+  ev=75(X[移]状態付与/消去) pc=95 ct=210 target=600100 status=3 {'sc': 0, 'nc': 3, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=3 strc=0 strs=[]
+
+  ev=75(X[移]状態付与/消去) pc=100 ct=210 target=600100 status=3 {'sc': 0, 'nc': 3, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=3 strc=0 strs=[]
+
+  ev=126(X[移]歩行時_並列キー処理) pc=43 ct=211 target=600101 status=0 {'sc': 0, 'nc': 0, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=0 strc=0 strs=[]
+
+  ev=126(X[移]歩行時_並列キー処理) pc=78 ct=211 target=600101 status=0 {'sc': 0, 'nc': 0, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=0 strc=0 strs=[]
+
+  ev=137(X[戦]状態付与/消去) pc=117 ct=210 target=600100 status=4 {'sc': 0, 'nc': 4, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=4 strc=0 strs=[]
+
+  ev=137(X[戦]状態付与/消去) pc=124 ct=210 target=600100 status=4 {'sc': 0, 'nc': 4, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=4 strc=0 strs=[]
+
+  ev=262(▲先頭空白削除) pc=10 ct=210 target=600100 status=16777234 {'sc': 1, 'nc': 2, 'rv': 1, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=4 strc=0 strs=[]
+
+  ev=262(▲先頭空白削除) pc=24 ct=210 target=600100 status=16777234 {'sc': 1, 'nc': 2, 'rv': 1, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=4 strc=0 strs=[]
+
+  ev=262(▲先頭空白削除) pc=39 ct=210 target=600100 status=16777234 {'sc': 1, 'nc': 2, 'rv': 1, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=4 strc=0 strs=[]
+
+  ev=264(○◆メッセージウィンドウ[インタ) pc=45 ct=210 target=600101 status=17 {'sc': 1, 'nc': 1, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=0 strs=[]
+
+  ev=264(○◆メッセージウィンドウ[インタ) pc=46 ct=210 target=600102 status=3 {'sc': 0, 'nc': 3, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=3 strc=0 strs=[]
+
+  ev=264(○◆メッセージウィンドウ[インタ) pc=47 ct=210 target=600104 status=18 {'sc': 1, 'nc': 2, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=3 strc=0 strs=[]
+
+  ev=264(○◆メッセージウィンドウ[インタ) pc=48 ct=210 target=600103 status=4113 {'sc': 1, 'nc': 1, 'rv': 0, 's1': 1, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=2 strs=['', '']
+
+  ev=265(○┣[メッセ—ジ]ウィンドウの変) pc=35 ct=210 target=600104 status=16777217 {'sc': 0, 'nc': 1, 'rv': 1, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=0 strs=[]
+
+  ev=265(○┣[メッセ—ジ]ウィンドウの変) pc=40 ct=210 target=600106 status=17 {'sc': 1, 'nc': 1, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=0 strs=[]
+
+  ev=266(○┣[メッセ—ジ]表示位置の変更) pc=18 ct=210 target=600102 status=16781330 {'sc': 1, 'nc': 2, 'rv': 1, 's1': 1, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=4 strc=2 strs=['', '']
+
+  ev=266(○┣[メッセ—ジ]表示位置の変更) pc=19 ct=210 target=600102 status=18 {'sc': 1, 'nc': 2, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=3 strc=0 strs=[]
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=62 ct=210 target=600094 status=12323 {'sc': 2, 'nc': 3, 'rv': 0, 's1': 1, 's2': 1, 's3': 0, 's4': 0, 's5': 0} extra=5 strc=3 strs=['', '', '']
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=126 ct=210 target=600097 status=4113 {'sc': 1, 'nc': 1, 'rv': 0, 's1': 1, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=2 strs=['', '']
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=135 ct=210 target=600097 status=17 {'sc': 1, 'nc': 1, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=0 strs=[]
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=150 ct=210 target=600095 status=4113 {'sc': 1, 'nc': 1, 'rv': 0, 's1': 1, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=2 strs=['', '']
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=159 ct=210 target=600095 status=17 {'sc': 1, 'nc': 1, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=0 strs=[]
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=239 ct=210 target=600096 status=1 {'sc': 0, 'nc': 1, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=1 strc=0 strs=[]
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=257 ct=210 target=600098 status=18 {'sc': 1, 'nc': 2, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=3 strc=0 strs=[]
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=278 ct=210 target=600098 status=16781330 {'sc': 1, 'nc': 2, 'rv': 1, 's1': 1, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=4 strc=2 strs=['', '']
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=301 ct=210 target=600098 status=18 {'sc': 1, 'nc': 2, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=3 strc=0 strs=[]
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=311 ct=210 target=600097 status=4113 {'sc': 1, 'nc': 1, 'rv': 0, 's1': 1, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=2 strs=['', '']
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=320 ct=210 target=600097 status=17 {'sc': 1, 'nc': 1, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=0 strs=[]
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=334 ct=210 target=600095 status=4113 {'sc': 1, 'nc': 1, 'rv': 0, 's1': 1, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=2 strs=['', '']
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=343 ct=210 target=600095 status=17 {'sc': 1, 'nc': 1, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=0 strs=[]
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=2733 ct=210 target=600096 status=1 {'sc': 0, 'nc': 1, 'rv': 0, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=1 strc=0 strs=[]
+
+  ev=270(×┣[メッセ—ジ]表示処理) pc=2735 ct=210 target=600098 status=4114 {'sc': 1, 'nc': 2, 'rv': 0, 's1': 1, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=3 strc=2 strs=['', '']
+
+  ev=271(×┗[メッセ—ジ]オートスキップ) pc=22 ct=210 target=600098 status=16777217 {'sc': 0, 'nc': 1, 'rv': 1, 's1': 0, 's2': 0, 's3': 0, 's4': 0, 's5': 0} extra=2 strc=0 strs=[]
+
+
+### hypothesis: 600000+n -> event n ; match by arg count
+
+  target=600100 -> ev100 argn=1 argsn=3 count=3 no  (X[移]ミニウィンドウ表示)
+
+  target=600100 -> ev100 argn=1 argsn=3 count=3 no  (X[移]ミニウィンドウ表示)
+
+  target=600101 -> ev101 argn=1 argsn=1 count=0 no  (X[移]メニュー時文章表示)
+
+  target=600101 -> ev101 argn=1 argsn=1 count=0 no  (X[移]メニュー時文章表示)
+
+  target=600100 -> ev100 argn=1 argsn=3 count=4 MATCH  (X[移]ミニウィンドウ表示)
+
+  target=600100 -> ev100 argn=1 argsn=3 count=4 MATCH  (X[移]ミニウィンドウ表示)
+
+  target=600100 -> ev100 argn=1 argsn=3 count=3 no  (X[移]ミニウィンドウ表示)
+
+  target=600100 -> ev100 argn=1 argsn=3 count=3 no  (X[移]ミニウィンドウ表示)
+
+  target=600100 -> ev100 argn=1 argsn=3 count=3 no  (X[移]ミニウィンドウ表示)
+
+  target=600101 -> ev101 argn=1 argsn=1 count=2 MATCH  (X[移]メニュー時文章表示)
+
+  target=600102 -> ev102 argn=2 argsn=0 count=3 no  (X[移]上部ステータス描画)
+
+  target=600104 -> ev104 argn=2 argsn=0 count=3 no  (X[移]選択位置主人公ID設定)
+
+  target=600103 -> ev103 argn=0 argsn=0 count=2 no  (■■【メニュー内部処理】■■)
+
+  target=600104 -> ev104 argn=2 argsn=0 count=1 no  (X[移]選択位置主人公ID設定)
+
+  target=600106 -> ev106 argn=2 argsn=0 count=2 MATCH  (X[移]選択箇所装備コード取得)
+
+  target=600102 -> ev102 argn=2 argsn=0 count=3 no  (X[移]上部ステータス描画)
+
+  target=600102 -> ev102 argn=2 argsn=0 count=3 no  (X[移]上部ステータス描画)
+
+  target=600094 -> ev94 argn=3 argsn=0 count=5 no  (X[移]セーブ·ロード画面描画)
+
+  target=600097 -> ev97 argn=3 argsn=0 count=2 no  (X[移]指定キャラHP/SP回復表示)
+
+  target=600097 -> ev97 argn=3 argsn=0 count=2 no  (X[移]指定キャラHP/SP回復表示)
+
+  target=600095 -> ev95 argn=2 argsn=0 count=2 MATCH  (X[移]システム画面描画)
+
+  target=600095 -> ev95 argn=2 argsn=0 count=2 MATCH  (X[移]システム画面描画)
+
+  target=600096 -> ev96 argn=4 argsn=0 count=1 no  (X[移]ダメ—ジ·回復ポップアップ)
+
+  target=600098 -> ev98 argn=2 argsn=0 count=3 no  (X[移]指定キャラ状態付与表示)
+
+  target=600098 -> ev98 argn=2 argsn=0 count=3 no  (X[移]指定キャラ状態付与表示)
+
+  target=600098 -> ev98 argn=2 argsn=0 count=3 no  (X[移]指定キャラ状態付与表示)
+
+  target=600097 -> ev97 argn=3 argsn=0 count=2 no  (X[移]指定キャラHP/SP回復表示)
+
+  target=600097 -> ev97 argn=3 argsn=0 count=2 no  (X[移]指定キャラHP/SP回復表示)
+
+  target=600095 -> ev95 argn=2 argsn=0 count=2 MATCH  (X[移]システム画面描画)
+
+  target=600095 -> ev95 argn=2 argsn=0 count=2 MATCH  (X[移]システム画面描画)
+
+  target=600096 -> ev96 argn=4 argsn=0 count=1 no  (X[移]ダメ—ジ·回復ポップアップ)
+
+  target=600098 -> ev98 argn=2 argsn=0 count=3 no  (X[移]指定キャラ状態付与表示)
+
+  target=600098 -> ev98 argn=2 argsn=0 count=1 no  (X[移]指定キャラ状態付与表示)
+
+  match 8/33
+
+
+### argn/argsn stats for all events: [((0, 0), 278), ((1, 0), 96), ((2, 0), 59), ((3, 0), 48), ((4, 0), 46), ((1, 1), 7), ((5, 0), 5), ((2, 1), 4), ((0, 1), 2), ((1, 3), 1), ((3, 1), 1), ((3, 2), 1)]

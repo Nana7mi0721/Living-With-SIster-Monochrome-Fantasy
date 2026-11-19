@@ -1,0 +1,6 @@
+feat(cli): start play when launched from a release package
+
+Detect `data/` beside `wolf-cli.exe` (or `Data/` in the current directory)
+when no command is given, and enter play mode instead of printing help.
+An explicit `--root` or `WOLF_DATA_ROOT` still wins. Two pure-layout unit
+tests cover the packaged-directory detection.

@@ -1,0 +1,2154 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+<HEAD>
+<META http-equiv="Content-Type" content="text/html; charset=Shift_JIS">
+<META name="GENERATOR" content="IBM WebSphere Studio Homepage Builder Version 7.0.1.0 for Windows">
+<META http-equiv="Content-Style-Type" content="text/css">
+<TITLE>YADOT-WOLF（WOLF RPGエディター）</TITLE>
+<link rel="shortcut icon" href="page/b01.ico">
+<STYLE type="text/css">
+<!--
+ A { text-decoration: none ;}
+-->
+</STYLE>
+<SCRIPT language="JavaScript">
+<!--HPB_SCRIPT_ROV_50
+//
+//  Licensed Materials - Property of IBM
+//  5724D51
+//  (C) Copyright IBM Corp. 1995, 2002 All Rights Reserved.
+//
+
+// HpbImgPreload:
+//
+function HpbImgPreload()
+{
+  var appVer=parseInt(navigator.appVersion);
+  var isNC=false,isN6=false,isIE=false;
+  if (document.all && appVer >= 4) isIE=true; else
+    if (document.getElementById && appVer > 4) isN6=true; else
+      if (document.layers && appVer >= 4) isNC=true;
+  if (isNC||isN6||isIE)
+  {
+    if (document.images)
+    {
+      var imgName = HpbImgPreload.arguments[0];
+      var cnt;
+      swImg[imgName] = new Array;
+      for (cnt = 1; cnt < HpbImgPreload.arguments.length; cnt++)
+      {
+        swImg[imgName][HpbImgPreload.arguments[cnt]] = new Image();
+        swImg[imgName][HpbImgPreload.arguments[cnt]].src = HpbImgPreload.arguments[cnt];
+      }
+    }
+  }
+}
+// HpbImgFind:
+//
+function HpbImgFind(doc, imgName)
+{
+  for (var i=0; i < doc.layers.length; i++)
+  {
+    var img = doc.layers[i].document.images[imgName];
+    if (!img) img = HpbImgFind(doc.layers[i], imgName);
+    if (img) return img;
+  }
+  return null;
+}
+// HpbImgSwap:
+//
+function HpbImgSwap(imgName, imgSrc)
+{
+  var appVer=parseInt(navigator.appVersion);
+  var isNC=false,isN6=false,isIE=false;
+  if (document.all && appVer >= 4) isIE=true; else
+    if (document.getElementById && appVer > 4) isN6=true; else
+      if (document.layers && appVer >= 4) isNC=true;
+  if (isNC||isN6||isIE)
+  {
+    if (document.images)
+    {
+      var img = document.images[imgName];
+      if (!img) img = HpbImgFind(document, imgName);
+      if (img) img.src = imgSrc;
+    }
+  }
+}
+var swImg; swImg=new Array;
+//-->
+</SCRIPT><SCRIPT language="JavaScript">
+<!--HPB_SCRIPT_PLD_50
+HpbImgPreload('_HPB_ROLLOVER1', '../page/kk_bana1.gif', '../page/kk_bana2.gif');
+HpbImgPreload('_HPB_ROLLOVER2', '../b02.gif', '../b12.gif');
+HpbImgPreload('_HPB_ROLLOVER3', 'b20.gif', 'b21.gif');
+//-->
+</SCRIPT></HEAD>
+<BODY style="font-family: ＭＳ ゴシック" bgcolor="#000e3c" text="#ffffff" background="../page/back-g_w.png" vlink="#00ff00" alink="#00ff00" link="#00ff00">
+<CENTER>
+<TABLE border="0">
+  <TBODY>
+    <TR>
+      <TD align="center"><A name="top">WOLF&nbsp;RPGエディター(ウディタ)制作者向けサイト</A></TD>
+    </TR>
+    <TR>
+      <TD><FONT style="font-size:70pt" color="#00ffff"><a title="「やどっとうるふ」っと読んでね♪">YADOT-WOLF</a></FONT></TD>
+    </TR>
+  </TBODY>
+</TABLE>
+<TABLE border="0">
+  <TBODY>
+    <TR>
+      <TD><a title="２０２４年に突如ＴＫドメインが更新できなくなったよ～"><IMG src="../page/yado-anime2.gif" width="27" height="20" border="0"></a></TD>
+      <TD><FONT color="#ffa0a0">やどっとうるふ</FONT>へようこそ！</TD>
+      <TD><a title="ここのドメインは２０３０年まで有効だよ～"><IMG src="../page/yado-anime2.gif" width="27" height="20" border="0"></a></TD>
+    </TR>
+  </TBODY>
+</TABLE>
+<BR>
+（更新：2026/10/11）<BR>
+<BR>
+<TABLE cellpadding="0" cellspacing="3">
+  <TBODY>
+    <TR>
+      <TD colspan="2" align="center" valign="top"><A href="http://kkni.net/" id="_HPB_ROLLOVER1" onmouseout="HpbImgSwap('_HPB_ROLLOVER1', '../page/kk_bana1.gif');" onmouseover="HpbImgSwap('_HPB_ROLLOVER1', '../page/kk_bana2.gif');" target="_blank"><IMG src="../page/kk_bana1.gif" width="200" height="40" border="0" name="_HPB_ROLLOVER1"></A><BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <FONT size="-1">YADOT-WOLFの本館サイト</FONT></TD>
+      <TD colspan="2" align="center"><A href="../" id="_HPB_ROLLOVER2" onmouseout="HpbImgSwap('_HPB_ROLLOVER2', '../b02.gif');" onmouseover="HpbImgSwap('_HPB_ROLLOVER2', '../b12.gif');" target="_top"><IMG src="../b02.gif" width="200" height="40" border="0" name="_HPB_ROLLOVER2"></A><BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <FONT size="-1">RPGﾂｸｰﾙ2000版のYADOT</FONT></TD>
+    </TR>
+    <TR>
+      <TD colspan="2" height="8"></TD>
+      <TD colspan="2"></TD>
+    </TR>
+    <TR>
+      <TD colspan="2" valign="top" align="center"><A href="../w/" id="_HPB_ROLLOVER3" onmouseout="HpbImgSwap('_HPB_ROLLOVER3', 'b20.gif');" onmouseover="HpbImgSwap('_HPB_ROLLOVER3', 'b21.gif');" target="_blank"><IMG src="b20.gif" width="200" height="40" border="0" name="_HPB_ROLLOVER3"></A><BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <FONT size="-1">（更新：2026/07/20）</FONT></TD>
+      <TD colspan="2" align="center" valign="top" bgcolor="#000078"><A href="http://www.silversecond.com/WolfRPGEditor/" target="_blank"><IMG src="editor_banner.gif" width="200" height="40" border="0"></A><BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <FONT size="-1">WOLF RPGｴﾃﾞｨﾀｰ公式サイト</FONT><BR>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      </TD>
+    </TR>
+  </TBODY>
+</TABLE>
+<BR>
+<TABLE cellpadding="2" bgcolor="#000000" cellspacing="4">
+  <TBODY>
+    <TR>
+      <TD>
+      <TABLE border="0">
+        <TBODY>
+          <TR>
+            <TD><FONT color="#ffff80" size="-1">YADOT-WOLF</FONT><FONT size="-1">は<A href="../sakuhin/yado/" target="_blank">ＹＡＤＯ</A>が管理するサイトです。主に<FONT color="#00ffff" size="-1">初心者向け</FONT>の情報を載せています。</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD><FONT style="font-size:10px" color="#9696aa">「初心者向け」とは思えないページもあるような気が･･･。</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD><FONT color="#ffff80" size="-1">YADOT-WOLF</FONT><FONT size="-1">の情報を利用した事を作品内に記載する必要はありません。</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD><FONT style="font-size:10px" color="#9696aa">「記載したい」と言う人は自由に記載してください。</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD><FONT size="-1">｢イベントコマンド｣などの一部のページは<FONT color="#00ffff">ウディタ[3.5]</FONT>の仕様に更新済みです。</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD><FONT style="font-size:10px" color="#9696aa">設定例や見本画像がウディタ[3.5]以前のままになっているページも存在します。</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+          <TR>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD><FONT size="-1">トップページの更新日は新規ページの追加や大きな更新があった時のみ変わります。</FONT><BR>
+            <TABLE border="0">
+              <TBODY>
+                <TR>
+                  <TD><FONT style="font-size:10px" color="#9696aa">誤字修正が多くて、説明用のページの更新ごとにトップページを変えると、毎日のように更新日を変えないと･･･。</FONT></TD>
+                </TR>
+              </TBODY>
+            </TABLE>
+            </TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      </TD>
+    </TR>
+  </TBODY>
+</TABLE>
+<BR>
+<TABLE bgcolor="#000000" cellpadding="5">
+  <TBODY>
+    <TR>
+      <TD colspan="3" align="center">▼ショートカット▼</TD>
+    </TR>
+    <TR>
+      <TD bgcolor="#000078" align="center" height="20"><A href="#shosin" target="_self"><FONT style="font-size:20px">初心者</FONT></A></TD>
+      <TD bgcolor="#780000" align="center"><A href="#ibekoma" target="_self"><FONT style="font-size:20px">イベントコマンド</FONT></A></TD>
+      <TD bgcolor="#000078" align="center"><A href="#hen" target="_self"><FONT style="font-size:20px">変数･データベース</FONT></A></TD>
+    </TR>
+    <TR align="center">
+      <TD bgcolor="#780000" height="20"><A href="#ev" target="_self"><FONT style="font-size:20px">マップイベント</FONT></A></TD>
+      <TD bgcolor="#000078" align="center"><A href="#enshutu" target="_self"><FONT style="font-size:20px">演出・システム</FONT></A><FONT color="#ffff00">&lt;追加&gt;</FONT></TD>
+      <TD bgcolor="#780000" align="center"><A href="#menu" target="_self"><FONT style="font-size:20px">自作メニュー</FONT></A></TD>
+    </TR>
+    <TR>
+      <TD bgcolor="#000078" align="center" height="20"><A href="#kihon" target="_self"><FONT style="font-size:20px">基本システム</FONT></A><FONT color="#ffff00">&lt;追加&gt;</FONT></TD>
+      <TD align="center" bgcolor="#780000"><A href="#kihon_kaizou" target="_self"><FONT style="font-size:20px">基本システム改造</FONT></A></TD>
+      <TD align="center" bgcolor="#000078"><A href="#bug" target="_self"><FONT style="font-size:20px">バグ・エラー</FONT></A></TD>
+    </TR>
+  </TBODY>
+</TABLE>
+</CENTER>
+<CENTER>
+<TABLE border="0">
+  <TBODY>
+    <TR>
+      <TD valign="middle"><A name="shosin">　</A>　　</TD>
+      <TD align="right"></TD>
+    </TR>
+    <TR>
+      <TD><A href="#ibekoma" target="_self"><FONT color="#009999">▼[イベントコマンド]トップへ▼</FONT></A></TD>
+      <TD></TD>
+    </TR>
+    <TR>
+      <TD>　</TD>
+      <TD></TD>
+    </TR>
+    <TR>
+      <TD valign="middle" height="40" colspan="2" bgcolor="#000078">　<FONT size="+3" color="#ffff00">◆初心者</FONT></TD>
+    </TR>
+    <TR>
+      <TD valign="top" colspan="2" bgcolor="#000023"><BR>
+      <TABLE cellpadding="0">
+        <TBODY>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="01_shoshin/0000_wolf_dl/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆ウディタの紹介とダウンロードの手順</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/0001_wolf_file_folder/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆ウディタのファイルとフォルダー</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/0004_data_sample/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆サンプルゲームで使用している素材の一覧</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/0005_wolf_data_folder/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆[RPG基本システム入り空データ]と[完全初期データの空データ]の設定</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/0003_backup/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆作品データのバックアップを残す</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/0900_adobaisu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆初心者への制作アドバイス</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/0901_keijiban/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆質問掲示板の利用に関して</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/0002_shoki_party/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆主人公の作成と初期パーティの準備とゲーム開始位置の設定</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1800_test/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆テストプレイ</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1801_f3_f7_f8_f9/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆デバッグ用の画面[Ｆ３][Ｆ７][Ｆ８][Ｆ９]</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1090_editor_gamen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆ウディタのメインウィンドウの説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1100_sinki_map/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆新規マップ作成</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1130_file_kobetu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆[Pro]ファイル個別暗号化(.wolfx)</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1140_gamedata/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆ゲームデータの作成</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1240_map_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆マップの基本設定</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1310_tile_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆タイルセット設定</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/1000_db/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆システムデータベース・ユーザーデータベース・可変データベース</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1350_com_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆コモンイベント</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1360_map_list/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆マップ選択ウィンドウ</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1370_task_list/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆タスクリスト</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1500_game_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆ゲームの基本設定</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1520_p_game_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆ゲームの基本設定[Pro版]</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1530_p_protect/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆プロテクト用キーを設定[Pro版]</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1510_config/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆コンフィグ</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1600_editor_op/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆エディターオプション</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1810_jidou_map/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆自動マップ生成</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1000_ev/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆「マップイベント」と「コモンイベント」</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1001_map_ev_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆マップイベント用のイベントウィンドウの説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1002_map_ev_id/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆「イベントＩＤ」について</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1350_com_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆コモンイベントエディタ画面の説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1351_com_nyuuryoku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆「入力の数 / 結果を返す」の説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1010_jidou_heiretu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆「自動実行」と「並列実行」の説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1011_1kai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆１回だけ自動的に実行するイベント</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/1003_ibekoma_hyouji/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆イベントコマンド表示欄について</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/0010_menu_henkou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆メニュー画面の選択肢をカスタマイズ([相談]を削除･[ロード]を追加)</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="01_shoshin/0011_menu_toji_kidou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆メニュー画面の選択肢を閉じてからイベントを起動</FONT></A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      　　</TD>
+    </TR>
+    <TR>
+      <TD><A name="ibekoma">　</A>　　</TD>
+      <TD align="right" valign="bottom"></TD>
+    </TR>
+    <TR>
+      <TD><A href="#hen" target="_self"><FONT color="#009999">▼[変数・データベース]トップへ▼</FONT></A>　　　　　<A href="#shosin" target="_self"><FONT color="#009999">▲[初心者]トップへ▲</FONT></A></TD>
+      <TD align="right" valign="bottom"><A href="#top" target="_self">▲トップへ▲</A></TD>
+    </TR>
+    <TR>
+      <TD>　</TD>
+      <TD></TD>
+    </TR>
+    <TR>
+      <TD height="40" colspan="2" bgcolor="#780000">　<FONT size="+3" color="#ffff00">◆イベントコマンド</FONT></TD>
+    </TR>
+    <TR>
+      <TD valign="top" colspan="2" bgcolor="#190000"><BR>
+      <TABLE cellpadding="0">
+        <TBODY>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="02_ibekoma/0000_ibekoma_nani/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆「イベントコマンド」って何？</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0100_bunshou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆文章の表示</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0101_tokushumoji/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆特殊文字</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0200_sentakushi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆選択肢</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0210_rei_sentakushi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆【使用例】選択肢</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0300_hensuu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆変数操作</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0301_enzansi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆演算子について</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0400_db/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆ＤＢ操作</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0500_mojiretsu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆文字列操作</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0501_mojiretsu_kakusi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┣◆隠しコード</FONT></A><FONT color="#ffff00"></FONT></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0510_rei_mojiretsu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆【使用例】文字列操作</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0600_hensuu_plus/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆変数操作＋</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0601_xy/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┣◆「Ｘ座標･Ｙ座標」と「画面Ｘ座標･画面Ｙ座標」の違い</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0610_rei_hensuu_plus_chara/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┣◆【使用例】変数操作＋の｢キャラ｣と｢位置｣</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0611_rei_hensuu_plus_picture/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆【使用例】変数操作＋の｢ピクチャ｣と｢その他｣</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0700_jouken_hen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆条件(数値)</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0800_jouken_moji/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆条件(文字列)</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0900_key/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆キー入力</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/0910_rei_key/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆【使用例】キー入力</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1000_picture/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆ピクチャ</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1001_hyoujikeisiki/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆表示形式(通常･加算･減算･乗算)について</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1100_effect/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆エフェクト</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1101_effect_z/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┣◆「Ｚオーダー」について</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1110_rei_effect/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆【使用例】エフェクト</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1200_sound/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆サウンド</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1300_save_load/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆セーブ･ロード操作</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1400_party/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆パーティ画像</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1500_chip/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆チップ処理</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1510_rei_chip/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆【使用例】チップ処理</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1600_bashoidou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆場所移動</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1700_ev/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆イベント制御</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1701_ev_dousa/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┣◆キャラクターの動作指定</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1710_rei_ev/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆【使用例】イベント制御</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1800_com/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆コモンイベント</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/1900_dl/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆ダウンロード</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="02_ibekoma/2000_pro/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆プロ版機能</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD>　<A href="02_ibekoma/2010_pro_hikisuu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆起動時の引数について</FONT></A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      　　</TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A name="hen">　</A>　　</TD>
+      <TD align="right" valign="bottom"></TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A href="#ev" target="_self"><FONT color="#009999">▼[マップイベント]トップへ▼</FONT></A>　　<A href="#ibekoma" target="_self"><FONT color="#009999">▲[イベントコマンド]トップへ▲</FONT></A></TD>
+      <TD align="right" valign="bottom"><A href="#top" target="_self">▲トップへ▲</A></TD>
+    </TR>
+    <TR>
+      <TD>　</TD>
+      <TD></TD>
+    </TR>
+    <TR bgcolor="#000078">
+      <TD valign="middle" height="40" colspan="2" bgcolor="#000078">　<FONT size="+3" color="#ffff00">◆変数･データベース</FONT></TD>
+    </TR>
+    <TR>
+      <TD valign="top" colspan="2" bgcolor="#000023"><BR>
+      <TABLE cellpadding="0">
+        <TBODY>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="03_hen/0000_hensuu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆「変数」って何？</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0001_hen_self/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆「セルフ変数」って何？</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0002_hen_tuujou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆「通常変数」「予備変数」って何？</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0003_hen_mojiretu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆「文字列変数」って何？</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0004_hen_sys/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆「システム変数」「システム文字列」って何？</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0005_hen_sys0-34/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┣◆システム変数[0～34]の説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0006_hen_sys35-76/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┣◆システム変数[35～76]の説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0007_hen_sys77-/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┣◆システム変数[77～120]の説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0011_hen_sys121-/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┣◆システム変数[121～163]の説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0008_hen_syss/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┣◆システム文字列[0～49]の説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0012_hen_syss50-/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆システム文字列[50～82]の説明</FONT></A><FONT color="#00ffff"></FONT></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0009_hen_x/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆「変数呼び出し値」「Ｘ番の変数呼出」って何？</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0109_rei_hen_x/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆【使用例】「変数呼び出し値」「Ｘ番の変数呼出」</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0020_ran/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆「乱数」って何？</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0021_ran_choufuku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆乱数で一度出力した値を二重に出力させない</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/0010_hen_narabikae/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆変数の番号や文字列を別のものに置き換える</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/1000_db/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆「システムＤＢ」「ユーザーＤＢ」「可変ＤＢ」の説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/1001_db_type/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆「タイプの設定」の画面説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/1100_db_sys/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆「システムＤＢ」の各タイプの説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/1200_db_user/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆「ユーザーＤＢ」の各タイプの説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/1201_db_user_senyuu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┃┗◆「装備時･専有箇所」の選択項目を増やす</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="03_hen/1300_db_kahen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆「可変ＤＢ」の各タイプの説明</FONT></A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      　　</TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A name="ev">　</A>　　</TD>
+      <TD align="right" valign="bottom"></TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A href="#enshutu" target="_self"><FONT color="#009999">▼[演出・システム]トップへ▼</FONT></A>　<A href="#hen" target="_self"><FONT color="#009999">▲[変数・データベース]トップへ▲</FONT></A></TD>
+      <TD align="right" valign="bottom"><A href="#top" target="_self">▲トップへ▲</A></TD>
+    </TR>
+    <TR>
+      <TD>　</TD>
+      <TD></TD>
+    </TR>
+    <TR>
+      <TD height="40" colspan="2" bgcolor="#780000">　<FONT size="+3" color="#ffff00">◆マップイベント</FONT></TD>
+    </TR>
+    <TR>
+      <TD valign="top" colspan="2" bgcolor="#190000"><BR>
+      <TABLE cellpadding="0">
+        <TBODY>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="04_ev/0000_chara/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆キャラクターイベントを作る</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="04_ev/0400_boss/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆ボスキャラを作る</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="04_ev/0200_mise/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆お店のイベントを作る</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="04_ev/0100_takara/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆アイテム取得(ツボ・宝箱)のイベントを作る</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="04_ev/0300_tobira/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆扉イベントを作る</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="04_ev/0001_a_b/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆マップイベントＡを実行するとマップイベントＢが出現する</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="04_ev/0002_a_b_c/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆複数のマップイベントを実行すると先へ進める</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="04_ev/0003_junban/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆正しい順番でスイッチを押すと扉が開く</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="04_ev/0310_tobira_mono_idou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆マップイベントを押して移動し、特定の位置に置くと扉が開く</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="04_ev/0010_chikayoru/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆主人公が近寄ると主人公へ向かってくるマップイベント</FONT></A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      　　</TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A name="enshutu">　</A>　　</TD>
+      <TD align="right" valign="bottom"></TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A href="#menu" target="_self"><FONT color="#009999">▼[自作メニュー]トップへ▼</FONT></A>　　　　<A href="#ev" target="_self"><FONT color="#009999">▲[マップイベント]トップへ▲</FONT></A></TD>
+      <TD align="right" valign="bottom"><A href="#top" target="_self">▲トップへ▲</A></TD>
+    </TR>
+    <TR>
+      <TD>　</TD>
+      <TD></TD>
+    </TR>
+    <TR bgcolor="#000078">
+      <TD valign="middle" height="40" colspan="2" bgcolor="#000078">　<FONT size="+3" color="#ffff00">◆演出・システム</FONT></TD>
+    </TR>
+    <TR>
+      <TD valign="top" colspan="2" bgcolor="#000023"><BR>
+      <TABLE cellpadding="0">
+        <TBODY>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="08_sys/0500_item_watasu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆マップイベントからアイテム画面を起動し、使う、渡す、見せる</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="08_sys/0510_item_tukau/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆アイテム画面からアイテムを使用してカギを開ける</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="09_en/0200_kakusi_michi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆隠し通路を作る</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="09_en/0500_save_point/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆セーブ禁止のマップにセーブポイントを設置</FONT></A><FONT color="#ffff00">&lt;追加&gt;</FONT></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="09_en/0600_tent/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆アイテム「テント」の設定方法</FONT></A><FONT color="#ffff00">&lt;追加&gt;</FONT></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="09_en/0000_mapev_effect/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆マップイベントでピクチャアニメーションを表示</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="09_en/0400_map_1mai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆マップの地形を１枚の画像で表示（大きな画像をマップ上に表示）</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="09_en/0100_nengappi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆年月日から曜日や日数を算出</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="08_sys/0300_party_kaiwa/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆パーティ編成(会話型・外す主人公を選択肢で選択)</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="08_sys/0400_medal/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆カジノ内では所持金が所持メダルに変わる</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0200_mouse_tubo/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆ゲーム中にマウスでツボを置く</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="09_en/0300_mask/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆マスク機能を使う</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="09_en/0360_mask_cut_in/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆【マスク使用例】戦闘中にカットインを表示</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="09_en/0330_mask_idou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆【マスク使用例】場所移動時の演出</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="09_en/0340_mask_zen_kuro/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆【マスク使用例】複数の黒マスクを同時に設定して画面全体を黒マスクに変える</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="09_en/0350_mask_light/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆【マスク使用例】光を当ててマップイベントを表示(懐中電灯)</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="09_en/0320_mask_mouse/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆【マスク使用例】マウスポインタの位置にマスクを設定(拡大鏡･射撃など)</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="09_en/0310_mask_msg_kao/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆【マスク使用例】歩行グラフィックを顔グラフィックに使う</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="08_sys/0000_shuukai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆周回プレイやクリア特典の基礎</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0001_shuukai_shokika/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆周回プレイ：【場所移動】でタイトル画面に戻って２周目を開始</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0003_shuukai_title/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆周回プレイ：【タイトル画面へ戻る】でタイトル画面に戻って２周目を開始</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0002_shuukai_sample/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆サンプルゲームを周回プレイ化してみる</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0010_tokuten_omake/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆クリアしたらタイトル画面で｢おまけ｣が選択できるようにする</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0100_pass/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆パスワードイベントの基礎</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0140_pass_sentakusi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆[選択肢]を使ってパスワードを入力</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0110_pass_keyboard/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆[キーボード入力]を使ってパスワードを入力</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0130_pass_key/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆[キー入力]を使ってパスワードを入力</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0120_pass_gamen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆オリジナルの入力画面でパスワードを入力</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0150_pass_jimen_iro/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆地面の色を変えて図形を作ってパスワードを入力</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0101_pass_kiku_hissu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆正しいパスワードを聞かないと扉が開かない(数字入力タイプ)</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/0102_pass_moji_kiku_hissu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆正しいパスワードを聞かないと扉が開かない(文字入力タイプ)</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/5000_atari/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆画像の当たり判定について</FONT></A><FONT color="#00ffff"></FONT></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="08_sys/5001_atari_a/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆画像ファイルのアルファ値で当たり判定を処理</FONT></A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      　　</TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A name="menu">　</A>　　</TD>
+      <TD align="right" valign="bottom"></TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A href="#kihon" target="_self"><FONT color="#009999">▼[基本システム]トップへ▼</FONT></A>　　　　<A href="#enshutu" target="_self"><FONT color="#009999">▲[演出・システム]トップへ▲</FONT></A></TD>
+      <TD align="right" valign="bottom"><A href="#top" target="_self">▲トップへ▲</A></TD>
+    </TR>
+    <TR>
+      <TD>　</TD>
+      <TD></TD>
+    </TR>
+    <TR>
+      <TD valign="middle" height="40" colspan="2" bgcolor="#780000">　<FONT size="+3" color="#ffff00">◆自作メニュー</FONT></TD>
+    </TR>
+    <TR>
+      <TD valign="top" colspan="2" bgcolor="#190000"><BR>
+      <TABLE cellpadding="0">
+        <TBODY>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="07_menu/0000_kiso/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆自作メニューの基礎講座</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="07_menu/0001_kiso_4x3/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆自作メニュー：横４×縦３</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="07_menu/0100_ichiran_kiso/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆自作アイテムメニューを作る</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="07_menu/0101_ichiran_2x12/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆自作アイテムメニュー：[横２×縦１２]に改造</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="07_menu/0102_ichiran_setu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆自作アイテムメニュー：説明欄を追加</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="07_menu/0120_ichiran_mouse/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆自作アイテムメニュー：マウス操作を追加</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="07_menu/0103_ichiran_scroll_bar/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆自作アイテムメニュー：スクロールバーを追加</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="07_menu/0200_kaiten/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆回転型の自作メニューを作る</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="07_menu/0201_kaiten_item/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆回転型の自作メニューでアイテム名を表示</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="07_menu/0202_kaiten_cursor/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆回転型の自作メニューをカーソルで操作</FONT></A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      　　</TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A name="kihon">　</A>　　</TD>
+      <TD align="right" valign="bottom"></TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A href="#kihon_kaizou" target="_self"><FONT color="#009999">▼[基本システム改造]トップへ▼</FONT></A>　　　<A href="#menu" target="_self"><FONT color="#009999">▲[自作メニュー]トップへ▲</FONT></A></TD>
+      <TD align="right" valign="bottom"><A href="#top" target="_self">▲トップへ▲</A></TD>
+    </TR>
+    <TR>
+      <TD>　</TD>
+      <TD></TD>
+    </TR>
+    <TR>
+      <TD height="40" colspan="2" bgcolor="#000078">　<FONT size="+3" color="#ffff00">◆基本システム</FONT></TD>
+    </TR>
+    <TR>
+      <TD valign="top" colspan="2" bgcolor="#000023"><BR>
+      <TABLE cellpadding="0">
+        <TBODY>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/1000_kihon/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆「基本システム」って何？</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/1002_list/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆コモンイベントの一覧と補足説明</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/1003_p_ban/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆基本システムで使用しているピクチャ番号</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/1010_menu_kouzou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┣◆メニュー画面の処理構造</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/1020_sen_kouzou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆戦闘処理の処理構造</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/1100_bannou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆万能ウィンドウについて</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/1101_bannou_rei/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">┗◆万能ウィンドウの設定例</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="6"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/1001_en/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆エンカウントで敵を出現</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/1040_xy_sen_teki/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆敵キャラの表示設定について</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/1004_meichuu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆戦闘システムの当たり判定(命中率･回避率)について</FONT></A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      <BR>
+      <HR width="70%">
+      <BR>
+      <TABLE cellpadding="0">
+        <TBODY>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/0000_item/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆000:○アイテム増減</FONT></A></TD>
+            <TD width="12"></TD>
+            <TD valign="top"><FONT color="#64646e">◆103:■■【メニュー内部処理】■■</FONT></TD>
+            <TD width="9"></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0001_buki/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆001:○武器増減</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0104_shu_id_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆104:X[移]選択位置主人公ID設定</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0002_bougu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆002:○防具増減</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0105_shu_id_shutoku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆105:X[移]選択位置主人公ID取得</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0003_okane/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆003:○お金の増減</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0106_soubi_shutoku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆106:X[移]選択箇所装備コード取得</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0004_hpsp/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆004:○回復・ダメージ処理</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0107_soubi_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆107:X[移]選択箇所装備コード設定</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0005_shu_zougen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆005:○メンバーの増減</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0108_chara_sentaku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆108:X[移]ｷｬﾗｸﾀｰ欄_選択実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0006_shu_data/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆006:○主人公情報の変更</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0109_soubi_sentaku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆109:X[移]装備欄_選択実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0007_nouryoku_zougen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆007:○能力値増減</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0110_ido_db19_item/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆110:X[移]ｱｲﾃﾑ一覧算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0008_tokushu_zougen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆008:○特殊技能増減</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0111_ido_db19_ginou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆111:X[移]技能一覧算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0009_joutai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆009:○状態異常変化</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0112_ido_db19_soubi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆112:X[移]装備一覧算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0010_lv/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆010:○経験値・Lv増減</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0113_soubi_henkou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆113:X[移]装備装着・解除</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0011_soubi_buki/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆011:○装備武器の変更</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0114_soubi_sabun/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆114:X[移]装備ﾊﾟﾗﾒｰﾀ差分算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0012_soubi_bougu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆012:○装備防具の変更</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0115_key_repeat/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆115:X[移]キーリピート設定</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0013_battle_command/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆013:○戦闘コマンドの変更</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0116_key_shutoku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆116:X[移]記憶キー位置取得</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0014_kakushu_menu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆014:○各種メニュー呼出</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0117_key_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆117:X[移]記憶キー位置設定</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0015_save/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆015:○セーブ許可・禁止設定</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0118_item_kouka/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆118:X[移]ｱｲﾃﾑ使用効果処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆016:---------------------------------</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0119_ginou_kouka/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆119:X[移]技能使用効果処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0017_imet_suu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆017:▲アイテム所持数取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0120_item_shouhi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆120:X[移]ｱｲﾃﾑ使用_消費処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0018_buki_suu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆018:▲武器所持数取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0121_ginou_shouhi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆121:X[移]技能使用_消費処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0019_bougu_suu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆019:▲防具所持数取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0122_ichiji_shokika/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆122:X[移]一時ｽﾃ計算&lt;初期化&gt;</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0020_okane_suu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆020:▲所持金取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0123_ichiji_soubi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆123:X[移]一時ｽﾃ計算&lt;装備補正&gt;</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0021_soubi_jouhou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆021:▲装備取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0124_ichiji_joutai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆124:X[移]一時ｽﾃ計算&lt;状態補正&gt;</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0022_shu_jouhou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆022:▲メンバー情報取得[数値]</FONT></A></TD>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆125:■■【メニュー実行処理】■■</FONT></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0023_shu_mojijouhou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆023:▲メンバー情報取得[文字列]</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0126_hokou_key/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆126:X[移]歩行時_並列キー処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0024_joutao_jouhou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆024:▲状態異常の取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0127_menu_kidou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆127:X[移]メニュー起動</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0025_tokushu_umu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆025:▲特殊技能の有無取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0128_item_jikkou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆128:X┣[移]アイテム欄実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0026_command_umu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆026:▲戦闘コマンド有無の判定</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0129_ginou_jikkou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆129:X┣[移]技能欄実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆027:---------------------------------</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0130_soubi_jikkou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆130:X┣[移]装備欄実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0028_battle/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆028:◆バトルの発生</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0131_save_jikkou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆131:X┣[移]セーブ欄実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0029_battle_tuika/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆029:◆[戦闘用]敵キャラの追加</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0132_sys_jikkou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆132:X┗[移]システム欄実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0030_battle_bun/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆030:◆[戦闘用]メッセージ表示</FONT></A></TD>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆133:■■■■■■■■■■■■■</FONT></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0031_battle_damage/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆031:◆[戦闘用]ダメージ処理</FONT></A></TD>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆134:■■【戦闘用・内部処理】■■</FONT></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆032:---------------------------------</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0135_battle_para_zougen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆135:X[戦]パラメータ増減</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0033_mise1/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆033:【1】 お店 初期化</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0136_battle_para_shutoku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆136:X[戦]パラメータ取得</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0034_mise2/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆034:【2】 お店 商品の追加</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0137_battle_joutai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆137:X[戦]状態付与/消去</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0035_mise3/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆035:【3】 お店処理 実行</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0138_battle_joutai_msg/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆138:X[戦]┗状態変化ﾒｯｾｰｼﾞ</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆036:---------------------------------</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0139_battle_joutai_kousin/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆139:X[戦]状態更新</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0037_en/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆037:◇ランダムエンカウント処理</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0140_battle_hen_shokika/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆140:X[戦]戦闘変数初期化</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆038:---------------------------------</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0141_slot_shu_id/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆141:X[戦]ｽﾛｯﾄから主人公ID取得</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0039_pixel_idou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆039:■主人公ピクセル移動切り替え</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0142_battle_shu_kousin/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆142:X[戦]指定主人公更新処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0040_click_idou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆040:■左クリック自動移動切り替え</FONT></A><FONT color="#ffff00">&lt;追加&gt;</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0143_db0_db10/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆143:X[戦]主人公DB→戦闘DBコピー</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆041:---------------------------------</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0144_udb9_db10/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆144:X[戦]敵DB→戦闘DBコピー</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆042:---------------------------------</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0145_battle_soubi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆145:X[戦]選択箇所装備コード取得</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆043:---------------------------------</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0146_battle_ichiji_shokika/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆146:X[戦]一時ｽﾃ計算&lt;初期化&gt;</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆044:■■■■■■■■■■■■</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0147_battle_ichiji_soubi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆147:X[戦]一時ｽﾃ計算&lt;装備補正&gt;</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆045:■以下､変更･呼出不可■■</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0148_battle_ichiji_joutai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆148:X[戦]一時ｽﾃ計算&lt;状態補正&gt;</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆046:■----------------- ■■</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0149_db10_db0/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆149:X[戦]戦闘DB→主人公DBへ戻す</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆047:■■ 【共通・内部処理】 ■■</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0150_command_shutoku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆150:X[戦]戦闘コマンド取得</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0048_shokika/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆048:X[共]基本ｼｽﾃﾑ自動初期化</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0151_command_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆151:X[戦]戦闘コマンド設定</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0049_sys_se/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆049:X[共]システムSE再生</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0152_command_idhiran/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆152:X[戦]戦闘ｺﾏﾝﾄﾞ一覧算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0050_item_zougen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆050:X[共]アイテム増減</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0153_sen_db19_item/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆153:X[戦]ｱｲﾃﾑ一覧算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0051_buki_zougen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆051:X[共]武器増減</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0154_sen_db19_ginou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆154:X[戦]技能一覧算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0052_bougu_zougen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆052:X[共]防具増減</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0155_battle_key_shutoku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆155:X[戦]記憶キー位置取得</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0053_okane_zougen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆053:X[共]所持金増減</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0156_battle_key_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆156:X[戦]記憶キー位置設定</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0054_item_suu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆054:X[共]ｱｲﾃﾑ所持数取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0157_battle_cdb14_touroku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆157:X[戦]コマンド登録</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0055_buki_suu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆055:X[共]武器所持数取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0158_battle_item_sentaku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆158:X[戦]ｱｲﾃﾑ選択実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0056_bougu_suu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆056:X[共]防具所持数取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0159_battle_ginou_sentaku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆159:X[戦]技能選択実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0057_okane_suu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆057:X[共]所持金取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0160_battle_ai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆160:X[戦]AI実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0058_ginou_umu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆058:X[共]技能の習得・消去</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0161_battle_shu_sentaku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆161:X[戦]味方対象選択実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0059_w/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆059:X[共]ウェイト(キー押しで中断)</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0162_battle_teki_sentaku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆162:X[戦]敵対象選択実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0060_w2/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆060:X[共]ウェイト2(キー押しで加速)</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0163_battle_target/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆163:X[戦]敵･味方行動対象算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0061_w3/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆061:X[共]キー押し加速ｳｪｲﾄ計算</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0164_battle_koudou_jikkou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆164:X[戦]行動実行結果算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆062:■■【共通・画面処理】■■</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0165_battle_tan_shori/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆165:X[戦]┗単体処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0063_msg/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆063:X[共]メッセージウィンドウ</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0166_battle_counter/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆166:X[戦]　　┗ｶｳﾝﾀｰ判定</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0064_bannou_byouga/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆064:X[共]万能ｳｨﾝﾄﾞｳ描画処理</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0167_battle_counter_jikkou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆167:X[戦]ｶｳﾝﾀｰ実行結果算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0065_bannou_sentaku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆065:X[共]万能ｳｨﾝﾄﾞｳ選択実行</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0168_battle_hensin/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆168:X[戦]変身判定</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0066_bannou_setumei/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆066:X[共]万能ｳｨﾝﾄﾞｳ説明欄変更</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0169_battle_item_shouhi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆169:X[戦]ｱｲﾃﾑ使用_消費処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0067_zen_effect/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆067:X[共]全体エフェクト実行</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0170_battle_ginou_shouhi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆170:X[戦]技能使用_消費処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆068:■■■■■■■■■■■■■</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0171_battle_teki_gekiha/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆171:X[戦]敵撃破処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆069:■■ 【移動時・内部処理】 ■■</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0172_battle_shouhai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆172:X[戦]敵/味方・勝敗判定</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0070_para_zougen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆070:X[移]パラメータ増減</FONT></A><FONT color="#ffff00"></FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0173_battle_nokori_turn/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆173:X[戦]┗ 残りターン数表示</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0071_para_shutoku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆071:X[移]パラメータ取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0174_battle_shu_ichi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆174:X[戦]味方欄_座標算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0072_moji_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆072:X[移]パラメータ変更(文字列)</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0175_battle_teki_ichi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆175:X[戦]敵キャラ_座標算出</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0073_moji_shutoku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆073:X[移]パラメータ取得(文字列)</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0176_battle_kihon_joutai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆176:X[戦]基本状態取得</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0074_lv_up/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆074:X[移]レベルアップ処理</FONT></A></TD>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆177:■■【戦闘用・画面処理】■■</FONT></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0075_joutai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆075:X[移]状態付与/消去</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0178_battle_shu_byouga/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆178:X[戦]味方欄_単体描画</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0076_joutai_kousin/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆076:X[移]状態更新</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0179_battle_teki_byouga/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆179:X[戦]敵キャラ_単体描画</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0077_com_henkou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆077:X[移]戦闘コマンド変更</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0180_battle_back/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆180:X[戦]バックグラウンド描画</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0078_com_shutoku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆078:X[移]戦闘コマンド取得</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0181_battle_pop_up/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆181:X[戦]ﾀﾞﾒｰｼﾞ・回復ﾎﾟｯﾌﾟｱｯﾌﾟ</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0079_party_jouhou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆079:X[移]パーティー情報計算</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0182_battle_msg/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆182:X[戦]戦闘メッセージ表示</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0080_party_gazou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆080:X[移]パーティー画像再設定</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0183_battle_effect/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆183:X[戦]技能エフェクト描画</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆081:■■【お店関連処理】■■</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0184_battle_keikoku/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆184:X[戦]警告文章表示</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0082_mise_shokika/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆082:X[移]お店商品初期化</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0185_battle_joubu_status/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆185:X[戦]上部ステータス描画</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0083_mise_tuika/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆083:X[移]お店商品追加</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0186_battle_senrihin/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆186:X[戦]戦利品獲得画面</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0084_mise_jikkou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆084:X[移]お店実行</FONT></A></TD>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆187:■■【戦闘用・実行処理】■■</FONT></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0085_mise_byouga/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆085:X[移]┣ お店　描画</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0188_battle_shori/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆188:X◆戦闘処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0086_mise_jouhou/"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆086:X[移]┗ お店内部情報更新</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0189_battle_shokika/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆189:X┣◆戦闘初期化</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆087:■■【メニュー画面処理】■■</FONT></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0190_battle_chara_haichi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆190:X┣◆戦闘キャラ配置</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0088_menu_byouga/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆088:X[移]メニュー描画</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0191_koudou_set/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆191:X┣◆行動内容のセット</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0089_menu_com/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆089:X┗[移]メニューコマンド算出</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0192_mikata_command/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆192:X┃┣◆味方コマンド選択</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0090_chara_byouga/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆090:X[移]キャラクター欄描画</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0193_ai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆193:X┃┗◆敵・味方AI計算</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0091_chara_zahyou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆091:X[移]ｷｬﾗｸﾀｰ欄_座標算出</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0194_koudou_jun/" target="_self"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆194:X┣◆行動順の計算</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0092_zen_chara/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆092:X[移]キャラ欄_全員描画</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0195_1turn/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆195:X┣◆１ターンの処理を実行</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0093_soubi_byouga/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆093:X[移]装備画面描画</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0196_koudou_kanou/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆196:X┃┣◆行動可能判定</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0094_save_byouga/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆094:X[移]セーブ・ロード画面描画</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0197_1koudou_loop/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆197:X┃┗◆１行動ループ</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0095_sys_byouga/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆095:X[移]システム画面描画</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0198_turn_end/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆198:X┣◆ターン終了処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0096_pop_up/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆096:X[移]ﾀﾞﾒｰｼﾞ・回復ﾎﾟｯﾌﾟｱｯﾌﾟ</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0199_shu_db/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆199:X┣◆主人公ＤＢ復元</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0097_chara_hpsp/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆097:X[移]指定ｷｬﾗHP/SP回復表示</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0200_senrihin/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆200:X┣◆戦利品獲得処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0098_chara_joutai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆098:X[移]指定ｷｬﾗ状態付与表示</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0201_battle_end/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆201:X┗◆戦闘終了処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0099_item_nokori/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆099:X[移]残りアイテム数表示</FONT></A></TD>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆202:■■■■■■■■■■■■■</FONT></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0100_mini_window/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆100:X[移]ミニウィンドウ表示</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0203-0214/index.htm#c203" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆203:○[変更可]戦闘開始時処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0101_menu_msg/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆101:X[移]メニュー時文章表示</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0203-0214/index.htm#c204" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆204:○[変更可]1ﾀｰﾝ開始時処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/0102_joubu_status/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆102:X[移]上部ステータス描画</FONT></A></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0203-0214/index.htm#c205" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆205:○[変更可]1ﾀｰﾝ終了時処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0203-0214/index.htm#c206" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆206:○[変更可]戦闘終了後処理</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD></TD>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆207:■■■■■■■■■■■■■</FONT></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0203-0214/index.htm#c208" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆208:【基本ｼｽﾃﾑVerX.XX説明書】</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD></TD>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆209:■■■■■■■■■■■■■</FONT></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD></TD>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆210:■以下､自由に使用可■■</FONT></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD></TD>
+            <TD></TD>
+            <TD><FONT color="#64646e">◆211:■■■■■■■■■■■■■</FONT></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0203-0214/index.htm#c212" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆212:相談コマンド</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0203-0214/index.htm#c213" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆213:ゲームオーバーイベント</FONT></A></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD></TD>
+            <TD></TD>
+            <TD><A href="05_kihon/0203-0214/index.htm#c214" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆214:WOLF RPGエディター使用Ev</FONT></A></TD>
+            <TD></TD>
+          </TR>
+        </TBODY>
+      </TABLE>　　</TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A name="kihon_kaizou">　</A>　　</TD>
+      <TD align="right" valign="bottom"></TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A href="#bug" target="_self"><FONT color="#009999">▼[バグ・エラー]トップへ▼</FONT></A>　　　　　<A href="#kihon" target="_self"><FONT color="#009999">▲[基本システム]トップへ▲</FONT></A></TD>
+      <TD align="right" valign="bottom"><A href="#top" target="_self">▲トップへ▲</A></TD>
+    </TR>
+    <TR>
+      <TD>　</TD>
+      <TD></TD>
+    </TR>
+    <TR>
+      <TD valign="middle" height="40" colspan="2" bgcolor="#780000">　<FONT size="+3" color="#ffff00">◆基本システム改造</FONT></TD>
+    </TR>
+    <TR>
+      <TD valign="top" colspan="2" bgcolor="#190000"><BR>
+      <TABLE cellpadding="0">
+        <TBODY>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/1200_kaizou_tec/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆基本システムの改造テクニック</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="30" valign="bottom"><FONT color="#00ffff">▼技能・アイテム・装備</FONT></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/4030_ginou_hpsp_percent/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【技能】技能使用時のＳＰ・ＨＰ消費量を最大値の～％で設定</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/5021_ginou_narabi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【技能】特殊技能の一覧を並び替える</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/4040_kaihuku_mudanasi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【技能・アイテム】全回復の主人公には無駄に回復を使用しない</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/4020_item_tokutei_type/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【アイテム】特定の主人公のみ回復アイテムが使用可能（装備タイプ）</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/4021_item_tokutei_mojiretu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【アイテム】特定の主人公のみ回復アイテムが使用可能（装備品の文字列）</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/4010_item_siyou_ran/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【アイテム】アイテムの使用回数制限に「～％の確率で消滅」を追加</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/5020_item_narabi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【アイテム】アイテムの一覧を並び替える</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/4000_soubi_siyou_hpsp/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【装備】装備すると特殊技能のＨＰ･ＳＰ消費量が変動</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="30" valign="bottom"><FONT color="#00ffff">▼移動時・メニュー画面</FONT></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/2000_bun_window_idhi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【移動時】メッセージウィンドウのＹ表示位置を変える</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/5000_m_soudan_umu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【メニュー画面】ゲームの途中でメニュー画面に「相談」が出現</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/5010_save_gamen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【メニュー画面】セーブ画面をカスタマイズ</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="05_kihon/5030_sys_gamen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【メニュー画面】システム設定で不要な設定を消去する</FONT></A><FONT color="#ffff00"></FONT></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD height="30" valign="bottom"><FONT color="#00ffff">▼戦闘時</FONT></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/3000_sen_teki_usiro/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【戦闘時】敵キャラの表示位置を移動＆主人公画面の後ろに表示</FONT></A><FONT color="#00ffff"></FONT></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/3001_sen_teki_p_jun/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【戦闘時】指定した敵キャラの画像を一番手前に表示する</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/3020_sensei_back/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【戦闘時】先制攻撃とバックアタックが発生するように改造</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/3010_teki_kyouka/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【戦闘時】全ての敵キャラを強くする</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="05_kihon/3030_meichuu_kaihi/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆【戦闘時】当たり判定を[命中率－回避率]から[命中率×(100－回避率)]に変える</FONT></A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      　　</TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A name="bug">　</A>　　</TD>
+      <TD align="right" valign="bottom"></TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A href="#tokusetu" target="_self"><FONT color="#009999">▼[特設ページ]トップへ▼</FONT></A>　　　　<A href="#kihon_kaizou" target="_self"><FONT color="#009999">▲[基本システム改造]トップへ▲</FONT></A></TD>
+      <TD align="right" valign="bottom"><A href="#top" target="_self">▲トップへ▲</A></TD>
+    </TR>
+    <TR>
+      <TD>　</TD>
+      <TD></TD>
+    </TR>
+    <TR>
+      <TD valign="middle" height="40" colspan="2" bgcolor="#000078">　<FONT size="+3" color="#ffff00">◆バグ・エラー</FONT></TD>
+    </TR>
+    <TR>
+      <TD valign="top" colspan="2" bgcolor="#000023"><BR>
+      <TABLE cellpadding="0">
+        <TBODY>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="06_bug/1000_500000/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆1フレームあたりの処理が500万回を越えました！</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="06_bug/1003_com500/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆エラー｢コモンイベント呼び出しが500階層を超えたため…｣</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="06_bug/1001_title_henkou_save/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆エラー｢異なるゲームのセーブデータをロードしようとしました｣</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="06_bug/1002_tile_awanai/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆エラー｢基本タイルセット〇〇のサイズが合いません｣</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="06_bug/2000_lv_zougen/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆レベルの増減による｢次Lvまで｣の誤差について</FONT></A></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD></TD>
+          </TR>
+          <TR>
+            <TD></TD>
+            <TD><A href="06_bug/2001_isshun_shu/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆タイトル画面で一瞬主人公が表示される(3.00以降では発生せず)</FONT></A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      　　</TD>
+    </TR>
+    <TR>
+      <TD valign="top"><A name="tokusetu">　</A>　　</TD>
+      <TD align="right" valign="bottom"></TD>
+    </TR>
+    <TR>
+      <TD valign="top">　　　　　　　　　　　　　　　　　　<A href="#bug" target="_self"><FONT color="#009999">▲[バグ・エラー]トップへ▲</FONT></A></TD>
+      <TD align="right" valign="bottom"><A href="#top" target="_self">▲トップへ▲</A></TD>
+    </TR>
+    <TR>
+      <TD>　</TD>
+      <TD></TD>
+    </TR>
+    <TR>
+      <TD height="40" colspan="2" bgcolor="#282828">　<FONT size="+3" color="#ffff00">◆特設ページ</FONT></TD>
+    </TR>
+    <TR>
+      <TD colspan="2" bgcolor="#141414"><BR>
+      <TABLE cellpadding="0">
+        <TBODY>
+          <TR>
+            <TD valign="top" width="16"></TD>
+            <TD valign="top"><A href="../sakuhin/" target="_top"><FONT color="#00ff00" onmouseover="this.color='#8cff8c'" onmouseout="this.color='#00ff00'">◆ＹＡＤＯ作品リスト</FONT></A></TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      　　</TD>
+    </TR>
+  </TBODY>
+</TABLE>
+</CENTER>
+<CENTER></CENTER>
+<CENTER>
+<TABLE border="0">
+  <TBODY>
+    <TR>
+      <TD colspan="2">　　<BR>
+      <HR>
+      <BR>
+      <FONT size="+2" color="#ff96ff">■サイトの更新履歴</FONT><BR>
+      <BR>
+      2026/10/11：１ページを追加。<BR>
+      2026/09/28：２ページを追加。<BR>
+      2026/04/17：１ページを追加、１ページを更新。<BR>
+      2026/02/07：１ページを更新。<BR>
+      <BR>
+      <A href="page/reki.htm" target="_blank">【過去の更新履歴(追加･更新したページタイトル)を見る】</A><BR>
+      <BR>
+      <HR>
+      <BR>
+      以下はリンク用のバナーです。（リンク報告不要）<BR>
+      <BR>
+      <TABLE cellpadding="8" bgcolor="#666666" cellspacing="2">
+        <TBODY>
+          <TR bgcolor="#000000">
+            <TD rowspan="2"><IMG src="b01.gif" width="200" height="40" border="0"></TD>
+            <TD>200×40ピクセル</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>http://yado.tk/wolf/b01.gif</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD align="center" rowspan="2"><IMG src="b02.gif" width="120" height="40" border="0"></TD>
+            <TD>120×40ピクセル</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>http://yado.tk/wolf/b02.gif</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD align="center" rowspan="2"><IMG src="b03.gif" width="120" height="30" border="0"></TD>
+            <TD>120×30ピクセル</TD>
+          </TR>
+          <TR bgcolor="#000000">
+            <TD>http://yado.tk/wolf/b03.gif</TD>
+          </TR>
+        </TBODY>
+      </TABLE>
+      </TD>
+    </TR>
+  </TBODY>
+</TABLE>
+</CENTER>
+<DIV style="position: relative; top: 20px" align="center">
+<HR>
+<FONT color="#ffff00">YADOT-WOLFトップ</FONT>　　<A href="http://kkni.net/" target="_blank">気紛れな空間へ戻る</A>　　<A href="../page/mail.htm" target="_blank">メール</A><BR>
+　</DIV>
+</BODY>
+</HTML>

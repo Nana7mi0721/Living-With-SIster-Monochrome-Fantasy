@@ -1,0 +1,18 @@
+M3: implement 151 ChangeColor whole-screen tint
+
+Add ScreenTint (crates/wolf-game/src/tint.rs): 151 ChangeColor packs R/G/B
+in bits 16/8/0 as percentages (100 = neutral) and the flash flag in bit 24.
+A flash is a triangle ramp out to the colour and back; 0 frames applies at once.
+
+Wire it through the game layer: GameHost::change_color stores the request in
+Game.screen_tint, Game::frame ticks the ramp once per frame, and tile_quads plus
+the new picture_quads (used by capture/play instead of calling atlas.sprites)
+bake the multiplier into each quad's tint. Only negative-numbered screen-layer
+pictures are tinted, so the HUD is unaffected.
+
+160/162 stays a cut: the only shipped call is CE48 pc145 [-1, 65546] (kind -1),
+so no mask is drawn. Fade.png exists under work/full but is unreachable.
+
+Verified: tint unit tests, crates/wolf-game/tests/screen_tint.rs (SampleMapA
+neutral/tinted/restored), and a real Dungeon capture sweep whose tint peaks at
+[1.5, 2.0, 1.5] at frame 13 (work/out/dungeon_peak.png vs dungeon_neutral.png).

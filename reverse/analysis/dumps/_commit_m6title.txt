@@ -1,0 +1,16 @@
+M6: title menu new-game path goes to a clean bedroom
+
+The sample title screen draws its art into the negative whole-screen
+picture slots. Those layers belong to the old map, but switch_map only
+stopped the coroutines and left them in the screen, so answering the
+title menu with 130 painted the title art on top of SampleMapA.
+
+- Screen::clear_screen_layers() drops only number < 0 and keeps ordinary
+  pictures; Game::switch_map calls it before loading the new map.
+- capture --boot now matches the Map003 route: 92.1% non-black, 49 live
+  pictures, one 130 Teleport to SampleMapA (60,34) dir 3, clean room+HUD
+  (work/out/title_clean.png).
+- Tests: picture unit test for the slot filter and a boot-path
+  integration test that asserts no TitleGraphic layer survives.
+- Docs/baseline refreshed (HANDOFF_M4 4.5/4.6/6, ARCHITECTURE M6 row,
+  NEW_SESSION_START, BASELINE.m6_mainline).

@@ -1,0 +1,146 @@
+  loaded    : 84 picture(s), 800 normal variable(s), playtime 16887 frame(s), choice anchor (512, 280)
+  entry     : save file work/retail_backup/Save/SaveData08.sav
+capture
+  data root : work/full
+  frames    : 60 (peak 9 coroutine(s))
+    coro 3   event 334    pc 40    wait Frames(241)
+    coro 5   event 337    pc 64    wait Frames(1)
+    coro 7   event 352    pc 609   wait Frames(42)
+    coro 8   event 355    pc 118   wait Frames(181)
+    coro 9   event 356    pc 119   wait Frames(141)
+    coro 10  event 357    pc 94    wait Frames(1)
+    coro 11  event 506    pc 16    wait Frames(1)
+  pictures  : 86 live -> 20 textured quad(s), 17 text picture(s)
+    pic -10    File at (0, 0) alpha 1.00 scale 100 window None file "cg/bg_14_sunset_a.jpg"
+    pic -7     File at (0, 0) alpha 1.00 scale 100 window None file "cg/bg_01_home_f.jpg"
+    pic -6     File at (0, 0) alpha 1.00 scale 100 window None file "DLC_data/dlc_imouto01_eye.png"
+    pic -5     File at (0, 0) alpha 1.00 scale 100 window None file "hscene/h_bg_001.jpg"
+    pic -4     File at (0, -2) alpha 1.00 scale 100 window None file "hscene/h_bg_002.png"
+    pic -1     File at (0, 36) alpha 0.00 scale 100 window None file "cg/blackscreen.jpg"
+    pic 107    File at (20, 505) alpha 1.00 scale 100 window None file "Picture/sub_button01.png"
+    pic 292    Text at (885, 535) alpha 1.00 scale 100 window None text "\\E\\f[32]0%"
+    pic 293    Text at (160, 523) alpha 1.00 scale 100 window None text "\\E\\f[28]兴奋"
+    pic 294    File at (985, 540) alpha 1.00 scale 75 window None file "Picture/endbutton.png"
+    pic 400    File at (820, 260) alpha 0.78 scale 100 window None file "Picture/h_button_s01.png"
+    pic 401    File at (820, 305) alpha 0.78 scale 100 window None file "Picture/h_button_s02.png"
+    pic 403    File at (820, 395) alpha 0.78 scale 100 window None file "Picture/h_button_s04.png"
+    pic 405    File at (828, 440) alpha 0.78 scale 100 window None file "Picture/hbutton_m17.png"
+    pic 406    File at (130, 350) alpha 0.78 scale 100 window None file "Picture/hbutton_m35.png"
+    pic 500    File at (205, 260) alpha 0.78 scale 100 window None file "Picture/h_button_s07.png"
+    pic 501    File at (205, 305) alpha 0.78 scale 100 window None file "Picture/h_button_s06.png"
+    pic 901    File at (0, 0) alpha 0.00 scale 100 window None text ""
+    pic 1000   File at (512, 306) alpha 1.00 scale 100 window None file "hscene/h_s10_pose03.png"
+    pic 1020   File at (512, 306) alpha 1.00 scale 100 window None file "hscene/h_s10_ef_up.png"
+    pic 1100   File at (512, 306) alpha 1.00 scale 100 window None file "hscene/h_s10_face_mayu.png"
+    pic 1110   File at (512, 306) alpha 1.00 scale 100 window None file "hscene/h_s10_face_eye.png"
+    pic 1120   File at (512, 306) alpha 1.00 scale 100 window None file "hscene/h_s10_face_kuchi.png"
+    pic 1184   File at (512, 306) alpha 1.00 scale 100 window None file "hscene/h_s10_ef_syasei03.png"
+    pic 1210   File at (512, 306) alpha 1.00 scale 100 window None file "hscene/h_s10_action_girlhold.png"
+    pic 1220   File at (512, 306) alpha 1.00 scale 100 window None file "hscene/h_s10_action_menhold.png"
+    pic 1901   File at (512, 306) alpha 1.00 scale 100 window None file "hscene/h_frame.png"
+    pic 1992   WindowFile at (531, 57) alpha 0.78 scale 100 window Some((215, 6)) file "<SQUARE>"
+    pic 1993   WindowFile at (530, 58) alpha 1.00 scale 60 window Some((215, 4)) file "<GRADX-444-000>"
+    pic 1994   WindowFile at (512, 60) alpha 1.00 scale 100 window Some((470, 8)) file "<SQUARE><FRAME>"
+    pic 1995   Text at (695, 41) alpha 1.00 scale 100 window Some((1, 1)) text "\\E\\f[12]GOOD"
+    pic 1996   WindowFile at (492, 57) alpha 0.50 scale -100 window Some((215, 6)) file "<SQUARE>"
+    pic 1997   WindowFile at (491, 58) alpha 1.00 scale 21 window Some((215, 4)) file "<GRADX-000-444>"
+    pic 1998   WindowFile at (491, 56) alpha 0.00 scale -100 window Some((217, 6)) file "<SQUARE><FRAME>"
+    pic 1999   Text at (280, 41) alpha 1.00 scale 100 window Some((1, 1)) text "\\E\\f[12]BAD"
+    pic 2104   File at (512, 306) alpha 1.00 scale 100 window None file "hscene/h_s10_action_vibrator2.png"
+    pic 2200   File at (501, 510) alpha 0.00 scale 150 window None file "hword/word_effect98.png"
+    pic 3000   WindowFile at (520, 265) alpha 0.00 scale 100 window Some((140, 100)) file "<SQUARE>"
+    pic 3003   WindowFile at (515, 350) alpha 0.00 scale 100 window Some((150, 60)) file "<SQUARE>"
+    pic 3004   WindowFile at (513, 440) alpha 0.00 scale 100 window Some((80, 60)) file "<SQUARE>"
+    pic 3007   WindowFile at (510, 485) alpha 0.00 scale 100 window Some((30, 40)) file "<SQUARE>"
+    pic 3010   WindowFile at (510, 547) alpha 0.00 scale 100 window Some((40, 40)) file "<SQUARE>"
+    pic 3200   File at (66, 408) alpha 1.00 scale 100 window None file "hscene/pose_01.png"
+    pic 3201   File at (121, 408) alpha 1.00 scale 100 window None file "hscene/pose_02.png"
+    pic 3202   File at (176, 408) alpha 1.00 scale 100 window None file "hscene/pose_03.png"
+    pic 3203   File at (66, 464) alpha 1.00 scale 100 window None file "hscene/pose_04.png"
+    pic 3206   File at (121, 464) alpha 1.00 scale 100 window None file "hscene/pose_07.png"
+    pic 3208   File at (176, 464) alpha 1.00 scale 100 window None file "DLC_data/pose_10.png"
+    pic 4000   File at (564, 344) alpha 0.00 scale 150 window None file "hword/word_effect31.png"
+    pic 4100   File at (-8, 10) alpha 0.00 scale 100 window None file "hword/word_effect102.png"
+    pic 4200   File at (500, 320) alpha 0.00 scale 100 window None file "hword/word_effect116.png"
+    pic 4300   File at (500, 480) alpha 0.00 scale 150 window None file "hword/word_effect40.png"
+    pic 4400   File at (518, 488) alpha 0.00 scale 100 window None file "hword/word_effect54.png"
+    pic 4500   File at (10, 10) alpha 0.00 scale 150 window None file "Picture/scene0102_bless01.png"
+    pic 4501   File at (-10, 10) alpha 0.00 scale 150 window None file "Picture/scene0102_bless02.png"
+    pic 5000   File at (565, 350) alpha 1.00 scale 100 window None file "cutin/cutin_211.png"
+    pic 6000   File at (0, 4) alpha 1.00 scale 100 window None file "hscene/header_bar.jpg"
+    pic 6100   File at (512, 60) alpha 1.00 scale 100 window None file "Picture/sleeping_staus.png"
+    pic 6200   Text at (140, 7) alpha 1.00 scale 100 window Some((1, 1)) text "\\f[24]0:42"
+    pic 6210   Text at (150, 10) alpha 1.00 scale 100 window Some((1, 1)) text "\\c[2]\\f[18]周日"
+    pic 6211   Text at (66, 10) alpha 1.00 scale 100 window Some((1, 1)) text "\\f[18]90\\f[14]天"
+    pic 6220   Text at (190, 12) alpha 1.00 scale 100 window Some((1, 1)) text "\\f[16]\\cdb[0:12:0]\\cdb[0:12:1]哥哥"
+    pic 6230   Text at (430, 14) alpha 1.00 scale 100 window Some((1, 1)) text "\\f[14]行动力"
+    pic 6231   WindowFile at (480, 14) alpha 1.00 scale 100 window Some((150, 15)) file "<SQUARE><FRAME>"
+    pic 6232   WindowFile at (480, 15) alpha 0.39 scale 100 window Some((150, 14)) file "<SQUARE>"
+    pic 6233   WindowFile at (480, 15) alpha 1.00 scale 62 window Some((150, 14)) file "<SQUARE>"
+    pic 6235   Text at (630, 16) alpha 1.00 scale 100 window Some((1, 1)) text "\\f[12] 75/120"
+    pic 6236   Text at (780, 14) alpha 1.00 scale 100 window Some((1, 1)) text "\\f[14]精力 2/6"
+    pic 6245   Text at (690, 14) alpha 1.00 scale 100 window Some((1, 1)) text "\\f[14]性欲"
+    pic 6246   Text at (760, 14) alpha 1.00 scale 100 window Some((1, 1)) text "\\f[14]60％"
+    pic 6250   Text at (860, 14) alpha 1.00 scale 100 window Some((1, 1)) text "\\f[14]所持金"
+    pic 6251   Text at (1015, 7) alpha 1.00 scale 100 window Some((1, 1)) text "\\f[24] 7586 \\f[14]G"
+    pic 9000   File at (880, 130) alpha 0.00 scale 100 window None file "hword/word_effect26.png"
+    pic 9300   File at (492, 472) alpha 0.00 scale 150 window None file "hword/word_effect115.png"
+    pic 36000  WindowFile at (0, 0) alpha 0.00 scale 0 window Some((580, 64)) file "BalloonBase_CafeLatte/[CafeLatte]base_Round.png"
+    pic 36008  WindowFile at (-266, -42) alpha 0.00 scale 100 window Some((48, 28)) file "BalloonBase_CafeLatte/[CafeLatte]nameL(Green)_Base.png"
+    pic 36009  File at (-290, -28) alpha 0.00 scale 100 window None file "BalloonBase_CafeLatte/[CafeLatte]nameL(Green)_Corner.png"
+    pic 36010  File at (-242, -28) alpha 0.00 scale 100 window None file "BalloonBase_CafeLatte/[CafeLatte]nameL(Green)_Corner.png"
+    pic 36011  File at (-290, -56) alpha 0.00 scale 100 window None file "BalloonBase_CafeLatte/[CafeLatte]nameL(Green)_Corner.png"
+    pic 36012  File at (-242, -56) alpha 0.00 scale 100 window None file "BalloonBase_CafeLatte/[CafeLatte]nameL(Green)_Corner.png"
+    pic 36013  Text at (-278, -22) alpha 0.00 scale 100 window None text "\\f[54]\n\\f[8]\\f[20]\\E可以哦……在屁股里射出来……！！\n把哥哥的给我……！"
+    pic 36014  Text at (-266, -42) alpha 0.00 scale 100 window None text "妹妹"
+    pic 36016  File at (0, 640) alpha 0.00 scale 100 window None file "BalloonBase_CafeLatte/[CafeLatte]pauseL.png"
+    pic 36020  Text at (0, 640) alpha 0.00 scale 100 window None text "妹妹"
+    pic 80000  File at (145, 492) alpha 0.00 scale 15 window None file "Picture/circle_w.png"
+    pic 100000 Text at (0, 0) alpha 0.00 scale 150 window None text ""
+  choice    : none open
+  sys8 font : 20 px (Sys8, used by every text path)
+  sys pads  : Sys20 0 Sys22 0 Sys26 0 Sys27 0
+  atlas     : 19 image(s), 30.0% of 2048x2048
+    quad pic    -10 at [0,0,1024,576] uv [0.000,0.000,0.500,0.281]
+    quad pic     -7 at [0,0,1024,576] uv [0.500,0.000,1.000,0.281]
+    quad pic    107 at [20,505,50,60] uv [0.000,0.281,0.024,0.311]
+    quad pic    294 at [951,513,68,53] uv [0.000,0.311,0.044,0.345]
+    quad pic    400 at [790,242,60,36] uv [0.024,0.281,0.054,0.299]
+    quad pic    401 at [790,287,60,36] uv [0.054,0.281,0.083,0.299]
+    quad pic    403 at [790,377,60,36] uv [0.083,0.281,0.112,0.299]
+    quad pic    405 at [790,422,76,36] uv [0.112,0.281,0.149,0.299]
+    quad pic    406 at [92,332,76,36] uv [0.149,0.281,0.187,0.299]
+    quad pic    500 at [175,242,60,36] uv [0.187,0.281,0.216,0.299]
+    quad pic    501 at [175,287,60,36] uv [0.216,0.281,0.245,0.299]
+    quad pic   1992 at [531,57,215,6] uv [0.245,0.281,0.350,0.284]
+    quad pic   1993 at [530,58,129,2] uv [0.350,0.281,0.455,0.283]
+    quad pic   1994 at [277,56,470,8] uv [0.455,0.281,0.685,0.285]
+    quad pic   1997 at [491,58,45,1] uv [0.685,0.281,0.790,0.283]
+    quad pic   5000 at [565,350,240,160] uv [0.000,0.345,0.117,0.423]
+    quad pic   6100 at [487,35,50,50] uv [0.790,0.281,0.814,0.306]
+    quad pic   6231 at [480,14,150,15] uv [0.814,0.281,0.887,0.289]
+    quad pic   6232 at [480,15,150,14] uv [0.887,0.281,0.960,0.288]
+    quad pic   6233 at [480,15,93,9] uv [0.887,0.281,0.960,0.288]
+    text pic    292 at [869,514,64,42] 0%
+    text pic    293 at [160,523,84,36] 兴奋
+    text pic   1995 at [695,41,36,16] GOOD
+    text pic   1999 at [280,41,30,16] BAD
+    text pic   6200 at [92,7,72,31] 0:42
+    text pic   6210 at [150,10,54,23] 周日
+    text pic   6211 at [34,10,36,23] 90
+    text pic   6211 at [52,10,28,18] 天
+    text pic   6220 at [190,12,144,21] 温柔的尖叫的哥哥
+    text pic   6230 at [430,14,56,18] 行动力
+    text pic   6235 at [630,16,54,16]  75/120
+    text pic   6236 at [780,14,70,18] 精力 2/6
+    text pic   6245 at [690,14,42,18] 性欲
+    text pic   6246 at [732,14,42,18] 60％
+    text pic   6250 at [860,14,56,18] 所持金
+    text pic   6251 at [936,7,96,31]  7586 
+    text pic   6251 at [1008,7,21,18] G
+  font      : work/full\Fonts\Lolita.ttf
+  text      : 17 item(s), 59 glyph(s), 18 line(s), 0 substituted
+  rendered  : 1024x576, 552091/589824 non-black pixel(s) = 93.6%
+  wrote     : work/out/title.png
+  auto      : 96 tracked run_condition==2 event(s), 11 running [216, 217, 334, 335, 337, 339, 352, 355, 356, 357, 506]
+  stats     : 2454 instruction(s), 76 picture op(s), 0 sound(s), 90 db access(es) (6 write, 30 label), 7 message(s), 0 choice(s), 0 warning(s)

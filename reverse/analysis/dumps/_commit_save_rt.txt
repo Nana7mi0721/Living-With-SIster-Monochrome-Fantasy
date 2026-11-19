@@ -1,0 +1,14 @@
+M2: close save round-trip residual - engine-level load/save verification + negative-scale fix
+
+- crates/wolf-game/tests/save_roundtrip.rs (new): load SaveData01..08 into a real Game,
+  Game::save_to, reload, and assert the picture table (all Screen fields), the 800 normal
+  variables, play time and the choice anchor are identical (8/8 slots). Skips when the
+  copyrighted retail saves are absent.
+- crates/wolf-game/src/savegame.rs: picture_to_record no longer clamps horizontal scale
+  with max(0). Retail SaveData08 window pics 1996/1998 store scale[0] = -100; the clamp
+  rewrote it to 0 and lost it on reload. Now v[9] = picture.scale as u32 (sign kept; the
+  renderer still max(0)). New unit test a_negative_horizontal_scale_survives_a_save_round_trip.
+- docs/HANDOFF_M3.md section 6 item 1 marked done; docs/SAVE_SPEC.md gains 6.3;
+  docs/BASELINE.json gains save_roundtrip.
+
+cargo test --workspace green; verify PASS 63/0.

@@ -1,0 +1,157 @@
+== substring occurrences of dir prefixes (all string fields) ==
+scene/                  2131
+word/                    480
+hword/                   480
+EnemyGraphic/              0
+Fog_BackGround/            0
+MapData/                   6
+cg/                     3012
+Picture/                2900
+CharaChip/               188
+BattleEffect/             82
+FIcon/                    10
+cutin/                  1025
+hscene/                 2131
+DLC_data/               1366
+1.4.0/                   386
+BGM/                     216
+SE/                     1365
+SystemFile/               33
+SystemGraphic/            19
+MapChip/                   0
+Kagura/                    5
+BalloonBase_CafeLatte/    32
+
+== samples ==
+scene/
+    ('ev216', 150, 'hscene/header_bar.jpg')
+    ('ev323', 150, 'hscene/h_bg_002b.png')
+    ('ev323', 150, 'hscene/h_bg_002b.png')
+    ('ev323', 150, 'hscene/h_bg_002b.png')
+    ('ev323', 150, 'hscene/h_bg_002b.png')
+    ('ev323', 150, 'hscene/h_bg_002b.png')
+word/
+    ('ev349', 150, 'hword/word_effect17.png')
+    ('ev349', 150, 'hword/word_effect32.png')
+    ('ev349', 150, 'hword/word_effect63.png')
+    ('ev349', 150, 'hword/word_effect05.png')
+    ('ev349', 150, 'hword/word_effect07.png')
+    ('ev349', 150, 'hword/word_effect17.png')
+hword/
+    ('ev349', 150, 'hword/word_effect17.png')
+    ('ev349', 150, 'hword/word_effect32.png')
+    ('ev349', 150, 'hword/word_effect63.png')
+    ('ev349', 150, 'hword/word_effect05.png')
+    ('ev349', 150, 'hword/word_effect07.png')
+    ('ev349', 150, 'hword/word_effect17.png')
+MapData/
+    ('SysDatabase t0 r0', 0, 'MapData/TitleMap.mps')
+    ('SysDatabase t0 r1', 0, 'MapData/SampleMapA.mps')
+    ('SysDatabase t0 r2', 0, 'MapData/SampleMapA_1.mps')
+    ('SysDatabase t0 r3', 0, 'MapData/Map003.mps')
+    ('SysDatabase t0 r24', 0, 'MapData/Map024.mps')
+    ('SysDatabase t0 r31', 0, 'MapData/Map031.mps')
+cg/
+    ('ev221', 150, 'cg/blackscreen.jpg')
+    ('ev222', 150, 'cg/blackscreen.jpg')
+    ('ev222', 150, 'cg/blackscreen.jpg')
+    ('ev232', 150, 'cg/blackscreen.jpg')
+    ('ev234', 150, 'cg/blackscreen.jpg')
+    ('ev239', 150, 'cg/map_05.jpg')
+Picture/
+    ('ev213', 150, 'Picture/circle_w.png')
+    ('ev215', 150, 'Picture/stand_imouto.png')
+    ('ev218', 150, 'Picture/stand_eye_b.png')
+    ('ev218', 150, 'Picture/stand_eye_b.png')
+    ('ev218', 150, 'Picture/stand_eye_b.png')
+    ('ev218', 150, 'Picture/stand_eye_b.png')
+CharaChip/
+    ('ev42', 270, 'CharaChip/hand3.png')
+    ('SampleMapA.json', 150, 'CharaChip/look.png')
+    ('SampleMapA.json', 150, 'CharaChip/talk.png')
+    ('SampleMapA.json', 150, 'CharaChip/hand1.png')
+    ('SampleMapA.json', 150, 'CharaChip/look.png')
+    ('SampleMapA.json', 150, 'CharaChip/look.png')
+BattleEffect/
+    ('ev239', 150, 'BattleEffect/pipo-mapeffect015_480.png')
+    ('ev239', 150, 'BattleEffect/frameeffects001m.png')
+    ('ev239', 150, 'BattleEffect/pipo-mapeffect015_480.png')
+    ('ev239', 150, 'BattleEffect/frameeffects001m.png')
+    ('ev239', 150, 'BattleEffect/[Attack]Slash01_panop.png')
+    ('ev241', 150, 'BattleEffect/pipo-btleffect002.png')
+FIcon/
+    ('DataBase t20 r0', 0, 'FIcon/沈黙.png')
+    ('DataBase t20 r1', 0, 'FIcon/びっくり.png')
+    ('DataBase t20 r2', 0, 'FIcon/はてな.png')
+    ('DataBase t20 r3', 0, 'FIcon/くしゃくしゃ.png')
+    ('DataBase t20 r4', 0, 'FIcon/音符.png')
+    ('DataBase t20 r5', 0, 'FIcon/ぴかーん.png')
+cutin/
+    ('ev323', 150, 'cutin/cutin_131.png')
+    ('ev323', 150, 'cutin/cutin_135.png')
+    ('ev323', 150, 'cutin/cutin_136.png')
+    ('ev323', 150, 'cutin/cutin_135.png')
+    ('ev323', 150, 'cutin/cutin_135.png')
+    ('ev323', 150, 'cutin/cutin_135.png')
+hscene/
+    ('ev216', 150, 'hscene/header_bar.jpg')
+    ('ev323', 150, 'hscene/h_bg_002b.png')
+    ('ev323', 150, 'hscene/h_bg_002b.png')
+    ('ev323', 150, 'hscene/h_bg_002b.png')
+    ('ev323', 150, 'hscene/h_bg_002b.png')
+    ('ev323', 150, 'hscene/h_bg_002b.png')
+DLC_data/
+    ('ev221', 150, 'DLC_data/dlc_cutin068.png')
+    ('ev233', 150, 'DLC_data/stand_imouto_future.png')
+    ('ev234', 150, 'DLC_data/status_future.png')
+    ('ev238', 150, 'DLC_data/battle_cutin10.png')
+    ('ev239', 150, 'DLC_data/battle_member07a.png')
+    ('ev239', 150, 'DLC_data/member_20_s.png')
+1.4.0/
+    ('ev221', 150, '1.4.0/SD_basya.png')
+    ('ev245', 150, '1.4.0/base_bottan.png')
+    ('ev245', 150, '1.4.0/base_bottan.png')
+    ('ev245', 150, '1.4.0/base_bottan.png')
+    ('ev245', 150, '1.4.0/base_bottan.png')
+    ('ev245', 150, '1.4.0/base_bottan.png')
+BGM/
+    ('ev222', 140, 'BGM/oyasumi no kiss wo1.mp3')
+    ('ev239', 140, 'BGM/soul_engage_loop.ogg')
+    ('ev239', 140, 'BGM/The_End_of_Destruction.ogg')
+    ('ev239', 140, 'BGM/Die_Letzte_Revolution.ogg')
+    ('ev239', 140, 'BGM/straightcontrast.ogg')
+    ('ev239', 140, 'BGM/p_egg_loop.ogg')
+SE/
+    ('ev228', 140, 'SE/decision9.mp3')
+    ('ev228', 140, 'SE/decision9.mp3')
+    ('ev228', 140, 'SE/button24.mp3')
+    ('ev228', 140, 'SE/se_positive01.mp3')
+    ('ev228', 140, 'SE/button24.mp3')
+    ('ev228', 140, 'SE/se_positive01.mp3')
+SystemFile/
+    ('TitleMap.json', 150, 'SystemFile/Button01.png')
+    ('TitleMap.mps', 150, 'SystemFile/Button01.png')
+    ('SysDatabase t3 r0', 0, 'SystemFile/[SE]Enter.ogg')
+    ('SysDatabase t3 r1', 0, 'SystemFile/[SE]Cursor.ogg')
+    ('SysDatabase t3 r2', 0, 'SystemFile/[SE]Cancel.ogg')
+    ('SysDatabase t9 r0', 0, 'SystemFile/shadow64TX.png')
+SystemGraphic/
+    ('ev212', 122, 'SystemGraphic/Text_Pause.png')
+    ('ev42', 150, 'SystemGraphic/TitleGraphic6.jpg')
+    ('ev42', 150, 'SystemGraphic/TitleGraphic.jpg')
+    ('ev42', 150, 'SystemGraphic/TitleGraphic6.jpg')
+    ('ev42', 150, 'SystemGraphic/TitleGraphic.jpg')
+    ('ev42', 150, 'SystemGraphic/TitleGraphic1.jpg')
+Kagura/
+    ('ev549', 150, 'Kagura/Kagura.png')
+    ('ev549', 150, 'Kagura/Disc.png')
+    ('ev549', 150, 'Kagura/inusuku.png')
+    ('TitleMap.json', 150, 'Kagura/bg.png')
+    ('TitleMap.mps', 150, 'Kagura/bg.png')
+BalloonBase_CafeLatte/
+    ('DataBase t26 r0', 0, 'BalloonBase_CafeLatte/[CafeLatte]base_Round.png')
+    ('DataBase t26 r0', 0, 'BalloonBase_CafeLatte/[CafeLatte]nameL(Green)_Base.png')
+    ('DataBase t26 r0', 0, 'BalloonBase_CafeLatte/[CafeLatte]nameL(Green)_Corner.png')
+    ('DataBase t26 r0', 0, 'BalloonBase_CafeLatte/[CafeLatte]pauseL.png')
+    ('DataBase t26 r1', 0, 'BalloonBase_CafeLatte/[CafeLatte]base_Round.png')
+    ('DataBase t26 r1', 0, 'BalloonBase_CafeLatte/[CafeLatte]shippo_Talk_Down.png')

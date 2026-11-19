@@ -1,0 +1,98 @@
+# 地图审计 —— 六张注册地图的结构、页面激活与可触达性（task-33）
+
+> 目标读者：负责在 Rust 运行时里跑地图图层、事件页调度与场所移动（opcode 130）的人。
+> 本文回答四个问题：**(a)** 游戏真正注册了哪几张地图、另外三张 .mps 为什么永远不会被加载；
+> **(b)** 一页事件的 4 个条件槽怎么编码、「最高活动页」怎么选；**(c)** 有没有死页（条件永远无法满足）；
+> **(d)** 有没有可走的地图图形、有没有指向未注册地图的场所移动。
+>
+> 每个数字都注明由哪条命令产出（§0.2 的 C1–C11），可逐条复现。标记沿用 «BT»docs/FORMAT_SPEC.md«BT» 的规范：
+> **已验证** / **未验证** / **★已实测纠正**。本文只描述**数据**，不涉及 «BT»crates/**«BT» 的任何改动。
+
+数据源：«BT»work/full/MapData/*.mps«BT»（9 个文件，全部解析到 EOF 且末字节为 «BT»0x66«BT»）、
+注册表 «BT»work/full/BasicData/SysDatabase.dat«BT»（type 0 = マップ設定）。
+
+---
+
+## 0. 测量时点与命令索引
+
+### 0.1 时点
+
+- 工作目录 «BT»E:\Study\github program\imoto life«BT»，测量时 HEAD «BT»02d2416«BT»（写入时主干已到 «BT»5df4a7c«BT»，«BT»work/full«BT» 的数据文件未变，所以数字仍然成立）。
+- 数据源 «BT»work/full/«BT»：«BT»MapData«BT» 下 9 个 «BT».mps«BT»（累计 73 事件 / 134 页 / 37 610 指令槽）。
+- 本审计全部数字与 «BT»docs/BASELINE.json«BT» 的 «BT»map_events«BT» 段一致（73 / 134 / 37610 / 7052 空 / 30558 实）。
+
+### 0.2 命令索引
+
+| 编号 | 命令 | 产出 |
+| :--- | :--- | :--- |
+| C1 | «BT»python work/_map_audit.py«BT» | 9 张图的逐事件/逐页 JSON（«BT»work/_map_audit.json«BT»） |
+| C2 | «BT»python work/_map_audit5.py«BT» | 带参数的指令游标；opcode 130 站点原始清单 |
+| C3 | «BT»python work/_map_audit6.py«BT» | TitleMap 事件 2 的 133 条指令全文 |
+| C4 | «BT»python work/_map_audit7.py«BT» | Map003 事件 1 / Map031 事件 0 / Map024 事件 0 指令全文 |
+| C5 | «BT»python work/_map_audit8.py«BT» | 触发/条件/opcode 直方图、断点枚举死页、teleport 清单 → «BT»work/_map_audit_data.json«BT» |
+| C6 | «BT»python work/_map_audit9.py«BT» | 人类可读逐事件表（«BT»work/_map_audit_tbl.txt«BT»，199 行） |
+| C7 | «BT»python work/_map_audit10.py«BT» | opcode 150 / 124 子操作普查（注册 6 张 vs 控制组） |
+| C8 | «BT»python work/_map_audit11.py«BT» | «BT»124 sub=0x4000 field=8«BT» 悬停读取的逐站点清单 |
+| C9 | «BT»python work/_map_audit12.py«BT» | §8 的 markdown 表 + 最高活动页优先级分析（«BT»work/_map_audit_md.txt«BT»） |
+| C10 | «BT»python work/_map_audit13.py«BT» | opcode 130 站点（pc 由 «BT»enumerate«BT» 给出，修掉 «BT»list.index«BT» 的重复项错位） |
+| C11 | «BT»python work/_map_audit14.py«BT» | §1.2 形状表 / op150 / 悬停 / op123 的分图统计 |
+
+### 0.3 一句话结论
+
+**6 张注册地图 = 1 张 WOLF 示例标题 + 2 张点触（point-and-click）主画面 + 1 张 70×170 的过场 + 2 张无瓦片的钩子地图；
+134 页里没有一个死页；注册 6 张的 115 页 «BT»graphic«BT» 全是空串 ⇒ 地图只是背景板；9 个场所移动站点里没有一个写死具体地图号
+⇒ 事件数据本身不构成地图图，新游戏起点只能来自 «BT»MapTree.dat«BT»（尚未解码）。**
+
+---
+
+## 1. 地图清单：注册的 6 张 vs 孤立的 3 张
+
+### 1.1 注册表（SysDatabase type 0 マップ設定，列 0 = ファイル名）**已验证**
+
+| 地图号 | 路径 | 事件 | 页 | 指令槽 |
+| --: | :--- | --: | --: | --: |
+| 0 | «BT»MapData/TitleMap.mps«BT» | 1 | 1 | 133 |
+| 1 | «BT»MapData/SampleMapA.mps«BT» | 40 | 93 | 31 083 |
+| 2 | «BT»MapData/SampleMapA_1.mps«BT» | 12 | 17 | 5 752 |
+| 3 | «BT»MapData/Map003.mps«BT» | 2 | 2 | 45 |
+| 24 | «BT»MapData/Map024.mps«BT» | 1 | 1 | 3 |
+| 31 | «BT»MapData/Map031.mps«BT» | 1 | 1 | 63 |
+
+type 0 共 50 行，其余 44 行是空槽（数值列 «BT»[-1,-1,0,-2]«BT» + 空文件名），不参与注册。
+
+### 1.2 形状 **已验证**
+
+| 地图 | 尺寸 | 瓦片层 | 事件 | 页 | 指令槽 | confirm | autorun | parallel | touch |
+| :--- | :--- | --: | --: | --: | --: | --: | --: | --: | --: |
+| «BT»TitleMap.mps«BT» | 53×30 | 3 | 1 | 1 | 133 | 0 | 1 | 0 | 0 |
+| «BT»SampleMapA.mps«BT» | 64×36 | 3 | 40 | 93 | 31 083 | 6 | 19 | 68 | 0 |
+| «BT»SampleMapA_1.mps«BT» | 64×36 | 3 | 12 | 17 | 5 752 | 0 | 2 | 15 | 0 |
+| «BT»Map003.mps«BT» | 70×170 | 3 | 2 | 2 | 45 | 0 | 2 | 0 | 0 |
+| «BT»Map024.mps«BT» | 53×30 | 0（无瓦片块） | 1 | 1 | 3 | 0 | 1 | 0 | 0 |
+| «BT»Map031.mps«BT» | 53×30 | 0（无瓦片块） | 1 | 1 | 63 | 0 | 1 | 0 | 0 |
+| «BT»SampleMapB.mps«BT»（控制组） | 30×30 | 3 | 6 | 6 | 36 | 4 | 0 | 0 | 2 |
+| «BT»Dungeon.mps«BT»（孤立） | 40×30 | 3 | 5 | 6 | 79 | 4 | 0 | 0 | 2 |
+| «BT»Map002.mps«BT»（孤立） | 100×30 | 3 | 5 | 7 | 416 | 0 | 0 | 7 | 0 |
+
+合计 **73 事件 / 134 页 / 37 610 槽**（注册 6 张占 57 / 115 / 37 079），与 «BT»docs/BASELINE.json«BT» 完全一致。
+trigger 字节含义：0 确认(confirm) / 1 自动执行(autorun) / 2 并行(parallel) / 3 接触(touch)；全库 trigger 分布
+«BT»{confirm 14, autorun 26, parallel 90, touch 4}«BT»，字节 4 从未出现。
+
+### 1.3 三张孤立地图 **已验证**
+
+| 地图 | 为什么不会被加载 | 内容 |
+| :--- | :--- | :--- |
+| «BT»Dungeon.mps«BT» | type 0 无对应行；全库 9 个 130 站点没有一个指向它（130 根本不写地图号，见 §6） | WOLF 示例地牢：5 事件 / 6 页 / 79 槽（含 1 个 130 与 2 个 touch 事件） |
+| «BT»Map002.mps«BT» | 同上 | 100×30 的示例图：5 事件 / 7 页 / 416 槽，含 61 条 150 与 4 个 «BT»-2«BT» 目的地 |
+| «BT»SampleMapB.mps«BT» | 同上 | WOLF 示例村：6 事件 / 6 页 / 36 槽，4 confirm + 2 touch，唯一一张「能走」的演示图 |
+
+这三张只可能通过引擎的新游戏初始地图（«BT»MapTree.dat«BT»，未解码）或调试直接进入。
+
+### 1.4 ★已实测纠正：两张地图没有瓦片层
+
+«BT»Map024.mps«BT» 与 «BT»Map031.mps«BT» 的 «BT»first_pixel«BT» 是 «BT»0xFFFFFFFF«BT» ⇒ «BT»has_tile_data == false«BT»、
+«BT»layers.is_empty()«BT»，瓦片块只有 4 字节。其余 7 张都是 3 层（layer0 地表 / layer1 装饰 / layer2 顶层）。
+«BT»docs/FORMAT_SPEC.md«BT» §5.3 已记录该分支，本审计确认它们确实是**钩子地图**：Map024 只有 1 个 3 槽事件（清图），
+Map031 只有 1 个 63 槽事件（读档后处理），都不需要地图内容。
+
+---

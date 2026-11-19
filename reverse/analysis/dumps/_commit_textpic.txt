@@ -1,0 +1,19 @@
+fix(save): keep Text picture message-box words across save/load
+
+picture_from_record treated only var6==1 (WindowFile) as a box and pushed Text
+records into the sprite-sheet branch, while picture_to_record wrote the Text
+picture's default split (1,1) into vars7_18[2]/[3]. A live message window
+(picture 16001, 7680x1200) therefore lost its box size on the first mid-scene
+save; the save only became a fixed point from the second cycle.
+
+- savegame.rs: Text records carry vars7_18[2]/[3] in Picture.window and write
+  them back (falling back to the saved baseline), never the Text split. File and
+  WindowFile semantics, tone/effect banks and animation tail are untouched.
+- savegame.rs unit test: a Text record with [2]=7680/[3]=1200 round-trips its
+  whole vars7_18 unchanged.
+- m13_crossday_save.rs: first mid-scene save is now asserted to be a byte fixed
+  point (S1==S2==S3) instead of tolerating a 16001-only delta.
+
+Verification: m8_save_parts 6 passed; m12_save_full_compare 2 passed (8/8 retail
+saves byte-identical); m13_crossday_save 2 passed / 1 ignored; full workspace
+suite 836 passed / 0 failed / 10 ignored (EXIT 0).

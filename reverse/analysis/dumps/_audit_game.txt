@@ -1,0 +1,1 @@
+{"Title": "妹相随～黑白世界的缤纷冒险～", "TitlePlus": "+DLC v2.03", "StartUpMsg": "", "TitleMsg": "", "MainFont": "LOLITA", "SubFonts": ["LOLITA", "LOLITA", "LOLITA"]}

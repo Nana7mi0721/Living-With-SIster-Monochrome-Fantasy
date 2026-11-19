@@ -1,0 +1,11 @@
+M11: close out the M10 residual boundaries
+
+- Battle determinism: lock the natural day-4 trajectory (BTreeSet ordering, byte-identical across 5 process runs).
+- H deep-chain real-save gate matrix: var304/var326 content blockers, synthetic-save reachability retained.
+- Movement: 8-way diagonal steps and NPC contact/occupancy in map_runtime.
+- Anchor 5/6 pixel geometry and negative-scale mirror regression tests.
+- Real multi-member battle command sequence across the BOSS gauge.
+- Audio loop acceptance dossier for all 31 loop-tagged tracks.
+
+Docs: HANDOFF_M10 section 8, PLAN M11 statuses, BASELINE m11_workstreams, research index.
+Tests: cargo test -q --workspace --no-fail-fast (green); wolf-cli verify PASS 70/0.

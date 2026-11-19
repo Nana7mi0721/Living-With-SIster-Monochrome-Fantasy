@@ -1,0 +1,7 @@
+M6: record why the sister click stays seeded
+
+Both 18:30 and 19:30 sit on SampleMapA event 1 page 0
+(var69==1), while the click handler that writes var63 lives
+on page 2 (var64==1), so clicking picture 120 cannot reach it
+in the current headless slice.  Document the three page gates
+and keep the var63 seed in the regression test.
