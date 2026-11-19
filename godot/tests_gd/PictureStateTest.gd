@@ -184,7 +184,7 @@ func _ready() -> void:
 	# 150 erase range: the far endpoint rides in the long form's ERASE_SPAN argument.
 	for slot in [1310, 1311, 1312, 1313]:
 		stage.draw_picture(slot, 0, "", "erase probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
-	stage.draw_picture(1310, 2, "", "", [10, 1, 1, 1313])
+	stage.draw_picture(1310, 2, "", "", [10, 1, 1, 1313], 0, 2, [], {"has_span": true})
 	for slot in [1310, 1311, 1312, 1313]:
 		check(stage._states.has(slot) and bool(stage._states[slot].get("erase_after", false)),
 			"150 erase span marks slot %d for removal" % slot)
@@ -196,10 +196,26 @@ func _ready() -> void:
 	# 150 hide range: the far endpoint is the first argument after the command number.
 	for slot in [1320, 1321, 1322]:
 		stage.draw_picture(slot, 0, "", "hide probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
-	stage.draw_picture(1320, 3, "", "", [1322])
+	stage.draw_picture(1320, 3, "", "", [1322], 0, 2, [], {"has_span": true})
 	for slot in [1320, 1321, 1322]:
 		check(stage._states.has(slot) and bool(stage._states[slot]["hidden"]),
 			"150 hide span hides slot %d" % slot)
+
+	# Without head bit 0x0100_0000 an erase/hide argument is not a range endpoint.
+	stage.draw_picture(1314, 0, "", "no span probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1315, 0, "", "no span neighbour", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1314, 2, "", "", [0, 1, 1, 1315])
+	check(not stage._cmds.has(1314), "erase without HasSpan removes only its slot")
+	check(stage._cmds.has(1315), "erase without HasSpan leaves the neighbour alone")
+
+	# R14-P2-01: track mode must compare the OLD command before storing the new one.
+	stage.track_picture(1380, 0, "", "track a", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.effect(0, 5, [0, 5, 1380, 1380, 100, 100, 100])
+	stage.track_picture(1380, 0, "", "track b", [10, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	check((stage._states[1380]["effects"] as Array).is_empty(),
+		"track mode does not inherit effects when the graphic changes")
+	check(float(stage._states[1380]["current"]["opacity"]) < 1.0,
+		"track mode fades in a fresh graphic instead of treating it as a redraw")
 
 	# 150 move honours the UNCHANGED sentinel: x/y stay, only scale and opacity change.
 	stage.draw_picture(1330, 0, "", "unchanged probe", [0, 1, 1, 1, 255, 100, 120, 200, 0], 0, 2)
@@ -237,6 +253,9 @@ func _ready() -> void:
 	check(int(stage._states[1372]["target"]["scale_y"]) == 50, "scale_mode 3 keeps scale_y independent")
 	stage.draw_picture(1373, 0, "", "scale mode 0", scale_args, 0, 2)
 	check(int(stage._states[1373]["target"]["scale_y"]) == 200, "default mode copies scale into scale_y")
+	var mirror_args := [0, 1, 1, 1, 255, 100, 100, 100, 0, 0, 0, 0, 0, 100, 100, 100, -50]
+	stage.draw_picture(1374, 0, "", "vertical mirror", mirror_args, 0, 2, [], {"scale_mode": 3})
+	check((stage._pictures[1374] as Control).scale.y < 0.0, "negative scale_y mirrors vertically")
 
 	# Tone defaults to the WOLF neutral 100, not 255 (picture.rs TONE_NEUTRAL).
 	stage.draw_picture(1340, 0, "", "tone probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)

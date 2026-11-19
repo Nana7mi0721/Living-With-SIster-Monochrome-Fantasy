@@ -425,6 +425,7 @@ public partial class VmController : Node, IHost, IVmSession
             sb.Append(",\"scale_mode\":").Append(cmd.ScaleMode);
             sb.Append(",\"keep_shift\":").Append(cmd.KeepShift ? "true" : "false");
             sb.Append(",\"relative\":").Append(cmd.Relative ? "true" : "false");
+            sb.Append(",\"has_span\":").Append(cmd.HasSpan ? "true" : "false");
             sb.Append(",\"animate\":[");
             var animate = cmd.Animate;
             if (animate != null)

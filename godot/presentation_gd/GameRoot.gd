@@ -155,8 +155,7 @@ func _ready() -> void:
 	# Rust boots windowed play with live event RNG (M25_LIVE_UX.md); headless/CI keeps
 	# the fixed stream so route and parity fixtures stay deterministic. WOLF_LIVE_RNG=0
 	# opts a windowed run back out.
-	if DisplayServer.get_name() != "headless" and OS.get_environment("WOLF_LIVE_RNG") != "0":
-		vm.SetEventSeed(Time.get_ticks_usec() & 0xFFFFFFFF)
+	_seed_live_rng_if_windowed()
 	if not session.StartTitle():
 		phase = "failed"
 		push_error("GameRoot: title event missing")
@@ -198,6 +197,7 @@ func _consume_picture_queue(queued: String) -> bool:
 			"scale_mode": int(p.get("scale_mode", 0)),
 			"keep_shift": bool(p.get("keep_shift", false)),
 			"relative": bool(p.get("relative", false)),
+			"has_span": bool(p.get("has_span", false)),
 		}
 		if vm.TrackPicturesOnly:
 			stage.track_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]), animate, flags)
@@ -916,12 +916,24 @@ func confirm_return_to_title() -> bool:
 		phase = "failed"
 		status("return-to-title failed: title event missing")
 		return false
+	_seed_live_rng_if_windowed()
 	frames = 0
 	_accumulator = 0.0
 	phase = "title"
 	_sync_play_ui()
 	status("returned to title (progress abandoned, save untouched)")
 	return true
+
+
+## Rust boots windowed play with live event RNG (M25_LIVE_UX.md); headless/CI keeps the
+## fixed stream so route and parity fixtures stay deterministic. WOLF_LIVE_RNG=0 opts a
+## windowed run back out. Mix the wall clock with the monotonic clock: ticks alone have
+## too little entropy right after boot, and a return-to-title rebuild must reseed too.
+func _seed_live_rng_if_windowed() -> void:
+	if DisplayServer.get_name() == "headless" or OS.get_environment("WOLF_LIVE_RNG") == "0":
+		return
+	var seed := int(Time.get_unix_time_from_system() * 1000.0) ^ Time.get_ticks_usec()
+	vm.SetEventSeed(seed & 0xFFFFFFFF)
 
 
 func modal_release_guard() -> bool:

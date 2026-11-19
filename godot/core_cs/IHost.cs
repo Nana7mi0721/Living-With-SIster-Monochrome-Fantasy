@@ -28,6 +28,8 @@ public sealed class PictureCmd
     public bool KeepShift { get; init; }
     /// <summary>Head bit 0x0001_0000: X/Y are offsets from the slot's current position.</summary>
     public bool Relative { get; init; }
+    /// <summary>Head bit 0x0100_0000: erase/hide carry the far endpoint of a slot range.</summary>
+    public bool HasSpan { get; init; }
 }
 
 public enum SoundChannel

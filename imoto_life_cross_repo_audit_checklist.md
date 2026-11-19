@@ -7,12 +7,14 @@
 
 ## 0. 2026-11-19 落地状态与勘误（优先于下文旧快照）
 
+> R14（基线 `c553d04`，审阅报告 `imoto_life_c553d04_review_and_roadmap.md`）：R13 的 7 项全部闭环；本轮修 `track_picture` 命令存储顺序（同槽换图误判 redraw）、150 HasSpan 门控、`scale_y` 纵向镜像、窗口 RNG 熵与回标题重播种。`PictureStateTest` 现为 checks=107。
+
 > 本节记录实际落地结果。下文的“当前代码现状”是审计当时的快照，**已过时**；两者冲突时以本节和 Rust 参考实现为准。
 
 ### 已完成
 
 - **AutoEvents**：最终采用**边沿触发** + `PrimeLatched`，仅 `RESUME_ON_LOAD={216,217}` 每次 replay；242/243 仍是 gated call only。原文“电平触发”与 Rust `auto_events.rs` 不符，**不要**再改成每帧重启。
-- **Opcode 176**：2026-11-19 R13 复核推翻旧结论：Rust `program.rs:293` 只把 111/112/102/170/179 建成 `BlockKind::Loop` 头，**不含 176**；`exec.rs:3150-3158` 的 case 176 在有循环时 `close_loop`、否则 log 后 `pc+=1`。`Program.cs` 已删除 176 块头，`EventVm.cs` 的 case 176 已改为 `ContinueLoop`。原文“176 是循环头”和“176 只 Pc++”都不准确。
+- **Opcode 176**：2026-11-19 R13 复核推翻旧结论：Rust `program.rs:293` 只把 111/112/102/170/179 建成 `BlockKind::Loop` 头，**不含 176**；`exec.rs:3150-3158` 的 case 176 在有循环时 `close_loop`、否则 log 后 `pc+=1`。`Program.cs` 已删除 176 块头，`EventVm.cs` 的 case 176 已改为 `CloseLoop`（无循环时 log + Pc++）。原文“176 是循环头”和“176 只 Pc++”都不准确。
 - **150 / 151 / 130 / 140**：150 图片参数按掩码与 Self 段保留 raw，其余 EvalNum；151 frames 已 EvalNum；130 按 raw `target,x,y,map,options`；140 raw volume/frames 等。
 - **125 / 126**：125 低 8 位 AutoKeys + 2 帧 TTL + 每实例一次投递（C# 有意偏差，Rust 无 TTL）；126 直接用 host 位布局，不做 WOLF 位转换。
 - **211**：已实现预约队列、绝对 target 映射、前台空闲时每帧弹一个、`ResetSessionState` 清空。
@@ -20,21 +22,21 @@
 - **121**：低 8 位编辑器 flag 全部无意义；0x600/0x700 恒等 current，0x800 abs(current)，0xC00 sqrt(max(value,0))*1000；600000+ 调用是绝对映射，不是相对 caller。
 - **CommonSelf**：只在实例结束/停止落库，不做实时广播。
 - **表现层**：160/161/162 TransitionState + GameRoot 黑色三角波 overlay；MapLayer 改 `MOUSE_FILTER_PASS` 且不再 `accept_event`。
-- **PictureStage**：150 fade/slide/erase-fade、hide、blend、独立 `scale_y`、负号固定屏层按原生尺寸（只有 `>=12000` 全屏）；290 per-picture 特效 0..5/7..10；`stage.tick()` 已接入每帧。R13 补齐：tone 默认 `[100,100,100]` 且只读 `TONE_PRESENT`，`_tone_color` 按 `picture.rs:1063-1097` 逐位实现；同槽仅 kind/file/text 且位置相同时继承 shake/zoom/breath/pattern；`_hit_rect` 含 `effect_offset` 与真实尺寸；分格 sprite-sheet 用 AtlasTexture，PATTERN 真正切 cell；blend 材质缓存、MUL 强制 alpha=1；tick 只推进有动画的槽。162 转场等待已补 `return Signal.Blocked`。150 head flags 已落地：`scale_mode=(head>>20)&0xF`（3=独立 scale_y）、`keep_shift=head&0x00400000`、`relative=head&0x00010000`；`_begin_draw` 接收前态，换图也能相对定位。
+- **PictureStage**：150 fade/slide/erase-fade、hide、blend、独立 `scale_y`、负号固定屏层按原生尺寸（只有 `>=12000` 全屏）；290 per-picture 特效 0..5/7..10；`stage.tick()` 已接入每帧。R14 补齐：`track_picture` 先快照前态、`_begin_draw` 后再 `_store_cmd`（否则同槽换图误判 redraw）；`HasSpan` 只在 head bit 0x0100_0000 时把 erase args[3] / hide args[0] 当范围终点；负 `scale_y` 纵向镜像。R13 补齐：tone 默认 `[100,100,100]` 且只读 `TONE_PRESENT`，`_tone_color` 按 `picture.rs:1063-1097` 逐位实现；同槽仅 kind/file/text 且位置相同时继承 shake/zoom/breath/pattern；`_hit_rect` 含 `effect_offset` 与真实尺寸；分格 sprite-sheet 用 AtlasTexture，PATTERN 真正切 cell；blend 材质缓存、MUL 强制 alpha=1；tick 只推进有动画的槽。162 转场等待已补 `return Signal.Blocked`。150 head flags 已落地：`scale_mode=(head>>20)&0xF`（3=独立 scale_y）、`keep_shift=head&0x00400000`、`relative=head&0x00010000`；`_begin_draw` 接收前态，换图也能相对定位。
 - **前端**：F11 全屏、F4 200 条消息回顾（有 `Nameplate.speaker` 时拼人名）、回标题确认、`_modal_release_guard` 释放守卫；标题页隐藏「返回标题」按钮；`MapLayer` 默认关闭调试色块/leader（`LWsmf_SHOW_MAP_DEBUG=1` 恢复），格子数据与点击不变；F5/F9 增加 1.5 秒 Toast。
-- **RNG**：`WolfRng.FromEnvironment` 在 `WOLF_LIVE_RNG` 非 0 时用 `EventSeed` 时钟扰动；窗口启动默认调用 `vm.SetEventSeed(Time.get_ticks_usec())`，但判断必须用 `DisplayServer.get_name() != "headless"`（`OS.has_feature("headless")` 在 `--headless` 下仍为 false，误用会让 CI 随机化）；headless/CI 保持固定 seed，`WOLF_LIVE_RNG=0` 可关闭窗口扰动（对齐 Rust `M25_LIVE_UX.md`）。
+- **RNG**：`WolfRng.FromEnvironment` 在 `WOLF_LIVE_RNG` 非 0 时用 `EventSeed` 时钟扰动；窗口启动与回标题重建后都调用 `_seed_live_rng_if_windowed()`，seed = `int(Time.get_unix_time_from_system()*1000.0) ^ Time.get_ticks_usec()`。判断必须用 `DisplayServer.get_name() != "headless"`（`OS.has_feature("headless")` 在 `--headless` 下仍为 false，误用会让 CI 随机化）；headless/CI 保持固定 seed，`WOLF_LIVE_RNG=0` 可关闭窗口扰动（对齐 Rust `M25_LIVE_UX.md`）。
 
 ### 已验证
 
-- `PictureStateTest` checks=102（含 keep_shift/relative/scale_mode）、`GameRootTest`、`LayerOrderTest`、`MapLayerTest` checks=18、`Smoke` / `ALL VM TESTS PASSED`、`SessionParityTest` checks=10 frames=418、route diff 149247/149247（100%）均通过。
+- `PictureStateTest` checks=107（含 HasSpan、track 换图、纵向镜像）、`GameRootTest`、`LayerOrderTest`、`MapLayerTest` checks=18、`Smoke` / `ALL VM TESTS PASSED`、`SessionParityTest` checks=10 frames=418、route diff 149247/149247（100%）均通过。
 - 完整 headless 门禁 `reports/gate_headless.log`：`GODOT_GATE_OK`、`EXIT=0`、38/38；M13 slot1 `frames=34437`、slot8 `frames=34631`。
-- 渲染门禁 `reports/gate_render.log`（`LWsmf_RENDER=1`）：`GODOT_GATE_OK`、`EXIT=0`、38/38；M13 slot1 `frames=34437`、slot8 `frames=34631`，与 headless 完全一致；`PERFORMANCE_FRAME_STRICT_OK fps=3825.1`。
-- 注：上一轮门禁 M13 为 35217/35411，本轮少 780 帧；两轮断言均通过、route diff 100%，差异来源未逐帧定位。
+- 渲染门禁 `reports/gate_render.log`（`LWsmf_RENDER=1`）：`GODOT_GATE_OK`、`EXIT=0`、38/38；M13 slot1 `frames=34437`、slot8 `frames=34631`，与 headless 完全一致；`PERFORMANCE_FRAME_STRICT_OK avg_ms=4.297 p95_ms=4.547 fps=232.7`。
+- 注：M13 的 780 帧差异不是代码回归——在干净 `5dd6956` worktree（junction 同一份 `work/` 数据）重跑 slot1 得到 `frames=34437`、`stage28_at=95/31081`，与当前完全一致；历史 35217 无法复现，推断来自不同数据/运行环境。
 
 ### 仍未完成/已知偏差
 
 - 290 颜色公式已按 Rust 逐位实现，但未做逐像素截图对拍；PATTERN 已通过 AtlasTexture 真正切 sprite-sheet cell；
-- 150 span 标志（head&0x01000000）未门控；当前 erase 固定用 args[3]、hide 用 args[0]，无已知副作用；
+- 150 span 标志（head&0x01000000）已门控；单槽 erase/hide 不再误擦邻槽；
 - 125 TTL 偏差、211 参数扩展、140 tempo/loopPoint 属长期对齐项；
 - UX 仍缺 F8 nearest/linear、初始窗口尺寸/缩放模式；backlog 人名依赖目前无事件写入的 `Nameplate.speaker`；
 - 未生成 release 包（本阶段明确不做）。

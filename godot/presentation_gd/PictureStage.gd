@@ -87,10 +87,10 @@ func band_order() -> Array:
 
 func draw_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int = 0, kind: int = -1, animate: Array = [], flags: Dictionary = {}) -> Control:
 	if action == 2:
-		_start_erase(number, args)
+		_start_erase(number, args, flags)
 		return null
 	if action == 3:
-		_hide_picture(number, args)
+		_hide_picture(number, args, flags)
 		return null
 	if kind < 0:
 		# SavedPicture has no kind field; recover it from what the decoder produced.
@@ -364,10 +364,10 @@ func _hit_rect(number: int) -> Rect2:
 ## native listeners on long deterministic runs.
 func track_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array = [], flags: Dictionary = {}) -> void:
 	if action == 2:
-		_start_erase(number, args)
+		_start_erase(number, args, flags)
 		return
 	if action == 3:
-		_hide_picture(number, args)
+		_hide_picture(number, args, flags)
 		return
 	if action == 1:
 		if not _cmds.has(number):
@@ -383,6 +383,7 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 		return
 	if kind < 0:
 		kind = 2 if file.is_empty() and not text.is_empty() else 0
+	var prev_state: Dictionary = _states.get(number, {}).duplicate(true)
 	var base := Vector2.ZERO
 	if kind == 2 or kind == 4:
 		base = Vector2(maxi(0, _arg(args, 1, 0)), maxi(0, _arg(args, 2, 0)))
@@ -392,9 +393,11 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 		base = _measure_text(text)["size"]
 	else:
 		base = Vector2(420, 140)
-	_store_cmd(number, action, file, text, args, anchor, kind, animate, flags)
+	# _begin_draw compares the slot's old command to decide whether this is a redraw, so
+	# the new command must be stored only after it runs (R14-P2-01).
 	_base_sizes[number] = base
-	_begin_draw(number, file, text, args, anchor, kind, animate, flags)
+	_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
+	_store_cmd(number, action, file, text, args, anchor, kind, animate, flags)
 
 
 func _build_picture(number: int, file: String, text: String, args: Array, anchor: int, kind: int) -> Control:
@@ -700,10 +703,12 @@ func _begin_move(number: int, _file: String, _text: String, args: Array, anchor:
 	_render_picture(number)
 
 
-func _start_erase(number: int, args: Array) -> void:
+func _start_erase(number: int, args: Array, flags: Dictionary = {}) -> void:
 	# The long erase form addresses a closed slot range via ERASE_SPAN (args[3]); the two
-	# endpoints are unordered (picture.rs apply, CE221 / Map003.mps ev1 pc24).
-	var span := _arg(args, 3, number) if args.size() > 3 else number
+	# endpoints are unordered (picture.rs apply, CE221 / Map003.mps ev1 pc24). The span is
+	# only meaningful when head bit 0x0100_0000 (HasSpan) marks it, otherwise args[3] is
+	# an ordinary argument and a single-slot erase would wipe its neighbours.
+	var span := _arg(args, 3, number) if bool(flags.get("has_span", false)) and args.size() > 3 else number
 	var lo := mini(number, span)
 	var hi := maxi(number, span)
 	for slot in range(lo, hi + 1):
@@ -739,10 +744,10 @@ func _start_erase_one(number: int, args: Array) -> void:
 	_render_picture(number)
 
 
-func _hide_picture(number: int, args: Array = []) -> void:
+func _hide_picture(number: int, args: Array = [], flags: Dictionary = {}) -> void:
 	# Hide also supports a closed range: 150 [0x01000003, lo, hi] passes the far endpoint as
 	# args[0] because the command number is the low slot (picture.rs apply, CE270).
-	var span := _arg(args, 0, number) if not args.is_empty() else number
+	var span := _arg(args, 0, number) if bool(flags.get("has_span", false)) and not args.is_empty() else number
 	var lo := mini(number, span)
 	var hi := maxi(number, span)
 	for slot in range(lo, hi + 1):
@@ -898,7 +903,8 @@ func _render_picture(number: int) -> void:
 	node.size = size
 	node.position = position
 	node.pivot_offset = size * 0.5
-	node.scale = Vector2(-1.0 if int(pose.get("scale", 100)) < 0 else 1.0, 1.0)
+	node.scale = Vector2(-1.0 if int(pose.get("scale", 100)) < 0 else 1.0,
+		-1.0 if int(pose.get("scale_y", 100)) < 0 else 1.0)
 	var blend := int(pose.get("blend", 0))
 	var tint := _tone_color(state)
 	tint.a = clampf(float(pose.get("opacity", 255)) / 255.0, 0.0, 1.0)
