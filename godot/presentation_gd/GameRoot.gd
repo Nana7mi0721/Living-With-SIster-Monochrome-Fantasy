@@ -29,6 +29,23 @@ var _transition_rect: ColorRect
 var _transition_frames := 0
 var _transition_elapsed := 0
 
+# Front-end conveniences (F11 fullscreen, F4 backlog, return-to-title confirm) and the
+# modal release guard: closing an overlay must not let a still-held mouse button fall
+# through to the picture/choice layer on the next frame.
+const BACKLOG_LIMIT := 200
+var _backlog: Array[String] = []
+var _backlog_root: Control
+var _backlog_label: Label
+var _backlog_scroll: ScrollContainer
+var _backlog_open := false
+var _title_button: Button
+var _title_confirm_root: Control
+var _title_confirm_open := false
+var _modal_release_guard := false
+var _fullscreen := false
+var _windowed_position := Vector2i.ZERO
+var _windowed_size := Vector2i.ZERO
+
 var phase := "boot"
 var frames := 0
 var auto_advance := false
@@ -115,6 +132,7 @@ func _ready() -> void:
 	session.name = "Session"
 	add_child(session)
 	session.Setup(vm, self)
+	_build_play_ui()
 
 	vm.connect("SoundRequested", _on_sound)
 	vm.connect("MessageRequested", func(text: String, face: int) -> void: session.ShowMessage(text, face))
@@ -162,15 +180,21 @@ func _consume_picture_queue(queued: String) -> bool:
 		push_error("picture queue JSON is not an array: %s" % queued.left(120))
 		return false
 	for p in batch:
+		var animate: Array = p.get("animate", [])
 		if vm.TrackPicturesOnly:
-			stage.track_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]))
+			stage.track_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]), animate)
 		else:
-			stage.draw_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]))
+			stage.draw_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]), animate)
 	return true
 
 
 func advance_frame() -> void:
 	if phase == "failed" or phase == "setup" or faulted:
+		return
+	_release_modal_guard_if_free()
+	# A full-screen read-only overlay owns the screen: the deterministic clock must not
+	# keep running behind it (the player could lose a message while reading backlog).
+	if _backlog_open or _title_confirm_open:
 		return
 	if auto_advance and message.is_open():
 		message.confirm()
@@ -180,14 +204,17 @@ func advance_frame() -> void:
 	# starts at (-1,-1) so screen-layer pictures cannot hover at the origin (D-09).
 	var pointer := router.hover_position if router.mouse_seen else Vector2(-1, -1)
 	vm.SetPointer(pointer.x, pointer.y)
-	vm.SetPointerPressed(router.pointer_pressed)
-	vm.SetPointerRightPressed(router.right_pressed)
-	vm.SetPointerMiddlePressed(router.middle_pressed)
+	# A modal release guard suppresses every button until the physical press is released.
+	var guarded := _modal_release_guard
+	vm.SetPointerPressed(router.pointer_pressed and not guarded)
+	vm.SetPointerRightPressed(router.right_pressed and not guarded)
+	vm.SetPointerMiddlePressed(router.middle_pressed and not guarded)
 	vm.SetFrameWheel(router.wheel_notch())
 	vm.BeginFrameInput()
 	session.AdvanceFrame()
 	var queued := str(vm.TakePicturesJson())
 	_consume_picture_queue(queued)
+	stage.tick()
 	_tick_transition()
 	frames = session.Frames
 	phase = session.Phase
@@ -224,7 +251,7 @@ func start_event(event_id: int) -> bool:
 # ---- input ---------------------------------------------------------------
 
 func _on_action() -> void:
-	if faulted:
+	if faulted or _modal_release_guard or _modal_window_open():
 		return
 	# 126 state 2 denies the selected basic key. Messages keep their confirm path
 	# (matching Rust message_dismissed); choices and map interactions do not.
@@ -246,6 +273,14 @@ func _on_action() -> void:
 func _on_cancel() -> void:
 	if faulted:
 		return
+	if _backlog_open:
+		close_backlog()
+		return
+	if _title_confirm_open:
+		cancel_return_to_title()
+		return
+	if _modal_release_guard:
+		return
 	if (int(session.BasicAllDeny) & 2) != 0:
 		return
 	if choice.is_open:
@@ -259,7 +294,7 @@ func _on_cancel() -> void:
 
 
 func _on_wheel(direction: int) -> void:
-	if faulted:
+	if faulted or _modal_window_open():
 		return
 	if choice.is_open:
 		# 126 state 2 denies the direction keys; the wheel must respect the same bits.
@@ -276,7 +311,7 @@ func _on_wheel(direction: int) -> void:
 
 
 func _on_move(dx: int, dy: int) -> void:
-	if faulted:
+	if faulted or _modal_window_open():
 		return
 	if choice.is_open:
 		var bit := 16 if dy < 0 else 32 if dy > 0 else 0
@@ -299,7 +334,7 @@ func _on_move(dx: int, dy: int) -> void:
 ## Only real mouse motion reaches here, so a resting mouse never steals the keyboard
 ## cursor (DECISIONS D-09). The hover also moves the choice cursor (W2-P1-01).
 func _on_hover(position: Vector2) -> void:
-	if faulted:
+	if faulted or _modal_window_open():
 		return
 	if choice.is_open:
 		choice.hover_at(position)
@@ -339,6 +374,8 @@ func _on_message(text: String, face: int) -> void:
 	# 1 means window-only, >= 2 selects the SysDB24 bust. A plain message must still open
 	# the window; MessageWindow also handles a first-line @n on its own.
 	message.open(text, face if face > 0 else 0)
+	# Backlog is memory-only, never saved: a reload starts a fresh history.
+	_push_backlog(message.full_text)
 
 
 func _on_message_closed() -> void:
@@ -400,8 +437,11 @@ func _tick_transition() -> void:
 		_transition_rect.visible = false
 
 
-func _on_effect(kind: int, duration: int, _args: Array) -> void:
-	status("effect kind=%d duration=%d" % [kind, duration])
+func _on_effect(kind: int, duration: int, args: Array) -> void:
+	# Rust applies 290 to the pictures in the closed args[2]..args[3] range and reports a
+	# no-op only when that range holds no live picture.
+	if not stage.effect(kind, duration, args):
+		status("effect kind=%d duration=%d (no target)" % [kind, duration])
 
 
 ## Sys3/Sys4 hold the choice window corner; the VM keeps them in SysVars.
@@ -500,12 +540,36 @@ func _on_message_text() -> String:
 	return message.full_text
 
 
-## F5 saves, F9 loads (retail keys); both are F5/F9 in TitleScreen too.
+## F5 saves, F9 loads, F11 toggles fullscreen, F4 opens the message backlog.
 func _unhandled_input(event: InputEvent) -> void:
-	if faulted or phase == "setup" or not (event is InputEventKey):
+	if not (event is InputEventKey):
 		return
 	var key := event as InputEventKey
 	if not key.pressed or key.echo:
+		return
+	if key.keycode == KEY_F11:
+		toggle_fullscreen()
+		get_viewport().set_input_as_handled()
+		return
+	if faulted or phase == "setup":
+		return
+	if key.keycode == KEY_F4:
+		if _backlog_open:
+			close_backlog()
+		else:
+			open_backlog()
+		get_viewport().set_input_as_handled()
+		return
+	if key.keycode == KEY_ESCAPE and (_backlog_open or _title_confirm_open):
+		if _backlog_open:
+			close_backlog()
+		else:
+			cancel_return_to_title()
+		get_viewport().set_input_as_handled()
+		return
+	if _backlog_open or _title_confirm_open:
+		# Every other key is consumed by the overlay; gameplay must not resume behind it.
+		get_viewport().set_input_as_handled()
 		return
 	if key.keycode == KEY_F5:
 		if session.SaveGame():
@@ -524,6 +588,303 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			status("load failed")
 		get_viewport().set_input_as_handled()
+
+
+# ---- front-end overlays (F11 / F4 / return to title) --------------------
+
+func _build_play_ui() -> void:
+	_title_button = Button.new()
+	_title_button.name = "ReturnToTitle"
+	_title_button.text = "返回标题"
+	_title_button.position = Vector2(892, 8)
+	_title_button.size = Vector2(120, 30)
+	_title_button.focus_mode = Control.FOCUS_NONE
+	_title_button.z_index = 90
+	_title_button.pressed.connect(request_return_to_title)
+	add_child(_title_button)
+	_build_title_confirm()
+
+
+func _build_title_confirm() -> void:
+	_title_confirm_root = Control.new()
+	_title_confirm_root.name = "ReturnToTitleConfirm"
+	_title_confirm_root.z_index = 130
+	_title_confirm_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_title_confirm_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_title_confirm_root.visible = false
+	add_child(_title_confirm_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.72)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_title_confirm_root.add_child(dim)
+
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -240.0
+	panel.offset_right = 240.0
+	panel.offset_top = -90.0
+	panel.offset_bottom = 90.0
+	_title_confirm_root.add_child(panel)
+
+	var margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 16)
+	panel.add_child(margin)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 12)
+	margin.add_child(column)
+
+	var title := Label.new()
+	title.text = "返回标题？"
+	title.add_theme_font_size_override("font_size", 20)
+	column.add_child(title)
+
+	var question := Label.new()
+	question.text = "当前进度不会自动写入存档。确定放弃本次游戏并返回标题吗？"
+	question.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	question.custom_minimum_size = Vector2(0, 48)
+	column.add_child(question)
+
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	buttons.alignment = BoxContainer.ALIGNMENT_END
+	column.add_child(buttons)
+
+	var cancel_button := Button.new()
+	cancel_button.text = "取消"
+	cancel_button.pressed.connect(cancel_return_to_title)
+	buttons.add_child(cancel_button)
+
+	var confirm_button := Button.new()
+	confirm_button.text = "返回标题"
+	confirm_button.pressed.connect(confirm_return_to_title)
+	buttons.add_child(confirm_button)
+
+
+func _build_backlog_overlay() -> void:
+	_backlog_root = Control.new()
+	_backlog_root.name = "MessageBacklog"
+	_backlog_root.z_index = 120
+	_backlog_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_backlog_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_backlog_root.visible = false
+	add_child(_backlog_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.78)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_backlog_root.add_child(dim)
+
+	var panel := PanelContainer.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	panel.offset_left = 60.0
+	panel.offset_top = 40.0
+	panel.offset_right = -60.0
+	panel.offset_bottom = -40.0
+	_backlog_root.add_child(panel)
+
+	var margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 14)
+	panel.add_child(margin)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 8)
+	margin.add_child(column)
+
+	var header := Label.new()
+	header.text = "消息回顾（最近 %d 条，只读，不写入存档）" % BACKLOG_LIMIT
+	header.add_theme_font_size_override("font_size", 18)
+	column.add_child(header)
+
+	_backlog_scroll = ScrollContainer.new()
+	_backlog_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_backlog_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(_backlog_scroll)
+
+	_backlog_label = Label.new()
+	_backlog_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_backlog_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_backlog_label.add_theme_font_size_override("font_size", 16)
+	_backlog_scroll.add_child(_backlog_label)
+
+	var footer := HBoxContainer.new()
+	footer.alignment = BoxContainer.ALIGNMENT_END
+	column.add_child(footer)
+	var close_button := Button.new()
+	close_button.text = "关闭（F4/Esc）"
+	close_button.pressed.connect(close_backlog)
+	footer.add_child(close_button)
+
+
+func _push_backlog(text: String) -> void:
+	var entry := text.strip_edges()
+	if entry.is_empty():
+		return
+	_backlog.append(entry)
+	while _backlog.size() > BACKLOG_LIMIT:
+		_backlog.pop_front()
+
+
+func backlog_size() -> int:
+	return _backlog.size()
+
+
+func backlog_open() -> bool:
+	return _backlog_open
+
+
+func _modal_window_open() -> bool:
+	return _backlog_open or _title_confirm_open
+
+
+func open_backlog() -> void:
+	if _backlog_root == null:
+		_build_backlog_overlay()
+	if _backlog_label == null:
+		return
+	var lines := PackedStringArray()
+	if _backlog.is_empty():
+		lines.append("（尚无对话记录）")
+	else:
+		for entry in _backlog:
+			lines.append(entry)
+	_backlog_label.text = "\n\n".join(lines)
+	_backlog_root.visible = true
+	_backlog_open = true
+	_backlog_scroll.set_deferred("scroll_vertical", 2147483647)
+	status("backlog open (%d messages)" % _backlog.size())
+
+
+func close_backlog() -> void:
+	if not _backlog_open:
+		return
+	_backlog_open = false
+	if _backlog_root != null:
+		_backlog_root.visible = false
+	_arm_modal_release_guard()
+	status("backlog closed")
+
+
+func is_fullscreen() -> bool:
+	return _fullscreen
+
+
+## Records the windowed pose so leaving fullscreen restores the exact pre-F11 geometry.
+func toggle_fullscreen() -> void:
+	if DisplayServer.get_name() == "headless":
+		_fullscreen = not _fullscreen
+		status("fullscreen=%s (headless)" % str(_fullscreen))
+		return
+	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		if _windowed_size != Vector2i.ZERO:
+			DisplayServer.window_set_size(_windowed_size)
+			DisplayServer.window_set_position(_windowed_position)
+		_fullscreen = false
+	else:
+		_windowed_position = DisplayServer.window_get_position()
+		_windowed_size = DisplayServer.window_get_size()
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		_fullscreen = true
+	status("fullscreen=%s" % str(_fullscreen))
+
+
+func title_confirm_open() -> bool:
+	return _title_confirm_open
+
+
+func request_return_to_title() -> void:
+	if faulted or phase == "setup" or phase == "failed" or _title_confirm_open:
+		return
+	if _backlog_open:
+		close_backlog()
+	if _title_confirm_root == null:
+		_build_title_confirm()
+	if _title_confirm_root == null:
+		return
+	_title_confirm_root.visible = true
+	_title_confirm_open = true
+	status("return-to-title confirm opened")
+
+
+func cancel_return_to_title() -> void:
+	if not _title_confirm_open:
+		return
+	_title_confirm_open = false
+	if _title_confirm_root != null:
+		_title_confirm_root.visible = false
+	_arm_modal_release_guard()
+	status("return-to-title cancelled")
+
+
+## Rebuilds the session (D-33) and restarts the title event without touching any save slot.
+func confirm_return_to_title() -> bool:
+	if not _title_confirm_open:
+		return false
+	_title_confirm_open = false
+	if _title_confirm_root != null:
+		_title_confirm_root.visible = false
+	_arm_modal_release_guard()
+	vm.StopAll()
+	vm.ResetDiagnostics()
+	vm.ResetPointer()
+	router.pointer_pressed = false
+	router.right_pressed = false
+	router.middle_pressed = false
+	router.clear_frame_latches()
+	message.close()
+	choice.close()
+	stage.clear_pictures()
+	audio.reset()
+	map_view.visible = false
+	if not session.Rebuild():
+		phase = "failed"
+		status("return-to-title failed: session rebuild")
+		return false
+	if not session.StartTitle():
+		phase = "failed"
+		status("return-to-title failed: title event missing")
+		return false
+	frames = 0
+	_accumulator = 0.0
+	phase = "title"
+	status("returned to title (progress abandoned, save untouched)")
+	return true
+
+
+func modal_release_guard() -> bool:
+	return _modal_release_guard
+
+
+func _arm_modal_release_guard() -> void:
+	_modal_release_guard = true
+	if router != null:
+		router.pointer_pressed = false
+		router.right_pressed = false
+		router.middle_pressed = false
+		router.clear_frame_latches()
+
+
+## The guard stays armed until every physical button and router latch is released, so the
+## release of the click that closed a modal cannot press a picture button underneath.
+func _release_modal_guard_if_free() -> void:
+	if not _modal_release_guard:
+		return
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		return
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+		return
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
+		return
+	if router.pointer_pressed or router.right_pressed or router.middle_pressed:
+		return
+	_modal_release_guard = false
+	router.clear_frame_latches()
 
 
 func status(line: String) -> void:
@@ -639,6 +1000,7 @@ func restart_after_fault() -> bool:
 	frames = 0
 	_accumulator = 0.0
 	phase = "title"
+	_arm_modal_release_guard()
 	status("fault recovery: returned to title")
 	return true
 
@@ -687,6 +1049,7 @@ func recover_to_last_save() -> bool:
 	frames = session.Frames
 	_accumulator = 0.0
 	phase = "bedroom"
+	_arm_modal_release_guard()
 	status("fault recovery: loaded last save")
 	return true
 
@@ -762,5 +1125,8 @@ func _build_fault_modal() -> void:
 	buttons.add_child(restart_button)
 	var close_button := Button.new()
 	close_button.text = "关闭"
-	close_button.pressed.connect(func() -> void: _fault_root.visible = false)
+	close_button.pressed.connect(func() -> void:
+		_fault_root.visible = false
+		_arm_modal_release_guard()
+	)
 	buttons.add_child(close_button)

@@ -33,6 +33,19 @@ public sealed class WolfRng
 
     public static WolfRng FromEventSeed(uint eventSeed) => new(DefaultSeed, eventSeed);
 
+    /// <summary>
+    /// Rust keeps the table cursor at zero unless WOLF_LIVE_RNG is set; the Godot windowed
+    /// entry opts into clock seeding with that switch while headless runs stay deterministic.
+    /// The C# port mirrors the policy, not the table: absent or "0" means the fixed default.
+    /// </summary>
+    public static WolfRng FromEnvironment()
+    {
+        var live = Environment.GetEnvironmentVariable("WOLF_LIVE_RNG");
+        if (string.IsNullOrEmpty(live) || live == "0")
+            return new WolfRng();
+        return new WolfRng(unchecked((uint)Environment.TickCount64));
+    }
+
     public uint State => _state;
     public uint EventState => _eventState;
     public uint EventSeed => _eventSeed;

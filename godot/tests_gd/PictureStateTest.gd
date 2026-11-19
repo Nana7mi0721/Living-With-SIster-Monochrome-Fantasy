@@ -143,6 +143,73 @@ func _ready() -> void:
 	check(vm.GetVar(4) == 8, "CE217 leaves the hour at 8")
 	check(vm.GetVar(5) == 30, "CE217 leaves the minute at 30")
 
+	# 150 fade: draw from alpha 0 and ramp to the command opacity (picture.rs alpha ramp).
+	stage.draw_picture(1300, 0, "", "fade probe", [100, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	var fade_holder: Control = stage._pictures.get(1300)
+	check(fade_holder != null and fade_holder.modulate.a < 0.01, "fade draw starts transparent")
+	stage.tick()
+	for _i in 49:
+		stage.tick()
+	check(absf(fade_holder.modulate.a - 0.5) < 0.02, "fade reaches half alpha halfway (got %.3f)" % fade_holder.modulate.a)
+	for _i in 51:
+		stage.tick()
+	check(absf(fade_holder.modulate.a - 1.0) < 0.01, "fade ends at the target opacity")
+
+	# 150 move with the animate tail slides from the old pose to the target.
+	stage.draw_picture(1301, 0, "", "slide probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1301, 0, "", "slide probe", [0, 1, 1, 1, 255, 200, 100, 100, 0], 0, 2, [10])
+	check(stage.picture_state(1301, 0) == 100, "slide starts from the previous x")
+	for _i in 5:
+		stage.tick()
+	var slide_x: int = stage.picture_state(1301, 0)
+	check(absf(slide_x - 150) <= 1, "slide is halfway after five of ten frames (got %d)" % slide_x)
+	for _i in 5:
+		stage.tick()
+	check(stage.picture_state(1301, 0) == 200, "slide lands on the target x")
+
+	# 290: inclusive target range, shift/zoom/flash state, and no-op outside the range.
+	stage.draw_picture(1302, 0, "", "effect probe", [0, 1, 1, 1, 255, 300, 200, 100, 0], 0, 2)
+	check(stage.effect(2, 0, [0, 0, 1302, 1302, 10, 20, 0]), "290 shift accepts a live target")
+	check(stage._states[1302]["shift"] == [10, 20], "290 shift records its offset")
+	check(stage.effect(4, 10, [0, 10, 1302, 1302, 512, 288, 150]), "290 zoom accepts a live target")
+	check(stage._states[1302]["zoom"] != null, "290 zoom records its state")
+	check(stage.effect(0, 5, [0, 5, 1302, 1302, 100, 100, 100]), "290 flash accepts a live target")
+	check(not stage.effect(0, 5, [0, 5, 1999, 1999, 100, 100, 100]), "290 flash without a target is a no-op")
+	check(not stage.effect(6, 5, [0, 5, 1302, 1302, 0, 0, 0]), "290 rejects unsupported kind 6")
+	var effect_holder: Control = stage._pictures.get(1302)
+	stage.tick()
+	check(effect_holder.modulate.r > 0.9 and effect_holder.modulate.g > 0.9, "290 flash brightens the picture")
+	check(stage._states[1302]["zoom"]["elapsed"] >= 1, "290 zoom advances each tick")
+
+	# 150 erase range: the far endpoint rides in the long form's ERASE_SPAN argument.
+	for slot in [1310, 1311, 1312, 1313]:
+		stage.draw_picture(slot, 0, "", "erase probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1310, 2, "", "", [10, 1, 1, 1313])
+	for slot in [1310, 1311, 1312, 1313]:
+		check(stage._states.has(slot) and bool(stage._states[slot].get("erase_after", false)),
+			"150 erase span marks slot %d for removal" % slot)
+	for _i in 10:
+		stage.tick()
+	for slot in [1310, 1311, 1312, 1313]:
+		check(not stage._cmds.has(slot), "150 erase span removes slot %d" % slot)
+
+	# 150 hide range: the far endpoint is the first argument after the command number.
+	for slot in [1320, 1321, 1322]:
+		stage.draw_picture(slot, 0, "", "hide probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1320, 3, "", "", [1322])
+	for slot in [1320, 1321, 1322]:
+		check(stage._states.has(slot) and bool(stage._states[slot]["hidden"]),
+			"150 hide span hides slot %d" % slot)
+
+	# 150 move honours the UNCHANGED sentinel: x/y stay, only scale and opacity change.
+	stage.draw_picture(1330, 0, "", "unchanged probe", [0, 1, 1, 1, 255, 100, 120, 200, 0], 0, 2)
+	stage.draw_picture(1330, 1, "", "", [0, 1, 1, 1, 128, -1000000, -1000000, 150], 0, 2)
+	var moved_state: Dictionary = stage._states[1330]["current"]
+	check(int(moved_state["x"]) == UiSkin.unit(100) and int(moved_state["y"]) == UiSkin.unit(120),
+		"150 move UNCHANGED keeps x/y")
+	check(int(moved_state["scale"]) == 150 and int(moved_state["opacity"]) == 128,
+		"150 move still applies supplied scale/opacity")
+
 	if failures == 0:
 		print("PICTURE_STATE_TEST_OK checks=%d" % checks)
 		get_tree().quit(0)

@@ -20,19 +20,21 @@
 - **121**：低 8 位编辑器 flag 全部无意义；0x600/0x700 恒等 current，0x800 abs(current)，0xC00 sqrt(max(value,0))*1000；600000+ 调用是绝对映射，不是相对 caller。
 - **CommonSelf**：只在实例结束/停止落库，不做实时广播。
 - **表现层**：160/161/162 TransitionState + GameRoot 黑色三角波 overlay；MapLayer 改 `MOUSE_FILTER_PASS` 且不再 `accept_event`。
+- **PictureStage**：150 fade/slide/erase-fade、hide、blend、独立 `scale_y`、负号固定屏层按原生尺寸（只有 `>=12000` 全屏）；290 per-picture 特效 0..5/7..10；`stage.tick()` 已接入每帧。
+- **前端**：F11 全屏、F4 200 条消息回顾、回标题确认、`_modal_release_guard` 释放守卫。
+- **RNG**：默认仍固定 seed，`WOLF_LIVE_RNG` 为显式 opt-in 时钟扰动（对齐 Rust 默认确定、环境变量 opt-in 的策略）。
 
 ### 已验证
 
-- `bash tools/godot_check.sh`：`GODOT_GATE_OK` / EXIT=0（38/38，M13 slot1/slot8 均通过）。
-- `LWsmf_RENDER=1 bash tools/godot_check.sh`：结果见工作区 `reports/gate_render.log`。
-- `Smoke.tscn`：`SMOKE_OK`；`VmTest`：`ALL VM TESTS PASSED`。
-- Route diff：`ROUTE_DIFF_OK: 149247/149247 steps matched 100%`。
+- `PictureStateTest` checks=82、`GameRootTest`、`LayerOrderTest`、`MapLayerTest` checks=18、`Smoke` / `ALL VM TESTS PASSED` 均通过。
+- 完整 headless 门禁 `reports/gate_headless.log`：`GODOT_GATE_OK`、`EXIT=0`、38/38；M13 slot1 `frames=34437`、slot8 `frames=34631`。
+- 渲染门禁 `reports/gate_render.log`（`LWsmf_RENDER=1`）：`GODOT_GATE_OK`、`EXIT=0`、38/38；M13 帧数与 headless 完全一致。
+- 注：上一轮门禁 M13 为 35217/35411，本轮少 780 帧；两轮断言均通过、route diff 100%，差异来源未逐帧定位。
 
-### 仍未完成
+### 仍未完成/已知偏差
 
-- 290 per-picture 特效、PictureStage fade/move 补间与 blend/负号/全屏语义；
-- RNG 时钟播种、`_modal_release_guard`、F11、F4 消息回顾、回标题确认；
-- 上述 125 TTL 偏差与 211 参数扩展的长期对齐；
+- 290 颜色/pattern 为近似，PATTERN 未真正切 sprite-sheet cell；150 keep-shift(0x400000) 与 relative draw 未做；
+- 125 TTL 偏差、211 参数扩展、140 tempo/loopPoint 属长期对齐项；
 - 未生成 release 包（本阶段明确不做）。
 
 ## 一、两个仓库的定位与架构差异（防误判边界）

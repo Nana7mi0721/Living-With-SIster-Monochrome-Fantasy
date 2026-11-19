@@ -283,6 +283,43 @@ func _ready() -> void:
 			if FileAccess.get_file_as_string(root.session.SavePath) != save_text_before:
 				failures.append("fault recovery must not rewrite the save slot")
 
+		# F11 must toggle the display mode and restore the previous state.
+		var fullscreen_before: bool = root.is_fullscreen()
+		root.toggle_fullscreen()
+		if root.is_fullscreen() == fullscreen_before:
+			failures.append("F11 must toggle fullscreen")
+		root.toggle_fullscreen()
+		if root.is_fullscreen() != fullscreen_before:
+			failures.append("a second F11 must restore the original window mode")
+
+		# F4 backlog: messages are remembered in memory and the overlay pauses the clock.
+		root._on_message("Backlog probe", -1)
+		if root.backlog_size() < 1:
+			failures.append("messages must enter the backlog ring")
+		root.open_backlog()
+		if not root.backlog_open():
+			failures.append("F4 must open the backlog overlay")
+		root.close_backlog()
+		if root.backlog_open():
+			failures.append("closing the backlog must hide it")
+		if not root.modal_release_guard():
+			failures.append("closing a modal must arm the release guard")
+
+		# Return-to-title confirmation: cancel keeps the run, confirm rebuilds and re-enters title.
+		var title_generation_before: int = root.session.Generation
+		root.request_return_to_title()
+		if not root.title_confirm_open():
+			failures.append("return-to-title must ask for confirmation")
+		root.cancel_return_to_title()
+		if root.title_confirm_open():
+			failures.append("cancelling return-to-title must close the modal")
+		root.request_return_to_title()
+		if not root.confirm_return_to_title():
+			failures.append("confirming return-to-title must rebuild the session")
+		if root.phase != "title":
+			failures.append("return-to-title must land on the title (got %s)" % root.phase)
+		if root.session.Generation <= title_generation_before:
+			failures.append("return-to-title must rebuild GameSession")
 		root.queue_free()
 	if failures.is_empty():
 		print("GAME_ROOT_TEST_OK")

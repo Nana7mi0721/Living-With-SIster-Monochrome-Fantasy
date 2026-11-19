@@ -421,7 +421,18 @@ public partial class VmController : Node, IHost, IVmSession
                 }
             }
             sb.Append("],\"anchor\":").Append(cmd.Anchor);
-            sb.Append(",\"kind\":").Append(cmd.Kind).Append('}');
+            sb.Append(",\"kind\":").Append(cmd.Kind);
+            sb.Append(",\"animate\":[");
+            var animate = cmd.Animate;
+            if (animate != null)
+            {
+                for (int k = 0; k < animate.Length; k++)
+                {
+                    if (k > 0) sb.Append(',');
+                    sb.Append(animate[k]);
+                }
+            }
+            sb.Append("]}");
         }
         sb.Append(']');
         _pictureQueue.Clear();

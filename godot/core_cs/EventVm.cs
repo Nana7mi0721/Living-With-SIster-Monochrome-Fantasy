@@ -17,7 +17,7 @@ public enum Signal
 public sealed class EventVm
 {
     public Variables Vars { get; } = new();
-    public WolfRng Rng { get; } = new();
+    public WolfRng Rng { get; } = WolfRng.FromEnvironment();
     public List<Instance> Instances { get; } = new();
     public Dictionary<int, Program> Programs { get; } = new();
     public ulong Frame { get; private set; }
