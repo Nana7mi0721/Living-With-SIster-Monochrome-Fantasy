@@ -21,7 +21,8 @@
 | 8 | [`../../oracle/TRACE_CONTRACT.md`](../../oracle/TRACE_CONTRACT.md) | Rust Oracle 与 Godot EventVM 对拍格式规范 |
 | 9 | [`M5_HANDOFF.md`](M5_HANDOFF.md) | **M5 收口交接**：转换引导、发布包、性能证据、存档回退与 90 天 soak |
 | 10 | [`RELEASE.md`](RELEASE.md) | **M5-A 发布说明**：导出预设、打包脚本、发布审计与实测记录 |
-| 11 | [`../README.md`](../README.md) | 全仓文档总索引 |
+| 11 | [`UI_UX_GROUND_TRUTH_SPEC.md`](UI_UX_GROUND_TRUTH_SPEC.md) | **UI/UX 真相规格书**：系统字体、窗口皮肤、槽位层级、动效模式与代码审计 |
+| 12 | [`../README.md`](../README.md) | 全仓文档总索引 |
 
 ## 2. 当前技术结论
 
