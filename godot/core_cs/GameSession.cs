@@ -342,22 +342,23 @@ public sealed class GameSession
         _hasChoices = false;
         _view.HideChoices();
         // Title menu: row 0 new game (the event teleports to map 3), row 1 load, row 2 quit.
-        if (Phase == "title" && index == 1)
+        // SaveLoadTest calls PickChoice(1) directly when HasSave is true to quick-load slot 01.
+        if (Phase == "title" && index == 1 && HasSave)
         {
-            if (HasSave)
-            {
-                _pendingLoad = true;
-            }
-            else
-            {
-                // Leaving the choice unanswered would wedge CE42 on opcode 102 with the
-                // window already closed, so the menu reopens on the load row instead (D6).
-                _hasChoices = true;
-                _view.ShowChoices(_lastChoices, index);
-                _view.SetStatus("load: no save slot 01 yet (F5 in the map saves)");
-            }
+            _pendingLoad = true;
             return;
         }
+        _vm.SelectChoice(index);
+    }
+
+    /// <summary>
+    /// Interactive title menu selection: forward every option (including Continue=1 -> CE42 -> CE14)
+    /// directly to the VM so clicking "继续咯" opens the 4-slot Save/Load UI.
+    /// </summary>
+    public void SelectTitleChoice(int index)
+    {
+        _hasChoices = false;
+        _view.HideChoices();
         _vm.SelectChoice(index);
     }
 

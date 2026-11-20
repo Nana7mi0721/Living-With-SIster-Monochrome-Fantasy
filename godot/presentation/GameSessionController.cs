@@ -103,6 +103,7 @@ public partial class GameSessionController : Node
     public void MoveLeader(int dx, int dy, int facing) => _session?.MoveLeader(dx, dy, facing);
     public void PressActionKey() => _session?.PressActionKey();
     public void PickChoice(int index) => _session?.PickChoice(index);
+    public void SelectTitleChoice(int index) => _session?.SelectTitleChoice(index);
     public void CancelChoice() => _session?.CancelChoice();
     public void DismissMessage() => _session?.DismissMessage();
     public void ShowMessage(string text, int face) => _session?.ShowMessage(text, face);

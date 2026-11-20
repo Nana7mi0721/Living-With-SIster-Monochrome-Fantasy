@@ -7,6 +7,7 @@ extends RefCounted
 ## taken at the 1024x576 logical resolution (DECISIONS D-09). Keeping the metric and the
 ## nine-patch in one place is what makes the C# and GDScript screens agree pixel for pixel.
 
+const _AppPaths = preload("res://presentation_gd/AppPaths.gd")
 const WINDOW_BASE := "SystemFile/WindowBase.png"
 const WINDOW_CORNER := 3
 const BASE_FONT_SIZE := 20
@@ -14,8 +15,8 @@ const BASE_FONT_SIZE := 20
 ## The unpacked tree ships no font, so fall back to a system CJK face. Order matters:
 ## Yu Gothic UI is the retail-feeling Windows face, MS Gothic its bitmap-era ancestor.
 const FONT_NAMES: Array[String] = [
-	# Simplified-Chinese first: the shipped script text is Chinese, and a Japanese face
-	# first would leave the retail HUD glyphs in their JP forms (audit L6).
+	# Retail uses LOLITA (ASCII/digits/JP) + rounded CJK fallback (YouYuan / YaHei / Noto).
+	"YouYuan",
 	"Microsoft YaHei UI",
 	"Microsoft YaHei",
 	"Noto Sans CJK SC",
@@ -48,28 +49,61 @@ const TEXT_COLORS: Array[Color] = [
 	Color8(200, 200, 200), # 19 light grey
 ]
 
-static var _font: SystemFont = null
-static var _bold_font: SystemFont = null
+static var _font: Font = null
+static var _bold_font: Font = null
 
 
-## One shared system font; SystemFont caches the resolved face internally.
+static func _find_retail_font_path() -> String:
+	var candidates := [
+		_AppPaths.package_root().path_join("Data/Lolita.ttf"),
+		_AppPaths.resource_root().path_join("Data/Lolita.ttf"),
+		OS.get_executable_path().get_base_dir().path_join("Data/Lolita.ttf"),
+		"E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy/Data/Lolita.ttf",
+	]
+	for p in candidates:
+		if FileAccess.file_exists(p):
+			return p
+	return ""
+
+
+static func _make_system_font(bold: bool) -> SystemFont:
+	var sys := SystemFont.new()
+	sys.font_names = PackedStringArray(FONT_NAMES)
+	if bold:
+		sys.font_weight = 700
+	sys.allow_system_fallback = true
+	sys.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+	return sys
+
+
+static func _build_font(bold: bool) -> Font:
+	var fallback := _make_system_font(bold)
+	var ttf_path := _find_retail_font_path()
+	if not ttf_path.is_empty():
+		var ff := FontFile.new()
+		if ff.load_dynamic_font(ttf_path) == OK:
+			ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+			ff.fallbacks = [fallback]
+			if bold:
+				var fv := FontVariation.new()
+				fv.base_font = ff
+				fv.variation_embolden = 0.22
+				return fv
+			return ff
+	return fallback
+
+
+## One shared retail/system font chain.
 static func font() -> Font:
 	if _font == null:
-		_font = SystemFont.new()
-		_font.font_names = PackedStringArray(FONT_NAMES)
-		_font.allow_system_fallback = true
-		_font.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+		_font = _build_font(false)
 	return _font
 
 
-## Bold system font for comic-style high-contrast dialogue, options and outlined labels.
+## Bold font for dialogue, options and outlined labels.
 static func bold_font() -> Font:
 	if _bold_font == null:
-		_bold_font = SystemFont.new()
-		_bold_font.font_names = PackedStringArray(FONT_NAMES)
-		_bold_font.font_weight = 700
-		_bold_font.allow_system_fallback = true
-		_bold_font.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+		_bold_font = _build_font(true)
 	return _bold_font
 
 

@@ -13,12 +13,12 @@ signal confirm_requested
 const WINDOW_SIZE := Vector2(960, 168)
 const WINDOW_POS := Vector2(64, 408)
 const TEXT_ORIGIN := Vector2(64, 410)
-const BUBBLE_X := 162.0
-const BUBBLE_WIDTH := 700.0
-const BUBBLE_BOTTOM := 568.0
-const BUBBLE_MIN_HEIGHT := 88.0
-const BUBBLE_PADDING_X := 32.0
-const BUBBLE_PADDING_Y := 14.0
+const BUBBLE_X := 176.0
+const BUBBLE_WIDTH := 672.0
+const BUBBLE_BOTTOM := 564.0
+const BUBBLE_MIN_HEIGHT := 78.0
+const BUBBLE_PADDING_X := 48.0
+const BUBBLE_PADDING_Y := 12.0
 const BUBBLE_CURSOR_RESERVE := 12.0
 const FONT_SIZE := 20
 const LINE_GAP := 6                # Sys8 + 6 == 26 px row pitch at the base size
@@ -27,14 +27,14 @@ const TEXT_SPEED := 500.0        # Sys9 default: characters per second
 const PAUSE_SECONDS := 0.25      # \\. beat
 const LEFT_PADDING := 12.0
 const TOP_PADDING := 8.0
-const CURSOR_TEXTURE := "SystemFile/Text_Pause.png"
-const CURSOR_FRAME_HEIGHT := 15
+const CURSOR_TEXTURE := "BalloonBase_CafeLatte/[CafeLatte]pauseL.png"
+const CURSOR_FALLBACK_TEXTURE := "SystemGraphic/Text_Pause.png"
 const CURSOR_POS := Vector2(504, 544)
 # Pill skin colours + >=0.12 RGB sum for DialogDrawTest lit-pixel contract.
-const SKIN_BORDER := Color(1.0, 1.0, 1.0, 0.26)
+const SKIN_BORDER := Color(1.0, 1.0, 1.0, 0.0)
 const SKIN_HIGHLIGHT := Color("f2f3f3")
 const SKIN_MID := Color("576062")
-const SKIN_FILL := Color(0.10, 0.11, 0.13, 0.80)
+const SKIN_FILL := Color(0.14, 0.15, 0.17, 0.72)
 const COLOR_TABLE: Array[Color] = [
 	Color.WHITE,
 	Color("80d0ff"),   # 1 -- the corpus' only non-white colours
@@ -54,6 +54,7 @@ var waiting_for_confirm := false
 var finished := false
 var speed_override := 0.0
 var hover_enabled := false
+var position_mode := 2002  # 2002=bottom bar, 2005=centered borderless, 2008=top
 
 var _tokens: Array = []
 var _chars: Array = []        # [{ch, color, x, y, size, line, outline, instant}]
@@ -62,6 +63,7 @@ var _line_align: Array[int] = []
 var _instant_index := -1
 var _pause_timer := 0.0
 var _cursor_time := 0.0
+var _center_cursor_pos := Vector2(512, 320)
 
 ## Face bust drawn behind the frame: Sys0 / \f[n], or the "@n" prefix on the first line.
 ## The retail install keeps only three faces (SysDB24 2/3/4), so anything else draws the
@@ -162,6 +164,10 @@ func _effective_line_gap() -> float:
 	return 3.0 if _lines >= 5 else float(LINE_GAP)
 
 
+func set_position_mode(mode: int) -> void:
+	position_mode = mode
+
+
 func bubble_rect() -> Rect2:
 	var pad_y := _bubble_padding_y()
 	var step := float(FONT_SIZE) + _effective_line_gap()
@@ -172,20 +178,21 @@ func bubble_rect() -> Rect2:
 		BUBBLE_MIN_HEIGHT,
 		WINDOW_SIZE.y
 	)
-	var top := clampf(bottom - height, WINDOW_POS.y, WINDOW_POS.y + WINDOW_SIZE.y - height)
+	var top := 46.0 if position_mode == 2008 else clampf(bottom - height, WINDOW_POS.y, WINDOW_POS.y + WINDOW_SIZE.y - height)
 	return Rect2(BUBBLE_X, top, BUBBLE_WIDTH, height)
 
 
-## Lay every paintable character out in screen space inside the centered dialog bubble.
+## Lay every paintable character out in screen space (bottom bar or centered 2005).
 func _layout() -> void:
 	_chars.clear()
 	_line_align.clear()
 	_instant_index = -1
 	var font := UiSkin.bold_font()
-	var line_left := BUBBLE_X + BUBBLE_PADDING_X
+	var is_center := position_mode == 2005
+	var line_left := 64.0 if is_center else (BUBBLE_X + BUBBLE_PADDING_X)
 	var x := line_left
 	var y := 0.0
-	var right := BUBBLE_X + BUBBLE_WIDTH - BUBBLE_PADDING_X
+	var right := 960.0 if is_center else (BUBBLE_X + BUBBLE_WIDTH - BUBBLE_PADDING_X)
 	var color := Color.WHITE
 	var glyph_size := FONT_SIZE
 	var row_size := FONT_SIZE
@@ -253,23 +260,22 @@ func _layout() -> void:
 		_line_align.append(HORIZONTAL_ALIGNMENT_LEFT)
 		line_widths.append(0.0)
 	var bubble := bubble_rect()
-	var y_origin := bubble.position.y + _bubble_padding_y()
-	var compact_ratio := (float(FONT_SIZE) + _effective_line_gap()) / float(LINE_HEIGHT)
-	var max_width := 0.0
-	for width in line_widths:
-		max_width = maxf(max_width, width)
-	var inner_w := BUBBLE_WIDTH - BUBBLE_PADDING_X * 2.0
-	var block_left_shift := maxf(0.0, (inner_w - max_width) * 0.5) if _lines <= 2 else 0.0
+	var compact_ratio := 1.0 if is_center else ((float(FONT_SIZE) + _effective_line_gap()) / float(LINE_HEIGHT))
+	var step_px := float(LINE_HEIGHT) if is_center else (float(FONT_SIZE) + _effective_line_gap())
+	var y_origin := ((576.0 - float(_lines) * step_px) * 0.5) if is_center else (bubble.position.y + _bubble_padding_y())
+	var inner_w := (960.0 - 64.0) if is_center else (BUBBLE_WIDTH - BUBBLE_PADDING_X * 2.0)
 	for entry in _chars:
 		var line: int = entry["line"]
 		var alignment := _line_align[line] if line < _line_align.size() else HORIZONTAL_ALIGNMENT_LEFT
-		var shift := block_left_shift
-		if alignment == HORIZONTAL_ALIGNMENT_CENTER:
+		var shift := 0.0
+		if is_center or alignment == HORIZONTAL_ALIGNMENT_CENTER:
 			shift = (inner_w - line_widths[line]) * 0.5
 		elif alignment == HORIZONTAL_ALIGNMENT_RIGHT:
 			shift = inner_w - line_widths[line]
 		entry["x"] = float(entry["x"]) + shift
 		entry["y"] = float(entry["y"]) * compact_ratio + y_origin
+	if is_center:
+		_center_cursor_pos = Vector2(512.0, y_origin + float(_lines) * step_px + 10.0)
 
 
 func laid_out_characters() -> int:
@@ -302,12 +308,19 @@ func _draw() -> void:
 	if face_number > 0:
 		_draw_face()
 	var rect := bubble_rect()
-	var pill := StyleBoxFlat.new()
-	pill.bg_color = SKIN_FILL
-	pill.border_color = SKIN_BORDER
-	pill.set_border_width_all(1)
-	pill.set_corner_radius_all(18)
-	draw_style_box(pill, rect)
+	if position_mode != 2005:
+		var outer := StyleBoxFlat.new()
+		outer.bg_color = Color(0.06, 0.07, 0.09, 0.24)
+		outer.set_corner_radius_all(28)
+		draw_style_box(outer, rect.grow(8.0))
+		var mid := StyleBoxFlat.new()
+		mid.bg_color = Color(0.10, 0.11, 0.13, 0.44)
+		mid.set_corner_radius_all(24)
+		draw_style_box(mid, rect.grow(3.0))
+		var core := StyleBoxFlat.new()
+		core.bg_color = SKIN_FILL
+		core.set_corner_radius_all(20)
+		draw_style_box(core, rect)
 	var font := UiSkin.bold_font()
 	var limit := mini(int(revealed), _chars.size())
 	var outline_color := Color(0.0, 0.0, 0.0, 1.0)
@@ -344,21 +357,24 @@ func _draw_face() -> void:
 
 func _draw_cursor(bubble: Rect2) -> void:
 	var cursor: Texture2D = assets.texture(CURSOR_TEXTURE) if assets != null else null
+	if cursor == null and assets != null:
+		cursor = assets.texture(CURSOR_FALLBACK_TEXTURE)
 	if cursor != null:
 		var cw := float(cursor.get_width())
 		var ch := float(cursor.get_height())
-		if ch > float(CURSOR_FRAME_HEIGHT) * 1.5:
-			var frame_count := maxi(1, int(ch) / CURSOR_FRAME_HEIGHT)
+		var frame_h := cw if (ch > cw * 1.5 and int(ch) % int(cw) == 0) else 15.0
+		if ch > frame_h * 1.5:
+			var frame_count := maxi(1, int(ch / frame_h))
 			var fh := floorf(ch / float(frame_count))
 			var frame := int(_cursor_time * 8.0) % frame_count
 			var src := Rect2(0.0, float(frame) * fh, cw, fh)
-			var dst_pos := Vector2(bubble.position.x + (bubble.size.x - cw) * 0.5, bubble.end.y - fh - 3.0)
+			var dst_pos := Vector2(_center_cursor_pos.x - cw * 0.5, _center_cursor_pos.y) if position_mode == 2005 else Vector2(bubble.position.x + (bubble.size.x - cw) * 0.5, bubble.end.y - fh + 2.0)
 			draw_texture_rect_region(cursor, Rect2(dst_pos, Vector2(cw, fh)), src)
 		else:
-			var dst_pos := Vector2(bubble.position.x + (bubble.size.x - cw) * 0.5, bubble.end.y - ch - 3.0)
+			var dst_pos := Vector2(_center_cursor_pos.x - cw * 0.5, _center_cursor_pos.y) if position_mode == 2005 else Vector2(bubble.position.x + (bubble.size.x - cw) * 0.5, bubble.end.y - ch + 2.0)
 			draw_texture(cursor, dst_pos)
 	else:
-		var pos := Vector2(bubble.position.x + bubble.size.x * 0.5 - 6.0, bubble.end.y - 16.0)
+		var pos := Vector2(_center_cursor_pos.x - 6.0, _center_cursor_pos.y) if position_mode == 2005 else Vector2(bubble.position.x + bubble.size.x * 0.5 - 6.0, bubble.end.y - 16.0)
 		draw_colored_polygon(PackedVector2Array([
 			pos,
 			pos + Vector2(12, 0),

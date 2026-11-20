@@ -298,14 +298,17 @@ if [ "$failures" -ne 0 ]; then
   exit 1
 fi
 
-# Performance probes always run serially on an uncontended machine after functional jobs finish.
-run_godot_marker "37/38" "res://tests/PerformanceProbeTest.tscn" PERFORMANCE_CORE_OK "$IMO/reports/performance_core.log"
+# Performance probes always run serially on an uncontended machine after functional jobs finish,
+# with LWsmf_SAVE_DIR isolated so they never overwrite user://system.json.
+PERF_SAVE_DIR="$ROOT_TEMP/perf_save"
+mkdir -p "$PERF_SAVE_DIR"
+LWsmf_SAVE_DIR="$PERF_SAVE_DIR" run_godot_marker "37/38" "res://tests/PerformanceProbeTest.tscn" PERFORMANCE_CORE_OK "$IMO/reports/performance_core.log"
 
 echo "[38/38] performance frame probe"
 if [ "${LWsmf_RENDER:-0}" = "1" ]; then
-  out_perfframe="$(LWsmf_PERF_STRICT=1 "$GODOT" --path "$IMO/godot" --rendering-driver opengl3 res://tests_gd/PerformanceFrameProbe.tscn 2>&1)"
+  out_perfframe="$(LWsmf_SAVE_DIR="$PERF_SAVE_DIR" LWsmf_PERF_STRICT=1 "$GODOT" --path "$IMO/godot" --rendering-driver opengl3 res://tests_gd/PerformanceFrameProbe.tscn 2>&1)"
 else
-  out_perfframe="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/PerformanceFrameProbe.tscn 2>&1)"
+  out_perfframe="$(LWsmf_SAVE_DIR="$PERF_SAVE_DIR" "$GODOT" --headless --path "$IMO/godot" res://tests_gd/PerformanceFrameProbe.tscn 2>&1)"
 fi
 printf '%s\n' "$out_perfframe" | tee "$IMO/reports/performance_frame.log"
 printf '%s\n' "$out_perfframe" | grep -q PERFORMANCE_FRAME_OK

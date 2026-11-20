@@ -63,6 +63,9 @@ public partial class VmController : Node, IHost, IVmSession
     [Signal]
     public delegate void SpeakerChangedEventHandler(string speaker);
 
+    [Signal]
+    public delegate void MessageOptionsChangedEventHandler(int windowId, int posMode, int faceId, string speaker, string windowName);
+
     public int TransitionPhase => Vm.TransitionPhase;
 
     public EventVm Vm { get; } = new();
@@ -395,9 +398,15 @@ public partial class VmController : Node, IHost, IVmSession
     {
         // Retail scripts pass speaker names into CE264 (bubble message interface) right
         // before opcode 101; forward it purely to the presentation nameplate.
-        if (target == 264 && strings.Length > 0)
+        if (target == 264)
         {
-            EmitSignal(SignalName.SpeakerChanged, strings[0] ?? "");
+            int windowId = args.Length > 0 ? args[0] : 0;
+            int posMode = args.Length > 1 ? args[1] : 2002;
+            int faceId = args.Length > 2 ? args[2] : 0;
+            string speaker = strings.Length > 0 ? (strings[0] ?? "") : "";
+            string windowName = strings.Length > 1 ? (strings[1] ?? "") : "";
+            EmitSignal(SignalName.MessageOptionsChanged, windowId, posMode, faceId, speaker, windowName);
+            EmitSignal(SignalName.SpeakerChanged, speaker);
         }
     }
 

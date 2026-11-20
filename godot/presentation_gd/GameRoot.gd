@@ -55,6 +55,9 @@ var _title_menu_cursor := -1
 var _title_menu_options := PackedStringArray()
 const CHOICE_HOVER_DEADZONE_SQ := 16.0
 var _choice_hover_lock_pos := Vector2(-1, -1)
+# Active CE264 speaker & position mode persist across consecutive 101 messages until cleared/changed.
+var _active_speaker := ""
+var _active_msg_pos_mode := 2002
 
 var phase := "boot"
 var frames := 0
@@ -161,6 +164,7 @@ func _ready() -> void:
 	_build_play_ui()
 
 	vm.connect("SoundRequested", _on_sound)
+	vm.connect("MessageOptionsChanged", _on_message_options_changed)
 	vm.connect("SpeakerChanged", _on_speaker_changed)
 	vm.connect("MessageRequested", func(text: String, face: int) -> void: session.ShowMessage(text, face))
 	vm.connect("MessageClosed", func() -> void: session.NotifyMessageClosed())
@@ -411,7 +415,10 @@ func _on_choice_chosen(index: int) -> void:
 	if index < 0:
 		session.CancelChoice()
 		return
-	session.PickChoice(index)
+	if phase == "title":
+		session.SelectTitleChoice(index)
+	else:
+		session.PickChoice(index)
 	# CE42 answers the load row by waiting on osave load; with no slot it would wedge on
 	# opcode 102 with the window already closed, so reopen the same menu on that row (D6).
 	if phase == "title" and index == 1 and not session.HasSave and not _title_menu_options.is_empty():
@@ -446,16 +453,25 @@ func _on_sound(channel: int, action: int, file: String, volume: int, frames: int
 	audio.play(channel, file, volume, vm.SoundLoopPoint, vm.SoundTempo, frames)
 
 
+func _on_message_options_changed(_window_id: int, pos_mode: int, _face_id: int, speaker: String, _window_name: String) -> void:
+	_active_msg_pos_mode = pos_mode
+	_active_speaker = speaker.strip_edges()
+	if message != null:
+		message.set_position_mode(pos_mode)
+
+
 func _on_speaker_changed(speaker: String) -> void:
+	_active_speaker = speaker.strip_edges()
+
+
+func _sync_active_nameplate() -> void:
 	if nameplate == null:
 		return
-	var trimmed := speaker.strip_edges()
-	var lower := trimmed.to_lower()
-	if trimmed.is_empty() or lower == "message" or lower == "hint":
+	if _active_msg_pos_mode == 2005 or _active_speaker.is_empty():
 		nameplate.hide_speaker()
 		return
 	var bubble := message.bubble_rect()
-	nameplate.show_speaker(trimmed, Vector2(bubble.position.x + 18.0, bubble.position.y - 36.0))
+	nameplate.show_speaker(_active_speaker, Vector2(bubble.position.x + 28.0, bubble.position.y - 18.0))
 
 
 func _on_message(text: String, face: int) -> void:
@@ -463,21 +479,21 @@ func _on_message(text: String, face: int) -> void:
 	# 1 means window-only, >= 2 selects the SysDB24 bust. A plain message must still open
 	# the window; MessageWindow also handles a first-line @n on its own.
 	message.open(text, face if face > 0 else 0)
-	if nameplate != null and nameplate.is_visible:
-		var bubble := message.bubble_rect()
-		nameplate.show_speaker(nameplate.speaker, Vector2(bubble.position.x + 18.0, bubble.position.y - 36.0))
+	_sync_active_nameplate()
 	# Backlog is memory-only, never saved: a reload starts a fresh history. The nameplate
 	# is written by the event handler before the message opens; prefix it when present.
 	# The backlog is read-only history: strip the WOLF escape codes (\c[..],\cself[n],\f[n])
 	# so a reload of the history shows readable text, never raw control codes.
 	var entry := TextTokenizer.plain_text(TextTokenizer.tokenize(message.full_text))
-	if nameplate != null and not nameplate.speaker.is_empty():
-		entry = "%s: %s" % [nameplate.speaker, entry]
+	if not _active_speaker.is_empty() and _active_msg_pos_mode != 2005:
+		entry = "%s: %s" % [_active_speaker, entry]
 	_push_backlog(entry)
 
 
 func _on_message_closed() -> void:
 	message.close()
+	# Hide visually between sentences without erasing _active_speaker, so multi-line
+	# consecutive 101 dialogues keep their nameplate after the first sentence (CE264 contract).
 	if nameplate != null:
 		nameplate.hide_speaker()
 
@@ -733,6 +749,12 @@ func _on_session_hud(x: int, y: int, text: String) -> void:
 
 
 func _on_session_map(map_id: int, leader_x: int, leader_y: int) -> void:
+	_active_speaker = ""
+	_active_msg_pos_mode = 2002
+	if message != null:
+		message.set_position_mode(2002)
+	if nameplate != null:
+		nameplate.hide_speaker()
 	if not map_view.cell_clicked.is_connected(_on_map_cell_clicked):
 		map_view.cell_clicked.connect(_on_map_cell_clicked)
 	if not map_view.cell_hovered.is_connected(_on_map_cell_hovered):
@@ -1135,6 +1157,9 @@ func restart_title() -> bool:
 	router.middle_pressed = false
 	router.clear_frame_latches()
 	message.close()
+	_active_speaker = ""
+	_active_msg_pos_mode = 2002
+	message.set_position_mode(2002)
 	if nameplate != null:
 		nameplate.hide_speaker()
 	choice.close()
