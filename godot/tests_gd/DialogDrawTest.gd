@@ -51,14 +51,19 @@ func _ready() -> void:
 	window.revealed = 1e9
 	window.finished = true
 	var rect := Rect2(MessageWindow.WINDOW_POS, MessageWindow.WINDOW_SIZE)
+	var bubble := window.bubble_rect()
+	if not is_equal_approx(bubble.position.x, MessageWindow.BUBBLE_X) or not is_equal_approx(bubble.size.x, MessageWindow.BUBBLE_WIDTH):
+		failures.append("bottom bubble should be centered at x=%.1f w=%.1f (got %s)" % [MessageWindow.BUBBLE_X, MessageWindow.BUBBLE_WIDTH, str(bubble)])
+	if bubble.end.y > MessageWindow.BUBBLE_BOTTOM + 6.0:
+		failures.append("bottom bubble escaped bottom bound (got %s)" % str(bubble))
 	var painted := window.laid_out_characters()
 	if painted <= 0:
 		failures.append("sample produced no characters")
 	var previous := Rect2()
 	for i in painted:
 		var cell := window.character_rect(i)
-		if not rect.encloses(cell):
-			failures.append("character %d escapes the window: %s" % [i, str(cell)])
+		if not rect.encloses(cell) or not bubble.encloses(cell):
+			failures.append("character %d escapes the window/bubble: %s (bubble=%s)" % [i, str(cell), str(bubble)])
 			break
 		if i > 0 and previous.intersects(cell):
 			failures.append("characters %d and %d overlap" % [i - 1, i])
@@ -142,6 +147,63 @@ func _ready() -> void:
 	if TextTokenizer.plain_text(nested) != "x":
 		failures.append("a nested database escape must leave no ':0]' behind (got %s)" % TextTokenizer.plain_text(nested))
 
+	# 3f. Centered mode (position_mode == 2005): 600px container clamped in y=42..540,
+	# default LEFT-aligned paragraph text while honoring \f[n], \c[n], <C>, and <R>.
+	var center_win := MessageWindow.new(assets)
+	add_child(center_win)
+	center_win.set_position_mode(2005)
+	var log_lines := PackedStringArray([
+		"\\c[1]Update Log\\c[0]",
+		"Line 2 left paragraph",
+		"Line 3 \\f[14]small\\f[0] text",
+		"Line 4",
+		"Line 5",
+		"Line 6",
+		"Line 7",
+		"Line 8",
+		"Line 9",
+		"Line 10",
+		"Line 11",
+		"<C>Centered",
+		"<R>Right",
+	])
+	center_win.open("\n".join(log_lines))
+	center_win.revealed = 1e9
+	center_win.finished = true
+	var center_box := center_win.bubble_rect()
+	if not is_equal_approx(center_box.size.x, 600.0) or not is_equal_approx(center_box.position.x, 212.0):
+		failures.append("2005 box must be 600px centered at x=212 (got %s)" % str(center_box))
+	if center_box.position.y < 42.0 or center_box.end.y > 540.0:
+		failures.append("2005 box must stay inside y=42..540 (got %s)" % str(center_box))
+	var center_prev := Rect2()
+	for i in center_win.laid_out_characters():
+		var cell := center_win.character_rect(i)
+		if not center_box.encloses(cell):
+			failures.append("2005 char %d escapes container: %s (box=%s)" % [i, str(cell), str(center_box)])
+			break
+		if i > 0 and center_prev.intersects(cell):
+			failures.append("2005 chars %d and %d overlap" % [i - 1, i])
+			break
+		center_prev = cell
+	var left_start_x := center_win.character_rect(0).position.x
+	if absf(left_start_x - (center_box.position.x + MessageWindow.CENTER_PADDING_X)) > 1.0:
+		failures.append("2005 default text must be left-aligned at padding_x (got x=%.1f)" % left_start_x)
+	var centered_line_x := center_win.character_rect(center_win.laid_out_characters() - 13).position.x
+	var right_line_x := center_win.character_rect(center_win.laid_out_characters() - 5).position.x
+	if not (centered_line_x > left_start_x and right_line_x > centered_line_x):
+		failures.append("2005 must still honor <C> and <R> (left=%.1f center=%.1f right=%.1f)" % [left_start_x, centered_line_x, right_line_x])
+	var pause_tex := assets.texture(MessageWindow.CURSOR_FALLBACK_TEXTURE)
+	if pause_tex != null and (pause_tex.get_width() != 17 or pause_tex.get_height() != 90):
+		failures.append("SystemFile/Text_Pause.png should be 17x90 (got %dx%d)" % [pause_tex.get_width(), pause_tex.get_height()])
+
+	# 3g. Nameplate: compact 26px tall pill with 16px bold text.
+	var plate := Nameplate.new(assets)
+	add_child(plate)
+	plate.show_speaker("Sister", Vector2(188, 464))
+	var plate_r := plate.plate_rect()
+	if not plate.is_visible or not is_equal_approx(plate_r.size.y, 26.0) or plate_r.size.x < Nameplate.MIN_WIDTH:
+		failures.append("nameplate pill rect mismatch (got %s)" % str(plate_r))
+
 	# 4. The choice window stacks rows without overlap and stays anchored on Sys3/Sys4.
 	var choice := ChoiceWindow.new(assets)
 	add_child(choice)
@@ -158,9 +220,22 @@ func _ready() -> void:
 			failures.append("choice rows %d and %d overlap" % [i - 1, i])
 		if rows[i].size.y < ChoiceWindow.FONT_SIZE:
 			failures.append("row %d is shorter than the font" % i)
-	var expected_pitch := ceilf(ChoiceWindow.FONT_SIZE * ChoiceWindow.LINE_SPACING_RATIO)
+	var expected_pitch := choice.line_height()
+	if not is_equal_approx(expected_pitch, 34.0):
+		failures.append("choice line height should be 34.0 (got %.1f)" % expected_pitch)
 	if rows.size() > 1 and not is_equal_approx(rows[1].position.y - rows[0].position.y, expected_pitch):
 		failures.append("row pitch should be %.1f" % expected_pitch)
+	choice.open(PackedStringArray(["A", "B"]), Vector2(512, 220), true, 0)
+	var centered_choice := choice.window_rect()
+	if not is_equal_approx(centered_choice.position.x, 512.0 - centered_choice.size.x * 0.5):
+		failures.append("choice window must center-anchor around position_hint (got %s)" % str(centered_choice))
+	choice.open(PackedStringArray(["A", "B"]), Vector2(10, 10), true, 0)
+	var clamped_choice := choice.window_rect()
+	if clamped_choice.position.x < 24.0 or clamped_choice.position.y < 48.0:
+		failures.append("choice window must clamp into safe area (got %s)" % str(clamped_choice))
+	choice.open(PackedStringArray(["A", "B"]), Vector2(512, 1000), true, 0)
+	if choice.window_rect().position.y < 1000.0:
+		failures.append("off-screen parked choice window must remain off-screen (got %s)" % str(choice.window_rect()))
 
 	# 4b. Empty trailing/middle choice options are skipped in layout/movement while keeping
 	# their original VM indices on hit test/confirm.
@@ -200,6 +275,14 @@ func _ready() -> void:
 	drawn.open(SAMPLE)
 	drawn.revealed = 1e9
 	drawn.finished = true
+	drawn.waiting_for_confirm = true
+	var drawn_plate := Nameplate.new(assets)
+	stage.layer(PictureStage.LAYER_NAMEPLATE).add_child(drawn_plate)
+	var db := drawn.bubble_rect()
+	drawn_plate.show_speaker("Sister", Vector2(db.position.x + 28.0, db.position.y - 24.0))
+	var drawn_choice := ChoiceWindow.new(assets)
+	stage.layer(PictureStage.LAYER_CHOICE_PANEL).add_child(drawn_choice)
+	drawn_choice.open(PackedStringArray(["New game", "Load", "Quit"]), Vector2(512, 220), true, 0)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var image := viewport.get_texture().get_image()
@@ -214,6 +297,26 @@ func _ready() -> void:
 			dir.make_dir("screens")
 		image.save_png(ProjectSettings.globalize_path("user://screens/dialog_draw.png"))
 		print("DIALOG_DRAW_SCREENSHOT ", ProjectSettings.globalize_path("user://screens/dialog_draw.png"))
+
+	# Also verify position_mode == 2005 container rendering.
+	drawn_plate.hide_speaker()
+	drawn_choice.close()
+	drawn.set_position_mode(2005)
+	drawn.open("\n".join(log_lines))
+	drawn.revealed = 1e9
+	drawn.finished = true
+	drawn.waiting_for_confirm = true
+	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var center_image := viewport.get_texture().get_image()
+	if center_image == null:
+		failures.append("2005 viewport produced no image")
+	else:
+		var cb := drawn.bubble_rect()
+		var center_lit := _lit_pixels(center_image, Rect2i(int(cb.position.x), int(cb.position.y), int(cb.size.x), int(cb.size.y)))
+		if center_lit < 5000:
+			failures.append("2005 container drew only %d lit pixels" % center_lit)
 
 	if failures.is_empty():
 		print("DIALOG_DRAW_TEST_OK")

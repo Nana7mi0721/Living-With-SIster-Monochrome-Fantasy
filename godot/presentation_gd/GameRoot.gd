@@ -316,6 +316,8 @@ func _on_action() -> void:
 			return
 		if mouse and choice.hover_at(router.hover_position) < 0:
 			return
+		if mouse:
+			_arm_modal_release_guard()
 		choice.confirm()
 		return
 	if message.is_open():
@@ -343,6 +345,8 @@ func _on_cancel() -> void:
 	if (int(session.BasicAllDeny) & 2) != 0:
 		return
 	if choice.is_open:
+		if router != null and router.last_input_source == "mouse":
+			_arm_modal_release_guard()
 		choice.cancel()
 		return
 	if message.is_open():
@@ -466,7 +470,7 @@ func _sync_active_nameplate() -> void:
 		nameplate.hide_speaker()
 		return
 	var bubble := message.bubble_rect()
-	nameplate.show_speaker(_active_speaker, Vector2(bubble.position.x + 28.0, bubble.position.y - 18.0))
+	nameplate.show_speaker(_active_speaker, Vector2(bubble.position.x + 24.0, bubble.position.y - 26.0))
 
 
 func _on_message(text: String, face: int) -> void:
@@ -612,8 +616,8 @@ func _on_effect(kind: int, duration: int, args: Array) -> void:
 
 ## Sys3/Sys4 hold the choice window corner; the VM keeps them in SysVars.
 func _choice_position() -> Vector2:
-	var x := 260
-	var y := 220
+	var x := 512
+	var y := 288
 	var sys3: int = vm.GetSys(3)
 	var sys4: int = vm.GetSys(4)
 	# WOLF's default is -1; any other negative value is a deliberate off-screen slot

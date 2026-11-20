@@ -9,9 +9,10 @@ extends Control
 
 signal chosen(index: int)
 
-const FONT_SIZE := 20
-const PADDING := 8.0
-const LINE_SPACING_RATIO := 1.35
+const FONT_SIZE := 18
+const LINE_HEIGHT := 34.0
+const PADDING_X := 16.0
+const PADDING_Y := 10.0
 const MIN_WIDTH := 220.0
 const CURSOR_TEXTURE := "SystemFile/CursorBase.png"
 
@@ -37,7 +38,21 @@ func _init(p_assets: AssetDB = null) -> void:
 
 
 func line_height() -> float:
-	return ceilf(FONT_SIZE * LINE_SPACING_RATIO)
+	return LINE_HEIGHT
+
+
+func _is_offscreen_parked() -> bool:
+	return position_hint.y >= 1000.0 or position_hint.y < -100.0 or position_hint.x >= 1200.0 or position_hint.x < -100.0
+
+
+func window_rect() -> Rect2:
+	var win_size := window_size()
+	if _is_offscreen_parked():
+		return Rect2(position_hint, win_size)
+	var raw_pos := position_hint - win_size * 0.5
+	var max_x := maxf(24.0, 1000.0 - win_size.x)
+	var max_y := maxf(48.0, 536.0 - win_size.y)
+	return Rect2(Vector2(clampf(raw_pos.x, 24.0, max_x), clampf(raw_pos.y, 48.0, max_y)), win_size)
 
 
 func _visible_indices() -> Array[int]:
@@ -116,10 +131,11 @@ func row_rects() -> Array:
 	var visible := _visible_indices()
 	if visible.is_empty():
 		return rects
-	var top := position_hint.y + PADDING
-	var width := window_size().x - PADDING * 2.0
+	var rect := window_rect()
+	var top := rect.position.y + PADDING_Y
+	var width := rect.size.x - PADDING_X * 2.0
 	for row_idx in visible.size():
-		rects.append(Rect2(position_hint.x + PADDING, top + row_idx * line_height(), width, line_height()))
+		rects.append(Rect2(rect.position.x + PADDING_X, top + row_idx * line_height(), width, line_height()))
 	return rects
 
 
@@ -128,8 +144,8 @@ func window_size() -> Vector2:
 	var width := MIN_WIDTH
 	var visible := _visible_indices()
 	for i in visible:
-		width = maxf(width, font.get_string_size(display_text(options[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x + PADDING * 2.0)
-	var height := maxi(visible.size(), 1) * line_height() + PADDING * 2.0
+		width = maxf(width, font.get_string_size(display_text(options[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x + PADDING_X * 2.0)
+	var height := maxi(visible.size(), 1) * line_height() + PADDING_Y * 2.0
 	return Vector2(ceilf(width), ceilf(height))
 
 
@@ -171,27 +187,35 @@ func _draw() -> void:
 	var visible := _visible_indices()
 	if visible.is_empty():
 		return
-	var rect := Rect2(position_hint, window_size())
+	var rect := window_rect()
 	var texture: Texture2D = assets.texture(UiSkin.WINDOW_BASE) if assets != null else null
 	if texture != null:
 		UiSkin.nine_patch(self, texture, rect)
 	else:
-		draw_rect(rect, Color(0.12, 0.14, 0.15, 0.9))
-		draw_rect(rect, Color(0.85, 0.85, 0.85, 0.6), false, 1.0)
+		draw_rect(rect, Color(0.10, 0.11, 0.12, 0.92))
+		draw_rect(rect, Color(0.90, 0.90, 0.90, 0.85), false, 1.0)
+	var cursor_tex: Texture2D = assets.texture(CURSOR_TEXTURE) if assets != null else null
 	var font := UiSkin.bold_font()
+	var text_height := font.get_ascent(FONT_SIZE) + font.get_descent(FONT_SIZE)
 	var rects := row_rects()
 	var outline_col := Color(0.0, 0.0, 0.0, 1.0)
 	for row_idx in visible.size():
 		var i := visible[row_idx]
 		var row: Rect2 = rects[row_idx]
-		var box := Rect2(rect.position.x + 8.0, row.position.y - 2.0, rect.size.x - 16.0, row.size.y)
+		var box := Rect2(rect.position.x + 6.0, row.position.y + 1.0, rect.size.x - 12.0, row.size.y - 2.0)
 		if i == selected:
-			draw_rect(box, Color(1.0, 1.0, 1.0, 0.22))
-			draw_rect(box, Color(1.0, 1.0, 1.0, 0.85), false, 1.0)
+			if cursor_tex != null:
+				UiSkin.nine_patch(self, cursor_tex, box)
+			else:
+				draw_rect(box, Color(1.0, 1.0, 1.0, 0.22))
+				draw_rect(box, Color(1.0, 1.0, 1.0, 0.85), false, 1.0)
 		elif i == _hover:
 			draw_rect(box, Color(1.0, 1.0, 1.0, 0.10))
 		var color := Color("fff2b8") if i == selected else Color.WHITE
-		var baseline := row.position + Vector2(0, font.get_ascent(FONT_SIZE))
+		var baseline := Vector2(
+			row.position.x,
+			row.position.y + (row.size.y - text_height) * 0.5 + font.get_ascent(FONT_SIZE)
+		)
 		var label := display_text(options[i])
-		draw_string_outline(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, 4, outline_col)
+		draw_string_outline(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, 2, outline_col)
 		draw_string(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, color)
