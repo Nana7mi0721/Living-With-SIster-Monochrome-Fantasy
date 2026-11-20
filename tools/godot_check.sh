@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # M0 环境门槛 / CI 入口：编译 C# 并跑 headless 冒烟、存档导入、Oracle 对拍与
 # GDScript 表现层测试。
-# 用法： tools/godot_check.sh            全 headless（CI）
-#        LWsmf_RENDER=1 tools/godot_check.sh  额外用真实渲染器跑 101 窗口像素校验
+# 用法： tools/godot_check.sh                       全 headless（默认并行加速）
+#        LWsmf_GODOT_JOBS=1 tools/godot_check.sh    严格串行模式
+#        LWsmf_RENDER=1 tools/godot_check.sh        额外用真实渲染器跑 101/150 像素校验
 # 退出码 0 = 引擎+C#+场景+存档+Oracle 全部通过。
 set -euo pipefail
 
@@ -12,9 +13,17 @@ DOTNET="${DOTNET:-/e/Study/tools/dotnet8/dotnet}"
 # Isolate the gate from the player profile: 220/221/222 persist system data beside the save
 # slot, and a previous run's file would change the first-run route branches (Ce253 day 3).
 # GameSessionController.DefaultSavePath honours LWsmf_SAVE_DIR.
-export LWsmf_SAVE_DIR="${LWsmf_SAVE_DIR:-$(mktemp -d)}"
+ROOT_TEMP="$(mktemp -d)"
+trap 'rm -rf "$ROOT_TEMP"' EXIT
+export LWsmf_SAVE_DIR="${LWsmf_SAVE_DIR:-$ROOT_TEMP/default_save}"
+mkdir -p "$LWsmf_SAVE_DIR" "$IMO/reports"
 export DOTNET_ROOT="${DOTNET_ROOT:-E:/Study/tools/dotnet8}"
 export PATH="/e/Study/tools/dotnet8:$PATH"
+export LWsmf_QUIET_HUD="${LWsmf_QUIET_HUD:-1}"
+JOBS="${LWsmf_GODOT_JOBS:-8}"
+if [ "${LWsmf_SERIAL:-0}" = "1" ]; then
+  JOBS=1
+fi
 
 if [ ! -x "$GODOT" ]; then
   echo "godot not found: $GODOT" >&2
@@ -40,239 +49,257 @@ python "$IMO/oracle/scan_op150_negative_scale.py" \
 echo "[2/38] build solutions"
 "$GODOT" --headless --path "$IMO/godot" --build-solutions --quit
 
-echo "[3/38] smoke test"
-out="$("$GODOT" --headless --path "$IMO/godot" res://tests/Smoke.tscn 2>&1)"
-echo "$out"
-echo "$out" | grep -q SMOKE_OK
-echo "$out" | grep -q DATABASE_TEST_OK
-echo "$out" | grep -q AUTO_EVENTS_TEST_OK
-echo "$out" | grep -q BATTLE_COMMAND_TEST_OK
-echo "$out" | grep -q BATTLE_WIRING_TEST_OK
-echo "$out" | grep -q BATTLE_TARGET_TEST_OK
-echo "$out" | grep -q BATTLE_SKILL_TARGET_TEST_OK
-echo "$out" | grep -q BATTLE_MENU_BRIDGE_TEST_OK
-echo "$out" | grep -q BATTLE_MATRIX_TEST_OK
-echo "$out" | grep -q BATTLE_ESCAPE_TEST_OK
-echo "$out" | grep -q H_EVENT_GATE_TEST_OK
-echo "$out" | grep -q CONTENT_MATRIX_TEST_OK
-echo "$out" | grep -q M13_ALL_ENDINGS_TEST_OK
-echo "$out" | grep -q M13_RANDOM_EVENTS_TEST_OK
-echo "$out" | grep -q OP150_NEGATIVE_SCALE_SCAN_OK
-
-echo "[4/38] save import test"
-out_save="$("$GODOT" --headless --path "$IMO/godot" res://tests/SaveImportTest.tscn 2>&1)"
-echo "$out_save"
-echo "$out_save" | grep -q SAVE_IMPORT_OK
-echo "$out_save" | grep -q SAVE_IMPORT_VALIDATION_OK
-
-echo "[5/38] oracle trace diff (cli)"
-python "$IMO/oracle/diff_trace.py" \
-  "$IMO/oracle/fixtures/ce42_reference_trace.json" \
-  "$IMO/oracle/fixtures/ce42_reference_trace.json" \
-  --report "$IMO/reports/trace_diff.json"
-
-echo "[6/38] godot trace diff test"
-out_trace="$("$GODOT" --headless --path "$IMO/godot" res://tests/TraceDiffTest.tscn 2>&1)"
-echo "$out_trace"
-echo "$out_trace" | grep -q TRACE_DIFF_TEST_OK
-
-echo "[7/38] title event test"
-out_title="$("$GODOT" --headless --path "$IMO/godot" res://tests/TitleTest.tscn 2>&1)"
-echo "$out_title"
-echo "$out_title" | grep -q TITLE_TEST_OK
-
-echo "[8/38] new game event test"
-out_new="$("$GODOT" --headless --path "$IMO/godot" res://tests/NewGameTest.tscn 2>&1)"
-echo "$out_new"
-echo "$out_new" | grep -q NEW_GAME_TEST_OK
-
-echo "[9/38] presentation playthrough test"
-out_pres="$("$GODOT" --headless --path "$IMO/godot" res://tests/PresentationTest.tscn 2>&1)"
-echo "$out_pres"
-echo "$out_pres" | grep -q PRESENTATION_TEST_OK
-
-echo "[10/38] map runtime test"
-out_map="$("$GODOT" --headless --path "$IMO/godot" res://tests/MapRuntimeTest.tscn 2>&1)"
-echo "$out_map"
-echo "$out_map" | grep -q MAP_RUNTIME_TEST_OK
-
-echo "[11/38] save/load slot test"
-out_save="$("$GODOT" --headless --path "$IMO/godot" res://tests/SaveLoadTest.tscn 2>&1)"
-echo "$out_save"
-echo "$out_save" | grep -q SAVE_LOAD_TEST_OK
-
-echo "[12/38] map message test"
-out_msg="$("$GODOT" --headless --path "$IMO/godot" res://tests/MapMessageTest.tscn 2>&1)"
-echo "$out_msg"
-echo "$out_msg" | grep -q MAP_MESSAGE_TEST_OK
-
 # The GDScript presentation layer (W2) resolves other scripts by class_name, so the global
-# class cache has to exist before any tests_gd scene can load.
+# class cache has to exist before any tests_gd scene runs in parallel.
 echo "[13/38] gdscript class cache"
 "$GODOT" --headless --path "$IMO/godot" --import --quit
 
-run_gd() {
+run_godot_marker() {
   local label="$1"
   local scene="$2"
   local marker="$3"
-  local log="$IMO/reports/gd_$(basename "$scene" .tscn).log"
-  echo "[$label] $marker"
+  local log="$4"
+  local t0=$SECONDS
   local out
-  out="$("$GODOT" --headless --path "$IMO/godot" "res://tests_gd/$scene" 2>&1)"
+  if ! out="$("$GODOT" --headless --path "$IMO/godot" "$scene" 2>&1)"; then
+    printf '%s\n' "$out" > "$log"
+    printf '[%s] FAILED (%ds)\n' "$label" "$((SECONDS - t0))"
+    return 1
+  fi
   printf '%s\n' "$out" > "$log"
-  printf '%s\n' "$out"
-  printf '%s\n' "$out" | grep -q "$marker"
+  if ! printf '%s\n' "$out" | grep -q "$marker"; then
+    printf '[%s] MISSING MARKER %s (%ds)\n' "$label" "$marker" "$((SECONDS - t0))"
+    return 1
+  fi
+  printf '[%s] %s (%ds)\n' "$label" "$marker" "$((SECONDS - t0))"
 }
 
-run_gd "14/38" InputRouterTest.tscn INPUT_ROUTER_TEST_OK
-run_gd "15/38" LayerOrderTest.tscn LAYER_ORDER_TEST_OK
-run_gd "16/38" AssetDBTest.tscn ASSETDB_TEST_OK
+# ---- individual job entrypoints (run in isolated LWsmf_SAVE_DIR) -----------
 
-if [ "${LWsmf_RENDER:-0}" = "1" ]; then
-  # Visual pass: the dummy renderer --headless selects has no textures, so the dialog
-  # test only measures pixels when a real renderer is present.
-  echo "[17/38] dialog draw test (windowed)"
-  out_dialog="$(LWsmf_RENDER=1 "$GODOT" --path "$IMO/godot" --rendering-driver opengl3 res://tests_gd/DialogDrawTest.tscn 2>&1)"
-  printf '%s\n' "$out_dialog" | tee "$IMO/reports/gd_DialogDrawTest.log"
-  printf '%s\n' "$out_dialog" | grep -q DIALOG_DRAW_TEST_OK
-  shot="$(printf '%s\n' "$out_dialog" | sed -n 's/^DIALOG_DRAW_SCREENSHOT //p' | head -1)"
-  if [ -n "$shot" ] && [ -f "$shot" ]; then cp "$shot" "$IMO/reports/dialog_draw.png"; fi
+job_m13_slot() {
+  local slot="$1"
+  local t0=$SECONDS
+  local out_m13
+  if ! out_m13="$(M13_SLOT="$slot" M13_DAYS=30 "$GODOT" --headless --path "$IMO/godot" res://tests_gd/M13MainlineEndingsTest.tscn 2>&1)"; then
+    printf '%s\n' "$out_m13" > "$IMO/reports/m13_mainline_endings_slot${slot}.log"
+    return 1
+  fi
+  printf '%s\n' "$out_m13" > "$IMO/reports/m13_mainline_endings_slot${slot}.log"
+  printf '%s\n' "$out_m13" | grep -q "M13_MAINLINE_ENDINGS_TEST_OK slot=$slot"
+  echo "[M13 slot=$slot] OK ($((SECONDS - t0))s)"
+}
+
+job_35_m4_route() {
+  local t0=$SECONDS
+  local out_m4route
+  out_m4route="$("$GODOT" --headless --path "$IMO/godot" res://tests/M4FullRouteTraceTest.tscn 2>&1)"
+  printf '%s\n' "$out_m4route" > "$IMO/reports/m4_full_route_test.log"
+  printf '%s\n' "$out_m4route" | grep -q M4_FULL_ROUTE_TRACE_TEST_OK
+  python "$IMO/oracle/diff_route.py" \
+    "$IMO/oracle/fixtures/m4_full_route_rust_trace.json.gz" \
+    "$IMO/reports/csharp_m4_route_trace.json" \
+    --report "$IMO/reports/m4_route_diff.json"
+  echo "[35/38] full M4 route trace diff OK ($((SECONDS - t0))s)"
+}
+
+job_27_main_route() {
+  local t0=$SECONDS
+  local out_route
+  out_route="$("$GODOT" --headless --path "$IMO/godot" res://tests/RouteTraceTest.tscn 2>&1)"
+  printf '%s\n' "$out_route" > "$IMO/reports/route_trace_test.log"
+  printf '%s\n' "$out_route" | grep -q ROUTE_TRACE_TEST_OK
+  python "$IMO/oracle/diff_route.py" \
+    "$IMO/oracle/fixtures/main_route_rust_trace.json.gz" \
+    "$IMO/reports/csharp_route_trace.json" \
+    --report "$IMO/reports/route_trace_diff.json"
+  echo "[27/38] main route trace diff OK ($((SECONDS - t0))s)"
+}
+
+job_19_oracle_step() {
+  local t0=$SECONDS
+  local out_oracle
+  out_oracle="$("$GODOT" --headless --path "$IMO/godot" res://tests/OracleStepTraceTest.tscn 2>&1)"
+  printf '%s\n' "$out_oracle" > "$IMO/reports/oracle_step_trace_test.log"
+  printf '%s\n' "$out_oracle" | grep -q ORACLE_STEP_TRACE_OK
+  python "$IMO/oracle/diff_trace.py" \
+    "$IMO/oracle/fixtures/samplemapa_event0_418_rust_trace.json" \
+    "$IMO/reports/csharp_step_trace.json" \
+    --report "$IMO/reports/step_trace_diff.json"
+  echo "[19/38] oracle step trace OK ($((SECONDS - t0))s)"
+}
+
+job_03_smoke() {
+  local t0=$SECONDS
+  local out
+  out="$("$GODOT" --headless --path "$IMO/godot" res://tests/Smoke.tscn 2>&1)"
+  printf '%s\n' "$out" > "$IMO/reports/smoke.log"
+  for m in \
+    SMOKE_OK DATABASE_TEST_OK AUTO_EVENTS_TEST_OK BATTLE_COMMAND_TEST_OK \
+    BATTLE_WIRING_TEST_OK BATTLE_TARGET_TEST_OK BATTLE_SKILL_TARGET_TEST_OK \
+    BATTLE_MENU_BRIDGE_TEST_OK BATTLE_MATRIX_TEST_OK BATTLE_ESCAPE_TEST_OK \
+    H_EVENT_GATE_TEST_OK CONTENT_MATRIX_TEST_OK M13_ALL_ENDINGS_TEST_OK \
+    M13_RANDOM_EVENTS_TEST_OK OP150_NEGATIVE_SCALE_SCAN_OK
+  do
+    printf '%s\n' "$out" | grep -q "$m"
+  done
+  echo "[3/38] smoke test OK ($((SECONDS - t0))s)"
+}
+
+job_04_save_import() {
+  local t0=$SECONDS
+  local out_save
+  out_save="$("$GODOT" --headless --path "$IMO/godot" res://tests/SaveImportTest.tscn 2>&1)"
+  printf '%s\n' "$out_save" > "$IMO/reports/save_import_test.log"
+  printf '%s\n' "$out_save" | grep -q SAVE_IMPORT_OK
+  printf '%s\n' "$out_save" | grep -q SAVE_IMPORT_VALIDATION_OK
+  echo "[4/38] save import test OK ($((SECONDS - t0))s)"
+}
+
+job_05_trace_diff_cli() {
+  local t0=$SECONDS
+  python "$IMO/oracle/diff_trace.py" \
+    "$IMO/oracle/fixtures/ce42_reference_trace.json" \
+    "$IMO/oracle/fixtures/ce42_reference_trace.json" \
+    --report "$IMO/reports/trace_diff.json"
+  echo "[5/38] oracle trace diff (cli) OK ($((SECONDS - t0))s)"
+}
+
+# Serialize tests that share Godot user:// so they cannot race on AppData files.
+job_user_dir_lane() {
+  run_godot_marker "14/38" "res://tests_gd/InputRouterTest.tscn" INPUT_ROUTER_TEST_OK "$IMO/reports/gd_InputRouterTest.log"
+  run_godot_marker "15/38" "res://tests_gd/LayerOrderTest.tscn" LAYER_ORDER_TEST_OK "$IMO/reports/gd_LayerOrderTest.log"
+  run_godot_marker "16/38" "res://tests_gd/AssetDBTest.tscn" ASSETDB_TEST_OK "$IMO/reports/gd_AssetDBTest.log"
+  if [ "${LWsmf_RENDER:-0}" = "1" ]; then
+    local out_dialog shot
+    out_dialog="$(LWsmf_RENDER=1 "$GODOT" --path "$IMO/godot" --rendering-driver opengl3 res://tests_gd/DialogDrawTest.tscn 2>&1)"
+    printf '%s\n' "$out_dialog" > "$IMO/reports/gd_DialogDrawTest.log"
+    printf '%s\n' "$out_dialog" | grep -q DIALOG_DRAW_TEST_OK
+    shot="$(printf '%s\n' "$out_dialog" | sed -n 's/^DIALOG_DRAW_SCREENSHOT //p' | head -1)"
+    if [ -n "$shot" ] && [ -f "$shot" ]; then cp "$shot" "$IMO/reports/dialog_draw.png"; fi
+    echo "[17/38] DIALOG_DRAW_TEST_OK (windowed)"
+
+    local out_pic shot_line shot_before shot_after
+    out_pic="$(LWsmf_RENDER=1 "$GODOT" --path "$IMO/godot" --rendering-driver opengl3 res://tests_gd/PictureRoundtripTest.tscn 2>&1)"
+    printf '%s\n' "$out_pic" > "$IMO/reports/gd_PictureRoundtripTest.log"
+    printf '%s\n' "$out_pic" | grep -q PICTURE_ROUNDTRIP_TEST_OK
+    shot_line="$(printf '%s\n' "$out_pic" | sed -n 's/^PICTURE_ROUNDTRIP_SCREENSHOT //p' | head -1)"
+    shot_before="${shot_line%%|*}"
+    shot_after="${shot_line#*|}"
+    if [ -n "$shot_before" ] && [ -f "$shot_before" ]; then cp "$shot_before" "$IMO/reports/picture_roundtrip.png"; fi
+    if [ -n "$shot_after" ] && [ -f "$shot_after" ]; then cp "$shot_after" "$IMO/reports/picture_roundtrip_replay.png"; fi
+    echo "[18/38] PICTURE_ROUNDTRIP_TEST_OK (windowed)"
+  else
+    run_godot_marker "17/38" "res://tests_gd/DialogDrawTest.tscn" DIALOG_DRAW_TEST_OK "$IMO/reports/gd_DialogDrawTest.log"
+    run_godot_marker "18/38" "res://tests_gd/PictureRoundtripTest.tscn" PICTURE_ROUNDTRIP_TEST_OK "$IMO/reports/gd_PictureRoundtripTest.log"
+  fi
+  run_godot_marker "20/38" "res://tests_gd/GameRootTest.tscn" GAME_ROOT_TEST_OK "$IMO/reports/gd_GameRootTest.log"
+  run_godot_marker "36/38" "res://tests_gd/SetupWizardTest.tscn" SETUP_WIZARD_TEST_OK "$IMO/reports/gd_SetupWizardTest.log"
+}
+
+run_job_wrapper() {
+  local idx="$1"
+  local label="$2"
+  shift 2
+  local job_save="$ROOT_TEMP/save_$idx"
+  local job_log="$ROOT_TEMP/job_$idx.log"
+  mkdir -p "$job_save"
+  if LWsmf_SAVE_DIR="$job_save" "$@" > "$job_log" 2>&1; then
+    cat "$job_log"
+    return 0
+  else
+    local rc=$?
+    echo "=== JOB FAILED: $label (exit $rc) ==="
+    cat "$job_log"
+    return "$rc"
+  fi
+}
+
+declare -a JOB_LABELS=()
+declare -a JOB_CMDS=()
+
+add_job() {
+  JOB_LABELS+=("$1")
+  shift
+  JOB_CMDS+=("$*")
+}
+
+# Schedule longest tests first to minimize tail latency across worker slots.
+if [ -f "$IMO/work/retail_backup/Save/SaveData01.sav" ]; then
+  add_job "M13 slot 1" job_m13_slot 1
+  add_job "M13 slot 8" job_m13_slot 8
 else
-  echo "[17/38] dialog draw test (headless layout pass)"
-  out_dialog="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/DialogDrawTest.tscn 2>&1)"
-  printf '%s\n' "$out_dialog" | tee "$IMO/reports/gd_DialogDrawTest.log"
-  printf '%s\n' "$out_dialog" | grep -q DIALOG_DRAW_TEST_OK
+  echo "[M13] skipped: work/retail_backup/Save/SaveData01.sav missing"
+fi
+add_job "32/38 Ce253DayRouteTest" run_godot_marker "32/38" "res://tests_gd/Ce253DayRouteTest.tscn" CE253_DAY_ROUTE_TEST_OK "$IMO/reports/ce253_day_route.log"
+add_job "35/38 M4FullRouteTrace" job_35_m4_route
+add_job "31/38 ColdStartDayTest" run_godot_marker "31/38" "res://tests_gd/ColdStartDayTest.tscn" COLD_START_DAY_TEST_OK "$IMO/reports/cold_start_day.log"
+add_job "27/38 RouteTrace" job_27_main_route
+add_job "03/38 Smoke" job_03_smoke
+add_job "user:// lane (14-18,20,36)" job_user_dir_lane
+add_job "04/38 SaveImport" job_04_save_import
+add_job "05/38 TraceDiffCli" job_05_trace_diff_cli
+add_job "06/38 TraceDiffTest" run_godot_marker "6/38" "res://tests/TraceDiffTest.tscn" TRACE_DIFF_TEST_OK "$IMO/reports/trace_diff_test.log"
+add_job "07/38 TitleTest" run_godot_marker "7/38" "res://tests/TitleTest.tscn" TITLE_TEST_OK "$IMO/reports/title_test.log"
+add_job "08/38 NewGameTest" run_godot_marker "8/38" "res://tests/NewGameTest.tscn" NEW_GAME_TEST_OK "$IMO/reports/new_game_test.log"
+add_job "09/38 PresentationTest" run_godot_marker "9/38" "res://tests/PresentationTest.tscn" PRESENTATION_TEST_OK "$IMO/reports/presentation_test.log"
+add_job "10/38 MapRuntimeTest" run_godot_marker "10/38" "res://tests/MapRuntimeTest.tscn" MAP_RUNTIME_TEST_OK "$IMO/reports/map_runtime_test.log"
+add_job "11/38 SaveLoadTest" run_godot_marker "11/38" "res://tests/SaveLoadTest.tscn" SAVE_LOAD_TEST_OK "$IMO/reports/save_load_test.log"
+add_job "12/38 MapMessageTest" run_godot_marker "12/38" "res://tests/MapMessageTest.tscn" MAP_MESSAGE_TEST_OK "$IMO/reports/map_message_test.log"
+add_job "19/38 OracleStepTrace" job_19_oracle_step
+add_job "21/38 TerrainTest" run_godot_marker "21/38" "res://tests/TerrainTest.tscn" TERRAIN_TEST_OK "$IMO/reports/terrain_test.log"
+add_job "22/38 MapLayerTest" run_godot_marker "22/38" "res://tests_gd/MapLayerTest.tscn" MAP_LAYER_TEST_OK "$IMO/reports/gd_MapLayerTest.log"
+add_job "23/38 SessionParityTest" run_godot_marker "23/38" "res://tests/SessionParityTest.tscn" SESSION_PARITY_TEST_OK "$IMO/reports/session_parity_test.log"
+add_job "24/38 AudioManagerTest" run_godot_marker "24/38" "res://tests_gd/AudioManagerTest.tscn" AUDIO_MANAGER_TEST_OK "$IMO/reports/audio_manager_test.log"
+add_job "25/38 ClockTest" run_godot_marker "25/38" "res://tests/ClockTest.tscn" CLOCK_TEST_OK "$IMO/reports/clock_test.log"
+add_job "26/38 SleepSoakTest" run_godot_marker "26/38" "res://tests/SleepSoakTest.tscn" SLEEP_SOAK_TEST_OK "$IMO/reports/sleep_soak.log"
+add_job "28/38 PictureStateTest" run_godot_marker "28/38" "res://tests_gd/PictureStateTest.tscn" PICTURE_STATE_TEST_OK "$IMO/reports/picture_state_test.log"
+add_job "29/38 DayMenuTest" run_godot_marker "29/38" "res://tests_gd/DayMenuTest.tscn" DAY_MENU_TEST_OK "$IMO/reports/day_menu_test.log"
+add_job "30/38 WeekendMenuTest" run_godot_marker "30/38" "res://tests_gd/WeekendMenuTest.tscn" WEEKEND_MENU_TEST_OK "$IMO/reports/weekend_menu_test.log"
+add_job "33/38 HSceneTest" run_godot_marker "33/38" "res://tests_gd/HSceneTest.tscn" H_SCENE_TEST_OK "$IMO/reports/h_scene_test.log"
+add_job "34/38 SignalStressTest" run_godot_marker "34/38" "res://tests_gd/SignalStressTest.tscn" SIGNAL_STRESS_TEST_OK "$IMO/reports/signal_stress_test.log"
+
+echo "[parallel pool] running ${#JOB_CMDS[@]} functional jobs with JOBS=$JOBS"
+declare -a ACTIVE_PIDS=()
+failures=0
+
+reap_finished() {
+  local -a still=()
+  local p
+  for p in "${ACTIVE_PIDS[@]}"; do
+    if kill -0 "$p" 2>/dev/null; then
+      still+=("$p")
+    else
+      if ! wait "$p"; then
+        failures=$((failures + 1))
+      fi
+    fi
+  done
+  ACTIVE_PIDS=("${still[@]+"${still[@]}"}")
+}
+
+for i in "${!JOB_CMDS[@]}"; do
+  while [ "${#ACTIVE_PIDS[@]}" -ge "$JOBS" ]; do
+    sleep 0.1
+    reap_finished
+  done
+  read -r -a cmd_parts <<< "${JOB_CMDS[$i]}"
+  run_job_wrapper "$i" "${JOB_LABELS[$i]}" "${cmd_parts[@]}" &
+  ACTIVE_PIDS+=("$!")
+done
+
+for p in "${ACTIVE_PIDS[@]+"${ACTIVE_PIDS[@]}"}"; do
+  if ! wait "$p"; then
+    failures=$((failures + 1))
+  fi
+done
+
+if [ "$failures" -ne 0 ]; then
+  echo "GODOT_GATE_FAILED ($failures parallel job(s) failed)" >&2
+  exit 1
 fi
 
-# The Rust reference trace is a committed fixture produced by:
-#   cargo run -p wolf-cli -- run --root work/all --map SampleMapA --event 0 --frames 418 \
-#     --answer 0 --step-trace reports/rust_step_trace.json
-# The gate only regenerates the C# side, so no Rust toolchain is required in CI.
-if [ "${LWsmf_RENDER:-0}" = "1" ]; then
-  echo "[18/38] picture roundtrip test (windowed)"
-  # Pixel proof: the picture stack rebuilt from its stored command list must render
-  # identically. The dummy renderer has no textures, so only a real renderer can diff.
-  out_pic="$(LWsmf_RENDER=1 "$GODOT" --path "$IMO/godot" --rendering-driver opengl3 res://tests_gd/PictureRoundtripTest.tscn 2>&1)"
-  printf '%s\n' "$out_pic" | tee "$IMO/reports/gd_PictureRoundtripTest.log"
-  printf '%s\n' "$out_pic" | grep -q PICTURE_ROUNDTRIP_TEST_OK
-  shot_line="$(printf '%s\n' "$out_pic" | sed -n 's/^PICTURE_ROUNDTRIP_SCREENSHOT //p' | head -1)"
-  shot_before="${shot_line%%|*}"
-  shot_after="${shot_line#*|}"
-  if [ -n "$shot_before" ] && [ -f "$shot_before" ]; then cp "$shot_before" "$IMO/reports/picture_roundtrip.png"; fi
-  if [ -n "$shot_after" ] && [ -f "$shot_after" ]; then cp "$shot_after" "$IMO/reports/picture_roundtrip_replay.png"; fi
-else
-  echo "[18/38] picture roundtrip test (headless bookkeeping)"
-  out_pic="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/PictureRoundtripTest.tscn 2>&1)"
-  printf '%s\n' "$out_pic" | tee "$IMO/reports/gd_PictureRoundtripTest.log"
-  printf '%s\n' "$out_pic" | grep -q PICTURE_ROUNDTRIP_TEST_OK
-fi
-
-echo "[19/38] oracle step trace (rust fixture vs csharp)"
-out_oracle="$("$GODOT" --headless --path "$IMO/godot" res://tests/OracleStepTraceTest.tscn 2>&1)"
-printf '%s\n' "$out_oracle" | tee "$IMO/reports/oracle_step_trace_test.log"
-printf '%s\n' "$out_oracle" | grep -q ORACLE_STEP_TRACE_OK
-python "$IMO/oracle/diff_trace.py" \
-  "$IMO/oracle/fixtures/samplemapa_event0_418_rust_trace.json" \
-  "$IMO/reports/csharp_step_trace.json" \
-  --report "$IMO/reports/step_trace_diff.json"
-
-echo "[20/38] game root smoke test"
-out_root="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/GameRootTest.tscn 2>&1)"
-printf '%s\n' "$out_root" | tee "$IMO/reports/gd_GameRootTest.log"
-printf '%s\n' "$out_root" | grep -q GAME_ROOT_TEST_OK
-
-echo "[21/38] terrain test (map_tiles passability oracle)"
-out_terrain="$("$GODOT" --headless --path "$IMO/godot" res://tests/TerrainTest.tscn 2>&1)"
-printf '%s\n' "$out_terrain" | tee "$IMO/reports/terrain_test.log"
-printf '%s\n' "$out_terrain" | grep -q TERRAIN_TEST_OK
-
-echo "[22/38] map layer test (tiles + terrain + click)"
-out_maplayer="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/MapLayerTest.tscn 2>&1)"
-printf '%s\n' "$out_maplayer" | tee "$IMO/reports/gd_MapLayerTest.log"
-printf '%s\n' "$out_maplayer" | grep -q MAP_LAYER_TEST_OK
-
-echo "[23/38] session parity test (core GameSession vs frozen fixture)"
-out_parity="$("$GODOT" --headless --path "$IMO/godot" res://tests/SessionParityTest.tscn 2>&1)"
-printf '%s\n' "$out_parity" | tee "$IMO/reports/session_parity_test.log"
-printf '%s\n' "$out_parity" | grep -q SESSION_PARITY_TEST_OK
-
-echo "[24/38] audio manager test (BGM/BGS/SE + save snapshot)"
-out_audio="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/AudioManagerTest.tscn 2>&1)"
-printf '%s\n' "$out_audio" | tee "$IMO/reports/audio_manager_test.log"
-printf '%s\n' "$out_audio" | grep -q AUDIO_MANAGER_TEST_OK
-
-echo "[25/38] clock test (CE217 minute carry + formatting)"
-out_clock="$("$GODOT" --headless --path "$IMO/godot" res://tests/ClockTest.tscn 2>&1)"
-printf '%s\n' "$out_clock" | tee "$IMO/reports/clock_test.log"
-printf '%s\n' "$out_clock" | grep -q CLOCK_TEST_OK
-
-echo "[26/38] thirty-day sleep soak (CE329 -> CE317)"
-out_soak="$("$GODOT" --headless --path "$IMO/godot" res://tests/SleepSoakTest.tscn 2>&1)"
-printf '%s\n' "$out_soak" | tee "$IMO/reports/sleep_soak.log"
-printf '%s\n' "$out_soak" | grep -q SLEEP_SOAK_TEST_OK
-
-echo "[27/38] main route trace diff (rust fixture vs csharp)"
-out_route="$("$GODOT" --headless --path "$IMO/godot" res://tests/RouteTraceTest.tscn 2>&1)"
-printf '%s\n' "$out_route" | tee "$IMO/reports/route_trace_test.log"
-printf '%s\n' "$out_route" | grep -q ROUTE_TRACE_TEST_OK
-python "$IMO/oracle/diff_route.py" \
-  "$IMO/oracle/fixtures/main_route_rust_trace.json.gz" \
-  "$IMO/reports/csharp_route_trace.json" \
-  --report "$IMO/reports/route_trace_diff.json"
-
-echo "[28/38] picture state test (opcode 124 / CE217 HUD / pointer latch)"
-out_picstate="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/PictureStateTest.tscn 2>&1)"
-printf '%s\n' "$out_picstate" | tee "$IMO/reports/picture_state_test.log"
-printf '%s\n' "$out_picstate" | grep -q PICTURE_STATE_TEST_OK
-
-echo "[29/38] daytime menu test (CE251 image click / clock / energy)"
-out_day="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/DayMenuTest.tscn 2>&1)"
-printf '%s\n' "$out_day" | tee "$IMO/reports/day_menu_test.log"
-printf '%s\n' "$out_day" | grep -q DAY_MENU_TEST_OK
-
-echo "[30/38] weekend menu test (CE310 image click / rest / clock / energy)"
-out_weekend="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/WeekendMenuTest.tscn 2>&1)"
-printf '%s\n' "$out_weekend" | tee "$IMO/reports/weekend_menu_test.log"
-printf '%s\n' "$out_weekend" | grep -q WEEKEND_MENU_TEST_OK
-
-echo "[31/38] cold start route (title -> day 2 08:30)"
-out_cold="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/ColdStartDayTest.tscn 2>&1)"
-printf '%s\n' "$out_cold" | tee "$IMO/reports/cold_start_day.log"
-printf '%s\n' "$out_cold" | grep -q COLD_START_DAY_TEST_OK
-
-echo "[32/38] natural day line (day 4 CE253 dispatch -> day 5 08:30)"
-out_battle="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/Ce253DayRouteTest.tscn 2>&1)"
-printf '%s\n' "$out_battle" | tee "$IMO/reports/ce253_day_route.log"
-printf '%s\n' "$out_battle" | grep -q CE253_DAY_ROUTE_TEST_OK
-
-echo "[33/38] H scene end-to-end (CE310 A/B/C/outdoor, CE318, CE323, CE326, CE335)"
-out_h="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/HSceneTest.tscn 2>&1)"
-printf '%s\n' "$out_h" | tee "$IMO/reports/h_scene_test.log"
-printf '%s\n' "$out_h" | grep -q H_SCENE_TEST_OK
-
-echo "[34/38] signal stress test (ChoicesRequested/EffectRequested marshalling)"
-out_signal="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/SignalStressTest.tscn 2>&1)"
-printf '%s\n' "$out_signal" | tee "$IMO/reports/signal_stress_test.log"
-printf '%s\n' "$out_signal" | grep -q SIGNAL_STRESS_TEST_OK
-
-echo "[35/38] full M4 route trace diff (cold start -> CE251/CE253 -> day 5 08:30)"
-out_m4route="$("$GODOT" --headless --path "$IMO/godot" res://tests/M4FullRouteTraceTest.tscn 2>&1)"
-printf '%s\n' "$out_m4route" | tee "$IMO/reports/m4_full_route_test.log"
-printf '%s\n' "$out_m4route" | grep -q M4_FULL_ROUTE_TRACE_TEST_OK
-python "$IMO/oracle/diff_route.py" \
-  "$IMO/oracle/fixtures/m4_full_route_rust_trace.json.gz" \
-  "$IMO/reports/csharp_m4_route_trace.json" \
-  --report "$IMO/reports/m4_route_diff.json"
-
-echo "[36/38] setup wizard test"
-out_setup="$("$GODOT" --headless --path "$IMO/godot" res://tests_gd/SetupWizardTest.tscn 2>&1)"
-printf '%s\n' "$out_setup" | tee "$IMO/reports/gd_SetupWizardTest.log"
-printf '%s\n' "$out_setup" | grep -q SETUP_WIZARD_TEST_OK
-
-echo "[37/38] performance core probe"
-out_perfcore="$("$GODOT" --headless --path "$IMO/godot" res://tests/PerformanceProbeTest.tscn 2>&1)"
-printf '%s\n' "$out_perfcore" | tee "$IMO/reports/performance_core.log"
-printf '%s\n' "$out_perfcore" | grep -q PERFORMANCE_CORE_OK
+# Performance probes always run serially on an uncontended machine after functional jobs finish.
+run_godot_marker "37/38" "res://tests/PerformanceProbeTest.tscn" PERFORMANCE_CORE_OK "$IMO/reports/performance_core.log"
 
 echo "[38/38] performance frame probe"
 if [ "${LWsmf_RENDER:-0}" = "1" ]; then
@@ -283,16 +310,4 @@ fi
 printf '%s\n' "$out_perfframe" | tee "$IMO/reports/performance_frame.log"
 printf '%s\n' "$out_perfframe" | grep -q PERFORMANCE_FRAME_OK
 
-# Retail saves are gitignored test data; run the M13 mainline regression only when present.
-if [ -f "$IMO/work/retail_backup/Save/SaveData01.sav" ]; then
-  echo "[M13] mainline retail-save endings (SaveData01/SaveData08)"
-  for slot in 1 8; do
-    out_m13="$(M13_SLOT="$slot" M13_DAYS=30 "$GODOT" --headless --path "$IMO/godot" res://tests_gd/M13MainlineEndingsTest.tscn 2>&1)"
-    printf '%s\n' "$out_m13" | tee "$IMO/reports/m13_mainline_endings_slot${slot}.log"
-    printf '%s\n' "$out_m13" | grep -q "M13_MAINLINE_ENDINGS_TEST_OK slot=$slot"
-  done
-else
-  echo "[M13] skipped: work/retail_backup/Save/SaveData01.sav missing"
-fi
-
-echo "GODOT_GATE_OK"
+echo "GODOT_GATE_OK elapsed=${SECONDS}s"

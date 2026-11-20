@@ -1265,6 +1265,12 @@ func clear_pictures() -> void:
 	_states.clear()
 
 
+func picture_text(number: int) -> String:
+	if not _cmds.has(number):
+		return ""
+	return str(_cmds[number].get("text", ""))
+
+
 ## Snapshot of the live picture slots, one dictionary per slot in ascending number order.
 ## SavedPicture in SaveCodec.cs reads exactly these keys (W3 Day4 picture roundtrip).
 func picture_snapshots() -> Array:

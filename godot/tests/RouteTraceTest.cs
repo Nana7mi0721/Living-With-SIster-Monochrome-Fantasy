@@ -294,6 +294,7 @@ public partial class RouteTraceTest : Node
 internal sealed class RouteHost : IHost
 {
     private readonly VmController _inner;
+    private readonly Dictionary<int, RoutePictureEntry> _pictures = new();
 
     public List<JsonObject> PendingEffects { get; } = new();
 
@@ -351,6 +352,7 @@ internal sealed class RouteHost : IHost
             ["file"] = cmd.File,
             ["args"] = args
         });
+        Track(cmd);
         _inner.Picture(cmd);
     }
 
@@ -402,7 +404,7 @@ internal sealed class RouteHost : IHost
     public void Transition(int kind, int flags) { }
     public void Reserve(int target) => _inner.Reserve(target);
     public int? SaveLoad(SaveOp op) => _inner.SaveLoad(op);
-    public int? PictureState(int number, int field) => _inner.PictureState(number, field);
+    public int? PictureState(int number, int field) => PictureStateInternal(number, field);
     public int? CharacterState(int target, int field) => _inner.CharacterState(target, field);
     public int? EngineState(int field) => _inner.EngineState(field);
     public int KeyCode(uint mask) => _inner.KeyCode(mask);
@@ -423,6 +425,109 @@ internal sealed class RouteHost : IHost
     }
 
     public void Log(string message) => _inner.Log(message);
+
+    private void Track(PictureCmd cmd)
+    {
+        if (cmd.Action is PictureAction.Erase or PictureAction.Hide)
+        {
+            _pictures.Remove(cmd.Number);
+            return;
+        }
+        if (cmd.Action == PictureAction.Move)
+        {
+            if (!_pictures.TryGetValue(cmd.Number, out var prev)) return;
+            var merged = new RoutePictureEntry
+            {
+                Kind = cmd.Kind,
+                File = string.IsNullOrEmpty(cmd.File) ? prev.File : cmd.File,
+                Text = string.IsNullOrEmpty(cmd.Text) ? prev.Text : cmd.Text,
+                Args = cmd.Args.Length == 0 ? prev.Args : cmd.Args,
+                Anchor = cmd.Anchor,
+            };
+            merged.Base = BaseSize(merged);
+            _pictures[cmd.Number] = merged;
+            return;
+        }
+        var entry = new RoutePictureEntry
+        {
+            Kind = cmd.Kind,
+            File = cmd.File,
+            Text = cmd.Text,
+            Args = cmd.Args,
+            Anchor = cmd.Anchor,
+        };
+        entry.Base = BaseSize(entry);
+        _pictures[cmd.Number] = entry;
+    }
+
+    private static Vector2 BaseSize(RoutePictureEntry entry)
+    {
+        int kind = entry.Kind;
+        if (kind == 2 || kind == 4)
+            return new Vector2(Math.Max(0, Arg(entry.Args, 1, 0)), Math.Max(0, Arg(entry.Args, 2, 0)));
+        if (kind == 3 && Arg(entry.Args, 1, 0) > 2 && Arg(entry.Args, 2, 0) > 2)
+            return new Vector2(Arg(entry.Args, 1, 0), Arg(entry.Args, 2, 0));
+        return new Vector2(420, 140);
+    }
+
+    private int? PictureStateInternal(int number, int field)
+    {
+        bool exists = _pictures.TryGetValue(number, out var entry);
+        if (field == 8)
+        {
+            if (!exists) return -1;
+            return HitRect(entry!).HasPoint(new Vector2(_inner.PointerX, _inner.PointerY)) ? 1 : 0;
+        }
+        if (field == 9) return exists ? 1 : 0;
+        if (!exists) return null;
+        return field switch
+        {
+            0 => Unit(Arg(entry!.Args, 5, 0)),
+            1 => Unit(Arg(entry.Args, 6, 0)),
+            2 or 3 => Unit(Arg(entry.Args, 7, 100)),
+            4 => Arg(entry.Args, 9, 0),
+            5 => 0,
+            10 => entry.Kind is 2 or 4 ? 1 : -1,
+            _ => null
+        };
+    }
+
+    private Rect2 HitRect(RoutePictureEntry entry)
+    {
+        int number = _pictures.FirstOrDefault(pair => ReferenceEquals(pair.Value, entry)).Key;
+        if (number < 0 || number >= 12000) return new Rect2(0, 0, 1024, 576);
+        var baseSize = entry.Base;
+        if (baseSize == Vector2.Zero) return new Rect2();
+        int scalePercent = Unit(Arg(entry.Args, 7, 100));
+        float factor = scalePercent == 0 ? 1f : Math.Abs(scalePercent) / 100f;
+        var size = baseSize * factor;
+        int x = Unit(Arg(entry.Args, 5, 0));
+        int y = Unit(Arg(entry.Args, 6, 0));
+        var pos = entry.Anchor switch
+        {
+            1 => new Vector2(x - size.X * 0.5f, y - size.Y * 0.5f),
+            2 => new Vector2(x, y - size.Y),
+            3 => new Vector2(x - size.X, y),
+            4 => new Vector2(x - size.X, y - size.Y),
+            5 => new Vector2(x - size.X * 0.5f, y),
+            6 => new Vector2(x - size.X * 0.5f, y - size.Y),
+            _ => new Vector2(x, y)
+        };
+        return new Rect2(pos, size);
+    }
+
+    private static int Arg(int[] args, int index, int fallback) => index < args.Length ? args[index] : fallback;
+    private static int Unit(int raw) => raw > 100_000 ? raw & 0xFFFF : raw;
+}
+
+internal sealed class RoutePictureEntry
+{
+    public int Kind;
+    public string File = "";
+    public string Text = "";
+    public int[] Args = Array.Empty<int>();
+    public int Anchor;
+    public Vector2 Base;
 }
 
 /// <summary>Headless GameSession view: keeps dialogue state, ignores the rest.</summary>

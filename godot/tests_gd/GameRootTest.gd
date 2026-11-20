@@ -320,7 +320,54 @@ func _ready() -> void:
 			failures.append("return-to-title must land on the title (got %s)" % root.phase)
 		if root.session.Generation <= title_generation_before:
 			failures.append("return-to-title must rebuild GameSession")
+		if root.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+			failures.append("GameRoot must ignore mouse_filter so InputRouter receives viewport mouse events")
 		root.queue_free()
+
+		# Regression: GameRoot.tscn must not swallow real Viewport mouse input (MOTION / LMB / RMB / WHEEL)
+		# via Control.MOUSE_FILTER_STOP, and single-frame press+release clicks must reach both
+		# InputRouter latches and opcode 124 (EngineState 7/8).
+		var packed_scene := load("res://scenes/GameRoot.tscn") as PackedScene
+		if packed_scene == null:
+			failures.append("GameRoot.tscn did not load")
+		else:
+			var scene_root := packed_scene.instantiate() as Control
+			add_child(scene_root)
+			if scene_root.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+				failures.append("GameRoot.tscn must set mouse_filter=MOUSE_FILTER_IGNORE")
+			var win_center := get_viewport().get_screen_transform().affine_inverse() * Vector2(512, 288)
+			var motion := InputEventMouseMotion.new()
+			motion.position = win_center
+			get_viewport().push_input(motion)
+			if not scene_root.router.mouse_seen or scene_root.router.hover_updates < 1:
+				failures.append("Viewport mouse motion did not reach InputRouter (mouse_seen=%s updates=%d)" % [str(scene_root.router.mouse_seen), scene_root.router.hover_updates])
+			for btn in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
+				var down := InputEventMouseButton.new()
+				down.button_index = btn
+				down.pressed = true
+				down.position = win_center
+				get_viewport().push_input(down)
+				var up := InputEventMouseButton.new()
+				up.button_index = btn
+				up.pressed = false
+				up.position = win_center
+				get_viewport().push_input(up)
+			var wheel := InputEventMouseButton.new()
+			wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+			wheel.pressed = true
+			wheel.position = win_center
+			get_viewport().push_input(wheel)
+			if not scene_root.router.left_frame_pressed() or not scene_root.router.right_frame_pressed():
+				failures.append("single-frame LMB/RMB clicks did not reach InputRouter latches")
+			if scene_root.router.wheel_notch() != -1:
+				failures.append("Viewport wheel down did not reach InputRouter (got %d)" % scene_root.router.wheel_notch())
+			scene_root.advance_frame()
+			if scene_root.vm.EngineStateBridge(7) != 2 or scene_root.vm.EngineStateBridge(8) != 2:
+				failures.append("single-frame LMB/RMB did not latch opcode 124 EngineState(7/8) (got %d/%d)" % [scene_root.vm.EngineStateBridge(7), scene_root.vm.EngineStateBridge(8)])
+			scene_root.advance_frame()
+			if scene_root.vm.EngineStateBridge(7) != 0 or scene_root.vm.EngineStateBridge(8) != 0:
+				failures.append("one-frame LMB/RMB latches did not clear on the next frame (got %d/%d)" % [scene_root.vm.EngineStateBridge(7), scene_root.vm.EngineStateBridge(8)])
+			scene_root.queue_free()
 	if failures.is_empty():
 		print("GAME_ROOT_TEST_OK")
 		get_tree().quit(0)

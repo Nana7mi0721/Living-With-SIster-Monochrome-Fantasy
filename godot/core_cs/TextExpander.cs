@@ -76,7 +76,7 @@ public static class TextExpander
             // A database escape is a cell read, not a colour: [type:row:column], each
             // field itself an expression (docs/engine/TEXT_SPEC.md section 2.7).
             if (readDb == null) return false;
-            int kind = lower == "udb" ? 2 : 0;
+            int kind = lower == "udb" ? 2 : lower == "sdb" ? 1 : 0;
             replacement = ReadDb(body, kind, inst, vars, readDb);
             return true;
         }
@@ -91,8 +91,16 @@ public static class TextExpander
 
             case "cself" or "self" or "cself_s" or "self_s":
             {
-                string s = inst.Self.GetStr(inst.Program.SelfBase + index);
-                replacement = string.IsNullOrEmpty(s) ? inst.Self.Get(inst.Program.SelfBase + index).ToString() : s;
+                int slot = inst.Program.SelfBase + index;
+                string s = inst.Self.GetStr(slot);
+                if (string.IsNullOrEmpty(s))
+                {
+                    replacement = (index % 100) is >= 5 and <= 9 ? string.Empty : inst.Self.Get(slot).ToString();
+                }
+                else
+                {
+                    replacement = s;
+                }
                 return true;
             }
 

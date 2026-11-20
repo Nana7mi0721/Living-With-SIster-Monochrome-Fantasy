@@ -170,6 +170,21 @@ func _ready() -> void:
 	if (_router.held_mask() & InputRouter.MASK_CANCEL) != 0:
 		failures.append("releasing the right button must clear MASK_CANCEL")
 
+	# 13. Spacebar is a cancel key (report §2.3) and sub-pixel mouse jitter (<1px) does not
+	# emit spurious hover updates after the cursor is active.
+	var cancel_before_space := _cancel
+	var action_before_space := _action
+	_router.handle_event(_key(KEY_SPACE))
+	if _cancel != cancel_before_space + 1 or _action != action_before_space:
+		failures.append("KEY_SPACE should emit cancel_pressed, not action_pressed")
+	var subpixel := InputEventMouseMotion.new()
+	subpixel.position = _router.hover_position + Vector2(0.4, 0.4)
+	var updates_before := _router.hover_updates
+	var hovers_before_subpixel := _hovers
+	_router.handle_event(subpixel)
+	if _router.hover_updates != updates_before or _hovers != hovers_before_subpixel:
+		failures.append("sub-pixel motion (<1px) should not emit hover_changed")
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

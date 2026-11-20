@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace Lwsmf.Core;
 
@@ -43,6 +44,11 @@ public sealed class Variables
     public List<string> SnapshotStrings() => new(_strings);
     public List<int> SnapshotSysNums() => new(_sysNums);
     public List<string> SnapshotSysStrings() => new(_sysStrings);
+
+    public ReadOnlySpan<int> NumsSpan => CollectionsMarshal.AsSpan(_nums);
+    public ReadOnlySpan<string> StringsSpan => CollectionsMarshal.AsSpan(_strings);
+    public ReadOnlySpan<int> SysNumsSpan => CollectionsMarshal.AsSpan(_sysNums);
+    public ReadOnlySpan<string> SysStringsSpan => CollectionsMarshal.AsSpan(_sysStrings);
 
     public void Clear() => Restore(null, null, null, null);
 
@@ -117,6 +123,8 @@ public sealed class SelfVars
 
     public int[] SnapshotNums() => (int[])_nums.Clone();
     public string[] SnapshotStrings() => (string[])_strings.Clone();
+    public ReadOnlySpan<int> NumsSpan => _nums;
+    public ReadOnlySpan<string> StringsSpan => _strings;
 
     public void Restore(EventSelfVars saved) => Restore(saved.ExpandNums(), saved.ExpandStrings());
 

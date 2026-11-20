@@ -41,15 +41,16 @@ func observe() -> void:
 	if root == null or root.phase == "failed":
 		return
 	var d := int(root.vm.GetVar(160))
-	for s in root.session.GetEventSelfAll(305, 600):
-		var stage := int(s)
-		if stage >= 0 and not stages_seen.has(stage):
-			print("[M13] stage_seen=%d day=%d step=%d clock=%d:%02d" % [stage, d, step_count, int(root.vm.GetVar(4)), int(root.vm.GetVar(5))])
-		stages_seen[stage] = true
-		if stage == 28 and stage28_day < 0:
-			stage28_day = d
-			stage28_step = step_count
-			print("[M13] STAGE28 day=%d step=%d clock=%d:%02d" % [d, step_count, int(root.vm.GetVar(4)), int(root.vm.GetVar(5))])
+	if root.session.HasEvent(305):
+		for s in root.session.GetEventSelfAll(305, 600):
+			var stage := int(s)
+			if stage >= 0 and not stages_seen.has(stage):
+				print("[M13] stage_seen=%d day=%d step=%d clock=%d:%02d" % [stage, d, step_count, int(root.vm.GetVar(4)), int(root.vm.GetVar(5))])
+			stages_seen[stage] = true
+			if stage == 28 and stage28_day < 0:
+				stage28_day = d
+				stage28_step = step_count
+				print("[M13] STAGE28 day=%d step=%d clock=%d:%02d" % [d, step_count, int(root.vm.GetVar(4)), int(root.vm.GetVar(5))])
 	var s51 := int(root.session.GetEventSelf(251, 651))
 	var s65 := int(root.session.GetEventSelf(251, 665))
 	if s51 >= 0:
@@ -95,10 +96,7 @@ func picture_state(number: int, field: int) -> int:
 	return int(root.stage.picture_state(number, field))
 
 func row_text(number: int) -> String:
-	for entry in root.stage.picture_snapshots():
-		if int(entry["number"]) == number:
-			return str(entry["text"])
-	return ""
+	return root.stage.picture_text(number)
 
 func menu_rows() -> Array[String]:
 	var rows: Array[String] = []

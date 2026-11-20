@@ -40,12 +40,21 @@ func line_height() -> float:
 	return ceilf(FONT_SIZE * LINE_SPACING_RATIO)
 
 
+func _visible_indices() -> Array[int]:
+	var indices: Array[int] = []
+	for i in options.size():
+		if not override_rects.is_empty() or not display_text(options[i]).is_empty():
+			indices.append(i)
+	return indices
+
+
 func open(p_options: PackedStringArray, p_position: Vector2, p_allow_cancel: bool = true, p_selected: int = 0) -> void:
 	options = p_options
 	position_hint = p_position
 	allow_cancel = p_allow_cancel
 	selected = clampi(p_selected, 0, maxi(options.size() - 1, 0))
 	override_rects = []
+	_hover = -1
 	is_open = true
 	queue_redraw()
 
@@ -64,19 +73,31 @@ func set_override_rects(rects: Array) -> void:
 
 
 func count() -> int:
-	return options.size()
+	return _visible_indices().size()
 
 
 func move(delta: int) -> void:
 	if not is_open or options.is_empty():
 		return
-	selected = clampi(selected + delta, 0, options.size() - 1)
+	var visible := _visible_indices()
+	if visible.is_empty():
+		return
+	var pos := visible.find(selected)
+	if pos < 0:
+		selected = visible[0]
+	else:
+		selected = visible[clampi(pos + delta, 0, visible.size() - 1)]
 	queue_redraw()
 
 
 func confirm() -> void:
 	if not is_open or options.is_empty():
 		return
+	var visible := _visible_indices()
+	if visible.is_empty():
+		return
+	if not (selected in visible):
+		selected = visible[0]
 	var index := selected
 	chosen.emit(index)
 
@@ -92,20 +113,23 @@ func row_rects() -> Array:
 	if not override_rects.is_empty():
 		return override_rects
 	var rects: Array = []
-	if options.is_empty():
+	var visible := _visible_indices()
+	if visible.is_empty():
 		return rects
 	var top := position_hint.y + PADDING
-	for i in options.size():
-		rects.append(Rect2(position_hint.x + PADDING, top + i * line_height(), window_size().x - PADDING * 2.0, line_height()))
+	var width := window_size().x - PADDING * 2.0
+	for row_idx in visible.size():
+		rects.append(Rect2(position_hint.x + PADDING, top + row_idx * line_height(), width, line_height()))
 	return rects
 
 
 func window_size() -> Vector2:
 	var font := UiSkin.font()
 	var width := MIN_WIDTH
-	for option in options:
-		width = maxf(width, font.get_string_size(display_text(option), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x + PADDING * 2.0)
-	var height := options.size() * line_height() + PADDING * 2.0
+	var visible := _visible_indices()
+	for i in visible:
+		width = maxf(width, font.get_string_size(display_text(options[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x + PADDING * 2.0)
+	var height := maxi(visible.size(), 1) * line_height() + PADDING * 2.0
 	return Vector2(ceilf(width), ceilf(height))
 
 
@@ -121,13 +145,16 @@ func hover_at(point: Vector2) -> int:
 	if not is_open:
 		_hover = -1
 		return -1
+	var visible := _visible_indices()
 	var rects := row_rects()
-	for i in rects.size():
-		if rects[i].has_point(point):
-			_hover = i
-			selected = i
+	var count := mini(visible.size(), rects.size())
+	for row_idx in count:
+		if rects[row_idx].has_point(point):
+			var option_idx := visible[row_idx]
+			_hover = option_idx
+			selected = option_idx
 			queue_redraw()
-			return i
+			return option_idx
 	_hover = -1
 	return -1
 
@@ -141,6 +168,9 @@ func _draw() -> void:
 		return
 	if not override_rects.is_empty():
 		return
+	var visible := _visible_indices()
+	if visible.is_empty():
+		return
 	var rect := Rect2(position_hint, window_size())
 	var texture: Texture2D = assets.texture(UiSkin.WINDOW_BASE) if assets != null else null
 	if texture != null:
@@ -150,8 +180,9 @@ func _draw() -> void:
 		draw_rect(rect, Color(0.85, 0.85, 0.85, 0.6), false, 1.0)
 	var font := UiSkin.font()
 	var rects := row_rects()
-	for i in options.size():
-		var row: Rect2 = rects[i]
+	for row_idx in visible.size():
+		var i := visible[row_idx]
+		var row: Rect2 = rects[row_idx]
 		var color := Color("ffe08a") if i == selected else Color.WHITE
 		if i == _hover:
 			draw_rect(row, Color(1, 1, 1, 0.10))

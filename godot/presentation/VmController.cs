@@ -529,7 +529,7 @@ public partial class VmController : Node, IHost, IVmSession
     {
         var value = DatabaseStore?.Read(new DbOp
         {
-            Container = kind == 2 ? DbContainer.Data : DbContainer.CData,
+            Container = kind == 2 ? DbContainer.Data : kind == 1 ? DbContainer.Sys : DbContainer.CData,
             Direction = DbDirection.Read,
             DbType = dbType,
             DataId = row,

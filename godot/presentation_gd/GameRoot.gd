@@ -50,6 +50,8 @@ var _toast_until := 0
 # Row CE43 last painted; Sys20 mirrors it so a cursor move repaints the title menu.
 var _title_menu_cursor := -1
 var _title_menu_options := PackedStringArray()
+const CHOICE_HOVER_DEADZONE_SQ := 16.0
+var _choice_hover_lock_pos := Vector2(-1, -1)
 
 var phase := "boot"
 var frames := 0
@@ -66,6 +68,9 @@ var _diagnostics_path := ""
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# GameRoot spans the entire 1024x576 viewport; leaving the default MOUSE_FILTER_STOP
+	# swallows every mouse motion, click and wheel event before InputRouter._unhandled_input.
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# M5-C: an exported build without game_data opens the local conversion wizard instead
 	# of failing with a missing programs.json. The wizard runs converter all beside the exe.
 	if not SetupWizardScript.data_ready():
@@ -231,10 +236,11 @@ func advance_frame() -> void:
 	vm.SetPointer(pointer.x, pointer.y)
 	# A modal release guard suppresses every button until the physical press is released.
 	var guarded := _modal_release_guard
-	vm.SetPointerPressed(router.pointer_pressed and not guarded)
-	vm.SetPointerRightPressed(router.right_pressed and not guarded)
-	vm.SetPointerMiddlePressed(router.middle_pressed and not guarded)
+	vm.SetPointerPressed(router.left_frame_pressed() and not guarded)
+	vm.SetPointerRightPressed(router.right_frame_pressed() and not guarded)
+	vm.SetPointerMiddlePressed(router.middle_frame_pressed() and not guarded)
 	vm.SetFrameWheel(router.wheel_notch())
+	_sync_live_clock_if_windowed()
 	vm.BeginFrameInput()
 	session.AdvanceFrame()
 	var queued := str(vm.TakePicturesJson())
@@ -342,6 +348,7 @@ func _on_wheel(direction: int) -> void:
 		if bit != 0 and (int(session.BasicAllDeny) & bit) != 0:
 			return
 		choice.move(direction)
+		_choice_hover_lock_pos = router.hover_position if router.mouse_seen else Vector2(-1, -1)
 	elif message.is_open():
 		message.confirm()
 
@@ -354,6 +361,7 @@ func _on_move(dx: int, dy: int) -> void:
 		if (int(session.BasicAllDeny) & bit) != 0:
 			return
 		choice.move(dy)
+		_choice_hover_lock_pos = router.hover_position if router.mouse_seen else Vector2(-1, -1)
 		return
 	# Bedroom walking: same step/facing convention as TitleScreen.MoveLeader.
 	if phase == "bedroom" and not message.is_open():
@@ -373,6 +381,10 @@ func _on_hover(position: Vector2) -> void:
 	if faulted or _modal_window_open():
 		return
 	if choice.is_open:
+		if _choice_hover_lock_pos.x >= 0.0:
+			if position.distance_squared_to(_choice_hover_lock_pos) < CHOICE_HOVER_DEADZONE_SQ:
+				return
+			_choice_hover_lock_pos = Vector2(-1, -1)
 		choice.hover_at(position)
 
 
@@ -444,6 +456,7 @@ func _on_choices(options: Array, selected: int = 0) -> void:
 		packed.append(str(option))
 	if packed.is_empty():
 		return
+	_choice_hover_lock_pos = Vector2(-1, -1)
 	choice.open(packed, _choice_position(), true, selected)
 	if session.Phase == "title":
 		_title_menu_options = packed
@@ -451,6 +464,7 @@ func _on_choices(options: Array, selected: int = 0) -> void:
 
 
 func _on_choices_closed() -> void:
+	_choice_hover_lock_pos = Vector2(-1, -1)
 	choice.close()
 	if phase == "title":
 		session.SetTitleMenuVisible(false)
@@ -634,7 +648,7 @@ func _on_map_cell_hovered(_cell: Vector2i) -> void:
 func _on_session_hud(x: int, y: int, text: String) -> void:
 	if map_view != null and map_view.visible:
 		map_view.set_leader_cell(Vector2i(x, y))
-	status(text)
+	status(text, OS.get_environment("LWsmf_QUIET_HUD") == "1")
 
 
 func _on_session_map(map_id: int, leader_x: int, leader_y: int) -> void:
@@ -1072,6 +1086,15 @@ func _seed_live_rng_if_windowed() -> void:
 	vm.SetEventSeed(seed & 0xFFFFFFFF)
 
 
+## Windowed live play mirrors wall-clock seconds into Sys82 (9000082) for clock-driven
+## events; headless/CI runs keep Sys82 deterministic at 0.
+func _sync_live_clock_if_windowed() -> void:
+	if DisplayServer.get_name() == "headless" or OS.get_environment("WOLF_LIVE_RNG") == "0":
+		return
+	var dt := Time.get_datetime_dict_from_system()
+	vm.SetSys(82, int(dt.get("second", 0)))
+
+
 func modal_release_guard() -> bool:
 	return _modal_release_guard
 
@@ -1102,11 +1125,12 @@ func _release_modal_guard_if_free() -> void:
 	router.clear_frame_latches()
 
 
-func status(line: String) -> void:
+func status(line: String, quiet: bool = false) -> void:
 	_status_lines.append(line)
 	while _status_lines.size() > 3:
 		_status_lines.pop_front()
-	print("[GameRoot] ", line)
+	if not quiet:
+		print("[GameRoot] ", line)
 
 
 func status_lines() -> Array[String]:

@@ -24,8 +24,8 @@ const MASK_DOWN := 32
 const MASK_LEFT := 64
 const MASK_RIGHT := 128
 
-const ACTION_KEYS: Array[int] = [KEY_Z, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]
-const CANCEL_KEYS: Array[int] = [KEY_X, KEY_ESCAPE, KEY_BACKSPACE]
+const ACTION_KEYS: Array[int] = [KEY_Z, KEY_ENTER, KEY_KP_ENTER]
+const CANCEL_KEYS: Array[int] = [KEY_X, KEY_ESCAPE, KEY_BACKSPACE, KEY_SPACE]
 const SUB_KEYS: Array[int] = [KEY_C, KEY_SHIFT]
 
 ## Last hover position in 1024x576 logical coordinates.
@@ -51,6 +51,7 @@ var _click_latch := false
 ## Held right button is WOLF's cancel key (crates/wolf-cli/src/play.rs key_bits): the VM's
 ## opcode-123 polls read it through held_mask(), just like the left-button OK latch.
 var _right_click_latch := false
+var _middle_click_latch := false
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -60,6 +61,8 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Route one event. Returns true when the event was consumed.
 func handle_event(event: InputEvent) -> bool:
 	if event is InputEventMouseMotion:
+		if mouse_seen and event.position.distance_squared_to(hover_position) < 1.0:
+			return false
 		mouse_seen = true
 		hover_position = event.position
 		hover_updates += 1
@@ -89,6 +92,8 @@ func handle_event(event: InputEvent) -> bool:
 			MOUSE_BUTTON_RIGHT:
 				_right_click_latch = true
 				cancel_pressed.emit()
+			MOUSE_BUTTON_MIDDLE:
+				_middle_click_latch = true
 			MOUSE_BUTTON_WHEEL_UP:
 				_wheel_bits |= MASK_UP
 				_wheel_dir = 1
@@ -176,12 +181,27 @@ func wheel_notch() -> int:
 	return _wheel_dir
 
 
+## Button state for one frame: true when physically held OR clicked within this tick, so
+## opcode 124 (EngineState 7/8/9) never drops a press+release completed inside 1/60 s.
+func left_frame_pressed() -> bool:
+	return pointer_pressed or _click_latch
+
+
+func right_frame_pressed() -> bool:
+	return right_pressed or _right_click_latch
+
+
+func middle_frame_pressed() -> bool:
+	return middle_pressed or _middle_click_latch
+
+
 ## Latches expire with the frame that saw them (crates/wolf-cli/src/play.rs step()).
 func clear_frame_latches() -> void:
 	_wheel_bits = 0
 	_wheel_dir = 0
 	_click_latch = false
 	_right_click_latch = false
+	_middle_click_latch = false
 
 
 ## The key code one 123 poll sees is computed by core_cs/KeyCodes.cs and reached through

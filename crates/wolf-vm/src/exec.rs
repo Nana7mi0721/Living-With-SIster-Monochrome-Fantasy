@@ -1669,6 +1669,77 @@ fn store_num(inst: &mut Instance, vars: &mut Variables, raw: i32, value: i32) {
     }
 }
 
+fn resolve_string_target(raw: i32, mode: i32, inst: &Instance, vars: &Variables) -> i32 {
+    if (mode & 0x0010) != 0 {
+        let address = eval_num(raw, inst, vars);
+        if matches!(
+            Magic::decode(address).kind(),
+            MagicKind::StrVar | MagicKind::SysVar | MagicKind::SelfVar
+        ) {
+            return address;
+        }
+    }
+    raw
+}
+
+fn split_first_line(text: &str) -> (&str, &str) {
+    let (line, rest) = match text.find('\n') {
+        Some(at) => (&text[..at], &text[at + 1..]),
+        None => (text, ""),
+    };
+    (line.strip_suffix('\r').unwrap_or(line), rest)
+}
+
+fn split_sound_cell(text: &str) -> (&str, Option<i32>, Option<i32>) {
+    if !text.contains('\n') {
+        return (text.trim_end_matches('\r'), None, None);
+    }
+    let mut lines = text.lines();
+    let file = lines.next().unwrap_or("").trim_end();
+    let volume = lines.next().and_then(|line| line.trim().parse().ok());
+    let pitch = lines.next().and_then(|line| line.trim().parse().ok());
+    (file, volume, pitch)
+}
+
+fn first_unit_len(text: &str) -> usize {
+    let mut chars = text.char_indices();
+    let Some((_, first)) = chars.next() else {
+        return 0;
+    };
+    if first != '\\' {
+        return first.len_utf8();
+    }
+    let rest = &text[1..];
+    let mut name_end = 0;
+    for (at, ch) in rest.char_indices() {
+        if ch.is_ascii_alphabetic() {
+            name_end = at + ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+    if name_end == 0 {
+        return first.len_utf8();
+    }
+    let after = &rest[name_end..];
+    if after.starts_with('[') {
+        if let Some(close) = after.find(']') {
+            return 1 + name_end + close + 1;
+        }
+    }
+    1 + name_end
+}
+
+fn last_unit_start(text: &str) -> usize {
+    let mut end = 0;
+    let mut last = 0;
+    while end < text.len() {
+        last = end;
+        end += first_unit_len(&text[end..]);
+    }
+    last
+}
+
 /// Write one magic operand as a string.
 fn store_str(inst: &mut Instance, vars: &mut Variables, raw: i32, value: &str) {
     let magic = Magic::decode(raw);
@@ -2195,12 +2266,126 @@ fn execute(
                 None
             }
             122 => {
-                let target = arg(cmd, 0);
-                let value = cmd
-                    .strings
-                    .first()
-                    .map_or(String::new(), |raw| expand(raw, inst, vars));
-                store_str(inst, vars, target, &value);
+                let raw_target = arg(cmd, 0);
+                let mode = arg(cmd, 1);
+                let source = arg(cmd, 2);
+                let target = resolve_string_target(raw_target, mode, inst, vars);
+                let operation = mode & 0xFF00;
+                let source_kind = mode & 0x0F;
+                let literal = |idx: usize| {
+                    cmd.strings
+                        .get(idx)
+                        .map_or(String::new(), |raw| expand(raw, inst, vars))
+                };
+                let string_source: Option<i32> = match (source_kind, argc(cmd) >= 3) {
+                    (1, true) => Some(source),
+                    (2, true) => {
+                        let address = eval_num(source, inst, vars);
+                        matches!(
+                            Magic::decode(address).kind(),
+                            MagicKind::StrVar | MagicKind::SysVar | MagicKind::SelfVar
+                        )
+                        .then_some(address)
+                    }
+                    _ => None,
+                };
+                let read_source = || match string_source {
+                    Some(address) => eval_str(address, inst, vars),
+                    None => literal(0),
+                };
+                let write_back = |inst: &mut Instance, vars: &mut Variables, text: &str| {
+                    if let Some(address) = string_source {
+                        store_str(inst, vars, address, text);
+                    }
+                };
+                match operation {
+                    0x0000 => {
+                        let value = read_source();
+                        store_str(inst, vars, target, &value);
+                    }
+                    0x0100 => {
+                        let value = read_source();
+                        let mut combined = eval_str(target, inst, vars);
+                        combined.push_str(&value);
+                        store_str(inst, vars, target, &combined);
+                    }
+                    0x0200 => {
+                        let text = read_source();
+                        let (line, rest) = split_first_line(&text);
+                        store_str(inst, vars, target, line);
+                        write_back(inst, vars, rest);
+                    }
+                    0x0300 => {
+                        let text = read_source();
+                        let (line, _) = split_first_line(&text);
+                        store_str(inst, vars, target, line);
+                    }
+                    0x0400 => {
+                        let text = read_source();
+                        let count = first_unit_len(&text);
+                        let (cut, rest) = text.split_at(count);
+                        store_str(inst, vars, target, cut);
+                        write_back(inst, vars, rest);
+                    }
+                    0x0500 => {
+                        if source_kind == 0 {
+                            let text = literal(0);
+                            if text.starts_with("<<GET_FILE_EXIST>>") {
+                                store_str(inst, vars, target, "0");
+                            } else {
+                                let at = last_unit_start(&text);
+                                store_str(inst, vars, target, &text[at..]);
+                            }
+                        } else {
+                            let text = read_source();
+                            let at = last_unit_start(&text);
+                            let (rest, cut) = text.split_at(at);
+                            store_str(inst, vars, target, cut);
+                            write_back(inst, vars, rest);
+                        }
+                    }
+                    0x0800 => {
+                        let needle = literal(0);
+                        let mut text = eval_str(target, inst, vars);
+                        if !needle.is_empty() {
+                            text = text.replace(&needle, "");
+                        }
+                        store_str(inst, vars, target, &text);
+                    }
+                    0x0900 => {
+                        let from = literal(0);
+                        let to = literal(1);
+                        let text = eval_str(target, inst, vars);
+                        let replaced = if from.is_empty() {
+                            text
+                        } else {
+                            text.replace(&from, &to)
+                        };
+                        store_str(inst, vars, target, &replaced);
+                    }
+                    0x0A00 => {
+                        let marker = literal(0);
+                        let text = eval_str(target, inst, vars);
+                        let value = match text.find(&marker) {
+                            Some(at) if !marker.is_empty() => text[..at].to_owned(),
+                            _ => "<<NotFound>>".to_owned(),
+                        };
+                        store_str(inst, vars, target, &value);
+                    }
+                    0x0B00 => {
+                        let marker = literal(0);
+                        let text = eval_str(target, inst, vars);
+                        let value = match text.find(&marker) {
+                            Some(at) if !marker.is_empty() => text[at + marker.len()..].to_owned(),
+                            _ => "<<NotFound>>".to_owned(),
+                        };
+                        store_str(inst, vars, target, &value);
+                    }
+                    _ => {
+                        let value = read_source();
+                        store_str(inst, vars, target, &value);
+                    }
+                }
                 inst.pc += 1;
                 None
             }
@@ -2320,13 +2505,27 @@ fn execute(
                 };
                 let playing = bits >= 0 && bits & 0x0200_0000 != 0;
                 let (action, file, volume, frames) = if playing {
-                    let file = expand(cmd.strings.first().map_or("", String::as_str), inst, vars);
-                    let volume = if argc(cmd) >= 6 { arg(cmd, 4) } else { 100 };
+                    let raw = expand(cmd.strings.first().map_or("", String::as_str), inst, vars);
+                    let (cell_file, cell_volume, _) = split_sound_cell(&raw);
+                    let raw_vol = if argc(cmd) >= 6 {
+                        eval_num(arg(cmd, 4), inst, vars)
+                    } else {
+                        100
+                    };
+                    let volume = if raw_vol > 0 || cell_volume.is_none() {
+                        raw_vol
+                    } else {
+                        cell_volume.unwrap_or(100)
+                    };
                     // For BGM this is the fade-in length; SE treats the same slot as a
                     // start delay. The mixer currently only uses frames when stopping,
                     // but keeping it here preserves the field instead of dropping it.
-                    let frames = if argc(cmd) >= 6 { arg(cmd, 1).max(0) } else { 0 };
-                    (SoundAction::Play, file, volume, frames)
+                    let frames = if argc(cmd) >= 6 {
+                        eval_num(arg(cmd, 1), inst, vars).max(0)
+                    } else {
+                        0
+                    };
+                    (SoundAction::Play, cell_file.to_owned(), volume, frames)
                 } else {
                     let frames = if argc(cmd) <= 5 { arg(cmd, 1) } else { 0 };
                     (SoundAction::Stop, String::new(), 0, frames)

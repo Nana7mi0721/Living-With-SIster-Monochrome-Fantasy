@@ -37,6 +37,9 @@ public static class VmTest
         TestTraceBgsChannel();
         TestUnknownSoundType();
         TestOpcode125126AutoAndBanKeys();
+        TestOpcode122StringOps();
+        TestOpcode140SoundCellSplitAndEval();
+        TestTextExpanderCselfEmptyAndSdb();
         TestOpcode1000ProFeatureWait();
         TestMaxCallDepth();
         DatabaseTest.Run();
@@ -941,5 +944,97 @@ public static class VmTest
             throw new Exception("depth rejection must be logged");
         if (vm.Faulted)
             throw new Exception("depth rejection must not fault the VM");
+    }
+
+    private static void TestOpcode122StringOps()
+    {
+        Console.WriteLine("  Testing Opcode 122 string operations...");
+        var slots = new List<Slot>
+        {
+            Slot.Command(122, [3_000_000, 0x0000, 0], ["Data\\SE/click.ogg"]),
+            Slot.Command(122, [3_000_000, 0x0800, 0], ["Data\\"]),
+            Slot.Command(122, [3_000_001, 0x0100, 0], ["A"]),
+            Slot.Command(122, [3_000_001, 0x0100, 0], ["B"]),
+            Slot.Command(122, [3_000_002, 0x0900, 0], ["\\n", "\n"]),
+            Slot.Command(122, [3_000_003, 0x0200 | 1, 3_000_002]),
+            Slot.Command(122, [3_000_004, 0x0400 | 1, 3_000_002]),
+            Slot.Command(122, [3_000_005, 0x0500 | 1, 3_000_002]),
+            Slot.Command(122, [3_000_006, 0x0500, 0, 1], ["<<GET_FILE_EXIST>>./save/save0.jpg"]),
+            Slot.Command(122, [3_000_007, 0x0A00, 0], [":"]),
+            Slot.Command(122, [3_000_008, 0x0B00, 0], [":"]),
+            Slot.Command(122, [1_600_010, 0x0011, 3_000_000]),
+        };
+        var prog = Program.FromSlots(98, "Op122", slots);
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        vm.RegisterProgram(prog);
+        var inst = vm.CreateInstance(98)!;
+        vm.Vars.SetStr(2, "row1\\nrow2_xy");
+        vm.Vars.SetStr(7, "left:right");
+        vm.Vars.SetStr(8, "left:right");
+        inst.Self.Set(610, 3_000_009);
+        vm.StepFrame();
+        if (vm.Vars.GetStr(0) != "SE/click.ogg")
+            throw new Exception($"0x0800 remove failed: '{vm.Vars.GetStr(0)}'");
+        if (vm.Vars.GetStr(1) != "AB")
+            throw new Exception($"0x0100 append failed: '{vm.Vars.GetStr(1)}'");
+        if (vm.Vars.GetStr(3) != "row1")
+            throw new Exception($"0x0201 first-line head failed: '{vm.Vars.GetStr(3)}'");
+        if (vm.Vars.GetStr(4) != "r" || vm.Vars.GetStr(5) != "y" || vm.Vars.GetStr(2) != "ow2_x")
+            throw new Exception($"cut char failed: 2='{vm.Vars.GetStr(2)}' 4='{vm.Vars.GetStr(4)}' 5='{vm.Vars.GetStr(5)}'");
+        if (vm.Vars.GetStr(6) != "0")
+            throw new Exception($"GET_FILE_EXIST failed: '{vm.Vars.GetStr(6)}'");
+        if (vm.Vars.GetStr(7) != "left" || vm.Vars.GetStr(8) != "right")
+            throw new Exception($"0xA00/0xB00 failed: 7='{vm.Vars.GetStr(7)}' 8='{vm.Vars.GetStr(8)}'");
+        if (vm.Vars.GetStr(9) != "SE/click.ogg")
+            throw new Exception($"0x0011 indirect target failed: '{vm.Vars.GetStr(9)}'");
+    }
+
+    private static void TestOpcode140SoundCellSplitAndEval()
+    {
+        Console.WriteLine("  Testing Opcode 140 multiline cell split & param eval...");
+        var slots = new List<Slot>
+        {
+            Slot.Command(140, [0x0200_0020, 0, 0, 0, 0, 0], ["SystemFile/[SE]Enter.ogg\r\n90\r\n125"]),
+            Slot.Command(140, [0x0200_0000, 0, 0, 0, 0, 100], ["BGM/quiet.ogg"]),
+            Slot.Command(140, [0x0200_0020, 1_600_001, 0, 0, 1_600_002, 1_600_003], ["SystemFile/[SE]Dyn.ogg"]),
+        };
+        var prog = Program.FromSlots(99, "Op140Split", slots);
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        vm.RegisterProgram(prog);
+        var inst = vm.CreateInstance(99)!;
+        inst.Self.Set(601, 15);
+        inst.Self.Set(602, 75);
+        inst.Self.Set(603, 110);
+        vm.StepFrame();
+        if (host.Sounds.Count != 3)
+            throw new Exception($"expected 3 sounds, got {host.Sounds.Count}");
+        var s0 = host.Sounds[0];
+        if (s0.File != "SystemFile/[SE]Enter.ogg" || s0.Volume != 90 || s0.Tempo != 125)
+            throw new Exception($"multiline SE cell failed: file='{s0.File}' vol={s0.Volume} tempo={s0.Tempo}");
+        var s1 = host.Sounds[1];
+        if (s1.File != "BGM/quiet.ogg" || s1.Volume != 0)
+            throw new Exception($"single-line vol=0 must be preserved: file='{s1.File}' vol={s1.Volume}");
+        var s2 = host.Sounds[2];
+        if (s2.Frames != 15 || s2.Volume != 75 || s2.Tempo != 110)
+            throw new Exception($"param EvalNum failed: frames={s2.Frames} vol={s2.Volume} tempo={s2.Tempo}");
+    }
+
+    private static void TestTextExpanderCselfEmptyAndSdb()
+    {
+        Console.WriteLine("  Testing TextExpander empty \\cself[5..9] and \\sdb kind...");
+        var prog = Program.FromSlots(100, "Expand", new List<Slot>());
+        var vm = new EventVm();
+        vm.RegisterProgram(prog);
+        var inst = vm.CreateInstance(100)!;
+        inst.Self.Set(600, 14);
+        string expanded = TextExpander.Expand("\\f[\\cself[0]]<\\cself[7]>", inst, vm.Vars, (_, _, _, _) => "");
+        if (expanded != "\\f[14]<>")
+            throw new Exception($"\\cself[7] must stay empty when unset, got '{expanded}'");
+        int seenKind = -1;
+        TextExpander.Expand("\\sdb[1:2:3]", inst, vm.Vars, (k, _, _, _) => { seenKind = k; return "ok"; });
+        if (seenKind != 1)
+            throw new Exception($"\\sdb must pass kind=1 (Sys), got {seenKind}");
     }
 }

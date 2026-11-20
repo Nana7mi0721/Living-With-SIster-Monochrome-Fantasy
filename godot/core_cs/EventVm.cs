@@ -673,10 +673,134 @@ public sealed class EventVm
                     break;
                 case 122:
                 {
-                    int target = slot.Params.Length > 0 ? slot.Params[0] : 0;
-                    string raw = slot.Strings.Length > 0 ? slot.Strings[0] : "";
-                    string expanded = Expand(raw, inst);
-                    StoreStr(inst, target, expanded);
+                    int rawTarget = slot.Params.Length > 0 ? slot.Params[0] : 0;
+                    int mode = slot.Params.Length > 1 ? slot.Params[1] : 0;
+                    int source = slot.Params.Length > 2 ? slot.Params[2] : 0;
+                    int target = ResolveStringTarget(rawTarget, mode, inst);
+                    int operation = mode & 0xFF00;
+                    int sourceKind = mode & 0x0F;
+
+                    string Literal(int idx) =>
+                        idx < slot.Strings.Length ? Expand(slot.Strings[idx], inst) : "";
+
+                    int? stringSource = null;
+                    if (slot.Params.Length >= 3)
+                    {
+                        if (sourceKind == 1)
+                        {
+                            stringSource = source;
+                        }
+                        else if (sourceKind == 2)
+                        {
+                            int address = EvalNum(source, inst);
+                            var kind = Magic.Decode(address).Kind;
+                            if (kind is MagicKind.StrVar or MagicKind.SysVar or MagicKind.SelfVar)
+                                stringSource = address;
+                        }
+                    }
+
+                    string ReadSource() =>
+                        stringSource.HasValue ? EvalStr(stringSource.Value, inst) : Literal(0);
+
+                    void WriteBack(string value)
+                    {
+                        if (stringSource.HasValue)
+                            StoreStr(inst, stringSource.Value, value);
+                    }
+
+                    switch (operation)
+                    {
+                        case 0x0000:
+                            StoreStr(inst, target, ReadSource());
+                            break;
+                        case 0x0100:
+                            StoreStr(inst, target, EvalStr(target, inst) + ReadSource());
+                            break;
+                        case 0x0200:
+                        {
+                            SplitFirstLine(ReadSource(), out string line, out string rest);
+                            StoreStr(inst, target, line);
+                            WriteBack(rest);
+                            break;
+                        }
+                        case 0x0300:
+                        {
+                            SplitFirstLine(ReadSource(), out string line, out _);
+                            StoreStr(inst, target, line);
+                            break;
+                        }
+                        case 0x0400:
+                        {
+                            string text = ReadSource();
+                            int count = FirstUnitLen(text);
+                            StoreStr(inst, target, text.Substring(0, count));
+                            WriteBack(text.Substring(count));
+                            break;
+                        }
+                        case 0x0500:
+                        {
+                            if (sourceKind == 0)
+                            {
+                                string text = Literal(0);
+                                if (text.StartsWith("<<GET_FILE_EXIST>>", StringComparison.Ordinal))
+                                {
+                                    StoreStr(inst, target, "0");
+                                    break;
+                                }
+                                int at = LastUnitStart(text);
+                                StoreStr(inst, target, text.Substring(at));
+                            }
+                            else
+                            {
+                                string text = ReadSource();
+                                int at = LastUnitStart(text);
+                                StoreStr(inst, target, text.Substring(at));
+                                WriteBack(text.Substring(0, at));
+                            }
+                            break;
+                        }
+                        case 0x0800:
+                        {
+                            string needle = Literal(0);
+                            string text = EvalStr(target, inst);
+                            if (!string.IsNullOrEmpty(needle))
+                                text = text.Replace(needle, string.Empty);
+                            StoreStr(inst, target, text);
+                            break;
+                        }
+                        case 0x0900:
+                        {
+                            string from = Literal(0);
+                            string to = Literal(1);
+                            string text = EvalStr(target, inst);
+                            string replaced = string.IsNullOrEmpty(from) ? text : text.Replace(from, to);
+                            StoreStr(inst, target, replaced);
+                            break;
+                        }
+                        case 0x0A00:
+                        {
+                            string marker = Literal(0);
+                            string text = EvalStr(target, inst);
+                            int idx = string.IsNullOrEmpty(marker)
+                                ? -1
+                                : text.IndexOf(marker, StringComparison.Ordinal);
+                            StoreStr(inst, target, idx >= 0 ? text.Substring(0, idx) : "<<NotFound>>");
+                            break;
+                        }
+                        case 0x0B00:
+                        {
+                            string marker = Literal(0);
+                            string text = EvalStr(target, inst);
+                            int idx = string.IsNullOrEmpty(marker)
+                                ? -1
+                                : text.IndexOf(marker, StringComparison.Ordinal);
+                            StoreStr(inst, target, idx >= 0 ? text.Substring(idx + marker.Length) : "<<NotFound>>");
+                            break;
+                        }
+                        default:
+                            StoreStr(inst, target, ReadSource());
+                            break;
+                    }
                     inst.Pc++;
                     break;
                 }
@@ -779,11 +903,16 @@ public sealed class EventVm
                     if (playing)
                     {
                         string rawStr = slot.Strings.Length > 0 ? slot.Strings[0] : "";
-                        file = Expand(rawStr, inst);
-                        volume = slot.Params.Length >= 6 ? slot.Params[4] : 100;
-                        frames = slot.Params.Length >= 6 ? Math.Max(0, slot.Params[1]) : 0;
-                        tempo = slot.Params.Length >= 6 ? slot.Params[5] : 100;
-                        loopPoint = slot.Params.Length >= 7 ? Math.Max(0, slot.Params[6]) : 0;
+                        string expanded = Expand(rawStr, inst);
+                        (string cellFile, int? cellVolume, int? cellTempo) = SplitSoundCell(expanded);
+                        int rawFrames = slot.Params.Length >= 6 ? Math.Max(0, EvalNum(slot.Params[1], inst)) : 0;
+                        int rawVol = slot.Params.Length >= 6 ? EvalNum(slot.Params[4], inst) : 100;
+                        int rawTempo = slot.Params.Length >= 6 ? EvalNum(slot.Params[5], inst) : 100;
+                        file = cellFile;
+                        volume = rawVol > 0 || cellVolume == null ? rawVol : cellVolume.Value;
+                        frames = rawFrames;
+                        tempo = rawTempo > 0 || cellTempo == null ? rawTempo : cellTempo.Value;
+                        loopPoint = slot.Params.Length >= 7 ? Math.Max(0, EvalNum(slot.Params[6], inst)) : 0;
                         action = SoundAction.Play;
                     }
                     else
@@ -1541,5 +1670,75 @@ public sealed class EventVm
                 Instances.RemoveAt(i);
             }
         }
+    }
+
+    private int ResolveStringTarget(int raw, int mode, Instance inst)
+    {
+        if ((mode & 0x0010) != 0)
+        {
+            int address = EvalNum(raw, inst);
+            var kind = Magic.Decode(address).Kind;
+            if (kind is MagicKind.StrVar or MagicKind.SysVar or MagicKind.SelfVar)
+                return address;
+        }
+        return raw;
+    }
+
+    private static void SplitFirstLine(string text, out string line, out string rest)
+    {
+        int nl = text.IndexOf('\n');
+        if (nl < 0)
+        {
+            line = text.EndsWith('\r') ? text.Substring(0, text.Length - 1) : text;
+            rest = string.Empty;
+            return;
+        }
+        line = nl > 0 && text[nl - 1] == '\r' ? text.Substring(0, nl - 1) : text.Substring(0, nl);
+        rest = text.Substring(nl + 1);
+    }
+
+    private static (string File, int? Volume, int? Tempo) SplitSoundCell(string raw)
+    {
+        int nl = raw.IndexOf('\n');
+        if (nl < 0)
+            return (raw.TrimEnd('\r'), null, null);
+        string[] lines = raw.Replace("\r\n", "\n").Split('\n');
+        string file = lines[0].TrimEnd();
+        int? vol = lines.Length > 1 && int.TryParse(lines[1].Trim(), out int v) ? v : null;
+        int? tempo = lines.Length > 2 && int.TryParse(lines[2].Trim(), out int t) ? t : null;
+        return (file, vol, tempo);
+    }
+
+    private static int FirstUnitLen(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return 0;
+        if (text[0] != '\\')
+            return char.IsHighSurrogate(text[0]) && text.Length > 1 && char.IsLowSurrogate(text[1]) ? 2 : 1;
+
+        int nameEnd = 1;
+        while (nameEnd < text.Length && char.IsAsciiLetter(text[nameEnd]))
+            nameEnd++;
+        if (nameEnd == 1)
+            return 1;
+        if (nameEnd < text.Length && text[nameEnd] == '[')
+        {
+            int close = text.IndexOf(']', nameEnd + 1);
+            if (close >= 0)
+                return close + 1;
+        }
+        return nameEnd;
+    }
+
+    private static int LastUnitStart(string text)
+    {
+        int end = 0;
+        int last = 0;
+        while (end < text.Length)
+        {
+            last = end;
+            end += FirstUnitLen(text.Substring(end));
+        }
+        return last;
     }
 }

@@ -161,7 +161,7 @@ fn parse_escape<L: VarLookup + ?Sized>(
         // label the event had just stored in the self string bank.
         EscapeBank::SelfVar => {
             let text = lookup.lookup_str(bank, index);
-            if text.is_empty() {
+            if text.is_empty() && !(5..=9).contains(&(index % 100)) {
                 lookup.lookup_num(bank, index).to_string()
             } else {
                 text
@@ -263,9 +263,13 @@ mod tests {
 
     #[test]
     fn nested_escapes_expand_innermost_first() {
-        // \cself[\cself[0]] with slot 0 = 7 -> \cself[7] -> 0 (slot 7 unwritten)
-        let f = fixed();
-        assert_eq!(expand("\\cself[\\cself[0]]", &f), "0");
+        // \cself[\cself[0]] with slot 0 = 7 -> \cself[7] -> "" (slots 5..=9 are string cells)
+        let mut f = fixed();
+        assert_eq!(expand("\\cself[\\cself[0]]", &f), "");
+        // Numeric slots outside 5..=9 keep the integer fallback: slot 1 = 8 -> wait, test slot 11:
+        f.self_nums.resize(12, 42);
+        f.self_nums[0] = 11;
+        assert_eq!(expand("\\cself[\\cself[0]]", &f), "42");
     }
 
     #[test]

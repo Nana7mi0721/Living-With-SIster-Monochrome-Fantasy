@@ -258,6 +258,15 @@ public sealed class GameSession
         _vm.StepFrame();
         ApplyPending();
         _vm.StartReservedEvent();
+        if (_messageOpen && !_vm.IsWaitingForMessage())
+        {
+            NotifyMessageClosed();
+        }
+        if (_hasChoices && !_vm.IsWaitingForChoice())
+        {
+            _hasChoices = false;
+            _view.HideChoices();
+        }
         UpdateMapHud(false);
     }
 
@@ -772,6 +781,10 @@ public sealed class GameSession
     private bool ApplyLoadedState(SaveState state)
     {
         _vm.Vm.StopAll();
+        _messageOpen = false;
+        _hasChoices = false;
+        _view.HideMessage();
+        _view.HideChoices();
         _vm.Map = null;
         _mapRuntime = null;
         _map = null;
@@ -931,6 +944,10 @@ public sealed class GameSession
     {
         Phase = "newgame";
         _vm.Vm.StopAll();
+        _messageOpen = false;
+        _hasChoices = false;
+        _view.HideMessage();
+        _view.HideChoices();
         // AutoEvents is session-scoped like Rust's Game::auto_events; StopAll does not
         // clear its edge latch. Re-arming here would replay event 38 and shift instance ids
         // (D-33). A fresh engine boot constructs a fresh scheduler instead.
@@ -1008,6 +1025,10 @@ public sealed class GameSession
         int? skipEventId = null)
     {
         _vm.Vm.StopAll();
+        _messageOpen = false;
+        _hasChoices = false;
+        _view.HideMessage();
+        _view.HideChoices();
         _vm.Map = null;
         _mapRuntime = null;
 

@@ -26,19 +26,32 @@ public partial class M4FullRouteTraceTest : Node
     private GameSession _session = null!;
     private M4RouteView _view = null!;
     private M4RouteHost _host = null!;
-    private readonly List<TraceStep> _steps = new(65536);
-    private readonly List<int> _mapIds = new(65536);
-    private readonly List<int> _stepInstanceIds = new(65536);
+    private readonly List<M4TraceStep> _steps = new(1_000_000);
+    private readonly List<int> _mapIds = new(1_000_000);
     private readonly List<string> _failures = new();
-    private Dictionary<int, int> _lastVars = new();
-    private Dictionary<int, string> _lastStrs = new();
+    private readonly List<int> _prevNums = new(1024);
+    private readonly List<int> _prevSys = new(256);
+    private readonly int[] _prevSelf = new int[SelfVars.TotalSlots];
+    private readonly List<string> _prevStrs = new(256);
+    private readonly List<string> _prevSysStrs = new(128);
+    private readonly string[] _prevSelfStrs = new string[SelfVars.TotalSlots];
     private Instance? _lastInstance;
-    private int _lastInstanceId = -1;
     private bool _lastStepFinalized;
     private double _pointerX = -1, _pointerY = -1;
     private bool _mouseDown;
     private bool _actionQueued;
     private string _programsPath = "";
+
+    private sealed class M4TraceStep
+    {
+        public ulong Frame;
+        public int EventId;
+        public int Pc;
+        public int Op;
+        public List<(int Key, int Val)>? Vars;
+        public List<(int Key, string Val)>? StrVars;
+        public List<string>? Effects;
+    }
 
     public override void _Ready()
     {
@@ -357,26 +370,22 @@ public partial class M4FullRouteTraceTest : Node
 
     private void StartTrace()
     {
+        Array.Fill(_prevSelfStrs, "");
         _bridge.Vm.StepHook = (inst, pc) =>
         {
             if (_steps.Count > 0 && !_lastStepFinalized)
-                Finish(_steps[^1], _stepInstanceIds[^1], _lastVars, _lastStrs, _lastInstance,
-                    _lastInstanceId, _bridge.Vm, _host, inst.Id);
+                Finish(_steps[^1], _lastInstance, _bridge.Vm, _host);
             int op = pc < inst.Program.Slots.Count ? inst.Program.Slots[pc].Opcode : 0;
-            _steps.Add(new TraceStep
+            _steps.Add(new M4TraceStep
             {
-                Step = _steps.Count + 1,
                 Frame = _bridge.Vm.Frame,
                 EventId = inst.EventId,
                 Pc = pc,
                 Op = op,
             });
             _mapIds.Add(_session.MapData?.Id ?? -1);
-            _stepInstanceIds.Add(inst.Id);
-            _lastVars = Snapshot(_bridge.Vm, inst);
-            _lastStrs = SnapshotStrings(_bridge.Vm, inst);
+            CaptureSnapshot(_bridge.Vm, inst);
             _lastInstance = inst;
-            _lastInstanceId = inst.Id;
             _lastStepFinalized = false;
         };
     }
@@ -385,11 +394,39 @@ public partial class M4FullRouteTraceTest : Node
     private void FinalizeLastStep()
     {
         if (_steps.Count == 0 || _lastStepFinalized) return;
-        Finish(_steps[^1], _stepInstanceIds[^1], _lastVars, _lastStrs, _lastInstance,
-            _lastInstanceId, _bridge.Vm, _host, null);
-        _lastVars = Snapshot(_bridge.Vm, _lastInstance);
-        _lastStrs = SnapshotStrings(_bridge.Vm, _lastInstance);
+        Finish(_steps[^1], _lastInstance, _bridge.Vm, _host);
+        CaptureSnapshot(_bridge.Vm, _lastInstance);
         _lastStepFinalized = true;
+    }
+
+    private void CaptureSnapshot(EventVm vm, Instance? inst)
+    {
+        CopyIntSpan(vm.Vars.NumsSpan, _prevNums);
+        CopyIntSpan(vm.Vars.SysNumsSpan, _prevSys);
+        CopyStrSpan(vm.Vars.StringsSpan, _prevStrs);
+        CopyStrSpan(vm.Vars.SysStringsSpan, _prevSysStrs);
+        if (inst != null)
+        {
+            inst.Self.NumsSpan.CopyTo(_prevSelf);
+            inst.Self.StringsSpan.CopyTo(_prevSelfStrs);
+        }
+        else
+        {
+            Array.Clear(_prevSelf);
+            Array.Fill(_prevSelfStrs, "");
+        }
+    }
+
+    private static void CopyIntSpan(ReadOnlySpan<int> src, List<int> dst)
+    {
+        dst.Clear();
+        for (int i = 0; i < src.Length; i++) dst.Add(src[i]);
+    }
+
+    private static void CopyStrSpan(ReadOnlySpan<string> src, List<string> dst)
+    {
+        dst.Clear();
+        for (int i = 0; i < src.Length; i++) dst.Add(src[i]);
     }
 
     private void Step()
@@ -432,15 +469,14 @@ public partial class M4FullRouteTraceTest : Node
 
     private void FinishAll()
     {
-        if (_steps.Count > 0)
-            Finish(_steps[^1], _stepInstanceIds[^1], _lastVars, _lastStrs, _lastInstance,
-                _lastInstanceId, _bridge.Vm, _host, null);
+        if (_steps.Count > 0 && !_lastStepFinalized)
+            Finish(_steps[^1], _lastInstance, _bridge.Vm, _host);
         GetTree().Quit(1);
     }
 
     private void WriteTrace(string outPath, int frames, int stepsCount)
     {
-        var sb = new StringBuilder(stepsCount * 160 + 256);
+        var sb = new StringBuilder(stepsCount * 128 + 256);
         sb.Append("{\"schema\":\"wolf.route\",\"schema_version\":1,");
         sb.Append("\"route\":\"").Append(RouteName).Append("\",\"frames\":").Append(frames);
         sb.Append(",\"total_steps\":").Append(stepsCount).Append(",\"steps\":[");
@@ -455,27 +491,32 @@ public partial class M4FullRouteTraceTest : Node
               .Append(",\"pc\":").Append(s.Pc)
               .Append(",\"op\":").Append(s.Op)
               .Append(",\"vars\":{");
-            bool first = true;
-            foreach (var pair in s.Vars.OrderBy(pair => pair.Key))
+            if (s.Vars != null)
             {
-                if (!first) sb.Append(',');
-                first = false;
-                sb.Append('"').Append(pair.Key).Append("\":").Append(pair.Value);
+                for (int j = 0; j < s.Vars.Count; j++)
+                {
+                    if (j > 0) sb.Append(',');
+                    sb.Append('"').Append(s.Vars[j].Key).Append("\":").Append(s.Vars[j].Val);
+                }
             }
             sb.Append("},\"str_vars\":{");
-            first = true;
-            foreach (var pair in s.StrVars.OrderBy(pair => pair.Key))
+            if (s.StrVars != null)
             {
-                if (!first) sb.Append(',');
-                first = false;
-                sb.Append('"').Append(pair.Key).Append("\":")
-                  .Append(JsonSerializer.Serialize(pair.Value));
+                for (int j = 0; j < s.StrVars.Count; j++)
+                {
+                    if (j > 0) sb.Append(',');
+                    sb.Append('"').Append(s.StrVars[j].Key).Append("\":");
+                    AppendJsonString(sb, s.StrVars[j].Val);
+                }
             }
             sb.Append("},\"effects\":[");
-            for (int e = 0; e < s.Effects.Count; e++)
+            if (s.Effects != null)
             {
-                if (e > 0) sb.Append(',');
-                sb.Append(s.Effects[e].ToJsonString());
+                for (int e = 0; e < s.Effects.Count; e++)
+                {
+                    if (e > 0) sb.Append(',');
+                    sb.Append(s.Effects[e]);
+                }
             }
             sb.Append("]}");
         }
@@ -483,86 +524,140 @@ public partial class M4FullRouteTraceTest : Node
         File.WriteAllText(outPath, sb.ToString(), new UTF8Encoding(false));
     }
 
-    private static Dictionary<int, int> Snapshot(EventVm vm, Instance? inst)
+    internal static void AppendJsonString(StringBuilder sb, string text)
     {
-        var map = new Dictionary<int, int>();
-        var nums = vm.Vars.SnapshotNums();
-        for (int i = 0; i < nums.Count; i++) map[i] = nums[i];
-        var sys = vm.Vars.SnapshotSysNums();
-        for (int i = 0; i < sys.Count; i++) map[9_000_000 + i] = sys[i];
-        if (inst != null)
+        sb.Append('"');
+        for (int i = 0; i < text.Length; i++)
         {
-            int[] self = inst.Self.SnapshotNums();
-            for (int i = 0; i < self.Length; i++)
+            char c = text[i];
+            switch (c)
             {
-                int group = i / 100;
-                int slot = i % 100;
-                map[1_000_000 + group * 100_000 + slot] = self[i];
+                case '"': sb.Append("\\\""); break;
+                case '\\': sb.Append("\\\\"); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                default:
+                    if (c < 0x20)
+                        sb.Append("\\u").Append(((int)c).ToString("x4"));
+                    else
+                        sb.Append(c);
+                    break;
             }
         }
-        return map;
+        sb.Append('"');
     }
 
-    private static Dictionary<int, string> SnapshotStrings(EventVm vm, Instance? inst)
+    private void Finish(M4TraceStep step, Instance? previous, EventVm vm, M4RouteHost host)
     {
-        var map = new Dictionary<int, string>();
-        var strings = vm.Vars.SnapshotStrings();
-        for (int i = 0; i < strings.Count; i++)
+        var nums = vm.Vars.NumsSpan;
+        int nMax = Math.Max(nums.Length, _prevNums.Count);
+        for (int i = 0; i < nMax; i++)
         {
-            if (!string.IsNullOrEmpty(strings[i])) map[3_000_000 + i] = strings[i];
-        }
-        var sys = vm.Vars.SnapshotSysStrings();
-        for (int i = 0; i < sys.Count; i++)
-        {
-            if (!string.IsNullOrEmpty(sys[i])) map[4_000_000 + i] = sys[i];
-        }
-        if (inst != null)
-        {
-            string[] self = inst.Self.SnapshotStrings();
-            for (int i = 0; i < self.Length; i++)
+            int cur = i < nums.Length ? nums[i] : 0;
+            int old = i < _prevNums.Count ? _prevNums[i] : 0;
+            if (cur != old)
             {
-                if (string.IsNullOrEmpty(self[i])) continue;
-                int group = i / 100;
-                int slot = i % 100;
-                map[2_000_000 + group * 100_000 + slot] = self[i];
+                step.Vars ??= new List<(int, int)>(4);
+                step.Vars.Add((i, cur));
             }
         }
-        return map;
-    }
+        if (previous != null)
+        {
+            var self = previous.Self.NumsSpan;
+            for (int i = 0; i < SelfVars.TotalSlots; i++)
+            {
+                int cur = self[i];
+                if (cur != _prevSelf[i])
+                {
+                    int addr = 1_000_000 + (i / 100) * 100_000 + (i % 100);
+                    step.Vars ??= new List<(int, int)>(4);
+                    step.Vars.Add((addr, cur));
+                }
+            }
+        }
+        else
+        {
+            for (int i = 0; i < SelfVars.TotalSlots; i++)
+            {
+                if (_prevSelf[i] != 0)
+                {
+                    int addr = 1_000_000 + (i / 100) * 100_000 + (i % 100);
+                    step.Vars ??= new List<(int, int)>(4);
+                    step.Vars.Add((addr, 0));
+                }
+            }
+        }
+        var sys = vm.Vars.SysNumsSpan;
+        int sysMax = Math.Max(sys.Length, _prevSys.Count);
+        for (int i = 0; i < sysMax; i++)
+        {
+            int cur = i < sys.Length ? sys[i] : 0;
+            int old = i < _prevSys.Count ? _prevSys[i] : 0;
+            if (cur != old)
+            {
+                step.Vars ??= new List<(int, int)>(4);
+                step.Vars.Add((9_000_000 + i, cur));
+            }
+        }
 
-    private static void Finish(TraceStep step, int stepInstanceId, Dictionary<int, int> before,
-                               Dictionary<int, string> beforeStrs, Instance? previous,
-                               int beforeInstanceId, EventVm vm, M4RouteHost host,
-                               int? currentInstanceId)
-    {
-        // Always finalize the previous instruction. At a coroutine switch this
-        // is the parent's block-end finalize, exactly like Rust's finalize_trace
-        // running before the child event starts. The snapshot still reads the
-        // previous instance's self bank through `previous`.
-        _ = currentInstanceId;
-        var after = Snapshot(vm, previous);
-        foreach (var pair in after)
+        if (previous != null)
         {
-            if (!before.TryGetValue(pair.Key, out int old) ? pair.Value != 0 : old != pair.Value)
-                step.Vars[pair.Key] = pair.Value;
+            var selfStrs = previous.Self.StringsSpan;
+            for (int i = 0; i < SelfVars.TotalSlots; i++)
+            {
+                string cur = selfStrs[i];
+                string old = _prevSelfStrs[i];
+                if (!string.Equals(cur, old, StringComparison.Ordinal))
+                {
+                    int addr = 2_000_000 + (i / 100) * 100_000 + (i % 100);
+                    step.StrVars ??= new List<(int, string)>(2);
+                    step.StrVars.Add((addr, cur));
+                }
+            }
         }
-        foreach (var pair in before)
+        else
         {
-            if (pair.Value != 0 && !after.ContainsKey(pair.Key)) step.Vars[pair.Key] = 0;
+            for (int i = 0; i < SelfVars.TotalSlots; i++)
+            {
+                if (!string.IsNullOrEmpty(_prevSelfStrs[i]))
+                {
+                    int addr = 2_000_000 + (i / 100) * 100_000 + (i % 100);
+                    step.StrVars ??= new List<(int, string)>(2);
+                    step.StrVars.Add((addr, ""));
+                }
+            }
         }
-        var afterStrs = SnapshotStrings(vm, previous);
-        foreach (var pair in afterStrs)
+        var strs = vm.Vars.StringsSpan;
+        int strMax = Math.Max(strs.Length, _prevStrs.Count);
+        for (int i = 0; i < strMax; i++)
         {
-            if (!beforeStrs.TryGetValue(pair.Key, out string? old) || old != pair.Value)
-                step.StrVars[pair.Key] = pair.Value;
+            string cur = i < strs.Length ? strs[i] : "";
+            string old = i < _prevStrs.Count ? _prevStrs[i] : "";
+            if (!string.Equals(cur, old, StringComparison.Ordinal))
+            {
+                step.StrVars ??= new List<(int, string)>(2);
+                step.StrVars.Add((3_000_000 + i, cur));
+            }
         }
-        foreach (var pair in beforeStrs)
+        var sysStrs = vm.Vars.SysStringsSpan;
+        int sysStrMax = Math.Max(sysStrs.Length, _prevSysStrs.Count);
+        for (int i = 0; i < sysStrMax; i++)
         {
-            if (!string.IsNullOrEmpty(pair.Value) && !afterStrs.ContainsKey(pair.Key))
-                step.StrVars[pair.Key] = "";
+            string cur = i < sysStrs.Length ? sysStrs[i] : "";
+            string old = i < _prevSysStrs.Count ? _prevSysStrs[i] : "";
+            if (!string.Equals(cur, old, StringComparison.Ordinal))
+            {
+                step.StrVars ??= new List<(int, string)>(2);
+                step.StrVars.Add((4_000_000 + i, cur));
+            }
         }
-        foreach (var effect in host.PendingEffects) step.Effects.Add(effect);
-        host.PendingEffects.Clear();
+
+        if (host.PendingEffects.Count > 0)
+        {
+            step.Effects = new List<string>(host.PendingEffects);
+            host.PendingEffects.Clear();
+        }
     }
 }
 
@@ -571,7 +666,8 @@ internal sealed class M4RouteHost : IHost
 {
     private readonly VmController _inner;
     private readonly Dictionary<int, M4PictureEntry> _pictures = new();
-    public List<JsonObject> PendingEffects { get; } = new();
+    private readonly StringBuilder _eff = new(256);
+    public List<string> PendingEffects { get; } = new();
 
     public M4RouteHost(VmController inner) => _inner = inner;
 
@@ -581,28 +677,31 @@ internal sealed class M4RouteHost : IHost
     public void CloseMessage() => _inner.CloseMessage();
     public void ShowChoices(string[] options)
     {
-        PendingEffects.Add(new JsonObject
+        _eff.Clear();
+        _eff.Append("{\"kind\":\"choice\",\"options\":[");
+        for (int i = 0; i < options.Length; i++)
         {
-            ["kind"] = "choice",
-            ["options"] = new JsonArray(options.Select(option => (JsonNode?)JsonValue.Create(option)).ToArray()),
-            ["selected"] = 0
-        });
+            if (i > 0) _eff.Append(',');
+            M4FullRouteTraceTest.AppendJsonString(_eff, options[i]);
+        }
+        _eff.Append("],\"selected\":0}");
+        PendingEffects.Add(_eff.ToString());
         _inner.ShowChoices(options);
     }
     public ChoiceReply? ChoiceMade() => _inner.ChoiceMade();
 
     public void CommonEventCall(int target, int[] args, string[] strings)
     {
-        var array = new JsonArray();
-        foreach (int arg in args) array.Add(arg);
-        PendingEffects.Add(new JsonObject { ["kind"] = "call", ["target_event_id"] = target, ["args"] = array });
+        _eff.Clear();
+        _eff.Append("{\"kind\":\"call\",\"target_event_id\":").Append(target).Append(",\"args\":");
+        AppendArgs(_eff, args);
+        _eff.Append('}');
+        PendingEffects.Add(_eff.ToString());
         _inner.CommonEventCall(target, args, strings);
     }
 
     public void Picture(PictureCmd cmd)
     {
-        var args = new JsonArray();
-        foreach (int arg in cmd.Args) args.Add(arg);
         string action = cmd.Action switch
         {
             PictureAction.Draw => "draw",
@@ -611,55 +710,49 @@ internal sealed class M4RouteHost : IHost
             PictureAction.Hide => "hide",
             _ => "set"
         };
-        PendingEffects.Add(new JsonObject
-        {
-            ["kind"] = "picture",
-            ["action"] = action,
-            ["slot"] = cmd.Number,
-            ["file"] = cmd.File,
-            ["args"] = args
-        });
+        _eff.Clear();
+        _eff.Append("{\"kind\":\"picture\",\"action\":\"").Append(action)
+            .Append("\",\"slot\":").Append(cmd.Number).Append(",\"file\":");
+        M4FullRouteTraceTest.AppendJsonString(_eff, cmd.File);
+        _eff.Append(",\"args\":");
+        AppendArgs(_eff, cmd.Args);
+        _eff.Append('}');
+        PendingEffects.Add(_eff.ToString());
         Track(cmd);
         _inner.Picture(cmd);
     }
 
     public void Sound(SoundCmd cmd)
     {
-        PendingEffects.Add(new JsonObject
-        {
-            ["kind"] = "sound",
-            ["action"] = cmd.Action == SoundAction.Play ? "play" : "stop",
-            ["type"] = cmd.Channel switch { SoundChannel.Bgm => "bgm", SoundChannel.Bgs => "bgs", _ => "se" },
-            ["file"] = cmd.File,
-            ["vol"] = cmd.Volume,
-            ["frames"] = cmd.Frames
-        });
+        string action = cmd.Action == SoundAction.Play ? "play" : "stop";
+        string type = cmd.Channel switch { SoundChannel.Bgm => "bgm", SoundChannel.Bgs => "bgs", _ => "se" };
+        _eff.Clear();
+        _eff.Append("{\"kind\":\"sound\",\"action\":\"").Append(action)
+            .Append("\",\"type\":\"").Append(type).Append("\",\"file\":");
+        M4FullRouteTraceTest.AppendJsonString(_eff, cmd.File);
+        _eff.Append(",\"vol\":").Append(cmd.Volume).Append(",\"frames\":").Append(cmd.Frames).Append('}');
+        PendingEffects.Add(_eff.ToString());
         _inner.Sound(cmd);
     }
 
     public DbValue? Database(DbOp op)
     {
-        PendingEffects.Add(new JsonObject
-        {
-            ["kind"] = "database",
-            ["type"] = op.DbType,
-            ["data"] = op.DataId,
-            ["item"] = op.ItemId,
-            ["value"] = op.Source?.Num ?? 0
-        });
+        _eff.Clear();
+        _eff.Append("{\"kind\":\"database\",\"type\":").Append(op.DbType)
+            .Append(",\"data\":").Append(op.DataId)
+            .Append(",\"item\":").Append(op.ItemId)
+            .Append(",\"value\":").Append(op.Source?.Num ?? 0).Append('}');
+        PendingEffects.Add(_eff.ToString());
         return _inner.Database(op);
     }
 
     public void Teleport(int target, int map, int x, int y, int options)
     {
-        PendingEffects.Add(new JsonObject
-        {
-            ["kind"] = "teleport",
-            ["map_id"] = map,
-            ["x"] = x,
-            ["y"] = y,
-            ["direction"] = options
-        });
+        _eff.Clear();
+        _eff.Append("{\"kind\":\"teleport\",\"map_id\":").Append(map)
+            .Append(",\"x\":").Append(x).Append(",\"y\":").Append(y)
+            .Append(",\"direction\":").Append(options).Append('}');
+        PendingEffects.Add(_eff.ToString());
         _inner.Teleport(target, map, x, y, options);
     }
 
@@ -674,10 +767,24 @@ internal sealed class M4RouteHost : IHost
 
     public void Effect(int kind, int duration, int[] args)
     {
-        var array = new JsonArray();
-        foreach (int arg in args) array.Add(arg);
-        PendingEffects.Add(new JsonObject { ["kind"] = "effect", ["type"] = kind, ["duration"] = duration, ["args"] = array });
+        _eff.Clear();
+        _eff.Append("{\"kind\":\"effect\",\"type\":").Append(kind)
+            .Append(",\"duration\":").Append(duration).Append(",\"args\":");
+        AppendArgs(_eff, args);
+        _eff.Append('}');
+        PendingEffects.Add(_eff.ToString());
         _inner.Effect(kind, duration, args);
+    }
+
+    private static void AppendArgs(StringBuilder sb, int[] args)
+    {
+        sb.Append('[');
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (i > 0) sb.Append(',');
+            sb.Append(args[i]);
+        }
+        sb.Append(']');
     }
 
     public void Log(string message) => _inner.Log(message);

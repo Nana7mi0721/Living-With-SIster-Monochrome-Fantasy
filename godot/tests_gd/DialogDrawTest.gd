@@ -162,6 +162,19 @@ func _ready() -> void:
 	if rows.size() > 1 and not is_equal_approx(rows[1].position.y - rows[0].position.y, expected_pitch):
 		failures.append("row pitch should be %.1f" % expected_pitch)
 
+	# 4b. Empty trailing/middle choice options are skipped in layout/movement while keeping
+	# their original VM indices on hit test/confirm.
+	choice.open(PackedStringArray(["First", "", "Third"]), Vector2(260, 220), true, 0)
+	if choice.count() != 2 or choice.row_rects().size() != 2:
+		failures.append("empty choice options should be omitted from visible count/rows")
+	choice.move(1)
+	if choice.selected != 2:
+		failures.append("moving down past an empty option should land on original index 2 (got %d)" % choice.selected)
+	choice.open(PackedStringArray(["First", "Second", ""]), Vector2(260, 220), true, 0)
+	var hidden_hit := choice.hover_at(choice.row_rects()[1].get_center())
+	if hidden_hit != 1:
+		failures.append("hover on second visible row should return original index 1 (got %d)" % hidden_hit)
+
 	# 5. Off-screen render: the window rect must actually contain lit pixels. The dummy
 	# renderer that --headless selects has no textures at all, so the pixel assertion only
 	# runs when a real renderer is present (windowed run, or the gate's LWsmf_RENDER=1).

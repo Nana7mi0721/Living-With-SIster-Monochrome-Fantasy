@@ -55,7 +55,7 @@ func play(channel: int, file: String, volume: int, loop_point: int = 0, tempo: i
 	_apply_loop(stream, looping, loop_point)
 	player.stream = stream
 	player.pitch_scale = 1.0
-	if channel != CHANNEL_SE and tempo > 0:
+	if tempo > 0:
 		player.pitch_scale = clampf(float(tempo) / 100.0, 0.25, 4.0)
 
 	var fade := maxf(float(frames) / 60.0, 0.0)
