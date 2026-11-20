@@ -51,6 +51,15 @@ public partial class VmController : Node, IHost, IVmSession
     [Signal]
     public delegate void EventFinishedEventHandler(int eventId);
 
+    [Signal]
+    public delegate void ReturnToTitleRequestedEventHandler();
+
+    [Signal]
+    public delegate void EndGameRequestedEventHandler();
+
+    [Signal]
+    public delegate void ColorChangeRequestedEventHandler(int color, int frames);
+
     public EventVm Vm { get; } = new();
 
     /// <summary>Direction bits opcode 126 currently denies for basic movement.</summary>
@@ -552,6 +561,16 @@ public partial class VmController : Node, IHost, IVmSession
     }
 
     public int? SaveLoad(SaveOp op) => null;
+
+    /// <summary>151 ChangeColor: the argument is a palette index, so the colour layer maps it.</summary>
+    public void ChangeColor(int color, int frames) =>
+        EmitSignal(SignalName.ColorChangeRequested, color, frames);
+
+    /// <summary>174 ReturnToTitle: the VM unwinds its instances; the view restarts the title.</summary>
+    public void ReturnToTitle() => EmitSignal(SignalName.ReturnToTitleRequested);
+
+    /// <summary>175 EndGame: the VM already cleared its instances, so the view only quits.</summary>
+    public void EndGame() => EmitSignal(SignalName.EndGameRequested);
 
     /// <summary>
     /// Opcode 124. The geometry lives in PictureStage (it knows the real texture extent),

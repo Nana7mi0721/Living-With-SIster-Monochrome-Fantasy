@@ -185,6 +185,47 @@ public sealed class GameSession
         return true;
     }
 
+    private int _titleMenuInstance = -1;
+
+    /// <summary>
+    /// CE43 paints the three title rows as pictures 3/4/5 and highlights the row Sys20 names.
+    /// The port skipped it as dead code (docs/ENGINE_EVENTS.md), but the retail title menu is
+    /// exactly this event: run one parallel instance while the title choice is open.
+    /// </summary>
+    public bool SetTitleMenuVisible(bool visible)
+    {
+        // A restart creates a new instance each time the cursor moves; drop every live CE43
+        // first so a title hand-off never leaves a painter running in the map (perf gate).
+        StopTitleMenuInstances();
+        if (!visible) return true;
+        var inst = _vm.Vm.CreateInstance(43);
+        if (inst == null) return false;
+        inst.IsParallel = true;
+        _titleMenuInstance = inst.Id;
+        return true;
+    }
+
+    private void StopTitleMenuInstances()
+    {
+        if (_vm.Vm.Instances.Count > 0)
+        {
+            var ids = new List<int>();
+            foreach (var inst in _vm.Vm.Instances)
+            {
+                if (inst.EventId == 43) ids.Add(inst.Id);
+            }
+            foreach (var id in ids) _vm.Vm.StopInstance(id);
+        }
+        _titleMenuInstance = -1;
+    }
+
+    /// <summary>Re-run CE43 so its Sys20 branch repaints the highlighted row.</summary>
+    public void RestartTitleMenu()
+    {
+        SetTitleMenuVisible(false);
+        SetTitleMenuVisible(true);
+    }
+
     /// <summary>One VM frame; the deterministic entry point used by tests.</summary>
     public void AdvanceFrame()
     {
@@ -265,8 +306,12 @@ public sealed class GameSession
     public void ShowChoices(string[] options)
     {
         _hasChoices = true;
+        _lastChoices = options;
         _view.ShowChoices(options, 0);
     }
+
+    /// <summary>Last window contents; the title menu reopens on a load with no slot.</summary>
+    private string[] _lastChoices = System.Array.Empty<string>();
 
     public void PickChoice(int index)
     {
@@ -281,6 +326,10 @@ public sealed class GameSession
             }
             else
             {
+                // Leaving the choice unanswered would wedge CE42 on opcode 102 with the
+                // window already closed, so the menu reopens on the load row instead (D6).
+                _hasChoices = true;
+                _view.ShowChoices(_lastChoices, index);
                 _view.SetStatus("load: no save slot 01 yet (F5 in the map saves)");
             }
             return;

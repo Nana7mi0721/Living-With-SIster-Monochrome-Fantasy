@@ -47,6 +47,9 @@ var _windowed_position := Vector2i.ZERO
 var _windowed_size := Vector2i.ZERO
 var _toast_label: Label
 var _toast_until := 0
+# Row CE43 last painted; Sys20 mirrors it so a cursor move repaints the title menu.
+var _title_menu_cursor := -1
+var _title_menu_options := PackedStringArray()
 
 var phase := "boot"
 var frames := 0
@@ -147,6 +150,9 @@ func _ready() -> void:
 	vm.connect("TeleportRequested", _on_teleport)
 	vm.connect("TransitionRequested", _on_transition)
 	vm.connect("EffectRequested", _on_effect)
+	vm.connect("ReturnToTitleRequested", _on_return_to_title)
+	vm.connect("EndGameRequested", _on_end_game)
+	vm.connect("ColorChangeRequested", _on_color_change)
 
 	if not vm.LoadPrograms(""):
 		phase = "failed"
@@ -178,6 +184,7 @@ func _process(delta: float) -> void:
 		_accumulator -= STEP
 		advance_frame()
 		guard += 1
+	_sync_title_menu()
 
 
 ## One deterministic frame; tests call this directly instead of waiting on the clock.
@@ -272,11 +279,17 @@ func start_event(event_id: int) -> bool:
 func _on_action() -> void:
 	if faulted or _modal_release_guard or _modal_window_open():
 		return
+	# A left click is WOLF's decide key, but only on a row the window actually offers:
+	# clicking empty screen must not confirm a choice (audit K1). InputRouter keeps emitting
+	# the action for tests and for the 123 poll latch, so the split lives here.
+	var mouse := router.last_input_source == "mouse"
 	# 126 state 2 denies the selected basic key. Messages keep their confirm path
 	# (matching Rust message_dismissed); choices and map interactions do not.
 	var action_denied := (int(session.BasicAllDeny) & 1) != 0
 	if choice.is_open:
 		if action_denied:
+			return
+		if mouse and choice.hover_at(router.hover_position) < 0:
 			return
 		choice.confirm()
 		return
@@ -285,8 +298,10 @@ func _on_action() -> void:
 		return
 	if action_denied:
 		return
-	# A bare action key in the bedroom is opcode 123's decision press (W3 Day4).
-	session.PressActionKey()
+	# Only the keyboard is opcode 123's decision press here; a click already reached the VM
+	# through held_mask()'s one-frame latch (audit K5).
+	if not mouse:
+		session.PressActionKey()
 
 
 func _on_cancel() -> void:
@@ -362,12 +377,19 @@ func _on_hover(position: Vector2) -> void:
 func _on_choice_chosen(index: int) -> void:
 	var was_open := choice.is_open
 	choice.close()
+	if phase == "title":
+		session.SetTitleMenuVisible(false)
 	if not was_open:
 		return
 	if index < 0:
 		session.CancelChoice()
-	else:
-		session.PickChoice(index)
+		return
+	session.PickChoice(index)
+	# CE42 answers the load row by waiting on osave load; with no slot it would wedge on
+	# opcode 102 with the window already closed, so reopen the same menu on that row (D6).
+	if phase == "title" and index == 1 and not session.HasSave and not _title_menu_options.is_empty():
+		choice.open(_title_menu_options, _choice_position(), true, 1)
+		_attach_title_menu()
 
 
 # ---- host callbacks ------------------------------------------------------
@@ -416,11 +438,18 @@ func _on_choices(options: Array, selected: int = 0) -> void:
 	var packed := PackedStringArray()
 	for option in options:
 		packed.append(str(option))
+	if packed.is_empty():
+		return
 	choice.open(packed, _choice_position(), true, selected)
+	if session.Phase == "title":
+		_title_menu_options = packed
+		_attach_title_menu()
 
 
 func _on_choices_closed() -> void:
 	choice.close()
+	if phase == "title":
+		session.SetTitleMenuVisible(false)
 
 
 func _on_teleport(target: int, map_id: int, x: int, y: int, options: int) -> void:
@@ -478,6 +507,81 @@ func _choice_position() -> Vector2:
 	x = sys3 if sys3 != -1 else x
 	y = sys4 if sys4 != -1 else y
 	return Vector2(x, y)
+
+
+# ---- title menu (CE43) ---------------------------------------------------
+
+## CE43 paints the three rows as pictures 3/4/5; CE42 parks the native choice box at
+## y=1000, so the picture rectangles are the only hit targets (audit K2).
+func _attach_title_menu() -> void:
+	var rects: Array = []
+	for slot in [3, 4, 5]:
+		var rect := stage.picture_rect(slot)
+		if rect.size.x > 0.0 and rect.size.y > 0.0:
+			rects.append(rect)
+	choice.set_override_rects(rects)
+	_title_menu_cursor = -1
+	session.SetTitleMenuVisible(true)
+	_sync_title_menu()
+
+
+## Sys20 (9000020) names the highlighted row; CE43 reads it once per run, so a cursor
+## move restarts the event to repaint the bright/dim pair (audit 一.2).
+func _sync_title_menu() -> void:
+	if phase != "title" or not choice.is_open:
+		return
+	# CE43 paints the rows on its first VM step, so the rectangles only exist a frame after
+	# the window opens; refresh until all three are known (audit K2).
+	var rects: Array = []
+	for slot in [3, 4, 5]:
+		var rect := stage.picture_rect(slot)
+		if rect.size.x > 0.0 and rect.size.y > 0.0:
+			rects.append(rect)
+	if rects.size() == 3 and rects != choice.override_rects:
+		choice.set_override_rects(rects)
+	if choice.selected == _title_menu_cursor:
+		return
+	_title_menu_cursor = choice.selected
+	vm.SetSys(20, _title_menu_cursor)
+	session.RestartTitleMenu()
+
+
+# ---- lifecycle and game-flow host callbacks (audit D2/D3/D4) -------------
+
+## Godot never delivers a release for a key or button let go while another window had
+## focus, so no latch may survive a focus loss (audit D3).
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_APPLICATION_FOCUS_OUT and what != NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		return
+	if router == null:
+		return
+	router.pointer_pressed = false
+	router.right_pressed = false
+	router.middle_pressed = false
+	router.clear_frame_latches()
+
+
+## Opcode 174: the retail game returns to the title at once, without the F12 popup.
+func _on_return_to_title() -> void:
+	if phase == "title" or phase == "setup" or phase == "failed":
+		return
+	restart_title()
+
+
+## Opcode 175: the retail game ends the process, so the port quits.
+func _on_end_game() -> void:
+	status("endgame")
+	get_tree().quit()
+
+
+## Opcode 151: palette-index screen tint. Reuses the black overlay as a one-shot ramp so
+## a mismatch can never leave the whole screen black; unknown indices are reported, not
+## guessed against a WOLF colour table we do not have (audit D4).
+func _on_color_change(color: int, frames: int) -> void:
+	if color != 0:
+		status("color change color=%d frames=%d (palette unmapped)" % [color, frames])
+		return
+	_on_transition(0, maxi(1, frames))
 
 
 # ---- session view callbacks (W3 Day4) -----------------------------------
@@ -907,6 +1011,12 @@ func confirm_return_to_title() -> bool:
 	if _title_confirm_root != null:
 		_title_confirm_root.visible = false
 	_arm_modal_release_guard()
+	return restart_title()
+
+
+## Rebuild and restart the title event. Opcode 174 calls this without the popup (audit D2);
+## the F12 popup calls it after the player confirms.
+func restart_title() -> bool:
 	vm.StopAll()
 	vm.ResetDiagnostics()
 	vm.ResetPointer()
@@ -916,6 +1026,7 @@ func confirm_return_to_title() -> bool:
 	router.clear_frame_latches()
 	message.close()
 	choice.close()
+	session.SetTitleMenuVisible(false)
 	stage.clear_pictures()
 	audio.reset()
 	map_view.visible = false

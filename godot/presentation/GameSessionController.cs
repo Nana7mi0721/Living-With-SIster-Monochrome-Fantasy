@@ -85,6 +85,10 @@ public partial class GameSessionController : Node
     }
 
     public bool StartTitle() => _session?.StartTitle() ?? false;
+
+    /// <summary>CE43 draws the title rows; the view drives it through this pair.</summary>
+    public bool SetTitleMenuVisible(bool visible) => _session?.SetTitleMenuVisible(visible) ?? false;
+    public void RestartTitleMenu() => _session?.RestartTitleMenu();
     public void AdvanceFrame() => _session?.AdvanceFrame();
     public bool SaveGame() => _session?.SaveGame() ?? false;
     public bool LoadGame() => _session?.LoadGame() ?? false;

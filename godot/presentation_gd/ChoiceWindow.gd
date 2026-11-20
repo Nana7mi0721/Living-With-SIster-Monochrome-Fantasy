@@ -25,6 +25,10 @@ var allow_cancel := true
 
 var _hover := -1
 
+## Rects the owner supplies when the rows are pictures instead of text: the title menu
+## draws pictures 3/4/5, so there is no text window to lay out (audit K2).
+var override_rects: Array = []
+
 
 func _init(p_assets: AssetDB = null) -> void:
 	assets = p_assets
@@ -41,6 +45,7 @@ func open(p_options: PackedStringArray, p_position: Vector2, p_allow_cancel: boo
 	position_hint = p_position
 	allow_cancel = p_allow_cancel
 	selected = clampi(p_selected, 0, maxi(options.size() - 1, 0))
+	override_rects = []
 	is_open = true
 	queue_redraw()
 
@@ -49,6 +54,12 @@ func close() -> void:
 	is_open = false
 	options = PackedStringArray()
 	_hover = -1
+	queue_redraw()
+
+
+## Owner-drawn rows: hit testing uses these rectangles and _draw() draws nothing.
+func set_override_rects(rects: Array) -> void:
+	override_rects = rects
 	queue_redraw()
 
 
@@ -78,6 +89,8 @@ func cancel() -> void:
 
 ## Rows in screen space so the test can assert no overlap and no clipping.
 func row_rects() -> Array:
+	if not override_rects.is_empty():
+		return override_rects
 	var rects: Array = []
 	if options.is_empty():
 		return rects
@@ -119,6 +132,8 @@ func hovered_index() -> int:
 
 func _draw() -> void:
 	if not is_open or options.is_empty():
+		return
+	if not override_rects.is_empty():
 		return
 	var rect := Rect2(position_hint, window_size())
 	var texture: Texture2D = assets.texture(UiSkin.WINDOW_BASE) if assets != null else null
