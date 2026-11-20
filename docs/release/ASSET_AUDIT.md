@@ -231,7 +231,7 @@ BasicData / MapData 是游戏数据（`.dat` / `.project` / `.mps`），不参�
 
 **SystemGraphic 的 8 个 live 文件**（`work/_audit_out26.txt`）：`TitleGraphic.jpg` 358,497（ev42#20/#30）、`TitleGraphic.png` 424,764（TitleMap ev2#84、Map003 ev1#19）、`TitleGraphic1..6.jpg` 324,826 / 314,916 / 304,294 / 310,515 / 303,241 / 337,568（ev42 的 #17/27/37/40/43/48/51/67/71/75/81/85）。
 
-> ⚠️ `TitleGraphic1..6.jpg` 严格按可达性算是 **live**（ev42 可达），但真实标题画面走的是 `Picture/title01.jpg`（`docs/M1_CLOSURE.md` v2 已用像素比对确证）。也就是说 ev42 那套「オリジナルタイトル画面Ａ」示例标题图**会被加载但不会显示**——这是我们运行时可以明确不做的一条路径。
+> ⚠️ **2026-11-20 复核更正**：`TitleGraphic1..6.jpg` 不是“加载但不显示”的死路径。确认前的待机画面确实是 `Picture/title01.jpg`，但按键进入 CE42 后，初始全屏图为 `-2 = SystemGraphic/TitleGraphic.jpg`（`V550>=10` 时为 `TitleGraphic6.jpg`，`V499=1..5` 时可被 `TitleGraphic1..5.jpg` 覆盖）；选「开始」后的 Map003 过渡在全新 `V300=0` 下绘制 `SystemGraphic/TitleGraphic.png`。详见 [deepseek_retail_mechanism_audit_2026_11_20.md](../reviews/deepseek_retail_mechanism_audit_2026_11_20.md) 与 [deepseek_title_graphics_fresh_state_2026_11_20.md](../reviews/deepseek_title_graphics_fresh_state_2026_11_20.md)。
 
 ### 3.4 342 条 missing 的真实构成（`work/_audit_out17/24/25.txt`）
 
@@ -380,8 +380,8 @@ M1 那 28 个文件（`work/_audit_out36.txt` 逐文件清单，图像 25 个 / 
 
 - `BGM/White_Base.mp3` 2,819,135、`BGM/nekomimi.mp3` 11,702,400、`SE/[Action]DoorOpen_Komori.ogg` 14,338
 - `Kagura/bg.png` 2,650、`Kagura/Kagura.png` 70,940、`Kagura/Disc.png` 87,298、`Kagura/inusuku.png` 122,843
-- `Picture/title01.jpg` 280,653（真实标题图）
-- `SystemGraphic/TitleGraphic.png` 424,764 + `TitleGraphic.jpg` 358,497 + `TitleGraphic1..6.jpg` 2,205,384（8 个示例标题图，合计 2,988,645）
+- `Picture/title01.jpg` 280,653（TitleMap 确认前标题图）
+- `SystemGraphic/TitleGraphic.png` 424,764 + `TitleGraphic.jpg` 358,497 + `TitleGraphic1..6.jpg` 2,205,384（标题美术组；`TitleGraphic.png` 用于 V300 条件的 Map003 过渡）
 - `SystemFile/Button01.png` 13,042、`CharaChip/hand3.png` 16,337
 - `DLC_data/save_SD_*.png` 10 个（akatuki / boss / clear / cook / dlc / gassyuku / start / start2 / taikai / tensai），合计 317,837
 

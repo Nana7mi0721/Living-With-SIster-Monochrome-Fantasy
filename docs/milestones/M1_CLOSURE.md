@@ -1,6 +1,8 @@
 # M1 闭包与标题画面验收基准（v2 · 启动链路实测版）
 
-> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](godot/README.md)；本文件只作追溯和迁移参考。
+> **历史证据（2026-11-14 冻结）**：Godot 阶段入口见 [`godot/README.md`](../godot/README.md)；本文件只作追溯和迁移参考。
+>
+> **2026-11-20 复核注**：本文对 `SystemGraphic/TitleGraphic.png` 的“WOLF 示例图/不走分支”表述已过时。该资产是 1024×576 的 V300 条件标题图，全新 Map003 过渡会绘制它；CE42 菜单还会在 `-2` 层绘制 `TitleGraphic.jpg` 或 `TitleGraphic6.jpg`。详见 [deepseek_retail_mechanism_audit_2026_11_20.md](../reviews/deepseek_retail_mechanism_audit_2026_11_20.md)。
 >
 > 目标读者：负责把《Living With Sister Monochrome Fantasy》的标题画面在 Rust 运行时里跑通的人。
 > 本文是 **M1 的验收基准**：启动链路的真实入口、三个 splash 的资产与时序、标题画面终态的可像素比对规格、
@@ -178,7 +180,7 @@ SysDatabase type 0（マップ設定）row 0 = MapData/TitleMap.mps      ← 开
 | 81 | 401 | `[1]` | — |
 | 82 | 111 | `[2, 2000300, 1, 2, 2000300, 0, 2]` | 2 条件：`2000300 == 1` → case 1；`2000300 == 0` → case 2。**首个命中即 break，case 号 = i+1**（`exec.rs:1509`） |
 | 83 | 401 | `[1]` | — |
-| 84 | 150 | `[0, 12000, 0, 1, 1, 1, 255, 0, 0, 100, 0]` `SystemGraphic/TitleGraphic.png` | 分支 1：官方默认标题图 |
+| 84 | 150 | `[0, 12000, 0, 1, 1, 1, 255, 0, 0, 100, 0]` `SystemGraphic/TitleGraphic.png` | 分支 1：`V300==1` 条件标题图（非 WOLF 示例图） |
 | 86 | 401 | `[2]` | — |
 | 87 | 150 | `[0, 12000, 0, 1, 1, 1, 255, 0, 0, 100, 0]` `Picture/title01.jpg` | 分支 2：**本作真实标题画**（§5） |
 | 89 | 499 | — | — |
@@ -273,7 +275,7 @@ SysDatabase type 0（マップ設定）row 0 = MapData/TitleMap.mps      ← 开
 | `Kagura/Disc.png` | full + alldata | 87 298 | 1024×576 | RGBA | 白字黑底免责声明：「本作品基于架空的世界観所制作，其中所有角色、情节、地点、事件等纯属虚构。如有雷同，纯属巧合。／本作品内登场的所有角色皆已年满18周岁。」 | **是** |
 | `Kagura/inusuku.png` | full + alldata | 122 843 | **1003×564** | RGB | いぬすく 品牌卡（少女抱熊 + いぬすく / inusuku / eroge developer） | **是** |
 | `SystemFile/Button01.png` | full + alldata | 13 042 | 606×35 | RGBA | 单行提示「通过光标进行选择，点击进行确定和取消」；alpha 墨迹 bbox x[19..586] y[0..34]，墨迹中心 (302.5, 17.0) ≈ 图心 (303, 17.5) | **是** |
-| `SystemGraphic/TitleGraphic.png` | full + alldata | 424 764 | 1024×576 | RGB | 官方默认标题图（本作不走这条分支，见 §5） | 未核 |
+| `SystemGraphic/TitleGraphic.png` | full + alldata | 424 764 | 1024×576 | RGB | V300 条件标题图；全新 `V300=0` 的 Map003 过渡实际会绘制 | **是** |
 | `Picture/title01.jpg` | full + alldata | 280 653 | 1024×576 | RGB | 黑白手绘小屋/河谷，**左上角已烧入「妹相随～黑白世界的缤纷冒险～」标题字**，右下角小 いぬすく 签名 | **是** |
 | `SE/[Action]DoorOpen_Komori.ogg` | **只在 alldata**（14 338 B） | — | — | ogg | 按键音（`work/full/SE` 目前 0 文件） | — |
 

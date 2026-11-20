@@ -8,6 +8,10 @@
 
 | 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
 | :--- | :---: | :--- | :--- |
+| [deepseek_retail_mechanism_audit_2026_11_20.md](deepseek_retail_mechanism_audit_2026_11_20.md) | 2026-11-20 | **标题机制、全新封面、字体回退综合核查** | “开始咯”不调用 CE14；全新三段封面分别为 `title01.jpg` / `TitleGraphic.jpg` / `TitleGraphic.png`；Lolita 完整覆盖出货文本，正常文本不触发中文回退 |
+| [deepseek_title_newgame_interaction_2026_11_20.md](deepseek_title_newgame_interaction_2026_11_20.md) | 2026-11-20 | **CE42/CE43 点击链路与 Map003 时序** | CE42 新游戏分支无存档钩子；CE43 仅绘制/高亮；Map003 两段 `180[50]` 是数据脚本节奏 |
+| [deepseek_title_graphics_fresh_state_2026_11_20.md](deepseek_title_graphics_fresh_state_2026_11_20.md) | 2026-11-20 | **全新 V300/V499/V503/V550 分支与封面** | TitleMap 显示 `title01`，CE42 菜单显示 `TitleGraphic.jpg`，Map003 过渡显示 `TitleGraphic.png` |
+| [deepseek_font_fallback_chain_2026_11_20.md](deepseek_font_fallback_chain_2026_11_20.md) | 2026-11-20 | **Lolita/DxLib/GDI 字体回退链** | 四个字体槽均为 `LOLITA`；出货文本与 GB2312 均无缺字；人为缺字为 tofu，无配置中文替代字体 |
 | [bug_inspection_report_2026_11_20.md](bug_inspection_report_2026_11_20.md) | 2026-11-20 | **右键点击失效、游戏素材缺失、文本解析内部代号泄露** | 定位 InputRouter 掩码与锁存缺陷、media.pak 错用前作素材导致 97.4% 缺失、ChoiceWindow 裸绘与 TextExpander 补 0 等 8 项文本缺陷 |
 | [bug_fix_and_gate_opt_2026_11_20.md](bug_fix_and_gate_opt_2026_11_20.md) | 2026-11-20 | **输入/文本/VM 修复、Oracle 同步与门禁并行加速** | 修复 GameRoot 鼠标拦截、Opcode 122/140 与会话残留状态，重生成 3 份 Oracle 夹具并通过 8 并发门禁优化将全量门禁缩短至 251s（`GODOT_GATE_OK`） |
 
