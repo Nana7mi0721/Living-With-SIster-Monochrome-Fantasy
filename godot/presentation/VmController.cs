@@ -521,6 +521,24 @@ public partial class VmController : Node, IHost, IVmSession
         return value;
     }
 
+    /// <summary>
+    /// Cell text for \cdb/\sdb (CData) and \udb (Data) text escapes. Reads the store
+    /// directly: a display lookup must not look like a script 250/251 in the trace.
+    /// </summary>
+    public string DbText(int kind, int dbType, int row, int column)
+    {
+        var value = DatabaseStore?.Read(new DbOp
+        {
+            Container = kind == 2 ? DbContainer.Data : DbContainer.CData,
+            Direction = DbDirection.Read,
+            DbType = dbType,
+            DataId = row,
+            ItemId = column
+        });
+        if (value == null) return "";
+        return value.IsString ? value.Str : value.Num.ToString();
+    }
+
     /// <summary>Test hook: number of opcode 250 reads against DataBase type 9.</summary>
     public int BattleDataReads { get; private set; }
 

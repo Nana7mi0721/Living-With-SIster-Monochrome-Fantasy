@@ -111,6 +111,21 @@ public sealed class TraceRecorderHost : IHost
         PendingEffects.Add(eff);
     }
 
+    /// <summary>Display lookup: resolve through the same provider but add no effect.</summary>
+    public string DbText(int kind, int dbType, int row, int column)
+    {
+        var value = DatabaseProvider?.Invoke(new DbOp
+        {
+            Container = kind == 2 ? DbContainer.Data : DbContainer.CData,
+            Direction = DbDirection.Read,
+            DbType = dbType,
+            DataId = row,
+            ItemId = column
+        });
+        if (value == null) return "";
+        return value.IsString ? value.Str : value.Num.ToString();
+    }
+
     public DbValue? Database(DbOp op)
     {
         var eff = new JsonObject

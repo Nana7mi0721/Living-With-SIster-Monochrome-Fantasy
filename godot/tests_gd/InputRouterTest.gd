@@ -155,6 +155,21 @@ func _ready() -> void:
 	if not confirms.is_empty():
 		failures.append("an echoed decide key must not confirm twice")
 
+	# 12. The held right button is WOLF's cancel key: opcode-123 polls must see MASK_CANCEL
+	# through the one-frame latch, and releasing the button must clear it.
+	_router.handle_event(_mouse(MOUSE_BUTTON_RIGHT))
+	if (_router.held_mask() & InputRouter.MASK_CANCEL) == 0:
+		failures.append("a right click should latch MASK_CANCEL for the VM")
+	_router.clear_frame_latches()
+	if (_router.held_mask() & InputRouter.MASK_CANCEL) == 0:
+		failures.append("a held right button should keep MASK_CANCEL set")
+	var release := _mouse(MOUSE_BUTTON_RIGHT)
+	release.pressed = false
+	_router.handle_event(release)
+	_router.clear_frame_latches()
+	if (_router.held_mask() & InputRouter.MASK_CANCEL) != 0:
+		failures.append("releasing the right button must clear MASK_CANCEL")
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

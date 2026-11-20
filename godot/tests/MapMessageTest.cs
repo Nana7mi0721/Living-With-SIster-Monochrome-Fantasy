@@ -90,6 +90,23 @@ public partial class MapMessageTest : Node
             Check(!view.MessageText.Contains("\\E"), "message control codes are stripped");
         }
 
+        // \cdb/\udb are database cell reads, not colours (docs/engine/TEXT_SPEC.md
+        // section 2.7). The probe callback pins the parse; the live VM pins the host hook.
+        Instance? probeInst = vm.Vm.Instances.FirstOrDefault();
+        Check(probeInst != null, "a live instance exists for the expander probe");
+        if (probeInst != null)
+        {
+            vm.SetVar(160, 7);
+            string probe = TextExpander.Expand("\\udb[28:\\v[160]:0]", probeInst, vm.Vm.Vars,
+                (kind, type, row, column) => $"{kind}/{type}/{row}/{column}");
+            Check(probe == "2/28/7/0", $"nested db escape resolves (got '{probe}')");
+            string cdb = TextExpander.Expand("\\cdb[0:12:8]", probeInst, vm.Vm.Vars,
+                (kind, type, row, column) => $"{kind}/{type}/{row}/{column}");
+            Check(cdb == "0/0/12/8", $"cdb escape resolves (got '{cdb}')");
+            string live = vm.Vm.Expand("\\cdb[0:12:8]", probeInst);
+            Check(!live.Contains("\\cdb"), $"live expander consumes cdb (got '{live}')");
+        }
+
         Check(session.MapRuntime != null, "map runtime exists");
         var event4 = session.MapRuntime?.Events.FirstOrDefault(e => e.Def.Id == 4 && e.InstanceId > 0);
         Check(event4 != null, "event 4 is in the runtime");

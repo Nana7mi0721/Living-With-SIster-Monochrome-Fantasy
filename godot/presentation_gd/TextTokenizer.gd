@@ -103,7 +103,7 @@ static func tokenize(source: String) -> Array:
 				var end := j
 				if j < n and (source[j] == "+" or source[j] == "-") and j + 1 < n and source[j + 1] == "[":
 					# \f+[n] / \f-[n] keep the sign inside the token.
-					var close := source.find("]", j + 2)
+					var close := _find_bracket(source, j + 1)
 					if close < 0:
 						literal += source.substr(i, j - i + 1)
 						i = j + 1
@@ -115,7 +115,7 @@ static func tokenize(source: String) -> Array:
 					i = close + 1
 					continue
 				if j < n and source[j] == "[":
-					var close := source.find("]", j + 1)
+					var close := _find_bracket(source, j)
 					if close < 0:
 						# Unclosed bracket: the whole run is literal text (TEXT_SPEC rule 2).
 						literal += source.substr(i, j - i)
@@ -204,6 +204,27 @@ static func _first_int(body: String) -> int:
 	if index == digits_start:
 		return 0
 	return int(digits)
+
+
+## Index of the ']' that closes the '[' at open_index, counting nested brackets.
+## \udb[28:\v[160]:0] has an inner escape pair; taking the first ']' would cut the
+## body in half and leak ":0]" into the painted text (the corpus has such strings).
+static func _find_bracket(source: String, open_index: int) -> int:
+	var depth := 0
+	var i := open_index
+	while i < source.length():
+		var ch := source[i]
+		if ch == "\\":
+			i += 2
+			continue
+		if ch == "[":
+			depth += 1
+		elif ch == "]":
+			depth -= 1
+			if depth == 0:
+				return i
+		i += 1
+	return -1
 
 
 static func _is_ascii_letter(ch: String) -> bool:

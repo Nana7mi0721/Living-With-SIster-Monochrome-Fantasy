@@ -104,9 +104,15 @@ func window_size() -> Vector2:
 	var font := UiSkin.font()
 	var width := MIN_WIDTH
 	for option in options:
-		width = maxf(width, font.get_string_size(option, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x + PADDING * 2.0)
+		width = maxf(width, font.get_string_size(display_text(option), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x + PADDING * 2.0)
 	var height := options.size() * line_height() + PADDING * 2.0
 	return Vector2(ceilf(width), ceilf(height))
+
+
+## The option as painted: opcode-102 strings keep their WOLF escape codes (\c[..],
+## \cself[n], \f[n], <C>), so the renderer must paint the TEXT tokens only.
+func display_text(raw: String) -> String:
+	return TextTokenizer.plain_text(TextTokenizer.tokenize(raw)).replace("\n", " ")
 
 
 ## Moving the mouse onto a row also moves the cursor, exactly like the retail window:
@@ -149,7 +155,7 @@ func _draw() -> void:
 		var color := Color("ffe08a") if i == selected else Color.WHITE
 		if i == _hover:
 			draw_rect(row, Color(1, 1, 1, 0.10))
-		draw_string(font, row.position + Vector2(0, FONT_SIZE), options[i],
+		draw_string(font, row.position + Vector2(0, FONT_SIZE), display_text(options[i]),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, color)
 		if i == selected:
 			var cursor: Texture2D = assets.texture(CURSOR_TEXTURE) if assets != null else null

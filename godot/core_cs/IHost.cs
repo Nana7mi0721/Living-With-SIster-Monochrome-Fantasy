@@ -164,6 +164,13 @@ public interface IHost
     void Picture(PictureCmd cmd);
     void Sound(SoundCmd cmd);
     DbValue? Database(DbOp op);
+
+    /// <summary>
+    /// Database cell text for \cdb/\sdb/\udb escapes. This is a read for display, not a
+    /// script database op: recorder hosts must forward it without appending a trace effect
+    /// (the rust oracle expands text outside the VM, so a logged read would diverge).
+    /// </summary>
+    string DbText(int kind, int dbType, int row, int column) => "";
     void Teleport(int target, int map, int x, int y, int options);
     void Transition(int kind, int flags);
 

@@ -48,6 +48,9 @@ var scripted_key_mask := -1
 var _wheel_bits := 0
 var _wheel_dir := 0
 var _click_latch := false
+## Held right button is WOLF's cancel key (crates/wolf-cli/src/play.rs key_bits): the VM's
+## opcode-123 polls read it through held_mask(), just like the left-button OK latch.
+var _right_click_latch := false
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -84,6 +87,7 @@ func handle_event(event: InputEvent) -> bool:
 				_click_latch = true
 				action_pressed.emit()
 			MOUSE_BUTTON_RIGHT:
+				_right_click_latch = true
 				cancel_pressed.emit()
 			MOUSE_BUTTON_WHEEL_UP:
 				_wheel_bits |= MASK_UP
@@ -135,6 +139,8 @@ func held_mask() -> int:
 	mask |= _wheel_bits
 	if _click_latch:
 		mask |= MASK_OK
+	if right_pressed or _right_click_latch:
+		mask |= MASK_CANCEL
 	return mask
 
 
@@ -175,6 +181,7 @@ func clear_frame_latches() -> void:
 	_wheel_bits = 0
 	_wheel_dir = 0
 	_click_latch = false
+	_right_click_latch = false
 
 
 ## The key code one 123 poll sees is computed by core_cs/KeyCodes.cs and reached through

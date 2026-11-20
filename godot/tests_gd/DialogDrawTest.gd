@@ -134,9 +134,21 @@ func _ready() -> void:
 	if db_window.laid_out_characters() != 7:
 		failures.append("a database colour must not drop glyphs (got %d)" % db_window.laid_out_characters())
 
+	# 3e. Nested brackets: \udb[28:\v[160]:0] must not be cut at the inner ']'.
+	var nested_raw := "\\udb[28:\\v[160]:0]x"
+	var nested := TextTokenizer.tokenize(nested_raw)
+	if TextTokenizer.to_source(nested) != nested_raw:
+		failures.append("nested brackets must round-trip (got %s)" % TextTokenizer.to_source(nested))
+	if TextTokenizer.plain_text(nested) != "x":
+		failures.append("a nested database escape must leave no ':0]' behind (got %s)" % TextTokenizer.plain_text(nested))
+
 	# 4. The choice window stacks rows without overlap and stays anchored on Sys3/Sys4.
 	var choice := ChoiceWindow.new(assets)
 	add_child(choice)
+	# Opcode-102 labels keep their WOLF escapes after variable expansion; the window paints
+	# the plain text only, never \c[..] or <C> (report §4.1).
+	if choice.display_text("\\c[1]继续\\c[0]") != "继续":
+		failures.append("choice labels must paint without colour codes (got %s)" % choice.display_text("\\c[1]继续\\c[0]"))
 	choice.open(PackedStringArray(["New game", "Load", "Quit"]), Vector2(260, 220), true, 0)
 	var rows := choice.row_rects()
 	if rows.size() != 3:

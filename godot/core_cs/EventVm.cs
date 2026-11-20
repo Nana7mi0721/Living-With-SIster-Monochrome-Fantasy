@@ -318,8 +318,12 @@ public sealed class EventVm
 
     public string Expand(string text, Instance inst)
     {
-        return TextExpander.Expand(text, inst, Vars);
+        return TextExpander.Expand(text, inst, Vars, ReadDbText);
     }
+
+    /// <summary>Database cell text for \cdb/\sdb (CData) and \udb (Data) escapes.</summary>
+    private string ReadDbText(int kind, int dbType, int row, int column)
+        => Host.DbText(kind, dbType, row, column);
 
     public int EvalNum(int raw, Instance inst)
     {

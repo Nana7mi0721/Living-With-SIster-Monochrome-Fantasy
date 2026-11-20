@@ -419,7 +419,9 @@ func _on_message(text: String, face: int) -> void:
 	message.open(text, face if face > 0 else 0)
 	# Backlog is memory-only, never saved: a reload starts a fresh history. The nameplate
 	# is written by the event handler before the message opens; prefix it when present.
-	var entry := message.full_text
+	# The backlog is read-only history: strip the WOLF escape codes (\c[..],\cself[n],\f[n])
+	# so a reload of the history shows readable text, never raw control codes.
+	var entry := TextTokenizer.plain_text(TextTokenizer.tokenize(message.full_text))
 	if nameplate != null and not nameplate.speaker.is_empty():
 		entry = "%s: %s" % [nameplate.speaker, entry]
 	_push_backlog(entry)

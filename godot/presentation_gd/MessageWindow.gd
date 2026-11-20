@@ -194,10 +194,11 @@ func _layout() -> void:
 				# out of bounds (W2-P1-05).
 				color = COLOR_TABLE[posmod(token.number, COLOR_TABLE.size())]
 			TextTokenizer.Kind.CDB:
-				# \cdb[21:a:b] reads a colour from the variable database. That palette is
-				# not in the unpacked tree, so the first field selects the fallback table
-				# and token.text keeps a/b for the day the database lands.
-				color = COLOR_TABLE[posmod(token.number, COLOR_TABLE.size())]
+				# \cdb/\sdb/\udb are database cell reads, not colours. TextExpander
+				# resolves them against the host database before the message reaches
+				# this window (docs/engine/TEXT_SPEC.md section 2.7); a token that
+				# survives is a cell the database could not answer, so draw nothing.
+				pass
 			TextTokenizer.Kind.FONT_SIZE:
 				# Font size in pixels, not a face id (docs/TEXT_SPEC.md section 9.1).
 				glyph_size = clampi(token.number, 8, 96)
