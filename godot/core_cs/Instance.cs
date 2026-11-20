@@ -75,5 +75,8 @@ public sealed class Instance
     /// <summary>Parallel scheduler instance (exec.rs Instance::is_parallel): never blocks the 211 foreground check.</summary>
     public bool IsParallel { get; set; }
 
+    /// <summary>Set by ReapFinished for the rest of the frame so MapRuntime does not kill the caller before its next step.</summary>
+    public bool JustResumedFromChild { get; set; }
+
     public bool IsRunnable => Wait.Kind == WaitStateKind.None;
 }

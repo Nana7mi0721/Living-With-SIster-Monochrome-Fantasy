@@ -2230,10 +2230,27 @@ fn execute(
                 None
             }
             121 => {
-                let target = arg(cmd, 0);
-                let a = eval_num(arg(cmd, 1), inst, vars);
-                let b = eval_num(arg(cmd, 2), inst, vars);
                 let bits = arg(cmd, 3) as u32;
+                let raw_target = arg(cmd, 0);
+                let target = if bits & 0x10 != 0 {
+                    eval_num(raw_target, inst, vars)
+                } else {
+                    raw_target
+                };
+                let raw_a = arg(cmd, 1);
+                let a = if bits & 0x04 != 0 {
+                    raw_a
+                } else if bits & 0x20 != 0 {
+                    eval_num(eval_num(raw_a, inst, vars), inst, vars)
+                } else {
+                    eval_num(raw_a, inst, vars)
+                };
+                let raw_b = arg(cmd, 2);
+                let b = if bits & 0x08 != 0 {
+                    raw_b
+                } else {
+                    eval_num(raw_b, inst, vars)
+                };
                 let bin = ((bits >> 12) & 0x0F) as u8;
                 // 0x6000 is a random range: docs/OPCODE_SPEC.md §3.2 calls it
                 // undefined in WolfTL, but 1,101 call sites pass (min, max) pairs
@@ -3011,14 +3028,29 @@ fn eval_string_condition(inst: &mut Instance, vars: &mut Variables, cmd: &Comman
     let block = inst.program.blocks[block_index].clone();
     let len = inst.program.len();
     let mut matched = None;
+    let mut rhs_offset = 0usize;
     for i in 0..count {
         let var = arg(cmd, 1 + i);
-        let lhs = eval_str(var, inst, vars);
-        let rhs = cmd
-            .strings
-            .get(i)
-            .map_or(String::new(), |raw| expand(raw, inst, vars));
-        if lhs == rhs {
+        let op_nibble = ((var as u32) >> 28) & 0x0F;
+        let rhs_from_var = (var as u32 & 0x0100_0000) != 0;
+        let lhs = eval_str(var & 0x00FF_FFFF, inst, vars);
+        let rhs = if rhs_from_var {
+            let rhs_raw = arg(cmd, 1 + count + rhs_offset);
+            rhs_offset += 1;
+            eval_str(rhs_raw & 0x00FF_FFFF, inst, vars)
+        } else {
+            cmd.strings
+                .get(i)
+                .map_or(String::new(), |raw| expand(raw, inst, vars))
+        };
+        let is_match = match op_nibble {
+            0 => lhs == rhs,
+            1 => lhs != rhs,
+            2 => lhs.contains(&rhs),
+            3 => lhs.starts_with(&rhs),
+            _ => lhs == rhs,
+        };
+        if is_match {
             matched = Some((i + 1) as i32);
             break;
         }

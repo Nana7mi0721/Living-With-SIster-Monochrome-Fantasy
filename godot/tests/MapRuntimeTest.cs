@@ -206,6 +206,20 @@ public partial class MapRuntimeTest : Node
             runtime.StartPending(vm);
             Check(runtime.Events[0].Active == 1, "page must not change to none while the instance waits on a child");
             Check(runtime.Events[0].InstanceId == inst.Id, "the child-waiting instance must survive");
+
+            // On the frame ReapFinished clears WaitStateKind.Child, JustResumedFromChild
+            // spares the caller through StartPending until the next StepFrame clears it.
+            var childProg = Program.FromSlots(998, "child", new List<Slot> { Slot.Command(172) });
+            vm.RegisterProgram(childProg);
+            var childInst = vm.CreateInstance(998, parentId: inst.Id)!;
+            inst.Wait.WaitForChild(childInst.Id);
+            vm.StepFrame();
+            Check(inst.JustResumedFromChild, "ReapFinished must latch JustResumedFromChild on parent");
+            runtime.StartPending(vm);
+            Check(runtime.Events[0].Active == 1 && runtime.Events[0].InstanceId == inst.Id,
+                "parent must survive StartPending on the frame its child returned");
+            vm.StepFrame();
+            Check(!inst.JustResumedFromChild, "next StepFrame must clear JustResumedFromChild");
         }
 
         // Autorun fires once per activation; a finished autorun must not be

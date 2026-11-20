@@ -436,6 +436,38 @@ public partial class SaveLoadTest : Node
         Check(vars.Get(300) == 41, "220 system load must restore the normal bank (got " + vars.Get(300) + ")");
         Check(session.Phase == "bedroom", "220 system load must not leave the live map (" + session.Phase + ")");
 
+        // 221 with flag == 1 indirect address + CData (1_100_000_000) numeric and string cells
+        // (CE94 pc 335/345/348 save-card party & hero icon lookup).
+        var op221Prog = Program.FromSlots(940, "Op221CData", new List<Slot>
+        {
+            Slot.Command(221, [1_600_011, 1, 1_600_062, 1]),
+            Slot.Command(221, [1_600_007, 1, 1_600_064, 1]),
+            Slot.Command(172)
+        });
+        vm.Vm.RegisterProgram(op221Prog);
+        Instance? op221Inst = vm.Vm.CreateInstance(940);
+        Check(op221Inst != null, "221 CData test instance must start");
+        if (op221Inst != null)
+        {
+            vm.Database(new DbOp
+            {
+                Container = DbContainer.CData,
+                Direction = DbDirection.Write,
+                DbType = 6,
+                DataId = 0,
+                ItemId = 1,
+                Source = new DbValue(12)
+            });
+            op221Inst.Self.Set(662, 1_106_000_001); // CData[6][0][1] -> hero id 12
+            op221Inst.Self.Set(664, 1_100_001_203); // CData[0][12][3] -> "SystemFile/charicon.png"
+            int budget = 32;
+            vm.Vm.StepInstance(op221Inst, ref budget);
+            Check(op221Inst.Self.Get(611) == 12,
+                $"221 flag==1 CData numeric must return 12 (got {op221Inst.Self.Get(611)})");
+            Check(op221Inst.Self.GetStr(607) == "SystemFile/charicon.png",
+                $"221 flag==1 CData string must store into cself[7] (got '{op221Inst.Self.GetStr(607)}')");
+        }
+
         // Strict gate: the whole title -> new game -> load chain must not meet an
         // unimplemented opcode; either it threw already or this counter caught it.
         Check(!vm.Vm.Faulted, "save-load chain must not fault the VM (" + vm.Vm.FaultReason + ")");

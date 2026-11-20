@@ -19,6 +19,8 @@ public static class VmTest
         TestOpcode121FlagSemantics();
         TestOpcode211ReserveArguments();
         TestOpcode124EventIdentity();
+        TestOpcode124PictureDivideAssign();
+        TestOpcode112StringConditionFlags();
         TestCallTargetResolution();
         TestOpcode111ConditionAndEscape();
         TestOpcode180WaitFrames();
@@ -740,11 +742,23 @@ public static class VmTest
         if (vm.Vars.Get(1) != 1_999_998)
             throw new Exception($"TC-121 clamp flag must be ignored, got {vm.Vars.Get(1)}");
 
-        // No 0x04 literal flag: the operand is still evaluated as Var 0 (9).
+        // 0x04 treats arg[1] as a literal integer (even when it collides with a magic bank),
+        // 0x08 treats arg[2] as a literal integer, 0x10 dereferences target indirectly, and
+        // 0x20 dereferences arg[1] indirectly.
         vm.Vars.Set(0, 9);
         vm.ExecuteSetVariable([2_000_002, 2_000_000, 0, 0x0004], inst);
-        if (vm.Vars.Get(2) != 9)
-            throw new Exception($"TC-121 literal flag must be ignored, got {vm.Vars.Get(2)}");
+        if (vm.Vars.Get(2) != 2_000_000)
+            throw new Exception($"TC-121 0x04 literal flag expected 2000000, got {vm.Vars.Get(2)}");
+        vm.ExecuteSetVariable([2_000_003, 2_000_000, 2_000_000, 0x2008], inst);
+        if (vm.Vars.Get(3) != 18_000_000)
+            throw new Exception($"TC-121 0x08 literal b flag expected 18000000, got {vm.Vars.Get(3)}");
+        vm.ExecuteSetVariable([2_000_005, 2_000_002, 0, 0x0020], inst);
+        if (vm.Vars.Get(5) != 9)
+            throw new Exception($"TC-121 0x20 indirect a expected 9, got {vm.Vars.Get(5)}");
+        vm.Vars.Set(6, 2_000_007);
+        vm.ExecuteSetVariable([2_000_006, 77, 0, 0x0010], inst);
+        if (vm.Vars.Get(7) != 77)
+            throw new Exception($"TC-121 0x10 indirect target expected 77, got {vm.Vars.Get(7)}");
 
         // 0x600 is a unary transform of the target's current value, not max(cur, value).
         vm.Vars.Set(4, 1);
@@ -1036,5 +1050,126 @@ public static class VmTest
         TextExpander.Expand("\\sdb[1:2:3]", inst, vm.Vars, (k, _, _, _) => { seenKind = k; return "ok"; });
         if (seenKind != 1)
             throw new Exception($"\\sdb must pass kind=1 (Sys), got {seenKind}");
+    }
+
+    private sealed class StateQueryHost : RecordingHost
+    {
+        public int PictureAnswer;
+        public int CharacterAnswer;
+        public override int? PictureState(int number, int field) => PictureAnswer;
+        public override int? CharacterState(int target, int field) => CharacterAnswer;
+    }
+
+    private static void TestOpcode124PictureDivideAssign()
+    {
+        Console.WriteLine("  Testing Opcode 124 (0x4400 divide-assign, div-by-0, 0x4000, 0x1200)...");
+        var slots = new List<Slot>
+        {
+            Slot.Command(124, [1_600_091, 0x4400, 1, 2]), // /= PictureState (240)
+            Slot.Command(124, [1_600_092, 0x4000, 1, 2]), // = PictureState (240)
+            Slot.Command(124, [1_600_093, 0x1200, 0, 7]), // = CharacterState (15, NOT /=)
+            Slot.Command(172)
+        };
+        var host = new StateQueryHost { PictureAnswer = 240, CharacterAnswer = 15 };
+        var vm = new EventVm { Host = host };
+        vm.RegisterProgram(Program.FromSlots(101, "Op124Div", slots));
+        var inst = vm.CreateInstance(101)!;
+        inst.Self.Set(691, 4800);
+        inst.Self.Set(692, 4800);
+        inst.Self.Set(693, 4800);
+        vm.StepFrame();
+
+        if (inst.Self.Get(691) != 20)
+            throw new Exception($"124 0x4400 expected 20, got {inst.Self.Get(691)}");
+        if (inst.Self.Get(692) != 240)
+            throw new Exception($"124 0x4000 expected 240, got {inst.Self.Get(692)}");
+        if (inst.Self.Get(693) != 15)
+            throw new Exception($"124 0x1200 must not compound-divide, expected 15, got {inst.Self.Get(693)}");
+
+        // Divide-by-zero leaves target unchanged.
+        host.PictureAnswer = 0;
+        var divZeroSlots = new List<Slot>
+        {
+            Slot.Command(124, [1_600_091, 0x4400, 1, 2]),
+            Slot.Command(172)
+        };
+        vm.RegisterProgram(Program.FromSlots(102, "Op124DivZero", divZeroSlots));
+        var inst2 = vm.CreateInstance(102)!;
+        inst2.Self.Set(691, 4800);
+        vm.StepFrame();
+        if (inst2.Self.Get(691) != 4800)
+            throw new Exception($"124 0x4400 div-by-0 expected 4800, got {inst2.Self.Get(691)}");
+    }
+
+    private static void TestOpcode112StringConditionFlags()
+    {
+        Console.WriteLine("  Testing Opcode 112 (StringCondition flags !=, Contains, StartsWith, bit 24 RHS var)...");
+        // Branch 1: cself[6] StartsWith cself[8] (0x31186a06, rhs in params[3])
+        // Branch 2: cself[6] == "" (0x00186a06)
+        // Else:     fallthrough
+        var multiSlots = new List<Slot>
+        {
+            Slot.Command(112, [0x12, 0x3100_0000 | 1_600_006, 1_600_006, 1_600_008], ["unused", "", "", ""]),
+            Slot.Command(401, [1]),
+            Slot.Command(121, [2_000_000, 1, 0, 0]),
+            Slot.Command(401, [2]),
+            Slot.Command(121, [2_000_000, 2, 0, 0]),
+            Slot.Command(420, [0]),
+            Slot.Command(121, [2_000_000, 3, 0, 0]),
+            Slot.Command(499),
+            Slot.Command(172)
+        };
+        var vm = new EventVm();
+        vm.RegisterProgram(Program.FromSlots(103, "Op112Multi", multiSlots));
+
+        var i1 = vm.CreateInstance(103)!;
+        i1.Self.SetStr(606, "\nrest");
+        i1.Self.SetStr(608, "\n");
+        vm.StepFrame();
+        if (vm.Vars.Get(0) != 1)
+            throw new Exception($"112 StartsWith var RHS expected branch 1, got {vm.Vars.Get(0)}");
+
+        var i2 = vm.CreateInstance(103)!;
+        i2.Self.SetStr(606, "");
+        i2.Self.SetStr(608, "\n");
+        vm.StepFrame();
+        if (vm.Vars.Get(0) != 2)
+            throw new Exception($"112 eq empty expected branch 2, got {vm.Vars.Get(0)}");
+
+        // != (0x10), Contains (0x20), == var RHS (0x01), and SysVar/StrVar high-flag stripping.
+        var opSlots = new List<Slot>
+        {
+            Slot.Command(112, [0x01, 0x1000_0000 | 1_600_007], [""]),
+            Slot.Command(401, [1]),
+            Slot.Command(121, [2_000_001, 10, 0, 0]),
+            Slot.Command(499),
+            Slot.Command(112, [0x01, 0x2000_0000 | 3_000_001], ["needle"]),
+            Slot.Command(401, [1]),
+            Slot.Command(121, [2_000_002, 20, 0, 0]),
+            Slot.Command(499),
+            Slot.Command(112, [0x01, 0x0100_0000 | 1_600_007, 1_600_005]),
+            Slot.Command(401, [1]),
+            Slot.Command(121, [2_000_003, 30, 0, 0]),
+            Slot.Command(499),
+            Slot.Command(112, [0x01, 0x1100_0000 | 9_900_025, 1_600_005]),
+            Slot.Command(401, [1]),
+            Slot.Command(121, [2_000_004, 40, 0, 0]),
+            Slot.Command(499),
+            Slot.Command(172)
+        };
+        vm.RegisterProgram(Program.FromSlots(104, "Op112Ops", opSlots));
+        var i3 = vm.CreateInstance(104)!;
+        i3.Self.SetStr(607, "icon.png");
+        i3.Self.SetStr(605, "icon.png");
+        vm.Vars.SetStr(1, "hay-needle-stack");
+        vm.StepFrame();
+        if (vm.Vars.Get(1) != 10)
+            throw new Exception($"112 != expected 10, got {vm.Vars.Get(1)}");
+        if (vm.Vars.Get(2) != 20)
+            throw new Exception($"112 Contains (flagged StrVar) expected 20, got {vm.Vars.Get(2)}");
+        if (vm.Vars.Get(3) != 30)
+            throw new Exception($"112 bit24 == var expected 30, got {vm.Vars.Get(3)}");
+        if (vm.Vars.Get(4) != 40)
+            throw new Exception($"112 flagged SysVar 9900025 != expected 40, got {vm.Vars.Get(4)}");
     }
 }

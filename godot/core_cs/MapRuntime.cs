@@ -310,9 +310,10 @@ public sealed class MapRuntime
             {
                 var live = state.InstanceId is int id ? vm.FindInstance(id) : null;
 
-                // A page cannot be pulled away while it is inside a child call: the child
-                // writes back into the caller's self variables when it returns.
-                if (want == null && live != null && live.Wait.Kind == WaitStateKind.Child) continue;
+                // A page cannot be pulled away while it is inside a child call (or on the frame
+                // its child just returned): the child writes back into the caller's self variables
+                // when it returns, and the caller needs its next step before page re-evaluation.
+                if (want == null && live != null && (live.Wait.Kind == WaitStateKind.Child || live.JustResumedFromChild)) continue;
 
                 if (live != null)
                 {

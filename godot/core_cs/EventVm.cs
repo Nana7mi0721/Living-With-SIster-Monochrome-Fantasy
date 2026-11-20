@@ -457,13 +457,15 @@ public sealed class EventVm
         };
     }
 
-    /// <summary>exec.rs 121: bits 0..7 are editor flags the Rust oracle masks off; only bits 8..11 select the transform.</summary>
+    /// <summary>121 SetVariable: low flag bits control literal/pointer addressing (0x04 literal a, 0x08 literal b, 0x10 indirect target, 0x20 indirect a).</summary>
     public void ExecuteSetVariable(int[] args, Instance inst)
     {
-        int target = args[0];
-        int a = EvalNum(args[1], inst);
-        int b = EvalNum(args[2], inst);
         uint bits = (uint)args[3];
+        int target = (bits & 0x10) != 0 ? EvalNum(args[0], inst) : args[0];
+        int a = (bits & 0x04) != 0
+            ? args[1]
+            : ((bits & 0x20) != 0 ? EvalNum(EvalNum(args[1], inst), inst) : EvalNum(args[1], inst));
+        int b = (bits & 0x08) != 0 ? args[2] : EvalNum(args[2], inst);
         byte bin = (byte)((bits >> 12) & 0x0F);
 
         int result = bin == 6 ? Rng.Range(a, b) : BinaryOp(bin, a, b);
@@ -516,16 +518,42 @@ public sealed class EventVm
                             int head = slot.Params.Length > 0 ? slot.Params[0] : 0;
                             if (slot.Opcode == 112)
                             {
-                                // 112 StringCondition: strings[i] is the literal to match,
-                                // Params[1+i] the string operand, bit 0x10 selects the else branch.
+                                // 112 StringCondition: high nibble of Params[1+i] selects the operator
+                                // (0=eq, 1=ne, 2=contains, 3=startsWith), bit 24 (0x0100_0000) reads
+                                // RHS from trailing Params[1+strCount+rhsOffset] instead of Strings[i],
+                                // and bit 0x10 of head selects the else branch.
                                 int strCount = head & 0x0F;
                                 bool useElse = (head & 0x10) != 0;
                                 int? matchedStr = null;
+                                int rhsOffset = 0;
                                 for (int i = 0; i < strCount; i++)
                                 {
-                                    string lhs = EvalStr(slot.Params.Length > 1 + i ? slot.Params[1 + i] : 0, inst);
-                                    string rhs = Expand(i < slot.Strings.Length ? slot.Strings[i] : "", inst);
-                                    if (lhs == rhs)
+                                    int varArg = slot.Params.Length > 1 + i ? slot.Params[1 + i] : 0;
+                                    int opNibble = (int)(((uint)varArg >> 28) & 0x0F);
+                                    bool rhsFromVar = (varArg & 0x0100_0000) != 0;
+                                    string lhs = EvalStr(varArg & 0x00FF_FFFF, inst);
+                                    string rhs;
+                                    if (rhsFromVar)
+                                    {
+                                        int rhsIdx = 1 + strCount + rhsOffset;
+                                        rhsOffset++;
+                                        int rhsRaw = rhsIdx < slot.Params.Length ? slot.Params[rhsIdx] : 0;
+                                        rhs = EvalStr(rhsRaw & 0x00FF_FFFF, inst);
+                                    }
+                                    else
+                                    {
+                                        rhs = Expand(i < slot.Strings.Length ? slot.Strings[i] : "", inst);
+                                    }
+
+                                    bool matchedOp = opNibble switch
+                                    {
+                                        0 => lhs == rhs,
+                                        1 => lhs != rhs,
+                                        2 => lhs.Contains(rhs, StringComparison.Ordinal),
+                                        3 => lhs.StartsWith(rhs, StringComparison.Ordinal),
+                                        _ => lhs == rhs,
+                                    };
+                                    if (matchedOp)
                                     {
                                         matchedStr = i + 1;
                                         break;
@@ -845,7 +873,10 @@ public sealed class EventVm
                     };
                     if (val.HasValue)
                     {
-                        StoreNum(inst, target, val.Value);
+                        int storeVal = (sub & 0xF000) == 0x4000
+                            ? Compound(sub & 0x0F00, EvalNum(target, inst), val.Value)
+                            : val.Value;
+                        StoreNum(inst, target, storeVal);
                     }
                     inst.Pc++;
                     break;
@@ -1178,9 +1209,11 @@ public sealed class EventVm
                         : new SaveTarget(EvalNum(fileRaw, inst));
                     int mode = opc == 220 && argc > 0 ? EvalNum(slot.Params[0], inst) : 0;
                     int dest = opc == 221 && argc > 0 ? slot.Params[0] : 0;
-                    int addr = opc == 220 || argc <= 2 ? 0 : slot.Params[2];
                     int val = opc == 222 && argc > 0 ? EvalNum(slot.Params[0], inst) : 0;
                     int flag = argc >= 4 ? EvalNum(slot.Params[3], inst) : 0;
+                    int addr = opc == 220 || argc <= 2
+                        ? 0
+                        : (flag == 1 ? EvalNum(slot.Params[2], inst) : slot.Params[2]);
 
                     var saveOp = new SaveOp
                     {
@@ -1194,7 +1227,11 @@ public sealed class EventVm
                         Owner = inst.EventId
                     };
                     int? loaded = Host.SaveLoad(saveOp);
-                    if (loaded.HasValue)
+                    if (saveOp.LoadedString != null)
+                    {
+                        StoreStr(inst, dest, saveOp.LoadedString);
+                    }
+                    else if (loaded.HasValue)
                     {
                         // The oracle stores the loaded word into destination for every
                         // save/load opcode (destination is 0 for 220/222).
@@ -1451,6 +1488,10 @@ public sealed class EventVm
     public void StepFrame()
     {
         Frame++;
+        for (int i = 0; i < Instances.Count; i++)
+        {
+            Instances[i].JustResumedFromChild = false;
+        }
         PollWaits();
         int budget = 200_000;
         RunInstances(ref budget);
@@ -1672,6 +1713,7 @@ public sealed class EventVm
                     if (parent != null && parent.Wait.Kind == WaitStateKind.Child && parent.Wait.ChildId == inst.Id)
                     {
                         parent.Wait.Clear();
+                        parent.JustResumedFromChild = true;
                     }
                 }
 

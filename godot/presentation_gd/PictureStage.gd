@@ -201,18 +201,22 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 		# SavedPicture has no kind field; recover it from what the decoder produced.
 		kind = 2 if file.is_empty() and not text.is_empty() else 0
 	if action == 1:
-		# A move with no picture in the slot is a no-op; falling through to _build_picture
-		# created a ghost sprite the script never drew (W2-P1-04).
-		if not _pictures.has(number):
-			return null
-		var prev_cmd: Dictionary = _cmds.get(number, {})
-		var move_anchor := anchor
-		if move_anchor == 0 and not prev_cmd.is_empty():
-			move_anchor = int(prev_cmd.get("anchor", 0))
-		var moved := _merged_move(number, file, text, args, move_anchor, kind)
-		_begin_move(number, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
-		_store_cmd(number, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
-		return _pictures[number]
+		var first_node: Control = null
+		for slot in _move_slots(number, args, flags):
+			# A move with no picture in the slot is a no-op; falling through to _build_picture
+			# created a ghost sprite the script never drew (W2-P1-04).
+			if not _pictures.has(slot):
+				continue
+			var prev_slot_cmd: Dictionary = _cmds.get(slot, {})
+			var move_anchor := anchor
+			if move_anchor == 0 and not prev_slot_cmd.is_empty():
+				move_anchor = int(prev_slot_cmd.get("anchor", 0))
+			var moved := _merged_move(slot, file, text, args, move_anchor, kind)
+			_begin_move(slot, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
+			_store_cmd(slot, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
+			if first_node == null:
+				first_node = _pictures[slot]
+		return first_node
 
 	var prev_state: Dictionary = _states.get(number, {}).duplicate(true)
 	var prev_cmd: Dictionary = _cmds.get(number, {})
@@ -586,6 +590,16 @@ func _arg(args: Array, index: int, fallback: int) -> int:
 	return int(args[index]) if index < args.size() else fallback
 
 
+static func _move_slots(number: int, args: Array, flags: Dictionary) -> Array[int]:
+	var slots: Array[int] = []
+	var span := int(args[12]) if bool(flags.get("has_span", false)) and args.size() > 12 else number
+	var lo := mini(number, span)
+	var hi := maxi(number, span)
+	for s in range(lo, hi + 1):
+		slots.append(s)
+	return slots
+
+
 func _hit_rect(number: int) -> Rect2:
 	var cmd: Dictionary = _cmds.get(number, {})
 	if cmd.is_empty():
@@ -599,8 +613,8 @@ func _hit_rect(number: int) -> Rect2:
 	var pose: Dictionary = state.get("current", {})
 	var scale_percent: int = int(pose.get("scale", UiSkin.unit(_arg(args, 7, 100))))
 	var scale_y_percent: int = int(pose.get("scale_y", _arg(args, 16, 100)))
-	var scale_factor := 1.0 if scale_percent == 0 else absf(scale_percent) / 100.0
-	var scale_y_factor := 1.0 if scale_y_percent == 0 else absf(scale_y_percent) / 100.0
+	var scale_factor := 0.0 if scale_percent == 0 else absf(scale_percent) / 100.0
+	var scale_y_factor := 0.0 if scale_y_percent == 0 else absf(scale_y_percent) / 100.0
 	var size := base * Vector2(scale_factor, scale_y_factor)
 	var x: int = int(pose.get("x", UiSkin.unit(_arg(args, 5, 0))))
 	var y: int = int(pose.get("y", UiSkin.unit(_arg(args, 6, 0))))
@@ -633,16 +647,17 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 		_hide_picture(number, args, flags)
 		return
 	if action == 1:
-		if not _cmds.has(number):
-			return
-		var move_anchor := anchor
-		if move_anchor == 0:
-			move_anchor = int(_cmds[number].get("anchor", 0))
-		var moved := _merged_move(number, file, text, args, move_anchor, kind)
-		_begin_move(number, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
-		_store_cmd(number, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
-		if not _base_sizes.has(number):
-			_base_sizes[number] = Vector2(420, 140)
+		for slot in _move_slots(number, args, flags):
+			if not _cmds.has(slot):
+				continue
+			var move_anchor := anchor
+			if move_anchor == 0:
+				move_anchor = int(_cmds[slot].get("anchor", 0))
+			var moved := _merged_move(slot, file, text, args, move_anchor, kind)
+			_begin_move(slot, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
+			_store_cmd(slot, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
+			if not _base_sizes.has(slot):
+				_base_sizes[slot] = Vector2(420, 140)
 		return
 	if kind < 0:
 		kind = 2 if file.is_empty() and not text.is_empty() else 0
@@ -920,8 +935,8 @@ func _apply_picture_geometry(holder: Control, number: int, file: String, args: A
 		base_size = holder.get_meta("base_size", holder.size)
 	# A negative scale is the retail horizontal mirror, not an invalid value (W2-P1-04).
 	var mirrored := scale_percent < 0
-	var scale := 1.0 if scale_percent == 0 else absf(scale_percent) / 100.0
-	var scale_y := 1.0 if scale_y_percent == 0 else absf(scale_y_percent) / 100.0
+	var scale := 0.0 if scale_percent == 0 else absf(scale_percent) / 100.0
+	var scale_y := 0.0 if scale_y_percent == 0 else absf(scale_y_percent) / 100.0
 	var final_size := base_size * Vector2(scale, scale_y)
 	holder.size = final_size
 	holder.position = UiSkin.anchor_position(anchor, x, y, final_size)
@@ -929,7 +944,7 @@ func _apply_picture_geometry(holder: Control, number: int, file: String, args: A
 	# Mirroring the container covers text and placeholder slots too; a TextureRect-only
 	# flip left every non-texture picture unmirrored (R5-P2-07).
 	holder.pivot_offset = final_size * 0.5
-	holder.scale = Vector2(-1.0 if mirrored else 1.0, 1.0)
+	holder.scale = Vector2(-1.0 if mirrored else 1.0, -1.0 if scale_y_percent < 0 else 1.0)
 
 
 func _pose_from_args(args: Array, anchor: int, flags: Dictionary = {}) -> Dictionary:
@@ -1023,6 +1038,7 @@ func _new_state(args: Array, anchor: int, base: Vector2, flags: Dictionary = {},
 		"target": pose,
 		"current": pose.duplicate(true),
 		"transition": null,
+		"tone_transition": null,
 		"erase_after": false,
 		"effects": [],
 		"color_corr": [0, 0, 0],
@@ -1125,6 +1141,20 @@ func _begin_move(number: int, _file: String, _text: String, args: Array, anchor:
 		state["fade_from"] = fade_from
 		state["fade_start"] = int(state["age"])
 	var duration := _animate_duration(animate)
+	var format_flag := _arg(args, 10, 0)
+	if (format_flag & 0x02000000) != 0 and not bool(state.get("zero_tone_hidden", false)):
+		var target_tone := _tone_from_args(args)
+		var cur_tone: Array = (state.get("tone", [100, 100, 100]) as Array).duplicate()
+		if duration > 0 and cur_tone != target_tone:
+			state["tone_transition"] = {
+				"from": cur_tone,
+				"to": target_tone.duplicate(),
+				"duration": duration,
+				"age": 0,
+			}
+		else:
+			state["tone_transition"] = null
+			state["tone"] = target_tone
 	if duration > 0:
 		state["transition"] = {
 			"from": state["current"].duplicate(true),
@@ -1233,7 +1263,7 @@ func _state_animating(state: Dictionary) -> bool:
 		return bool(state.get("erase_after", false)) and state.get("transition", null) != null
 	if int(state.get("fade", 0)) > 0:
 		return true
-	for key in ["transition", "shake", "zoom", "breath", "pattern"]:
+	for key in ["transition", "tone_transition", "shake", "zoom", "breath", "pattern"]:
 		if state.get(key, null) != null:
 			return true
 	return not (state.get("effects", []) as Array).is_empty()
@@ -1256,6 +1286,23 @@ func _advance_picture(number: int) -> void:
 				return
 		else:
 			state["current"] = _lerp_pose(transition["from"], transition["to"], int(transition["age"]), duration)
+	var tone_tr: Variant = state.get("tone_transition", null)
+	if tone_tr != null:
+		var tt: Dictionary = tone_tr
+		tt["age"] = int(tt["age"]) + 1
+		var t_dur := maxi(1, int(tt["duration"]))
+		if int(tt["age"]) >= t_dur:
+			state["tone"] = (tt["to"] as Array).duplicate()
+			state["tone_transition"] = null
+		else:
+			var frac := float(tt["age"]) / float(t_dur)
+			var t_from: Array = tt["from"]
+			var t_to: Array = tt["to"]
+			state["tone"] = [
+				int(round(lerpf(float(t_from[0]), float(t_to[0]), frac))),
+				int(round(lerpf(float(t_from[1]), float(t_to[1]), frac))),
+				int(round(lerpf(float(t_from[2]), float(t_to[2]), frac))),
+			]
 	var fade := int(state.get("fade", 0))
 	if fade > 0:
 		var elapsed := int(state["age"]) - int(state.get("fade_start", 0))
@@ -1320,8 +1367,8 @@ func _render_picture(number: int) -> void:
 	node.visible = true
 	var pose: Dictionary = state["current"]
 	var base: Vector2 = _base_sizes.get(number, state.get("base_size", Vector2.ZERO))
-	var scale_x := 1.0 if int(pose.get("scale", 100)) == 0 else absf(float(pose.get("scale", 100))) / 100.0
-	var scale_y := 1.0 if int(pose.get("scale_y", 100)) == 0 else absf(float(pose.get("scale_y", 100))) / 100.0
+	var scale_x := 0.0 if int(pose.get("scale", 100)) == 0 else absf(float(pose.get("scale", 100))) / 100.0
+	var scale_y := 0.0 if int(pose.get("scale_y", 100)) == 0 else absf(float(pose.get("scale_y", 100))) / 100.0
 	var size := base * Vector2(scale_x, scale_y)
 	var position := UiSkin.anchor_position(int(pose.get("anchor", 0)), int(pose["x"]), int(pose["y"]), size)
 	var zoom: Variant = state.get("zoom", null)

@@ -759,6 +759,30 @@ public sealed class GameSession
             if (index == 29) return (int)(state.PlayFrames / 60);
             if (index <= 12) return index < state.SysVars.Count ? state.SysVars[index] : 0;
         }
+        if (address is >= 1_100_000_000 and < 1_200_000_000)
+        {
+            int offset = address - 1_100_000_000;
+            int dbType = offset / 1_000_000;
+            int rem = offset % 1_000_000;
+            int row = rem / 100;
+            int col = rem % 100;
+            DbValue? cell = _vm.Database(new DbOp
+            {
+                Container = DbContainer.CData,
+                Direction = DbDirection.Read,
+                DbType = dbType,
+                DataId = row,
+                ItemId = col,
+                Destination = op.Destination
+            });
+            if (cell == null) return 0;
+            if (cell.IsString)
+            {
+                op.LoadedString = cell.Str;
+                return 0;
+            }
+            return cell.Num;
+        }
         return 0;
     }
 

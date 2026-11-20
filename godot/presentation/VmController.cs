@@ -507,7 +507,24 @@ public partial class VmController : Node, IHost, IVmSession
                 break;
             default:
                 // Erase and Hide both free the slot (crates/wolf-game/src/picture.rs).
-                _pictures.Remove(cmd.Number);
+                if (cmd.HasSpan && cmd.Args is { Length: > 3 })
+                {
+                    int lo = Math.Min(cmd.Number, cmd.Args[3]);
+                    int hi = Math.Max(cmd.Number, cmd.Args[3]);
+                    if ((long)hi - lo <= 256)
+                    {
+                        for (int n = lo; n <= hi; n++) _pictures.Remove(n);
+                    }
+                    else
+                    {
+                        foreach (int key in _pictures.Keys.Where(k => k >= lo && k <= hi).ToArray())
+                            _pictures.Remove(key);
+                    }
+                }
+                else
+                {
+                    _pictures.Remove(cmd.Number);
+                }
                 break;
         }
         if (!EmitPictureSignals)
