@@ -60,6 +60,11 @@ public partial class VmController : Node, IHost, IVmSession
     [Signal]
     public delegate void ColorChangeRequestedEventHandler(int color, int frames);
 
+    [Signal]
+    public delegate void SpeakerChangedEventHandler(string speaker);
+
+    public int TransitionPhase => Vm.TransitionPhase;
+
     public EventVm Vm { get; } = new();
 
     /// <summary>Direction bits opcode 126 currently denies for basic movement.</summary>
@@ -388,6 +393,12 @@ public partial class VmController : Node, IHost, IVmSession
     // has no presentation listener, so this no longer emits a signal (R10-A1).
     public void CommonEventCall(int target, int[] args, string[] strings)
     {
+        // Retail scripts pass speaker names into CE264 (bubble message interface) right
+        // before opcode 101; forward it purely to the presentation nameplate.
+        if (target == 264 && strings.Length > 0)
+        {
+            EmitSignal(SignalName.SpeakerChanged, strings[0] ?? "");
+        }
     }
 
     /// <summary>Test hook: stop emitting the signal while still tracking picture state.</summary>
@@ -835,7 +846,11 @@ public partial class VmController : Node, IHost, IVmSession
     }
 
     /// End every running script; GDScript cannot reach the EventVm property (Vm).
-    public void StopAll() => Vm.StopAll();
+    public void StopAll()
+    {
+        Vm.StopAll();
+        _pictureQueue.Clear();
+    }
     public void ResetDiagnostics() => Vm.ResetDiagnostics();
 
     /// <summary>

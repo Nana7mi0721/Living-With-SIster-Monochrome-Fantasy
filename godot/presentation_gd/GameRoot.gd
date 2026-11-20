@@ -23,9 +23,12 @@ var router: InputRouter
 
 var audio: AudioManager
 
-# Whole-screen fade for 160/161/162: a black ColorRect above the stage, driven by
-# the same 1/60 s clock as the VM (Rust transition.rs brightness/alpha).
+# Whole-screen fade for 160/161/162: a black ColorRect and frozen TextureRect above the stage,
+# driven by the same 1/60 s clock as the VM (Rust transition.rs brightness/alpha).
 var _transition_rect: ColorRect
+var _transition_freeze_rect: TextureRect
+var _transition_freeze_active := false
+var _transition_mode := 0
 var _transition_frames := 0
 var _transition_elapsed := 0
 
@@ -96,6 +99,15 @@ func _ready() -> void:
 	_transition_rect.visible = false
 	add_child(_transition_rect)
 
+	_transition_freeze_rect = TextureRect.new()
+	_transition_freeze_rect.z_index = 60
+	_transition_freeze_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_transition_freeze_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	_transition_freeze_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_transition_freeze_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_transition_freeze_rect.visible = false
+	add_child(_transition_freeze_rect)
+
 	message = MessageWindow.new(assets)
 	stage.layer(PictureStage.LAYER_MESSAGE_FRAME).add_child(message)
 	nameplate = Nameplate.new(assets)
@@ -149,6 +161,7 @@ func _ready() -> void:
 	_build_play_ui()
 
 	vm.connect("SoundRequested", _on_sound)
+	vm.connect("SpeakerChanged", _on_speaker_changed)
 	vm.connect("MessageRequested", func(text: String, face: int) -> void: session.ShowMessage(text, face))
 	vm.connect("MessageClosed", func() -> void: session.NotifyMessageClosed())
 	vm.connect("ChoicesRequested", func(options: Array) -> void: session.ShowChoices(PackedStringArray(options)))
@@ -408,9 +421,18 @@ func _on_choice_chosen(index: int) -> void:
 
 # ---- host callbacks ------------------------------------------------------
 
+func _flush_pending_pictures() -> void:
+	if vm == null:
+		return
+	var queued := str(vm.TakePicturesJson())
+	if not queued.is_empty():
+		_consume_picture_queue(queued)
+
+
 ## Opcode 124 host answer. The stage owns the geometry, so hover and the scalar fields
 ## come from one place instead of a second copy of the anchor/scale rules.
 func _picture_state(number: int, field: int, pointer: Vector2) -> Variant:
+	_flush_pending_pictures()
 	return stage.picture_state(number, field, pointer)
 
 
@@ -424,11 +446,26 @@ func _on_sound(channel: int, action: int, file: String, volume: int, frames: int
 	audio.play(channel, file, volume, vm.SoundLoopPoint, vm.SoundTempo, frames)
 
 
+func _on_speaker_changed(speaker: String) -> void:
+	if nameplate == null:
+		return
+	var trimmed := speaker.strip_edges()
+	var lower := trimmed.to_lower()
+	if trimmed.is_empty() or lower == "message" or lower == "hint":
+		nameplate.hide_speaker()
+		return
+	var bubble := message.bubble_rect()
+	nameplate.show_speaker(trimmed, Vector2(bubble.position.x + 18.0, bubble.position.y - 36.0))
+
+
 func _on_message(text: String, face: int) -> void:
 	# `face` is the optional @n prefix parsed by EventVm (not Sys0): -1 means "no prefix",
 	# 1 means window-only, >= 2 selects the SysDB24 bust. A plain message must still open
 	# the window; MessageWindow also handles a first-line @n on its own.
 	message.open(text, face if face > 0 else 0)
+	if nameplate != null and nameplate.is_visible:
+		var bubble := message.bubble_rect()
+		nameplate.show_speaker(nameplate.speaker, Vector2(bubble.position.x + 18.0, bubble.position.y - 36.0))
 	# Backlog is memory-only, never saved: a reload starts a fresh history. The nameplate
 	# is written by the event handler before the message opens; prefix it when present.
 	# The backlog is read-only history: strip the WOLF escape codes (\c[..],\cself[n],\f[n])
@@ -441,6 +478,8 @@ func _on_message(text: String, face: int) -> void:
 
 func _on_message_closed() -> void:
 	message.close()
+	if nameplate != null:
+		nameplate.hide_speaker()
 
 
 func _on_message_confirm() -> void:
@@ -476,38 +515,84 @@ func _on_teleport(target: int, map_id: int, x: int, y: int, options: int) -> voi
 	status("teleport map=%d (%d,%d) target=%d" % [map_id, x, y, target])
 
 
+func _clear_transition_overlays() -> void:
+	_transition_frames = 0
+	_transition_elapsed = 0
+	_transition_mode = 0
+	_transition_freeze_active = false
+	if _transition_rect != null:
+		_transition_rect.color.a = 0.0
+		_transition_rect.visible = false
+	if _transition_freeze_rect != null:
+		_transition_freeze_rect.modulate.a = 0.0
+		_transition_freeze_rect.visible = false
+		_transition_freeze_rect.texture = null
+
+
 func _on_transition(kind: int, flags: int) -> void:
+	_flush_pending_pictures()
+	var phase_mode: int = vm.TransitionPhase if vm != null else 0
+	if phase_mode == 1:
+		# 161 PrepareTransition: freeze current scene so 162 can crossfade without dipping to black.
+		_clear_transition_overlays()
+		var vp := get_viewport()
+		var img: Image = null
+		if vp != null and vp.get_texture() != null:
+			img = vp.get_texture().get_image()
+		if img != null and img.get_width() > 0 and img.get_height() > 0:
+			_transition_freeze_rect.texture = ImageTexture.create_from_image(img)
+			_transition_freeze_rect.modulate = Color.WHITE
+			_transition_freeze_rect.visible = true
+			_transition_freeze_active = true
+		status("transition prepare kind=%d flags=%d" % [kind, flags])
+		return
 	# Rust transition.rs: kind < 0 is the shipped hard cut (CE48's [-1, 0x1000A]);
 	# otherwise the low byte of flags is the fade length, zero meaning one frame.
 	if kind < 0:
-		_transition_frames = 0
-		_transition_elapsed = 0
-		_transition_rect.color.a = 0.0
-		_transition_rect.visible = false
+		_clear_transition_overlays()
 		status("transition kind=%d flags=%d (hard cut)" % [kind, flags])
 		return
 	_transition_frames = maxi(1, flags & 0xFF)
 	_transition_elapsed = 0
-	_transition_rect.visible = true
-	_transition_rect.color.a = 0.0
+	if phase_mode == 2:
+		_transition_mode = 1
+		if _transition_freeze_active and _transition_freeze_rect.texture != null:
+			_transition_freeze_rect.visible = true
+			_transition_freeze_rect.modulate.a = 1.0
+			_transition_rect.visible = false
+		else:
+			_transition_rect.visible = true
+			_transition_rect.color.a = 1.0
+	else:
+		_transition_freeze_active = false
+		_transition_freeze_rect.visible = false
+		_transition_freeze_rect.texture = null
+		_transition_mode = 0
+		_transition_rect.visible = true
+		_transition_rect.color.a = 0.0
 	status("transition kind=%d flags=%d (fade %d frames)" % [kind, flags, _transition_frames])
 
 
-## Black triangle wave: 0 -> 1 at the midpoint -> 0, then the overlay hides.
+## Mode 0: black triangle wave 0 -> 1 -> 0; Mode 1: crossfade/fadeout 1 -> 0.
 func _tick_transition() -> void:
 	if _transition_frames <= 0:
 		return
 	var t := clampf(float(_transition_elapsed) / float(_transition_frames), 0.0, 1.0)
-	_transition_rect.color.a = 1.0 - absf(2.0 * t - 1.0)
+	if _transition_mode == 1:
+		var alpha := 1.0 - t
+		if _transition_freeze_active:
+			_transition_freeze_rect.modulate.a = alpha
+		else:
+			_transition_rect.color.a = alpha
+	else:
+		_transition_rect.color.a = 1.0 - absf(2.0 * t - 1.0)
 	_transition_elapsed += 1
 	if _transition_elapsed > _transition_frames:
-		_transition_frames = 0
-		_transition_elapsed = 0
-		_transition_rect.color.a = 0.0
-		_transition_rect.visible = false
+		_clear_transition_overlays()
 
 
 func _on_effect(kind: int, duration: int, args: Array) -> void:
+	_flush_pending_pictures()
 	# Rust applies 290 to the pictures in the closed args[2]..args[3] range and reports a
 	# no-op only when that range holds no live picture.
 	if not stage.effect(kind, duration, args):
@@ -594,13 +679,9 @@ func _on_end_game() -> void:
 
 ## Opcode 151 changes the screen colour. The operand is a DirectDraw COLORREF
 ## (0x00BBGGRR), so the channels decode without the engine palette: 0x0196C896 is amber,
-## 0x00646464 is grey. The engine's own palette blend is not in the data, so the port
-## approximates it with a multiplicative tint over the presentation tree (audit D4).
-## Colour 0 is the black ramp the transition opcodes already use.
+## 0x00646464 is grey. Color 0 is the neutral (0,0,0) tint ramp, never a 160/162 blackout.
 func _on_color_change(color: int, frames: int) -> void:
-	if color == 0:
-		_on_transition(0, maxi(1, frames))
-		return
+	_flush_pending_pictures()
 	stage.set_screen_tint(color, frames)
 	_sync_screen_tint()
 
@@ -665,6 +746,8 @@ func _on_session_map(map_id: int, leader_x: int, leader_y: int) -> void:
 
 
 func _on_clear_pictures() -> void:
+	if vm != null:
+		vm.TakePicturesJson()
 	stage.clear_pictures()
 
 
@@ -1052,7 +1135,10 @@ func restart_title() -> bool:
 	router.middle_pressed = false
 	router.clear_frame_latches()
 	message.close()
+	if nameplate != null:
+		nameplate.hide_speaker()
 	choice.close()
+	_clear_transition_overlays()
 	session.SetTitleMenuVisible(false)
 	stage.reset_screen_tint()
 	stage.clear_pictures()

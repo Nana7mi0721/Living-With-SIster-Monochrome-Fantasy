@@ -44,12 +44,44 @@ var layers: Dictionary = {}
 const UNCHANGED := -1000000
 const FADE_MAX := 600
 const SHAKE_ENDLESS := 100000
+const SYSGRAPHIC_MAX_SIDE := 4096
+const SYSGRAPHIC_MAX_PIXELS := 2097152
+
+
+## Multi-run text renderer used for WOLF opcode-150 kind-2/4 text pictures.
+## Inherits Label so existing contracts (node is Label, label.text, label.size) hold,
+## while _draw() paints mixed \f[n] sizes, \c[n] colors, \E outlines, and <R> tails
+## aligned on a common baseline with 1.3x line pitch (textpic.rs).
+class PictureTextLabel extends Label:
+	var runs: Array = []  # Array of {text, pos, size, color, has_color, outline}
+	var line_pitch_ratio := 1.3
+
+	func _draw() -> void:
+		if runs.is_empty():
+			return
+		var draw_font := UiSkin.font()
+		var outline_color := Color(0, 0, 0, 1)
+		for entry in runs:
+			var r: Dictionary = entry
+			var r_text: String = str(r.get("text", ""))
+			if r_text.is_empty():
+				continue
+			var pos: Vector2 = r.get("pos", Vector2.ZERO)
+			var px: int = int(r.get("size", 20))
+			var col := Color(1, 1, 1, 1)
+			if bool(r.get("has_color", false)):
+				col = r.get("color", Color.WHITE)
+			if bool(r.get("outline", false)):
+				draw_string_outline(draw_font, pos, r_text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, 2, outline_color)
+			draw_string(draw_font, pos, r_text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, col)
+
 
 var _pictures: Dictionary = {}  # number -> Control
 var _cmds: Dictionary = {}     # number -> draw command, for save/restore (W3 Day4)
 var _base_sizes: Dictionary = {}  # number -> unscaled hit-box source size
 var _states: Dictionary = {}   # number -> animation/effect state (fade, slide, 290)
 var _blend_materials: Dictionary = {}  # blend mode -> shared CanvasItemMaterial
+var _sysgraphic_cache: Dictionary = {}  # "KEY|w|h" -> Texture2D
 
 
 func _init(p_assets: AssetDB = null) -> void:
@@ -144,16 +176,9 @@ static func packed_multiplier(packed: int) -> Color:
 
 func _apply_screen_tint() -> void:
 	screen_tint = _tint_now()
-	var band := layer(LAYER_SCENE_PICTURE)
-	if band == null:
-		return
-	for child in band.get_children():
-		var node := child as Control
-		if node == null:
-			continue
-		if picture_number(node) >= 0:
-			continue
-		node.modulate = screen_tint
+	for number in _pictures.keys():
+		if int(number) < 0:
+			_render_picture(int(number))
 
 
 ## Slot number encoded in the node name built by _build_picture ("Pic%d").
@@ -198,8 +223,17 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 		and int(prev_cmd.get("kind", -1)) == kind \
 		and str(prev_cmd.get("file", "")) == file \
 		and str(prev_cmd.get("text", "")) == text
-	var node := _build_picture(number, file, text, args, anchor, kind)
+	if redraws and _can_reuse_picture(number, prev_cmd, args, kind):
+		var existing: Control = _pictures[number]
+		if existing != null and is_instance_valid(existing):
+			_base_sizes[number] = existing.get_meta("base_size", existing.size)
+			_states[number] = prev_state
+			_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
+			_store_cmd(number, action, file, text, args, anchor, kind, animate, flags)
+			return existing
+
 	_free_picture(number)
+	var node := _build_picture(number, file, text, args, anchor, kind)
 	if node == null:
 		push_warning("draw_picture %d produced no node kind=%d action=%d" % [number, kind, action])
 		return null
@@ -218,6 +252,26 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 	return node
 
 
+func _can_reuse_picture(number: int, prev_cmd: Dictionary, args: Array, kind: int) -> bool:
+	if not _pictures.has(number):
+		return false
+	var node: Control = _pictures[number]
+	if node == null or not is_instance_valid(node) or node.get_parent() == null:
+		return false
+	var prev_args: Array = prev_cmd.get("args", [])
+	if kind == 3 or kind == 4:
+		var w_prev := _arg(prev_args, 1, 18)
+		var h_prev := _arg(prev_args, 2, 18)
+		var w_new := _arg(args, 1, 18)
+		var h_new := _arg(args, 2, 18)
+		return w_prev == w_new and h_prev == h_new
+	var cols_prev := maxi(1, _arg(prev_args, 1, 1))
+	var rows_prev := maxi(1, _arg(prev_args, 2, 1))
+	var cols_new := maxi(1, _arg(args, 1, 1))
+	var rows_new := maxi(1, _arg(args, 2, 1))
+	return cols_prev == cols_new and rows_prev == rows_new
+
+
 ## A move carries geometry, not a new source. Keep the slot's existing file/text/kind and
 ## base size so a track-mode move cannot overwrite the sprite identity with a 420x140 stub.
 func _merged_move(number: int, file: String, text: String, args: Array, anchor: int, kind: int) -> Dictionary:
@@ -225,9 +279,9 @@ func _merged_move(number: int, file: String, text: String, args: Array, anchor: 
 	var merged_file := file if not file.is_empty() else str(prev.get("file", ""))
 	var merged_text := text if not text.is_empty() else str(prev.get("text", ""))
 	var merged_args: Array = args if not args.is_empty() else prev.get("args", [])
-	var merged_kind := kind if kind >= 0 else int(prev.get("kind", -1))
+	var merged_kind := int(prev.get("kind", -1))
 	if merged_kind < 0:
-		merged_kind = 2 if merged_file.is_empty() and not merged_text.is_empty() else 0
+		merged_kind = kind if kind >= 0 else (2 if merged_file.is_empty() and not merged_text.is_empty() else 0)
 	return {
 		"file": merged_file,
 		"text": merged_text,
@@ -257,28 +311,134 @@ func _free_picture(number: int) -> void:
 		var node: Control = _pictures[number]
 		_pictures.erase(number)
 		if is_instance_valid(node):
+			var parent := node.get_parent()
+			if parent != null:
+				parent.remove_child(node)
 			node.queue_free()
 
 
-## Strip the text-formatting tokens and measure the remaining glyphs. The HUD relies on
-## this: CE217's 6200 is "\f[24]\v[4]:\v[5]" after the VM has already substituted the
-## variables, and CE251's rows are "\f[20]\cself[5]".
+## Strip the text-formatting tokens and lay out multi-run spans with per-run font size,
+## SystemDB colour, outline, baseline alignment, <R> right-align, and 1.3x line pitch.
 func _measure_text(source: String) -> Dictionary:
 	var plain := ""
-	var font_size := 20
+	var default_px := 20
+	var font_px := default_px
+	var color_idx := -1
+	var outline := false
+	var lines: Array = []
+	var cur_chunks: Array = []
+	var cur_tail_from := -1
+	var buf := ""
+
 	for token in TextTokenizer.tokenize(source):
 		match token.kind:
 			TextTokenizer.Kind.TEXT:
 				plain += token.text
+				buf += token.text
 			TextTokenizer.Kind.NEWLINE:
 				plain += "\n"
+				if not buf.is_empty():
+					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
+					buf = ""
+				lines.append({"chunks": cur_chunks, "tail_from": cur_tail_from})
+				cur_chunks = []
+				cur_tail_from = -1
 			TextTokenizer.Kind.FONT_SIZE:
-				font_size = clampi(token.number, 8, 96)
-	var measured := UiSkin.font().get_string_size(plain, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+				if not buf.is_empty():
+					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
+					buf = ""
+				font_px = default_px if int(token.number) <= 0 else clampi(int(token.number), 1, 96)
+			TextTokenizer.Kind.FONT_SIZE_RELATIVE:
+				if not buf.is_empty():
+					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
+					buf = ""
+				var next: int = font_px + int(token.number)
+				font_px = default_px if next <= 0 else clampi(next, 1, 96)
+			TextTokenizer.Kind.COLOR, TextTokenizer.Kind.COLOR_SELF:
+				if not buf.is_empty():
+					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
+					buf = ""
+				color_idx = int(token.number)
+			TextTokenizer.Kind.OUTLINE_ON:
+				if not buf.is_empty():
+					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
+					buf = ""
+				outline = true
+			TextTokenizer.Kind.OUTLINE_OFF:
+				if not buf.is_empty():
+					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
+					buf = ""
+				outline = false
+			TextTokenizer.Kind.ALIGN_RIGHT:
+				if not buf.is_empty():
+					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
+					buf = ""
+				if cur_tail_from < 0:
+					cur_tail_from = cur_chunks.size()
+	if not buf.is_empty():
+		cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
+	lines.append({"chunks": cur_chunks, "tail_from": cur_tail_from})
+	if lines.size() > 1 and (lines[lines.size() - 1]["chunks"] as Array).is_empty():
+		lines.pop_back()
+
+	var draw_font := UiSkin.font()
+	var line_widths: Array[float] = []
+	var line_max_px: Array[int] = []
+	var block_w := 0.0
+	for line in lines:
+		var lw := 0.0
+		var max_px := 0
+		var chunks: Array = line["chunks"]
+		for c in chunks:
+			var px := int(c["size"])
+			var sz := draw_font.get_string_size(str(c["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, px)
+			c["width"] = sz.x
+			lw += sz.x
+			max_px = maxi(max_px, px)
+		if max_px <= 0:
+			max_px = font_px
+		line_widths.append(lw)
+		line_max_px.append(max_px)
+		block_w = maxf(block_w, lw)
+
+	var placed_runs: Array = []
+	var y_cursor := 0.0
+	for li in lines.size():
+		var line: Dictionary = lines[li]
+		var chunks: Array = line["chunks"]
+		var max_px: int = line_max_px[li]
+		var max_ascent := draw_font.get_ascent(max_px)
+		var tail_from: int = int(line["tail_from"])
+		var x_left := 0.0
+		var tail_w := 0.0
+		if tail_from >= 0:
+			for ci in range(tail_from, chunks.size()):
+				tail_w += float(chunks[ci]["width"])
+		var x_right := maxf(0.0, block_w - tail_w)
+		for ci in chunks.size():
+			var c: Dictionary = chunks[ci]
+			var run_x := x_left
+			if tail_from >= 0 and ci >= tail_from:
+				run_x = x_right
+				x_right += float(c["width"])
+			else:
+				x_left += float(c["width"])
+			var idx := int(c["color_idx"])
+			placed_runs.append({
+				"text": str(c["text"]),
+				"pos": Vector2(run_x, y_cursor + max_ascent),
+				"size": int(c["size"]),
+				"has_color": idx >= 0,
+				"color": UiSkin.color_for_index(idx) if idx >= 0 else Color.WHITE,
+				"outline": bool(c["outline"]),
+			})
+		y_cursor += ceilf(float(max_px) * 1.3)
+
 	return {
 		"text": plain,
-		"font_size": font_size,
-		"size": Vector2(ceilf(measured.x) + 2.0, ceilf(measured.y) + 2.0),
+		"font_size": font_px,
+		"size": Vector2(ceilf(maxf(1.0, block_w)) + 2.0, ceilf(maxf(1.0, y_cursor))),
+		"runs": placed_runs,
 	}
 
 
@@ -363,7 +523,12 @@ func _base_size_for(number: int, cmd: Dictionary = {}) -> Vector2:
 	var args: Array = cmd.get("args", [])
 	var kind: int = int(cmd.get("kind", 0))
 	if kind == 2 or kind == 4:
-		return Vector2(maxi(0, _arg(args, 1, 0)), maxi(0, _arg(args, 2, 0)))
+		var bw := maxi(0, _arg(args, 1, 0))
+		var bh := maxi(0, _arg(args, 2, 0))
+		var sys_kind := _parse_sysgraphic(str(cmd.get("file", "")))
+		if not sys_kind.is_empty() and str(sys_kind.get("shape", "")) == "LINE" and bw > 0 and bh == 0:
+			bh = 1
+		return Vector2(bw, bh)
 	if (kind == 3 or kind == 4) and _arg(args, 1, 0) > 0 and _arg(args, 2, 0) > 0:
 		return Vector2(_arg(args, 1, 0), _arg(args, 2, 0))
 	var holder: Control = _pictures.get(number)
@@ -483,8 +648,13 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 		kind = 2 if file.is_empty() and not text.is_empty() else 0
 	var prev_state: Dictionary = _states.get(number, {}).duplicate(true)
 	var base := Vector2.ZERO
+	var sys_track := _parse_sysgraphic(file) if (kind == 3 or kind == 4) else {}
 	if kind == 3 or kind == 4:
-		base = Vector2(maxi(0, _arg(args, 1, 18)), maxi(0, _arg(args, 2, 18)))
+		var tw := maxi(0, _arg(args, 1, 18))
+		var th := maxi(0, _arg(args, 2, 18))
+		if not sys_track.is_empty() and str(sys_track.get("shape", "")) == "LINE" and tw > 0 and th == 0:
+			th = 1
+		base = Vector2(tw, th)
 	elif not file.is_empty() and assets != null and assets.texture(file) != null:
 		base = _texture_cell_size(assets.texture(file), _arg(args, 1, 1), _arg(args, 2, 1))
 	elif not text.is_empty():
@@ -498,16 +668,138 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 	_store_cmd(number, action, file, text, args, anchor, kind, animate, flags)
 
 
+static func _parse_sysgraphic(raw_name: String) -> Dictionary:
+	var s := raw_name.strip_edges().to_upper()
+	if not s.begins_with("<"):
+		return {}
+	match s:
+		"<SQUARE>":
+			return {"shape": "SQUARE", "key": "SQUARE"}
+		"<SQUARE><FRAME>", "<SQUARE>FRAME":
+			return {"shape": "SQUARE_FRAME", "key": "SQUARE_FRAME"}
+		"<LINE>":
+			return {"shape": "LINE", "key": "LINE"}
+		"<CIRCLE>":
+			return {"shape": "CIRCLE", "key": "CIRCLE"}
+		"<TRI-LEFT>":
+			return {"shape": "TRI", "dir": "LEFT", "key": "TRI_LEFT"}
+		"<TRI-RIGHT>":
+			return {"shape": "TRI", "dir": "RIGHT", "key": "TRI_RIGHT"}
+		"<TRI-UP>":
+			return {"shape": "TRI", "dir": "UP", "key": "TRI_UP"}
+		"<TRI-DOWN>":
+			return {"shape": "TRI", "dir": "DOWN", "key": "TRI_DOWN"}
+	if s == "<GRADX>" or s.begins_with("<GRADX-") and s.ends_with(">"):
+		var endpoints := _parse_grad_endpoints(s.substr(1, s.length() - 2))
+		return {"shape": "GRADX", "from": endpoints[0], "to": endpoints[1], "key": "GRADX_%d_%d" % [endpoints[0], endpoints[1]]}
+	if s == "<GRADY>" or s.begins_with("<GRADY-") and s.ends_with(">"):
+		var endpoints := _parse_grad_endpoints(s.substr(1, s.length() - 2))
+		return {"shape": "GRADY", "from": endpoints[0], "to": endpoints[1], "key": "GRADY_%d_%d" % [endpoints[0], endpoints[1]]}
+	return {}
+
+
+static func _parse_grad_endpoints(inner: String) -> Array[int]:
+	var parts := inner.split("-")
+	if parts.size() == 3 and parts[1].is_valid_int() and parts[2].is_valid_int():
+		return [clampi(parts[1].to_int(), 0, 1000), clampi(parts[2].to_int(), 0, 1000)]
+	return [1000, 0]
+
+
+static func _sysgraphic_ramp(from_pm: int, to_pm: int, index: int, span: int) -> int:
+	var val := from_pm if span <= 0 else clampi(from_pm + ((to_pm - from_pm) * index) / span, 0, 1000)
+	return (val * 255 + 500) / 1000
+
+
+func _sysgraphic_texture(spec: Dictionary, w: int, h: int) -> Texture2D:
+	if spec.is_empty() or w <= 0:
+		return null
+	var shape := str(spec.get("shape", ""))
+	if shape == "LINE" and h == 0:
+		h = 1
+	if h <= 0 or w > SYSGRAPHIC_MAX_SIDE or h > SYSGRAPHIC_MAX_SIDE or w * h > SYSGRAPHIC_MAX_PIXELS:
+		return null
+	var spec_key := str(spec.get("key", shape))
+	var cache_w := 1 if (shape == "SQUARE" or shape == "LINE" or shape == "GRADY") else w
+	var cache_h := 1 if (shape == "SQUARE" or shape == "LINE" or shape == "GRADX") else h
+	var cache_key := "%s|%d|%d" % [spec_key, cache_w, cache_h]
+	if _sysgraphic_cache.has(cache_key):
+		return _sysgraphic_cache[cache_key]
+
+	var buf := PackedByteArray()
+	buf.resize(cache_w * cache_h * 4)
+	match shape:
+		"SQUARE", "LINE":
+			buf[0] = 255; buf[1] = 255; buf[2] = 255; buf[3] = 255
+		"GRADX":
+			var from_x := int(spec.get("from", 1000))
+			var to_x := int(spec.get("to", 0))
+			var span_x := cache_w - 1
+			for x in cache_w:
+				var off := x * 4
+				buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
+				buf[off + 3] = _sysgraphic_ramp(from_x, to_x, x, span_x)
+		"GRADY":
+			var from_y := int(spec.get("from", 1000))
+			var to_y := int(spec.get("to", 0))
+			var span_y := cache_h - 1
+			for y in cache_h:
+				var off := y * 4
+				buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
+				buf[off + 3] = _sysgraphic_ramp(from_y, to_y, y, span_y)
+		"SQUARE_FRAME":
+			for y in cache_h:
+				for x in cache_w:
+					var off := (y * cache_w + x) * 4
+					var border := x < 1 or y < 1 or x + 1 >= cache_w or y + 1 >= cache_h
+					buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
+					buf[off + 3] = 255 if border else 0
+		"CIRCLE":
+			var cw := float(cache_w)
+			var ch := float(cache_h)
+			for y in cache_h:
+				var ny := (float(y) + 0.5) / ch * 2.0 - 1.0
+				for x in cache_w:
+					var nx := (float(x) + 0.5) / cw * 2.0 - 1.0
+					var off := (y * cache_w + x) * 4
+					buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
+					buf[off + 3] = 255 if (nx * nx + ny * ny <= 1.0) else 0
+		"TRI":
+			var dir := str(spec.get("dir", "DOWN"))
+			var cw := float(cache_w)
+			var ch := float(cache_h)
+			for y in cache_h:
+				var py := float(y) + 0.5
+				for x in cache_w:
+					var px := float(x) + 0.5
+					var inside := false
+					match dir:
+						"LEFT":
+							inside = absf(py - ch * 0.5) <= ch * 0.5 * (px / cw)
+						"RIGHT":
+							inside = absf(py - ch * 0.5) <= ch * 0.5 * ((cw - px) / cw)
+						"DOWN":
+							inside = absf(px - cw * 0.5) <= cw * 0.5 * ((ch - py) / ch)
+						"UP":
+							inside = absf(px - cw * 0.5) <= cw * 0.5 * (py / ch)
+					var off := (y * cache_w + x) * 4
+					buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
+					buf[off + 3] = 255 if inside else 0
+
+	var image := Image.create_from_data(cache_w, cache_h, false, Image.FORMAT_RGBA8, buf)
+	var tex := ImageTexture.create_from_image(image)
+	_sysgraphic_cache[cache_key] = tex
+	return tex
+
+
 func _build_picture(number: int, file: String, text: String, args: Array, anchor: int, kind: int) -> Control:
 	var holder := Control.new()
 	holder.name = "Pic%d" % number
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if number < 0:
-		holder.modulate = screen_tint
 
 	var is_window := kind == 3 or kind == 4
+	var sys_spec := _parse_sysgraphic(file) if is_window else {}
 	var texture: Texture2D = null
-	if not file.is_empty() and assets != null:
+	if sys_spec.is_empty() and not file.is_empty() and assets != null:
 		texture = assets.texture(file)
 		# The retail title art lives in Picture.wolf; an install whose unpacked tree lacks
 		# it still ships the SystemGraphic banner. The old fallback pointed at the 320x240
@@ -517,7 +809,20 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 			texture = assets.texture("SystemGraphic/TitleGraphic.png")
 
 	var size: Vector2
-	if is_window:
+	if is_window and not sys_spec.is_empty():
+		var sw := maxi(0, _arg(args, 1, 0))
+		var sh := maxi(0, _arg(args, 2, 0))
+		if str(sys_spec.get("shape", "")) == "LINE" and sw > 0 and sh == 0:
+			sh = 1
+		size = Vector2(maxi(1, sw), maxi(1, sh))
+		var rect := TextureRect.new()
+		rect.texture = _sysgraphic_texture(sys_spec, int(size.x), int(size.y))
+		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		rect.stretch_mode = TextureRect.STRETCH_SCALE
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		holder.add_child(rect)
+		rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	elif is_window:
 		# 150 args[1]/args[2] are the window box width and height, not a sprite-sheet grid
 		# (picture.rs 19). The skin is the named file, or the default WindowBase panel,
 		# drawn as the retail 18x18 nine-patch so a 300x200 box is a panel, not an 18x18 dot.
@@ -560,23 +865,22 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 		rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	elif not text.is_empty():
 		# Opcode 150 text pictures are the retail HUD (CE217 draws 6200 as "8:30" at
-		# x=140,y=7 anchored top-right). Rendering them as a placeholder swallowed the
-		# clock, weekday and every other text HUD surface, so measure the tokenized text
-		# and let the shared anchor table place it exactly like the Rust screen does.
+		# x=140,y=7 anchored top-right). PictureTextLabel extends Label so existing
+		# contracts hold while _draw() paints mixed \f[n] sizes, \c[n] colours, and \E.
 		var layout := _measure_text(text)
 		size = layout["size"]
-		var label := Label.new()
+		var label := PictureTextLabel.new()
 		label.text = layout["text"]
+		label.runs = layout["runs"]
 		label.position = Vector2.ZERO
 		label.size = size
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		label.add_theme_font_override("font", UiSkin.font())
 		label.add_theme_font_size_override("font_size", int(layout["font_size"]))
-		# Retail picture text carries a contrasting rim; without it white tokens vanish
-		# against the white title art (audit L6).
-		label.add_theme_constant_override("outline_size", 2)
-		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
+		label.add_theme_constant_override("outline_size", 0)
+		label.add_theme_color_override("font_color", Color(0, 0, 0, 0))
+		label.queue_redraw()
 		holder.add_child(label)
 	else:
 		size = Vector2(420, 140)
@@ -705,8 +1009,12 @@ func _tone_from_args(args: Array) -> Array:
 	return tone
 
 
-func _new_state(args: Array, anchor: int, base: Vector2, flags: Dictionary = {}) -> Dictionary:
+func _new_state(args: Array, anchor: int, base: Vector2, flags: Dictionary = {}, raster_window: bool = false) -> Dictionary:
 	var pose := _pose_from_args(args, anchor, flags)
+	var tone := _tone_from_args(args)
+	var zero_tone_hidden := raster_window and int(tone[0]) == 0 and int(tone[1]) == 0 and int(tone[2]) == 0
+	if zero_tone_hidden:
+		tone = [100, 100, 100]
 	return {
 		"age": 0,
 		"fade": 0,
@@ -725,8 +1033,9 @@ func _new_state(args: Array, anchor: int, base: Vector2, flags: Dictionary = {})
 		"pattern": null,
 		"pattern_index": maxi(1, _arg(args, 3, 1)),
 		"split": [maxi(1, _arg(args, 1, 1)), maxi(1, _arg(args, 2, 1))],
-		"tone": _tone_from_args(args),
-		"hidden": false,
+		"tone": tone,
+		"hidden": zero_tone_hidden,
+		"zero_tone_hidden": zero_tone_hidden,
 		"base_size": base,
 	}
 
@@ -739,7 +1048,8 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 	var prev: Dictionary = previous if not previous.is_empty() else _states.get(number, {})
 	var prev_cmd: Dictionary = _cmds.get(number, {})
 	var base: Vector2 = _base_sizes.get(number, Vector2.ZERO)
-	var state := _new_state(args, anchor, base, flags)
+	var raster_window := (kind == 3 or kind == 4) and not file.strip_edges().begins_with("<")
+	var state := _new_state(args, anchor, base, flags, raster_window)
 	# picture.rs picture_args: relative draws offset from the old pose even when the
 	# graphic changes; a fresh slot has no old pose and therefore uses the raw value.
 	if bool(flags.get("relative", false)) and not prev.is_empty():
@@ -1034,6 +1344,8 @@ func _render_picture(number: int) -> void:
 		-1.0 if int(pose.get("scale_y", 100)) < 0 else 1.0)
 	var blend := int(pose.get("blend", 0))
 	var tint := _tone_color(state)
+	if number < 0:
+		tint = Color(tint.r * screen_tint.r, tint.g * screen_tint.g, tint.b * screen_tint.b, 1.0)
 	tint.a = clampf(float(pose.get("opacity", 255)) / 255.0, 0.0, 1.0)
 	# WOLF blend 3 is multiply; retail forces the alpha to 255 so the modulation
 	# multiplies RGB without also dimming by the slot opacity (GameView.gd:99-100).
@@ -1136,7 +1448,11 @@ func _apply_effect(state: Dictionary, kind: int, duration: int, args: Array) -> 
 		0, 5:
 			if duration <= 0 or (v[0] == 0 and v[1] == 0 and v[2] == 0):
 				state["effects"] = []
+				if bool(state.get("zero_tone_hidden", false)):
+					state["hidden"] = true
 			else:
+				if bool(state.get("zero_tone_hidden", false)):
+					state["hidden"] = false
 				state["effects"] = [{
 					"kind": kind,
 					"duration": maxi(1, duration),
@@ -1258,6 +1574,9 @@ func clear_pictures() -> void:
 	for number in _pictures.keys():
 		var node: Control = _pictures[number]
 		if is_instance_valid(node):
+			var parent := node.get_parent()
+			if parent != null:
+				parent.remove_child(node)
 			node.queue_free()
 	_pictures.clear()
 	_cmds.clear()

@@ -33,6 +33,8 @@ public sealed class EventVm
     /// <summary>Latest unimplemented-opcode error, also the save-blocking fault reason.</summary>
     public string? FaultReason { get; private set; }
     public bool Faulted => FaultReason != null;
+    /// <summary>Transition sub-phase reported alongside TransitionRequested (0=store, 1=freeze, 2=fadeout).</summary>
+    public int TransitionPhase { get; private set; }
     /// <summary>Auto-input mask requested by opcode 125, in WOLF editor key layout.</summary>
     public uint AutoKeys { get; private set; }
     /// <summary>Remaining frames the 125 injection stays available (0/1/2).</summary>
@@ -1032,6 +1034,7 @@ public sealed class EventVm
                     {
                         _transitionKind = kind;
                         _transitionFlags = flags;
+                        TransitionPhase = 0;
                         Host.Transition(kind, flags);
                         inst.Pc++;
                         break;
@@ -1039,12 +1042,14 @@ public sealed class EventVm
                     if (slot.Opcode == 161)
                     {
                         _transitionPrepared = true;
+                        TransitionPhase = 1;
                         Host.Transition(_transitionKind, _transitionFlags);
                         inst.Pc++;
                         break;
                     }
                     _transitionPrepared = false;
                     int frames = Math.Max(1, _transitionFlags & 0xFF);
+                    TransitionPhase = 2;
                     Host.Transition(_transitionKind, _transitionFlags);
                     inst.Wait.WaitForFrames((uint)frames);
                     inst.Pc++;

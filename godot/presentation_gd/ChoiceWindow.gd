@@ -124,7 +124,7 @@ func row_rects() -> Array:
 
 
 func window_size() -> Vector2:
-	var font := UiSkin.font()
+	var font := UiSkin.bold_font()
 	var width := MIN_WIDTH
 	var visible := _visible_indices()
 	for i in visible:
@@ -178,23 +178,20 @@ func _draw() -> void:
 	else:
 		draw_rect(rect, Color(0.12, 0.14, 0.15, 0.9))
 		draw_rect(rect, Color(0.85, 0.85, 0.85, 0.6), false, 1.0)
-	var font := UiSkin.font()
+	var font := UiSkin.bold_font()
 	var rects := row_rects()
+	var outline_col := Color(0.0, 0.0, 0.0, 1.0)
 	for row_idx in visible.size():
 		var i := visible[row_idx]
 		var row: Rect2 = rects[row_idx]
-		var color := Color("ffe08a") if i == selected else Color.WHITE
-		if i == _hover:
-			draw_rect(row, Color(1, 1, 1, 0.10))
-		draw_string(font, row.position + Vector2(0, FONT_SIZE), display_text(options[i]),
-			HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, color)
+		var box := Rect2(rect.position.x + 8.0, row.position.y - 2.0, rect.size.x - 16.0, row.size.y)
 		if i == selected:
-			var cursor: Texture2D = assets.texture(CURSOR_TEXTURE) if assets != null else null
-			if cursor != null:
-				draw_texture(cursor, row.position + Vector2(-cursor.get_width() - 4, 0))
-			else:
-				draw_colored_polygon(PackedVector2Array([
-					row.position + Vector2(-12, 6),
-					row.position + Vector2(-2, 12),
-					row.position + Vector2(-12, 18),
-				]), color)
+			draw_rect(box, Color(1.0, 1.0, 1.0, 0.22))
+			draw_rect(box, Color(1.0, 1.0, 1.0, 0.85), false, 1.0)
+		elif i == _hover:
+			draw_rect(box, Color(1.0, 1.0, 1.0, 0.10))
+		var color := Color("fff2b8") if i == selected else Color.WHITE
+		var baseline := row.position + Vector2(0, font.get_ascent(FONT_SIZE))
+		var label := display_text(options[i])
+		draw_string_outline(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, 4, outline_col)
+		draw_string(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, color)

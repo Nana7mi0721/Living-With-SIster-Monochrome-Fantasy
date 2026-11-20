@@ -38,7 +38,14 @@ bash tools/godot_check.sh
 
 ---
 
-## 4. 文档维护约定
+## 4. Git 提交与推送约定
+
+- **分阶段提交**：每次完成部分修改任务并通过对应校验后，应及时在本地执行 `git commit`（只暂存当次改动文件，严禁提交 `work/`、解包资产或临时生成物）；
+- **回合结束推送**：在一轮对话全部任务完成、通过交付门禁并清理临时文件后，应自主执行 `git push` 将提交推送至远端仓库。
+
+---
+
+## 5. 文档维护约定
 
 - 新增架构决策必须记录于 [docs/godot/DECISIONS.md](docs/godot/DECISIONS.md)；
 - 缺陷审查与修复报告必须归档至 [docs/reviews/](docs/reviews/)；

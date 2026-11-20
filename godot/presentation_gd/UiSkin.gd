@@ -19,15 +19,37 @@ const FONT_NAMES: Array[String] = [
 	"Microsoft YaHei UI",
 	"Microsoft YaHei",
 	"Noto Sans CJK SC",
-	"Yu Gothic UI",
-	"MS Gothic",
-	"Meiryo",
-	"Noto Sans CJK JP",
-	"Noto Sans",
+	"Source Han Sans SC",
+	"PingFang SC",
 	"sans-serif",
 ]
 
+## SystemDB Type 12 text colour palette (`color[0..19]`).
+const TEXT_COLORS: Array[Color] = [
+	Color8(255, 255, 255), # 0 white
+	Color8(140, 175, 255), # 1 blue (weekday Sat)
+	Color8(210, 130, 130), # 2 soft red (weekday Sun)
+	Color8(180, 255, 180), # 3 green
+	Color8(90, 40, 0),     # 4 dark brown
+	Color8(160, 80, 80),   # 5 muted red
+	Color8(255, 140, 0),   # 6 orange
+	Color8(255, 220, 150), # 7 warm cream
+	Color8(100, 100, 100), # 8 mid grey
+	Color8(0, 0, 0),       # 9 black (HUD stats on white panels)
+	Color8(255, 255, 255), # 10 white
+	Color8(170, 170, 200), # 11 lavender
+	Color8(255, 100, 100), # 12 red
+	Color8(255, 255, 255), # 13 white
+	Color8(150, 150, 150), # 14 light grey
+	Color8(75, 75, 75),    # 15 dark grey
+	Color8(200, 255, 200), # 16 pale green
+	Color8(255, 200, 200), # 17 pale red
+	Color8(200, 200, 255), # 18 pale blue
+	Color8(200, 200, 200), # 19 light grey
+]
+
 static var _font: SystemFont = null
+static var _bold_font: SystemFont = null
 
 
 ## One shared system font; SystemFont caches the resolved face internally.
@@ -38,6 +60,23 @@ static func font() -> Font:
 		_font.allow_system_fallback = true
 		_font.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
 	return _font
+
+
+## Bold system font for comic-style high-contrast dialogue, options and outlined labels.
+static func bold_font() -> Font:
+	if _bold_font == null:
+		_bold_font = SystemFont.new()
+		_bold_font.font_names = PackedStringArray(FONT_NAMES)
+		_bold_font.font_weight = 700
+		_bold_font.allow_system_fallback = true
+		_bold_font.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+	return _bold_font
+
+
+static func color_for_index(index: int) -> Color:
+	if index < 0 or index >= TEXT_COLORS.size():
+		return Color.WHITE
+	return TEXT_COLORS[index]
 
 
 ## Draw an 18x18 nine-patch into [param rect]. Falls back to a flat box when the

@@ -49,6 +49,7 @@ var _media_basename_rank: Dictionary = {}  # lowercase basename -> rank of the w
 var _cache: Dictionary = {}      # key -> Resource
 var _sizes: Dictionary = {}      # key -> bytes
 var _lru: Array[String] = []     # oldest first
+var _logged_misses: Dictionary = {}
 
 
 func _init(p_root: String = "") -> void:
@@ -148,6 +149,9 @@ func resolve(logical: String) -> String:
 		return _basenames[bare]
 	if _media_basenames.has(bare):
 		return MEDIA_PREFIX + str(_media_basenames[bare])
+	if not key.begins_with("<") and not _logged_misses.has(key):
+		_logged_misses[key] = true
+		push_warning("[ASSET_MISS] %s" % logical)
 	return ""
 
 
@@ -296,6 +300,7 @@ func clear() -> void:
 	_cache.clear()
 	_sizes.clear()
 	_lru.clear()
+	_logged_misses.clear()
 	used_bytes = 0
 
 
