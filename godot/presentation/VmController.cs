@@ -560,7 +560,14 @@ public partial class VmController : Node, IHost, IVmSession
         EmitSignal(SignalName.TransitionRequested, kind, flags);
     }
 
-    public int? SaveLoad(SaveOp op) => null;
+    /// <summary>
+    /// Set by <see cref="GameSession"/>: the session owns the slot files, so opcodes
+    /// 220/221/222 reach it through this hook instead of a second copy of the format.
+    /// </summary>
+    public Func<SaveOp, int?>? SaveLoadHandler { get; set; }
+
+    /// <summary>220/221/222: null means the VM stores nothing back into a variable.</summary>
+    public int? SaveLoad(SaveOp op) => SaveLoadHandler?.Invoke(op);
 
     /// <summary>151 ChangeColor: the argument is a palette index, so the colour layer maps it.</summary>
     public void ChangeColor(int color, int frames) =>

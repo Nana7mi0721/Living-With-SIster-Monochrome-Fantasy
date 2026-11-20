@@ -138,6 +138,23 @@ func _ready() -> void:
 	if bridge.KeyCodeForPoll(0, 0, InputRouter.MASK_CANCEL, 0) != 11:
 		failures.append("auto keys should merge into the held bits")
 
+	# 11. OS key repeat is the WOLF cursor repeat: an echoed direction key still steps,
+	# but an echoed decide key must not confirm twice (audit K4).
+	var echo_move := _key(KEY_RIGHT)
+	echo_move.echo = true
+	var moves: Array = []
+	_router.move_pressed.connect(func(dx: int, dy: int) -> void: moves.append(Vector2i(dx, dy)))
+	_router.handle_event(echo_move)
+	if moves.is_empty() or moves[0] != Vector2i(1, 0):
+		failures.append("an echoed direction key should still step the cursor")
+	var echo_ok := _key(KEY_Z)
+	echo_ok.echo = true
+	var confirms: Array = []
+	_router.action_pressed.connect(func() -> void: confirms.append(1))
+	_router.handle_event(echo_ok)
+	if not confirms.is_empty():
+		failures.append("an echoed decide key must not confirm twice")
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

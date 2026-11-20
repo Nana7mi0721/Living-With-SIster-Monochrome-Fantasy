@@ -45,8 +45,14 @@ public partial class RouteTraceTest : Node
         var host = new RouteHost(bridge);
         bridge.Vm.Host = host;
 
-        var session = new GameSession(bridge, view, programsPath,
-            Path.Combine(repo, "reports", "route_unused_save.json"));
+        // Same isolation as M4FullRouteTraceTest: a reports/ save dir accumulates the port's
+        // system save (and its .bak rotation, which SaveCodec falls back to), which changes
+        // the 221 reads the oracle compares against.
+        string routeSaveDir = Path.Combine(Path.GetTempPath(), "lwsmf-route-trace-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(routeSaveDir);
+        var session = new GameSession(bridge, view, programsPath, Path.Combine(routeSaveDir, "unused_save.json"));
+        string routeSystemSavePath = Path.Combine(routeSaveDir, "system.json");
+
         session.ScriptedInput = true;
         session.AutoPickChoice = true;
         bridge.MessageRequested += (text, face) => session.ShowMessage(text, face);
@@ -119,6 +125,8 @@ public partial class RouteTraceTest : Node
             && session.LeaderY == leaderYAtSave
             && (session.MapData?.Id ?? -1) == mapAtSave;
         if (File.Exists(session.SavePath)) File.Delete(session.SavePath);
+        if (File.Exists(routeSystemSavePath)) File.Delete(routeSystemSavePath);
+        try { if (Directory.Exists(routeSaveDir)) Directory.Delete(routeSaveDir, true); } catch (IOException) { }
         if (!saveOk)
         {
             GD.PrintErr($"[RouteTraceTest] FAIL: save/load saved={saved} loaded={loaded} "

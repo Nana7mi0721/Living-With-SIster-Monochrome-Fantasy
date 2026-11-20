@@ -90,6 +90,33 @@ func _ready() -> void:
 		if nine.patch_margin_left != UiSkin.WINDOW_CORNER:
 			failures.append("window nine-patch margin should be %d" % UiSkin.WINDOW_CORNER)
 
+	# 9. Opcode 151 packs R/G/B multipliers as percentages in bits 16/8/0 and tints only
+	#    the screen layers (number < 0); HUD pictures stay neutral (tint.rs blueprint).
+	var backdrop := stage.draw_picture(-2, 0, "SystemFile/Missing.png", "", [])
+	var hud := stage.draw_picture(12100, 0, "SystemFile/Missing.png", "", [])
+	stage.set_screen_tint((200 << 16) | (150 << 8) | 1, 0)
+	if backdrop == null or hud == null:
+		failures.append("tint slots drew no node")
+	else:
+		if not backdrop.modulate.is_equal_approx(Color(2.0, 1.5, 0.01)):
+			failures.append("a screen-layer picture takes the 151 multiplier (got %s)" % str(backdrop.modulate))
+		if not hud.modulate.is_equal_approx(Color.WHITE):
+			failures.append("the 151 tint must not touch HUD pictures (got %s)" % str(hud.modulate))
+
+	# 10. Bit 24 makes the ramp a triangle: it peaks at the colour and returns to where it
+	#     started, so a one-shot 151 leaves the screen as it found it.
+	stage.reset_screen_tint()
+	stage.set_screen_tint(0x01000000 | (200 << 16) | (100 << 8) | 100, 4)
+	stage.tick_screen_tint()
+	stage.tick_screen_tint()
+	if not stage.screen_tint_multiplier().r > 1.9:
+		failures.append("a flash should peak at the colour halfway (got %s)" % str(stage.screen_tint_multiplier()))
+	stage.tick_screen_tint()
+	stage.tick_screen_tint()
+	if not stage.screen_tint_multiplier().is_equal_approx(Color.WHITE):
+		failures.append("a flash returns to its origin (got %s)" % str(stage.screen_tint_multiplier()))
+	stage.reset_screen_tint()
+
 	if failures.is_empty():
 		print("LAYER_ORDER_TEST_OK")
 		get_tree().quit(0)

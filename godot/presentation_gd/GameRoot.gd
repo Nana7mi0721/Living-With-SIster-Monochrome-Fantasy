@@ -240,6 +240,8 @@ func advance_frame() -> void:
 	var queued := str(vm.TakePicturesJson())
 	_consume_picture_queue(queued)
 	stage.tick()
+	stage.tick_screen_tint()
+	_sync_screen_tint()
 	_tick_transition()
 	frames = session.Frames
 	phase = session.Phase
@@ -298,10 +300,10 @@ func _on_action() -> void:
 		return
 	if action_denied:
 		return
-	# Only the keyboard is opcode 123's decision press here; a click already reached the VM
-	# through held_mask()'s one-frame latch (audit K5).
-	if not mouse:
-		session.PressActionKey()
+	# Map interaction needs the click to latch opcode 123's decision press too: the CE251
+	# day-menu row only arms on it (CE253 day-3 regression), while the choice branch above
+	# already returned, so the empty-click guard stays unaffected.
+	session.PressActionKey()
 
 
 func _on_cancel() -> void:
@@ -574,14 +576,23 @@ func _on_end_game() -> void:
 	get_tree().quit()
 
 
-## Opcode 151: palette-index screen tint. Reuses the black overlay as a one-shot ramp so
-## a mismatch can never leave the whole screen black; unknown indices are reported, not
-## guessed against a WOLF colour table we do not have (audit D4).
+## Opcode 151 changes the screen colour. The operand is a DirectDraw COLORREF
+## (0x00BBGGRR), so the channels decode without the engine palette: 0x0196C896 is amber,
+## 0x00646464 is grey. The engine's own palette blend is not in the data, so the port
+## approximates it with a multiplicative tint over the presentation tree (audit D4).
+## Colour 0 is the black ramp the transition opcodes already use.
 func _on_color_change(color: int, frames: int) -> void:
-	if color != 0:
-		status("color change color=%d frames=%d (palette unmapped)" % [color, frames])
+	if color == 0:
+		_on_transition(0, maxi(1, frames))
 		return
-	_on_transition(0, maxi(1, frames))
+	stage.set_screen_tint(color, frames)
+	_sync_screen_tint()
+
+
+## Opcode 151 tints the map and the screen-layer pictures; HUD pictures stay neutral
+## (tint.rs: "picture 0 and above" is HUD).
+func _sync_screen_tint() -> void:
+	map_view.modulate = stage.screen_tint_multiplier()
 
 
 # ---- session view callbacks (W3 Day4) -----------------------------------
@@ -1027,6 +1038,7 @@ func restart_title() -> bool:
 	message.close()
 	choice.close()
 	session.SetTitleMenuVisible(false)
+	stage.reset_screen_tint()
 	stage.clear_pictures()
 	audio.reset()
 	map_view.visible = false

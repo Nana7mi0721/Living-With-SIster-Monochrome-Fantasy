@@ -9,6 +9,10 @@ set -euo pipefail
 GODOT="${GODOT:-/e/Study/tools/godot-4.7.2-mono/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe}"
 IMO="$(cd "$(dirname "$0")/.." && pwd)"
 DOTNET="${DOTNET:-/e/Study/tools/dotnet8/dotnet}"
+# Isolate the gate from the player profile: 220/221/222 persist system data beside the save
+# slot, and a previous run's file would change the first-run route branches (Ce253 day 3).
+# GameSessionController.DefaultSavePath honours LWsmf_SAVE_DIR.
+export LWsmf_SAVE_DIR="${LWsmf_SAVE_DIR:-$(mktemp -d)}"
 export DOTNET_ROOT="${DOTNET_ROOT:-E:/Study/tools/dotnet8}"
 export PATH="/e/Study/tools/dotnet8:$PATH"
 

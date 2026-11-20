@@ -63,8 +63,14 @@ public partial class M4FullRouteTraceTest : Node
 
         _host = new M4RouteHost(_bridge);
         _bridge.Vm.Host = _host;
-        _session = new GameSession(_bridge, _view, _programsPath,
-            Path.Combine(repo, "reports", "m4_full_route_unused_save.json"));
+        // Keep the trace session's save files out of reports/: the port stores the script
+        // operand "save/system.sav" beside the session save, and a stale rotation from an
+        // earlier gate run would make the first 221 leg read old play time (ROUTE_DIFF 39/...).
+        string saveDir = Path.Combine(Path.GetTempPath(), "lwsmf-m4-route-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(saveDir);
+        _session = new GameSession(_bridge, _view, _programsPath, Path.Combine(saveDir, "unused_save.json"));
+        string systemSavePath = Path.Combine(saveDir, "system.json");
+
         _session.ScriptedInput = true;
         _session.AutoPickChoice = true;
         _bridge.MessageRequested += (text, face) => _session.ShowMessage(text, face);
@@ -139,6 +145,8 @@ public partial class M4FullRouteTraceTest : Node
             && _session.LeaderY == leaderYAtSave
             && (_session.MapData?.Id ?? -1) == mapAtSave;
         if (File.Exists(_session.SavePath)) File.Delete(_session.SavePath);
+        if (File.Exists(systemSavePath)) File.Delete(systemSavePath);
+        try { if (Directory.Exists(saveDir)) Directory.Delete(saveDir, true); } catch (IOException) { }
         if (!saveOk)
             Fail($"save/load saved={saved} loaded={loaded} frames={_session.Frames}/{framesAtSave} "
                 + $"leader={_session.LeaderX},{_session.LeaderY}/{leaderXAtSave},{leaderYAtSave}");

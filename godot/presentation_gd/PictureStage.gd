@@ -86,6 +86,85 @@ func band_order() -> Array:
 	return BAND_ORDER.duplicate()
 
 
+# ---- opcode 151 screen tint (mirrors crates/wolf-game/src/tint.rs) ----------
+# The operand packs R/G/B multipliers in bits 16/8/0 as percentages (100 = neutral),
+# bit 24 is the flash flag: the ramp goes out to the colour and straight back, so a
+# one-shot 151 leaves the screen as it found it. Only screen-layer pictures (number < 0)
+# and the map take the multiplier; HUD pictures (0 and above) never do.
+var screen_tint := Color(1, 1, 1)
+var _tint_from := Color(1, 1, 1)
+var _tint_to := Color(1, 1, 1)
+var _tint_elapsed := 0
+var _tint_duration := 0
+var _tint_flash := false
+
+
+func set_screen_tint(packed: int, frames: int) -> void:
+	_tint_from = _tint_now()
+	_tint_to = packed_multiplier(packed)
+	_tint_flash = (packed & 0x01000000) != 0
+	_tint_duration = maxi(frames, 0)
+	_tint_elapsed = 0
+	_apply_screen_tint()
+
+
+func tick_screen_tint() -> void:
+	if _tint_elapsed < _tint_duration:
+		_tint_elapsed += 1
+	_apply_screen_tint()
+
+
+func reset_screen_tint() -> void:
+	_tint_from = Color(1, 1, 1)
+	_tint_to = Color(1, 1, 1)
+	_tint_elapsed = 0
+	_tint_duration = 0
+	_tint_flash = false
+	_apply_screen_tint()
+
+
+func screen_tint_multiplier() -> Color:
+	return _tint_now()
+
+
+func _tint_now() -> Color:
+	if _tint_duration == 0 or _tint_elapsed >= _tint_duration:
+		return _tint_from if _tint_flash else _tint_to
+	var t := float(_tint_elapsed) / float(_tint_duration)
+	var f := t if not _tint_flash else (t * 2.0 if t < 0.5 else (1.0 - t) * 2.0)
+	return _tint_from.lerp(_tint_to, clampf(f, 0.0, 1.0))
+
+
+static func packed_multiplier(packed: int) -> Color:
+	return Color(
+		float((packed >> 16) & 0xFF) / 100.0,
+		float((packed >> 8) & 0xFF) / 100.0,
+		float(packed & 0xFF) / 100.0)
+
+
+func _apply_screen_tint() -> void:
+	screen_tint = _tint_now()
+	var band := layer(LAYER_SCENE_PICTURE)
+	if band == null:
+		return
+	for child in band.get_children():
+		var node := child as Control
+		if node == null:
+			continue
+		if picture_number(node) >= 0:
+			continue
+		node.modulate = screen_tint
+
+
+## Slot number encoded in the node name built by _build_picture ("Pic%d").
+static func picture_number(node: Node) -> int:
+	var label := str(node.name)
+	if label.begins_with("Pic"):
+		return label.substr(3).to_int()
+	return 0
+
+
+
 func draw_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int = 0, kind: int = -1, animate: Array = [], flags: Dictionary = {}) -> Control:
 	if action == 2:
 		_start_erase(number, args, flags)
@@ -423,6 +502,8 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 	var holder := Control.new()
 	holder.name = "Pic%d" % number
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if number < 0:
+		holder.modulate = screen_tint
 
 	var is_window := kind == 3 or kind == 4
 	var texture: Texture2D = null

@@ -97,7 +97,9 @@ func handle_event(event: InputEvent) -> bool:
 				return false
 		return true
 
-	if event is InputEventKey and event.pressed and not event.echo:
+	# Audit K4: the OS repeat is the WOLF cursor repeat, so an echoed direction key still
+	# steps; an echoed decide/cancel key must not confirm twice, hence the filter there.
+	if event is InputEventKey and event.pressed and (not event.echo or _is_direction(event.keycode)):
 		last_input_source = "keyboard"
 		key_event.emit(event.keycode, true)
 		if event.keycode in ACTION_KEYS:
@@ -121,6 +123,10 @@ func handle_event(event: InputEvent) -> bool:
 				return true
 		return false
 	return false
+
+
+static func _is_direction(keycode: int) -> bool:
+	return keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_W, KEY_A, KEY_S, KEY_D]
 
 
 ## Bit mask of the keys held right now, for opcode 123 (KeyCodes layout).

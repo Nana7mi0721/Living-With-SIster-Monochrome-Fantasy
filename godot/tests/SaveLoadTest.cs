@@ -385,6 +385,51 @@ public partial class SaveLoadTest : Node
         probe.Instances.Add(new SavedInstance { Id = 2, ParentId = 9, EventId = 1, Kind = "ce", Pc = 0 });
         Check(SaveCodec.FromJson(SaveCodec.ToJson(probe)) == null, "orphan parent id must be rejected");
 
+        // D1: opcodes 220/221/222 reach the session that owns the slot files. Before this
+        // the host answered null, so the retail title's system-data probes all read 0.
+        string sysPath = Path.Combine(saveDir, "System.json");
+        if (File.Exists(sysPath)) File.Delete(sysPath);
+        Check(session.HandleSaveLoad(new SaveOp
+        {
+            Opcode = 221,
+            File = new SaveTarget("Save/System.sav"),
+            Address = 2_000_300,
+        }) == 0, "221 on a missing tier must answer 0");
+        Check(session.HandleSaveLoad(new SaveOp
+        {
+            Opcode = 222,
+            File = new SaveTarget("Save/System.sav"),
+            Address = 2_000_300,
+            Value = 7,
+        }) == null, "222 must write without a VM result");
+        Check(File.Exists(sysPath), "a path operand must map beside slot 01 (" + sysPath + ")");
+        Check(session.HandleSaveLoad(new SaveOp
+        {
+            Opcode = 221,
+            File = new SaveTarget("Save/System.sav"),
+            Address = 2_000_300,
+        }) == 7, "221 must read back what 222 wrote");
+
+        // 220 with a path operand is the retail system-data file: banks only, no map and
+        // no coroutine state, and the load is deferred to the frame boundary.
+        vars.Set(300, 41);
+        Check(session.HandleSaveLoad(new SaveOp
+        {
+            Opcode = 220,
+            Mode = 0,
+            File = new SaveTarget("Save/System.sav"),
+        }) == null, "220 save of system data must answer null");
+        vars.Set(300, 0);
+        Check(session.HandleSaveLoad(new SaveOp
+        {
+            Opcode = 220,
+            Mode = 1,
+            File = new SaveTarget("Save/System.sav"),
+        }) == null, "220 load of system data must defer to the frame boundary");
+        session.AdvanceFrame();
+        Check(vars.Get(300) == 41, "220 system load must restore the normal bank (got " + vars.Get(300) + ")");
+        Check(session.Phase == "bedroom", "220 system load must not leave the live map (" + session.Phase + ")");
+
         // Strict gate: the whole title -> new game -> load chain must not meet an
         // unimplemented opcode; either it threw already or this counter caught it.
         Check(!vm.Vm.Faulted, "save-load chain must not fault the VM (" + vm.Vm.FaultReason + ")");

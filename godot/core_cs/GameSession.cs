@@ -40,6 +40,8 @@ public interface IVmSession
     DbValue? Database(DbOp op);
     /// <summary>Apply the 250 retail database overlay cells captured by the importer.</summary>
     void ApplySavedCells(IReadOnlyList<LegacySaveImporter.DatabaseCell> cells);
+    /// <summary>220/221/222 hook: the session owns the slot files, the VM only asks.</summary>
+    Func<SaveOp, int?>? SaveLoadHandler { get; set; }
 }
 
 /// <summary>
@@ -89,6 +91,10 @@ public sealed class GameSession
     private bool _hasChoices;
     private bool _pendingLoad;
     private bool _started;
+    // 220 full loads cannot run inside a coroutine, so they are queued for the frame
+    // boundary the same way teleports are (crates/wolf-game/src/game.rs save_requests).
+    private string? _pendingGameLoad;
+    private readonly Queue<string> _pendingSystemLoads = new();
 
     public GameSession(IVmSession vm, IGameSessionView view, string dataPath, string savePath)
     {
@@ -96,6 +102,8 @@ public sealed class GameSession
         _view = view;
         _dataPath = dataPath;
         _savePath = savePath;
+        // 220/221/222 must reach the session that owns the slot files (audit D1).
+        _vm.SaveLoadHandler = HandleSaveLoad;
     }
 
     public string DataPath => _dataPath;
@@ -263,6 +271,13 @@ public sealed class GameSession
     private void ApplyPending()
     {
         while (_teleports.Count > 0) ApplyTeleport(_teleports.Dequeue());
+        while (_pendingSystemLoads.Count > 0) LoadSystemData(_pendingSystemLoads.Dequeue());
+        if (_pendingGameLoad != null)
+        {
+            string path = _pendingGameLoad;
+            _pendingGameLoad = null;
+            LoadGameFrom(path);
+        }
         if (_pendingLoad)
         {
             _pendingLoad = false;
@@ -495,7 +510,10 @@ public sealed class GameSession
         return state;
     }
 
-    public bool SaveGame()
+    public bool SaveGame() => SaveGameTo(_savePath);
+
+    /// <summary>Write one full slot to an explicit file (opcode 220 with a numeric slot).</summary>
+    public bool SaveGameTo(string path)
     {
         if (Phase != "bedroom" || _map == null || _mapRuntime == null)
         {
@@ -515,7 +533,7 @@ public sealed class GameSession
 
         try
         {
-            SaveCodec.Write(_savePath, state);
+            SaveCodec.Write(path, state);
         }
         catch (IOException ex)
         {
@@ -534,10 +552,13 @@ public sealed class GameSession
     /// A missing or unreadable slot (and a slot whose map left programs.json) leaves the
     /// live bedroom untouched; a late fault is rolled back to the pre-load snapshot.
     /// </summary>
-    public bool LoadGame()
+    public bool LoadGame() => LoadGameFrom(_savePath);
+
+    /// <summary>Load one full slot from an explicit file, same gates as slot 01.</summary>
+    public bool LoadGameFrom(string path)
     {
         LoadedFrom = SaveSlotSource.None;
-        SaveReadResult read = SaveCodec.ReadWithSource(_savePath);
+        SaveReadResult read = SaveCodec.ReadWithSource(path);
         SaveState? state = read.State;
         if (state == null)
         {
@@ -571,6 +592,180 @@ public sealed class GameSession
         _view.SetStatus($"loaded slot 01 from {SaveCodec.SourceName(read.Source)} (map {state.MapId} {state.LeaderX},{state.LeaderY})");
         UpdateMapHud(false);
         return true;
+    }
+
+    // ---- script save/load (opcodes 220/221/222, audit D1) ----------------
+
+    /// <summary>
+    /// Map a 220/221/222 file operand onto this port's slots. A numeric slot is one-based
+    /// (WOLF names them SaveDataNN); an explicit path keeps only its file name and lives
+    /// beside slot 01, so a retail "Save/System.sav" can never write outside the user dir.
+    /// </summary>
+    private string ResolveSaveTarget(SaveTarget file)
+    {
+        string dir = Path.GetDirectoryName(_savePath) ?? ".";
+        if (file.IsPath)
+        {
+            string name = Path.GetFileName(file.Path);
+            if (name.Length == 0) name = "System.sav";
+            return Path.Combine(dir, Path.ChangeExtension(name, ".json"));
+        }
+        int slot = file.Slot <= 1 ? 1 : file.Slot;
+        return Path.Combine(dir, $"save_{slot:00}.json");
+    }
+
+    /// <summary>220/221/222 entry point. Null means the VM has nothing to store back.</summary>
+    public int? HandleSaveLoad(SaveOp op)
+    {
+        string path = ResolveSaveTarget(op.File);
+        switch (op.Opcode)
+        {
+            case 220:
+                // A path target is the retail system data (banks only); a slot target is a
+                // whole game save. Full loads are queued for the frame boundary.
+                if (op.File.IsPath)
+                {
+                    if (op.Mode == 1) _pendingSystemLoads.Enqueue(path);
+                    else SaveSystemData(path);
+                }
+                else if (op.Mode == 1)
+                {
+                    _pendingGameLoad = path;
+                }
+                else
+                {
+                    SaveGameTo(path);
+                }
+                return null;
+            case 221:
+            {
+                SaveState? state = SaveCodec.Read(path);
+                // A missing tier is the normal "no data here" answer for the existence probes.
+                return state == null ? 0 : ReadSaveAddress(state, op, path);
+            }
+            case 222:
+            {
+                SaveState state = SaveCodec.Read(path) ?? new SaveState();
+                if (WriteSaveAddress(state, op)) SaveCodec.Write(path, state);
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Write the retail system-data file: variable banks only, no map state.</summary>
+    private SaveState BuildSystemState()
+    {
+        var state = new SaveState
+        {
+            SavedAt = DateTime.UtcNow.ToString("o"),
+            PlayFrames = Frames,
+            Vars = _vm.Vm.Vars.SnapshotNums(),
+            StrVars = _vm.Vm.Vars.SnapshotStrings(),
+            SysVars = _vm.Vm.Vars.SnapshotSysNums(),
+            SysStrVars = _vm.Vm.Vars.SnapshotSysStrings(),
+        };
+        foreach (var bank in _vm.Vm.CommonSelf) state.CommonSelf.Add(SavedSelf(bank.Key, bank.Value));
+        return state;
+    }
+
+    private void SaveSystemData(string path)
+    {
+        try
+        {
+            SaveCodec.Write(path, BuildSystemState());
+        }
+        catch (IOException ex)
+        {
+            _view.SetStatus("system save failed: " + ex.Message);
+        }
+    }
+
+    /// <summary>Restore a system-data file: banks only, the live map stays where it is.</summary>
+    private void LoadSystemData(string path)
+    {
+        SaveState? state = SaveCodec.Read(path);
+        if (state == null)
+        {
+            _view.SetStatus("system load: no system data at " + Path.GetFileName(path));
+            return;
+        }
+        _vm.Vm.Vars.Restore(state.Vars, state.StrVars, state.SysVars, state.SysStrVars);
+        _view.SetStatus("system load: restored " + Path.GetFileName(path));
+    }
+
+    /// <summary>Read a 221 address: normal, self and system banks share the VM's magic ids.</summary>
+    private int ReadSaveAddress(SaveState state, SaveOp op, string path)
+    {
+        int address = op.Address;
+        if (address is >= 2_000_000 and <= 2_999_999)
+        {
+            int index = address - 2_000_000;
+            return index < state.Vars.Count ? state.Vars[index] : 0;
+        }
+        if (address is >= 1_600_000 and <= 1_699_999)
+        {
+            EventSelfVars? bank = FindSelfBank(state, op.Owner);
+            if (bank == null) return 0;
+            int index = address - 1_600_000;
+            if (bank.NumMap != null && bank.NumMap.TryGetValue(index, out int value)) return value;
+            return index < bank.Nums.Length ? bank.Nums[index] : 0;
+        }
+        if (address is >= 9_000_000 and <= 9_099_999)
+        {
+            int index = address - 9_000_000;
+            if (index == 24) return SaveCodec.Exists(path) ? 1 : 0;
+            if (index == 29) return (int)(state.PlayFrames / 60);
+            if (index <= 12) return index < state.SysVars.Count ? state.SysVars[index] : 0;
+        }
+        return 0;
+    }
+
+    /// <summary>Write one 222 value; false means the address is outside every bank.</summary>
+    private static bool WriteSaveAddress(SaveState state, SaveOp op)
+    {
+        int address = op.Address;
+        if (address is >= 2_000_000 and <= 2_999_999)
+        {
+            int index = address - 2_000_000;
+            if (index >= Variables.MaxSlots) return false;
+            while (state.Vars.Count <= index) state.Vars.Add(0);
+            state.Vars[index] = op.Value;
+            return true;
+        }
+        if (address is >= 1_600_000 and <= 1_699_999)
+        {
+            EventSelfVars? bank = FindSelfBank(state, op.Owner);
+            if (bank == null)
+            {
+                bank = new EventSelfVars { Id = op.Owner, NumMap = new Dictionary<int, int>() };
+                state.SelfVars.Add(bank);
+            }
+            bank.NumMap ??= new Dictionary<int, int>();
+            bank.NumMap[address - 1_600_000] = op.Value;
+            return true;
+        }
+        if (address is >= 9_000_000 and <= 9_099_999)
+        {
+            int index = address - 9_000_000;
+            if (index == 29)
+            {
+                state.PlayFrames = Math.Max(0, op.Value) * 60L;
+                return true;
+            }
+            if (index > 12) return false;
+            while (state.SysVars.Count <= index) state.SysVars.Add(0);
+            state.SysVars[index] = op.Value;
+            return true;
+        }
+        return false;
+    }
+
+    private static EventSelfVars? FindSelfBank(SaveState state, int owner)
+    {
+        foreach (var bank in state.SelfVars) if (bank.Id == owner) return bank;
+        foreach (var bank in state.CommonSelf) if (bank.Id == owner) return bank;
+        return null;
     }
 
     /// <summary>Apply a slot that already passed the codec gates and the map-file check.</summary>

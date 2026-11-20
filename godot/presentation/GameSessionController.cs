@@ -116,7 +116,21 @@ public partial class GameSessionController : Node
     private static string DefaultDataPath() => Path.Combine(AppPaths.GameDataDir(), "programs.json");
 
     // ProjectSettings owns the user:// mapping; the core session layer writes plain OS paths.
-    private static string DefaultSavePath() => ProjectSettings.GlobalizePath("user://save_01.json");
+    // Tests point LWsmf_SAVE_DIR at a scratch dir: opcodes 220/221/222 persist system data,
+    // and a previous run's file would otherwise flip the first-run route branches.
+    private static string DefaultSavePath()
+    {
+        string? scratch = System.Environment.GetEnvironmentVariable("LWsmf_SAVE_DIR");
+        if (!string.IsNullOrWhiteSpace(scratch))
+        {
+            // One directory per test process: a shared scratch would carry system data from
+            // the previous gate step into the next, the same leak this isolates against.
+            string dir = Path.Combine(scratch, "run-" + System.Environment.ProcessId);
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, "save_01.json");
+        }
+        return ProjectSettings.GlobalizePath("user://save_01.json");
+    }
 
     /// <summary>View bridge: every core callback becomes one named call on the GDScript root.</summary>
     private sealed class CallableView : IGameSessionView
