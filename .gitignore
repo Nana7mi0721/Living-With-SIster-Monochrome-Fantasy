@@ -1,31 +1,13 @@
-/target
+# ====================================================================
+# .gitignore - Living With Sister Monochrome Fantasy Remake
+# ====================================================================
+
+# Build & Compilation Targets (Rust)
+/target/
 **/*.rs.bk
 *.pdb
-*.exe
-/work/
-/release/
-/.recon/
-/_wolfref/
-/_tmp_*.py
-/ce.txt
-/tools/bin/
-/tools/cmake/
-/tools/ffmpeg/
-/tools/rustup-init.exe
-/tools/smoke/target/
-/tools/wgpusmoke/target/
-/docs/gpt调研/
-/.claude/
-/game_data/
-__pycache__/
-*.pyc
-# Local captures, reference assets and scratch dumps (not shipped)
-/reports/
-/tmp_dump_*.py
-/*.CT
-/docs/攻略/
-/docs/攻略文档/
-/游戏示例图片/
+
+# Build & Compilation Targets (.NET / C# / Godot)
 /godot/.godot/
 /godot/.mono/
 /godot/bin/
@@ -33,3 +15,49 @@ __pycache__/
 /godot/build/
 /dist/
 *.csproj.user
+*.exe
+*.dll
+
+# Python Caches & Temporary Scripts
+__pycache__/
+*.pyc
+/_tmp_*.py
+/tmp_dump_*.py
+
+# Commercial Assets & Game Data Isolation (Protected)
+/work/
+/release/
+/.recon/
+/_wolfref/
+/game_data/
+/ce.txt
+/*.CT
+/docs/gpt调研/
+/docs/攻略/
+/docs/攻略文档/
+/游戏示例图片/
+
+# Testing Logs & Execution Artifacts
+/reports/
+/tools/smoke/target/
+/tools/wgpusmoke/target/
+
+# Local Tools & Binaries
+/tools/bin/
+/tools/cmake/
+/tools/ffmpeg/
+/tools/rustup-init.exe
+
+# IDE & Editor Metadata
+.vs/
+.idea/
+.vscode/
+.claude/
+.gemini/
+*.suo
+*.user
+
+# OS Metadata
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store

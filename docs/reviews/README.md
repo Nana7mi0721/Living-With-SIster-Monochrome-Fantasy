@@ -1,0 +1,36 @@
+# 代码审查与缺陷台账索引（docs/reviews/）
+
+本目录收归工程演进过程中各阶段的系统性代码审查（Code Review）、跨仓库审计（Cross-repo Audit）以及缺陷排查与修复报告。
+
+---
+
+## 1. 现行缺陷排查与审查报告
+
+| 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
+| :--- | :---: | :--- | :--- |
+| [bug_inspection_report_2026_11_20.md](bug_inspection_report_2026_11_20.md) | 2026-11-20 | **右键点击失效、游戏素材缺失、文本解析内部代号泄露** | 定位 InputRouter 掩码与锁存缺陷、media.pak 错用前作素材导致 97.4% 缺失、ChoiceWindow 裸绘与 TextExpander 补 0 等 8 项文本缺陷 |
+| [bug_fix_and_gate_opt_2026_11_20.md](bug_fix_and_gate_opt_2026_11_20.md) | 2026-11-20 | **输入/文本/VM 修复、Oracle 同步与门禁并行加速** | 修复 GameRoot 鼠标拦截、Opcode 122/140 与会话残留状态，重生成 3 份 Oracle 夹具并通过 8 并发门禁优化将全量门禁缩短至 251s（`GODOT_GATE_OK`） |
+
+---
+
+## 2. 里程碑阶段性代码审查报告
+
+| 文档 | 对应里程碑/轮次 | 主题与核心审查内容 |
+| :--- | :---: | :--- |
+| [m5_round12_review_2026_11_19.md](m5_round12_review_2026_11_19.md) | M5 · Round 12 | 发布前夕全景审查、转换引导与运行时收口验证 |
+| [m4_round11_review_2026_11_18.md](m4_round11_review_2026_11_18.md) | M4 · Round 11 | 对齐 Oracle、长程 Soak 稳定性与主循环回归 |
+| [m2w4_round5_repo_review_2026_11_15.md](m2w4_round5_repo_review_2026_11_15.md) | M2W4 · Round 5 | 仓库级代码整洁度、跨模块依赖与资产清单审计 |
+| [m2w4_round4_review_2026_11_15.md](m2w4_round4_review_2026_11_15.md) | M2W4 · Round 4 | 状态机流转、事件调度与变量库无损往返深度比对 |
+| [m2w2_round3_review_2026_11_14.md](m2w2_round3_review_2026_11_14.md) | M2W2 · Round 3 | 日常日程闭环、NPC 移动交互与地图切换 |
+| [m1_auditfix_round2_review_2026_11_14.md](m1_auditfix_round2_review_2026_11_14.md) | M1 · Round 2 | M1 启动切片缺陷修复专项回归 |
+| [m1_audit_and_m2_plan_2026_11_14.md](m1_audit_and_m2_plan_2026_11_14.md) | M1 / M2 | M1 阶段收口审计与 M2 推进规划 |
+
+---
+
+## 3. 跨仓库对照与体验审计
+
+| 文档 | 对照标的 | 核心内容 |
+| :--- | :---: | :--- |
+| [imoto_life_title_and_layout_audit_report.md](imoto_life_title_and_layout_audit_report.md) | 姊妹作《妹！生活》 | 标题界面、窗口布局、字体排版像素对齐审计 |
+| [imoto_life_cross_repo_audit_checklist.md](imoto_life_cross_repo_audit_checklist.md) | 跨工程协同 | 核心架构、字节码解析器、输入层设计清单对比 |
+| [imoto_life_c553d04_review_and_roadmap.md](imoto_life_c553d04_review_and_roadmap.md) | 提交 c553d04 对齐 | 跨项目路线图对齐与设计借鉴 |

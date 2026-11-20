@@ -1,0 +1,37 @@
+# Set default behavior to automatically normalize line endings
+* text=auto eol=lf
+
+# Explicit text files that must retain LF line endings
+*.sh text eol=lf
+*.bash text eol=lf
+*.cs text eol=lf
+*.gd text eol=lf
+*.rs text eol=lf
+*.py text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.tsv text eol=lf
+*.md text eol=lf
+*.tscn text eol=lf
+*.godot text eol=lf
+*.csproj text eol=lf
+*.sln text eol=lf
+
+# Windows-specific files
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary file types
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.pck binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.zip binary
+*.exe binary
+*.CT binary
+*.pdf binary
