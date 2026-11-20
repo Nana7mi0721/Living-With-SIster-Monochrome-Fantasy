@@ -1158,12 +1158,16 @@ func _start_erase_one(number: int, args: Array) -> void:
 		_free_picture(number)
 		_cmds.erase(number)
 		return
+	var state: Dictionary = _states.get(number, {})
+	if bool(state.get("hidden", false)):
+		_free_picture(number)
+		_cmds.erase(number)
+		return
 	var fade := clampi(_arg(args, 0, 0), 0, FADE_MAX)
 	if fade <= 0:
 		_free_picture(number)
 		_cmds.erase(number)
 		return
-	var state: Dictionary = _states.get(number, {})
 	if state.is_empty():
 		var cmd: Dictionary = _cmds.get(number, {})
 		state = _new_state(cmd.get("args", []), int(cmd.get("anchor", 0)), _base_sizes.get(number, Vector2.ZERO))
@@ -1223,8 +1227,10 @@ func tick() -> void:
 ## A static slot does not need a transform pass every frame. Only slots with a live tween
 ## or 290 effect are advanced and re-rendered.
 func _state_animating(state: Dictionary) -> bool:
-	if state.is_empty() or bool(state.get("hidden", false)):
+	if state.is_empty():
 		return false
+	if bool(state.get("hidden", false)):
+		return bool(state.get("erase_after", false)) and state.get("transition", null) != null
 	if int(state.get("fade", 0)) > 0:
 		return true
 	for key in ["transition", "shake", "zoom", "breath", "pattern"]:

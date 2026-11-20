@@ -409,6 +409,12 @@ public partial class SaveLoadTest : Node
             File = new SaveTarget("Save/System.sav"),
             Address = 2_000_300,
         }) == 7, "221 must read back what 222 wrote");
+        Check(session.HandleSaveLoad(new SaveOp
+        {
+            Opcode = 221,
+            File = new SaveTarget("save/system.sav"),
+            Address = 2_000_300,
+        }) == 7, "221 must resolve save/system.sav case-insensitively to System.json");
 
         // 220 with a path operand is the retail system-data file: banks only, no map and
         // no coroutine state, and the load is deferred to the frame boundary.

@@ -51,6 +51,27 @@ const TEXT_COLORS: Array[Color] = [
 
 static var _font: Font = null
 static var _bold_font: Font = null
+static var _strict_font_override: int = -1
+
+
+## Strict retail font mode: when enabled (or LWsmf_STRICT_FONT=1), skip the OS/CJK
+## fallback chain once Data/Lolita.ttf loads, so out-of-corpus glyphs behave like DxLib.
+static func is_strict_font_mode() -> bool:
+	if _strict_font_override >= 0:
+		return _strict_font_override == 1
+	return OS.get_environment("LWsmf_STRICT_FONT") == "1"
+
+
+static func set_strict_font_mode(enabled: bool) -> void:
+	_strict_font_override = 1 if enabled else 0
+	_font = null
+	_bold_font = null
+
+
+static func clear_strict_font_mode_override() -> void:
+	_strict_font_override = -1
+	_font = null
+	_bold_font = null
 
 
 static func _find_retail_font_path() -> String:
@@ -77,20 +98,21 @@ static func _make_system_font(bold: bool) -> SystemFont:
 
 
 static func _build_font(bold: bool) -> Font:
-	var fallback := _make_system_font(bold)
+	var strict := is_strict_font_mode()
 	var ttf_path := _find_retail_font_path()
 	if not ttf_path.is_empty():
 		var ff := FontFile.new()
 		if ff.load_dynamic_font(ttf_path) == OK:
 			ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
-			ff.fallbacks = [fallback]
+			ff.allow_system_fallback = not strict
+			ff.fallbacks = [] if strict else [_make_system_font(bold)]
 			if bold:
 				var fv := FontVariation.new()
 				fv.base_font = ff
 				fv.variation_embolden = 0.22
 				return fv
 			return ff
-	return fallback
+	return _make_system_font(bold)
 
 
 ## One shared retail/system font chain.

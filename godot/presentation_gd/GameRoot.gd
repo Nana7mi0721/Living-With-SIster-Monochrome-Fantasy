@@ -419,11 +419,6 @@ func _on_choice_chosen(index: int) -> void:
 		session.SelectTitleChoice(index)
 	else:
 		session.PickChoice(index)
-	# CE42 answers the load row by waiting on osave load; with no slot it would wedge on
-	# opcode 102 with the window already closed, so reopen the same menu on that row (D6).
-	if phase == "title" and index == 1 and not session.HasSave and not _title_menu_options.is_empty():
-		choice.open(_title_menu_options, _choice_position(), true, 1)
-		_attach_title_menu()
 
 
 # ---- host callbacks ------------------------------------------------------

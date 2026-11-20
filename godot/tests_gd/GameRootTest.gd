@@ -368,6 +368,75 @@ func _ready() -> void:
 			if scene_root.vm.EngineStateBridge(7) != 0 or scene_root.vm.EngineStateBridge(8) != 0:
 				failures.append("one-frame LMB/RMB latches did not clear on the next frame (got %d/%d)" % [scene_root.vm.EngineStateBridge(7), scene_root.vm.EngineStateBridge(8)])
 			scene_root.queue_free()
+
+	# Strict glyph mode check: when Data/Lolita.ttf is present, strict mode drops OS fallback.
+	UiSkin.set_strict_font_mode(false)
+	var f_normal: Font = UiSkin.font()
+	UiSkin.set_strict_font_mode(true)
+	var f_strict: Font = UiSkin.font()
+	if f_normal is FontFile and f_strict is FontFile:
+		if (f_strict as FontFile).fallbacks.size() != 0 or (f_strict as FontFile).allow_system_fallback:
+			failures.append("UiSkin strict font mode must drop system fallback on Data/Lolita.ttf")
+	UiSkin.clear_strict_font_mode_override()
+
+	# Title Continue -> Save/Load wheel must not switch title menu -> cancel returns to live title.
+	var title_root = load("res://presentation_gd/GameRoot.gd").new()
+	add_child(title_root)
+	for i in range(400):
+		title_root._process(title_root.STEP)
+		if title_root.choice.is_open:
+			break
+		if i > 10 and i % 10 == 0:
+			var l_down := InputEventMouseButton.new()
+			l_down.button_index = MOUSE_BUTTON_LEFT
+			l_down.pressed = true
+			l_down.position = Vector2(512, 520)
+			title_root.router.handle_event(l_down)
+			title_root._process(title_root.STEP)
+			var l_up := InputEventMouseButton.new()
+			l_up.button_index = MOUSE_BUTTON_LEFT
+			l_up.pressed = false
+			l_up.position = Vector2(512, 520)
+			title_root.router.handle_event(l_up)
+	for _i in range(4):
+		title_root._process(title_root.STEP)
+	if not title_root.choice.is_open:
+		failures.append("title_root failed to reach title choice menu")
+	else:
+		title_root.choice.selected = 1
+		title_root.choice.confirm()
+		for _i in range(20):
+			title_root._process(title_root.STEP)
+		if title_root.choice.is_open:
+			failures.append("title choice window must stay closed inside CE131 Save/Load screen")
+		var before_f3 := str(title_root.stage._cmds.get(3, {}).get("file", ""))
+		var w_down := InputEventMouseButton.new()
+		w_down.button_index = MOUSE_BUTTON_WHEEL_DOWN
+		w_down.pressed = true
+		w_down.position = Vector2(512, 288)
+		title_root.router.handle_event(w_down)
+		for _i in range(5):
+			title_root._process(title_root.STEP)
+		if str(title_root.stage._cmds.get(3, {}).get("file", "")) != before_f3 or title_root.choice.is_open:
+			failures.append("mouse wheel inside Save/Load UI must not switch title menu options")
+		var r_down := InputEventMouseButton.new()
+		r_down.button_index = MOUSE_BUTTON_RIGHT
+		r_down.pressed = true
+		r_down.position = Vector2(512, 288)
+		title_root.router.handle_event(r_down)
+		for _i in range(6):
+			title_root._process(title_root.STEP)
+		var r_up := InputEventMouseButton.new()
+		r_up.button_index = MOUSE_BUTTON_RIGHT
+		r_up.pressed = false
+		r_up.position = Vector2(512, 288)
+		title_root.router.handle_event(r_up)
+		for _i in range(30):
+			title_root._process(title_root.STEP)
+		if not title_root.choice.is_open or title_root.stage.picture_rect(12000).size.x > 0.0:
+			failures.append("canceling Save/Load UI must return to an interactive title menu (choice_open=%s slot12000=%s)" % [str(title_root.choice.is_open), str(title_root.stage.picture_rect(12000))])
+	title_root.queue_free()
+
 	if failures.is_empty():
 		print("GAME_ROOT_TEST_OK")
 		get_tree().quit(0)

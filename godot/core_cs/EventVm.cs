@@ -113,6 +113,7 @@ public sealed class EventVm
         return code;
     }
     private int _nextInstanceId = 1;
+    public bool EndGameRequested { get; private set; }
     private readonly Dictionary<string, int> _titleToId = new(StringComparer.Ordinal);
     private readonly HashSet<int> _freshInstanceIds = new();
 
@@ -1349,6 +1350,7 @@ public sealed class EventVm
                     inst.Pc = prog.Len;
                     return Signal.ReturnToTitle;
                 case 175:
+                    EndGameRequested = true;
                     Host.EndGame();
                     Instances.Clear();
                     return Signal.EndGame;
@@ -1571,6 +1573,7 @@ public sealed class EventVm
     /// <summary>Drop every coroutine (map switch / teleport).</summary>
     public void StopAll()
     {
+        EndGameRequested = false;
         _freshInstanceIds.Clear();
         Instances.Clear();
     }

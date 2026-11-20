@@ -83,6 +83,7 @@ public sealed class GameSession
 
     private MapDefinition? _map;
     private MapRuntime? _mapRuntime;
+    private Program? _titleProgram;
     private int _leaderX;
     private int _leaderY;
     private int _facing = 2;
@@ -180,6 +181,7 @@ public sealed class GameSession
             return false;
         }
 
+        _titleProgram = title;
         _messageOpen = false;
         _hasChoices = false;
         _actionPressed = false;
@@ -258,6 +260,16 @@ public sealed class GameSession
         _vm.StepFrame();
         ApplyPending();
         _vm.StartReservedEvent();
+        // TitleMap.mps event 2 is an autorun (trigger=1) map event: in retail WOLF it restarts
+        // from pc 0 once CE42 returns cleanly (e.g. canceling CE14/CE131 Save/Load UI) while still
+        // on the title screen, keeping the title menu operable instead of deadlocking.
+        if (Phase == "title" && _titleProgram != null && !_vm.Vm.EndGameRequested
+            && !_messageOpen && !_hasChoices && !_pendingLoad
+            && _teleports.Count == 0 && _pendingGameLoad == null
+            && !_vm.Vm.ForegroundBusy())
+        {
+            _vm.Vm.CreateInstance(_titleProgram);
+        }
         if (_messageOpen && !_vm.IsWaitingForMessage())
         {
             NotifyMessageClosed();
@@ -618,7 +630,26 @@ public sealed class GameSession
         {
             string name = Path.GetFileName(file.Path);
             if (name.Length == 0) name = "System.sav";
-            return Path.Combine(dir, Path.ChangeExtension(name, ".json"));
+            string targetName = Path.ChangeExtension(name, ".json");
+            string candidate = Path.Combine(dir, targetName);
+            if (!File.Exists(candidate) && Directory.Exists(dir))
+            {
+                // Retail scripts mix "save/system.sav" (TitleMap) and "Save/System.sav" (CE131);
+                // share one backing file on case-sensitive filesystems without breaking callers
+                // that inspect System.json on creation.
+                foreach (string existing in Directory.EnumerateFiles(dir, "*.json"))
+                {
+                    if (string.Equals(Path.GetFileName(existing), targetName, StringComparison.OrdinalIgnoreCase))
+                        return existing;
+                }
+                string bakName = targetName + ".bak";
+                foreach (string existingBak in Directory.EnumerateFiles(dir, "*.json.bak"))
+                {
+                    if (string.Equals(Path.GetFileName(existingBak), bakName, StringComparison.OrdinalIgnoreCase))
+                        return existingBak[..^4];
+                }
+            }
+            return candidate;
         }
         int slot = file.Slot <= 1 ? 1 : file.Slot;
         return Path.Combine(dir, $"save_{slot:00}.json");
