@@ -36,6 +36,15 @@ public partial class VmController : Node, IHost, IVmSession
     public delegate void ChoicesRequestedEventHandler(string[] options);
 
     [Signal]
+    public delegate void ProFeatureRequestedEventHandler(int kind, int milliseconds, string path);
+
+    [Signal]
+    public delegate void PointerPressObservedEventHandler();
+
+    [Signal]
+    public delegate void ForegroundEventEnteredEventHandler(int eventId, bool isRoot);
+
+    [Signal]
     public delegate void ChoiceSelectedEventHandler(int index);
 
     [Signal]
@@ -80,6 +89,8 @@ public partial class VmController : Node, IHost, IVmSession
     public int SoundTempo => _lastSoundTempo;
 
     private ChoiceReply? _pendingChoiceReply;
+    public bool ChoiceAllowsCancel { get; private set; } = true;
+    public bool MessageKeptForChoice { get; private set; }
     private bool _messageDismissed = true;
     private bool _isWaitingChoice;
     private bool _isWaitingMessage;
@@ -101,6 +112,8 @@ public partial class VmController : Node, IHost, IVmSession
     private bool _pointerPressed;
     private bool _pointerPressPending;
     private bool _pointerPressFrame;
+    private bool _pointerPressSeen;
+    private int _pointerPressTtl;
     private bool _rightPressed;
     private bool _rightPressPending;
     private bool _rightPressFrame;
@@ -243,6 +256,7 @@ public partial class VmController : Node, IHost, IVmSession
 
     public void SelectChoice(int index)
     {
+        ChoiceAllowsCancel = true;
         _pendingChoiceReply = ChoiceReply.Select(index);
         _isWaitingChoice = false;
         EmitSignal(SignalName.ChoiceSelected, index);
@@ -250,6 +264,7 @@ public partial class VmController : Node, IHost, IVmSession
 
     public void CancelChoice()
     {
+        ChoiceAllowsCancel = true;
         _pendingChoiceReply = ChoiceReply.Cancel;
         _isWaitingChoice = false;
     }
@@ -260,10 +275,28 @@ public partial class VmController : Node, IHost, IVmSession
         _isWaitingMessage = false;
     }
 
-    /// <summary>Reopen the saved dialogue window without replaying the opcode that produced it.</summary>
-    public void RestoreDialogue(string? message, string[] choices)
+    public void ResetDialogueState()
     {
         _pendingChoiceReply = null;
+        ChoiceAllowsCancel = true;
+        MessageKeptForChoice = false;
+        _isWaitingChoice = false;
+        _isWaitingMessage = false;
+        _messageDismissed = true;
+        _currentChoices = Array.Empty<string>();
+    }
+
+    /// <summary>Reopen the saved dialogue window without replaying the opcode that produced it.</summary>
+    public void RestoreDialogue(string? message, string[] choices, bool allowCancel = true)
+    {
+        _pendingChoiceReply = null;
+        ChoiceAllowsCancel = allowCancel;
+        MessageKeptForChoice = choices.Length > 0 && !string.IsNullOrEmpty(message);
+        if (!string.IsNullOrEmpty(message))
+        {
+            _messageDismissed = MessageKeptForChoice;
+            EmitSignal(SignalName.MessageRequested, message, -1);
+        }
         if (choices.Length > 0)
         {
             _currentChoices = choices;
@@ -271,12 +304,10 @@ public partial class VmController : Node, IHost, IVmSession
             _isWaitingMessage = false;
             EmitSignal(SignalName.ChoicesRequested, choices);
         }
-        else if (!string.IsNullOrEmpty(message))
+        else
         {
-            _messageDismissed = false;
-            _isWaitingMessage = true;
             _isWaitingChoice = false;
-            EmitSignal(SignalName.MessageRequested, message, -1);
+            _isWaitingMessage = !string.IsNullOrEmpty(message);
         }
     }
 
@@ -363,21 +394,37 @@ public partial class VmController : Node, IHost, IVmSession
 
     public void ShowMessage(string text, int? face)
     {
-        _messageDismissed = false;
-        _isWaitingMessage = true;
+        ShowMessage(text, face, false);
+    }
+
+    public void ShowMessage(string text, int? face, bool keepOpen)
+    {
+        MessageKeptForChoice = keepOpen;
+        _messageDismissed = keepOpen;
+        _isWaitingMessage = !keepOpen;
         EmitSignal(SignalName.MessageRequested, text, face ?? -1);
     }
+
+    /// <summary>GDScript-facing bridge: nullable overloads are not part of the method table.</summary>
+    public void ShowMessageForChoice(string text, int face) => ShowMessage(text, face, true);
 
     public bool MessageDismissed() => _messageDismissed;
 
     public void CloseMessage()
     {
+        MessageKeptForChoice = false;
         EmitSignal(SignalName.MessageClosed);
     }
 
     public void ShowChoices(string[] options)
     {
+        ShowChoices(options, true);
+    }
+
+    public void ShowChoices(string[] options, bool allowCancel)
+    {
         _currentChoices = options;
+        ChoiceAllowsCancel = allowCancel;
         _isWaitingChoice = true;
         _pendingChoiceReply = null;
         EmitSignal(SignalName.ChoicesRequested, options);
@@ -721,7 +768,8 @@ public partial class VmController : Node, IHost, IVmSession
     /// </summary>
     public int? EngineState(int field)
     {
-        return field switch
+        if (field == 7 && _pointerPressFrame) _pointerPressSeen = true;
+        int? result = field switch
         {
             // game.rs 6898-6900: the static map id and BGM id are 0 and -1.
             0 => 0,
@@ -738,6 +786,8 @@ public partial class VmController : Node, IHost, IVmSession
             // store a fabricated 0; field 18 in particular falls through to EventVm.
             _ => null,
         };
+        if (field == 7 && _pointerPressFrame) EmitSignal(SignalName.PointerPressObserved);
+        return result;
     }
 
     private static int TriState(bool held, bool pressedThisFrame) => pressedThisFrame ? 2 : (held ? 1 : 0);
@@ -794,6 +844,8 @@ public partial class VmController : Node, IHost, IVmSession
         _pointerPressed = held;
         _pointerPressPending = false;
         _pointerPressFrame = false;
+        _pointerPressSeen = false;
+        _pointerPressTtl = 0;
     }
 
     public void SetPointerRightPressed(bool pressed)
@@ -816,6 +868,8 @@ public partial class VmController : Node, IHost, IVmSession
         _pointerPressed = false;
         _pointerPressPending = false;
         _pointerPressFrame = false;
+        _pointerPressSeen = false;
+        _pointerPressTtl = 0;
         _rightPressed = false;
         _rightPressPending = false;
         _rightPressFrame = false;
@@ -831,8 +885,23 @@ public partial class VmController : Node, IHost, IVmSession
     /// <summary>Turn the latched press into this frame's answer, once per 1/60 s step.</summary>
     public void BeginFrameInput()
     {
-        _pointerPressFrame = _pointerPressPending;
-        _pointerPressPending = false;
+        if (_pointerPressPending)
+        {
+            _pointerPressFrame = true;
+            _pointerPressPending = false;
+            _pointerPressSeen = false;
+            _pointerPressTtl = 2;
+        }
+        else if (_pointerPressFrame && !_pointerPressSeen && _pointerPressTtl > 0)
+        {
+            _pointerPressTtl--;
+        }
+        else
+        {
+            _pointerPressFrame = false;
+            _pointerPressSeen = false;
+            _pointerPressTtl = 0;
+        }
         _rightPressFrame = _rightPressPending;
         _rightPressPending = false;
         _middlePressFrame = _middlePressPending;
@@ -915,6 +984,8 @@ public partial class VmController : Node, IHost, IVmSession
         // session must not fire the previous run's queued events (game.rs queue).
         _reservedEvents.Clear();
         _pendingChoiceReply = null;
+        ChoiceAllowsCancel = true;
+        MessageKeptForChoice = false;
         _isWaitingChoice = false;
         _isWaitingMessage = false;
         _messageDismissed = true;
@@ -940,6 +1011,13 @@ public partial class VmController : Node, IHost, IVmSession
     {
         EmitSignal(SignalName.EffectRequested, kind, duration, args);
     }
+
+    public void ProFeature(int kind, int milliseconds) => ProFeature(kind, milliseconds, "");
+
+    public void ProFeature(int kind, int milliseconds, string path) =>
+        EmitSignal(SignalName.ProFeatureRequested, kind, milliseconds, path ?? "");
+
+    public void EventEntered(int eventId, bool isRoot) => EmitSignal(SignalName.ForegroundEventEntered, eventId, isRoot);
 
     public void Reserve(int target) => Reserve(target, Array.Empty<int>(), Array.Empty<string>());
 

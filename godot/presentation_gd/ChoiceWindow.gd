@@ -7,11 +7,13 @@ extends Control
 
 signal chosen(index: int)
 
-const FONT_SIZE := 18
-const LINE_HEIGHT := 34.0
-const PADDING_X := 16.0
-const PADDING_Y := 10.0
-const MIN_WIDTH := 220.0
+const FONT_SIZE := 20
+const LINE_HEIGHT := 27.0
+const PADDING_X := 10.0
+const PADDING_Y := 6.0
+const MIN_WIDTH := 120.0
+const SELECTED_COLOR := Color.WHITE
+const DEFAULT_POSITION_SENTINEL := -1.0
 const CURSOR_TEXTURE := "SystemFile/CursorBase.png"
 
 var assets: AssetDB
@@ -46,7 +48,11 @@ func window_rect() -> Rect2:
 	var win_size := window_size()
 	if _is_offscreen_parked():
 		return Rect2(position_hint, win_size)
-	var raw_pos := position_hint - win_size * 0.5
+	var raw_pos := position_hint
+	if is_equal_approx(raw_pos.x, DEFAULT_POSITION_SENTINEL):
+		raw_pos.x = 512.0 - win_size.x * 0.5
+	if is_equal_approx(raw_pos.y, DEFAULT_POSITION_SENTINEL):
+		raw_pos.y = 288.0 - win_size.y * 0.5
 	var max_x := maxf(24.0, 1000.0 - win_size.x)
 	var max_y := maxf(48.0, 536.0 - win_size.y)
 	return Rect2(Vector2(clampf(raw_pos.x, 24.0, max_x), clampf(raw_pos.y, 48.0, max_y)), win_size)
@@ -140,18 +146,59 @@ func row_rects() -> Array:
 
 
 func window_size() -> Vector2:
-	var font := UiSkin.bold_font()
 	var width := MIN_WIDTH
 	var visible := _visible_indices()
 	for i in visible:
-		width = maxf(width, font.get_string_size(display_text(options[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x + PADDING_X * 2.0)
+		width = maxf(width, label_width(options[i]) + PADDING_X * 2.0)
 	var height := maxi(visible.size(), 1) * line_height() + PADDING_Y * 2.0
 	return Vector2(ceilf(width), ceilf(height))
 
 
 ## Strip WOLF escape codes so option labels paint plain text only.
 func display_text(raw: String) -> String:
-	return TextTokenizer.plain_text(TextTokenizer.tokenize(raw)).replace("\n", " ")
+	var out := ""
+	for run in _label_runs(raw):
+		out += run["text"]
+	return out
+
+
+func label_width(raw: String) -> float:
+	var width := 0.0
+	var font := UiSkin.bold_font()
+	for run in _label_runs(raw):
+		width += font.get_string_size(run["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, run["size"]).x
+	return width
+
+
+## Split an option into drawable runs while honouring inline \f[n] / \f+[n] / \f-[n].
+func _label_runs(raw: String) -> Array:
+	var runs: Array = []
+	var size := FONT_SIZE
+	var color := Color.WHITE
+	for token in TextTokenizer.tokenize(raw):
+		match token.kind:
+			TextTokenizer.Kind.TEXT:
+				_append_run(runs, token.text, size, color)
+			TextTokenizer.Kind.NEWLINE:
+				_append_run(runs, " ", size, color)
+			TextTokenizer.Kind.FONT_SIZE:
+				size = FONT_SIZE if token.number <= 0 else clampi(token.number, 8, FONT_SIZE)
+			TextTokenizer.Kind.FONT_SIZE_RELATIVE:
+				size = clampi(size + token.number, 8, FONT_SIZE)
+			TextTokenizer.Kind.COLOR, TextTokenizer.Kind.COLOR_SELF:
+				color = UiSkin.color_for_index(token.number)
+	return runs
+
+
+func _append_run(runs: Array, text: String, size: int, color: Color) -> void:
+	if text.is_empty():
+		return
+	if not runs.is_empty():
+		var last: Dictionary = runs[-1]
+		if last["size"] == size and last["color"] == color:
+			last["text"] = String(last["text"]) + text
+			return
+	runs.append({"text": text, "size": size, "color": color})
 
 
 ## Move the cursor onto the row under [param point] so a mouse click confirms that row.
@@ -194,13 +241,12 @@ func _draw() -> void:
 		draw_rect(rect, Color(0.90, 0.90, 0.90, 0.85), false, 1.0)
 	var cursor_tex: Texture2D = assets.texture(CURSOR_TEXTURE) if assets != null else null
 	var font := UiSkin.bold_font()
-	var text_height := font.get_ascent(FONT_SIZE) + font.get_descent(FONT_SIZE)
 	var rects := row_rects()
 	var outline_col := Color(0.0, 0.0, 0.0, 1.0)
 	for row_idx in visible.size():
 		var i := visible[row_idx]
 		var row: Rect2 = rects[row_idx]
-		var box := Rect2(rect.position.x + 6.0, row.position.y + 1.0, rect.size.x - 12.0, row.size.y - 2.0)
+		var box := Rect2(rect.position.x + 5.0, row.position.y, rect.size.x - 10.0, row.size.y)
 		if i == selected:
 			if cursor_tex != null:
 				UiSkin.nine_patch(self, cursor_tex, box)
@@ -209,11 +255,21 @@ func _draw() -> void:
 				draw_rect(box, Color(1.0, 1.0, 1.0, 0.85), false, 1.0)
 		elif i == _hover:
 			draw_rect(box, Color(1.0, 1.0, 1.0, 0.10))
-		var color := Color("fff2b8") if i == selected else Color.WHITE
+		var runs := _label_runs(options[i])
+		var row_size := FONT_SIZE
+		for run in runs:
+			row_size = maxi(row_size, int(run["size"]))
+		var text_height := font.get_ascent(row_size) + font.get_descent(row_size)
 		var baseline := Vector2(
 			row.position.x,
-			row.position.y + (row.size.y - text_height) * 0.5 + font.get_ascent(FONT_SIZE)
+			row.position.y + (row.size.y - text_height) * 0.5 + font.get_ascent(row_size)
 		)
-		var label := display_text(options[i])
-		draw_string_outline(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, 2, outline_col)
-		draw_string(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, color)
+		for run in runs:
+			var color: Color = SELECTED_COLOR
+			if i != selected:
+				color = run["color"]
+			var run_size: int = run["size"]
+			var label: String = run["text"]
+			draw_string_outline(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, run_size, UiSkin.TEXT_OUTLINE_SIZE, outline_col)
+			draw_string(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, run_size, color)
+			baseline.x += font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, run_size).x

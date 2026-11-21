@@ -14,14 +14,15 @@ enum Kind {
 	TEXT,
 	NEWLINE,
 	PAUSE,       # \.  -- 0.25 s beat
-	WAIT,        # \> \< \| \! -- stop until the player confirms
-	INSTANT,     # \^ -- reveal the rest of the line at once
+	WAIT,        # \| \! -- stop until the player confirms, then continue
+	INSTANT,     # \> \^ -- reveal the rest of the line at once
 	FONT_SIZE,        # \f[n] -- absolute glyph size in pixels
 	FONT_SIZE_RELATIVE, # \f+[n] / \f-[n] -- relative step (negative shrinks)
 	COLOR,       # \c[n]
 	COLOR_SELF,  # \cself[n]
-	VOICE,       # \v[n] -- voice / SE index
+	VARIABLE,    # \v[n] -- core text expansion resolves it before rendering
 	SPEED,       # \sp[n] -- characters per second for the rest of the message
+	LETTER_SPACING, # \-[n] / \+[n] -- glyph advance tweak; consumes as control text
 	CDB,         # \cdb[..] -- database colour
 	OUTLINE_ON,  # \E -- outline on (the first token of most retail messages)
 	OUTLINE_OFF, # \N -- outline off (never a newline)
@@ -91,6 +92,22 @@ static func tokenize(source: String) -> Array:
 					kind = Kind.INSTANT_OFF
 				tokens.append(Token.new(kind, "\\" + nxt))
 				i += 2
+				continue
+			if nxt == "-" or nxt == "+":
+				# WOLF letter-spacing: \-[n] (canonical) and the symmetric \+[n].
+				# Consume it as a control token so brackets never leak into painted text.
+				var close := -1
+				if i + 2 < n and source[i + 2] == "[":
+					close = _find_bracket(source, i + 2)
+				_flush(tokens, literal)
+				literal = ""
+				if close >= 0:
+					var body := source.substr(i + 3, close - i - 3)
+					tokens.append(Token.new(Kind.LETTER_SPACING, source.substr(i, close - i + 1), "", _first_int(body)))
+					i = close + 1
+				else:
+					tokens.append(Token.new(Kind.LETTER_SPACING, "\\" + nxt))
+					i += 2
 				continue
 			if _is_ascii_letter(nxt):
 				var j := i + 1
@@ -174,7 +191,7 @@ static func _letter_token(name: String, body: String, raw: String) -> Token:
 		"f":
 			return Token.new(Kind.FONT_SIZE, raw, "", number)
 		"v":
-			return Token.new(Kind.VOICE, raw, "", number)
+			return Token.new(Kind.VARIABLE, raw, "", number)
 		"sp":
 			return Token.new(Kind.SPEED, raw, "", number)
 		"cdb":

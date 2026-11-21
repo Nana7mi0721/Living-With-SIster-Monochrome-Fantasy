@@ -673,6 +673,7 @@ internal sealed class M4RouteHost : IHost
 
     public void Wait(uint frames) => _inner.Wait(frames);
     public void ShowMessage(string text, int? face) => _inner.ShowMessage(text, face);
+    public void ShowMessage(string text, int? face, bool keepOpen) => _inner.ShowMessage(text, face, keepOpen);
     public bool MessageDismissed() => _inner.MessageDismissed();
     public void CloseMessage() => _inner.CloseMessage();
     public void ShowChoices(string[] options)

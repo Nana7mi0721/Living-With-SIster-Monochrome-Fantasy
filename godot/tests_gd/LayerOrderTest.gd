@@ -90,18 +90,35 @@ func _ready() -> void:
 		if nine.patch_margin_left != UiSkin.WINDOW_CORNER:
 			failures.append("window nine-patch margin should be %d" % UiSkin.WINDOW_CORNER)
 
-	# 9. Opcode 151 packs R/G/B multipliers as percentages in bits 16/8/0 and tints only
-	#    the screen layers (number < 0); HUD pictures stay neutral (tint.rs blueprint).
+	# 9. Opcode 151 packs R/G/B multipliers as percentages in bits 16/8/0. A multiply
+	#    overlay above scene art tints positive and negative pictures alike; top HUD and
+	#    system-menu slots sit above that overlay so their text stays legible.
 	var backdrop := stage.draw_picture(-2, 0, "SystemFile/Missing.png", "", [])
+	var scene := stage.draw_picture(4, 0, "SystemFile/Missing.png", "", [])
 	var hud := stage.draw_picture(12100, 0, "SystemFile/Missing.png", "", [])
+	var overlay := stage.screen_tint_overlay()
 	stage.set_screen_tint((200 << 16) | (150 << 8) | 1, 0)
-	if backdrop == null or hud == null:
+	if backdrop == null or scene == null or hud == null:
 		failures.append("tint slots drew no node")
+	if overlay == null:
+		failures.append("screen tint overlay missing")
 	else:
-		if not backdrop.modulate.is_equal_approx(Color(2.0, 1.5, 0.01)):
-			failures.append("a screen-layer picture takes the 151 multiplier (got %s)" % str(backdrop.modulate))
-		if not hud.modulate.is_equal_approx(Color.WHITE):
-			failures.append("the 151 tint must not touch HUD pictures (got %s)" % str(hud.modulate))
+		if overlay.z_index != PictureStage.LAYER_SCREEN_TINT or overlay.z_as_relative:
+			failures.append("screen tint overlay must use absolute z %d" % PictureStage.LAYER_SCREEN_TINT)
+		if overlay.get_parent() != stage:
+			failures.append("screen tint overlay must be a direct stage child")
+		if not overlay.visible or not overlay.color.is_equal_approx(Color(2.0, 1.5, 0.01, 1.0)):
+			failures.append("screen tint overlay must show the 151 multiplier (got %s)" % str(overlay.color))
+		var material := overlay.material as CanvasItemMaterial
+		if material == null or material.blend_mode != CanvasItemMaterial.BLEND_MODE_MUL:
+			failures.append("screen tint overlay must use multiply blending")
+		if scene != null and hud != null:
+			var scene_z := stage.layer(PictureStage.LAYER_SCENE_PICTURE).z_index + scene.z_index
+			var hud_z := stage.layer(PictureStage.LAYER_SCENE_PICTURE).z_index + hud.z_index
+			if scene_z >= overlay.z_index:
+				failures.append("normal scene picture must paint below the screen tint")
+			if hud_z <= overlay.z_index or hud_z >= stage.layer(PictureStage.LAYER_MESSAGE_FRAME).z_index:
+				failures.append("HUD/menu picture must paint above tint and below dialogs (got z %d)" % hud_z)
 
 	# 10. Bit 24 makes the ramp a triangle: it peaks at the colour and returns to where it
 	#     started, so a one-shot 151 leaves the screen as it found it.
@@ -111,11 +128,16 @@ func _ready() -> void:
 	stage.tick_screen_tint()
 	if not stage.screen_tint_multiplier().r > 1.9:
 		failures.append("a flash should peak at the colour halfway (got %s)" % str(stage.screen_tint_multiplier()))
+	if overlay != null and (not overlay.visible or overlay.color.r <= 1.9):
+		failures.append("the visible overlay must follow the flash peak")
 	stage.tick_screen_tint()
 	stage.tick_screen_tint()
 	if not stage.screen_tint_multiplier().is_equal_approx(Color.WHITE):
 		failures.append("a flash returns to its origin (got %s)" % str(stage.screen_tint_multiplier()))
+	if overlay != null and overlay.visible:
+		failures.append("a neutral screen tint must hide the multiply overlay")
 	stage.reset_screen_tint()
+	failures.append_array(await _render_tint_probe())
 
 	if failures.is_empty():
 		print("LAYER_ORDER_TEST_OK")
@@ -124,3 +146,46 @@ func _ready() -> void:
 	for failure in failures:
 		print("LAYER_ORDER_TEST_FAILED: ", failure)
 	get_tree().quit(1)
+
+
+func _render_tint_probe() -> Array[String]:
+	var failures: Array[String] = []
+	if DisplayServer.get_name() == "headless":
+		return failures
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(32, 32)
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(viewport)
+	var probe := PictureStage.new()
+	viewport.add_child(probe)
+	var scene := ColorRect.new()
+	scene.color = Color.WHITE
+	scene.size = Vector2(32, 32)
+	probe.layer(PictureStage.LAYER_SCENE_PICTURE).add_child(scene)
+	var hud := ColorRect.new()
+	hud.color = Color.WHITE
+	hud.size = Vector2(16, 32)
+	hud.position = Vector2(16, 0)
+	hud.z_index = PictureStage.SCREEN_TINT_UI_PICTURE_Z
+	probe.layer(PictureStage.LAYER_SCENE_PICTURE).add_child(hud)
+	await _render_frame()
+	var clear := _probe_pixels(viewport)
+	probe.set_screen_tint(0x00323232, 0)
+	await _render_frame()
+	var tinted := _probe_pixels(viewport)
+	if not (tinted[0].r < clear[0].r - 0.1):
+		failures.append("151 must visibly darken a normal scene picture")
+	if tinted[1].r < 0.9 or not tinted[1].is_equal_approx(clear[1]):
+		failures.append("HUD above the tint overlay must stay readable")
+	viewport.queue_free()
+	return failures
+
+
+func _render_frame() -> void:
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+
+
+func _probe_pixels(viewport: SubViewport) -> Array[Color]:
+	var image := viewport.get_texture().get_image()
+	return [image.get_pixel(8, 16), image.get_pixel(24, 16)]

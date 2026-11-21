@@ -2172,9 +2172,18 @@ fn execute(
                     (current >= 2).then_some(current)
                 });
                 host.show_message(text, face);
-                inst.wait = WaitState::Message;
-                inst.pc += 1;
-                Some(Signal::Blocked)
+                let paired_choice = matches!(
+                    inst.program.slots.get(inst.pc + 1),
+                    Some(Slot::Command(next)) if next.opcode == 102
+                );
+                if paired_choice {
+                    inst.pc += 1;
+                    None
+                } else {
+                    inst.wait = WaitState::Message;
+                    inst.pc += 1;
+                    Some(Signal::Blocked)
+                }
             }
             102 => {
                 let options: Vec<String> = cmd
@@ -3812,6 +3821,57 @@ mod tests {
         host.dismiss = true;
         vm.step_frame(&mut host);
         assert_eq!(vm.vars.get(0), 1);
+    }
+
+    #[test]
+    fn message_physically_before_choice_opens_both_in_one_frame() {
+        let e = event(
+            1,
+            "prompt+choice",
+            vec![
+                cmd(101, &[], &["ready?"]),
+                cmd(102, &[2], &["yes", "no"]),
+                cmd(401, &[2], &[]),
+                cmd(121, &[2_000_000, 1, 0, 0], &[]),
+                cmd(421, &[0], &[]),
+                cmd(499, &[], &[]),
+            ],
+        );
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+        assert_eq!(host.messages, vec!["ready?".to_owned()]);
+        assert_eq!(host.choices, vec![vec!["yes".to_owned(), "no".to_owned()]]);
+        assert_eq!(vm.vars.get(0), 0, "the prompt must not wait for dismissal");
+
+        host.reply = Some(ChoiceReply::Index(0));
+        vm.step_frame(&mut host);
+        assert_eq!(vm.vars.get(0), 1);
+    }
+
+    #[test]
+    fn message_with_a_comment_before_choice_still_waits() {
+        let e = event(
+            1,
+            "separated",
+            vec![
+                cmd(101, &[], &["wait"]),
+                cmd(103, &[], &["separator"]),
+                cmd(102, &[2], &["only"]),
+                cmd(401, &[2], &[]),
+                cmd(499, &[], &[]),
+            ],
+        );
+        let mut vm = vm_with(vec![e]);
+        let mut host = Recorder::default();
+        vm.start_event(1).unwrap();
+        vm.step_frame(&mut host);
+        assert_eq!(host.messages, vec!["wait".to_owned()]);
+        assert!(host.choices.is_empty(), "a separated 101 must still block");
+        host.dismiss = true;
+        vm.step_frame(&mut host);
+        assert_eq!(host.choices, vec![vec!["only".to_owned()]]);
     }
 
     #[test]

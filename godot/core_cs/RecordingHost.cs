@@ -23,6 +23,11 @@ public class RecordingHost : NullHost
     public readonly List<int[]> Scrolls = new();
     public readonly List<(int Color, int Frames)> Colors = new();
     public readonly List<(int Kind, int Milliseconds)> ProFeatures = new();
+    public readonly List<(int Kind, int Milliseconds, string Path)> ProFeaturePaths = new();
+    public readonly List<(string Text, int? Face, bool KeepOpen)> Messages = new();
+    public readonly List<bool> ChoiceAllowsCancel = new();
+    public readonly List<int> EnteredEvents = new();
+    public readonly List<bool> EnteredEventRoots = new();
     public int ClearDebugCount;
     public int ReturnToTitleCount;
     public int EndGameCount;
@@ -81,10 +86,19 @@ public class RecordingHost : NullHost
     public override void Reserve(int target, int[] args, string[] strings)
         => Reservations.Add(new CallRecord(target, args, strings));
 
+    public override void ShowMessage(string text, int? face) => ShowMessage(text, face, false);
+    public override void ShowMessage(string text, int? face, bool keepOpen) =>
+        Messages.Add((text, face, keepOpen));
+
     public override void Picture(PictureCmd cmd) => Pictures.Add(cmd);
     public override void Sound(SoundCmd cmd) => Sounds.Add(cmd);
     public override void Effect(int kind, int duration, int[] args) => Effects.Add(new EffectCall(kind, duration, args));
     public override void CommonEventCall(int target, int[] args, string[] strings) => Calls.Add(new CallRecord(target, args, strings));
+    public override void ShowChoices(string[] options, bool allowCancel)
+    {
+        ChoiceAllowsCancel.Add(allowCancel);
+        base.ShowChoices(options);
+    }
     public override void Teleport(int target, int map, int x, int y, int options) => Teleports.Add(new TeleportRecord(target, map, x, y, options));
     public override void Log(string message) => Logs.Add(message);
 
@@ -96,6 +110,17 @@ public class RecordingHost : NullHost
     public override void ReturnToTitle() => ReturnToTitleCount++;
     public override void EndGame() => EndGameCount++;
     public override void ProFeature(int kind, int milliseconds) => ProFeatures.Add((kind, milliseconds));
+    public override void ProFeature(int kind, int milliseconds, string path)
+    {
+        ProFeatures.Add((kind, milliseconds));
+        ProFeaturePaths.Add((kind, milliseconds, path));
+    }
+
+    public override void EventEntered(int eventId, bool isRoot)
+    {
+        EnteredEvents.Add(eventId);
+        EnteredEventRoots.Add(isRoot);
+    }
 
     public override int KeyCodeAuto(uint mask, uint autoKeys)
     {

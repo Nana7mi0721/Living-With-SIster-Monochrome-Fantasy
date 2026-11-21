@@ -1,11 +1,13 @@
 class_name PictureStage
 extends Control
-## The nine-band render stack.
+## The nine-band render stack plus a screen-tint overlay between scene and dialog.
 ##
 ## Every band is a full-rect Control with an absolute z_index, so draw order is a property
 ## of the stage rather than of tree order:
-##   Map 0 < ScenePicture 10 < SceneText 11 < MessageFrame 20 < MessageText 25
-##        < Nameplate 30 < ChoicePanel 40 < ChoiceText 41 < Cursor 50
+##   Map 0 < ScenePicture 10 < SceneText 11 < ScreenTint 12 < MessageFrame 20
+##        < MessageText 25 < Nameplate 30 < ChoicePanel 40 < ChoiceText 41 < Cursor 50
+## Top HUD and system-menu pictures ride at effective z 13 so environment tint cannot
+## wash out time, money, or save-menu text.
 ##
 ## Pictures are keyed by their WOLF slot number. Draw replaces the slot, Move updates it,
 ## and Erase/Hide frees or hides it.
@@ -17,12 +19,17 @@ const _PictureEffects := preload("res://presentation_gd/PictureEffects.gd")
 const LAYER_MAP := 0
 const LAYER_SCENE_PICTURE := 10
 const LAYER_SCENE_TEXT := 11
+const LAYER_SCREEN_TINT := 12
 const LAYER_MESSAGE_FRAME := 20
 const LAYER_MESSAGE_TEXT := 25
 const LAYER_NAMEPLATE := 30
 const LAYER_CHOICE_PANEL := 40
 const LAYER_CHOICE_TEXT := 41
 const LAYER_CURSOR := 50
+const SCREEN_TINT_UI_PICTURE_Z := 3
+const HUD_TOP_SLOT_MIN := 6000
+const HUD_TOP_SLOT_MAX := 6251
+const SYSTEM_UI_SLOT_MIN := 12000
 
 const BAND_ORDER: Array[int] = [
 	LAYER_MAP,
@@ -43,6 +50,7 @@ const FADE_MAX := 600
 var assets: AssetDB
 ## z_index -> band Control, in BAND_ORDER order.
 var layers: Dictionary = {}
+var _screen_tint_overlay: ColorRect
 
 
 ## Multi-run text renderer used for WOLF opcode-150 kind-2/4 text pictures.
@@ -90,6 +98,8 @@ func _ready() -> void:
 
 
 func _build_layers() -> void:
+	if not layers.is_empty():
+		return
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for band in BAND_ORDER:
@@ -101,6 +111,18 @@ func _build_layers() -> void:
 		control.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		add_child(control)
 		layers[band] = control
+	_screen_tint_overlay = ColorRect.new()
+	_screen_tint_overlay.name = "ScreenTint"
+	_screen_tint_overlay.z_index = LAYER_SCREEN_TINT
+	_screen_tint_overlay.z_as_relative = false
+	_screen_tint_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_screen_tint_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_screen_tint_overlay.color = Color.WHITE
+	_screen_tint_overlay.visible = false
+	var material := CanvasItemMaterial.new()
+	material.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
+	_screen_tint_overlay.material = material
+	add_child(_screen_tint_overlay)
 
 
 func layer(z_index: int) -> Control:
@@ -114,10 +136,16 @@ func band_order() -> Array:
 	return BAND_ORDER.duplicate()
 
 
+func screen_tint_overlay() -> ColorRect:
+	if _screen_tint_overlay == null:
+		_build_layers()
+	return _screen_tint_overlay
+
+
 # ---- opcode 151 screen tint ------------------------------------------------
 # Packs R/G/B multipliers in bits 16/8/0 as percentages (100 = neutral); bit 24 is the
-# flash flag (triangle ramp back to origin). Only screen-layer pictures (number < 0) and
-# the map take the multiplier; HUD pictures (0 and above) stay neutral.
+# flash flag (triangle ramp back to origin). The overlay multiplies the map and scene
+# pictures; top HUD/system pictures are lifted above it so menus stay readable.
 var screen_tint := Color(1, 1, 1)
 var _tint_from := Color(1, 1, 1)
 var _tint_to := Color(1, 1, 1)
@@ -171,9 +199,10 @@ static func packed_multiplier(packed: int) -> Color:
 
 func _apply_screen_tint() -> void:
 	screen_tint = _tint_now()
-	for number in _pictures.keys():
-		if int(number) < 0:
-			_render_picture(int(number))
+	if _screen_tint_overlay == null:
+		_build_layers()
+	_screen_tint_overlay.color = Color(screen_tint.r, screen_tint.g, screen_tint.b, 1.0)
+	_screen_tint_overlay.visible = not _screen_tint_overlay.color.is_equal_approx(Color.WHITE)
 
 
 ## Slot number encoded in the node name built by _build_picture ("Pic%d").
@@ -511,8 +540,10 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 		1:
 			return int(pose.get("y", UiSkin.unit(_arg(args, 6, 0)))) + int(_PictureEffects.effect_offset(state).y)
 		2, 3:
-			var base := _base_size_for(number, cmd)
-			return int(base.x) if field == 2 else int(base.y)
+			var raw := int(pose.get("scale", UiSkin.unit(_arg(args, 7, 100))))
+			if field == 3:
+				raw = int(pose.get("scale_y", _arg(args, 16, 100)))
+			return raw
 		4:
 			return _arg(args, 9, 0)
 		5:
@@ -1188,6 +1219,7 @@ func _render_picture(number: int) -> void:
 	var state: Dictionary = _states.get(number, {})
 	if node == null or not is_instance_valid(node) or state.is_empty():
 		return
+	node.z_index = SCREEN_TINT_UI_PICTURE_Z if _is_screen_tint_ui(number) else 0
 	if bool(state.get("hidden", false)):
 		node.visible = false
 		return
@@ -1202,7 +1234,8 @@ func _render_picture(number: int) -> void:
 	var scale_x := absf(float(scale_x_pct)) / 100.0
 	var scale_y := absf(float(scale_y_pct)) / 100.0
 	var size := base * Vector2(scale_x, scale_y)
-	var position := _anchored_position(int(pose.get("anchor", 0)), int(pose["x"]), int(pose["y"]), size, scale_x_pct, scale_y_pct)
+	var position := _anchored_position(int(pose.get("anchor", 0)), int(pose["x"]), int(pose["y"]),
+		size, scale_x_pct, scale_y_pct)
 	var zoom: Variant = state.get("zoom", null)
 	if zoom != null:
 		var z: Dictionary = zoom
@@ -1221,15 +1254,16 @@ func _render_picture(number: int) -> void:
 	node.scale = Vector2(-1.0 if scale_x_pct < 0 else 1.0, -1.0 if scale_y_pct < 0 else 1.0)
 	var blend := int(pose.get("blend", 0))
 	var tint := _effects.tone_color(state)
-	if number < 0:
-		tint = Color(tint.r * screen_tint.r, tint.g * screen_tint.g, tint.b * screen_tint.b, 1.0)
 	tint.a = clampf(float(pose.get("opacity", 255)) / 255.0, 0.0, 1.0)
-	# Multiply blend forces alpha to 1.0 so RGB multiplication is not also dimmed by slot opacity.
-	if (blend & 0xF) == 3:
-		tint.a = 1.0
 	node.modulate = tint
 	_apply_pattern_cell(node, state)
 	_effects.apply_blend(node, blend)
+
+
+static func _is_screen_tint_ui(number: int) -> bool:
+	if number >= SYSTEM_UI_SLOT_MIN:
+		return true
+	return number >= HUD_TOP_SLOT_MIN and number <= HUD_TOP_SLOT_MAX
 
 
 func _apply_pattern_cell(node: Control, state: Dictionary) -> void:

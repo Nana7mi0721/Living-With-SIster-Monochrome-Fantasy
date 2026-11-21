@@ -8,7 +8,9 @@
 
 | 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
 | :--- | :---: | :--- | :--- |
-| [m4_oracle_refresh_2026_11_21.md](m4_oracle_refresh_2026_11_21.md) | 2026-11-21 | **M4 Oracle 夹具刷新与双模式门禁恢复** | 第 362832 步分歧来自早于 op121 语义修复的旧夹具；刷新脚本补齐数据根、.NET 环境与原子替换；Rust/C# 990102 步 100% 一致，双模式门禁全绿 |
+| [lwsmf_8fa1189_audit_remediation_2026_11_21.md](lwsmf_8fa1189_audit_remediation_2026_11_21.md) | 2026-11-21 | **两份 `8fa1189` 游玩/UI 审计的逐项修复闭环** | P0/P1/P2 均已落到代码、数据语义或测试；`101+102` 同屏、`124` 缩放字段、Tips 点击穿透与 13 张素材核对完成 |
+| [release_gate_verification_2026_11_21.md](release_gate_verification_2026_11_21.md) | 2026-11-21 | **基线 `8fa1189` 的修复与无头 38 项门禁验证** | Release 构建 0 警告/0 错误；无头门禁 38/38；418 夹具 2461/2461；主路线 149655/149655；M4 989439/989439；本轮未执行 OpenGL3 渲染门禁 |
+| [m4_oracle_refresh_2026_11_21.md](m4_oracle_refresh_2026_11_21.md) | 2026-11-21 | **M4 Oracle 夹具刷新（历史快照）** | 第 362832 步分歧来自早于 op121 语义修复的旧夹具；该次刷新记录为 990102 步 100% 一致。当前 `124` 语义修复后的计数以 [release_gate_verification_2026_11_21.md](release_gate_verification_2026_11_21.md) 为准 |
 | [deepseek_retail_mechanism_audit_2026_11_20.md](deepseek_retail_mechanism_audit_2026_11_20.md) | 2026-11-20 | **标题机制、全新封面、字体回退综合核查** | “开始咯”不调用 CE14；全新三段封面分别为 `title01.jpg` / `TitleGraphic.jpg` / `TitleGraphic.png`；Lolita 完整覆盖出货文本，正常文本不触发中文回退 |
 | [deepseek_title_newgame_interaction_2026_11_20.md](deepseek_title_newgame_interaction_2026_11_20.md) | 2026-11-20 | **CE42/CE43 点击链路与 Map003 时序** | CE42 新游戏分支无存档钩子；CE43 仅绘制/高亮；Map003 两段 `180[50]` 是数据脚本节奏 |
 | [deepseek_title_graphics_fresh_state_2026_11_20.md](deepseek_title_graphics_fresh_state_2026_11_20.md) | 2026-11-20 | **全新 V300/V499/V503/V550 分支与封面** | TitleMap 显示 `title01`，CE42 菜单显示 `TitleGraphic.jpg`，Map003 过渡显示 `TitleGraphic.png` |
@@ -39,3 +41,11 @@
 | [imoto_life_title_and_layout_audit_report.md](imoto_life_title_and_layout_audit_report.md) | 姊妹作《妹！生活》 | 标题界面、窗口布局、字体排版像素对齐审计 |
 | [imoto_life_cross_repo_audit_checklist.md](imoto_life_cross_repo_audit_checklist.md) | 跨工程协同 | 核心架构、字节码解析器、输入层设计清单对比 |
 | [imoto_life_c553d04_review_and_roadmap.md](imoto_life_c553d04_review_and_roadmap.md) | 提交 c553d04 对齐 | 跨项目路线图对齐与设计借鉴 |
+
+---
+
+## 4. 历史保留
+
+| 文档 | 状态 | 说明 |
+| :--- | :---: | :--- |
+| [lwsmf_orchestrator_pre_release_tasklist.md](lwsmf_orchestrator_pre_release_tasklist.md) | 已取代 | 仅保留为 [PRE_RELEASE_ORCHESTRATOR_AUDIT.md](../godot/PRE_RELEASE_ORCHESTRATOR_AUDIT.md) 的任务清单出处；不再作为执行依据 |

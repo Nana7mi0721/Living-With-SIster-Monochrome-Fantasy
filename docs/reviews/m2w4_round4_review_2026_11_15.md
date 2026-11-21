@@ -102,7 +102,7 @@
 
 | 门禁编号 | 名称 | 证明了什么 | 没证明什么 |
 | --- | --- | --- | --- |
-| 1–2 | `versions` / `build solutions` | Godot 4.7.2 .NET 与 C# 工程可编译（上游日志） | 未在无缓存干净环境验证，依赖本地 `/e/Study` 路径 |
+| 1–2 | `versions` / `build solutions` | Godot 4.7.2 .NET 与 C# 工程可编译（上游日志） | 未在无缓存干净环境验证，依赖未提交的本地 SDK/Godot 环境配置 |
 | 3–4 | `Smoke` / `SaveImportTest` | 基础核心类型与 8 槽 `.sav` 最小解析不崩溃 | 未覆盖损坏/GBK 混杂的真实玩家 `.sav` 边界 |
 | 5–6 | `diff_trace.py` / `TraceDiffTest` | `diff_trace.py` 自检通过；`CE42` 10 步占位比对通过 | 仅 10 步极短路径，非全流程 |
 | 7–12 | `Title` / `NewGame` / `Presentation` / `MapRuntime` / `SaveLoad` / `MapMessage` | **旧 `TitleScreen.cs` 路径**可走通标题→卧室→存读档（94/94）与地图触发 | **不是发布路径 `GameRoot.gd`**；无真实音频/渲染/指针输入校验 |

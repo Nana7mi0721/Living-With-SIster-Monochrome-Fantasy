@@ -5,9 +5,11 @@ extends Control
 ## Draws the active speaker badge above the dialog bubble when set by the VM.
 
 const FONT_SIZE := 16
-const MIN_WIDTH := 88.0
-const PADDING := Vector2(18, 5)
+const MIN_WIDTH := 92.0
+const PADDING := Vector2(16, 4)
 const COLOR := Color.WHITE
+const BACKGROUND := Color(0.54, 0.54, 0.55, 0.94)
+const BORDER := Color(0.10, 0.10, 0.12, 0.96)
 
 var assets: AssetDB
 var speaker := ""
@@ -21,10 +23,10 @@ func _init(p_assets: AssetDB = null) -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	size = Vector2(1024, 576)
 	_style = StyleBoxFlat.new()
-	_style.bg_color = Color(0.42, 0.43, 0.46, 0.88)
-	_style.border_color = Color(0.0, 0.0, 0.0, 0.92)
+	_style.bg_color = BACKGROUND
+	_style.border_color = BORDER
 	_style.set_border_width_all(2)
-	_style.set_corner_radius_all(13)
+	_style.set_corner_radius_all(12)
 
 
 func show_speaker(name: String, where: Vector2 = Vector2(188, 464)) -> void:
@@ -61,5 +63,5 @@ func _draw() -> void:
 		rect.position.x + (rect.size.x - text_w) * 0.5,
 		rect.position.y + (rect.size.y - text_height) * 0.5 + font.get_ascent(FONT_SIZE)
 	)
-	draw_string_outline(font, baseline, speaker, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, 2, Color(0.0, 0.0, 0.0, 1.0))
+	draw_string_outline(font, baseline, speaker, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, UiSkin.TEXT_OUTLINE_SIZE, Color(0.0, 0.0, 0.0, 1.0))
 	draw_string(font, baseline, speaker, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, COLOR)

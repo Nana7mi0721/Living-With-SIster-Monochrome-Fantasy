@@ -180,6 +180,7 @@ public sealed class SavedDialogue
 {
     [JsonPropertyName("message")] public string? Message { get; set; }
     [JsonPropertyName("choices")] public List<string> Choices { get; set; } = new();
+    [JsonPropertyName("allow_cancel")] public bool AllowCancel { get; set; } = true;
 }
 
 /// <summary>

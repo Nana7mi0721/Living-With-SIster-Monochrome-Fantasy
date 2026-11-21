@@ -3,8 +3,17 @@ extends RefCounted
 ## Opcode-290 effect state machine, tone/blend evaluation, and animation math for PictureStage.
 
 const SHAKE_ENDLESS := 100000
+const MULTIPLY_SHADER := """
+shader_type canvas_item;
+render_mode blend_mul, unshaded;
 
-var _blend_materials: Dictionary = {}  # blend mode -> shared CanvasItemMaterial
+void fragment() {
+	COLOR.rgb = mix(vec3(1.0), COLOR.rgb, COLOR.a);
+	COLOR.a = 1.0;
+}
+"""
+
+var _blend_materials: Dictionary = {}  # blend mode -> shared Material
 
 
 ## Compute RGB modulate from base tone, 290 kind=1 color_corr, and active flash/blink effects.
@@ -17,7 +26,7 @@ func tone_color(state: Dictionary) -> Color:
 	var out := Color(1, 1, 1, 1)
 	for channel in 3:
 		var base := clampi(int(tone[channel]) + int(corr[channel]), 0, 200)
-		var value := clampi((base * 255 + 50) / 100, 0, 255)
+		var value := clampi((base * 255 + 50) / 100, 0, 510)
 		for effect in state.get("effects", []):
 			var fx: Dictionary = effect
 			var duration := maxi(1, int(fx.get("duration", 1)))
@@ -30,15 +39,15 @@ func tone_color(state: Dictionary) -> Color:
 				var dist := pos if pos <= duration else cycle - pos
 				var wave := float(dist) / float(duration)
 				var blink := float(base) + float(target[channel]) * wave
-				value = clampi(int(round(blink * 2.55)), 0, 255)
+				value = clampi(int(round(blink * 2.55)), 0, 510)
 			else:
 				var phase := age % duration
 				var from_value := 100 + int(target[channel])
 				var numerator := from_value * (duration - phase) + 100 * phase
 				var denominator := 100 * duration
 				value = int((value * numerator + denominator / 2) / denominator)
-				value = clampi(value, 0, 255)
-		out[channel] = clampf(float(value) / 255.0, 0.0, 1.0)
+				value = clampi(value, 0, 510)
+		out[channel] = float(value) / 255.0
 	return out
 
 
@@ -48,16 +57,25 @@ func apply_blend(node: Control, blend: int) -> void:
 		node.material = null
 		return
 	if not _blend_materials.has(mode):
-		var material := CanvasItemMaterial.new()
-		match mode:
-			1:
-				material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-			2:
-				material.blend_mode = CanvasItemMaterial.BLEND_MODE_SUB
-			3:
-				material.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
-			_:
-				material.blend_mode = CanvasItemMaterial.BLEND_MODE_MIX
+		var material: Material
+		if mode == 3:
+			# CanvasItemMaterial's MUL mode ignores alpha during fades. Fading the
+			# multiply factor toward white keeps slot opacity meaningful.
+			var shader := Shader.new()
+			shader.code = MULTIPLY_SHADER
+			var shader_material := ShaderMaterial.new()
+			shader_material.shader = shader
+			material = shader_material
+		else:
+			var canvas_material := CanvasItemMaterial.new()
+			match mode:
+				1:
+					canvas_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+				2:
+					canvas_material.blend_mode = CanvasItemMaterial.BLEND_MODE_SUB
+				_:
+					canvas_material.blend_mode = CanvasItemMaterial.BLEND_MODE_MIX
+			material = canvas_material
 		_blend_materials[mode] = material
 	node.material = _blend_materials[mode]
 

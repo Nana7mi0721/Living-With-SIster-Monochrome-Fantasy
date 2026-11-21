@@ -111,19 +111,45 @@ public partial class SaveLoadTest : Node
             Number = 12000, Action = PictureAction.Draw, File = "Picture/title01.jpg",
             Args = new[] { 0, 0, 0, 0, 255, 0, 0, 100 }
         });
-        Check(view.PictureSnapshots().Count == 2, "two picture slots must be live before save");
+        Check(view.PictureSnapshots().Count == 2, "scene and save-UI picture slots must be live before save");
         Check(session.SaveGame(), "SaveGame must succeed with pictures on screen");
         view.ClearPictures();
         Check(view.PictureSnapshots().Count == 0, "ClearPictures must drop the snapshot slots");
         Check(session.LoadGame(), "LoadGame must succeed with saved pictures");
         var restoredPics = view.PictureSnapshots();
-        Check(restoredPics.Count == 2, $"two picture slots must come back (got {restoredPics.Count})");
+        Check(restoredPics.Count == 1, $"only scene pictures must come back (got {restoredPics.Count})");
         var restored3 = restoredPics.FirstOrDefault(p => p.Number == 3);
         Check(restored3 != null && restored3.File == "Picture/face01.png" && restored3.Anchor == 3
               && restored3.Args.Count == 8 && restored3.Args[7] == 50,
             "restored picture must keep file, anchor and args");
-        Check(restoredPics.Count(p => p.Number == 12000) == 1, "backdrop slot must be restored once");
+        Check(restoredPics.All(p => p.Number < 12000 || p.Number > 12599),
+            "save-UI picture slots must never be persisted");
         view.ClearPictures();
+
+        // Menu coroutines are session UI, not gameplay. Their descendants must not leak
+        // into a load, while an unrelated scene coroutine still does.
+        var saveRoot = Program.FromSlots(14, "SaveMenu", new List<Slot> { Slot.Command(180, [10000]) });
+        var saveChild = Program.FromSlots(131, "SaveSlot", new List<Slot> { Slot.Command(180, [10000]) });
+        var saveCaller = Program.FromSlots(90013, "SaveCaller", new List<Slot> { Slot.Command(172) });
+        vm.Vm.RegisterProgram(saveRoot);
+        vm.Vm.RegisterProgram(saveChild);
+        vm.Vm.RegisterProgram(saveCaller);
+        Instance saveUi = vm.Vm.CreateInstance(14)!;
+        Instance saveUiChild = vm.Vm.CreateInstance(131, saveUi.Id)!;
+        Instance saveCallerInst = vm.Vm.CreateInstance(90013)!;
+        saveCallerInst.Wait.WaitForChild(saveUi.Id);
+        SaveState? filtered = session.BuildSaveState();
+        Check(filtered != null, "save state must build with menu UI live");
+        Check(filtered != null && filtered.Instances.All(i => i.EventId is not (14 or 131)),
+            "CE14/CE131 and their descendants must be filtered from saved instances");
+        SavedInstance? savedCaller = filtered?.Instances.FirstOrDefault(i => i.Id == saveCallerInst.Id);
+        Check(savedCaller != null, "a non-save caller must survive the filter");
+        Check(savedCaller?.WaitKind == (int)WaitStateKind.None && savedCaller.WaitChild == 0
+              && savedCaller.WaitFrames == 0 && savedCaller.WaitBlock == 0,
+            "a caller waiting on filtered save UI must not keep a dangling child wait");
+        vm.Vm.StopInstance(saveCallerInst.Id);
+        vm.Vm.StopInstance(saveUiChild.Id);
+        vm.Vm.StopInstance(saveUi.Id);
 
         // Arm the map's conversation page and save in the middle of its message: the load
         // must resume the same coroutine instead of replaying the opcode that opened it.
@@ -170,11 +196,19 @@ public partial class SaveLoadTest : Node
         int choicePc = liveChoice?.Pc ?? -1;
         int choiceWait = (int)(liveChoice?.Wait.Kind ?? WaitStateKind.None);
         Check(session.SaveGame(), "SaveGame must succeed while a choice is open");
+        SaveState? choiceSlot = SaveCodec.Read(session.SavePath);
+        Check(choiceSlot?.Dialogue != null, "choice checkpoint must save its dialogue block");
+        if (choiceSlot?.Dialogue != null)
+        {
+            choiceSlot.Dialogue.AllowCancel = false;
+            SaveCodec.Write(session.SavePath, choiceSlot);
+        }
 
         vm.SelectChoice(0);
         for (int i = 0; i < 4; i++) session.AdvanceFrame();
         Check(session.LoadGame(), "LoadGame must succeed from a choice checkpoint");
         Check(view.HasChoices, "choice window must be visible again after load");
+        Check(!session.ChoiceAllowsCancel, "a non-cancellable choice must stay locked after load");
         Check(string.Join("|", vm.GetCurrentChoices()) == choiceText, "choice options must be identical after load");
         Instance? resumedChoice = vm.Vm.FindInstance(liveId);
         Check(resumedChoice?.Pc == choicePc, $"choice pc must resume at {choicePc} (got {resumedChoice?.Pc})");
@@ -476,6 +510,29 @@ public partial class SaveLoadTest : Node
         Check(!vm2.Vm.Faulted, "title-load chain must not fault the VM (" + vm2.Vm.FaultReason + ")");
         Check(vm2.Vm.UnhandledOpcodeCount == 0,
             $"title-load chain saw {vm2.Vm.UnhandledOpcodeCount} unhandled opcodes");
+
+        // Legacy slots may still name a child that the save-UI filter removed. Restore
+        // must release that waiter rather than parking the caller forever.
+        SaveState? dangling = session.BuildSaveState();
+        Check(dangling != null, "save state must build for the dangling-wait probe");
+        const int danglingCallerId = 9100;
+        dangling?.Instances.Add(new SavedInstance
+        {
+            Id = danglingCallerId,
+            EventId = 90013,
+            Kind = "ce",
+            Pc = 0,
+            WaitKind = (int)WaitStateKind.Child,
+            WaitChild = 999_999
+        });
+        string danglingPath = Path.Combine(saveDir, "save_dangling.json");
+        if (dangling != null) SaveCodec.Write(danglingPath, dangling);
+        Check(session.LoadGameFrom(danglingPath), "a slot with a missing child wait must still load");
+        Instance? restoredCaller = vm.Vm.FindInstance(danglingCallerId);
+        Check(restoredCaller != null && restoredCaller.Wait.Kind == WaitStateKind.None,
+            "restore must release a caller whose saved child no longer exists");
+        Check(restoredCaller?.JustResumedFromChild == true,
+            "a released child waiter must resume like a normal child return");
 
         try { Directory.Delete(saveDir, true); }
         catch (IOException) { }

@@ -2,7 +2,7 @@
 
 > **状态**：独立只读复核完成。未修改生产代码，未提交 git；临时截图、探针与二进制均放在 `work/out/deepseek_title_graphics/`，核查结束后清理。本报告是本次唯一写入仓库的文件。
 >
-> 核查对象：仓库 `E:\Study\github program\Living With SIster Monochrome Fantasy`，HEAD `1989151`；原版数据根为 `E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy`。截图 `游戏示例图片/截图/` 是未跟踪用户资料，只读引用，不复制、不提交。
+> 核查对象：本仓库，HEAD `1989151`；原版数据根为 `<retail-root>`。截图 `游戏示例图片/截图/` 是未跟踪用户资料，只读引用，不复制、不提交。
 >
 > **结论置信度**：图像选择与层序为高置信；`221` 的失败路径未在本轮直接反汇编原版 `Game.exe`，但无论“失败返回 0”还是“失败不写目标”，全新 VM 的目标变量本来就是 0，因此最终分支结论不受该差异影响。
 

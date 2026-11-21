@@ -21,6 +21,7 @@ public partial class GameSessionController : Node
     private string _savePath = "";
 
     public bool Valid => _session != null;
+    public string LastError { get; private set; } = "";
     /// <summary>Increments whenever a fresh GameSession (and fresh AutoEvents) is constructed.</summary>
     public int Generation { get; private set; }
     public bool ScriptedInput => _session?.ScriptedInput ?? false;
@@ -34,8 +35,10 @@ public partial class GameSessionController : Node
     public int GetEventSelf(int eventId, int slot) => _vm?.GetEventSelf(eventId, slot) ?? -1;
     public int[] GetEventSelfAll(int eventId, int slot) => _vm?.GetEventSelfAll(eventId, slot) ?? Array.Empty<int>();
     public string SavePath => _session?.SavePath ?? "";
+    public string SaveDirectory => Path.GetDirectoryName(_session?.SavePath ?? "") ?? "";
     public bool MessageOpen => _session?.MessageOpen ?? false;
     public bool HasChoices => _session?.HasChoices ?? false;
+    public bool ChoiceAllowsCancel => _session?.ChoiceAllowsCancel ?? true;
     public bool Faulted => _vm?.Faulted ?? false;
     public int AutoEventStarts(int eventId) => _session?.AutoEventStarts(eventId) ?? 0;
     /// <summary>CE242 command rounds driven by the rebuilt battle wiring.</summary>
@@ -89,7 +92,32 @@ public partial class GameSessionController : Node
     /// <summary>CE43 draws the title rows; the view drives it through this pair.</summary>
     public bool SetTitleMenuVisible(bool visible) => _session?.SetTitleMenuVisible(visible) ?? false;
     public void RestartTitleMenu() => _session?.RestartTitleMenu();
-    public void AdvanceFrame() => _session?.AdvanceFrame();
+    public void AdvanceFrame()
+    {
+        if (_session == null) return;
+        try
+        {
+            _session.AdvanceFrame();
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.ToString();
+            WriteCrashLog(LastError);
+            _session.Fail("unhandled exception: " + ex.Message);
+        }
+        if (_session.Phase == "failed")
+        {
+            string reason = LastError.Length > 0 ? LastError : "session entered failed phase";
+            try
+            {
+                _ui?.Call("report_fault", reason);
+            }
+            catch (Exception ex)
+            {
+                GD.PushError($"[GameSessionController] failed to show fault modal: {ex.Message}");
+            }
+        }
+    }
     public bool SaveGame() => _session?.SaveGame() ?? false;
     public bool LoadGame() => _session?.LoadGame() ?? false;
     public bool SaveQuick() => _session?.SaveGameTo(QuickSavePath()) ?? false;
@@ -117,6 +145,20 @@ public partial class GameSessionController : Node
     public void Fail(string reason) => _session?.Fail(reason);
 
     private static string DefaultDataPath() => Path.Combine(AppPaths.GameDataDir(), "programs.json");
+
+    private static void WriteCrashLog(string detail)
+    {
+        try
+        {
+            string path = ProjectSettings.GlobalizePath("user://crash.log");
+            File.AppendAllText(path,
+                $"[{DateTime.UtcNow:O}] {detail}{System.Environment.NewLine}{System.Environment.NewLine}");
+        }
+        catch (Exception ex)
+        {
+            GD.PushError($"[GameSessionController] crash log write failed: {ex.Message}");
+        }
+    }
 
     // ProjectSettings owns the user:// mapping; the core session layer writes plain OS paths.
     // Tests point LWsmf_SAVE_DIR at a scratch dir: opcodes 220/221/222 persist system data,
@@ -162,6 +204,8 @@ public partial class GameSessionController : Node
             _host.Call("_on_choices", options, selected);
 
         public void HideChoices() => _host.Call("_on_choices_closed");
+
+        public void OnLoadCompleted() => _host.Call("_on_load_completed");
 
         public void ClearPictures() => _host.Call("_on_clear_pictures");
 

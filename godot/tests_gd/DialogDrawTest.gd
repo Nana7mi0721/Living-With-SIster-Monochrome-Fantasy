@@ -15,7 +15,8 @@ func _ready() -> void:
 	var assets := AssetDB.new()
 
 	# 1. Round-trip: tokenize -> to_source must reproduce the input byte for byte.
-	for source in [SAMPLE, TORTURE, "", "plain text only", "\\E", "\\c[", "\\c[1", "\\"]:
+	for source in [SAMPLE, TORTURE, "", "plain text only", "\\E", "\\c[", "\\c[1", "\\",
+			"\\-[1]", "\\+[2]", "\\-[-2]-"]:
 		var tokens := TextTokenizer.tokenize(source)
 		if TextTokenizer.to_source(tokens) != source:
 			failures.append("round trip failed for %s" % source)
@@ -31,6 +32,18 @@ func _ready() -> void:
 		failures.append("\\\\f+[8] should be a relative +8 size step (got %s)" % str(rel))
 	if TextTokenizer.to_source(rel) != "\\f+[8]":
 		failures.append("\\\\f+[8] must round-trip")
+	var spacing := TextTokenizer.tokenize("\\-[1]x\\+[2]y")
+	if TextTokenizer.plain_text(spacing) != "xy":
+		failures.append("letter-spacing codes must not leak glyphs (got %s)" % TextTokenizer.plain_text(spacing))
+	if spacing.size() != 4 or spacing[0].kind != TextTokenizer.Kind.LETTER_SPACING or spacing[0].number != 1:
+		failures.append("\\\\-[1] should be a LETTER_SPACING token with 1 (got %s)" % str(spacing))
+	if spacing[2].kind != TextTokenizer.Kind.LETTER_SPACING or spacing[2].number != 2:
+		failures.append("\\\\+[2] should be a LETTER_SPACING token with 2 (got %s)" % str(spacing))
+	if TextTokenizer.to_source(spacing) != "\\-[1]x\\+[2]y":
+		failures.append("letter-spacing tokens must round-trip")
+	var bare_spacing := TextTokenizer.tokenize("\\-")
+	if bare_spacing.size() != 1 or bare_spacing[0].kind != TextTokenizer.Kind.LETTER_SPACING:
+		failures.append("a bare \\\\- must be consumed as letter spacing")
 	for tag_case in [["<L>", TextTokenizer.Kind.ALIGN_LEFT], ["<C>", TextTokenizer.Kind.ALIGN_CENTER], ["<R>", TextTokenizer.Kind.ALIGN_RIGHT]]:
 		var tag_tokens := TextTokenizer.tokenize(tag_case[0])
 		if tag_tokens.size() != 1 or tag_tokens[0].kind != tag_case[1]:
@@ -39,7 +52,7 @@ func _ready() -> void:
 	if normal_tag.size() != 1 or normal_tag[0].kind != TextTokenizer.Kind.TEXT:
 		failures.append("non-control angle text must stay literal")
 	for expected in [TextTokenizer.Kind.OUTLINE_ON, TextTokenizer.Kind.COLOR, TextTokenizer.Kind.FONT_SIZE,
-			TextTokenizer.Kind.VOICE, TextTokenizer.Kind.PAUSE,
+			TextTokenizer.Kind.VARIABLE, TextTokenizer.Kind.PAUSE,
 			TextTokenizer.Kind.INSTANT, TextTokenizer.Kind.ALIGN_CENTER, TextTokenizer.Kind.ALIGN_LEFT]:
 		if not kinds.has(expected):
 			failures.append("token kind %d missing from the sample" % expected)
@@ -56,6 +69,18 @@ func _ready() -> void:
 		failures.append("bottom bubble should be centered at x=%.1f w=%.1f (got %s)" % [MessageWindow.BUBBLE_X, MessageWindow.BUBBLE_WIDTH, str(bubble)])
 	if bubble.end.y > MessageWindow.BUBBLE_BOTTOM + 6.0:
 		failures.append("bottom bubble escaped bottom bound (got %s)" % str(bubble))
+	if not is_equal_approx(MessageWindow.BUBBLE_X, 156.0) or not is_equal_approx(MessageWindow.BUBBLE_WIDTH, 712.0):
+		failures.append("bottom bubble must use the retail 156/712 x geometry")
+	for style in window._feather_styles:
+		if style.border_width_left != 0 or style.border_width_top != 0:
+			failures.append("dialog panels must not draw hard borders")
+			break
+	var single := MessageWindow.new(assets)
+	add_child(single)
+	single.open("一行")
+	var single_bubble := single.bubble_rect()
+	if not is_equal_approx(single_bubble.size.y, MessageWindow.BUBBLE_MIN_HEIGHT) or not is_equal_approx(single_bubble.end.y, 562.0):
+		failures.append("single-line bubble should be 56px tall and end at y=562 (got %s)" % str(single_bubble))
 	var painted := window.laid_out_characters()
 	if painted <= 0:
 		failures.append("sample produced no characters")
@@ -127,6 +152,80 @@ func _ready() -> void:
 	if not (mid_x > next_x + 20.0):
 		failures.append("trailing <L> must not overwrite <C> on the same line (mid=%.1f next=%.1f)" % [mid_x, next_x])
 
+	# Chinese punctuation may hang into the right padding, but a wrap must never put it
+	# at the start of the next line.
+	var cjk_wrap := MessageWindow.new(assets)
+	add_child(cjk_wrap)
+	var glyph_w := UiSkin.bold_font().get_string_size("中", HORIZONTAL_ALIGNMENT_LEFT, -1, MessageWindow.FONT_SIZE).x
+	var inner_w := MessageWindow.BUBBLE_WIDTH - MessageWindow.BUBBLE_PADDING_X * 2.0
+	var capacity := maxi(1, int(floor(inner_w / maxf(glyph_w, 1.0))))
+	cjk_wrap.open("中".repeat(capacity) + "。下")
+	if cjk_wrap.character_line(capacity) != cjk_wrap.character_line(0):
+		failures.append("a closing punctuation glyph must not be pushed to a new line")
+	var previous_line := -1
+	for i in cjk_wrap.laid_out_characters():
+		var line := cjk_wrap.character_line(i)
+		if line != previous_line:
+			if MessageWindow.LINE_START_FORBIDDEN.contains(cjk_wrap.character_text(i)):
+				failures.append("line %d starts with forbidden punctuation '%s'" % [line, cjk_wrap.character_text(i)])
+				break
+			previous_line = line
+
+	# Four/five-line dialogue keeps enough pitch for a 1px outline instead of collapsing
+	# rows onto each other.
+	var tight := MessageWindow.new(assets)
+	add_child(tight)
+	tight.open("一\n二\n三\n四\n五")
+	if tight.line_count() != 5:
+		failures.append("five-line dialogue should report five rows (got %d)" % tight.line_count())
+	var row_step := tight.character_rect(1).position.y - tight.character_rect(0).position.y
+	if row_step < MessageWindow.FONT_SIZE + UiSkin.TEXT_OUTLINE_SIZE * 2.0:
+		failures.append("five-line row pitch crowds the outline (got %.1f)" % row_step)
+
+	# Typewriter defaults, beats, waits and speed changes.
+	if not is_equal_approx(MessageWindow.TEXT_SPEED, 40.0) or not is_equal_approx(MessageWindow.CENTER_TEXT_SPEED, 35.0):
+		failures.append("typewriter defaults should be 40 cps / 35 cps centered")
+	var typing := MessageWindow.new(assets)
+	add_child(typing)
+	typing.open("abcd")
+	typing._process(0.03)
+	if int(typing.revealed) != 1:
+		failures.append("40 cps typewriter should reveal one glyph in 0.03s (got %.2f)" % typing.revealed)
+	typing._process(1.0)
+	if not typing.finished or not typing.waiting_for_confirm:
+		failures.append("typewriter should finish and wait for confirmation")
+	var paused := MessageWindow.new(assets)
+	add_child(paused)
+	paused.open("a\\.b")
+	paused._process(0.03)
+	if int(paused.revealed) != 1 or paused._pause_timer <= 0.0:
+		failures.append("\\\\. must pause after the preceding glyph (revealed=%d pause=%.2f)" % [int(paused.revealed), paused._pause_timer])
+	var waited := MessageWindow.new(assets)
+	add_child(waited)
+	waited.open("a\\|b")
+	waited._process(1.0)
+	if not waited.waiting_for_continue or int(waited.revealed) != 1:
+		failures.append("\\\\| must stop the typewriter before the next glyph")
+	waited.confirm()
+	waited._process(1.0)
+	if not waited.finished:
+		failures.append("confirming a mid-message WAIT should resume the typewriter")
+	var sped := MessageWindow.new(assets)
+	add_child(sped)
+	sped.open("a\\sp[8]b")
+	if not is_equal_approx(sped.character_speed(0), MessageWindow.TEXT_SPEED) or not is_equal_approx(sped.character_speed(1), 8.0):
+		failures.append("\\\\sp[8] should change the speed from that glyph onward")
+	var attached := MessageWindow.new(assets)
+	add_child(attached)
+	attached.open("Prompt shown with a choice")
+	attached.attach_choice_window()
+	if not attached.choice_attached() or not attached.finished or not attached.waiting_for_confirm:
+		failures.append("a paired choice prompt must finish immediately and stay open")
+	if int(attached.revealed) != attached.laid_out_characters():
+		failures.append("a paired choice prompt must reveal every glyph")
+	attached.close()
+	if attached.choice_attached():
+		failures.append("closing a message must clear its paired-choice state")
 	# UiSkin.TEXT_COLORS covers all 30 SystemDB Type 12 entries (0..29).
 	if UiSkin.TEXT_COLORS.size() != 30 or UiSkin.color_for_index(29) != Color8(0, 0, 0):
 		failures.append("UiSkin.TEXT_COLORS must contain all 30 entries (0..29)")
@@ -188,6 +287,10 @@ func _ready() -> void:
 	var center_box := center_win.bubble_rect()
 	if not is_equal_approx(center_box.size.x, 600.0) or not is_equal_approx(center_box.position.x, 212.0):
 		failures.append("2005 box must be 600px centered at x=212 (got %s)" % str(center_box))
+	if MessageWindow.CENTER_FONT_SIZE != 20 or not is_equal_approx(MessageWindow.CENTER_LINE_HEIGHT, 26.0):
+		failures.append("2005 typography must be 20px / 26px")
+	if center_win.character_size(0) != 20:
+		failures.append("2005 body text must render at 20px (got %d)" % center_win.character_size(0))
 	if center_box.position.y < 42.0 or center_box.end.y > 540.0:
 		failures.append("2005 box must stay inside y=42..540 (got %s)" % str(center_box))
 	var center_prev := Rect2()
@@ -211,13 +314,15 @@ func _ready() -> void:
 	if pause_tex != null and (pause_tex.get_width() != 17 or pause_tex.get_height() != 90):
 		failures.append("SystemFile/Text_Pause.png should be 17x90 (got %dx%d)" % [pause_tex.get_width(), pause_tex.get_height()])
 
-	# 3g. Nameplate: compact 26px tall pill with 16px bold text.
+	# 3g. Nameplate: compact 24px tall pill with 16px bold text.
 	var plate := Nameplate.new(assets)
 	add_child(plate)
 	plate.show_speaker("Sister", Vector2(188, 464))
 	var plate_r := plate.plate_rect()
-	if not plate.is_visible or not is_equal_approx(plate_r.size.y, 26.0) or plate_r.size.x < Nameplate.MIN_WIDTH:
+	if not plate.is_visible or not is_equal_approx(plate_r.size.y, 24.0) or plate_r.size.x < Nameplate.MIN_WIDTH:
 		failures.append("nameplate pill rect mismatch (got %s)" % str(plate_r))
+	if plate._style.bg_color != Nameplate.BACKGROUND or plate._style.corner_radius_top_left != 12:
+		failures.append("nameplate must use the retail grey fill and 12px corner radius")
 
 	# 4. The choice window stacks rows without overlap and stays anchored on Sys3/Sys4.
 	var choice := ChoiceWindow.new(assets)
@@ -236,14 +341,27 @@ func _ready() -> void:
 		if rows[i].size.y < ChoiceWindow.FONT_SIZE:
 			failures.append("row %d is shorter than the font" % i)
 	var expected_pitch := choice.line_height()
-	if not is_equal_approx(expected_pitch, 34.0):
-		failures.append("choice line height should be 34.0 (got %.1f)" % expected_pitch)
+	if not is_equal_approx(expected_pitch, 27.0):
+		failures.append("choice line height should be 27.0 (got %.1f)" % expected_pitch)
 	if rows.size() > 1 and not is_equal_approx(rows[1].position.y - rows[0].position.y, expected_pitch):
 		failures.append("row pitch should be %.1f" % expected_pitch)
 	choice.open(PackedStringArray(["A", "B"]), Vector2(512, 220), true, 0)
+	var explicit_choice := choice.window_rect()
+	if not is_equal_approx(explicit_choice.position.x, 512.0) or not is_equal_approx(explicit_choice.position.y, 220.0):
+		failures.append("an explicit Sys3/Sys4 pair must be treated as the window's top-left (got %s)" % str(explicit_choice))
+	choice.open(PackedStringArray(["A", "B"]), Vector2(-1, -1), true, 0)
 	var centered_choice := choice.window_rect()
-	if not is_equal_approx(centered_choice.position.x, 512.0 - centered_choice.size.x * 0.5):
-		failures.append("choice window must center-anchor around position_hint (got %s)" % str(centered_choice))
+	if not is_equal_approx(centered_choice.position.x, 512.0 - centered_choice.size.x * 0.5) \
+			or not is_equal_approx(centered_choice.position.y, 288.0 - centered_choice.size.y * 0.5):
+		failures.append("the -1 sentinel must center the choice window (got %s)" % str(centered_choice))
+	if not is_equal_approx(ChoiceWindow.FONT_SIZE, 20.0) or not is_equal_approx(ChoiceWindow.MIN_WIDTH, 120.0):
+		failures.append("choice typography must be 20px with a 120px minimum width")
+	if ChoiceWindow.SELECTED_COLOR != Color.WHITE:
+		failures.append("selected choice text must be pure white")
+	var full_width := choice.label_width("Adventure")
+	var inline_width := choice.label_width("\\f[12]Adventure")
+	if choice.display_text("\\f[12]Adventure") != "Adventure" or inline_width >= full_width:
+		failures.append("inline choice font sizes must shrink runs without leaking tags (full=%.1f inline=%.1f)" % [full_width, inline_width])
 	choice.open(PackedStringArray(["A", "B"]), Vector2(10, 10), true, 0)
 	var clamped_choice := choice.window_rect()
 	if clamped_choice.position.x < 24.0 or clamped_choice.position.y < 48.0:
@@ -267,6 +385,17 @@ func _ready() -> void:
 	choice.open(PackedStringArray(["", "VisibleFirst", "VisibleSecond"]), Vector2(260, 220), true, 0)
 	if choice.selected != 1:
 		failures.append("ChoiceWindow.open must snap selected to first visible option when index 0 is empty (got %d)" % choice.selected)
+
+	# 4c. Backlog uses the shared UI font and advertises both line and page navigation.
+	var overlays := PlayOverlays.new()
+	add_child(overlays)
+	overlays.push_backlog("backlog font probe")
+	overlays.open_backlog()
+	if overlays._backlog_label.get_theme_font("font") != UiSkin.font():
+		failures.append("backlog text must use UiSkin.font()")
+	if overlays._backlog_header == null or not overlays._backlog_header.text.contains("W/S"):
+		failures.append("backlog header should document Up/Down or W/S scrolling")
+	overlays.close_backlog()
 
 	# 5. Off-screen render: the window rect must actually contain lit pixels. The dummy
 	# renderer that --headless selects has no textures at all, so the pixel assertion only
@@ -297,10 +426,10 @@ func _ready() -> void:
 	var drawn_plate := Nameplate.new(assets)
 	stage.layer(PictureStage.LAYER_NAMEPLATE).add_child(drawn_plate)
 	var db := drawn.bubble_rect()
-	drawn_plate.show_speaker("Sister", Vector2(db.position.x + 28.0, db.position.y - 24.0))
+	drawn_plate.show_speaker("Sister", Vector2(db.position.x + 12.0, db.position.y - 22.0))
 	var drawn_choice := ChoiceWindow.new(assets)
 	stage.layer(PictureStage.LAYER_CHOICE_PANEL).add_child(drawn_choice)
-	drawn_choice.open(PackedStringArray(["New game", "Load", "Quit"]), Vector2(512, 220), true, 0)
+	drawn_choice.open(PackedStringArray(["New game", "Load", "Quit"]), Vector2(-1, -1), true, 0)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var image := viewport.get_texture().get_image()

@@ -28,6 +28,8 @@ const DIR_PRIORITY: Array[String] = [
 const AUDIO_EXTENSIONS: Array[String] = [".ogg", ".mp3", ".wav"]
 
 var root_dir: String
+## Directory shared with the active save slots; dynamic Save/*.jpg thumbnails live here.
+var save_dir := ""
 ## True when the retail install was missing and the committed stub tree took over.
 var using_fallback := false
 var budget_bytes: int = DEFAULT_BUDGET_BYTES
@@ -80,6 +82,10 @@ static func fallback_root() -> String:
 
 static func _norm_key(logical: String) -> String:
 	return logical.replace("\\", "/").lstrip("/").to_lower()
+
+
+func set_save_dir(path: String) -> void:
+	save_dir = path
 
 
 static func _has_ext(key: String, exts: Array[String]) -> bool:
@@ -154,6 +160,17 @@ func resolve(logical: String, media_kind: String = "any") -> String:
 
 	var allow_tex := kind == "texture" or kind == "any"
 	var allow_audio := kind == "audio" or kind == "any"
+
+	# CE131/CE435 write screenshots at runtime; they are deliberately outside the
+	# immutable retail/pack index and must win over any stale basename match.
+	if allow_tex and key.begins_with("save/") and not save_dir.is_empty():
+		var file_name := key.get_file()
+		for candidate in [
+			save_dir.path_join(file_name),
+			save_dir.path_join("Save").path_join(file_name),
+		]:
+			if FileAccess.file_exists(candidate):
+				return candidate
 
 	if _files.has(key):
 		if (allow_tex and not _has_ext(key, AUDIO_EXTENSIONS)) or (allow_audio and not _has_ext(key, TEXTURE_EXTENSIONS)):
@@ -411,6 +428,17 @@ static func _audio_from_bytes(bytes: PackedByteArray, fallback_ext: String) -> A
 
 func has_cached(logical: String) -> bool:
 	return _cache.has(_norm_key(logical))
+
+
+## Drop one logical path after a screenshot is rewritten or deleted.
+func invalidate(logical: String) -> void:
+	var key := _norm_key(logical)
+	if _sizes.has(key):
+		used_bytes -= int(_sizes[key])
+	_sizes.erase(key)
+	_cache.erase(key)
+	_lru.erase(key)
+	_logged_misses.erase(key)
 
 
 func clear() -> void:

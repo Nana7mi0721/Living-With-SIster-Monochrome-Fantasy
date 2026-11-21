@@ -117,6 +117,7 @@ public sealed class EventVm
     public bool ReturnToTitleRequested { get; set; }
     private readonly Dictionary<string, int> _titleToId = new(StringComparer.Ordinal);
     private readonly HashSet<int> _freshInstanceIds = new();
+    private readonly HashSet<int> _enteredInstanceIds = new();
 
     // Transition setting installed by opcode 160 and consumed by 161/162
     // (Rust crates/wolf-vm/src/exec.rs:910-937).
@@ -613,7 +614,8 @@ public sealed class EventVm
                             {
                                 options[i] = Expand(slot.Strings[i], inst);
                             }
-                            Host.ShowChoices(options);
+                            bool allowCancel = slot.Params.Length == 0 || (slot.Params[0] & 0x10) == 0;
+                            Host.ShowChoices(options, allowCancel);
                             inst.Wait.WaitForChoice(ctrl.BlockIndex);
                             inst.Pc++;
                             return Signal.Blocked;
@@ -664,7 +666,13 @@ public sealed class EventVm
                         face = expanded[1] - '0';
                         messageText = expanded.Length > 2 ? expanded[2..] : "";
                     }
-                    Host.ShowMessage(messageText, face);
+                    bool pairedChoice = inst.Pc + 1 < prog.Len && prog.Slots[inst.Pc + 1].Opcode == 102;
+                    Host.ShowMessage(messageText, face, pairedChoice);
+                    if (pairedChoice)
+                    {
+                        inst.Pc++;
+                        break;
+                    }
                     inst.Wait.WaitForMessage();
                     inst.Pc++;
                     return Signal.Blocked;
@@ -677,7 +685,8 @@ public sealed class EventVm
                         options[i] = Expand(slot.Strings[i], inst);
                     }
                     int blockIdx = ctrl.Kind == ControlKind.Block ? ctrl.BlockIndex : 0;
-                    Host.ShowChoices(options);
+                    bool allowCancel = slot.Params.Length == 0 || (slot.Params[0] & 0x10) == 0;
+                    Host.ShowChoices(options, allowCancel);
                     inst.Wait.WaitForChoice(blockIdx);
                     inst.Pc++;
                     return Signal.Blocked;
@@ -1006,12 +1015,8 @@ public sealed class EventVm
                             if (slot.Params.Length > 11)
                             {
                                 var magic = Magic.Decode(slot.Params[11]);
-                                file = magic.Kind switch
-                                {
-                                    MagicKind.SelfVar => inst.Self.GetStr((int)magic.Index),
-                                    MagicKind.StrVar => Vars.GetStr((int)magic.Index),
-                                    _ => ""
-                                };
+                                if (magic.Kind is MagicKind.SelfVar or MagicKind.StrVar or MagicKind.SysVar)
+                                    file = Expand(EvalStr(slot.Params[11], inst), inst);
                             }
                             break;
                     }
@@ -1459,7 +1464,8 @@ public sealed class EventVm
                     int rawKind = slot.Params.Length > 0 ? slot.Params[0] : 0;
                     int milliseconds = slot.Params.Length > 1 ? slot.Params[1] : 0;
                     int kind = rawKind >> 16;
-                    Host.ProFeature(kind, milliseconds);
+                    string path = slot.Strings.Length > 0 ? Expand(slot.Strings[0], inst) : "";
+                    Host.ProFeature(kind, milliseconds, path);
                     inst.Pc++;
                     if (kind == 5)
                     {
@@ -1622,6 +1628,7 @@ public sealed class EventVm
         EndGameRequested = false;
         ReturnToTitleRequested = false;
         _freshInstanceIds.Clear();
+        _enteredInstanceIds.Clear();
         Instances.Clear();
     }
 
@@ -1682,6 +1689,10 @@ public sealed class EventVm
             var inst = Instances[i];
             if (inst.IsRunnable)
             {
+                if (_enteredInstanceIds.Add(inst.Id) && !inst.IsParallel)
+                {
+                    Host.EventEntered(inst.EventId, !inst.ParentId.HasValue);
+                }
                 StepInstance(inst, ref budget);
             }
         }

@@ -52,6 +52,8 @@ var _choice_hover_lock_pos := Vector2(-1, -1)
 # Active CE264 speaker & position mode persist across consecutive 101 messages until cleared/changed.
 var _active_speaker := ""
 var _active_msg_pos_mode: int = _WolfConst.MSG_POS_BOTTOM
+var _clean_scene_image: Image
+var _action_input_pending := false
 
 var phase := "boot"
 var frames := 0
@@ -136,6 +138,7 @@ func _ready() -> void:
 	session.name = "Session"
 	add_child(session)
 	session.Setup(vm, self)
+	assets.set_save_dir(session.SaveDirectory)
 	_build_overlays()
 	_load_display_settings()
 
@@ -151,6 +154,9 @@ func _ready() -> void:
 	vm.connect("ReturnToTitleRequested", _on_return_to_title)
 	vm.connect("EndGameRequested", _on_end_game)
 	vm.connect("ColorChangeRequested", _on_color_change)
+	vm.connect("ProFeatureRequested", _on_pro_feature)
+	vm.connect("PointerPressObserved", _on_pointer_press_observed)
+	vm.connect("ForegroundEventEntered", _on_event_entered)
 
 	if not vm.LoadPrograms(""):
 		phase = "failed"
@@ -184,6 +190,8 @@ func _process(delta: float) -> void:
 	if overlays != null:
 		overlays.tick_toast()
 	if phase == "failed" or phase == "setup" or faulted:
+		if phase == "failed" and overlays != null:
+			report_fault(_failure_reason())
 		return
 	_accumulator += delta
 	var guard := 0
@@ -211,6 +219,8 @@ func _consume_picture_queue(queued: String) -> bool:
 	if not batch is Array:
 		push_error("picture queue JSON is not an array: %s" % queued.left(120))
 		return false
+	if _batch_opens_system_ui(batch) and not _system_ui_visible():
+		_clean_scene_image = _grab_viewport_image()
 	for p in batch:
 		var animate: Array = p.get("animate", [])
 		var flags := {
@@ -227,14 +237,46 @@ func _consume_picture_queue(queued: String) -> bool:
 	return true
 
 
+func _batch_opens_system_ui(batch: Array) -> bool:
+	for p in batch:
+		if not p is Dictionary:
+			continue
+		var number := int(p.get("number", 0))
+		var action := int(p.get("action", 0))
+		if action == 0 and number >= 12000 and number <= 12599:
+			return true
+	return false
+
+
+func _system_ui_visible() -> bool:
+	if stage == null:
+		return false
+	for number in range(12000, 12600):
+		if stage.picture_rect(number).size.x > 0.0:
+			return true
+	return false
+
+
+func _grab_viewport_image() -> Image:
+	if _is_headless() or not is_inside_tree():
+		return null
+	var viewport := get_viewport()
+	if viewport == null or viewport.get_texture() == null:
+		return null
+	var image := viewport.get_texture().get_image()
+	return image if image != null and not image.is_empty() else null
+
+
 func advance_frame() -> void:
 	if phase == "failed" or phase == "setup" or faulted:
+		if phase == "failed" and overlays != null:
+			report_fault(_failure_reason())
 		return
 	_release_modal_guard_if_free()
 	# Pause the deterministic clock while a modal overlay (backlog/title confirm) is open.
 	if _modal_window_open():
 		return
-	if auto_advance and message.is_open():
+	if auto_advance and message.is_open() and not message.choice_attached():
 		message.confirm()
 	# Pointer starts at (-1,-1) before any mouse event so slots cannot hover at (0,0).
 	var pointer := router.hover_position if router.mouse_seen else Vector2(-1, -1)
@@ -250,6 +292,8 @@ func advance_frame() -> void:
 		var _p0 := Time.get_ticks_usec()
 		session.AdvanceFrame()
 		var _p1 := Time.get_ticks_usec()
+		if faulted:
+			return
 		var queued := str(vm.TakePicturesJson())
 		_consume_picture_queue(queued)
 		var _p2 := Time.get_ticks_usec()
@@ -260,6 +304,8 @@ func advance_frame() -> void:
 		PROF["stage_tick"] = PROF.get("stage_tick", 0) + (_p3 - _p2)
 	else:
 		session.AdvanceFrame()
+		if faulted:
+			return
 		var queued := str(vm.TakePicturesJson())
 		_consume_picture_queue(queued)
 		stage.tick()
@@ -272,13 +318,28 @@ func advance_frame() -> void:
 		report_fault(vm.FaultReason)
 		return
 	router.clear_frame_latches()
+	_action_input_pending = false
 
 
 ## Opcode 123 polls through this bound method so the Callable stays alive across the session.
 func _key_state(mask: int, auto_keys: int) -> int:
 	if session.ScriptedInput:
 		return vm.ScriptedKeyCode
-	return vm.KeyCodeForPoll(mask, router.held_mask(not _modal_release_guard), auto_keys, router.wheel_notch())
+	var held := router.held_mask(not _modal_release_guard)
+	return vm.KeyCodeForPoll(mask, held, auto_keys, router.wheel_notch())
+
+
+func _on_pointer_press_observed() -> void:
+	if router != null:
+		router.clear_click_latch()
+
+
+## Do not let the click/key that opened an event satisfy that event's own first poll.
+func _on_event_entered(_event_id: int, is_root: bool) -> void:
+	if is_root or not _action_input_pending or router == null:
+		return
+	if router.action_input_held():
+		router.suppress_action_until_release()
 
 
 ## Start a common event by id.
@@ -303,6 +364,7 @@ func _on_action() -> void:
 			return
 		if mouse:
 			_arm_modal_release_guard()
+		_action_input_pending = true
 		choice.confirm()
 		return
 	if message.is_open():
@@ -315,9 +377,13 @@ func _on_action() -> void:
 				# Clear same-frame click latches so finishing typewriter reveal does not bleed
 				# to parallel 123/124 polls, without blocking rapid next-page clicks.
 				router.clear_pointer_latches()
+		elif was_finished:
+			_action_input_pending = true
+			_suppress_confirmed_action_until_release()
 		return
 	if action_denied:
 		return
+	_action_input_pending = true
 	session.PressActionKey()
 
 
@@ -340,12 +406,7 @@ func _on_cancel() -> void:
 			_arm_modal_release_guard()
 		choice.cancel()
 		return
-	if message.is_open():
-		message.close()
-		# Closing the window must also end WaitState.Message so the VM does not stall.
-		_on_message_confirm()
-		if mouse:
-			_arm_modal_release_guard()
+	# Retail cancel does not discard an unread line; only message-bottom actions advance it.
 
 
 func _on_wheel(direction: int) -> void:
@@ -361,8 +422,8 @@ func _on_wheel(direction: int) -> void:
 			return
 		choice.move(direction)
 		_choice_hover_lock_pos = router.hover_position if router.mouse_seen else Vector2(-1, -1)
-	elif message.is_open():
-		message.confirm()
+	elif message.is_open() and direction < 0:
+		open_backlog()
 
 
 func _on_move(dx: int, dy: int) -> void:
@@ -375,15 +436,6 @@ func _on_move(dx: int, dy: int) -> void:
 		choice.move(dy)
 		_choice_hover_lock_pos = router.hover_position if router.mouse_seen else Vector2(-1, -1)
 		return
-	if phase == "bedroom" and not message.is_open():
-		var facing := 2
-		if dy < 0:
-			facing = 8
-		elif dx < 0:
-			facing = 4
-		elif dx > 0:
-			facing = 6
-		session.MoveLeader(dx, dy, facing)
 
 
 ## Only real mouse motion reaches here, so a resting mouse never steals the keyboard cursor.
@@ -405,6 +457,7 @@ func _on_choice_chosen(index: int) -> void:
 		session.SetTitleMenuVisible(false)
 	if not was_open:
 		return
+	_suppress_confirmed_action_until_release()
 	if index < 0:
 		session.CancelChoice()
 		return
@@ -412,6 +465,12 @@ func _on_choice_chosen(index: int) -> void:
 		session.SelectTitleChoice(index)
 	else:
 		session.PickChoice(index)
+
+
+## A decide input that closed a message or choice must not satisfy the next 123 poll.
+func _suppress_confirmed_action_until_release() -> void:
+	if router != null and router.action_input_held():
+		router.suppress_action_until_release()
 
 
 # ---- host callbacks ------------------------------------------------------
@@ -452,15 +511,17 @@ func _on_speaker_changed(speaker: String) -> void:
 func _sync_active_nameplate() -> void:
 	if nameplate == null:
 		return
-	if _active_msg_pos_mode == _WolfConst.MSG_POS_CENTER or _active_speaker.is_empty():
+	if _active_speaker.is_empty():
 		nameplate.hide_speaker()
 		return
 	var bubble := message.bubble_rect()
-	nameplate.show_speaker(_active_speaker, Vector2(bubble.position.x + 24.0, bubble.position.y - 26.0))
+	nameplate.show_speaker(_active_speaker, Vector2(bubble.position.x + 12.0, bubble.position.y - 22.0))
 
 
 func _on_message(text: String, face: int) -> void:
 	message.open(text, face if face > 0 else 0)
+	if vm != null and vm.MessageKeptForChoice:
+		message.attach_choice_window()
 	_sync_active_nameplate()
 	# Backlog is memory-only history with WOLF escape codes stripped.
 	var entry := TextTokenizer.plain_text(TextTokenizer.tokenize(message.full_text))
@@ -489,7 +550,7 @@ func _on_choices(options: Array, selected: int = 0) -> void:
 	if packed.is_empty():
 		return
 	_choice_hover_lock_pos = Vector2(-1, -1)
-	choice.open(packed, _choice_position(), true, selected)
+	choice.open(packed, _choice_position(), session.ChoiceAllowsCancel, selected)
 	if session.Phase == "title":
 		_title_menu_options = packed
 		_attach_title_menu()
@@ -588,10 +649,57 @@ func _on_effect(kind: int, duration: int, args: Array) -> void:
 			status("effect kind=%d duration=%d (no target)" % [kind, duration])
 
 
+## Opcode 1000 kind 0/3 read/write the save-thumbnail path; other features have no
+## presentation contract here and kind 5 remains the VM's timed wait.
+func _on_pro_feature(kind: int, _milliseconds: int, path: String) -> void:
+	var logical := path.replace("\\", "/").strip_edges()
+	if not logical.to_lower().begins_with("save/"):
+		return
+	var file_name := logical.get_file()
+	if file_name.is_empty():
+		return
+	var directory: String = session.SaveDirectory
+	if directory.is_empty():
+		status("pro-feature %d: save directory unavailable" % kind)
+		return
+	var target: String = directory.path_join(file_name)
+	match kind:
+		0:
+			var image := _thumbnail_source_image()
+			if image == null:
+				status("save thumbnail failed: no viewport image")
+				return
+			if image.get_width() != 1024 or image.get_height() != 576:
+				image.resize(1024, 576, Image.INTERPOLATE_BILINEAR)
+			var save_error := image.save_jpg(target, 0.90)
+			if save_error != OK:
+				status("save thumbnail failed: %s" % error_string(save_error))
+				return
+			assets.invalidate(logical)
+			assets.invalidate("save/" + file_name)
+			status("save thumbnail written: %s" % file_name)
+		3:
+			if FileAccess.file_exists(target):
+				var delete_error := DirAccess.remove_absolute(target)
+				if delete_error != OK:
+					status("save thumbnail delete failed: %s" % error_string(delete_error))
+					return
+			assets.invalidate(logical)
+			assets.invalidate("save/" + file_name)
+			status("save thumbnail deleted: %s" % file_name)
+
+
+func _thumbnail_source_image() -> Image:
+	if _system_ui_visible() and _clean_scene_image != null:
+		return _clean_scene_image.duplicate()
+	var image := _grab_viewport_image()
+	return image.duplicate() if image != null else null
+
+
 ## Sys3/Sys4 hold the choice window corner.
 func _choice_position() -> Vector2:
-	var x := 512
-	var y := 288
+	var x := -1
+	var y := -1
 	var sys3: int = vm.GetSys(_WolfConst.SYS_CHOICE_ANCHOR_X)
 	var sys4: int = vm.GetSys(_WolfConst.SYS_CHOICE_ANCHOR_Y)
 	# -1 is the default sentinel; other negative values deliberately park the window off-screen.
@@ -672,9 +780,9 @@ func _on_color_change(color: int, frames: int) -> void:
 	_sync_screen_tint()
 
 
-## Opcode 151 tints the map and screen-layer pictures (< 0); HUD pictures stay neutral.
+## Opcode 151 is a stage-wide multiply overlay; the map must not apply it a second time.
 func _sync_screen_tint() -> void:
-	map_view.modulate = stage.screen_tint_multiplier()
+	map_view.modulate = Color.WHITE
 
 
 # ---- session view callbacks ----------------------------------------------
@@ -733,6 +841,22 @@ func _on_session_map(map_id: int, leader_x: int, leader_y: int) -> void:
 		status("map layer missing for map %d" % map_id)
 	map_view.set_leader_cell(Vector2i(leader_x, leader_y))
 	status("map %d (%d,%d)" % [map_id, leader_x, leader_y])
+
+
+## A successful load invalidates every transient overlay from the pre-load frame.
+func _on_load_completed() -> void:
+	_active_speaker = ""
+	_active_msg_pos_mode = _WolfConst.MSG_POS_BOTTOM
+	message.close()
+	choice.close()
+	if nameplate != null:
+		nameplate.hide_speaker()
+	if overlays != null:
+		overlays.close_non_fault_modals()
+		overlays.clear_backlog()
+	_clear_transition_overlays()
+	_clean_scene_image = null
+	_arm_modal_release_guard()
 
 
 func _on_clear_pictures() -> void:
@@ -1015,7 +1139,7 @@ func title_confirm_open() -> bool:
 
 
 func request_return_to_title() -> void:
-	if faulted or phase == "setup" or phase == "failed" or title_confirm_open():
+	if faulted or phase == "title" or phase == "setup" or phase == "failed" or title_confirm_open():
 		return
 	overlays.open_title_confirm()
 	status("return-to-title confirm opened")
@@ -1144,12 +1268,22 @@ func report_fault(reason: String) -> void:
 		return
 	faulted = true
 	phase = "faulted"
+	_clear_transition_overlays()
 	choice.close()
 	message.close()
 	if overlays != null:
 		overlays.show_fault_modal(reason, session.HasSave)
 	status("FAULT: %s" % reason)
 	push_error("GameRoot faulted: %s" % reason)
+
+
+func _failure_reason() -> String:
+	var reason: String = vm.FaultReason if vm != null else ""
+	if not reason.is_empty():
+		return reason
+	if not _status_lines.is_empty():
+		return _status_lines[-1]
+	return "session failed"
 
 
 func can_save() -> bool:

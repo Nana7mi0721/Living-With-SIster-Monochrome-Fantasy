@@ -10,16 +10,21 @@ const _MediaPakReader = preload("res://presentation/MediaPakReader.cs")
 const WINDOW_BASE := "SystemFile/WindowBase.png"
 const WINDOW_CORNER := 3
 const BASE_FONT_SIZE := 20
+const TEXT_OUTLINE_SIZE := 1
 
 const FONT_NAMES: Array[String] = [
-	"YouYuan",
 	"Microsoft YaHei UI",
 	"Microsoft YaHei",
 	"Noto Sans CJK SC",
 	"Source Han Sans SC",
 	"PingFang SC",
+	"YouYuan",
 	"sans-serif",
 ]
+
+## Actual bold faces are preferred; this embolden keeps regular-only CJK faces legible.
+const FALLBACK_EMBOLDEN := 0.32
+const RETAIL_EMBOLDEN := 0.22
 
 ## SystemDB Type 12 text colour palette (color[0..29]).
 const TEXT_COLORS: Array[Color] = [
@@ -133,24 +138,52 @@ static func _find_retail_font_bytes_in_pak() -> PackedByteArray:
 	return PackedByteArray()
 
 
-static func _make_system_font(bold: bool) -> SystemFont:
+static func _find_system_bold_face() -> Font:
+	for font_name in FONT_NAMES:
+		if font_name == "sans-serif":
+			continue
+		var path := OS.get_system_font_path(font_name, 700)
+		if path.is_empty() or not FileAccess.file_exists(path):
+			continue
+		var ff := FontFile.new()
+		if ff.load_dynamic_font(path) != OK:
+			continue
+		ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+		ff.hinting = TextServer.HINTING_LIGHT
+		ff.allow_system_fallback = true
+		return ff
+	return null
+
+
+static func _make_system_font(bold: bool) -> Font:
+	if bold:
+		var bold_face := _find_system_bold_face()
+		if bold_face != null:
+			return bold_face
 	var sys := SystemFont.new()
 	sys.font_names = PackedStringArray(FONT_NAMES)
 	if bold:
 		sys.font_weight = 700
 	sys.allow_system_fallback = true
 	sys.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+	sys.hinting = TextServer.HINTING_LIGHT
+	if bold:
+		var fv := FontVariation.new()
+		fv.base_font = sys
+		fv.variation_embolden = FALLBACK_EMBOLDEN
+		return fv
 	return sys
 
 
 static func _configure_font_file(ff: FontFile, bold: bool, strict: bool) -> Font:
 	ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+	ff.hinting = TextServer.HINTING_LIGHT
 	ff.allow_system_fallback = not strict
 	ff.fallbacks = [] if strict else [_make_system_font(bold)]
 	if bold:
 		var fv := FontVariation.new()
 		fv.base_font = ff
-		fv.variation_embolden = 0.22
+		fv.variation_embolden = RETAIL_EMBOLDEN
 		return fv
 	return ff
 

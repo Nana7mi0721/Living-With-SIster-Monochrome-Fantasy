@@ -18,6 +18,8 @@ public interface IVmSession
     int LeaderFacing { get; set; }
     uint MovementDeny { get; }
     uint BasicAllDeny { get; }
+    /// <summary>Whether the choice currently waiting on the host may be cancelled.</summary>
+    bool ChoiceAllowsCancel => true;
     /// <summary>Map file registered for a map id (SysDatabase type 0, column 0).</summary>
     string MapPath(int mapId);
     bool ActionKeyRequested { get; set; }
@@ -37,7 +39,11 @@ public interface IVmSession
     void SelectChoice(int index);
     void CancelChoice();
     void DismissMessage();
-    void RestoreDialogue(string? message, string[] choices);
+    /// <summary>True when the current 101 prompt is held for the following 102 choice.</summary>
+    bool MessageKeptForChoice => false;
+    /// <summary>Forget stale host-side dialogue state before replaying a loaded slot.</summary>
+    void ResetDialogueState() { }
+    void RestoreDialogue(string? message, string[] choices, bool allowCancel = true);
     DbValue? Database(DbOp op);
     /// <summary>Apply the 250 retail database overlay cells captured by the importer.</summary>
     void ApplySavedCells(IReadOnlyList<LegacySaveImporter.DatabaseCell> cells);
@@ -65,6 +71,8 @@ public interface IGameSessionView
     IReadOnlyList<SavedAudio> SnapshotAudio();
     bool HasMessage { get; }
     string MessageText { get; }
+    /// <summary>Close transient front-end overlays after a successful load/rollback.</summary>
+    void OnLoadCompleted() { HideMessage(); HideChoices(); }
 }
 
 /// <summary>
@@ -74,6 +82,9 @@ public interface IGameSessionView
 /// </summary>
 public sealed class GameSession
 {
+    private const int SaveUiPictureFirst = 12000;
+    private const int SaveUiPictureLast = 12599;
+
     private readonly IVmSession _vm;
     private readonly IGameSessionView _view;
     private readonly string _dataPath;
@@ -118,6 +129,7 @@ public sealed class GameSession
     public int Facing => _facing;
     public int Frames { get; private set; }
     public bool HasChoices => _hasChoices;
+    public bool ChoiceAllowsCancel { get; private set; } = true;
     public bool MessageOpen => _messageOpen;
     /// <summary>Number of conditional common events tracked by the auto-event scheduler.</summary>
     public int AutoEventCount => EnsureAutoEvents().EventCount;
@@ -167,7 +179,9 @@ public sealed class GameSession
     public void CancelChoice()
     {
         _hasChoices = false;
+        ChoiceAllowsCancel = true;
         _view.HideChoices();
+        ClosePairedMessage();
         _vm.CancelChoice();
     }
 
@@ -183,8 +197,10 @@ public sealed class GameSession
         }
 
         _titleProgram = title;
+        _vm.ResetDialogueState();
         _messageOpen = false;
         _hasChoices = false;
+        ChoiceAllowsCancel = true;
         _actionPressed = false;
         _pendingLoad = false;
         _teleports.Clear();
@@ -273,14 +289,15 @@ public sealed class GameSession
                 _vm.Vm.CreateInstance(_titleProgram);
             }
         }
-        if (_messageOpen && !_vm.IsWaitingForMessage())
-        {
-            NotifyMessageClosed();
-        }
         if (_hasChoices && !_vm.IsWaitingForChoice())
         {
             _hasChoices = false;
+            ChoiceAllowsCancel = true;
             _view.HideChoices();
+        }
+        if (_messageOpen && !_vm.IsWaitingForMessage() && !_hasChoices)
+        {
+            NotifyMessageClosed();
         }
         UpdateMapHud(false);
         if (_vm.Vm.ReturnToTitleRequested)
@@ -350,6 +367,7 @@ public sealed class GameSession
     public void ShowChoices(string[] options)
     {
         _hasChoices = true;
+        ChoiceAllowsCancel = _vm.ChoiceAllowsCancel;
         _lastChoices = options;
         _view.ShowChoices(options, 0);
     }
@@ -360,7 +378,9 @@ public sealed class GameSession
     public void PickChoice(int index)
     {
         _hasChoices = false;
+        ChoiceAllowsCancel = true;
         _view.HideChoices();
+        ClosePairedMessage();
         // Title menu: row 0 new game (the event teleports to map 3), row 1 load, row 2 quit.
         // SaveLoadTest calls PickChoice(1) directly when HasSave is true to quick-load slot 01.
         if (Phase == "title" && index == 1 && HasSave)
@@ -378,8 +398,17 @@ public sealed class GameSession
     public void SelectTitleChoice(int index)
     {
         _hasChoices = false;
+        ChoiceAllowsCancel = true;
         _view.HideChoices();
+        ClosePairedMessage();
         _vm.SelectChoice(index);
+    }
+
+    private void ClosePairedMessage()
+    {
+        if (!_messageOpen) return;
+        _messageOpen = false;
+        _view.HideMessage();
     }
 
     // ---- movement and teleports ----------------------------------------
@@ -500,9 +529,19 @@ public sealed class GameSession
         }
 
         state.MapEvents = _mapRuntime.SnapshotStates(_vm.Vm);
+        var liveInstances = new Dictionary<int, Instance>();
+        foreach (Instance inst in _vm.Vm.Instances) liveInstances[inst.Id] = inst;
+        var persistedInstances = new List<Instance>();
         foreach (Instance inst in _vm.Vm.Instances)
         {
+            if (!HasSaveUiAncestor(inst, liveInstances)) persistedInstances.Add(inst);
+        }
+        var persistedIds = persistedInstances.Select(i => i.Id).ToHashSet();
+        foreach (Instance inst in persistedInstances)
+        {
             MapEventState? owner = _mapRuntime.Events.FirstOrDefault(e => e.InstanceId == inst.Id);
+            bool childDropped = inst.Wait.Kind == WaitStateKind.Child
+                && !persistedIds.Contains(inst.Wait.ChildId);
             var saved = new SavedInstance
             {
                 Id = inst.Id,
@@ -512,10 +551,10 @@ public sealed class GameSession
                 ReturnTo = inst.ReturnTo,
                 Kind = owner != null ? "map" : "ce",
                 Page = owner?.Active ?? -1,
-                WaitKind = (int)inst.Wait.Kind,
-                WaitFrames = inst.Wait.Frames,
-                WaitBlock = inst.Wait.Block,
-                WaitChild = inst.Wait.ChildId,
+                WaitKind = childDropped ? (int)WaitStateKind.None : (int)inst.Wait.Kind,
+                WaitFrames = childDropped ? 0 : inst.Wait.Frames,
+                WaitBlock = childDropped ? 0 : inst.Wait.Block,
+                WaitChild = childDropped ? 0 : inst.Wait.ChildId,
                 Self = SavedSelf(inst.EventId, inst.Self)
             };
             foreach (LoopCtx loop in inst.Loops)
@@ -525,19 +564,59 @@ public sealed class GameSession
             state.Instances.Add(saved);
         }
 
-        state.Pictures.AddRange(_view.SnapshotPictures());
+        state.Pictures.AddRange(_view.SnapshotPictures().Where(p => !IsSaveUiPicture(p.Number)));
         state.Audio.AddRange(_view.SnapshotAudio());
 
-        if (_view.HasMessage)
+        bool hasMessageWait = persistedInstances.Any(i => i.Wait.Kind == WaitStateKind.Message);
+        bool hasChoiceWait = persistedInstances.Any(i => i.Wait.Kind == WaitStateKind.Choice);
+        if (hasMessageWait && _view.HasMessage)
         {
             state.Dialogue = new SavedDialogue { Message = _view.MessageText };
         }
-        else if (_vm.IsWaitingForChoice())
+        else if (hasChoiceWait && _vm.IsWaitingForChoice())
         {
-            state.Dialogue = new SavedDialogue { Choices = _vm.GetCurrentChoices().ToList() };
+            state.Dialogue = new SavedDialogue
+            {
+                Message = _messageOpen && _view.HasMessage ? _view.MessageText : "",
+                Choices = _vm.GetCurrentChoices().ToList(),
+                AllowCancel = ChoiceAllowsCancel
+            };
         }
 
         return state;
+    }
+
+    private static bool IsSaveUiPicture(int number) =>
+        number >= SaveUiPictureFirst && number <= SaveUiPictureLast;
+
+    private static bool IsSaveUiEvent(int eventId) => eventId is 14 or 94 or 131;
+
+    private static bool HasSaveUiAncestor(Instance inst, IReadOnlyDictionary<int, Instance> byId)
+    {
+        var seen = new HashSet<int>();
+        Instance? current = inst;
+        while (current != null && seen.Add(current.Id))
+        {
+            if (IsSaveUiEvent(current.EventId)) return true;
+            current = current.ParentId is int parent && byId.TryGetValue(parent, out Instance? found)
+                ? found
+                : null;
+        }
+        return false;
+    }
+
+    private static bool HasSaveUiAncestor(SavedInstance inst, IReadOnlyDictionary<int, SavedInstance> byId)
+    {
+        var seen = new HashSet<int>();
+        SavedInstance? current = inst;
+        while (current != null && seen.Add(current.Id))
+        {
+            if (IsSaveUiEvent(current.EventId)) return true;
+            current = current.ParentId is int parent && byId.TryGetValue(parent, out SavedInstance? found)
+                ? found
+                : null;
+        }
+        return false;
     }
 
     public bool SaveGame() => SaveGameTo(_savePath);
@@ -565,7 +644,7 @@ public sealed class GameSession
         {
             SaveCodec.Write(path, state);
         }
-        catch (IOException ex)
+        catch (Exception ex)
         {
             _view.SetStatus("save failed: " + ex.Message);
             return false;
@@ -609,6 +688,10 @@ public sealed class GameSession
         {
             if (rollback != null && RestoreAfterFailedLoad(rollback))
             {
+                _view.RestorePictures(rollback.Pictures.Where(p => !IsSaveUiPicture(p.Number)).ToList());
+                _view.RestoreAudio(rollback.Audio);
+                _view.OnLoadCompleted();
+                RestoreLoadedDialogue(rollback);
                 _view.SetStatus($"load failed: kept map {rollback.MapId} at {rollback.LeaderX},{rollback.LeaderY}");
             }
             return false;
@@ -616,12 +699,36 @@ public sealed class GameSession
 
         LoadedFrom = read.Source;
         // EnterMap -> ShowMap clears the layer, so the saved slots are replayed after it.
-        _view.RestorePictures(state.Pictures);
+        _view.RestorePictures(state.Pictures.Where(p => !IsSaveUiPicture(p.Number)).ToList());
         // Audio last: the map load above may start its own track, and the slot wins.
         _view.RestoreAudio(state.Audio);
+        _view.OnLoadCompleted();
+        RestoreLoadedDialogue(state);
         _view.SetStatus($"loaded slot 01 from {SaveCodec.SourceName(read.Source)} (map {state.MapId} {state.LeaderX},{state.LeaderY})");
         UpdateMapHud(false);
         return true;
+    }
+
+    private void RestoreLoadedDialogue(SaveState state)
+    {
+        if (state.Dialogue == null) return;
+        bool messageWait = _vm.Vm.Instances.Any(i => i.Wait.Kind == WaitStateKind.Message);
+        bool choiceWait = _vm.Vm.Instances.Any(i => i.Wait.Kind == WaitStateKind.Choice);
+        if (messageWait && !string.IsNullOrEmpty(state.Dialogue.Message))
+        {
+            _vm.RestoreDialogue(state.Dialogue.Message, Array.Empty<string>());
+        }
+        else if (choiceWait && state.Dialogue.Choices.Count > 0)
+        {
+            _vm.RestoreDialogue(state.Dialogue.Message, state.Dialogue.Choices.ToArray(),
+                state.Dialogue.AllowCancel);
+        }
+        else if (choiceWait)
+        {
+            // A legacy slot can carry a choice wait without labels; resolve it rather
+            // than leaving an invisible modal gate forever.
+            _vm.CancelChoice();
+        }
     }
 
     // ---- script save/load (opcodes 220/221/222) -------------------------
@@ -724,7 +831,7 @@ public sealed class GameSession
         {
             SaveCodec.Write(path, BuildSystemState());
         }
-        catch (IOException ex)
+        catch (Exception ex)
         {
             _view.SetStatus("system save failed: " + ex.Message);
         }
@@ -845,10 +952,13 @@ public sealed class GameSession
     private bool ApplyLoadedState(SaveState state)
     {
         _vm.Vm.StopAll();
+        _vm.ResetDialogueState();
         _messageOpen = false;
         _hasChoices = false;
+        ChoiceAllowsCancel = true;
         _view.HideMessage();
         _view.HideChoices();
+        _view.ClearPictures();
         _vm.Map = null;
         _mapRuntime = null;
         _map = null;
@@ -1008,8 +1118,10 @@ public sealed class GameSession
     {
         Phase = "newgame";
         _vm.Vm.StopAll();
+        _vm.ResetDialogueState();
         _messageOpen = false;
         _hasChoices = false;
+        ChoiceAllowsCancel = true;
         _view.HideMessage();
         _view.HideChoices();
         // AutoEvents is session-scoped; StopAll does not clear its edge latch. Re-arming
@@ -1038,8 +1150,11 @@ public sealed class GameSession
 
     private void RestoreInstances(SaveState state)
     {
+        var savedById = new Dictionary<int, SavedInstance>();
+        foreach (SavedInstance saved in state.Instances) savedById[saved.Id] = saved;
         foreach (SavedInstance saved in state.Instances)
         {
+            if (HasSaveUiAncestor(saved, savedById)) continue;
             Program? program = null;
             if (saved.Kind == "map" && saved.Page >= 0)
             {
@@ -1082,6 +1197,19 @@ public sealed class GameSession
                 inst.Loops.Add(new LoopCtx { Block = loop.Block, Remaining = loop.Remaining });
             }
             _vm.Vm.RestoreInstance(inst);
+        }
+        ClearMissingChildWaits();
+    }
+
+    /// <summary>Save-UI children are intentionally omitted; release any caller left waiting on them.</summary>
+    private void ClearMissingChildWaits()
+    {
+        var liveIds = _vm.Vm.Instances.Select(i => i.Id).ToHashSet();
+        foreach (Instance inst in _vm.Vm.Instances)
+        {
+            if (inst.Wait.Kind != WaitStateKind.Child || liveIds.Contains(inst.Wait.ChildId)) continue;
+            inst.Wait.Clear();
+            inst.JustResumedFromChild = true;
         }
     }
 
@@ -1145,10 +1273,6 @@ public sealed class GameSession
         }
         _view.ShowMap(_map, _mapRuntime, _leaderX, _leaderY);
         _mapRuntime.StartPending(_vm.Vm);
-        if (restore?.Dialogue != null)
-        {
-            _vm.RestoreDialogue(restore.Dialogue.Message, restore.Dialogue.Choices.ToArray());
-        }
     }
 
     private readonly struct PendingTeleport

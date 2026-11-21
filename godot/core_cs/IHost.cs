@@ -158,10 +158,14 @@ public interface IHost
 {
     void Wait(uint frames);
     void ShowMessage(string text, int? face);
+    /// <summary>Show a prompt that stays on screen while the next 102 choice opens.</summary>
+    void ShowMessage(string text, int? face, bool keepOpen) => ShowMessage(text, face);
     bool MessageDismissed();
     void CloseMessage();
 
     void ShowChoices(string[] options);
+    /// <summary>102 with bit4 clear exposes a cancel branch; bit4 set must ignore cancel.</summary>
+    void ShowChoices(string[] options, bool allowCancel) => ShowChoices(options);
     ChoiceReply? ChoiceMade();
 
     void CommonEventCall(int target, int[] args, string[] strings);
@@ -212,6 +216,9 @@ public interface IHost
     void EndGame() { }
 
     /// <summary>1000 ProFeature: engine-specific request, <paramref name="milliseconds"/> is the hint.</summary>
+    void ProFeature(int kind, int milliseconds, string path) { ProFeature(kind, milliseconds); }
+
+    /// <summary>Legacy two-argument form kept for hosts that only need the kind and timing.</summary>
     void ProFeature(int kind, int milliseconds) { }
 
     /// <summary>
@@ -221,6 +228,9 @@ public interface IHost
     /// </summary>
     int KeyCodeAuto(uint mask, uint autoKeys) => KeyCode(mask);
 
+    /// <summary>A foreground event is about to execute its first slot.</summary>
+    void EventEntered(int eventId, bool isRoot) { }
+
     void Log(string message);
 }
 
@@ -228,9 +238,11 @@ public class NullHost : IHost
 {
     public virtual void Wait(uint frames) { }
     public virtual void ShowMessage(string text, int? face) { }
+    public virtual void ShowMessage(string text, int? face, bool keepOpen) => ShowMessage(text, face);
     public virtual bool MessageDismissed() => true;
     public virtual void CloseMessage() { }
     public virtual void ShowChoices(string[] options) { }
+    public virtual void ShowChoices(string[] options, bool allowCancel) => ShowChoices(options);
     public virtual ChoiceReply? ChoiceMade() => ChoiceReply.Select(0);
     public virtual void CommonEventCall(int target, int[] args, string[] strings) { }
     public virtual void Picture(PictureCmd cmd) { }
@@ -250,7 +262,9 @@ public class NullHost : IHost
     public virtual void ReturnToTitle() { }
     public virtual void EndGame() { }
     public virtual void ProFeature(int kind, int milliseconds) { }
+    public virtual void ProFeature(int kind, int milliseconds, string path) => ProFeature(kind, milliseconds);
     public virtual int KeyCodeAuto(uint mask, uint autoKeys) => KeyCode(mask);
+    public virtual void EventEntered(int eventId, bool isRoot) { }
     public virtual int KeyCode(uint mask) => 0;
     public virtual void Effect(int kind, int duration, int[] args) { }
     public virtual void Reserve(int target) { }

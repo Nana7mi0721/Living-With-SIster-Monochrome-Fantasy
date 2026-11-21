@@ -77,6 +77,16 @@ func _ready() -> void:
 	vm.SetPointerPressed(false)
 	vm.BeginFrameInput()
 	check(vm.EngineStateBridge(7) == 0, "release does not create a press")
+	vm.ResetPointer()
+	vm.SetPointerPressed(true)
+	vm.BeginFrameInput()
+	vm.BeginFrameInput()
+	check(vm.EngineStateBridge(7) == 2, "an unread press survives a short wait")
+	vm.BeginFrameInput()
+	check(vm.EngineStateBridge(7) == 1, "a consumed press edge clears on the next frame")
+	vm.SetPointerPressed(false)
+	vm.SetPointer(512, 230)
+	vm.BeginFrameInput()
 
 	# Right and middle buttons share the same tri-state contract (fields 8 and 9).
 	vm.SetPointerRightPressed(true)
@@ -180,6 +190,8 @@ func _ready() -> void:
 	stage.tick()
 	check(effect_holder.modulate.r > 0.9 and effect_holder.modulate.g > 0.9, "290 flash brightens the picture")
 	check(stage._states[1302]["zoom"]["elapsed"] >= 1, "290 zoom advances each tick")
+	check(stage.effect(1, 0, [0, 1, 1302, 1302, 50, 0, 0]), "290 color correction accepts a live target")
+	check(effect_holder.modulate.r > 1.0, "positive color correction must brighten above 1.0")
 
 	# 150 erase range: the far endpoint rides in the long form's ERASE_SPAN argument.
 	for slot in [1310, 1311, 1312, 1313]:
@@ -226,11 +238,19 @@ func _ready() -> void:
 	check(int(moved_state["scale"]) == 150 and int(moved_state["opacity"]) == 128,
 		"150 move still applies supplied scale/opacity")
 
-	# R13: picture_state fields 2/3 are the real drawing extent, not scale percent.
-	check(stage.picture_state(1201, 2) == int(stage._base_size_for(1201).x),
-		"field 2 returns the measured text width")
-	check(stage.picture_state(1201, 3) == int(stage._base_size_for(1201).y),
-		"field 3 returns the measured text height")
+	# Opcode 124 fields 2/3 are the live axis scales; CE63/CE94 feed both answers
+	# straight back into 150. A zero scale still means a zero-sized picture.
+	check(stage.picture_state(1201, 2) == 100 and stage.picture_state(1201, 3) == 100,
+		"fields 2/3 return the live draw scale")
+	stage.draw_picture(1375, 0, "", "zero scale", [0, 1, 1, 1, 255, 100, 120, 0, 0], 0, 2)
+	check(stage.picture_state(1375, 2) == 0 and stage.picture_state(1375, 3) == 0,
+		"fields 2/3 preserve a genuine zero scale")
+	check(not (stage._pictures[1375] as Control).visible, "scale 0 keeps the node hidden")
+	stage.draw_picture(1376, 0, "", "axis scales",
+		[0, 1, 1, 1, 255, 100, 120, 150, 0, 0, 0, 0, 0, 100, 100, 100, 60],
+		0, 2, [], {"scale_mode": 3})
+	check(stage.picture_state(1376, 2) == 150 and stage.picture_state(1376, 3) == 60,
+		"field 2/3 follow the axis-specific draw scales")
 
 	# 150 head flags: keep_shift preserves the running 290 shift across a redraw.
 	stage.draw_picture(1370, 0, "", "flag base", [0, 1, 1, 1, 255, 100, 120, 100, 0], 0, 2)
@@ -295,10 +315,19 @@ func _ready() -> void:
 		check(int(stage._states[1360]["pattern"]["cell"]) == 2, "pattern advances one held cell")
 		check((rect.texture as AtlasTexture).region.position.x == cell_w, "pattern renders its second cell")
 
-	# Multiply blend forces alpha 1 so RGB modulation is not also dimmed.
+	# Multiply blend keeps slot opacity so alpha fades work.
 	stage.draw_picture(1361, 0, "", "mul probe", [0, 1, 1, 1, 128, 100, 100, 100, 0], 0, 2, [], {"blend": 3})
 	var mul_holder: Control = stage._pictures.get(1361)
-	check(mul_holder != null and absf(mul_holder.modulate.a - 1.0) < 0.01, "multiply blend keeps alpha at 1")
+	check(mul_holder != null and absf(mul_holder.modulate.a - 128.0 / 255.0) < 0.01,
+		"multiply blend preserves the slot opacity")
+	var mul_shader: ShaderMaterial = null
+	if mul_holder != null:
+		mul_shader = mul_holder.material as ShaderMaterial
+	check(mul_shader != null and mul_shader.shader != null and mul_shader.shader.code.contains("blend_mul"),
+		"multiply blend uses an alpha-aware multiply shader")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await _check_multiply_alpha_fade()
 
 	if failures == 0:
 		print("PICTURE_STATE_TEST_OK checks=%d" % checks)
@@ -306,3 +335,48 @@ func _ready() -> void:
 	else:
 		print("PICTURE_STATE_TEST_FAIL %d/%d" % [checks - failures, checks])
 		get_tree().quit(1)
+
+
+func _check_multiply_alpha_fade() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(8, 8)
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(viewport)
+	var background := ColorRect.new()
+	background.color = Color.WHITE
+	background.size = Vector2(8, 8)
+	viewport.add_child(background)
+	var multiply := ColorRect.new()
+	multiply.color = Color.BLACK
+	multiply.size = Vector2(8, 8)
+	multiply.z_index = 1
+	viewport.add_child(multiply)
+	var effects := PictureEffects.new()
+	effects.apply_blend(multiply, 3)
+
+	multiply.modulate.a = 0.0
+	await _render_viewport(viewport)
+	var clear := _viewport_pixel(viewport)
+	multiply.modulate.a = 0.5
+	await _render_viewport(viewport)
+	var half := _viewport_pixel(viewport)
+	multiply.modulate.a = 1.0
+	await _render_viewport(viewport)
+	var opaque := _viewport_pixel(viewport)
+
+	check(half.r < clear.r - 0.05 and half.r > opaque.r + 0.05,
+		"multiply opacity 0.5 fades between clear and opaque")
+	check(clear.r > opaque.r + 0.25, "multiply opacity 0 and 1 differ")
+	viewport.queue_free()
+
+
+func _render_viewport(viewport: SubViewport) -> void:
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+
+
+func _viewport_pixel(viewport: SubViewport) -> Color:
+	var image := viewport.get_texture().get_image()
+	return image.get_pixel(4, 4)

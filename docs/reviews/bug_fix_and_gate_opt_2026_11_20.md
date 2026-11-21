@@ -2,6 +2,8 @@
 
 本报告记录针对 [bug_inspection_report_2026_11_20.md](bug_inspection_report_2026_11_20.md) 的核查修复、对照姊妹作（`Imouto Life Monochrome`）非操作类修复的跨仓库审计落地，以及 `tools/godot_check.sh` 耗时瓶颈分析与并行化改造。
 
+> 后续按 WOLF 蓝本复核更正：空格是确认键（`ACTION_KEYS`），不是取消键。下方第 1 节关于空格的旧记录只代表当时实现；当前语义见 D-58 与 [最新验证报告](release_gate_verification_2026_11_21.md)。
+
 ---
 
 ## 1. 鼠标完全无法操作根因与输入修复

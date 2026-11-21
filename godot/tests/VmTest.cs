@@ -23,6 +23,7 @@ public static class VmTest
         TestOpcode112StringConditionFlags();
         TestOpcode221_222CSelfStringPath();
         TestOpcode150BlendMode();
+        TestOpcode150DynamicFile();
         TestOpcode174ReturnToTitleDeferral();
         TestCallTargetResolution();
         TestOpcode111ConditionAndEscape();
@@ -45,7 +46,10 @@ public static class VmTest
         TestOpcode122StringOps();
         TestOpcode140SoundCellSplitAndEval();
         TestTextExpanderCselfEmptyAndSdb();
+        TestOpcode102CancelFlag();
+        TestOpcode101PairedChoice();
         TestOpcode1000ProFeatureWait();
+        TestEventEntryNotifications();
         TestMaxCallDepth();
         DatabaseTest.Run();
         AutoEventsTest.Run();
@@ -921,7 +925,7 @@ public static class VmTest
         Console.WriteLine("  Testing Opcode 1000 (ProFeature wait)...");
         var slots = new List<Slot>
         {
-            Slot.Command(1000, [5 << 16, 32]),
+            Slot.Command(1000, [5 << 16, 32], ["Save/save1.jpg"]),
             Slot.Command(121, [2_000_000, 7, 0, 0x0000])
         };
         var prog = Program.FromSlots(93, "ProFeature", slots);
@@ -935,12 +939,126 @@ public static class VmTest
             throw new Exception($"1000 kind=5 should wait 2 frames, got {sig} {inst.Wait.Kind} {inst.Wait.Frames}");
         if (host.ProFeatures.Count != 1 || host.ProFeatures[0] != (5, 32))
             throw new Exception("1000 should report kind 5, 32ms");
+        if (host.ProFeaturePaths.Count != 1 || host.ProFeaturePaths[0] != (5, 32, "Save/save1.jpg"))
+            throw new Exception("1000 must forward the expanded screenshot path");
         vm.StepFrame();
         if (vm.Vars.Get(0) != 0)
             throw new Exception("1000 resumed before its wait elapsed");
         vm.StepFrame();
         if (vm.Vars.Get(0) != 7)
             throw new Exception($"1000 did not resume, Var 0={vm.Vars.Get(0)}");
+    }
+
+    private static void TestOpcode102CancelFlag()
+    {
+        Console.WriteLine("  Testing Opcode 102 cancel permission...");
+        foreach ((int args, bool expected) in new[] { (0x11, false), (0x01, true) })
+        {
+            var slots = new List<Slot>
+            {
+                Slot.Command(102, [args], ["only"]),
+                Slot.Command(401, [2]),
+                Slot.Command(121, [2_000_000, 1, 0, 0]),
+                Slot.Command(421, [0]),
+                Slot.Command(121, [2_000_000, 2, 0, 0]),
+                Slot.Command(499, [])
+            };
+            var vm = new EventVm { Host = new RecordingHost() };
+            vm.RegisterProgram(Program.FromSlots(94, "Choices", slots));
+            var inst = vm.CreateInstance(94)!;
+            int budget = 100;
+            Signal signal = vm.StepInstance(inst, ref budget);
+            var host = (RecordingHost)vm.Host!;
+            if (signal != Signal.Blocked || inst.Wait.Kind != WaitStateKind.Choice)
+                throw new Exception("102 must block for a choice");
+            if (host.ChoiceAllowsCancel.Count != 1 || host.ChoiceAllowsCancel[0] != expected)
+                throw new Exception($"102 args 0x{args:X} must expose cancel={expected}");
+        }
+    }
+
+    private static void TestOpcode101PairedChoice()
+    {
+        Console.WriteLine("  Testing Opcode 101 -> 102 same-screen prompt...");
+        var pairedSlots = new List<Slot>
+        {
+            Slot.Command(101, [], ["Are you ready?"]),
+            Slot.Command(102, [0x12], ["Yes", "No"]),
+            Slot.Command(401, [2]),
+            Slot.Command(121, [2_000_000, 1, 0, 0]),
+            Slot.Command(421, [0]),
+            Slot.Command(121, [2_000_000, -1, 0, 0]),
+            Slot.Command(499, [])
+        };
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        vm.RegisterProgram(Program.FromSlots(110, "PairedPrompt", pairedSlots));
+        var inst = vm.CreateInstance(110)!;
+        vm.StepFrame();
+
+        if (inst.Wait.Kind != WaitStateKind.Choice)
+            throw new Exception($"101 followed by 102 must block on the choice, got {inst.Wait.Kind}");
+        if (host.Messages.Count != 1 || host.Messages[0].Text != "Are you ready?" || !host.Messages[0].KeepOpen)
+            throw new Exception("paired 101 must keep the prompt open for the choice");
+        if (host.ChoiceAllowsCancel.Count != 1 || host.ChoiceAllowsCancel[0] != false)
+            throw new Exception("the adjacent 102 must still publish its own cancel permission");
+
+        vm.StepFrame();
+        if (vm.Vars.Get(0) != 1)
+            throw new Exception($"auto-selected paired choice must enter case 1, got {vm.Vars.Get(0)}");
+
+        var blockedSlots = new List<Slot>
+        {
+            Slot.Command(101, [], ["Wait for me"]),
+            Slot.Command(103, [], ["not physically adjacent"]),
+            Slot.Command(102, [2], ["A"]),
+            Slot.Command(401, [2]),
+            Slot.Command(499, [])
+        };
+        var blockedHost = new RecordingHost();
+        var blockedVm = new EventVm { Host = blockedHost };
+        blockedVm.RegisterProgram(Program.FromSlots(111, "SeparatedPrompt", blockedSlots));
+        var blocked = blockedVm.CreateInstance(111)!;
+        blockedVm.StepFrame();
+        if (blocked.Wait.Kind != WaitStateKind.Message)
+            throw new Exception("a non-adjacent 101 must retain the normal message wait");
+        if (blockedHost.Messages.Count != 1 || blockedHost.Messages[0].KeepOpen)
+            throw new Exception("only a physically adjacent 101/102 pair may keep the prompt open");
+    }
+
+    private static void TestEventEntryNotifications()
+    {
+        Console.WriteLine("  Testing foreground event entry notifications...");
+        var child = Program.FromSlots(50, "EntryChild", new List<Slot>
+        {
+            Slot.Command(172)
+        });
+        var parent = Program.FromSlots(40, "EntryParent", new List<Slot>
+        {
+            Slot.Command(210, [500_050, 0]),
+            Slot.Command(172)
+        });
+        var parallel = Program.FromSlots(60, "EntryParallel", new List<Slot>
+        {
+            Slot.Command(180, [2]),
+            Slot.Command(172)
+        });
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        vm.RegisterProgram(child);
+        vm.RegisterProgram(parent);
+        vm.RegisterProgram(parallel);
+        vm.CreateInstance(40);
+        vm.CreateInstance(60)!.IsParallel = true;
+
+        vm.StepFrame();
+        vm.StepFrame();
+        if (host.EnteredEvents.Count != 2 || host.EnteredEvents[0] != 40 || host.EnteredEvents[1] != 50)
+            throw new Exception($"event entries expected [40,50], got [{string.Join(",", host.EnteredEvents)}]");
+        if (host.EnteredEventRoots.Count != 2 || !host.EnteredEventRoots[0] || host.EnteredEventRoots[1])
+            throw new Exception("event entry roots must report [root, child]");
+        vm.StepFrame();
+        if (host.EnteredEvents.Count != 2)
+            throw new Exception("EventEntered must fire once per foreground instance");
     }
 
     private static void TestMaxCallDepth()
@@ -1230,6 +1348,32 @@ public static class VmTest
         vm.StepFrame();
         if (host.Pictures.Count != 1 || host.Pictures[0].BlendMode != 1)
             throw new Exception($"150 BlendMode expected 1, got {(host.Pictures.Count > 0 ? host.Pictures[0].BlendMode : -1)}");
+    }
+
+    private static void TestOpcode150DynamicFile()
+    {
+        Console.WriteLine("  Testing Opcode 150 fileString/SysStr path expansion...");
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        vm.Vars.Set(3, 7);
+        vm.Vars.SetStr(5, "Picture/tip_\\v[3].png");
+        vm.Vars.SetSysStr(4, "Picture/sys.png");
+        var slots = new List<Slot>
+        {
+            // head kind=1 (fileString), cmd=0 (Draw); [11] is the string source.
+            Slot.Command(150, [0x0010, 10, 0, 1, 1, 1, 255, 100, 100, 100, 0, 3_000_005]),
+            Slot.Command(150, [0x0010, 11, 0, 1, 1, 1, 255, 100, 100, 100, 0, 9_000_004]),
+            Slot.Command(172)
+        };
+        vm.RegisterProgram(Program.FromSlots(109, "Op150FileString", slots));
+        vm.CreateInstance(109);
+        vm.StepFrame();
+        if (host.Pictures.Count != 2)
+            throw new Exception($"150 fileString expected 2 pictures, got {host.Pictures.Count}");
+        if (host.Pictures[0].File != "Picture/tip_7.png")
+            throw new Exception($"150 StrVar path expected expansion, got '{host.Pictures[0].File}'");
+        if (host.Pictures[1].File != "Picture/sys.png")
+            throw new Exception($"150 SysStrVar path expected expansion, got '{host.Pictures[1].File}'");
     }
 
     private static void TestOpcode174ReturnToTitleDeferral()

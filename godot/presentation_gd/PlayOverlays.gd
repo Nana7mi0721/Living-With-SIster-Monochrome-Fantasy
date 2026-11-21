@@ -12,6 +12,7 @@ signal fault_restart_requested
 signal fault_modal_closed
 
 const BACKLOG_LIMIT := 200
+const BACKLOG_LINE_STEP := 24
 const MILESTONE_VARS := [40, 42, 44, 53, 503, 531, 550]
 
 var _toast_label: Label
@@ -19,6 +20,7 @@ var _toast_until := 0
 
 var _backlog: Array[String] = []
 var _backlog_root: Control
+var _backlog_header: Label
 var _backlog_label: Label
 var _backlog_scroll: ScrollContainer
 var _backlog_open := false
@@ -118,7 +120,9 @@ func _build_backlog_overlay() -> void:
 	margin.add_child(column)
 
 	var header := Label.new()
-	header.text = "消息回顾（最近 %d 条，只读，不写入存档，PageUp/PageDown 翻页）" % BACKLOG_LIMIT
+	_backlog_header = header
+	header.text = "消息回顾（最近 %d 条，只读；↑/↓ 或 W/S 行滚动，PageUp/PageDown 翻页）" % BACKLOG_LIMIT
+	header.add_theme_font_override("font", UiSkin.font())
 	header.add_theme_font_size_override("font_size", 18)
 	column.add_child(header)
 
@@ -130,6 +134,7 @@ func _build_backlog_overlay() -> void:
 	_backlog_label = Label.new()
 	_backlog_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_backlog_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_backlog_label.add_theme_font_override("font", UiSkin.font())
 	_backlog_label.add_theme_font_size_override("font_size", 16)
 	_backlog_scroll.add_child(_backlog_label)
 
@@ -138,6 +143,7 @@ func _build_backlog_overlay() -> void:
 	column.add_child(footer)
 	var close_button := Button.new()
 	close_button.text = "关闭（F4/Esc）"
+	close_button.add_theme_font_override("font", UiSkin.font())
 	close_button.pressed.connect(close_backlog)
 	footer.add_child(close_button)
 
@@ -198,6 +204,36 @@ func scroll_backlog_page(direction: int) -> void:
 	var vbar := _backlog_scroll.get_v_scroll_bar()
 	var max_val := int(vbar.max_value) if vbar != null else 2147483647
 	_backlog_scroll.scroll_vertical = clampi(_backlog_scroll.scroll_vertical + direction * page, 0, max_val)
+
+
+func scroll_backlog_lines(direction: int) -> void:
+	if not _backlog_open or _backlog_scroll == null:
+		return
+	var vbar := _backlog_scroll.get_v_scroll_bar()
+	var max_val := int(vbar.max_value) if vbar != null else 2147483647
+	_backlog_scroll.scroll_vertical = clampi(
+		_backlog_scroll.scroll_vertical + direction * BACKLOG_LINE_STEP, 0, max_val)
+
+
+func _input(event: InputEvent) -> void:
+	if not _backlog_open or not (event is InputEventKey):
+		return
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return
+	match key.keycode:
+		KEY_UP, KEY_W:
+			scroll_backlog_lines(-1)
+			get_viewport().set_input_as_handled()
+		KEY_DOWN, KEY_S:
+			scroll_backlog_lines(1)
+			get_viewport().set_input_as_handled()
+		KEY_PAGEUP:
+			scroll_backlog_page(-1)
+			get_viewport().set_input_as_handled()
+		KEY_PAGEDOWN:
+			scroll_backlog_page(1)
+			get_viewport().set_input_as_handled()
 
 
 # ---- F12 Return-to-Title Confirm -----------------------------------------

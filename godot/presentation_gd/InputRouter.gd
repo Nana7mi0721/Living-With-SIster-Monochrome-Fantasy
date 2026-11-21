@@ -23,8 +23,8 @@ const MASK_DOWN := 32
 const MASK_LEFT := 64
 const MASK_RIGHT := 128
 
-const ACTION_KEYS: Array[int] = [KEY_Z, KEY_ENTER, KEY_KP_ENTER]
-const CANCEL_KEYS: Array[int] = [KEY_X, KEY_ESCAPE, KEY_BACKSPACE, KEY_SPACE]
+const ACTION_KEYS: Array[int] = [KEY_Z, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]
+const CANCEL_KEYS: Array[int] = [KEY_X, KEY_ESCAPE, KEY_BACKSPACE]
 const SUB_KEYS: Array[int] = [KEY_C, KEY_SHIFT]
 
 ## Last hover position in 1024x576 logical coordinates.
@@ -47,6 +47,8 @@ var _wheel_dir := 0
 var _click_latch := false
 var _right_click_latch := false
 var _middle_click_latch := false
+## A newly entered event must not consume the click/key that opened it.
+var _action_entry_suppressed := false
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -76,6 +78,9 @@ func handle_event(event: InputEvent) -> bool:
 			match mb.button_index:
 				MOUSE_BUTTON_LEFT:
 					pointer_pressed = false
+					if _action_entry_suppressed:
+						_click_latch = false
+						_release_action_suppression_if_free()
 				MOUSE_BUTTON_RIGHT:
 					right_pressed = false
 				MOUSE_BUTTON_MIDDLE:
@@ -113,6 +118,13 @@ func handle_event(event: InputEvent) -> bool:
 			_:
 				return false
 		return true
+
+	if event is InputEventKey and not event.pressed:
+		key_event.emit(event.keycode, false)
+		if _action_entry_suppressed and event.keycode in ACTION_KEYS:
+			_click_latch = false
+			_release_action_suppression_if_free()
+		return false
 
 	# OS repeat drives cursor stepping; decide/cancel keys ignore echo to prevent double-confirm.
 	if event is InputEventKey and event.pressed and (not event.echo or _is_direction(event.keycode)):
@@ -154,6 +166,8 @@ func held_mask(allow_mouse: bool = true) -> int:
 			mask |= MASK_OK
 		if right_pressed or _right_click_latch:
 			mask |= MASK_CANCEL
+	if _action_entry_suppressed:
+		mask &= ~MASK_OK
 	return mask
 
 
@@ -190,7 +204,7 @@ func wheel_notch() -> int:
 
 ## Button state for one frame: true when physically held or clicked within this tick.
 func left_frame_pressed() -> bool:
-	return pointer_pressed or _click_latch
+	return not _action_entry_suppressed and (pointer_pressed or _click_latch)
 
 
 func right_frame_pressed() -> bool:
@@ -199,6 +213,43 @@ func right_frame_pressed() -> bool:
 
 func middle_frame_pressed() -> bool:
 	return middle_pressed or _middle_click_latch
+
+
+func click_latched() -> bool:
+	return _click_latch
+
+
+## A physical click may drive exactly one VM menu. Drop only the one-frame OK latch;
+## keep held state so a fresh release/press pair still behaves like the device.
+func clear_click_latch() -> void:
+	_click_latch = false
+
+
+## Drop the action that opened a new event, and keep masking it until the device releases.
+func suppress_action_until_release() -> void:
+	_action_entry_suppressed = true
+	_click_latch = false
+
+
+func action_entry_suppressed() -> bool:
+	return _action_entry_suppressed
+
+
+func action_input_held() -> bool:
+	if pointer_pressed or _click_latch:
+		return true
+	if scripted_key_mask >= 0:
+		return (scripted_key_mask & MASK_OK) != 0
+	return _any_pressed(ACTION_KEYS)
+
+
+func _release_action_suppression_if_free() -> void:
+	if not _action_entry_suppressed:
+		return
+	if action_input_held():
+		return
+	_action_entry_suppressed = false
+	_click_latch = false
 
 
 ## Clear one-frame press/wheel latches at the end of a VM step.
@@ -218,3 +269,4 @@ func clear_pointer_latches() -> void:
 	_click_latch = false
 	_right_click_latch = false
 	_middle_click_latch = false
+	_action_entry_suppressed = false

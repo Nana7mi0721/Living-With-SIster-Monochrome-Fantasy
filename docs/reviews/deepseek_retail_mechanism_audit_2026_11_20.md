@@ -2,8 +2,7 @@
 
 > **状态**：数据脚本层已验证；PE 与 Windows GDI 层为静态分析加受限探针验证。未修改生产代码，未启动完整原版流程做逐帧或全窗口像素采集。
 >
-> **核查对象**：当前 Steam 安装目录
-> `E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy`，
+> **核查对象**：当前零售安装根 `<retail-root>`，
 > 仓库 HEAD `1989151`。当前安装根目录同时存在中文补丁安装器，`Game.dat`
 > 的标题和副标题也是中文 `+DLC v2.03`；因此本报告结论适用于**当前已安装构建**，
 > 不能无条件外推到未打补丁的日文初版。

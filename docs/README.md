@@ -35,7 +35,7 @@ graph LR
 | 文档 | 状态 | 内容与定位 |
 | :--- | :---: | :--- |
 | [godot/README.md](godot/README.md) | **现行 · 先读** | **Godot 重制阶段唯一规范入口**：环境基线、当前完成状态与维护约定 |
-| [godot/DECISIONS.md](godot/DECISIONS.md) | **现行 · 权威** | **定稿架构决策（D-01..D-53）**：确定采用纯 C# 确定性事件内核 + GDScript 呈现层 |
+| [godot/DECISIONS.md](godot/DECISIONS.md) | **现行 · 权威** | **定稿架构决策（D-01..D-70）**：确定采用纯 C# 确定性事件内核 + GDScript 呈现层 |
 | [godot/PLAN.md](godot/PLAN.md) | **现行 · 权威** | Godot 阶段总体演进路线与 M0–M5 各阶段退出标准 |
 | [BASELINE.json](BASELINE.json) | **现行 · 权威** | 自动化测试与一致性校验基线（包含 Game.dat 字段、公共事件、地图事件统计） |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | **现行 · 权威** | 全局架构设计方案（数据转换管线、运行时状态机、渲染层级） |
@@ -69,7 +69,7 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 - [godot/RELEASE.md](godot/RELEASE.md) — 发布与导出说明：构建流程、导出预设与实测记录
 - [godot/LEGACY_RUST_AUDIT.md](godot/LEGACY_RUST_AUDIT.md) — 22 项旧 Rust 实现缺陷防范与 Godot 交互护栏
 - [godot/UI_UX_GROUND_TRUTH_SPEC.md](godot/UI_UX_GROUND_TRUTH_SPEC.md) — UI/UX/动效真相规格书：系统字体/窗口/光标/图层/转场硬证据与表现层审计
-- [godot/PRE_RELEASE_ORCHESTRATOR_AUDIT.md](godot/PRE_RELEASE_ORCHESTRATOR_AUDIT.md) — **现行 · 权威**：发版前全量审计报告（`W1-P0/P1` 修复清单、姊妹作查漏、优化项评估表、代码治理与包体瘦身账本）
+- [godot/PRE_RELEASE_ORCHESTRATOR_AUDIT.md](godot/PRE_RELEASE_ORCHESTRATOR_AUDIT.md) — **历史证据**：基线 `9f36abb` 的发版前审计；部分问题已被后续决策与门禁关闭，现状以最新验证报告与 `DECISIONS.md` 为准
 
 ---
 
@@ -97,11 +97,13 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 系统性代码审查（Code Review）、跨仓库审计与缺陷追踪记录：
 
 - [reviews/README.md](reviews/README.md) — 代码审查台账总览索引
+- [reviews/lwsmf_8fa1189_audit_remediation_2026_11_21.md](reviews/lwsmf_8fa1189_audit_remediation_2026_11_21.md) — **现行·闭环**：两份 `8fa1189` 游玩/UI 审计的逐项修复、语义结论与回归映射
+- [reviews/release_gate_verification_2026_11_21.md](reviews/release_gate_verification_2026_11_21.md) — **现行·验证**：基线 `8fa1189` 的 Release 构建与无头 38 项门禁实测证据
 - [reviews/deepseek_retail_mechanism_audit_2026_11_20.md](reviews/deepseek_retail_mechanism_audit_2026_11_20.md) — **现行·专题**：标题“开始/继续”、全新封面分支、Map003 时序与 Lolita 字体回退综合核查
 - [reviews/deepseek_title_newgame_interaction_2026_11_20.md](reviews/deepseek_title_newgame_interaction_2026_11_20.md) — 标题菜单/新游戏入口/原版点击行为分项报告
 - [reviews/deepseek_title_graphics_fresh_state_2026_11_20.md](reviews/deepseek_title_graphics_fresh_state_2026_11_20.md) — 全新状态封面与 CE42/Map003 选图分项报告
 - [reviews/deepseek_font_fallback_chain_2026_11_20.md](reviews/deepseek_font_fallback_chain_2026_11_20.md) — DxLib 字体绑定与缺字回退分项报告
-- [reviews/bug_inspection_report_2026_11_20.md](reviews/bug_inspection_report_2026_11_20.md) — **现行·重点**：右键点击失效、素材缺失、文本解析内部代号泄露深度审查报告
+- [reviews/bug_inspection_report_2026_11_20.md](reviews/bug_inspection_report_2026_11_20.md) — **历史·重点**：右键点击失效、素材缺失、文本解析内部代号泄露深度审查报告（空格结论已由 D-58/D-70 更正）
 - [reviews/bug_fix_and_gate_opt_2026_11_20.md](reviews/bug_fix_and_gate_opt_2026_11_20.md) — **现行·记录**：输入/文本/VM 修复、Oracle 对齐与 38 项门禁并行加速总结
 - [reviews/m4_oracle_refresh_2026_11_21.md](reviews/m4_oracle_refresh_2026_11_21.md) — **现行·记录**：M4 Oracle 夹具刷新、刷新脚本修复与双模式门禁恢复
 - [reviews/m5_round12_review_2026_11_19.md](reviews/m5_round12_review_2026_11_19.md) — M5 发布前夕全景审查与收口验证

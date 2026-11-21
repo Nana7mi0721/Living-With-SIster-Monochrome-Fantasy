@@ -39,6 +39,32 @@ func _ready() -> void:
 		for signal_name in SIGNALS:
 			if root.vm.get_signal_connection_list(signal_name).is_empty():
 				failures.append("VmBridge signal %s is not connected" % signal_name)
+		if KEY_SPACE not in root.router.ACTION_KEYS or KEY_SPACE in root.router.CANCEL_KEYS:
+			failures.append("space must confirm, not cancel")
+		root.request_return_to_title()
+		if root.title_confirm_open():
+			failures.append("F12 must not offer abandon-game on the title screen")
+		var thumb_name := "save99.jpg"
+		var thumb_path: String = root.session.SaveDirectory.path_join(thumb_name)
+		DirAccess.remove_absolute(thumb_path)
+		var thumb_image := Image.create(1024, 576, false, Image.FORMAT_RGB8)
+		thumb_image.fill(Color(0.2, 0.4, 0.6))
+		root.stage.draw_picture(12000, 0, "", "", [0, 0, 0, 0, 255, 0, 0, 100], 0, 0)
+		root._clean_scene_image = thumb_image
+		root._on_pro_feature(0, 0, "Save/" + thumb_name)
+		if not FileAccess.file_exists(thumb_path):
+			failures.append("ProFeature kind 0 must write the save thumbnail")
+		elif root.assets.resolve("Save/" + thumb_name, "texture").is_empty():
+			failures.append("AssetDB must resolve a dynamic Save/ thumbnail")
+		root._on_pro_feature(3, 0, "Save/" + thumb_name)
+		if FileAccess.file_exists(thumb_path):
+			failures.append("ProFeature kind 3 must delete the save thumbnail")
+		root.stage.clear_pictures()
+		if not root.assets.using_fallback:
+			for tip_index in range(13):
+				var tip_path := "cg/tips_%02d.png" % tip_index
+				if root.assets.resolve(tip_path, "texture").is_empty():
+					failures.append("retail media pack is missing %s" % tip_path)
 
 		# M5-D: with no slot on disk, a fault must not offer save recovery.
 		root.report_fault("no save probe")
@@ -71,6 +97,14 @@ func _ready() -> void:
 		root._on_choices(["A", "B"])
 		if not root.choice.is_open:
 			failures.append("ChoicesRequested path did not open the choice window")
+		root.vm.ShowChoices(PackedStringArray(["Locked"]), false)
+		if root.choice.allow_cancel:
+			failures.append("102 bit4 must disable choice cancellation in the window")
+		root.choice.cancel()
+		if not root.choice.is_open:
+			failures.append("a non-cancellable choice must ignore cancel")
+		root.session.CancelChoice()
+		root._on_choices(["A", "B"])
 		# R5-P1-01: 126 state 2 must also stop the wheel from moving the choice cursor.
 		root.vm.ApplyInputPermission(0x210)
 		var wheel_before: int = root.choice.selected
@@ -84,6 +118,29 @@ func _ready() -> void:
 		root.choice.cancel()
 		if root.choice.is_open:
 			failures.append("choice cancel should close the window")
+
+		# A keyboard decide that commits a choice must stay masked until release, otherwise
+		# the next 123 poll in the same event consumes it and closes the Tips tutorial.
+		var held_phase: String = root.phase
+		root.phase = "bedroom"
+		root.router.clear_pointer_latches()
+		root.router.scripted_key_mask = InputRouter.MASK_OK
+		root.router.last_input_source = "keyboard"
+		root.choice.open(PackedStringArray(["Tips"]), Vector2(260, 220))
+		root._on_choice_chosen(0)
+		if not root.router.action_entry_suppressed():
+			failures.append("a keyboard choice commit must suppress the held decide key")
+		if (root.router.held_mask() & InputRouter.MASK_OK) != 0 or root.router.left_frame_pressed():
+			failures.append("the held decide key must not reach the next 123/124 poll")
+		root.router.scripted_key_mask = 0
+		var choice_key_up := InputEventKey.new()
+		choice_key_up.keycode = KEY_Z
+		choice_key_up.pressed = false
+		root.router.handle_event(choice_key_up)
+		if root.router.action_entry_suppressed():
+			failures.append("releasing the choice decide key must restore input")
+		root.router.scripted_key_mask = -1
+		root.phase = held_phase
 
 		# W2-P1-01: pointer hover moves the choice cursor and a click commits that row. Use a
 		# standalone widget: the live title event must not receive a synthetic pick before the
@@ -126,6 +183,15 @@ func _ready() -> void:
 				failures.append("leader should stand at 62,35 (got %d,%d)" % [root.session.LeaderX, root.session.LeaderY])
 			if not root.map_view.visible:
 				failures.append("the bedroom map layer should be visible")
+			# A paired 101→102 prompt and its rows must share the frame; picking one
+			# closes both the choice window and the held prompt.
+			root.vm.ShowMessageForChoice("Paired prompt", -1)
+			root.vm.ShowChoices(PackedStringArray(["A", "B"]), true)
+			if not root.message.is_open() or not root.message.choice_attached() or not root.choice.is_open:
+				failures.append("a paired prompt must keep the message and choice windows open together")
+			root.choice.confirm()
+			if root.message.is_open() or root.choice.is_open:
+				failures.append("selecting a paired choice must close both windows")
 
 		# Round-5 P1: 126 state 2 on OK must block the map action key, and state 1 on Up
 		# must stop both walking and turning. Apply raw 126 args through the VM bridge.
@@ -142,6 +208,12 @@ func _ready() -> void:
 			root._on_move(0, -1)
 			if root.session.LeaderY != y0 or root.session.Facing != facing0:
 				failures.append("126 movement ban must not move or turn the leader")
+			root.vm.ApplyInputPermission(0x000)
+			var move_x: int = root.session.LeaderX
+			var move_y: int = root.session.LeaderY
+			root._on_move(1, 0)
+			if root.session.LeaderX != move_x or root.session.LeaderY != move_y:
+				failures.append("bedroom WASD/arrows must not move the hidden leader")
 			root.vm.ApplyInputPermission(0x010)
 
 		# F5/F9: save the bedroom, walk a frame, then reload the same slot.
@@ -296,6 +368,15 @@ func _ready() -> void:
 		root._on_message("Backlog probe", -1)
 		if root.backlog_size() < 1:
 			failures.append("messages must enter the backlog ring")
+		root.message.revealed = 0.0
+		root.message.finished = false
+		root._on_cancel()
+		if not root.message.is_open() or root.message.finished:
+			failures.append("cancel during dialogue must not skip the unread line")
+		root._on_wheel(1)
+		if not root.message.is_open() or root.message.finished:
+			failures.append("wheel down during dialogue must not confirm the line")
+		root.message.close()
 		root.open_backlog()
 		if not root.backlog_open():
 			failures.append("F4 must open the backlog overlay")
@@ -408,6 +489,10 @@ func _ready() -> void:
 		oob_click.position = Vector2(-10, 288)
 		if root.router.handle_event(oob_click):
 			failures.append("InputRouter must ignore clicks outside 1024x576 logical bounds")
+		root.phase = "failed"
+		root._process(root.STEP)
+		if not root.faulted or not root.fault_modal_visible():
+			failures.append("phase=failed must surface a visible fault modal instead of a silent freeze")
 		remove_child(root)
 		root.queue_free()
 
@@ -469,11 +554,11 @@ func _ready() -> void:
 	# Title Continue -> Save/Load wheel must not switch title menu -> cancel returns to live title.
 	var title_root = load("res://presentation_gd/GameRoot.gd").new()
 	add_child(title_root)
-	for i in range(400):
+	for i in range(900):
 		title_root._process(title_root.STEP)
 		if title_root.choice.is_open:
 			break
-		if i > 10 and i % 10 == 0:
+		if i > 5 and i % 5 == 0:
 			var l_down := InputEventMouseButton.new()
 			l_down.button_index = MOUSE_BUTTON_LEFT
 			l_down.pressed = true
@@ -488,7 +573,10 @@ func _ready() -> void:
 	for _i in range(4):
 		title_root._process(title_root.STEP)
 	if not title_root.choice.is_open:
-		failures.append("title_root failed to reach title choice menu")
+		failures.append("title_root failed to reach title choice menu (phase=%s frames=%d msg=%s waiting=%s running=%s inst=%s)" % [
+			title_root.phase, title_root.frames, str(title_root.message.is_open()),
+			str(title_root.vm.IsWaitingForMessage()), str(title_root.vm.IsRunning()),
+			title_root.session.DescribeInstances()])
 	else:
 		title_root.choice.selected = 1
 		title_root.choice.confirm()
@@ -524,6 +612,61 @@ func _ready() -> void:
 			failures.append("canceling Save/Load UI must return to an interactive title menu (choice_open=%s slot12000=%s)" % [str(title_root.choice.is_open), str(title_root.stage.picture_rect(12000))])
 	title_root.queue_free()
 
+	var item_root = load("res://presentation_gd/GameRoot.gd").new()
+	add_child(item_root)
+	item_root.vm.StopAll()
+	item_root.stage.clear_pictures()
+	var item_entries: Array[int] = []
+	var item_entry_roots: Array[bool] = []
+	item_root.vm.connect("ForegroundEventEntered",
+		func(event_id: int, is_root: bool) -> void:
+			item_entries.append(event_id)
+			item_entry_roots.append(is_root))
+	var item_down := InputEventMouseButton.new()
+	item_down.button_index = MOUSE_BUTTON_LEFT
+	item_down.pressed = true
+	item_down.position = Vector2(512, 288)
+	item_root.router.handle_event(item_down)
+	if not item_root._action_input_pending or not item_root.router.action_input_held():
+		failures.append("test setup must leave the CE235 opening action pending")
+	item_root.vm.StartEventAt(14, 16)
+	item_root._process(item_root.STEP)
+	if not item_entries.has(128):
+		failures.append("CE14 must reach CE128's foreground entry")
+	var ce128_entry := item_entries.find(128)
+	if not item_entry_roots.has(true) or ce128_entry < 0 or item_entry_roots[ce128_entry]:
+		failures.append("CE128 entry must report itself as a child event")
+	if not item_root.router.action_entry_suppressed():
+		failures.append("the CE128 entry must suppress the opening click until release")
+	for _i in range(40):
+		item_root._process(item_root.STEP)
+	if not _item_rows_visible(item_root):
+		failures.append("the opening click must not close the CE128 item panel")
+	var item_up := InputEventMouseButton.new()
+	item_up.button_index = MOUSE_BUTTON_LEFT
+	item_up.pressed = false
+	item_up.position = Vector2(512, 288)
+	item_root.router.handle_event(item_up)
+	if item_root.router.action_entry_suppressed():
+		failures.append("releasing the opening click must end the CE128 entry guard")
+	var item_close := InputEventMouseButton.new()
+	item_close.button_index = MOUSE_BUTTON_RIGHT
+	item_close.pressed = true
+	item_close.position = Vector2(512, 288)
+	item_root.router.handle_event(item_close)
+	for _i in range(1):
+		item_root._process(item_root.STEP)
+	item_up = InputEventMouseButton.new()
+	item_up.button_index = MOUSE_BUTTON_RIGHT
+	item_up.pressed = false
+	item_up.position = Vector2(512, 288)
+	item_root.router.handle_event(item_up)
+	for _i in range(24):
+		item_root._process(item_root.STEP)
+	if _item_rows_visible(item_root):
+		failures.append("closing CE128 must fade every item-list row, not leave text residue")
+	item_root.queue_free()
+
 	if failures.is_empty():
 		print("GAME_ROOT_TEST_OK")
 		get_tree().quit(0)
@@ -531,3 +674,12 @@ func _ready() -> void:
 		for failure in failures:
 			print("GAME_ROOT_TEST_FAILED: ", failure)
 		get_tree().quit(1)
+
+
+func _item_rows_visible(root) -> bool:
+	for slot in root.stage._cmds.keys():
+		if int(slot) >= 15000 and int(slot) < 15010:
+			var state: Dictionary = root.stage._states.get(int(slot), {}).get("current", {})
+			if root.stage.picture_rect(int(slot)).size.x > 0.0 and int(state.get("opacity", 0)) > 0:
+				return true
+	return false

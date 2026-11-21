@@ -166,7 +166,7 @@ CE43 为 `┗オリジナルタイトル画面Ｂ`，58 槽。
 零售文件：
 
 ```text
-Path:   E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy\Game.exe
+Path:   <retail-root>\Game.exe
 Size:   7,329,792 bytes
 SHA256: 98949e233e4085d9c745b2e8ba41e17ff49e5dafff16e5f28882d39bcaf804ea
 MD5:    d806f54f68b143a7da9a33b784ec776b

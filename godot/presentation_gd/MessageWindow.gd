@@ -12,64 +12,62 @@ const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
 
 const WINDOW_SIZE := Vector2(960, 168)
 const WINDOW_POS := Vector2(64, 408)
-const TEXT_ORIGIN := Vector2(64, 410)
-const BUBBLE_X := 160.0
-const BUBBLE_WIDTH := 704.0
-const BUBBLE_BOTTOM := 566.0
-const BUBBLE_MIN_HEIGHT := 64.0
-const BUBBLE_PADDING_X := 32.0
-const BUBBLE_PADDING_Y := 14.0
-const BUBBLE_CURSOR_RESERVE := 12.0
+const BUBBLE_X := 156.0
+const BUBBLE_WIDTH := 712.0
+const BUBBLE_BOTTOM := 562.0
+const BUBBLE_MIN_HEIGHT := 56.0
+const BUBBLE_PADDING_X := 24.0
+const BUBBLE_PADDING_Y := 10.0
+const BUBBLE_CURSOR_RESERVE := 6.0
 const CENTER_BOX_WIDTH := 600.0
 const CENTER_BOX_X := (1024.0 - CENTER_BOX_WIDTH) * 0.5
 const CENTER_PADDING_X := 36.0
 const CENTER_PADDING_Y := 20.0
-const CENTER_CURSOR_RESERVE := 22.0
+const CENTER_CURSOR_RESERVE := 12.0
 const CENTER_MIN_HEIGHT := 96.0
 const CENTER_SAFE_TOP := 42.0
 const CENTER_SAFE_BOTTOM := 540.0
-const CENTER_FONT_SIZE := 17
-const CENTER_LINE_HEIGHT := 24.0
+const CENTER_FONT_SIZE := 20
+const CENTER_LINE_HEIGHT := 26.0
 const FONT_SIZE := 20
 const LINE_GAP := 6                # Sys8 + 6 == 26 px row pitch at the base size
 const LINE_HEIGHT := 26          # Sys8 + 6
-const TEXT_SPEED := 500.0        # Sys9 default: characters per second
+const TEXT_SPEED := 40.0         # characters per second
+const CENTER_TEXT_SPEED := 35.0
 const PAUSE_SECONDS := 0.25      # \\. beat
-const LEFT_PADDING := 12.0
-const TOP_PADDING := 8.0
 const CURSOR_TEXTURE := "BalloonBase_CafeLatte/[CafeLatte]pauseL.png"
 const CURSOR_FALLBACK_TEXTURE := "SystemFile/Text_Pause.png"
-const CURSOR_POS := Vector2(504, 544)
-const SKIN_BORDER := Color(1.0, 1.0, 1.0, 0.12)
-const SKIN_HIGHLIGHT := Color("f2f3f3")
-const SKIN_MID := Color("576062")
-const SKIN_FILL := Color(0.08, 0.09, 0.11, 0.78)
-const CENTER_FILL := Color(0.08, 0.09, 0.11, 0.72)
+const FEATHER_GROW := [10.0, 6.0, 3.0, 0.0]
+const FEATHER_RADIUS := [26, 23, 20, 17]
+const FEATHER_ALPHA := [0.12, 0.22, 0.40, 0.82]
+const LINE_START_FORBIDDEN := "，。、！？；：）》」』】〕〉》”’…—～·%‰,.;:!?)]}"
 
 var assets: AssetDB
 var visible_window := false
 var full_text := ""
 var revealed := 0.0
 var waiting_for_confirm := false
+var waiting_for_continue := false
 var finished := false
 var speed_override := 0.0
 var hover_enabled := false
+var _choice_attached := false
 var position_mode: int = _WolfConst.MSG_POS_BOTTOM
 
 var _tokens: Array = []
 var _chars: Array = []        # [{ch, color, x, y, size, line, outline, instant}]
+var _char_speeds: Array[float] = []
 var _lines: int = 0
 var _line_align: Array[int] = []
 var _instant_index := -1
 var _pause_timer := 0.0
+var _char_timer := 0.0
 var _cursor_time := 0.0
 var _center_content_height := CENTER_LINE_HEIGHT
+var _boundary_events: Array = []
+var _event_cursor := 0
 
-var _style_center_halo: StyleBoxFlat
-var _style_center_core: StyleBoxFlat
-var _style_outer: StyleBoxFlat
-var _style_mid: StyleBoxFlat
-var _style_core: StyleBoxFlat
+var _feather_styles: Array[StyleBoxFlat] = []
 
 ## Face bust drawn behind the frame: Sys0 / \f[n], or the "@n" prefix on the first line.
 var face_number := 0
@@ -83,29 +81,12 @@ func _init(p_assets: AssetDB = null) -> void:
 	position = Vector2.ZERO
 	size = Vector2(1024, 576)
 
-	_style_center_halo = StyleBoxFlat.new()
-	_style_center_halo.bg_color = Color(0.04, 0.05, 0.07, 0.28)
-	_style_center_halo.set_corner_radius_all(26)
-
-	_style_center_core = StyleBoxFlat.new()
-	_style_center_core.bg_color = CENTER_FILL
-	_style_center_core.border_color = Color(1.0, 1.0, 1.0, 0.10)
-	_style_center_core.set_border_width_all(1)
-	_style_center_core.set_corner_radius_all(22)
-
-	_style_outer = StyleBoxFlat.new()
-	_style_outer.bg_color = Color(0.05, 0.06, 0.08, 0.26)
-	_style_outer.set_corner_radius_all(22)
-
-	_style_mid = StyleBoxFlat.new()
-	_style_mid.bg_color = Color(0.06, 0.07, 0.09, 0.42)
-	_style_mid.set_corner_radius_all(20)
-
-	_style_core = StyleBoxFlat.new()
-	_style_core.bg_color = SKIN_FILL
-	_style_core.border_color = SKIN_BORDER
-	_style_core.set_border_width_all(1)
-	_style_core.set_corner_radius_all(18)
+	for i in FEATHER_GROW.size():
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.0, 0.0, 0.0, FEATHER_ALPHA[i])
+		style.set_border_width_all(0)
+		style.set_corner_radius_all(FEATHER_RADIUS[i])
+		_feather_styles.append(style)
 
 
 ## Open the window with one opcode-101 message. Text is tokenized once, then the reveal
@@ -122,20 +103,28 @@ func open(text: String, p_face: int = 0) -> void:
 	full_text = text
 	visible_window = true
 	waiting_for_confirm = false
+	waiting_for_continue = false
 	finished = false
+	_choice_attached = false
 	revealed = 0.0
 	_pause_timer = 0.0
+	_char_timer = 0.0
 	_tokens = TextTokenizer.tokenize(text)
 	_layout()
+	_dispatch_boundary_events(0)
 	queue_redraw()
 
 
 func close() -> void:
 	visible_window = false
 	waiting_for_confirm = false
+	waiting_for_continue = false
 	finished = false
+	_choice_attached = false
 	_tokens.clear()
 	_chars.clear()
+	_char_speeds.clear()
+	_boundary_events.clear()
 	queue_redraw()
 
 
@@ -148,14 +137,31 @@ func wants_confirm() -> bool:
 	return visible_window
 
 
+func choice_attached() -> bool:
+	return _choice_attached
+
+
+## A paired 101→102 keeps this prompt visible but hands input to the choice rows.
+func attach_choice_window() -> void:
+	if not visible_window:
+		return
+	_choice_attached = true
+	revealed = float(_chars.size())
+	_finish_reveal()
+
+
 func confirm() -> void:
 	if not visible_window:
 		return
+	if waiting_for_continue:
+		waiting_for_continue = false
+		if int(revealed) >= _chars.size():
+			_finish_reveal()
+		queue_redraw()
+		return
 	if not finished:
 		revealed = float(_chars.size())
-		finished = true
-		waiting_for_confirm = true
-		queue_redraw()
+		_finish_reveal()
 		return
 	close()
 	confirm_requested.emit()
@@ -168,19 +174,63 @@ func _process(delta: float) -> void:
 	if finished:
 		queue_redraw()
 		return
-	if _pause_timer > 0.0:
-		_pause_timer -= delta
+	if waiting_for_continue:
 		queue_redraw()
 		return
-	var speed := speed_override if speed_override > 0.0 else TEXT_SPEED
-	revealed = minf(revealed + delta * speed, float(_chars.size()))
-	if _instant_index >= 0 and int(revealed) >= _instant_index:
-		revealed = float(_chars.size())
-	if int(revealed) >= _chars.size():
-		finished = true
-		waiting_for_confirm = true
-		reveal_finished.emit()
+	if _pause_timer > 0.0:
+		_pause_timer = maxf(0.0, _pause_timer - delta)
+		queue_redraw()
+		return
+	_char_timer += delta
+	while int(revealed) < _chars.size() and not waiting_for_continue and _pause_timer <= 0.0:
+		var speed := _speed_for_index(int(revealed))
+		if speed <= 0.0:
+			revealed = float(_chars.size())
+			_dispatch_boundary_events(_chars.size())
+			break
+		var step := 1.0 / speed
+		if _char_timer < step:
+			break
+		_char_timer -= step
+		revealed = minf(revealed + 1.0, float(_chars.size()))
+		if _instant_index >= 0 and int(revealed) >= _instant_index:
+			revealed = float(_chars.size())
+		_dispatch_boundary_events(int(revealed))
+	if int(revealed) >= _chars.size() and not waiting_for_continue:
+		_finish_reveal()
 	queue_redraw()
+
+
+func _speed_for_index(index: int) -> float:
+	if speed_override > 0.0:
+		return speed_override
+	if index < 0 or index >= _char_speeds.size():
+		return 0.0
+	return _char_speeds[index]
+
+
+func _dispatch_boundary_events(frontier: int) -> void:
+	while _event_cursor < _boundary_events.size():
+		var event: Dictionary = _boundary_events[_event_cursor]
+		if int(event["index"]) > frontier:
+			return
+		match String(event["kind"]):
+			"pause":
+				_pause_timer = maxf(_pause_timer, float(event["value"]))
+			"wait":
+				waiting_for_continue = true
+		_event_cursor += 1
+
+
+func _finish_reveal() -> void:
+	if finished:
+		return
+	finished = true
+	waiting_for_confirm = true
+	waiting_for_continue = false
+	_pause_timer = 0.0
+	queue_redraw()
+	reveal_finished.emit()
 
 
 func _bubble_padding_y() -> float:
@@ -188,7 +238,7 @@ func _bubble_padding_y() -> float:
 
 
 func _effective_line_gap() -> float:
-	return 3.0 if _lines >= 5 else float(LINE_GAP)
+	return 5.0 if _lines >= 5 else float(LINE_GAP)
 
 
 func set_position_mode(mode: int) -> void:
@@ -210,7 +260,7 @@ func bubble_rect() -> Rect2:
 	var pad_y := _bubble_padding_y()
 	var step := float(FONT_SIZE) + _effective_line_gap()
 	var content_h := float(maxi(1, _lines)) * step
-	var bottom := 572.0 if _lines >= 5 else BUBBLE_BOTTOM
+	var bottom := BUBBLE_BOTTOM
 	var height := clampf(
 		maxf(BUBBLE_MIN_HEIGHT, content_h + pad_y * 2.0 + BUBBLE_CURSOR_RESERVE),
 		BUBBLE_MIN_HEIGHT,
@@ -223,6 +273,9 @@ func bubble_rect() -> Rect2:
 ## Lay every paintable character out in screen space (bottom/top bar or centered 2005).
 func _layout() -> void:
 	_chars.clear()
+	_char_speeds.clear()
+	_boundary_events.clear()
+	_event_cursor = 0
 	_line_align.clear()
 	_instant_index = -1
 	var font := UiSkin.bold_font()
@@ -232,8 +285,10 @@ func _layout() -> void:
 	var x := line_left
 	var y := 0.0
 	var right := (CENTER_BOX_X + CENTER_BOX_WIDTH - CENTER_PADDING_X) if is_center else (BUBBLE_X + BUBBLE_WIDTH - BUBBLE_PADDING_X)
+	var bubble_right := (CENTER_BOX_X + CENTER_BOX_WIDTH) if is_center else (BUBBLE_X + BUBBLE_WIDTH)
 	var color := Color.WHITE
 	var glyph_size := base_size
+	var glyph_speed := CENTER_TEXT_SPEED if is_center else TEXT_SPEED
 	var row_size := base_size
 	var align := HORIZONTAL_ALIGNMENT_LEFT
 	var outline := false
@@ -247,7 +302,8 @@ func _layout() -> void:
 			TextTokenizer.Kind.TEXT:
 				for ch in token.text:
 					var width := font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, glyph_size).x
-					if x + width > right:
+					var can_hang := _is_forbidden_line_start(ch) and x + width <= bubble_right - 2.0
+					if line_has_chars and x + width > right and not can_hang:
 						x = line_left
 						y += maxf(CENTER_LINE_HEIGHT, float(row_size) + 6.0) if is_center else float(row_size + LINE_GAP)
 						row_size = glyph_size
@@ -257,6 +313,7 @@ func _layout() -> void:
 						line_has_chars = false
 					_chars.append({"ch": ch, "color": color, "x": x, "y": y, "size": glyph_size,
 						"line": _lines - 1, "outline": outline, "instant": instant})
+					_char_speeds.append(glyph_speed)
 					line_has_chars = true
 					var line_width: float = x + width - line_left
 					if line_width > line_widths[_lines - 1]:
@@ -279,6 +336,16 @@ func _layout() -> void:
 				glyph_size = base_size if token.number <= 0 else clampi(token.number, 8, 96)
 			TextTokenizer.Kind.FONT_SIZE_RELATIVE:
 				glyph_size = clampi(glyph_size + token.number, 8, 96)
+			TextTokenizer.Kind.SPEED:
+				glyph_speed = float(token.number)
+			TextTokenizer.Kind.PAUSE:
+				_boundary_events.append({"index": _chars.size(), "kind": "pause", "value": PAUSE_SECONDS})
+			TextTokenizer.Kind.WAIT:
+				_boundary_events.append({"index": _chars.size(), "kind": "wait", "value": 0.0})
+			TextTokenizer.Kind.VARIABLE:
+				pass
+			TextTokenizer.Kind.LETTER_SPACING:
+				pass
 			TextTokenizer.Kind.OUTLINE_ON:
 				outline = true
 			TextTokenizer.Kind.OUTLINE_OFF:
@@ -324,12 +391,34 @@ func _layout() -> void:
 		entry["y"] = float(entry["y"]) * compact_ratio + y_origin
 
 
+func _is_forbidden_line_start(ch: String) -> bool:
+	return LINE_START_FORBIDDEN.contains(ch)
+
+
 func laid_out_characters() -> int:
 	return _chars.size()
 
 
 func line_count() -> int:
 	return _lines
+
+
+func character_text(index: int) -> String:
+	if index < 0 or index >= _chars.size():
+		return ""
+	return String(_chars[index]["ch"])
+
+
+func character_line(index: int) -> int:
+	if index < 0 or index >= _chars.size():
+		return -1
+	return int(_chars[index]["line"])
+
+
+func character_speed(index: int) -> float:
+	if index < 0 or index >= _char_speeds.size():
+		return 0.0
+	return _char_speeds[index]
 
 
 ## Where a character lands, in screen coordinates.
@@ -354,13 +443,8 @@ func _draw() -> void:
 	if face_number > 0:
 		_draw_face()
 	var rect := bubble_rect()
-	if position_mode == _WolfConst.MSG_POS_CENTER:
-		draw_style_box(_style_center_halo, rect.grow(4.0))
-		draw_style_box(_style_center_core, rect)
-	else:
-		draw_style_box(_style_outer, rect.grow(4.0))
-		draw_style_box(_style_mid, rect.grow(2.0))
-		draw_style_box(_style_core, rect)
+	for i in _feather_styles.size():
+		draw_style_box(_feather_styles[i], rect.grow(FEATHER_GROW[i]))
 	var font := UiSkin.bold_font()
 	var limit := mini(int(revealed), _chars.size())
 	var outline_color := Color(0.0, 0.0, 0.0, 1.0)
@@ -369,10 +453,10 @@ func _draw() -> void:
 		var size: int = entry["size"]
 		var baseline := Vector2(entry["x"], entry["y"] + font.get_ascent(size))
 		draw_string_outline(font, baseline, entry["ch"],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, size, 2, outline_color)
+			HORIZONTAL_ALIGNMENT_LEFT, -1, size, UiSkin.TEXT_OUTLINE_SIZE, outline_color)
 		draw_string(font, baseline, entry["ch"],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, size, entry["color"])
-	if waiting_for_confirm and not hover_enabled:
+	if (waiting_for_confirm or waiting_for_continue) and not hover_enabled and not _choice_attached:
 		_draw_cursor(rect)
 
 
@@ -398,14 +482,9 @@ func _draw_face() -> void:
 func _draw_cursor(bubble: Rect2) -> void:
 	var cursor: Texture2D = null
 	if assets != null:
-		if position_mode == _WolfConst.MSG_POS_CENTER:
+		cursor = assets.texture(CURSOR_TEXTURE)
+		if cursor == null:
 			cursor = assets.texture(CURSOR_FALLBACK_TEXTURE)
-			if cursor == null:
-				cursor = assets.texture(CURSOR_TEXTURE)
-		else:
-			cursor = assets.texture(CURSOR_TEXTURE)
-			if cursor == null:
-				cursor = assets.texture(CURSOR_FALLBACK_TEXTURE)
 	if cursor != null:
 		var cw := float(cursor.get_width())
 		var ch := float(cursor.get_height())
@@ -420,7 +499,7 @@ func _draw_cursor(bubble: Rect2) -> void:
 		elif ch > 15.0 * 1.5 and int(ch) % 15 == 0:
 			frame_count = maxi(1, int(ch / 15.0))
 			fh = 15.0
-		var y_offset := -6.0 if position_mode == _WolfConst.MSG_POS_CENTER else -3.0
+		var y_offset := 2.0
 		var bob := sin(_cursor_time * 4.5) * 1.5 if frame_count == 1 else 0.0
 		var dst_pos := Vector2(bubble.position.x + (bubble.size.x - cw) * 0.5, bubble.end.y - fh + y_offset + bob)
 		if frame_count > 1:

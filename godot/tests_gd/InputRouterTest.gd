@@ -170,13 +170,13 @@ func _ready() -> void:
 	if (_router.held_mask() & InputRouter.MASK_CANCEL) != 0:
 		failures.append("releasing the right button must clear MASK_CANCEL")
 
-	# 13. Spacebar is a cancel key (report §2.3) and sub-pixel mouse jitter (<1px) does not
+	# 13. Spacebar confirms like Enter/Z; sub-pixel mouse jitter (<1px) does not
 	# emit spurious hover updates after the cursor is active.
 	var cancel_before_space := _cancel
 	var action_before_space := _action
 	_router.handle_event(_key(KEY_SPACE))
-	if _cancel != cancel_before_space + 1 or _action != action_before_space:
-		failures.append("KEY_SPACE should emit cancel_pressed, not action_pressed")
+	if _action != action_before_space + 1 or _cancel != cancel_before_space:
+		failures.append("KEY_SPACE should emit action_pressed, not cancel_pressed")
 	var subpixel := InputEventMouseMotion.new()
 	subpixel.position = _router.hover_position + Vector2(0.4, 0.4)
 	var updates_before := _router.hover_updates
@@ -184,6 +184,28 @@ func _ready() -> void:
 	_router.handle_event(subpixel)
 	if _router.hover_updates != updates_before or _hovers != hovers_before_subpixel:
 		failures.append("sub-pixel motion (<1px) should not emit hover_changed")
+
+	# 14. A newly entered event masks the opening click until physical release.
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+	_router.handle_event(_mouse(MOUSE_BUTTON_LEFT))
+	if not _router.click_latched():
+		failures.append("test setup must latch the opening click")
+	_router.suppress_action_until_release()
+	if not _router.action_entry_suppressed():
+		failures.append("event entry must arm the action suppression")
+	if (_router.held_mask() & InputRouter.MASK_OK) != 0:
+		failures.append("event entry must mask the opening click for 123")
+	if _router.left_frame_pressed():
+		failures.append("event entry must mask the opening click for 124")
+	var suppress_release := _mouse(MOUSE_BUTTON_LEFT)
+	suppress_release.pressed = false
+	_router.handle_event(suppress_release)
+	if _router.action_entry_suppressed():
+		failures.append("releasing the opening click must end action suppression")
+	_router.handle_event(_mouse(MOUSE_BUTTON_LEFT))
+	if (_router.held_mask() & InputRouter.MASK_OK) == 0 or not _router.left_frame_pressed():
+		failures.append("a fresh click after release must reach the next poll")
 
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
