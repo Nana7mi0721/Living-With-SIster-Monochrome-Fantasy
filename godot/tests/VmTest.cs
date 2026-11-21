@@ -48,6 +48,7 @@ public static class VmTest
         TestTextExpanderCselfEmptyAndSdb();
         TestOpcode102CancelFlag();
         TestOpcode101PairedChoice();
+        TestOpcode101MultiDigitFacePrefix();
         TestOpcode1000ProFeatureWait();
         TestEventEntryNotifications();
         TestMaxCallDepth();
@@ -1374,6 +1375,30 @@ public static class VmTest
             throw new Exception($"150 StrVar path expected expansion, got '{host.Pictures[0].File}'");
         if (host.Pictures[1].File != "Picture/sys.png")
             throw new Exception($"150 SysStrVar path expected expansion, got '{host.Pictures[1].File}'");
+    }
+
+    private static void TestOpcode101MultiDigitFacePrefix()
+    {
+        Console.WriteLine("  Testing Opcode 101 multi-digit @<n> face prefix parsing...");
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        var slots = new List<Slot>
+        {
+            Slot.Command(101, [], ["@10你好"]),
+            Slot.Command(101, [], ["@2hello"]),
+            Slot.Command(172)
+        };
+        vm.RegisterProgram(Program.FromSlots(110, "Op101MultiDigitFace", slots));
+        var inst = vm.CreateInstance(110)!;
+        vm.StepFrame();
+        if (host.Messages.Count != 1)
+            throw new Exception($"@10 prefix expected 1 message, got {host.Messages.Count}");
+        if (host.Messages[0].Face != 10 || host.Messages[0].Text != "你好")
+            throw new Exception($"@10 prefix expected face=10 text='你好', got face={host.Messages[0].Face} text='{host.Messages[0].Text}'");
+        inst.Wait.Clear();
+        vm.StepFrame();
+        if (host.Messages.Count != 2 || host.Messages[1].Face != 2 || host.Messages[1].Text != "hello")
+            throw new Exception($"@2 prefix expected face=2 text='hello', got count={host.Messages.Count} face={(host.Messages.Count > 1 ? host.Messages[1].Face : null)} text='{(host.Messages.Count > 1 ? host.Messages[1].Text : "")}'");
     }
 
     private static void TestOpcode174ReturnToTitleDeferral()

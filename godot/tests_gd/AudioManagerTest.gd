@@ -40,10 +40,24 @@ func _ready() -> void:
 	var loop_wav := bgs.stream as AudioStreamWAV
 	_expect(loop_wav != null, "stub loop stream is a wav")
 	if loop_wav != null:
-		# loop_point is in 60 Hz game frames; AudioStreamWAV.loop_begin is in samples.
-		_expect(loop_wav.loop_begin == roundi(30.0 * loop_wav.mix_rate / 60.0), "wav loop begin converts frames to samples")
-		_expect(loop_wav.loop_end == roundi(loop_wav.get_length() * loop_wav.mix_rate),
+		var stub_total := roundi(loop_wav.get_length() * loop_wav.mix_rate)
+		# loop_point is in 60 Hz game frames; AudioStreamWAV.loop_begin is clamped within [0, total_samples - 1].
+		_expect(loop_wav.loop_begin == mini(roundi(30.0 * loop_wav.mix_rate / 60.0), maxi(0, stub_total - 1)),
+			"wav loop begin converts frames to samples within stream bounds")
+		_expect(loop_wav.loop_end == stub_total,
 			"wav loop end covers the whole stream")
+		var long_wav := AudioStreamWAV.new()
+		long_wav.format = AudioStreamWAV.FORMAT_16_BITS
+		long_wav.mix_rate = 22050
+		var wav_data := PackedByteArray()
+		wav_data.resize(22050 * 2)
+		long_wav.data = wav_data
+		mixer._apply_loop(long_wav, true, 30)
+		_expect(long_wav.loop_begin == roundi(30.0 * 22050.0 / 60.0), "in-bounds wav loop begin converts frames to samples")
+		_expect(long_wav.loop_end == 22050, "in-bounds wav loop end matches sample count")
+		mixer._apply_loop(long_wav, true, 9999999)
+		_expect(long_wav.loop_begin == 22049 and long_wav.loop_begin < long_wav.loop_end,
+			"oversized wav loop_point clamps loop_begin below loop_end")
 
 	# 2. A BGS play must never steal the BGM track (pre-W4 bug classified it as BGM).
 	_expect(mixer.current_file(AudioManager.CHANNEL_BGM).ends_with("Sound/stub.wav"), "bgm intact after bgs")
@@ -58,7 +72,12 @@ func _ready() -> void:
 	_expect(int(mixer.current_track(AudioManager.CHANNEL_BGM).get("volume", -1)) == 60,
 		"bgm volume state updates without a restart")
 
-	# 4. Stop clears only its channel; snapshot lists live tracks in channel order.
+	# 4. Stop clears only its channel; snapshot lists live BGM/BGS tracks and omits transient SE.
+	_expect(mixer.play(AudioManager.CHANNEL_SE, "Sound/stub.wav", 100, 0, 100, 6), "se live during snapshot")
+	var snap_with_se := mixer.snapshot()
+	_expect(snap_with_se.size() == 2, "snapshot must omit transient SE channel")
+	for entry in snap_with_se:
+		_expect(int(entry.get("channel", -1)) != AudioManager.CHANNEL_SE, "snapshot entry must not be SE")
 	mixer.stop(AudioManager.CHANNEL_SE, 0)
 	_expect(mixer.current_file(AudioManager.CHANNEL_SE) == "", "se stopped")
 	_expect(mixer.track_count() == 2, "two tracks after stop")
@@ -69,6 +88,13 @@ func _ready() -> void:
 	_expect(int(snap[1].get("loop_point", -1)) == 30, "loop point kept")
 	_expect(bool(snap[1].get("loop", false)), "bgs loops")
 	_expect(int(snap[0].get("volume", -1)) == 60, "volume kept")
+
+	# 4b. Oversized WAV loop_point must clamp loop_begin below loop_end.
+	_expect(mixer.play(AudioManager.CHANNEL_BGS, "Sound/stub.wav", 50, 9999999, 100, 0), "oversized loop_point play")
+	var clamped_wav := mixer.player_for(AudioManager.CHANNEL_BGS).stream as AudioStreamWAV
+	_expect(clamped_wav != null and clamped_wav.loop_begin >= 0 and clamped_wav.loop_begin < clamped_wav.loop_end,
+		"oversized loop_point clamps loop_begin < loop_end")
+	mixer.play(AudioManager.CHANNEL_BGS, "Sound/stub.wav", 40, 30, 100, 0)
 
 	# 5. Reset then restore reproduces the live set.
 	mixer.reset()

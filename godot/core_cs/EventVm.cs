@@ -663,8 +663,16 @@ public sealed class EventVm
                     string messageText = expanded;
                     if (expanded.StartsWith('@') && expanded.Length >= 2 && char.IsAsciiDigit(expanded[1]))
                     {
-                        face = expanded[1] - '0';
-                        messageText = expanded.Length > 2 ? expanded[2..] : "";
+                        int end = 1;
+                        while (end < expanded.Length && char.IsAsciiDigit(expanded[end]))
+                        {
+                            end++;
+                        }
+                        if (int.TryParse(expanded.AsSpan(1, end - 1), out int parsedFace))
+                        {
+                            face = parsedFace;
+                        }
+                        messageText = end < expanded.Length ? expanded[end..] : "";
                     }
                     bool pairedChoice = inst.Pc + 1 < prog.Len && prog.Slots[inst.Pc + 1].Opcode == 102;
                     Host.ShowMessage(messageText, face, pairedChoice);

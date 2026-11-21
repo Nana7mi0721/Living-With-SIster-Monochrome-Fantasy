@@ -25,6 +25,10 @@ func _ready() -> void:
 		var cmd: String = script.build_convert_command("/tmp/Data")
 		if not cmd.contains("converter all") or not cmd.contains("--root") or not cmd.contains("--out"):
 			failures.append("conversion command is incomplete: %s" % cmd)
+		var paren_root := "D:/Games/LWSMF (v1.4)/Data"
+		var bat: String = script._build_windows_batch("E:/Games/LWSMF (v1.4)", script._launch_command(paren_root, "E:/Games/LWSMF (v1.4)/converter/convert.bat"), "C:/tmp/conv.log", "C:/tmp/status.txt")
+		if not bat.contains(paren_root) or bat.contains("(%s)" % paren_root):
+			failures.append("windows batch helper must preserve ')' path without outer cmd grouping: %s" % bat)
 		if script.find_convert_launcher().is_empty():
 			failures.append("converter launcher should be discoverable in this checkout")
 		var wizard = script.new()

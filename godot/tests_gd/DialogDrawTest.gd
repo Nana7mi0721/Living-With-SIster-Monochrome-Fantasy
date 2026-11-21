@@ -386,16 +386,30 @@ func _ready() -> void:
 	if choice.selected != 1:
 		failures.append("ChoiceWindow.open must snap selected to first visible option when index 0 is empty (got %d)" % choice.selected)
 
-	# 4c. Backlog uses the shared UI font and advertises both line and page navigation.
+	# 4c. Backlog uses the shared UI font, supports key echo scrolling, and yields to title confirm.
 	var overlays := PlayOverlays.new()
 	add_child(overlays)
-	overlays.push_backlog("backlog font probe")
+	for idx in range(40):
+		overlays.push_backlog("backlog font probe %d" % idx)
 	overlays.open_backlog()
 	if overlays._backlog_label.get_theme_font("font") != UiSkin.font():
 		failures.append("backlog text must use UiSkin.font()")
 	if overlays._backlog_header == null or not overlays._backlog_header.text.contains("W/S"):
 		failures.append("backlog header should document Up/Down or W/S scrolling")
+	overlays._backlog_scroll.scroll_vertical = 100
+	var echo_up := InputEventKey.new()
+	echo_up.keycode = KEY_UP
+	echo_up.pressed = true
+	echo_up.echo = true
+	overlays._input(echo_up)
+	if overlays._backlog_scroll.scroll_vertical >= 100:
+		failures.append("backlog must scroll continuously on directional key echo (got %d)" % overlays._backlog_scroll.scroll_vertical)
 	overlays.close_backlog()
+	overlays.open_title_confirm()
+	overlays.open_backlog()
+	if overlays.backlog_open():
+		failures.append("open_backlog must stay blocked while title_confirm is open")
+	overlays.cancel_title_confirm()
 
 	# 5. Off-screen render: the window rect must actually contain lit pixels. The dummy
 	# renderer that --headless selects has no textures at all, so the pixel assertion only

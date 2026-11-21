@@ -177,11 +177,12 @@ func reset() -> void:
 		_tracks[channel] = {}
 
 
-## One entry per live track, in SaveState order. Positions are milliseconds so the save
-## file stays independent of the audio server's mix rate.
+## One entry per live long-form track (BGM/BGS), in SaveState order. Transient SE are omitted
+## so a save taken mid-effect does not replay a clipped sound on load. Positions are
+## milliseconds so the save file stays independent of the audio server's mix rate.
 func snapshot() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
-	for channel in CHANNEL_COUNT:
+	for channel in [CHANNEL_BGM, CHANNEL_BGS]:
 		var track: Dictionary = _tracks[channel]
 		if track.is_empty():
 			continue
@@ -283,7 +284,7 @@ func _apply_loop(stream: AudioStream, looping: bool, loop_point: int) -> void:
 			if total_samples > 0:
 				# loop_point is in 60 Hz frames; AudioStreamWAV loop bounds count samples.
 				var begin := roundi(float(maxi(loop_point, 0)) * float(wav.mix_rate) / 60.0)
-				wav.loop_begin = begin
+				wav.loop_begin = clampi(begin, 0, total_samples - 1)
 				wav.loop_end = total_samples
 
 

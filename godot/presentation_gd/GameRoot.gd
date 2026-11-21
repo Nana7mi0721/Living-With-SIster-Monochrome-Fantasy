@@ -751,10 +751,12 @@ func _notification(what: int) -> void:
 	if what != NOTIFICATION_APPLICATION_FOCUS_OUT and what != NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		return
 	_modal_release_guard = false
+	_action_input_pending = false
 	if vm != null:
 		vm.ResetPointer()
 	if router != null:
 		router.clear_pointer_latches()
+		router.clear_suppression()
 		router.clear_frame_latches()
 	Input.flush_buffered_events()
 
@@ -791,24 +793,9 @@ func _on_session_status(line: String) -> void:
 	status(line)
 
 
-func _on_map_cell_clicked(cell: Vector2i) -> void:
-	if session == null or phase != "bedroom" or faulted or _modal_release_guard or _modal_window_open():
-		return
-	if session.HasChoices or session.MessageOpen:
-		return
-	var delta: Vector2i = cell - map_view.leader_cell()
-	if absi(delta.x) + absi(delta.y) != 1:
-		return
-	var facing := 2
-	if delta.y < 0:
-		facing = 8
-	elif delta.y > 0:
-		facing = 2
-	elif delta.x < 0:
-		facing = 4
-	else:
-		facing = 6
-	session.MoveLeader(delta.x, delta.y, facing)
+func _on_map_cell_clicked(_cell: Vector2i) -> void:
+	# Bedroom uses picture buttons rather than tile clicks to avoid moving the hidden leader.
+	pass
 
 
 func _on_map_cell_hovered(_cell: Vector2i) -> void:
@@ -831,8 +818,6 @@ func _on_session_map(map_id: int, leader_x: int, leader_y: int) -> void:
 	if (phase == "title" or phase == "faulted") and overlays != null:
 		overlays.close_non_fault_modals()
 		overlays.clear_backlog()
-	if not map_view.cell_clicked.is_connected(_on_map_cell_clicked):
-		map_view.cell_clicked.connect(_on_map_cell_clicked)
 	if not map_view.cell_hovered.is_connected(_on_map_cell_hovered):
 		map_view.cell_hovered.connect(_on_map_cell_hovered)
 	map_view.visible = true
@@ -843,12 +828,14 @@ func _on_session_map(map_id: int, leader_x: int, leader_y: int) -> void:
 	status("map %d (%d,%d)" % [map_id, leader_x, leader_y])
 
 
-## A successful load invalidates every transient overlay from the pre-load frame.
-func _on_load_completed() -> void:
+func _reset_presentation_transient_state() -> void:
 	_active_speaker = ""
 	_active_msg_pos_mode = _WolfConst.MSG_POS_BOTTOM
-	message.close()
-	choice.close()
+	if message != null:
+		message.close()
+		message.set_position_mode(_WolfConst.MSG_POS_BOTTOM)
+	if choice != null:
+		choice.close()
 	if nameplate != null:
 		nameplate.hide_speaker()
 	if overlays != null:
@@ -856,6 +843,14 @@ func _on_load_completed() -> void:
 		overlays.clear_backlog()
 	_clear_transition_overlays()
 	_clean_scene_image = null
+	if stage != null:
+		stage.reset_screen_tint()
+	_sync_screen_tint()
+
+
+## A successful load invalidates every transient overlay and screen state from the pre-load frame.
+func _on_load_completed() -> void:
+	_reset_presentation_transient_state()
 	_arm_modal_release_guard()
 
 
@@ -926,6 +921,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if key.keycode == KEY_F4:
+		if title_confirm_open():
+			get_viewport().set_input_as_handled()
+			return
 		if backlog_open():
 			close_backlog()
 		else:
@@ -933,6 +931,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if key.keycode == KEY_F12:
+		if backlog_open():
+			get_viewport().set_input_as_handled()
+			return
 		request_return_to_title()
 		get_viewport().set_input_as_handled()
 		return
@@ -1010,7 +1011,7 @@ func _modal_window_open() -> bool:
 
 
 func open_backlog() -> void:
-	if overlays == null:
+	if overlays == null or title_confirm_open():
 		return
 	overlays.open_backlog()
 	status("backlog open (%d messages)" % overlays.backlog_size())
@@ -1139,7 +1140,7 @@ func title_confirm_open() -> bool:
 
 
 func request_return_to_title() -> void:
-	if faulted or phase == "title" or phase == "setup" or phase == "failed" or title_confirm_open():
+	if faulted or phase == "title" or phase == "setup" or phase == "failed" or title_confirm_open() or backlog_open():
 		return
 	overlays.open_title_confirm()
 	status("return-to-title confirm opened")
@@ -1172,19 +1173,8 @@ func restart_title() -> bool:
 	vm.ResetPointer()
 	router.clear_pointer_latches()
 	router.clear_frame_latches()
-	if overlays != null:
-		overlays.close_non_fault_modals()
-		overlays.clear_backlog()
-	message.close()
-	_active_speaker = ""
-	_active_msg_pos_mode = _WolfConst.MSG_POS_BOTTOM
-	message.set_position_mode(_WolfConst.MSG_POS_BOTTOM)
-	if nameplate != null:
-		nameplate.hide_speaker()
-	choice.close()
-	_clear_transition_overlays()
+	_reset_presentation_transient_state()
 	session.SetTitleMenuVisible(false)
-	stage.reset_screen_tint()
 	stage.clear_pictures()
 	audio.reset()
 	map_view.visible = false
@@ -1327,11 +1317,8 @@ func restart_after_fault() -> bool:
 	vm.ResetPointer()
 	router.clear_pointer_latches()
 	router.clear_frame_latches()
-	if overlays != null:
-		overlays.close_non_fault_modals()
-		overlays.clear_backlog()
-	message.close()
-	choice.close()
+	_reset_presentation_transient_state()
+	session.SetTitleMenuVisible(false)
 	stage.clear_pictures()
 	audio.reset()
 	map_view.visible = false
@@ -1345,6 +1332,7 @@ func restart_after_fault() -> bool:
 		if overlays != null:
 			overlays.show_fault_modal(vm.FaultReason, session.HasSave)
 		return false
+	_seed_live_rng_if_windowed()
 	faulted = false
 	if overlays != null:
 		overlays.hide_fault_modal()
@@ -1371,11 +1359,7 @@ func recover_to_last_save() -> bool:
 	vm.ResetPointer()
 	router.clear_pointer_latches()
 	router.clear_frame_latches()
-	if overlays != null:
-		overlays.close_non_fault_modals()
-		overlays.clear_backlog()
-	message.close()
-	choice.close()
+	_reset_presentation_transient_state()
 	stage.clear_pictures()
 	audio.reset()
 	map_view.visible = false

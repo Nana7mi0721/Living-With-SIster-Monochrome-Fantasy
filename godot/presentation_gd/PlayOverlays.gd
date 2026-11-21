@@ -172,6 +172,8 @@ func backlog_open() -> bool:
 
 
 func open_backlog() -> void:
+	if _title_confirm_open:
+		return
 	if _backlog_root == null:
 		_build_backlog_overlay()
 	if _backlog_label == null:
@@ -219,7 +221,7 @@ func _input(event: InputEvent) -> void:
 	if not _backlog_open or not (event is InputEventKey):
 		return
 	var key := event as InputEventKey
-	if not key.pressed or key.echo:
+	if not key.pressed:
 		return
 	match key.keycode:
 		KEY_UP, KEY_W:

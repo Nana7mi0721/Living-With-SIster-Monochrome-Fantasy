@@ -261,6 +261,11 @@ func clear_frame_latches() -> void:
 	_middle_click_latch = false
 
 
+## Clear entry-suppression guard (e.g. on focus loss when key/mouse release may be missed).
+func clear_suppression() -> void:
+	_action_entry_suppressed = false
+
+
 ## Clear mouse button held state and click latches (keeps wheel state untouched).
 func clear_pointer_latches() -> void:
 	pointer_pressed = false
@@ -269,4 +274,4 @@ func clear_pointer_latches() -> void:
 	_click_latch = false
 	_right_click_latch = false
 	_middle_click_latch = false
-	_action_entry_suppressed = false
+	clear_suppression()

@@ -216,6 +216,27 @@ func _ready() -> void:
 				failures.append("bedroom WASD/arrows must not move the hidden leader")
 			root.vm.ApplyInputPermission(0x010)
 
+		# Load must reset screen_tint, message.position_mode, and nameplate.
+		if root.phase == "bedroom":
+			var pre_save_lx: int = root.session.LeaderX
+			var pre_save_ly: int = root.session.LeaderY
+			if root.session.SaveGame():
+				root.stage.set_screen_tint(0x001E1E32, 0)
+				root._on_message_options_changed(0, WolfConst.MSG_POS_CENTER, 0, "妹妹", "")
+				root._on_message("居中对白", -1)
+				if root.message.position_mode != WolfConst.MSG_POS_CENTER:
+					failures.append("test setup must enter center message mode before load")
+				if not root.session.LoadGame():
+					failures.append("LoadGame must succeed for tint/mode reset check")
+				if not root.stage.screen_tint_multiplier().is_equal_approx(Color.WHITE):
+					failures.append("LoadGame must reset screen_tint to neutral white (got %s)" % str(root.stage.screen_tint_multiplier()))
+				if root.message.position_mode != WolfConst.MSG_POS_BOTTOM:
+					failures.append("LoadGame must reset message.position_mode to MSG_POS_BOTTOM (got %d)" % root.message.position_mode)
+				if root.nameplate != null and root.nameplate.is_visible:
+					failures.append("LoadGame must hide lingering nameplate")
+			if root.session.LeaderX != pre_save_lx or root.session.LeaderY != pre_save_ly:
+				failures.append("load reset probe should preserve saved coordinates")
+
 		# F5/F9: save the bedroom, walk a frame, then reload the same slot.
 		if root.phase == "bedroom":
 			# W4 Day1-2: two live tracks must survive the save/load round trip. This scene
@@ -295,12 +316,22 @@ func _ready() -> void:
 		root.vm.ApplyInputPermission(0x0102)
 		if root.vm.BasicMoveDeny == 0:
 			failures.append("test setup must deny movement input before the restart")
+		# Fault restart must also reset screen_tint, message.position_mode, and nameplate.
+		root.stage.set_screen_tint(0x00141428, 0)
+		root._on_message_options_changed(0, WolfConst.MSG_POS_CENTER, 0, "妹妹", "")
+		root._sync_active_nameplate()
 		# D-13 recovery: a held click latched at fault time must not survive into the title.
 		root.router.pointer_pressed = true
 		root.router._click_latch = true
 		# D-13 recovery: title restart must release the latch, hide the modal and reset the clock.
 		if not root.restart_after_fault():
 			failures.append("restart_after_fault must succeed while faulted")
+		if not root.stage.screen_tint_multiplier().is_equal_approx(Color.WHITE):
+			failures.append("restart_after_fault must reset screen_tint to white")
+		if root.message.position_mode != WolfConst.MSG_POS_BOTTOM:
+			failures.append("restart_after_fault must reset message.position_mode to MSG_POS_BOTTOM")
+		if root.nameplate != null and root.nameplate.is_visible:
+			failures.append("restart_after_fault must hide the nameplate")
 		if root.faulted:
 			failures.append("restart_after_fault must clear the fault latch")
 		if root.phase != "title":
@@ -418,9 +449,32 @@ func _ready() -> void:
 		root._on_map_cell_clicked(Vector2i(lx_guard + 1, ly_guard))
 		if root.session.LeaderX != lx_guard or root.session.LeaderY != ly_guard:
 			failures.append("_on_map_cell_clicked must ignore clicks while modal_release_guard is active")
+		root.router.suppress_action_until_release()
+		root._action_input_pending = true
 		root._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
 		if root.modal_release_guard() or root.router.right_pressed:
 			failures.append("FOCUS_OUT must clear modal_release_guard and router button state")
+		if root.router.action_entry_suppressed() or root._action_input_pending:
+			failures.append("FOCUS_OUT must clear action entry suppression and pending input flag")
+		if root.map_view.cell_clicked.is_connected(root._on_map_cell_clicked):
+			failures.append("bedroom map_view.cell_clicked must stay disconnected")
+		root._on_map_cell_clicked(Vector2i(lx_guard + 1, ly_guard))
+		if root.session.LeaderX != lx_guard or root.session.LeaderY != ly_guard:
+			failures.append("bedroom map clicks must never move the hidden leader")
+
+		# F4/F12 mutual exclusion: neither modal may open on top of the other.
+		root.open_backlog()
+		root.request_return_to_title()
+		if root.title_confirm_open():
+			failures.append("F12 title confirm must not open while F4 backlog is open")
+		root.close_backlog()
+		root._release_modal_guard_if_free()
+		root.request_return_to_title()
+		root.open_backlog()
+		if root.backlog_open():
+			failures.append("F4 backlog must not open while F12 title confirm is open")
+		root.cancel_return_to_title()
+		root._release_modal_guard_if_free()
 
 		# F8 scaling mode cycling + window clamp helper + F2 stats + F3 debug overlays.
 		var scale0: String = root.scaling_mode_name()

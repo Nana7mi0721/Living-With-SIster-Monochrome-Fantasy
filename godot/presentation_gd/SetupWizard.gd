@@ -28,6 +28,7 @@ var _retry_button: Button
 var _pid := -1
 var _status_file := ""
 var _log_file := ""
+var _script_file := ""
 
 ## App directory differs between the editor (res://) and an exported build (exe folder).
 static func app_dir() -> String:
@@ -220,6 +221,24 @@ func _refresh_data_status() -> void:
 	]
 
 
+## Write a standalone batch script so paths containing ')' cannot break cmd.exe grouping.
+static func _build_windows_batch(base: String, command: String, log_file: String, status_file: String) -> String:
+	var safe_base := base.replace("%", "%%")
+	var safe_cmd := command.replace("%", "%%")
+	var safe_log := log_file.replace("%", "%%")
+	var safe_status := status_file.replace("%", "%%")
+	return "\r\n".join([
+		"@echo off",
+		"cd /d \"%s\"" % safe_base,
+		"if errorlevel 1 (",
+		"  echo 1 > \"%s\"" % safe_status,
+		"  exit /b 1",
+		")",
+		"%s > \"%s\" 2>&1" % [safe_cmd, safe_log],
+		"echo %ERRORLEVEL% > \"%s\"" % safe_status,
+	]) + "\r\n"
+
+
 func start_conversion() -> bool:
 	if _pid > 0 and OS.is_process_running(_pid):
 		_status.text = "转换仍在进行，请稍候…"
@@ -239,14 +258,18 @@ func start_conversion() -> bool:
 	_log_file = ProjectSettings.globalize_path("user://setup_conversion.log")
 	if FileAccess.file_exists(_status_file):
 		DirAccess.remove_absolute(_status_file)
-	# cmd.exe keeps the conversion off the render thread; the status file is the
-	# completion latch polled by _process.
+	# Keep conversion off the render thread; the status file is the completion latch polled by _process.
 	var shell := "cmd.exe" if OS.get_name() == "Windows" else "bash"
 	var args: PackedStringArray
 	if OS.get_name() == "Windows":
-		args = PackedStringArray(["/d", "/s", "/v:on", "/c",
-			"cd /d \"%s\" && (%s) > \"%s\" 2>&1 & echo !ERRORLEVEL! > \"%s\"" % [
-				base, command, _log_file, _status_file]])
+		_script_file = ProjectSettings.globalize_path("user://setup_conversion_run.bat")
+		var script_handle := FileAccess.open(_script_file, FileAccess.WRITE)
+		if script_handle == null:
+			_status.text = "无法写入转换脚本。请按手动命令运行。"
+			return false
+		script_handle.store_string(_build_windows_batch(base, command, _log_file, _status_file))
+		script_handle.close()
+		args = PackedStringArray(["/d", "/c", _script_file])
 	else:
 		args = PackedStringArray(["-lc",
 			"cd \"%s\" && (%s) > \"%s\" 2>&1; echo $? > \"%s\"" % [
