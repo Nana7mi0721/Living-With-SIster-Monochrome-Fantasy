@@ -238,19 +238,22 @@ func _ready() -> void:
 	check(int(moved_state["scale"]) == 150 and int(moved_state["opacity"]) == 128,
 		"150 move still applies supplied scale/opacity")
 
-	# Opcode 124 fields 2/3 are the live axis scales; CE63/CE94 feed both answers
-	# straight back into 150. A zero scale still means a zero-sized picture.
-	check(stage.picture_state(1201, 2) == 100 and stage.picture_state(1201, 3) == 100,
-		"fields 2/3 return the live draw scale")
+	# Opcode 124 fields 2/3 return rendered pixel dimensions (unscaled base size when
+	# scale == 0 for preload measurement in CE63/CE90/CE94/CE178, scaled px otherwise).
+	var base1201: Vector2 = stage._base_sizes[1201]
+	check(stage.picture_state(1201, 2) == int(round(base1201.x)) and stage.picture_state(1201, 3) == int(round(base1201.y)),
+		"fields 2/3 return rendered pixel dimensions")
 	stage.draw_picture(1375, 0, "", "zero scale", [0, 1, 1, 1, 255, 100, 120, 0, 0], 0, 2)
-	check(stage.picture_state(1375, 2) == 0 and stage.picture_state(1375, 3) == 0,
-		"fields 2/3 preserve a genuine zero scale")
+	var base1375: Vector2 = stage._base_sizes[1375]
+	check(stage.picture_state(1375, 2) == int(round(base1375.x)) and stage.picture_state(1375, 3) == int(round(base1375.y)),
+		"scale=0 still reports unscaled base dimensions for preload sizing")
 	check(not (stage._pictures[1375] as Control).visible, "scale 0 keeps the node hidden")
 	stage.draw_picture(1376, 0, "", "axis scales",
 		[0, 1, 1, 1, 255, 100, 120, 150, 0, 0, 0, 0, 0, 100, 100, 100, 60],
 		0, 2, [], {"scale_mode": 3})
-	check(stage.picture_state(1376, 2) == 150 and stage.picture_state(1376, 3) == 60,
-		"field 2/3 follow the axis-specific draw scales")
+	var base1376: Vector2 = stage._base_sizes[1376]
+	check(stage.picture_state(1376, 2) == int(round(base1376.x * 1.5)) and stage.picture_state(1376, 3) == int(round(base1376.y * 0.6)),
+		"field 2/3 reflect axis-specific draw scales in pixels")
 
 	# 150 head flags: keep_shift preserves the running 290 shift across a redraw.
 	stage.draw_picture(1370, 0, "", "flag base", [0, 1, 1, 1, 255, 100, 120, 100, 0], 0, 2)
@@ -325,6 +328,18 @@ func _ready() -> void:
 		mul_shader = mul_holder.material as ShaderMaterial
 	check(mul_shader != null and mul_shader.shader != null and mul_shader.shader.code.contains("blend_mul"),
 		"multiply blend uses an alpha-aware multiply shader")
+	# Same-position redraws keep 290 color_corr and one-shot FLASH clamps cleanly at duration.
+	stage.draw_picture(1362, 0, "", "flash probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.effect(1, 0, [0, 0, 1362, 1362, 20, 20, 20])
+	stage.effect(0, 4, [0, 4, 1362, 1362, 40, 40, 40])
+	stage.draw_picture(1362, 0, "", "flash probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	var st1362: Dictionary = stage._states.get(1362, {})
+	check(st1362.get("color_corr", []) == [20, 20, 20] and (st1362.get("effects", []) as Array).size() == 1,
+		"same-position redraw preserves active color_corr and effects")
+	var fx_done := {"effects": [{"kind": 0, "age": 4, "duration": 4, "target": [80, 80, 80]}], "tone": [100, 100, 100], "color_corr": [0, 0, 0]}
+	var pic_effects := PictureEffects.new()
+	var col_done: Color = pic_effects.tone_color(fx_done)
+	check(absf(col_done.r - 1.0) < 0.02, "one-shot FLASH clamps cleanly at age==duration instead of wrapping")
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await _check_multiply_alpha_fade()

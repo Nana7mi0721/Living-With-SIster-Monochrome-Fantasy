@@ -49,6 +49,7 @@ public static class VmTest
         TestOpcode102CancelFlag();
         TestOpcode101PairedChoice();
         TestOpcode101MultiDigitFacePrefix();
+        TestGetFileExistHostDelegate();
         TestOpcode1000ProFeatureWait();
         TestEventEntryNotifications();
         TestMaxCallDepth();
@@ -1420,5 +1421,29 @@ public static class VmTest
             throw new Exception($"174 must not call Host.ReturnToTitle synchronously, count={host.ReturnToTitleCount}");
         if (vm.Vars.Get(50) != 0)
             throw new Exception("174 must stop subsequent instances in the same frame");
+    }
+
+    private sealed class FileCheckHost : NullHost
+    {
+        public string Existing = "./save/save1.jpg";
+        public override bool FileExists(string path) => string.Equals(path, Existing, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void TestGetFileExistHostDelegate()
+    {
+        Console.WriteLine("  Testing Opcode 122 GET_FILE_EXIST host lookup...");
+        var host = new FileCheckHost();
+        var vm = new EventVm { Host = host };
+        var slots = new List<Slot>
+        {
+            Slot.Command(122, [3_000_001, 0x0500, 0, 1], ["<<GET_FILE_EXIST>>./save/save1.jpg"]),
+            Slot.Command(122, [3_000_002, 0x0500, 0, 1], ["<<GET_FILE_EXIST>>./save/save9.jpg"]),
+            Slot.Command(172)
+        };
+        vm.RegisterProgram(Program.FromSlots(111, "GetFileExist", slots));
+        vm.CreateInstance(111);
+        vm.StepFrame();
+        if (vm.Vars.GetStr(1) != "1" || vm.Vars.GetStr(2) != "0")
+            throw new Exception($"GET_FILE_EXIST mismatch: s1='{vm.Vars.GetStr(1)}' s2='{vm.Vars.GetStr(2)}'");
     }
 }

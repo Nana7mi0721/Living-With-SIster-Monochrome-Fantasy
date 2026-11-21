@@ -534,6 +534,16 @@ public partial class SaveLoadTest : Node
         Check(restoredCaller?.JustResumedFromChild == true,
             "a released child waiter must resume like a normal child return");
 
+        // Save/Load must filter transient universal/menu popup slots (15000..16999, e.g. CE64/CE101).
+        SaveState? filteredState = session.BuildSaveState();
+        filteredState?.Pictures.Add(new SavedPicture { Number = 15000, Kind = 4, File = "SystemFile/WindowBase.png", Args = [0, 1, 1, 1, 255, 512, 288, 100, 0] });
+        filteredState?.Pictures.Add(new SavedPicture { Number = 16000, Kind = 4, File = "SystemFile/WindowBase.png", Args = [0, 1, 1, 1, 255, 512, 384, 100, 0] });
+        string filteredPath = Path.Combine(saveDir, "save_filtered.json");
+        if (filteredState != null) SaveCodec.Write(filteredPath, filteredState);
+        Check(session.LoadGameFrom(filteredPath), "filtered UI picture slot must load cleanly");
+        Check(!view.SnapshotPictures().Any(p => p.Number is 15000 or 16000),
+            "load must exclude transient menu/popup picture slots 15000 and 16000");
+
         try { Directory.Delete(saveDir, true); }
         catch (IOException) { }
 

@@ -1017,6 +1017,30 @@ public partial class VmController : Node, IHost, IVmSession
     public void ProFeature(int kind, int milliseconds, string path) =>
         EmitSignal(SignalName.ProFeatureRequested, kind, milliseconds, path ?? "");
 
+    /// <summary>Directory holding runtime saves and thumbnail JPGs for GET_FILE_EXIST.</summary>
+    public string SaveDirectory { get; set; } = "";
+
+    public bool FileExists(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        string norm = path.Replace('\\', '/').Trim();
+        while (norm.StartsWith("./", StringComparison.Ordinal) || norm.StartsWith("../", StringComparison.Ordinal))
+        {
+            norm = norm.StartsWith("./", StringComparison.Ordinal) ? norm.Substring(2) : norm.Substring(3);
+        }
+        norm = norm.TrimStart('/');
+        if (norm.StartsWith("save/", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(SaveDirectory))
+        {
+            string fileName = Path.GetFileName(norm);
+            if (!string.IsNullOrEmpty(fileName))
+            {
+                if (File.Exists(Path.Combine(SaveDirectory, fileName))) return true;
+                if (File.Exists(Path.Combine(SaveDirectory, "Save", fileName))) return true;
+            }
+        }
+        return false;
+    }
+
     public void EventEntered(int eventId, bool isRoot) => EmitSignal(SignalName.ForegroundEventEntered, eventId, isRoot);
 
     public void Reserve(int target) => Reserve(target, Array.Empty<int>(), Array.Empty<string>());

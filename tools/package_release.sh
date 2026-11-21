@@ -160,10 +160,44 @@ PY
 echo "== staging minimal runtime assets =="
 mkdir -p "$STAGE/work/all/BasicData"
 cp -a "$ROOT/work/all/BasicData/"*.project "$STAGE/work/all/BasicData/"
+FOUND_FONT=""
 if [ -n "${LWSMF_FONT_PATH:-}" ] && [ -f "$LWSMF_FONT_PATH" ]; then
-  cp -a "$LWSMF_FONT_PATH" "$STAGE/work/all/Lolita.ttf"
-elif [ -f "$ROOT/work/all/Lolita.ttf" ]; then
-  cp -a "$ROOT/work/all/Lolita.ttf" "$STAGE/work/all/Lolita.ttf"
+  FOUND_FONT="$LWSMF_FONT_PATH"
+else
+  for dir in "$ROOT/work/all" "$ROOT/work/all/Data" "$ROOT/work/out/retail_pairing/game"; do
+    for name in "Lolita.ttf" "LOLITA.TTF" "lolita.ttf"; do
+      if [ -f "$dir/$name" ]; then
+        FOUND_FONT="$dir/$name"
+        break 2
+      fi
+    done
+  done
+fi
+if [ -n "$FOUND_FONT" ]; then
+  cp -a "$FOUND_FONT" "$STAGE/work/all/Lolita.ttf"
+else
+  HAS_PAK_FONT="$("$PYTHON_BIN" - "$ROOT/work/all/media.pak" <<'PY'
+import sys, struct
+from pathlib import Path
+p = Path(sys.argv[1])
+if not p.is_file():
+    print("0"); raise SystemExit(0)
+with p.open("rb") as f:
+    magic = f.read(8)
+    count, = struct.unpack("<I", f.read(4))
+    f.seek(4, 1)
+    names = []
+    for _ in range(count):
+        nlen, = struct.unpack("<H", f.read(2))
+        names.append(f.read(nlen).decode("utf-8", errors="replace").lower())
+        f.seek(16, 1)
+    print("1" if any(n.endswith("lolita.ttf") for n in names) else "0")
+PY
+)"
+  if [ "$HAS_PAK_FONT" != "1" ] && [ "${LWSMF_ALLOW_MISSING_FONT:-0}" != "1" ]; then
+    echo "ERROR: Lolita.ttf not found in work/all, Data, retail_pairing, or media.pak. Set LWSMF_FONT_PATH=/path/to/Lolita.ttf (or LWSMF_ALLOW_MISSING_FONT=1)." >&2
+    exit 3
+  fi
 fi
 
 if [ "$SLIM" = true ]; then

@@ -791,9 +791,11 @@ public sealed class EventVm
                             if (sourceKind == 0)
                             {
                                 string text = Literal(0);
-                                if (text.StartsWith("<<GET_FILE_EXIST>>", StringComparison.Ordinal))
+                                const string FileExistPrefix = "<<GET_FILE_EXIST>>";
+                                if (text.StartsWith(FileExistPrefix, StringComparison.Ordinal))
                                 {
-                                    StoreStr(inst, target, "0");
+                                    string query = text.Substring(FileExistPrefix.Length);
+                                    StoreStr(inst, target, Host.FileExists(query) ? "1" : "0");
                                     break;
                                 }
                                 int at = LastUnitStart(text);

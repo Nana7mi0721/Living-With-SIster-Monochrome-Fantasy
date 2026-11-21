@@ -540,10 +540,12 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 		1:
 			return int(pose.get("y", UiSkin.unit(_arg(args, 6, 0)))) + int(_PictureEffects.effect_offset(state).y)
 		2, 3:
-			var raw := int(pose.get("scale", UiSkin.unit(_arg(args, 7, 100))))
+			var base: Vector2 = _base_sizes.get(number, state.get("base_size", Vector2.ZERO))
 			if field == 3:
-				raw = int(pose.get("scale_y", _arg(args, 16, 100)))
-			return raw
+				var sy := int(pose.get("scale_y", _arg(args, 16, 100)))
+				return int(round(base.y)) if sy == 0 else int(round(base.y * absf(float(sy)) / 100.0))
+			var sx := int(pose.get("scale", UiSkin.unit(_arg(args, 7, 100))))
+			return int(round(base.x)) if sx == 0 else int(round(base.x * absf(float(sx)) / 100.0))
 		4:
 			return _arg(args, 9, 0)
 		5:
@@ -998,6 +1000,8 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 		return
 	var same_position := _pose_position(prev.get("target", {})) == _pose_position(state["target"])
 	if same_position:
+		state["color_corr"] = prev.get("color_corr", [0, 0, 0]).duplicate()
+		state["effects"] = prev.get("effects", []).duplicate(true)
 		state["shake"] = null if prev.get("shake", null) == null else prev["shake"].duplicate(true)
 		state["zoom"] = null if prev.get("zoom", null) == null else prev["zoom"].duplicate(true)
 		state["breath"] = null if prev.get("breath", null) == null else prev["breath"].duplicate(true)
@@ -1334,6 +1338,9 @@ func picture_snapshots() -> Array:
 	var numbers: Array = _cmds.keys()
 	numbers.sort()
 	for number in numbers:
+		var st: Dictionary = _states.get(number, {})
+		if bool(st.get("erase_after", false)) or bool(st.get("hidden", false)):
+			continue
 		var cmd: Dictionary = _cmds[number].duplicate(true)
 		cmd["number"] = number
 		out.append(cmd)

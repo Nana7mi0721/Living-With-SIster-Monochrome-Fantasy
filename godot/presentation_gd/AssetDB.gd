@@ -81,7 +81,10 @@ static func fallback_root() -> String:
 
 
 static func _norm_key(logical: String) -> String:
-	return logical.replace("\\", "/").lstrip("/").to_lower()
+	var key := logical.replace("\\", "/").strip_edges().to_lower()
+	while key.begins_with("./") or key.begins_with("../"):
+		key = key.substr(2) if key.begins_with("./") else key.substr(3)
+	return key.lstrip("/")
 
 
 func set_save_dir(path: String) -> void:

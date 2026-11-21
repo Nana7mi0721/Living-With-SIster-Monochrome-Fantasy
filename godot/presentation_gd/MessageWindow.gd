@@ -37,9 +37,30 @@ const CENTER_TEXT_SPEED := 35.0
 const PAUSE_SECONDS := 0.25      # \\. beat
 const CURSOR_TEXTURE := "BalloonBase_CafeLatte/[CafeLatte]pauseL.png"
 const CURSOR_FALLBACK_TEXTURE := "SystemFile/Text_Pause.png"
-const FEATHER_GROW := [10.0, 6.0, 3.0, 0.0]
-const FEATHER_RADIUS := [26, 23, 20, 17]
-const FEATHER_ALPHA := [0.12, 0.22, 0.40, 0.82]
+const BUBBLE_FEATHER_PAD := 14.0
+const BUBBLE_CORNER_RADIUS := 18.0
+const BUBBLE_SDF_SHADER := """
+shader_type canvas_item;
+uniform vec2 box_size = vec2(740.0, 84.0);
+uniform float corner_radius = 18.0;
+uniform float feather = 14.0;
+uniform float max_alpha = 0.80;
+
+float rounded_box_sdf(vec2 p, vec2 half_extents, float r) {
+	vec2 q = abs(p) - half_extents + vec2(r);
+	return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+
+void fragment() {
+	vec2 local_px = (UV - vec2(0.5)) * box_size;
+	vec2 inner_half = max(vec2(1.0), box_size * 0.5 - vec2(feather));
+	float d = rounded_box_sdf(local_px, inner_half, corner_radius);
+	float alpha = (1.0 - smoothstep(-2.0, feather, d)) * max_alpha;
+	float grad = clamp(UV.y, 0.0, 1.0);
+	vec3 col = mix(vec3(0.22, 0.22, 0.23), vec3(0.11, 0.11, 0.12), grad);
+	COLOR = vec4(col, alpha);
+}
+"""
 const LINE_START_FORBIDDEN := "，。、！？；：）》」』】〕〉》”’…—～·%‰,.;:!?)]}"
 
 var assets: AssetDB
@@ -67,12 +88,26 @@ var _center_content_height := CENTER_LINE_HEIGHT
 var _boundary_events: Array = []
 var _event_cursor := 0
 
-var _feather_styles: Array[StyleBoxFlat] = []
+var _face_node: _MessageFaceLayer
+var _bubble_rect_node: ColorRect
+var _bubble_material: ShaderMaterial
 
 ## Face bust drawn behind the frame: Sys0 / \f[n], or the "@n" prefix on the first line.
 var face_number := 0
 const FACE_SIZE := Vector2(307, 230)
 const FACE_MAP := {2: "Picture/face01.png", 3: "Picture/face02.png", 4: "DLC_data/member_20_s.png"}
+
+
+class _MessageFaceLayer extends Control:
+	var owner_window: MessageWindow
+	func _init(p_owner: MessageWindow) -> void:
+		owner_window = p_owner
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		show_behind_parent = true
+		size = Vector2(1024, 576)
+	func _draw() -> void:
+		if owner_window != null and owner_window.visible_window and owner_window.face_number > 0:
+			owner_window._draw_face_on(self)
 
 
 func _init(p_assets: AssetDB = null) -> void:
@@ -81,12 +116,20 @@ func _init(p_assets: AssetDB = null) -> void:
 	position = Vector2.ZERO
 	size = Vector2(1024, 576)
 
-	for i in FEATHER_GROW.size():
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.0, 0.0, 0.0, FEATHER_ALPHA[i])
-		style.set_border_width_all(0)
-		style.set_corner_radius_all(FEATHER_RADIUS[i])
-		_feather_styles.append(style)
+	_face_node = _MessageFaceLayer.new(self)
+	add_child(_face_node)
+
+	var shader := Shader.new()
+	shader.code = BUBBLE_SDF_SHADER
+	_bubble_material = ShaderMaterial.new()
+	_bubble_material.shader = shader
+	_bubble_rect_node = ColorRect.new()
+	_bubble_rect_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bubble_rect_node.show_behind_parent = true
+	_bubble_rect_node.color = Color.WHITE
+	_bubble_rect_node.material = _bubble_material
+	_bubble_rect_node.visible = false
+	add_child(_bubble_rect_node)
 
 
 ## Open the window with one opcode-101 message. Text is tokenized once, then the reveal
@@ -112,6 +155,7 @@ func open(text: String, p_face: int = 0) -> void:
 	_tokens = TextTokenizer.tokenize(text)
 	_layout()
 	_dispatch_boundary_events(0)
+	_sync_backing_nodes()
 	queue_redraw()
 
 
@@ -125,6 +169,7 @@ func close() -> void:
 	_chars.clear()
 	_char_speeds.clear()
 	_boundary_events.clear()
+	_sync_backing_nodes()
 	queue_redraw()
 
 
@@ -247,6 +292,7 @@ func set_position_mode(mode: int) -> void:
 	position_mode = mode
 	if visible_window:
 		_layout()
+		_sync_backing_nodes()
 		queue_redraw()
 
 
@@ -437,14 +483,30 @@ func face_rect() -> Rect2:
 	return Rect2(Vector2(1024.0 - FACE_SIZE.x, 576.0 - FACE_SIZE.y), FACE_SIZE)
 
 
+func _sync_backing_nodes() -> void:
+	if _face_node != null:
+		_face_node.visible = visible_window and face_number > 0
+		_face_node.queue_redraw()
+	if _bubble_rect_node == null:
+		return
+	if not visible_window:
+		_bubble_rect_node.visible = false
+		return
+	var outer := bubble_rect().grow(BUBBLE_FEATHER_PAD)
+	_bubble_rect_node.position = outer.position
+	_bubble_rect_node.size = outer.size
+	_bubble_rect_node.visible = true
+	if _bubble_material != null:
+		_bubble_material.set_shader_parameter("box_size", outer.size)
+		_bubble_material.set_shader_parameter("corner_radius", minf(BUBBLE_CORNER_RADIUS, (outer.size.y - BUBBLE_FEATHER_PAD * 2.0) * 0.45))
+		_bubble_material.set_shader_parameter("feather", BUBBLE_FEATHER_PAD)
+
+
 func _draw() -> void:
 	if not visible_window:
 		return
-	if face_number > 0:
-		_draw_face()
+	_sync_backing_nodes()
 	var rect := bubble_rect()
-	for i in _feather_styles.size():
-		draw_style_box(_feather_styles[i], rect.grow(FEATHER_GROW[i]))
 	var font := UiSkin.bold_font()
 	var limit := mini(int(revealed), _chars.size())
 	var outline_color := Color(0.0, 0.0, 0.0, 1.0)
@@ -466,16 +528,16 @@ func character_size(index: int) -> int:
 	return _chars[index]["size"]
 
 
-func _draw_face() -> void:
+func _draw_face_on(target: CanvasItem) -> void:
 	var rect := face_rect()
 	var path: String = FACE_MAP.get(face_number, "")
 	var texture: Texture2D = assets.texture(path) if assets != null and path != "" else null
 	if texture != null:
-		draw_texture_rect(texture, rect, false)
+		target.draw_texture_rect(texture, rect, false)
 		return
-	draw_rect(rect, Color(0.16, 0.18, 0.22, 0.85))
-	draw_rect(rect, Color(0.45, 0.50, 0.58, 0.8), false, 1.0)
-	draw_string(UiSkin.font(), rect.position + Vector2(16, 40), "face %d" % face_number,
+	target.draw_rect(rect, Color(0.16, 0.18, 0.22, 0.85))
+	target.draw_rect(rect, Color(0.45, 0.50, 0.58, 0.8), false, 1.0)
+	target.draw_string(UiSkin.font(), rect.position + Vector2(16, 40), "face %d" % face_number,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.75, 0.78, 0.85))
 
 

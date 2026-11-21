@@ -155,7 +155,6 @@ func _ready() -> void:
 	vm.connect("EndGameRequested", _on_end_game)
 	vm.connect("ColorChangeRequested", _on_color_change)
 	vm.connect("ProFeatureRequested", _on_pro_feature)
-	vm.connect("PointerPressObserved", _on_pointer_press_observed)
 	vm.connect("ForegroundEventEntered", _on_event_entered)
 
 	if not vm.LoadPrograms(""):
@@ -329,17 +328,15 @@ func _key_state(mask: int, auto_keys: int) -> int:
 	return vm.KeyCodeForPoll(mask, held, auto_keys, router.wheel_notch())
 
 
-func _on_pointer_press_observed() -> void:
-	if router != null:
-		router.clear_click_latch()
-
-
 ## Do not let the click/key that opened an event satisfy that event's own first poll.
-func _on_event_entered(_event_id: int, is_root: bool) -> void:
-	if is_root or not _action_input_pending or router == null:
+func _on_event_entered(event_id: int, _is_root: bool) -> void:
+	if router == null or (session != null and session.ScriptedInput):
 		return
 	if router.action_input_held():
 		router.suppress_action_until_release()
+		if phase != "title" or event_id == 128 or event_id == 131:
+			if vm != null:
+				vm.SetPointerHeld(false)
 
 
 ## Start a common event by id.
@@ -515,7 +512,7 @@ func _sync_active_nameplate() -> void:
 		nameplate.hide_speaker()
 		return
 	var bubble := message.bubble_rect()
-	nameplate.show_speaker(_active_speaker, Vector2(bubble.position.x + 12.0, bubble.position.y - 22.0))
+	nameplate.show_speaker(_active_speaker, Vector2(bubble.position.x + 14.0, bubble.position.y - 24.0))
 
 
 func _on_message(text: String, face: int) -> void:

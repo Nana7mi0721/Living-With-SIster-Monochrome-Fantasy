@@ -231,6 +231,9 @@ public interface IHost
     /// <summary>A foreground event is about to execute its first slot.</summary>
     void EventEntered(int eventId, bool isRoot) { }
 
+    /// <summary>WOLF opcode 122 &lt;&lt;GET_FILE_EXIST&gt;&gt; runtime existence check.</summary>
+    bool FileExists(string path) => false;
+
     void Log(string message);
 }
 
@@ -265,6 +268,7 @@ public class NullHost : IHost
     public virtual void ProFeature(int kind, int milliseconds, string path) => ProFeature(kind, milliseconds);
     public virtual int KeyCodeAuto(uint mask, uint autoKeys) => KeyCode(mask);
     public virtual void EventEntered(int eventId, bool isRoot) { }
+    public virtual bool FileExists(string path) => false;
     public virtual int KeyCode(uint mask) => 0;
     public virtual void Effect(int kind, int duration, int[] args) { }
     public virtual void Reserve(int target) { }

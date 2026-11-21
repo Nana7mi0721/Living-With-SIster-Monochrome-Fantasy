@@ -71,10 +71,8 @@ func _ready() -> void:
 		failures.append("bottom bubble escaped bottom bound (got %s)" % str(bubble))
 	if not is_equal_approx(MessageWindow.BUBBLE_X, 156.0) or not is_equal_approx(MessageWindow.BUBBLE_WIDTH, 712.0):
 		failures.append("bottom bubble must use the retail 156/712 x geometry")
-	for style in window._feather_styles:
-		if style.border_width_left != 0 or style.border_width_top != 0:
-			failures.append("dialog panels must not draw hard borders")
-			break
+	if window._bubble_material == null or window._bubble_rect_node == null or not window._bubble_rect_node.visible:
+		failures.append("dialog bubble must use the SDF shader ColorRect without hard borders")
 	var single := MessageWindow.new(assets)
 	add_child(single)
 	single.open("一行")
@@ -314,15 +312,15 @@ func _ready() -> void:
 	if pause_tex != null and (pause_tex.get_width() != 17 or pause_tex.get_height() != 90):
 		failures.append("SystemFile/Text_Pause.png should be 17x90 (got %dx%d)" % [pause_tex.get_width(), pause_tex.get_height()])
 
-	# 3g. Nameplate: compact 24px tall pill with 16px bold text.
+	# 3g. Nameplate: 28px tall capsule pill with 16px bold text and double border.
 	var plate := Nameplate.new(assets)
 	add_child(plate)
 	plate.show_speaker("Sister", Vector2(188, 464))
 	var plate_r := plate.plate_rect()
-	if not plate.is_visible or not is_equal_approx(plate_r.size.y, 24.0) or plate_r.size.x < Nameplate.MIN_WIDTH:
+	if not plate.is_visible or not is_equal_approx(plate_r.size.y, 28.0) or plate_r.size.x < Nameplate.MIN_WIDTH:
 		failures.append("nameplate pill rect mismatch (got %s)" % str(plate_r))
-	if plate._style.bg_color != Nameplate.BACKGROUND or plate._style.corner_radius_top_left != 12:
-		failures.append("nameplate must use the retail grey fill and 12px corner radius")
+	if plate._style.bg_color != Nameplate.BACKGROUND or plate._style.corner_radius_top_left != 14 or plate._inner_style.border_width_top != 1:
+		failures.append("nameplate must use the retail grey fill, 14px capsule radius, and double ring")
 
 	# 4. The choice window stacks rows without overlap and stays anchored on Sys3/Sys4.
 	var choice := ChoiceWindow.new(assets)

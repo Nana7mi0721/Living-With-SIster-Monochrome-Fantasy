@@ -719,6 +719,28 @@ func _ready() -> void:
 		item_root._process(item_root.STEP)
 	if _item_rows_visible(item_root):
 		failures.append("closing CE128 must fade every item-list row, not leave text residue")
+	# Held LMB on a root foreground event must also suppress until release, and EngineState(7) must not wipe _click_latch.
+	var click_check_up := InputEventMouseButton.new()
+	click_check_up.button_index = MOUSE_BUTTON_LEFT
+	click_check_up.pressed = false
+	click_check_up.position = Vector2(512, 288)
+	item_root.router.handle_event(click_check_up)
+	item_root.router.clear_frame_latches()
+	item_root.router.clear_suppression()
+	var click_probe := InputEventMouseButton.new()
+	click_probe.button_index = MOUSE_BUTTON_LEFT
+	click_probe.pressed = true
+	click_probe.position = Vector2(512, 288)
+	item_root.router.handle_event(click_probe)
+	item_root.vm.SetPointerPressed(true)
+	item_root.vm.BeginFrameInput()
+	var _es7: int = item_root.vm.EngineStateBridge(7)
+	if not item_root.router.click_latched():
+		failures.append("polling EngineState(7) must not steal _click_latch from opcode 123")
+	item_root._on_event_entered(128, true)
+	if not item_root.router.action_entry_suppressed():
+		failures.append("root foreground event entry while action held must suppress until release")
+	item_root.router.handle_event(click_check_up)
 	item_root.queue_free()
 
 	if failures.is_empty():

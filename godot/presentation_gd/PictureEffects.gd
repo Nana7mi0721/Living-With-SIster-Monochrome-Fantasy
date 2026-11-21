@@ -41,7 +41,7 @@ func tone_color(state: Dictionary) -> Color:
 				var blink := float(base) + float(target[channel]) * wave
 				value = clampi(int(round(blink * 2.55)), 0, 510)
 			else:
-				var phase := age % duration
+				var phase := mini(age, duration)
 				var from_value := 100 + int(target[channel])
 				var numerator := from_value * (duration - phase) + 100 * phase
 				var denominator := 100 * duration

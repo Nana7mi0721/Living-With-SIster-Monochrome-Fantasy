@@ -10,7 +10,7 @@ const _MediaPakReader = preload("res://presentation/MediaPakReader.cs")
 const WINDOW_BASE := "SystemFile/WindowBase.png"
 const WINDOW_CORNER := 3
 const BASE_FONT_SIZE := 20
-const TEXT_OUTLINE_SIZE := 1
+const TEXT_OUTLINE_SIZE := 2
 
 const FONT_NAMES: Array[String] = [
 	"Microsoft YaHei UI",
@@ -63,6 +63,8 @@ const TEXT_COLORS: Array[Color] = [
 static var _font: Font = null
 static var _bold_font: Font = null
 static var _strict_font_override: int = -1
+static var _font_source: String = "unloaded"
+static var _font_logged := false
 
 
 ## Strict retail font mode: when enabled (or LWsmf_STRICT_FONT=1), skip the OS/CJK
@@ -94,22 +96,40 @@ static func _find_retail_font_path() -> String:
 	var res_root := _AppPaths.resource_root()
 	var exe_dir := OS.get_executable_path().get_base_dir()
 	var data_root := pkg_root.path_join("work/all").simplify_path()
-	candidates.append_array([
-		data_root.path_join("Lolita.ttf"),
-		data_root.path_join("Data/Lolita.ttf"),
-		pkg_root.path_join("Lolita.ttf"),
-		pkg_root.path_join("Data/Lolita.ttf"),
-		res_root.path_join("Data/Lolita.ttf"),
-		exe_dir.path_join("Data/Lolita.ttf"),
-		exe_dir.path_join("work/all/Lolita.ttf"),
-	])
+	var dirs := [
+		data_root,
+		data_root.path_join("Data"),
+		pkg_root,
+		pkg_root.path_join("Data"),
+		res_root.path_join("Data"),
+		exe_dir.path_join("Data"),
+		exe_dir.path_join("work/all"),
+		pkg_root.path_join("work/out/retail_pairing/game").simplify_path(),
+	]
+	for d in dirs:
+		for name in ["Lolita.ttf", "LOLITA.TTF", "lolita.ttf"]:
+			candidates.append(d.path_join(name))
 	for p in candidates:
 		if not p.is_empty() and FileAccess.file_exists(p):
 			return p
+	for d in dirs:
+		if d.is_empty() or not DirAccess.dir_exists_absolute(d):
+			continue
+		var dir := DirAccess.open(d)
+		if dir == null:
+			continue
+		dir.list_dir_begin()
+		var item := dir.get_next()
+		while not item.is_empty():
+			if not dir.current_is_dir() and item.to_lower() == "lolita.ttf":
+				dir.list_dir_end()
+				return d.path_join(item)
+			item = dir.get_next()
+		dir.list_dir_end()
 	return ""
 
 
-static func _find_retail_font_bytes_in_pak() -> PackedByteArray:
+static func _find_retail_font_bytes_in_pak() -> Dictionary:
 	var pak_candidates: Array[String] = []
 	var env_pak := OS.get_environment("LWsmf_MEDIA_PAK").strip_edges()
 	if not env_pak.is_empty():
@@ -128,14 +148,14 @@ static func _find_retail_font_bytes_in_pak() -> PackedByteArray:
 		var reader = _MediaPakReader.new()
 		if not reader.Open(pak_path):
 			continue
-		for entry_name in ["Lolita.ttf", "Data/Lolita.ttf"]:
+		for entry_name in ["Lolita.ttf", "LOLITA.TTF", "lolita.ttf", "Data/Lolita.ttf", "Data/LOLITA.TTF"]:
 			if reader.Has(entry_name):
 				var bytes = reader.Read(entry_name)
 				if bytes != null and bytes.size() > 0:
 					reader.Close()
-					return bytes
+					return {"entry": entry_name, "bytes": bytes}
 		reader.Close()
-	return PackedByteArray()
+	return {}
 
 
 static func _find_system_bold_face() -> Font:
@@ -188,20 +208,53 @@ static func _configure_font_file(ff: FontFile, bold: bool, strict: bool) -> Font
 	return ff
 
 
+static func _record_font_source(src: String, built: Font) -> void:
+	_font_source = "%s (cjk=%s)" % [src, str(built.has_char(0x4E2D))]
+	if not _font_logged:
+		_font_logged = true
+		print("[UiSkin] font=%s" % _font_source)
+
+
+static func font_status() -> String:
+	if _font_source == "unloaded":
+		font()
+	return _font_source
+
+
 static func _build_font(bold: bool) -> Font:
 	var strict := is_strict_font_mode()
 	var ttf_path := _find_retail_font_path()
 	if not ttf_path.is_empty():
 		var ff := FontFile.new()
-		if ff.load_dynamic_font(ttf_path) == OK:
-			return _configure_font_file(ff, bold, strict)
-	var pak_bytes := _find_retail_font_bytes_in_pak()
-	if not pak_bytes.is_empty():
+		if ff.load_dynamic_font(ttf_path) == OK and ff.has_char(0x4E2D):
+			var built := _configure_font_file(ff, bold, strict)
+			_record_font_source("file:" + ttf_path.get_file(), built)
+			return built
+	var pak_info := _find_retail_font_bytes_in_pak()
+	if not pak_info.is_empty():
+		var pak_bytes: PackedByteArray = pak_info["bytes"]
+		var entry := str(pak_info.get("entry", "Lolita.ttf"))
+		var cache_dir := ProjectSettings.globalize_path("user://cache")
+		DirAccess.make_dir_recursive_absolute(cache_dir)
+		var cache_path := cache_dir.path_join("Lolita.ttf")
+		var cf := FileAccess.open(cache_path, FileAccess.WRITE)
+		if cf != null:
+			cf.store_buffer(pak_bytes)
+			cf.close()
+			var ff_cached := FontFile.new()
+			if ff_cached.load_dynamic_font(cache_path) == OK and ff_cached.has_char(0x4E2D):
+				var built := _configure_font_file(ff_cached, bold, strict)
+				_record_font_source("pak:" + entry, built)
+				return built
 		var ff := FontFile.new()
 		ff.data = pak_bytes
-		if ff.get_face_count() > 0:
-			return _configure_font_file(ff, bold, strict)
-	return _make_system_font(bold)
+		if ff.has_char(0x4E2D) or ff.get_face_count() > 0:
+			var built := _configure_font_file(ff, bold, strict)
+			_record_font_source("pak_mem:" + entry, built)
+			return built
+	var fallback := _make_system_font(bold)
+	_record_font_source("system", fallback)
+	return fallback
 
 
 ## One shared retail/system font chain.

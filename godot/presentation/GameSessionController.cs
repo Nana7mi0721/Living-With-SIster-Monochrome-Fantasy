@@ -62,6 +62,7 @@ public partial class GameSessionController : Node
         _ui = ui;
         _savePath = savePath.Length > 0 ? savePath : DefaultSavePath();
         _session = new GameSession(vm, new CallableView(ui), DefaultDataPath(), _savePath);
+        vm.SaveDirectory = Path.GetDirectoryName(_session.SavePath) ?? "";
         Generation++;
     }
 

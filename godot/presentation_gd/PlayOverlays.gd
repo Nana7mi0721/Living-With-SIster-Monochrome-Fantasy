@@ -595,5 +595,6 @@ func refresh_debug(fps: float, frame_count: int, phase_name: String, active_inst
 		"FPS=%.0f  Frame=%d  Phase=%s" % [fps, frame_count, phase_name],
 		"Pics=%d  Hover=%s" % [pic_count, ptr_text],
 		"AssetDB=%.2f MB  Misses=%d" % [used_mb, asset_misses],
+		"Font=%s" % UiSkin.font_status(),
 		"Instances: %s" % inst_summary,
 	])

@@ -148,6 +148,14 @@ func _ready() -> void:
 		failures.append("texture resolution must prefer image basenames over audio basenames")
 	if not harden_db.resolve("shared", "audio").to_lower().ends_with("shared.wav"):
 		failures.append("audio resolution must prefer audio basenames over image basenames")
+	var thumb_dir := base.path_join("save_thumbs")
+	DirAccess.make_dir_recursive_absolute(thumb_dir)
+	img_a.save_png(thumb_dir.path_join("save1.jpg"))
+	harden_db.set_save_dir(thumb_dir)
+	if harden_db.resolve("../save/save1.jpg", "texture").is_empty():
+		failures.append("../save/ relative thumbnail path must resolve against save_dir")
+	if harden_db.texture("../save/save1.jpg") == null:
+		failures.append("../save/ relative thumbnail texture must decode")
 
 	if failures.is_empty():
 		print("ASSETDB_TEST_OK")
