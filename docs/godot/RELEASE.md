@@ -92,11 +92,13 @@ bash tools/package_release.sh --slim
   - `Lwsmf-win64-slim/work/all/media.pak` SHA-256：`e3669a9e1e587e822c022c8d63345031eff539d687753f77a4ca578e31f2dbd1`
 - **Slim 载荷实测**：通过宿主 Godot 读取 `dist/Lwsmf-win64-slim/work/all/media.pak`（3,802 条）与紧凑 JSON，`BattleEffect/kaenbeam.png`、`BattleEffect/pipo-btleffect162.png`、`Picture/title01.jpg`、`Picture/item_list_base.png`、`SystemGraphic/TitleGraphic.jpg`、`SystemFile/WindowBase.png`、`cg/bg_01_home_a.jpg`、`SystemFile/[SE]Cursor.ogg` 与 `programs.json`（550 公共事件）+ `database.json` 全部零错误解码（`SLIM_PAYLOAD_SMOKE_OK misses=0`）。注：在自动化沙盒终端内直接拉起新建 `.exe` 会触发 Low-IL ACL 限制（`0xC0000142`），独立桌面会话双击解压包正常运行不受此限。
 
-## 6. 发布审计命令
+## 6. 发布审计与移动端配套
 
 ```bash
 python tools/release_audit.py --dist dist/Lwsmf-win64-slim
 python tools/release_audit.py --repo-scan
+bash tools/check_mobile_env.sh --target all
 ```
 
-预期标记：`RELEASE_AUDIT_OK ...` 与 `REPO_PRIVACY_AUDIT_OK leaks=0`。
+- 预期标记：`RELEASE_AUDIT_OK ...`、`REPO_PRIVACY_AUDIT_OK leaks=0` 与 `MOBILE_ENV_CHECK`。
+- Android / iOS 发包预设、环境体检、`package_android.sh`、`package_ios.sh`、`inject_ios_data.sh` 与无签名 iOS CI 详情见 [../release/MOBILE_PACKAGING.md](../release/MOBILE_PACKAGING.md)。

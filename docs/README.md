@@ -127,6 +127,7 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 - [release/ASSET_AUDIT.md](release/ASSET_AUDIT.md) — 游戏原始素材全景审计与解包规则
 - [release/MAP_AUDIT.md](release/MAP_AUDIT.md) — 地图图块与事件热区审计
 - [release/TOOLING.md](release/TOOLING.md) — 编译构建、离线转换与自动化脚本设计
+- [release/MOBILE_PACKAGING.md](release/MOBILE_PACKAGING.md) — Android / iOS 发包工具链、导出预设、环境体检与 CI 注入指南
 
 ---
 

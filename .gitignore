@@ -13,10 +13,15 @@
 /godot/bin/
 /godot/obj/
 /godot/build/
+/godot/mobile_data/
 /dist/
 *.csproj.user
 *.exe
 *.dll
+*.apk
+*.ipa
+*.keystore
+*.jks
 
 # Python Caches & Temporary Scripts
 __pycache__/

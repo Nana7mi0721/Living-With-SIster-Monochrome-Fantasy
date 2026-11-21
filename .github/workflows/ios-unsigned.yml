@@ -1,0 +1,74 @@
+name: iOS Unsigned IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version'
+        required: false
+        default: '0.1.0'
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+  GODOT_VERSION: "4.7.2"
+  GODOT_RELEASE: "4.7.2-stable"
+
+jobs:
+  build:
+    name: Build unsigned arm64 IPA (engine-only)
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK and iOS workload
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install .NET iOS workload
+        run: dotnet workload install ios
+
+      - name: Download Godot 4.7.2 Mono macOS editor and templates
+        run: |
+          set -euo pipefail
+          TOOLS_DIR="$RUNNER_TEMP/godot-mono-ios"
+          mkdir -p "$TOOLS_DIR/bin"
+          BASE_URL="https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}"
+
+          curl -L --fail --retry 3 -o "$TOOLS_DIR/godot-mono.zip" \
+            "${BASE_URL}/Godot_v${GODOT_RELEASE}_mono_macos.universal.zip"
+          unzip -q "$TOOLS_DIR/godot-mono.zip" -d "$TOOLS_DIR/editor"
+          GODOT_BIN="$TOOLS_DIR/editor/Godot_mono.app/Contents/MacOS/Godot"
+          chmod +x "$GODOT_BIN"
+          ln -sf "$GODOT_BIN" "$TOOLS_DIR/bin/godot"
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+          echo "$TOOLS_DIR/bin" >> "$GITHUB_PATH"
+
+          curl -L --fail --retry 3 -o "$TOOLS_DIR/templates-mono.tpz" \
+            "${BASE_URL}/Godot_v${GODOT_RELEASE}_mono_export_templates.tpz"
+          unzip -q "$TOOLS_DIR/templates-mono.tpz" -d "$TOOLS_DIR/templates"
+          TEMPLATE_DIR="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable.mono"
+          mkdir -p "$TEMPLATE_DIR"
+          cp -R "$TOOLS_DIR/templates/templates/." "$TEMPLATE_DIR/"
+          test -f "$TEMPLATE_DIR/ios.zip"
+
+      - name: Build engine-only unsigned IPA
+        run: |
+          bash tools/package_ios.sh \
+            --version "${{ github.event.inputs.version }}" \
+            --unsigned \
+            --force
+
+      - name: Upload engine-only IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lwsmf-${{ github.event.inputs.version }}-ios-arm64-unsigned
+          path: |
+            dist/ios/${{ github.event.inputs.version }}/Lwsmf-${{ github.event.inputs.version }}-ios-arm64-unsigned.ipa
+            dist/ios/${{ github.event.inputs.version }}/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
