@@ -45,7 +45,7 @@ public sealed class EventVm
     public uint BasicMoveDeny { get; private set; }
     /// <summary>126 state 2: these keys stop both walking and 123.</summary>
     public uint BasicAllDeny { get; private set; }
-    /// <summary>Dedupe key for the reserved sound-type warning (R7-NEW-02).</summary>
+    /// <summary>Dedupe key for the reserved sound-type warning.</summary>
     private readonly HashSet<(int EventId, int Pc, int SoundType)> _unknownSoundTypeLogs = new();
     /// <summary>126 device form: physical input denied (125 auto input still passes).</summary>
     public bool DeviceDeny { get; private set; }
@@ -113,7 +113,8 @@ public sealed class EventVm
         return code;
     }
     private int _nextInstanceId = 1;
-    public bool EndGameRequested { get; private set; }
+    public bool EndGameRequested { get; set; }
+    public bool ReturnToTitleRequested { get; set; }
     private readonly Dictionary<string, int> _titleToId = new(StringComparer.Ordinal);
     private readonly HashSet<int> _freshInstanceIds = new();
 
@@ -975,6 +976,7 @@ public sealed class EventVm
                 {
                     int head = slot.Params.Length > 0 ? slot.Params[0] : 0;
                     byte kind = (byte)((head >> 4) & 0x07);
+                    byte blendMode = (byte)((head >> 8) & 0x0F);
                     byte anchor = (byte)((head >> 12) & 0x07);
                     PictureAction action = (head & 0x0F) switch
                     {
@@ -1046,6 +1048,7 @@ public sealed class EventVm
                         Anchor = anchor,
                         Animate = animate,
                         ScaleMode = (byte)((head >> 20) & 0x0F),
+                        BlendMode = blendMode,
                         KeepShift = (head & 0x0040_0000) != 0,
                         Relative = (head & 0x0001_0000) != 0,
                         HasSpan = (head & 0x0100_0000) != 0
@@ -1198,13 +1201,16 @@ public sealed class EventVm
                     break;
                 case 220 or 221 or 222:
                 {
-                    // Operand order per docs/OPCODE_220_SAVE.md: the file is arg1, the
+                    // Operand order per docs/engine/OPCODE_220_SAVE.md: the file is arg1, the
                     // mode (220) and destination address (221) are arg0, the address is
                     // arg2 for 221/222, and the trailing flag is arg3 when present.
                     byte opc = (byte)slot.Opcode;
                     int argc = slot.Params.Length;
                     int fileRaw = argc > 1 ? slot.Params[1] : 0;
-                    SaveTarget target = Magic.Decode(fileRaw).Kind == MagicKind.StrVar
+                    var fileMagic = Magic.Decode(fileRaw);
+                    bool isStrFile = fileMagic.Kind == MagicKind.StrVar
+                        || (fileMagic.Kind == MagicKind.SelfVar && (fileMagic.Index % Magic.SelfSlotsPerGroup) is >= 5 and <= 9);
+                    SaveTarget target = isStrFile
                         ? new SaveTarget(EvalStr(fileRaw, inst))
                         : new SaveTarget(EvalNum(fileRaw, inst));
                     int mode = opc == 220 && argc > 0 ? EvalNum(slot.Params[0], inst) : 0;
@@ -1383,8 +1389,8 @@ public sealed class EventVm
                     break;
                 }
                 case 174:
-                    Host.ReturnToTitle();
-                    inst.Pc = prog.Len;
+                    ReturnToTitleRequested = true;
+                    Instances.Clear();
                     return Signal.ReturnToTitle;
                 case 175:
                     EndGameRequested = true;
@@ -1434,8 +1440,7 @@ public sealed class EventVm
                         break;
                     }
                     child.IsParallel = inst.IsParallel;
-                    // 210 and 300 both reach a common event; the trace/side-effect host must
-                    // see the call either way (round-4 review: 300 was silently missing it).
+                    // Both 210 and 300 dispatch a common event, so notify the host for both.
                     Host.CommonEventCall(callee.Id, callArgs, callStrings);
                     for (int i = 0; i < callArgs.Length; i++)
                     {
@@ -1615,6 +1620,7 @@ public sealed class EventVm
     public void StopAll()
     {
         EndGameRequested = false;
+        ReturnToTitleRequested = false;
         _freshInstanceIds.Clear();
         Instances.Clear();
     }
@@ -1672,7 +1678,7 @@ public sealed class EventVm
     {
         for (int i = 0; i < Instances.Count; i++)
         {
-            if (budget <= 0) break;
+            if (budget <= 0 || ReturnToTitleRequested || EndGameRequested) break;
             var inst = Instances[i];
             if (inst.IsRunnable)
             {

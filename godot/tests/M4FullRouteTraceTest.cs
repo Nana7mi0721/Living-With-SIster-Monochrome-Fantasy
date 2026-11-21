@@ -838,14 +838,14 @@ internal sealed class M4RouteHost : IHost
         bool exists = _pictures.TryGetValue(number, out var entry);
         if (field == 8)
         {
-            if (!exists) return -1;
-            return HitRect(entry!).HasPoint(new Vector2(_inner.PointerX, _inner.PointerY)) ? 1 : 0;
+            if (!exists || entry == null) return -1;
+            return HitRect(entry).HasPoint(new Vector2(_inner.PointerX, _inner.PointerY)) ? 1 : 0;
         }
         if (field == 9) return exists ? 1 : 0;
-        if (!exists) return null;
+        if (!exists || entry == null) return null;
         return field switch
         {
-            0 => Unit(Arg(entry!.Args, 5, 0)),
+            0 => Unit(Arg(entry.Args, 5, 0)),
             1 => Unit(Arg(entry.Args, 6, 0)),
             2 or 3 => Unit(Arg(entry.Args, 7, 100)),
             4 => Arg(entry.Args, 9, 0),

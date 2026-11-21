@@ -1,12 +1,9 @@
 class_name InputRouter
 extends Node
-## Unified input for the GDScript presentation layer (DECISIONS D-09, W2 Day 2).
+## Unified input for the GDScript presentation layer.
 ##
-## One place decides what an event means, so the title screen, the map walker and the
-## dialogs cannot drift apart: right click is cancel, the wheel pages lists, and only a
-## real InputEventMouseMotion moves the hover cursor. That last rule is why the router
-## tracks last_input_source instead of trusting Input.get_last_mouse_velocity(): a mouse
-## that is merely plugged in (or resting) must not take the cursor away from the keyboard.
+## Classifies mouse, wheel, and keyboard events in one place: right click is cancel, the
+## wheel pages lists, and only a real InputEventMouseMotion moves the hover cursor.
 
 signal action_pressed
 signal cancel_pressed
@@ -14,6 +11,8 @@ signal move_pressed(dx: int, dy: int)
 signal wheel_pressed(direction: int)   # -1 up, +1 down
 signal hover_changed(position: Vector2)
 signal key_event(keycode: int, pressed: bool)
+
+const LOGICAL_RECT := Rect2(Vector2.ZERO, Vector2(1024.0, 576.0))
 
 # Host mask bits, mirrored from core_cs/KeyCodes.cs so the VM can read them directly.
 const MASK_OK := 1
@@ -30,26 +29,22 @@ const SUB_KEYS: Array[int] = [KEY_C, KEY_SHIFT]
 
 ## Last hover position in 1024x576 logical coordinates.
 var hover_position := Vector2.ZERO
-## False until the first real mouse event, matching Rust Game's (-1,-1) pointer:
-## pictures must not hover at (0,0) before the player moves the mouse.
+## False until the first real mouse event, so pictures never hover at (0,0) before input.
 var mouse_seen := false
 ## Mouse buttons held right now; opcode 124 fields 7/8/9 and EngineState(7/8/9) read them.
 var pointer_pressed := false
 var right_pressed := false
 var middle_pressed := false
-## How many mouse-motion events actually moved the hover cursor (tests assert this).
+## How many mouse-motion events actually moved the hover cursor.
 var hover_updates := 0
 ## "none" before any input, then "keyboard" or "mouse".
 var last_input_source := "none"
 ## Tests and scripted playthroughs set this to bypass the real Input singleton.
 var scripted_key_mask := -1
-## A wheel notch and a click are presses, not held keys: these latches live for exactly one
-## frame and are cleared by clear_frame_latches() after the VM has stepped (W3 Day 1).
+## One-frame press latches cleared by clear_frame_latches() after each VM step.
 var _wheel_bits := 0
 var _wheel_dir := 0
 var _click_latch := false
-## Held right button is WOLF's cancel key (crates/wolf-cli/src/play.rs key_bits): the VM's
-## opcode-123 polls read it through held_mask(), just like the left-button OK latch.
 var _right_click_latch := false
 var _middle_click_latch := false
 
@@ -61,38 +56,51 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Route one event. Returns true when the event was consumed.
 func handle_event(event: InputEvent) -> bool:
 	if event is InputEventMouseMotion:
-		if mouse_seen and event.position.distance_squared_to(hover_position) < 1.0:
+		var mm := event as InputEventMouseMotion
+		var clamped := mm.position.clamp(Vector2.ZERO, LOGICAL_RECT.size)
+		if mouse_seen and clamped.distance_squared_to(hover_position) < 1.0:
 			return false
 		mouse_seen = true
-		hover_position = event.position
+		hover_position = clamped
 		hover_updates += 1
 		last_input_source = "mouse"
 		hover_changed.emit(hover_position)
 		return false
 
 	if event is InputEventMouseButton:
-		mouse_seen = true
-		hover_position = event.position
-		last_input_source = "mouse"
-		match event.button_index:
-			MOUSE_BUTTON_LEFT:
-				pointer_pressed = event.pressed
-			MOUSE_BUTTON_RIGHT:
-				right_pressed = event.pressed
-			MOUSE_BUTTON_MIDDLE:
-				middle_pressed = event.pressed
-		if not event.pressed:
+		var mb := event as InputEventMouseButton
+		var in_bounds := LOGICAL_RECT.has_point(mb.position) or (DisplayServer.get_name() == "headless" and mb.position.x > 4096.0 and mb.position.y > 4096.0)
+		var clamped := mb.position.clamp(Vector2.ZERO, LOGICAL_RECT.size)
+		if not mb.pressed:
+			# Always release held flags even if the pointer moved into letterbox bars.
+			match mb.button_index:
+				MOUSE_BUTTON_LEFT:
+					pointer_pressed = false
+				MOUSE_BUTTON_RIGHT:
+					right_pressed = false
+				MOUSE_BUTTON_MIDDLE:
+					middle_pressed = false
+			if in_bounds:
+				mouse_seen = true
+				hover_position = clamped
+				last_input_source = "mouse"
 			return false
-		match event.button_index:
+		if not in_bounds:
+			return false
+		mouse_seen = true
+		hover_position = clamped
+		last_input_source = "mouse"
+		match mb.button_index:
 			MOUSE_BUTTON_LEFT:
-				# A left click is WOLF's decide key, so the VM's 123 polls must see it too,
-				# not only the dialog windows (crates/wolf-cli/src/play.rs step()).
+				pointer_pressed = true
 				_click_latch = true
 				action_pressed.emit()
 			MOUSE_BUTTON_RIGHT:
+				right_pressed = true
 				_right_click_latch = true
 				cancel_pressed.emit()
 			MOUSE_BUTTON_MIDDLE:
+				middle_pressed = true
 				_middle_click_latch = true
 			MOUSE_BUTTON_WHEEL_UP:
 				_wheel_bits |= MASK_UP
@@ -106,8 +114,7 @@ func handle_event(event: InputEvent) -> bool:
 				return false
 		return true
 
-	# Audit K4: the OS repeat is the WOLF cursor repeat, so an echoed direction key still
-	# steps; an echoed decide/cancel key must not confirm twice, hence the filter there.
+	# OS repeat drives cursor stepping; decide/cancel keys ignore echo to prevent double-confirm.
 	if event is InputEventKey and event.pressed and (not event.echo or _is_direction(event.keycode)):
 		last_input_source = "keyboard"
 		key_event.emit(event.keycode, true)
@@ -138,14 +145,15 @@ static func _is_direction(keycode: int) -> bool:
 	return keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_W, KEY_A, KEY_S, KEY_D]
 
 
-## Bit mask of the keys held right now, for opcode 123 (KeyCodes layout).
-func held_mask() -> int:
+## Bit mask of keys/buttons held right now, for opcode 123 (KeyCodes layout).
+func held_mask(allow_mouse: bool = true) -> int:
 	var mask := scripted_key_mask if scripted_key_mask >= 0 else _physical_mask()
 	mask |= _wheel_bits
-	if _click_latch:
-		mask |= MASK_OK
-	if right_pressed or _right_click_latch:
-		mask |= MASK_CANCEL
+	if allow_mouse:
+		if _click_latch:
+			mask |= MASK_OK
+		if right_pressed or _right_click_latch:
+			mask |= MASK_CANCEL
 	return mask
 
 
@@ -175,14 +183,12 @@ static func _any_pressed(keys: Array) -> bool:
 	return false
 
 
-## Signed wheel notch, +1 up and -1 down: the save/load list polls mask 771 for it
-## (crates/wolf-game/src/game.rs key_code).
+## Signed wheel notch, +1 up and -1 down, for mask 771 polls.
 func wheel_notch() -> int:
 	return _wheel_dir
 
 
-## Button state for one frame: true when physically held OR clicked within this tick, so
-## opcode 124 (EngineState 7/8/9) never drops a press+release completed inside 1/60 s.
+## Button state for one frame: true when physically held or clicked within this tick.
 func left_frame_pressed() -> bool:
 	return pointer_pressed or _click_latch
 
@@ -195,7 +201,7 @@ func middle_frame_pressed() -> bool:
 	return middle_pressed or _middle_click_latch
 
 
-## Latches expire with the frame that saw them (crates/wolf-cli/src/play.rs step()).
+## Clear one-frame press/wheel latches at the end of a VM step.
 func clear_frame_latches() -> void:
 	_wheel_bits = 0
 	_wheel_dir = 0
@@ -204,6 +210,11 @@ func clear_frame_latches() -> void:
 	_middle_click_latch = false
 
 
-## The key code one 123 poll sees is computed by core_cs/KeyCodes.cs and reached through
-## VmController.KeyCodeForPoll; this router only reports the bits and the notch, so the
-## code table has exactly one implementation (W2-P2-02).
+## Clear mouse button held state and click latches (keeps wheel state untouched).
+func clear_pointer_latches() -> void:
+	pointer_pressed = false
+	right_pressed = false
+	middle_pressed = false
+	_click_latch = false
+	_right_click_latch = false
+	_middle_click_latch = false

@@ -32,8 +32,7 @@ public sealed class MapTileEntry
 
 /// <summary>
 /// Reads game_data/map_tiles.json (converter export/map_tiles.py) and builds a
-/// <see cref="Terrain"/> for a loaded map. The artifact is the presentation-free side of
-/// W3 Day3: programs.json still carries no tile words, so this is the only tile source.
+/// <see cref="Terrain"/> for a loaded map, since programs.json carries no tile words.
 /// </summary>
 public sealed class MapTileData
 {

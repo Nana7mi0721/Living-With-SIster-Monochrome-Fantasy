@@ -7,11 +7,10 @@ namespace Lwsmf.Core;
 
 public static class ProgramLoader
 {
-    // ---- shared artifact cache (M1-P2-02) -------------------------------
-    // Every loader below used to re-open and re-parse the whole programs.json (550 common
-    // events + 73 map events, several MB). Keep one parsed document per path, keyed by
-    // size and mtime so a regenerated artifact invalidates itself. Callers must not
-    // dispose the document they get back.
+    // ---- shared artifact cache ------------------------------------------
+    // Keep one parsed programs.json document per path, keyed by size and mtime
+    // so a regenerated artifact invalidates itself without re-parsing several MB
+    // on each lookup. Callers must not dispose the document they get back.
 
     private sealed class CachedDocument
     {

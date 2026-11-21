@@ -63,7 +63,7 @@ public partial class GameSessionController : Node
     }
 
     /// <summary>
-    /// D-33 recovery: replace the core session instead of reusing it. AutoEvents is session-scoped,
+    /// Session recovery: replace the core session instead of reusing it. AutoEvents is session-scoped,
     /// so a new session is the only way to re-arm a one-shot condition after a fault return.
     /// </summary>
     public bool Rebuild()
@@ -92,7 +92,9 @@ public partial class GameSessionController : Node
     public void AdvanceFrame() => _session?.AdvanceFrame();
     public bool SaveGame() => _session?.SaveGame() ?? false;
     public bool LoadGame() => _session?.LoadGame() ?? false;
-    /// <summary>M5-D: same load entry point, kept distinct for callers that want the status line.</summary>
+    public bool SaveQuick() => _session?.SaveGameTo(QuickSavePath()) ?? false;
+    public bool LoadQuick() => _session?.LoadGameFrom(QuickSavePath()) ?? false;
+    /// <summary>Same load entry point, kept distinct for callers that want the status line.</summary>
     public bool LoadGameWithStatus() => _session?.LoadGame() ?? false;
     /// <summary>True when the last successful load came from the .bak rotation.</summary>
     public bool LoadedFromBackup => _session?.LoadedFromBackup ?? false;
@@ -132,6 +134,9 @@ public partial class GameSessionController : Node
         }
         return ProjectSettings.GlobalizePath("user://save_01.json");
     }
+
+    public string QuickSavePath() =>
+        Path.Combine(Path.GetDirectoryName(DefaultSavePath()) ?? ".", "quicksave.json");
 
     /// <summary>View bridge: every core callback becomes one named call on the GDScript root.</summary>
     private sealed class CallableView : IGameSessionView

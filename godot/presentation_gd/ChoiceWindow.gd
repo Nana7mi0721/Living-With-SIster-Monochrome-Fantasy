@@ -1,11 +1,9 @@
 class_name ChoiceWindow
 extends Control
-## Opcode-102 choice window, drawn by hand (W2 Day 4, docs/OPCODE_102.md).
+## Opcode-102 choice window, drawn directly onto the canvas.
 ##
-## Position comes from Sys3/Sys4 and the row pitch is ceil(font * 1.35); everything else
-## is fixed layout. The window deliberately owns no Buttons: hit testing happens against
-## the drawn rows, because a Button would steal focus from the VM's key handling and the
-## retail window has no per-row chrome at all.
+## Position comes from Sys3/Sys4 and row pitch is fixed at LINE_HEIGHT. Hit testing runs
+## directly against drawn row rectangles so no Button nodes steal focus from VM keys.
 
 signal chosen(index: int)
 
@@ -26,8 +24,7 @@ var allow_cancel := true
 
 var _hover := -1
 
-## Rects the owner supplies when the rows are pictures instead of text: the title menu
-## draws pictures 3/4/5, so there is no text window to lay out (audit K2).
+## Rects supplied by the owner when rows are drawn as pictures (e.g. title menu slots 3/4/5).
 var override_rects: Array = []
 
 
@@ -67,9 +64,12 @@ func open(p_options: PackedStringArray, p_position: Vector2, p_allow_cancel: boo
 	options = p_options
 	position_hint = p_position
 	allow_cancel = p_allow_cancel
-	selected = clampi(p_selected, 0, maxi(options.size() - 1, 0))
 	override_rects = []
 	_hover = -1
+	selected = clampi(p_selected, 0, maxi(options.size() - 1, 0))
+	var visible := _visible_indices()
+	if not visible.is_empty() and not (selected in visible):
+		selected = visible[0]
 	is_open = true
 	queue_redraw()
 
@@ -123,7 +123,7 @@ func cancel() -> void:
 	chosen.emit(-1)
 
 
-## Rows in screen space so the test can assert no overlap and no clipping.
+## Rows in screen space for hit testing and layout assertions.
 func row_rects() -> Array:
 	if not override_rects.is_empty():
 		return override_rects
@@ -149,22 +149,20 @@ func window_size() -> Vector2:
 	return Vector2(ceilf(width), ceilf(height))
 
 
-## The option as painted: opcode-102 strings keep their WOLF escape codes (\c[..],
-## \cself[n], \f[n], <C>), so the renderer must paint the TEXT tokens only.
+## Strip WOLF escape codes so option labels paint plain text only.
 func display_text(raw: String) -> String:
 	return TextTokenizer.plain_text(TextTokenizer.tokenize(raw)).replace("\n", " ")
 
 
-## Moving the mouse onto a row also moves the cursor, exactly like the retail window:
-## confirming with the mouse must select the row under the pointer (W2-P1-01).
+## Move the cursor onto the row under [param point] so a mouse click confirms that row.
 func hover_at(point: Vector2) -> int:
 	if not is_open:
 		_hover = -1
 		return -1
 	var visible := _visible_indices()
 	var rects := row_rects()
-	var count := mini(visible.size(), rects.size())
-	for row_idx in count:
+	var visible_count := mini(visible.size(), rects.size())
+	for row_idx in visible_count:
 		if rects[row_idx].has_point(point):
 			var option_idx := visible[row_idx]
 			_hover = option_idx
@@ -180,7 +178,7 @@ func hovered_index() -> int:
 
 
 func _draw() -> void:
-	if not is_open or options.is_empty():
+	if not is_open or options.is_empty() or _is_offscreen_parked():
 		return
 	if not override_rects.is_empty():
 		return

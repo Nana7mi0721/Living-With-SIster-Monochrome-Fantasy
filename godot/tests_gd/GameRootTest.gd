@@ -304,8 +304,65 @@ func _ready() -> void:
 			failures.append("closing the backlog must hide it")
 		if not root.modal_release_guard():
 			failures.append("closing a modal must arm the release guard")
+		# Wait for physical release state to clear the guard before testing message click guard.
+		root._release_modal_guard_if_free()
 
-		# Return-to-title confirmation: cancel keeps the run, confirm rebuilds and re-enters title.
+		# MessageWindow click guard: first click finishes typewriter reveal without arming
+		# modal_release_guard (clearing pointer latches for the frame); second click closes
+		# and arms modal_release_guard, blocking map clicks and masking mouse OK/Cancel.
+		root.router.last_input_source = "mouse"
+		root.router.pointer_pressed = true
+		root.router._click_latch = true
+		root._on_message("Typewriter guard test", -1)
+		root.message.revealed = 0.0
+		root.message.finished = false
+		root._on_action()
+		if not root.message.finished or not root.message.is_open():
+			failures.append("first click on revealing message must finish reveal without closing")
+		if root.modal_release_guard():
+			failures.append("finishing reveal must not arm modal_release_guard")
+		if root.router.pointer_pressed or root.router._click_latch:
+			failures.append("finishing reveal via mouse must clear same-frame click latches")
+		root.router.pointer_pressed = true
+		root.router._click_latch = true
+		root._on_action()
+		if root.message.is_open() or not root.modal_release_guard():
+			failures.append("confirming finished message via mouse must close and arm modal_release_guard")
+		root.router.right_pressed = true
+		root.router._right_click_latch = true
+		if (root.router.held_mask(not root._modal_release_guard) & (InputRouter.MASK_OK | InputRouter.MASK_CANCEL)) != 0:
+			failures.append("_key_state mask must suppress mouse OK/Cancel while modal_release_guard is active")
+		var lx_guard: int = root.session.LeaderX
+		var ly_guard: int = root.session.LeaderY
+		root._on_map_cell_clicked(Vector2i(lx_guard + 1, ly_guard))
+		if root.session.LeaderX != lx_guard or root.session.LeaderY != ly_guard:
+			failures.append("_on_map_cell_clicked must ignore clicks while modal_release_guard is active")
+		root._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+		if root.modal_release_guard() or root.router.right_pressed:
+			failures.append("FOCUS_OUT must clear modal_release_guard and router button state")
+
+		# F8 scaling mode cycling + window clamp helper + F2 stats + F3 debug overlays.
+		var scale0: String = root.scaling_mode_name()
+		var scale1: String = root.cycle_scaling_mode()
+		var scale2: String = root.cycle_scaling_mode()
+		var scale3: String = root.cycle_scaling_mode()
+		if scale1 == scale0 or scale2 == scale1 or scale3 != scale0:
+			failures.append("F8 must cycle through all three scaling modes (%s -> %s -> %s -> %s)" % [scale0, scale1, scale2, scale3])
+		var clamped_win: Vector2i = root.clamp_window_size(Vector2i(4000, 3000), Rect2i(0, 0, 1920, 1080))
+		if clamped_win != Vector2i(1920, 1080):
+			failures.append("clamp_window_size must clamp oversized windows to usable rect (got %s)" % str(clamped_win))
+		root.vm.SetVar(160, 7)
+		var v160_before: int = root.vm.GetVar(160)
+		root.overlays.toggle_stats(root.vm)
+		if not root.stats_open() or root.vm.GetVar(160) != v160_before:
+			failures.append("F2 stats overlay must open read-only without mutating VM state")
+		root.overlays.toggle_stats(root.vm)
+		root.overlays.toggle_debug()
+		if not root.debug_open():
+			failures.append("F3 debug overlay must toggle open")
+		root.overlays.toggle_debug()
+
+		# Return-to-title confirmation: cancel keeps the run, confirm rebuilds, clears backlog, and re-enters title.
 		var title_generation_before: int = root.session.Generation
 		root.request_return_to_title()
 		if not root.title_confirm_open():
@@ -316,12 +373,42 @@ func _ready() -> void:
 		root.request_return_to_title()
 		if not root.confirm_return_to_title():
 			failures.append("confirming return-to-title must rebuild the session")
+		if root.backlog_size() != 0:
+			failures.append("returning to title must clear the backlog")
 		if root.phase != "title":
 			failures.append("return-to-title must land on the title (got %s)" % root.phase)
 		if root.session.Generation <= title_generation_before:
 			failures.append("return-to-title must rebuild GameSession")
 		if root.mouse_filter != Control.MOUSE_FILTER_IGNORE:
 			failures.append("GameRoot must ignore mouse_filter so InputRouter receives viewport mouse events")
+
+		# Quick save/load API smoke when exposed on GameSessionController.
+		if root.session.has_method("SaveQuick") and root.session.has_method("LoadQuick"):
+			root.session.SetScriptedInput(true)
+			var qg := 0
+			while root.phase != "bedroom" and qg < 900:
+				root.advance_frame()
+				qg += 1
+			if root.phase == "bedroom":
+				if not root.session.SaveQuick():
+					failures.append("SaveQuick should succeed in bedroom")
+				elif not root.session.LoadQuick():
+					failures.append("LoadQuick should succeed after SaveQuick")
+			root.session.SetScriptedInput(false)
+
+		# InputRouter letterbox bounds: hover clamps to [0,1024]x[0,576], clicks outside are ignored.
+		var oob_motion := InputEventMouseMotion.new()
+		oob_motion.position = Vector2(-50, 700)
+		root.router.handle_event(oob_motion)
+		if root.router.hover_position != Vector2(0, 576):
+			failures.append("InputRouter must clamp hover_position to [0,1024]x[0,576] (got %s)" % str(root.router.hover_position))
+		var oob_click := InputEventMouseButton.new()
+		oob_click.button_index = MOUSE_BUTTON_LEFT
+		oob_click.pressed = true
+		oob_click.position = Vector2(-10, 288)
+		if root.router.handle_event(oob_click):
+			failures.append("InputRouter must ignore clicks outside 1024x576 logical bounds")
+		remove_child(root)
 		root.queue_free()
 
 		# Regression: GameRoot.tscn must not swallow real Viewport mouse input (MOTION / LMB / RMB / WHEEL)

@@ -116,6 +116,21 @@ func _ready() -> void:
 	if not (center_x > left_x and right_x > left_x):
 		failures.append("align tags should shift lines (left=%s center=%s right=%s)" % [left_x, center_x, right_x])
 
+	# Trailing <L> after characters on a <C> line must not overwrite that line's <C> alignment.
+	var trailing_align := MessageWindow.new(assets)
+	add_child(trailing_align)
+	trailing_align.open("<C>Mid<L>\nLeftNext")
+	trailing_align.revealed = 1e9
+	trailing_align.finished = true
+	var mid_x := trailing_align.character_rect(0).position.x
+	var next_x := trailing_align.character_rect(3).position.x
+	if not (mid_x > next_x + 20.0):
+		failures.append("trailing <L> must not overwrite <C> on the same line (mid=%.1f next=%.1f)" % [mid_x, next_x])
+
+	# UiSkin.TEXT_COLORS covers all 30 SystemDB Type 12 entries (0..29).
+	if UiSkin.TEXT_COLORS.size() != 30 or UiSkin.color_for_index(29) != Color8(0, 0, 0):
+		failures.append("UiSkin.TEXT_COLORS must contain all 30 entries (0..29)")
+
 	# 3c. \cdb[21:a:b] keeps all three fields, and a negative colour index must wrap
 	# instead of indexing out of bounds (W2-P1-05).
 	var cdb := TextTokenizer.tokenize("\\cdb[21:78:0]x")
@@ -249,6 +264,9 @@ func _ready() -> void:
 	var hidden_hit := choice.hover_at(choice.row_rects()[1].get_center())
 	if hidden_hit != 1:
 		failures.append("hover on second visible row should return original index 1 (got %d)" % hidden_hit)
+	choice.open(PackedStringArray(["", "VisibleFirst", "VisibleSecond"]), Vector2(260, 220), true, 0)
+	if choice.selected != 1:
+		failures.append("ChoiceWindow.open must snap selected to first visible option when index 0 is empty (got %d)" % choice.selected)
 
 	# 5. Off-screen render: the window rect must actually contain lit pixels. The dummy
 	# renderer that --headless selects has no textures at all, so the pixel assertion only

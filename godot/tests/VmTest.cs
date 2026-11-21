@@ -21,6 +21,9 @@ public static class VmTest
         TestOpcode124EventIdentity();
         TestOpcode124PictureDivideAssign();
         TestOpcode112StringConditionFlags();
+        TestOpcode221_222CSelfStringPath();
+        TestOpcode150BlendMode();
+        TestOpcode174ReturnToTitleDeferral();
         TestCallTargetResolution();
         TestOpcode111ConditionAndEscape();
         TestOpcode180WaitFrames();
@@ -1171,5 +1174,82 @@ public static class VmTest
             throw new Exception($"112 bit24 == var expected 30, got {vm.Vars.Get(3)}");
         if (vm.Vars.Get(4) != 40)
             throw new Exception($"112 flagged SysVar 9900025 != expected 40, got {vm.Vars.Get(4)}");
+    }
+
+    private sealed class SaveTargetRecordingHost : RecordingHost
+    {
+        public readonly List<SaveOp> SaveOps = new();
+        public override int? SaveLoad(SaveOp op)
+        {
+            SaveOps.Add(op);
+            return op.Opcode == 221 ? 7 : null;
+        }
+    }
+
+    private static void TestOpcode221_222CSelfStringPath()
+    {
+        Console.WriteLine("  Testing Opcode 221/222 CSelf5 (1600005) string-path routing...");
+        var host = new SaveTargetRecordingHost();
+        var vm = new EventVm { Host = host };
+        var slots = new List<Slot>
+        {
+            Slot.Command(222, [42, 1_600_005, 2_000_300, 0]),
+            Slot.Command(221, [2_000_010, 1_600_005, 2_000_300, 0]),
+            Slot.Command(221, [2_000_011, 1_600_000, 2_000_300, 0]),
+            Slot.Command(172)
+        };
+        vm.RegisterProgram(Program.FromSlots(105, "Op221CSelf5", slots));
+        var inst = vm.CreateInstance(105)!;
+        inst.Self.SetStr(605, "Save/System.sav");
+        inst.Self.Set(600, 2);
+        vm.StepFrame();
+
+        if (host.SaveOps.Count != 3)
+            throw new Exception($"expected 3 SaveOps, got {host.SaveOps.Count}");
+        if (!host.SaveOps[0].File.IsPath || host.SaveOps[0].File.Path != "Save/System.sav")
+            throw new Exception($"222 CSelf5 expected Path 'Save/System.sav', got IsPath={host.SaveOps[0].File.IsPath} Path='{host.SaveOps[0].File.Path}' Slot={host.SaveOps[0].File.Slot}");
+        if (!host.SaveOps[1].File.IsPath || host.SaveOps[1].File.Path != "Save/System.sav")
+            throw new Exception($"221 CSelf5 expected Path 'Save/System.sav', got IsPath={host.SaveOps[1].File.IsPath} Path='{host.SaveOps[1].File.Path}' Slot={host.SaveOps[1].File.Slot}");
+        if (host.SaveOps[2].File.IsPath || host.SaveOps[2].File.Slot != 2)
+            throw new Exception($"221 CSelf0 expected Slot 2, got IsPath={host.SaveOps[2].File.IsPath} Slot={host.SaveOps[2].File.Slot}");
+    }
+
+    private static void TestOpcode150BlendMode()
+    {
+        Console.WriteLine("  Testing Opcode 150 BlendMode decoding...");
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        // head: bits 8..11 = 1 (Add), action = 0 (Draw), kind = 0
+        var slots = new List<Slot>
+        {
+            Slot.Command(150, [0x0100, 10], ["Picture/fx.png"]),
+            Slot.Command(172)
+        };
+        vm.RegisterProgram(Program.FromSlots(106, "Op150Blend", slots));
+        vm.CreateInstance(106);
+        vm.StepFrame();
+        if (host.Pictures.Count != 1 || host.Pictures[0].BlendMode != 1)
+            throw new Exception($"150 BlendMode expected 1, got {(host.Pictures.Count > 0 ? host.Pictures[0].BlendMode : -1)}");
+    }
+
+    private static void TestOpcode174ReturnToTitleDeferral()
+    {
+        Console.WriteLine("  Testing Opcode 174 ReturnToTitle frame-end deferral...");
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        vm.RegisterProgram(Program.FromSlots(107, "Op174", new List<Slot> { Slot.Command(174) }));
+        vm.RegisterProgram(Program.FromSlots(108, "After174", new List<Slot> { Slot.Command(121, [2_000_050, 99, 0, 0]), Slot.Command(172) }));
+        vm.CreateInstance(107);
+        vm.CreateInstance(108);
+        vm.StepFrame();
+
+        if (!vm.ReturnToTitleRequested)
+            throw new Exception("174 must set ReturnToTitleRequested");
+        if (vm.Instances.Count != 0)
+            throw new Exception($"174 must clear all VM instances, remaining={vm.Instances.Count}");
+        if (host.ReturnToTitleCount != 0)
+            throw new Exception($"174 must not call Host.ReturnToTitle synchronously, count={host.ReturnToTitleCount}");
+        if (vm.Vars.Get(50) != 0)
+            throw new Exception("174 must stop subsequent instances in the same frame");
     }
 }

@@ -1,7 +1,7 @@
 class_name AudioManager
 extends Node
-## W4 Day1-2: BGM / BGS / SE mixer. Three long-lived players, one authoritative state per
-## channel, and a snapshot/restore pair that the core GameSession writes into SaveState.
+## BGM / BGS / SE mixer. Three long-lived players, one authoritative state per
+## channel, and a snapshot/restore pair persisted by GameSession into SaveState.
 ##
 ## Opcode 140 encodes the sound type in intArgs[0] bits 4..7: 0 = BGM, 1 = BGS, 2 = SE.
 ## intArgs[5] is tempo (100 = normal) and intArgs[6] the loop point in 60 Hz frames.
@@ -43,8 +43,8 @@ func play(channel: int, file: String, volume: int, loop_point: int = 0, tempo: i
 		return false
 
 	# AssetDB caches one AudioStream per file. BGM/BGS need independent loop state, so
-	# duplicate before touching loop properties (R5-P2-03). SE never loops and is
-	# high-frequency; it can use the cached stream directly (R7-NEW-01).
+	# duplicate before touching loop properties. SE never loops and is high-frequency, so
+	# it uses the cached stream directly.
 	var stream := cached
 	if channel != CHANNEL_SE:
 		stream = cached.duplicate() as AudioStream

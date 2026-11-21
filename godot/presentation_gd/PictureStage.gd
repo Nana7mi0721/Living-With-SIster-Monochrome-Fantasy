@@ -1,17 +1,18 @@
 class_name PictureStage
 extends Control
-## The nine-band render stack (DECISIONS D-09, W2 Day 3).
+## The nine-band render stack.
 ##
 ## Every band is a full-rect Control with an absolute z_index, so draw order is a property
-## of the stage rather than of tree order -- a dialog opened before the map loads still
-## lands above it:
+## of the stage rather than of tree order:
 ##   Map 0 < ScenePicture 10 < SceneText 11 < MessageFrame 20 < MessageText 25
 ##        < Nameplate 30 < ChoicePanel 40 < ChoiceText 41 < Cursor 50
 ##
 ## Pictures are keyed by their WOLF slot number. Draw replaces the slot, Move updates it,
-## Erase/Hide frees it. Every slot keeps its native size scaled by the 150 percentage, the
-## same placement law as Picture::destination in the Rust engine; a system number is not a
-## full-screen rule of its own.
+## and Erase/Hide frees or hides it.
+
+const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
+const _PictureShapes := preload("res://presentation_gd/PictureShapes.gd")
+const _PictureEffects := preload("res://presentation_gd/PictureEffects.gd")
 
 const LAYER_MAP := 0
 const LAYER_SCENE_PICTURE := 10
@@ -36,22 +37,17 @@ const BAND_ORDER: Array[int] = [
 ]
 
 const SCREEN_SIZE := Vector2(1024, 576)
+const UNCHANGED := -1000000
+const FADE_MAX := 600
 
 var assets: AssetDB
 ## z_index -> band Control, in BAND_ORDER order.
 var layers: Dictionary = {}
 
-const UNCHANGED := -1000000
-const FADE_MAX := 600
-const SHAKE_ENDLESS := 100000
-const SYSGRAPHIC_MAX_SIDE := 4096
-const SYSGRAPHIC_MAX_PIXELS := 2097152
-
 
 ## Multi-run text renderer used for WOLF opcode-150 kind-2/4 text pictures.
-## Inherits Label so existing contracts (node is Label, label.text, label.size) hold,
-## while _draw() paints mixed \f[n] sizes, \c[n] colors, \E outlines, and <R> tails
-## aligned on a common baseline with 1.3x line pitch (textpic.rs).
+## Inherits Label so existing node/text/size contracts hold while _draw() paints mixed
+## \f[n] sizes, \c[n] colors, \E outlines, and <R> tails on a common baseline.
 class PictureTextLabel extends Label:
 	var runs: Array = []  # Array of {text, pos, size, color, has_color, outline}
 	var line_pitch_ratio := 1.3
@@ -76,12 +72,12 @@ class PictureTextLabel extends Label:
 			draw_string(draw_font, pos, r_text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, col)
 
 
-var _pictures: Dictionary = {}  # number -> Control
-var _cmds: Dictionary = {}     # number -> draw command, for save/restore (W3 Day4)
-var _base_sizes: Dictionary = {}  # number -> unscaled hit-box source size
-var _states: Dictionary = {}   # number -> animation/effect state (fade, slide, 290)
-var _blend_materials: Dictionary = {}  # blend mode -> shared CanvasItemMaterial
-var _sysgraphic_cache: Dictionary = {}  # "KEY|w|h" -> Texture2D
+var _pictures: Dictionary = {}     # number -> Control
+var _cmds: Dictionary = {}         # number -> draw command snapshot
+var _base_sizes: Dictionary = {}   # number -> unscaled hit-box source size
+var _states: Dictionary = {}       # number -> animation/effect state (fade, slide, 290)
+var _shapes := _PictureShapes.new()
+var _effects := _PictureEffects.new()
 
 
 func _init(p_assets: AssetDB = null) -> void:
@@ -113,16 +109,15 @@ func layer(z_index: int) -> Control:
 	return layers.get(z_index)
 
 
-## z_index values in paint order; the layer-order test asserts this is sorted.
+## z_index values in paint order.
 func band_order() -> Array:
 	return BAND_ORDER.duplicate()
 
 
-# ---- opcode 151 screen tint (mirrors crates/wolf-game/src/tint.rs) ----------
-# The operand packs R/G/B multipliers in bits 16/8/0 as percentages (100 = neutral),
-# bit 24 is the flash flag: the ramp goes out to the colour and straight back, so a
-# one-shot 151 leaves the screen as it found it. Only screen-layer pictures (number < 0)
-# and the map take the multiplier; HUD pictures (0 and above) never do.
+# ---- opcode 151 screen tint ------------------------------------------------
+# Packs R/G/B multipliers in bits 16/8/0 as percentages (100 = neutral); bit 24 is the
+# flash flag (triangle ramp back to origin). Only screen-layer pictures (number < 0) and
+# the map take the multiplier; HUD pictures (0 and above) stay neutral.
 var screen_tint := Color(1, 1, 1)
 var _tint_from := Color(1, 1, 1)
 var _tint_to := Color(1, 1, 1)
@@ -134,7 +129,7 @@ var _tint_flash := false
 func set_screen_tint(packed: int, frames: int) -> void:
 	_tint_from = _tint_now()
 	_tint_to = packed_multiplier(packed)
-	_tint_flash = (packed & 0x01000000) != 0
+	_tint_flash = (packed & _WolfConst.PIC_FLAG_TINT_FLASH) != 0
 	_tint_duration = maxi(frames, 0)
 	_tint_elapsed = 0
 	_apply_screen_tint()
@@ -189,7 +184,6 @@ static func picture_number(node: Node) -> int:
 	return 0
 
 
-
 func draw_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int = 0, kind: int = -1, animate: Array = [], flags: Dictionary = {}) -> Control:
 	if action == 2:
 		_start_erase(number, args, flags)
@@ -198,31 +192,28 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 		_hide_picture(number, args, flags)
 		return null
 	if kind < 0:
-		# SavedPicture has no kind field; recover it from what the decoder produced.
 		kind = 2 if file.is_empty() and not text.is_empty() else 0
 	if action == 1:
 		var first_node: Control = null
 		for slot in _move_slots(number, args, flags):
-			# A move with no picture in the slot is a no-op; falling through to _build_picture
-			# created a ghost sprite the script never drew (W2-P1-04).
+			# A move targeting an empty slot is a no-op; never fabricate a node.
 			if not _pictures.has(slot):
 				continue
 			var prev_slot_cmd: Dictionary = _cmds.get(slot, {})
 			var move_anchor := anchor
 			if move_anchor == 0 and not prev_slot_cmd.is_empty():
 				move_anchor = int(prev_slot_cmd.get("anchor", 0))
-			var moved := _merged_move(slot, file, text, args, move_anchor, kind)
-			_begin_move(slot, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
-			_store_cmd(slot, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
+			var moved := _merged_move(slot, file, text, args, move_anchor, kind, flags)
+			_begin_move(slot, str(moved["file"]), str(moved["text"]), args, int(moved["anchor"]), int(moved["kind"]), animate, flags)
+			var cmd_args := _resolved_move_args(slot, moved["args"])
+			_store_cmd(slot, 0, str(moved["file"]), str(moved["text"]), cmd_args, int(moved["anchor"]), int(moved["kind"]), animate, moved["flags"])
 			if first_node == null:
 				first_node = _pictures[slot]
 		return first_node
 
 	var prev_state: Dictionary = _states.get(number, {}).duplicate(true)
 	var prev_cmd: Dictionary = _cmds.get(number, {})
-	# picture.rs 1369-1371: only the SAME graphic is a redraw. A different image in the
-	# same slot is a fresh picture and must not inherit the old one's shake/breath/zoom
-	# or slide in from the old position.
+	# Only the exact same kind/file/text counts as a redraw; a new asset resets effects/pose.
 	var redraws := not prev_cmd.is_empty() \
 		and int(prev_cmd.get("kind", -1)) == kind \
 		and str(prev_cmd.get("file", "")) == file \
@@ -233,7 +224,7 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 			_base_sizes[number] = existing.get_meta("base_size", existing.size)
 			_states[number] = prev_state
 			_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
-			_store_cmd(number, action, file, text, args, anchor, kind, animate, flags)
+			_store_cmd(number, 0, file, text, args, anchor, kind, animate, flags)
 			return existing
 
 	_free_picture(number)
@@ -252,7 +243,7 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 	if redraws and not prev_state.is_empty():
 		_states[number] = prev_state
 	_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
-	_store_cmd(number, action, file, text, args, anchor, kind, animate, flags)
+	_store_cmd(number, 0, file, text, args, anchor, kind, animate, flags)
 	return node
 
 
@@ -276,23 +267,70 @@ func _can_reuse_picture(number: int, prev_cmd: Dictionary, args: Array, kind: in
 	return cols_prev == cols_new and rows_prev == rows_new
 
 
-## A move carries geometry, not a new source. Keep the slot's existing file/text/kind and
-## base size so a track-mode move cannot overwrite the sprite identity with a 420x140 stub.
-func _merged_move(number: int, file: String, text: String, args: Array, anchor: int, kind: int) -> Dictionary:
+## Merge a Move command with the slot's existing draw identity, preserving args[1..2]
+## (sprite grid / window size) and prior flags when Move leaves them UNCHANGED.
+func _merged_move(number: int, file: String, text: String, args: Array, anchor: int, kind: int, flags: Dictionary = {}) -> Dictionary:
 	var prev: Dictionary = _cmds.get(number, {})
+	var prev_args: Array = prev.get("args", [])
 	var merged_file := file if not file.is_empty() else str(prev.get("file", ""))
 	var merged_text := text if not text.is_empty() else str(prev.get("text", ""))
-	var merged_args: Array = args if not args.is_empty() else prev.get("args", [])
+	var merged_args: Array = args.duplicate() if not args.is_empty() else prev_args.duplicate()
+	# Keep original args[1..2] (grid cols/rows or window w/h) and args[3] if not overridden.
+	if prev_args.size() > 1:
+		while merged_args.size() <= 1:
+			merged_args.append(0)
+		merged_args[1] = prev_args[1]
+	if prev_args.size() > 2:
+		while merged_args.size() <= 2:
+			merged_args.append(0)
+		merged_args[2] = prev_args[2]
+	if prev_args.size() > 3 and (merged_args.size() <= 3 or int(merged_args[3]) == 0 or int(merged_args[3]) == UNCHANGED):
+		while merged_args.size() <= 3:
+			merged_args.append(0)
+		merged_args[3] = prev_args[3]
 	var merged_kind := int(prev.get("kind", -1))
 	if merged_kind < 0:
 		merged_kind = kind if kind >= 0 else (2 if merged_file.is_empty() and not merged_text.is_empty() else 0)
+	var merged_flags: Dictionary = (prev.get("flags", {}) as Dictionary).duplicate(true)
+	for k in flags.keys():
+		if k == "relative":
+			continue
+		if k == "blend":
+			var b := int(flags["blend"])
+			if b >= 0 and b != 15:
+				merged_flags["blend"] = b & 0xF
+		else:
+			merged_flags[k] = flags[k]
 	return {
 		"file": merged_file,
 		"text": merged_text,
 		"args": merged_args,
 		"anchor": anchor,
 		"kind": merged_kind,
+		"flags": merged_flags,
 	}
+
+
+## Patch the stored command args with the resolved target pose so restore_pictures() replays
+## the post-Move geometry without re-applying UNCHANGED sentinels.
+func _resolved_move_args(slot: int, base_args: Array) -> Array:
+	var out: Array = base_args.duplicate()
+	var state: Dictionary = _states.get(slot, {})
+	var target: Dictionary = state.get("target", {})
+	if target.is_empty():
+		return out
+	while out.size() < 8:
+		out.append(0)
+	out[4] = int(target.get("opacity", out[4]))
+	out[5] = int(target.get("x", out[5]))
+	out[6] = int(target.get("y", out[6]))
+	out[7] = int(target.get("scale", out[7]))
+	var sy := int(target.get("scale_y", out[7]))
+	if out.size() > 16 or sy != int(out[7]):
+		while out.size() <= 16:
+			out.append(100)
+		out[16] = sy
+	return out
 
 
 func _store_cmd(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array = [], flags: Dictionary = {}) -> void:
@@ -321,7 +359,7 @@ func _free_picture(number: int) -> void:
 			node.queue_free()
 
 
-## Strip the text-formatting tokens and lay out multi-run spans with per-run font size,
+## Strip text-formatting tokens and lay out multi-run spans with per-run font size,
 ## SystemDB colour, outline, baseline alignment, <R> right-align, and 1.3x line pitch.
 func _measure_text(source: String) -> Dictionary:
 	var plain := ""
@@ -446,10 +484,9 @@ func _measure_text(source: String) -> Dictionary:
 	}
 
 
-## Opcode 124 answers (crates/wolf-game/src/game.rs picture_state). Fields 8/9 answer for
-## a missing picture too (-1 vs 0); every other field answers null. Text pictures keep
-## their 1x1 window box as the hit box, exactly like Rust, so a row's text does not eat
-## the click meant for the button beneath it.
+## Opcode 124 answers. Fields 8/9 answer for missing pictures too (-1 vs 0); every other
+## field answers null. Text pictures keep their 1x1 window box as the hit box so row text
+## does not steal clicks aimed at buttons underneath.
 func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> Variant:
 	var exists := _cmds.has(number)
 	if field == 8:
@@ -470,13 +507,10 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 	var pose: Dictionary = state.get("current", {})
 	match field:
 		0:
-			# game.rs 6825: 124 asks where the picture is drawn now, effects included.
-			return int(pose.get("x", UiSkin.unit(_arg(args, 5, 0)))) + int(_effect_offset(state).x)
+			return int(pose.get("x", UiSkin.unit(_arg(args, 5, 0)))) + int(_PictureEffects.effect_offset(state).x)
 		1:
-			return int(pose.get("y", UiSkin.unit(_arg(args, 6, 0)))) + int(_effect_offset(state).y)
+			return int(pose.get("y", UiSkin.unit(_arg(args, 6, 0)))) + int(_PictureEffects.effect_offset(state).y)
 		2, 3:
-			# game.rs 6827-6850 returns the picture's real width/height (text metrics,
-			# window box or native texture size), not the scale percentage.
 			var base := _base_size_for(number, cmd)
 			return int(base.x) if field == 2 else int(base.y)
 		4:
@@ -488,28 +522,15 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 	return null
 
 
-func _effect_offset(state: Dictionary) -> Vector2:
-	var shift: Array = state.get("shift", [0, 0])
-	var offset := Vector2(float(shift[0]), float(shift[1]))
-	var shake: Variant = state.get("shake", null)
-	if shake != null:
-		var period := maxi(1, int(shake.get("period", 1)))
-		var sign := 1.0 if (int(shake.get("elapsed", 0)) / period) % 2 == 0 else -1.0
-		var raw: Array = shake.get("offset", [0, 0])
-		offset += Vector2(float(raw[0]) * sign, float(raw[1]) * sign)
-	return offset
-
-
 func _sort_band_by_number(band: Control) -> void:
-	# WOLF repaints a layer in slot-number order; tree order is insertion order, so a later
-	# redraw of a low-numbered backdrop would otherwise cover the sprites above it (L1).
+	# WOLF paints slots in ascending slot-number order, independent of draw call order.
 	var keys: Array[int] = []
 	var by_key: Dictionary = {}
 	for child in band.get_children():
-		var name := String(child.name)
-		if not name.begins_with("Pic"):
+		var label := String(child.name)
+		if not label.begins_with("Pic"):
 			continue
-		var slot := name.substr(3).to_int()
+		var slot := label.substr(3).to_int()
 		keys.append(slot)
 		by_key[slot] = child
 	keys.sort()
@@ -529,7 +550,7 @@ func _base_size_for(number: int, cmd: Dictionary = {}) -> Vector2:
 	if kind == 2 or kind == 4:
 		var bw := maxi(0, _arg(args, 1, 0))
 		var bh := maxi(0, _arg(args, 2, 0))
-		var sys_kind := _parse_sysgraphic(str(cmd.get("file", "")))
+		var sys_kind := _PictureShapes.parse_sysgraphic(str(cmd.get("file", "")))
 		if not sys_kind.is_empty() and str(sys_kind.get("shape", "")) == "LINE" and bw > 0 and bh == 0:
 			bh = 1
 		return Vector2(bw, bh)
@@ -551,13 +572,7 @@ func _base_size_for(number: int, cmd: Dictionary = {}) -> Vector2:
 
 
 func _texture_cell_size(texture: Texture2D, columns: int, rows: int) -> Vector2:
-	var full := texture.get_size()
-	if columns <= 1 and rows <= 1:
-		return full
-	var cell := Vector2(floor(full.x / maxi(1, columns)), floor(full.y / maxi(1, rows)))
-	if cell.x < 1.0 or cell.y < 1.0:
-		return full
-	return cell
+	return _texture_cell_size_from(texture.get_size(), columns, rows)
 
 
 func _cell_region(full: Vector2, columns: int, rows: int, pattern_cell: int) -> Rect2:
@@ -590,14 +605,43 @@ func _arg(args: Array, index: int, fallback: int) -> int:
 	return int(args[index]) if index < args.size() else fallback
 
 
-static func _move_slots(number: int, args: Array, flags: Dictionary) -> Array[int]:
+func _slots_in_span(lo: int, hi: int) -> Array[int]:
 	var slots: Array[int] = []
-	var span := int(args[12]) if bool(flags.get("has_span", false)) and args.size() > 12 else number
-	var lo := mini(number, span)
-	var hi := maxi(number, span)
-	for s in range(lo, hi + 1):
-		slots.append(s)
+	if hi - lo <= 256:
+		for s in range(lo, hi + 1):
+			slots.append(s)
+		return slots
+	var seen: Dictionary = {}
+	for dict in [_cmds, _pictures, _states]:
+		for k in dict.keys():
+			var s := int(k)
+			if s >= lo and s <= hi and not seen.has(s):
+				seen[s] = true
+				slots.append(s)
+	slots.sort()
 	return slots
+
+
+func _move_slots(number: int, args: Array, flags: Dictionary) -> Array[int]:
+	var span := int(args[12]) if bool(flags.get("has_span", false)) and args.size() > 12 else number
+	return _slots_in_span(mini(number, span), maxi(number, span))
+
+
+## Compute the top-left rect origin for a picture, flipping across the anchor edge
+## whenever scale_x < 0 or scale_y < 0.
+static func _anchored_position(anchor: int, x: int, y: int, final_size: Vector2, scale_x_pct: int, scale_y_pct: int) -> Vector2:
+	var pos := UiSkin.anchor_position(anchor, x, y, final_size)
+	if scale_x_pct < 0:
+		if anchor == 0 or anchor == 2:
+			pos.x -= final_size.x
+		elif anchor == 3 or anchor == 4:
+			pos.x += final_size.x
+	if scale_y_pct < 0:
+		if anchor == 0 or anchor == 3 or anchor == 5:
+			pos.y -= final_size.y
+		elif anchor == 2 or anchor == 4 or anchor == 6:
+			pos.y += final_size.y
+	return pos
 
 
 func _hit_rect(number: int) -> Rect2:
@@ -618,27 +662,23 @@ func _hit_rect(number: int) -> Rect2:
 	var size := base * Vector2(scale_factor, scale_y_factor)
 	var x: int = int(pose.get("x", UiSkin.unit(_arg(args, 5, 0))))
 	var y: int = int(pose.get("y", UiSkin.unit(_arg(args, 6, 0))))
-	var position := UiSkin.anchor_position(anchor, x, y, size)
-	# The hit box is the rectangle the renderer draws: zoom around its centre and the
-	# running 290 shift/shake (picture.rs picture_rect -> destination -> transform).
+	var position := _anchored_position(anchor, x, y, size, scale_percent, scale_y_percent)
 	var zoom: Variant = state.get("zoom", null)
 	if zoom != null:
-		var k := _zoom_percent(zoom) / 100.0
+		var k := _PictureEffects.zoom_percent(zoom) / 100.0
 		var centre_raw: Array = zoom.get("centre", [0, 0])
 		var centre := Vector2(float(centre_raw[0]), float(centre_raw[1]))
 		position = centre + (position - centre) * k
 		size *= k
 	var breath: Variant = state.get("breath", null)
 	if breath != null:
-		var growth := _breath_growth(breath)
+		var growth := _PictureEffects.breath_growth(breath)
 		size *= Vector2(1.0 + growth.x / 100.0, 1.0 + growth.y / 100.0)
-	position += _effect_offset(state)
+	position += _PictureEffects.effect_offset(state)
 	return Rect2(position, size)
 
 
-## Queue mode: keep the slot table and hit boxes current without adding nodes. Opcode 124
-## still needs existence, coordinates and hover, but the managed Picture signal crashes
-## native listeners on long deterministic runs.
+## Queue/track mode: maintain slot state and hit boxes without instantiating Control nodes.
 func track_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array = [], flags: Dictionary = {}) -> void:
 	if action == 2:
 		_start_erase(number, args, flags)
@@ -653,9 +693,10 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 			var move_anchor := anchor
 			if move_anchor == 0:
 				move_anchor = int(_cmds[slot].get("anchor", 0))
-			var moved := _merged_move(slot, file, text, args, move_anchor, kind)
-			_begin_move(slot, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
-			_store_cmd(slot, action, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
+			var moved := _merged_move(slot, file, text, args, move_anchor, kind, flags)
+			_begin_move(slot, str(moved["file"]), str(moved["text"]), args, int(moved["anchor"]), int(moved["kind"]), animate, flags)
+			var cmd_args := _resolved_move_args(slot, moved["args"])
+			_store_cmd(slot, 0, str(moved["file"]), str(moved["text"]), cmd_args, int(moved["anchor"]), int(moved["kind"]), animate, moved["flags"])
 			if not _base_sizes.has(slot):
 				_base_sizes[slot] = Vector2(420, 140)
 		return
@@ -663,7 +704,7 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 		kind = 2 if file.is_empty() and not text.is_empty() else 0
 	var prev_state: Dictionary = _states.get(number, {}).duplicate(true)
 	var base := Vector2.ZERO
-	var sys_track := _parse_sysgraphic(file) if (kind == 3 or kind == 4) else {}
+	var sys_track := _PictureShapes.parse_sysgraphic(file) if (kind == 3 or kind == 4) else {}
 	if kind == 3 or kind == 4:
 		var tw := maxi(0, _arg(args, 1, 18))
 		var th := maxi(0, _arg(args, 2, 18))
@@ -676,134 +717,10 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 		base = _measure_text(text)["size"]
 	else:
 		base = Vector2(420, 140)
-	# _begin_draw compares the slot's old command to decide whether this is a redraw, so
-	# the new command must be stored only after it runs (R14-P2-01).
+	# Store the new command only after _begin_draw compares against the previous slot state.
 	_base_sizes[number] = base
 	_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
-	_store_cmd(number, action, file, text, args, anchor, kind, animate, flags)
-
-
-static func _parse_sysgraphic(raw_name: String) -> Dictionary:
-	var s := raw_name.strip_edges().to_upper()
-	if not s.begins_with("<"):
-		return {}
-	match s:
-		"<SQUARE>":
-			return {"shape": "SQUARE", "key": "SQUARE"}
-		"<SQUARE><FRAME>", "<SQUARE>FRAME":
-			return {"shape": "SQUARE_FRAME", "key": "SQUARE_FRAME"}
-		"<LINE>":
-			return {"shape": "LINE", "key": "LINE"}
-		"<CIRCLE>":
-			return {"shape": "CIRCLE", "key": "CIRCLE"}
-		"<TRI-LEFT>":
-			return {"shape": "TRI", "dir": "LEFT", "key": "TRI_LEFT"}
-		"<TRI-RIGHT>":
-			return {"shape": "TRI", "dir": "RIGHT", "key": "TRI_RIGHT"}
-		"<TRI-UP>":
-			return {"shape": "TRI", "dir": "UP", "key": "TRI_UP"}
-		"<TRI-DOWN>":
-			return {"shape": "TRI", "dir": "DOWN", "key": "TRI_DOWN"}
-	if s == "<GRADX>" or s.begins_with("<GRADX-") and s.ends_with(">"):
-		var endpoints := _parse_grad_endpoints(s.substr(1, s.length() - 2))
-		return {"shape": "GRADX", "from": endpoints[0], "to": endpoints[1], "key": "GRADX_%d_%d" % [endpoints[0], endpoints[1]]}
-	if s == "<GRADY>" or s.begins_with("<GRADY-") and s.ends_with(">"):
-		var endpoints := _parse_grad_endpoints(s.substr(1, s.length() - 2))
-		return {"shape": "GRADY", "from": endpoints[0], "to": endpoints[1], "key": "GRADY_%d_%d" % [endpoints[0], endpoints[1]]}
-	return {}
-
-
-static func _parse_grad_endpoints(inner: String) -> Array[int]:
-	var parts := inner.split("-")
-	if parts.size() == 3 and parts[1].is_valid_int() and parts[2].is_valid_int():
-		return [clampi(parts[1].to_int(), 0, 1000), clampi(parts[2].to_int(), 0, 1000)]
-	return [1000, 0]
-
-
-static func _sysgraphic_ramp(from_pm: int, to_pm: int, index: int, span: int) -> int:
-	var val := from_pm if span <= 0 else clampi(from_pm + ((to_pm - from_pm) * index) / span, 0, 1000)
-	return (val * 255 + 500) / 1000
-
-
-func _sysgraphic_texture(spec: Dictionary, w: int, h: int) -> Texture2D:
-	if spec.is_empty() or w <= 0:
-		return null
-	var shape := str(spec.get("shape", ""))
-	if shape == "LINE" and h == 0:
-		h = 1
-	if h <= 0 or w > SYSGRAPHIC_MAX_SIDE or h > SYSGRAPHIC_MAX_SIDE or w * h > SYSGRAPHIC_MAX_PIXELS:
-		return null
-	var spec_key := str(spec.get("key", shape))
-	var cache_w := 1 if (shape == "SQUARE" or shape == "LINE" or shape == "GRADY") else w
-	var cache_h := 1 if (shape == "SQUARE" or shape == "LINE" or shape == "GRADX") else h
-	var cache_key := "%s|%d|%d" % [spec_key, cache_w, cache_h]
-	if _sysgraphic_cache.has(cache_key):
-		return _sysgraphic_cache[cache_key]
-
-	var buf := PackedByteArray()
-	buf.resize(cache_w * cache_h * 4)
-	match shape:
-		"SQUARE", "LINE":
-			buf[0] = 255; buf[1] = 255; buf[2] = 255; buf[3] = 255
-		"GRADX":
-			var from_x := int(spec.get("from", 1000))
-			var to_x := int(spec.get("to", 0))
-			var span_x := cache_w - 1
-			for x in cache_w:
-				var off := x * 4
-				buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
-				buf[off + 3] = _sysgraphic_ramp(from_x, to_x, x, span_x)
-		"GRADY":
-			var from_y := int(spec.get("from", 1000))
-			var to_y := int(spec.get("to", 0))
-			var span_y := cache_h - 1
-			for y in cache_h:
-				var off := y * 4
-				buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
-				buf[off + 3] = _sysgraphic_ramp(from_y, to_y, y, span_y)
-		"SQUARE_FRAME":
-			for y in cache_h:
-				for x in cache_w:
-					var off := (y * cache_w + x) * 4
-					var border := x < 1 or y < 1 or x + 1 >= cache_w or y + 1 >= cache_h
-					buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
-					buf[off + 3] = 255 if border else 0
-		"CIRCLE":
-			var cw := float(cache_w)
-			var ch := float(cache_h)
-			for y in cache_h:
-				var ny := (float(y) + 0.5) / ch * 2.0 - 1.0
-				for x in cache_w:
-					var nx := (float(x) + 0.5) / cw * 2.0 - 1.0
-					var off := (y * cache_w + x) * 4
-					buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
-					buf[off + 3] = 255 if (nx * nx + ny * ny <= 1.0) else 0
-		"TRI":
-			var dir := str(spec.get("dir", "DOWN"))
-			var cw := float(cache_w)
-			var ch := float(cache_h)
-			for y in cache_h:
-				var py := float(y) + 0.5
-				for x in cache_w:
-					var px := float(x) + 0.5
-					var inside := false
-					match dir:
-						"LEFT":
-							inside = absf(py - ch * 0.5) <= ch * 0.5 * (px / cw)
-						"RIGHT":
-							inside = absf(py - ch * 0.5) <= ch * 0.5 * ((cw - px) / cw)
-						"DOWN":
-							inside = absf(px - cw * 0.5) <= cw * 0.5 * ((ch - py) / ch)
-						"UP":
-							inside = absf(px - cw * 0.5) <= cw * 0.5 * (py / ch)
-					var off := (y * cache_w + x) * 4
-					buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
-					buf[off + 3] = 255 if inside else 0
-
-	var image := Image.create_from_data(cache_w, cache_h, false, Image.FORMAT_RGBA8, buf)
-	var tex := ImageTexture.create_from_image(image)
-	_sysgraphic_cache[cache_key] = tex
-	return tex
+	_store_cmd(number, 0, file, text, args, anchor, kind, animate, flags)
 
 
 func _build_picture(number: int, file: String, text: String, args: Array, anchor: int, kind: int) -> Control:
@@ -812,56 +729,27 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var is_window := kind == 3 or kind == 4
-	var sys_spec := _parse_sysgraphic(file) if is_window else {}
+	var sys_spec := _PictureShapes.parse_sysgraphic(file) if is_window else {}
 	var texture: Texture2D = null
 	if sys_spec.is_empty() and not file.is_empty() and assets != null:
 		texture = assets.texture(file)
-		# The retail title art lives in Picture.wolf; an install whose unpacked tree lacks
-		# it still ships the SystemGraphic banner. The old fallback pointed at the 320x240
-		# WOLF editor sample in SystemFile, which painted the sample title (audit report).
+		# Fall back to the SystemGraphic banner when Picture/title* is absent in unpacked trees.
 		if texture == null and not is_window \
-				and (number == 12000 or file.begins_with("Picture/title") or file.begins_with("SystemGraphic/Title")):
+				and (number == _WolfConst.PIC_SLOT_TITLE_BG or file.begins_with("Picture/title") or file.begins_with("SystemGraphic/Title")):
 			texture = assets.texture("SystemGraphic/TitleGraphic.png")
 
 	var size: Vector2
-	if is_window and not sys_spec.is_empty():
-		var sw := maxi(0, _arg(args, 1, 0))
-		var sh := maxi(0, _arg(args, 2, 0))
-		if str(sys_spec.get("shape", "")) == "LINE" and sw > 0 and sh == 0:
-			sh = 1
-		size = Vector2(maxi(1, sw), maxi(1, sh))
-		var rect := TextureRect.new()
-		rect.texture = _sysgraphic_texture(sys_spec, int(size.x), int(size.y))
-		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		rect.stretch_mode = TextureRect.STRETCH_SCALE
-		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		holder.add_child(rect)
-		rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	elif is_window:
-		# 150 args[1]/args[2] are the window box width and height, not a sprite-sheet grid
-		# (picture.rs 19). The skin is the named file, or the default WindowBase panel,
-		# drawn as the retail 18x18 nine-patch so a 300x200 box is a panel, not an 18x18 dot.
-		size = Vector2(maxi(1, _arg(args, 1, 18)), maxi(1, _arg(args, 2, 18)))
-		if texture == null and assets != null:
-			texture = assets.texture(UiSkin.WINDOW_BASE)
-		var nine := NinePatchRect.new()
-		nine.texture = texture
-		nine.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		holder.add_child(nine)
-		nine.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		var corner := UiSkin.WINDOW_CORNER
-		nine.patch_margin_left = corner
-		nine.patch_margin_top = corner
-		nine.patch_margin_right = corner
-		nine.patch_margin_bottom = corner
+	if is_window:
+		var win_child := _shapes.build_window_node(sys_spec, texture, args, assets)
+		size = win_child.get_meta("window_size", win_child.size)
+		holder.add_child(win_child)
+		win_child.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	elif texture != null:
 		var columns := maxi(1, _arg(args, 1, 1))
 		var rows := maxi(1, _arg(args, 2, 1))
 		size = _texture_cell_size(texture, columns, rows)
 		var shown := texture
 		if columns > 1 or rows > 1:
-			# File pictures use window-width/height as a sprite-sheet grid and RESERVED
-			# as the one-based cell (picture.rs merge_args 2116-2130).
 			var atlas := AtlasTexture.new()
 			atlas.atlas = texture
 			atlas.region = _cell_region(texture.get_size(), columns, rows, maxi(1, _arg(args, 3, 1)))
@@ -872,16 +760,12 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 		var rect := TextureRect.new()
 		rect.texture = shown
 		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		# The holder owns the placed size; every later 150 Move / 290 zoom / breath edit
-		# changes holder.size, so the child fills it instead of freezing the first draw (L2).
 		rect.stretch_mode = TextureRect.STRETCH_SCALE
 		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rect.use_parent_material = true
 		holder.add_child(rect)
 		rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	elif not text.is_empty():
-		# Opcode 150 text pictures are the retail HUD (CE217 draws 6200 as "8:30" at
-		# x=140,y=7 anchored top-right). PictureTextLabel extends Label so existing
-		# contracts hold while _draw() paints mixed \f[n] sizes, \c[n] colours, and \E.
 		var layout := _measure_text(text)
 		size = layout["size"]
 		var label := PictureTextLabel.new()
@@ -890,6 +774,7 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 		label.position = Vector2.ZERO
 		label.size = size
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.use_parent_material = true
 		label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		label.add_theme_font_override("font", UiSkin.font())
 		label.add_theme_font_size_override("font_size", int(layout["font_size"]))
@@ -899,19 +784,19 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 		holder.add_child(label)
 	else:
 		size = Vector2(420, 140)
-		# A missing asset must not paint an opaque block over the scene in a shipped
-		# build; the debug build keeps the visible box so authors notice (audit L6).
 		if OS.is_debug_build():
 			var box := ColorRect.new()
 			box.color = UiSkin.placeholder_color(number, file)
 			box.size = size
 			box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			box.use_parent_material = true
 			holder.add_child(box)
 			var label := Label.new()
 			label.text = "picture %d (text)" % number if file.is_empty() else "%s\n(missing asset)" % file
 			label.position = Vector2(10, 10)
 			label.size = size - Vector2(20, 20)
 			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			label.use_parent_material = true
 			label.add_theme_font_size_override("font_size", 13)
 			holder.add_child(label)
 		else:
@@ -922,7 +807,7 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 	return holder
 
 
-func _apply_picture_geometry(holder: Control, number: int, file: String, args: Array, anchor: int, known_size: Vector2 = Vector2.ZERO) -> void:
+func _apply_picture_geometry(holder: Control, _number: int, _file: String, args: Array, anchor: int, known_size: Vector2 = Vector2.ZERO) -> void:
 	var opacity: int = int(args[4]) if args.size() > 4 else 255
 	var x: int = UiSkin.unit(int(args[5])) if args.size() > 5 else 512
 	var y: int = UiSkin.unit(int(args[6])) if args.size() > 6 else 288
@@ -930,26 +815,18 @@ func _apply_picture_geometry(holder: Control, number: int, file: String, args: A
 	var scale_y_percent: int = int(args[16]) if args.size() > 16 else 100
 	var base_size := known_size
 	if base_size == Vector2.ZERO:
-		# On a move the holder already sits at its scaled size; without the remembered
-		# source size every move would multiply the scale again.
 		base_size = holder.get_meta("base_size", holder.size)
-	# A negative scale is the retail horizontal mirror, not an invalid value (W2-P1-04).
-	var mirrored := scale_percent < 0
 	var scale := 0.0 if scale_percent == 0 else absf(scale_percent) / 100.0
 	var scale_y := 0.0 if scale_y_percent == 0 else absf(scale_y_percent) / 100.0
 	var final_size := base_size * Vector2(scale, scale_y)
 	holder.size = final_size
-	holder.position = UiSkin.anchor_position(anchor, x, y, final_size)
+	holder.position = _anchored_position(anchor, x, y, final_size, scale_percent, scale_y_percent)
 	holder.modulate = Color(1, 1, 1, clampf(opacity, 0, 255) / 255.0)
-	# Mirroring the container covers text and placeholder slots too; a TextureRect-only
-	# flip left every non-texture picture unmirrored (R5-P2-07).
 	holder.pivot_offset = final_size * 0.5
-	holder.scale = Vector2(-1.0 if mirrored else 1.0, -1.0 if scale_y_percent < 0 else 1.0)
+	holder.scale = Vector2(-1.0 if scale_percent < 0 else 1.0, -1.0 if scale_y_percent < 0 else 1.0)
 
 
 func _pose_from_args(args: Array, anchor: int, flags: Dictionary = {}) -> Dictionary:
-	# UNCHANGED (-1000000) means "leave this field alone"; a fresh Draw falls back to the
-	# slot defaults, while _begin_move patches these six fields back to the live pose.
 	var opacity := _arg(args, 4, 255)
 	if opacity == UNCHANGED:
 		opacity = 255
@@ -965,9 +842,9 @@ func _pose_from_args(args: Array, anchor: int, flags: Dictionary = {}) -> Dictio
 	var scale_y := _arg(args, 16, 100)
 	if scale_y == UNCHANGED:
 		scale_y = 100
-	var blend := _arg(args, 8, 0)
-	if blend == UNCHANGED:
-		blend = 0
+	# Blend comes from opcode-150 head bits 17..19 via flags["blend"], never from args[8] (rotation).
+	var raw_blend := int(flags.get("blend", -1))
+	var blend := 0 if (raw_blend < 0 or raw_blend == 15) else (raw_blend & 0xF)
 	var pose := {
 		"opacity": clampi(opacity, 0, 255),
 		"x": UiSkin.unit(x),
@@ -981,8 +858,7 @@ func _pose_from_args(args: Array, anchor: int, flags: Dictionary = {}) -> Dictio
 	return pose
 
 
-## picture.rs merge_args: SCALE is copied into SCALE_Y unless head bits 20..23 select
-## mode 3, which is the only mode that reads the independent SCALE_Y slot (args[16]).
+## SCALE copies into SCALE_Y unless head bits 20..23 select scale_mode 3.
 func _apply_scale_mode(target: Dictionary, args: Array, flags: Dictionary) -> void:
 	if int(flags.get("scale_mode", 0)) == 3:
 		return
@@ -991,8 +867,7 @@ func _apply_scale_mode(target: Dictionary, args: Array, flags: Dictionary) -> vo
 	target["scale_y"] = int(target.get("scale", 100))
 
 
-## picture.rs picture_args: relative X/Y are offsets from the slot's current screen pose.
-## UiSkin.unit converts the raw word, so the offset is added after conversion.
+## Relative X/Y are offsets from the slot's current screen pose.
 func _apply_relative_pose(target: Dictionary, base: Dictionary, args: Array) -> void:
 	if args.size() > 5 and int(args[5]) != UNCHANGED:
 		target["x"] = int(base.get("x", 0)) + UiSkin.unit(int(args[5]))
@@ -1000,22 +875,25 @@ func _apply_relative_pose(target: Dictionary, base: Dictionary, args: Array) -> 
 		target["y"] = int(base.get("y", 0)) + UiSkin.unit(int(args[6]))
 
 
-func _merge_unchanged(target: Dictionary, current: Dictionary, args: Array) -> void:
-	for entry in [[4, "opacity"], [5, "x"], [6, "y"], [7, "scale"], [8, "blend"], [16, "scale_y"]]:
+func _merge_unchanged(target: Dictionary, current: Dictionary, args: Array, flags: Dictionary = {}) -> void:
+	for entry in [[4, "opacity"], [5, "x"], [6, "y"], [7, "scale"], [16, "scale_y"]]:
 		var index: int = entry[0]
 		var key: String = entry[1]
 		if index >= args.size() or int(args[index]) == UNCHANGED:
 			target[key] = current.get(key, target[key])
+	var raw_blend := int(flags.get("blend", -1))
+	if raw_blend < 0 or raw_blend == 15:
+		target["blend"] = int(current.get("blend", 0))
+	else:
+		target["blend"] = raw_blend & 0xF
 
 
-## WOLF tones are percentages with 100 as neutral (picture.rs TONE_NEUTRAL), and the
-## three tone slots are padding unless raw arg 12 marks them with TONE_PRESENT. Reading
-## them unconditionally painted unmarked draws with tone 255 (a 2.55x over-bright base)
-## and made the type 1 colour correction unable to darken anything.
+## WOLF tones are percentages with 100 as neutral; args[13..15] apply only when args[10]
+## carries PIC_FLAG_TONE_MASK.
 func _tone_from_args(args: Array) -> Array:
 	var tone: Array = [100, 100, 100]
 	var format_flag := _arg(args, 10, 0)
-	if (format_flag & 0x02000000) != 0:
+	if (format_flag & _WolfConst.PIC_FLAG_TONE_MASK) != 0:
 		tone = [
 			clampi(_arg(args, 13, 100), 0, 200),
 			clampi(_arg(args, 14, 100), 0, 200),
@@ -1027,7 +905,10 @@ func _tone_from_args(args: Array) -> Array:
 func _new_state(args: Array, anchor: int, base: Vector2, flags: Dictionary = {}, raster_window: bool = false) -> Dictionary:
 	var pose := _pose_from_args(args, anchor, flags)
 	var tone := _tone_from_args(args)
-	var zero_tone_hidden := raster_window and int(tone[0]) == 0 and int(tone[1]) == 0 and int(tone[2]) == 0
+	var is_zero_tone := int(tone[0]) == 0 and int(tone[1]) == 0 and int(tone[2]) == 0
+	# Under blend=0 (MIX), tone=[0,0,0] would draw a solid black rect; hide it until a 290
+	# effect raises brightness. Under blend=1 (ADD), tone=[0,0,0] renders transparently.
+	var zero_tone_hidden := raster_window and (int(pose.get("blend", 0)) & 0xF) == 0 and is_zero_tone
 	if zero_tone_hidden:
 		tone = [100, 100, 100]
 	return {
@@ -1056,28 +937,20 @@ func _new_state(args: Array, anchor: int, base: Vector2, flags: Dictionary = {},
 	}
 
 
-## Draw replaces the slot. A redraw at the same place keeps the breathing/zoom/shake phase;
-## a redraw at a different place slides from the old pose (picture.rs advance/replace).
+## Draw replaces the slot. Same graphic & position preserves animation phases; same graphic
+## at a different place slides from the previous pose.
 func _begin_draw(number: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array, flags: Dictionary = {}, previous: Dictionary = {}) -> void:
-	# A draw frees the slot before rebuilding it, so a non-redraw must receive the old pose
-	# explicitly: relative offsets and keep_shift refer to the picture that was on screen.
 	var prev: Dictionary = previous if not previous.is_empty() else _states.get(number, {})
 	var prev_cmd: Dictionary = _cmds.get(number, {})
 	var base: Vector2 = _base_sizes.get(number, Vector2.ZERO)
 	var raster_window := (kind == 3 or kind == 4) and not file.strip_edges().begins_with("<")
 	var state := _new_state(args, anchor, base, flags, raster_window)
-	# picture.rs picture_args: relative draws offset from the old pose even when the
-	# graphic changes; a fresh slot has no old pose and therefore uses the raw value.
 	if bool(flags.get("relative", false)) and not prev.is_empty():
 		_apply_relative_pose(state["target"], prev.get("current", {}), args)
 		state["current"]["x"] = int(state["target"]["x"])
 		state["current"]["y"] = int(state["target"]["y"])
-	# picture.rs keep_shift (head bit 0x0040_0000) is the only carried animation field
-	# that survives a full redraw apart from the same-position phase carry.
 	if bool(flags.get("keep_shift", false)) and not prev.is_empty():
 		state["shift"] = (prev.get("shift", [0, 0]) as Array).duplicate()
-	# Draw replaces the slot. Only the same kind/file/text is a redraw; everything else
-	# starts from the new command (picture.rs 1369-1371).
 	var redraws := not prev.is_empty() and not prev_cmd.is_empty() \
 		and int(prev_cmd.get("kind", -1)) == kind \
 		and str(prev_cmd.get("file", "")) == file \
@@ -1092,16 +965,12 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 		_states[number] = state
 		_render_picture(number)
 		return
-	# picture.rs 1394-1425: the animation carry-over is same graphic AND same position.
-	# A placement change rebuilds the slot and keeps the tween semantics instead.
 	var same_position := _pose_position(prev.get("target", {})) == _pose_position(state["target"])
 	if same_position:
 		state["shake"] = null if prev.get("shake", null) == null else prev["shake"].duplicate(true)
 		state["zoom"] = null if prev.get("zoom", null) == null else prev["zoom"].duplicate(true)
 		state["breath"] = null if prev.get("breath", null) == null else prev["breath"].duplicate(true)
 		state["pattern"] = null if prev.get("pattern", null) == null else prev["pattern"].duplicate(true)
-	# A redraw never fades in again and never loses its alpha: with no OPACITY slot the
-	# command keeps whatever alpha was on screen (picture.rs 1426-1433).
 	state["fade"] = 0
 	var has_opacity := args.size() > 4 and int(args[4]) != UNCHANGED
 	if not has_opacity:
@@ -1121,15 +990,14 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 	_render_picture(number)
 
 
-## Move changes geometry in place and may fade from the current alpha. anchor==0 means
-## "leave the anchor alone" on a move (picture.rs 150 handling).
+## Move updates geometry in place and optionally tweens from the current pose/alpha.
 func _begin_move(number: int, _file: String, _text: String, args: Array, anchor: int, _kind: int, animate: Array, flags: Dictionary = {}) -> void:
 	var state: Dictionary = _states.get(number, {})
 	if state.is_empty():
 		var cmd: Dictionary = _cmds.get(number, {})
 		state = _new_state(cmd.get("args", []), int(cmd.get("anchor", anchor)), _base_sizes.get(number, Vector2.ZERO))
 	var target := _pose_from_args(args, anchor, flags)
-	_merge_unchanged(target, state["current"], args)
+	_merge_unchanged(target, state["current"], args, flags)
 	if bool(flags.get("relative", false)):
 		_apply_relative_pose(target, state.get("current", {}), args)
 	_apply_scale_mode(target, args, flags)
@@ -1142,7 +1010,7 @@ func _begin_move(number: int, _file: String, _text: String, args: Array, anchor:
 		state["fade_start"] = int(state["age"])
 	var duration := _animate_duration(animate)
 	var format_flag := _arg(args, 10, 0)
-	if (format_flag & 0x02000000) != 0 and not bool(state.get("zero_tone_hidden", false)):
+	if (format_flag & _WolfConst.PIC_FLAG_TONE_MASK) != 0 and not bool(state.get("zero_tone_hidden", false)):
 		var target_tone := _tone_from_args(args)
 		var cur_tone: Array = (state.get("tone", [100, 100, 100]) as Array).duplicate()
 		if duration > 0 and cur_tone != target_tone:
@@ -1172,14 +1040,8 @@ func _begin_move(number: int, _file: String, _text: String, args: Array, anchor:
 
 
 func _start_erase(number: int, args: Array, flags: Dictionary = {}) -> void:
-	# The long erase form addresses a closed slot range via ERASE_SPAN (args[3]); the two
-	# endpoints are unordered (picture.rs apply, CE221 / Map003.mps ev1 pc24). The span is
-	# only meaningful when head bit 0x0100_0000 (HasSpan) marks it, otherwise args[3] is
-	# an ordinary argument and a single-slot erase would wipe its neighbours.
 	var span := _arg(args, 3, number) if bool(flags.get("has_span", false)) and args.size() > 3 else number
-	var lo := mini(number, span)
-	var hi := maxi(number, span)
-	for slot in range(lo, hi + 1):
+	for slot in _slots_in_span(mini(number, span), maxi(number, span)):
 		_start_erase_one(slot, args)
 
 
@@ -1217,16 +1079,12 @@ func _start_erase_one(number: int, args: Array) -> void:
 
 
 func _hide_picture(number: int, args: Array = [], flags: Dictionary = {}) -> void:
-	# Hide also supports a closed range: 150 [0x01000003, lo, hi] passes the far endpoint as
-	# args[0] because the command number is the low slot (picture.rs apply, CE270).
 	var span := _arg(args, 0, number) if bool(flags.get("has_span", false)) and not args.is_empty() else number
-	var lo := mini(number, span)
-	var hi := maxi(number, span)
-	for slot in range(lo, hi + 1):
+	for slot in _slots_in_span(mini(number, span), maxi(number, span)):
 		var state: Dictionary = _states.get(slot, {})
 		if state.is_empty() and _cmds.has(slot):
 			var cmd: Dictionary = _cmds[slot]
-			state = _new_state(cmd.get("args", []), int(cmd.get("anchor", 0)), _base_sizes.get(slot, Vector2.ZERO))
+			state = _new_state(cmd.get("args", []), int(cmd.get("anchor", 0)), _base_sizes.get(slot, Vector2.ZERO), cmd.get("flags", {}))
 		if state.is_empty():
 			continue
 		state["hidden"] = true
@@ -1244,7 +1102,7 @@ func _pose_position(pose: Dictionary) -> Vector2i:
 	return Vector2i(int(pose.get("x", 0)), int(pose.get("y", 0)))
 
 
-## Advance every slot once per frame: slide transition, fade ramp, then the 290 effects.
+## Advance every animating slot once per frame.
 func tick() -> void:
 	for number in _states.keys():
 		if not _states.has(number):
@@ -1254,8 +1112,6 @@ func tick() -> void:
 			_advance_picture(number)
 
 
-## A static slot does not need a transform pass every frame. Only slots with a live tween
-## or 290 effect are advanced and re-rendered.
 func _state_animating(state: Dictionary) -> bool:
 	if state.is_empty():
 		return false
@@ -1312,36 +1168,7 @@ func _advance_picture(number: int) -> void:
 		state["current"]["opacity"] = int(round(lerpf(from_alpha, to_alpha, t)))
 		if elapsed >= fade:
 			state["fade"] = 0
-	var kept: Array = []
-	for effect in state.get("effects", []):
-		var fx: Dictionary = effect
-		fx["age"] = int(fx.get("age", 0)) + 1
-		if int(fx.get("kind", 0)) != 5 and int(fx["age"]) >= int(fx.get("duration", 1)):
-			continue
-		kept.append(fx)
-	state["effects"] = kept
-	var shake: Variant = state.get("shake", null)
-	if shake != null:
-		var sh: Dictionary = shake
-		sh["elapsed"] = int(sh.get("elapsed", 0)) + 1
-		var period := maxi(1, int(sh.get("period", 1)))
-		if int(sh.get("count", SHAKE_ENDLESS)) < SHAKE_ENDLESS and int(sh["elapsed"]) / period >= int(sh["count"]):
-			state["shake"] = null
-	var zoom: Variant = state.get("zoom", null)
-	if zoom != null:
-		var z: Dictionary = zoom
-		z["elapsed"] = mini(int(z.get("duration", 0)), int(z.get("elapsed", 0)) + 1)
-	var breath: Variant = state.get("breath", null)
-	if breath != null:
-		var b: Dictionary = breath
-		b["elapsed"] = int(b.get("elapsed", 0)) + 1
-	var pattern: Variant = state.get("pattern", null)
-	if pattern != null:
-		var p: Dictionary = pattern
-		p["elapsed"] = int(p.get("elapsed", 0)) + 1
-		if int(p["elapsed"]) >= maxi(1, int(p.get("interval", 1))):
-			p["elapsed"] = 0
-			_step_pattern(p)
+	_effects.tick_effects(state)
 	_states[number] = state
 	_render_picture(number)
 
@@ -1364,49 +1191,45 @@ func _render_picture(number: int) -> void:
 	if bool(state.get("hidden", false)):
 		node.visible = false
 		return
-	node.visible = true
 	var pose: Dictionary = state["current"]
+	var scale_x_pct := int(pose.get("scale", 100))
+	var scale_y_pct := int(pose.get("scale_y", 100))
+	if scale_x_pct == 0 or scale_y_pct == 0:
+		node.visible = false
+		return
+	node.visible = true
 	var base: Vector2 = _base_sizes.get(number, state.get("base_size", Vector2.ZERO))
-	var scale_x := 0.0 if int(pose.get("scale", 100)) == 0 else absf(float(pose.get("scale", 100))) / 100.0
-	var scale_y := 0.0 if int(pose.get("scale_y", 100)) == 0 else absf(float(pose.get("scale_y", 100))) / 100.0
+	var scale_x := absf(float(scale_x_pct)) / 100.0
+	var scale_y := absf(float(scale_y_pct)) / 100.0
 	var size := base * Vector2(scale_x, scale_y)
-	var position := UiSkin.anchor_position(int(pose.get("anchor", 0)), int(pose["x"]), int(pose["y"]), size)
+	var position := _anchored_position(int(pose.get("anchor", 0)), int(pose["x"]), int(pose["y"]), size, scale_x_pct, scale_y_pct)
 	var zoom: Variant = state.get("zoom", null)
 	if zoom != null:
 		var z: Dictionary = zoom
-		var k := _zoom_percent(z) / 100.0
+		var k := _PictureEffects.zoom_percent(z) / 100.0
 		var centre := Vector2(float(z.get("centre", [0, 0])[0]), float(z.get("centre", [0, 0])[1]))
 		position = centre + (position - centre) * k
 		size *= k
 	var breath: Variant = state.get("breath", null)
 	if breath != null:
-		var growth := _breath_growth(breath)
+		var growth := _PictureEffects.breath_growth(breath)
 		size *= Vector2(1.0 + growth.x / 100.0, 1.0 + growth.y / 100.0)
-	var offset := Vector2(float(state.get("shift", [0, 0])[0]), float(state.get("shift", [0, 0])[1]))
-	var shake: Variant = state.get("shake", null)
-	if shake != null:
-		var sh: Dictionary = shake
-		var period := maxi(1, int(sh.get("period", 1)))
-		var sign := 1.0 if (int(sh.get("elapsed", 0)) / period) % 2 == 0 else -1.0
-		offset += Vector2(float(sh.get("offset", [0, 0])[0]) * sign, float(sh.get("offset", [0, 0])[1]) * sign)
-	position += offset
+	position += _PictureEffects.effect_offset(state)
 	node.size = size
 	node.position = position
 	node.pivot_offset = size * 0.5
-	node.scale = Vector2(-1.0 if int(pose.get("scale", 100)) < 0 else 1.0,
-		-1.0 if int(pose.get("scale_y", 100)) < 0 else 1.0)
+	node.scale = Vector2(-1.0 if scale_x_pct < 0 else 1.0, -1.0 if scale_y_pct < 0 else 1.0)
 	var blend := int(pose.get("blend", 0))
-	var tint := _tone_color(state)
+	var tint := _effects.tone_color(state)
 	if number < 0:
 		tint = Color(tint.r * screen_tint.r, tint.g * screen_tint.g, tint.b * screen_tint.b, 1.0)
 	tint.a = clampf(float(pose.get("opacity", 255)) / 255.0, 0.0, 1.0)
-	# WOLF blend 3 is multiply; retail forces the alpha to 255 so the modulation
-	# multiplies RGB without also dimming by the slot opacity (GameView.gd:99-100).
+	# Multiply blend forces alpha to 1.0 so RGB multiplication is not also dimmed by slot opacity.
 	if (blend & 0xF) == 3:
 		tint.a = 1.0
 	node.modulate = tint
 	_apply_pattern_cell(node, state)
-	_apply_blend(node, blend)
+	_effects.apply_blend(node, blend)
 
 
 func _apply_pattern_cell(node: Control, state: Dictionary) -> void:
@@ -1424,55 +1247,7 @@ func _apply_pattern_cell(node: Control, state: Dictionary) -> void:
 		(atlas as AtlasTexture).region = region
 
 
-func _tone_color(state: Dictionary) -> Color:
-	var tone: Array = state.get("tone", [100, 100, 100])
-	var corr: Array = state.get("color_corr", [0, 0, 0])
-	var out := Color(1, 1, 1, 1)
-	for channel in 3:
-		var base := clampi(int(tone[channel]) + int(corr[channel]), 0, 200)
-		var value := clampi((base * 255 + 50) / 100, 0, 255)
-		# picture.rs tone_byte / percent_times_duration: every colour effect contributes
-		# a percent ramp with denominator 100*duration. BLINK adds, the rest multiply.
-		for effect in state.get("effects", []):
-			var fx: Dictionary = effect
-			var duration := maxi(1, int(fx.get("duration", 1)))
-			var phase := int(fx.get("age", 0)) % duration
-			var target: Array = fx.get("target", [0, 0, 0])
-			if int(fx.get("kind", 0)) == 5:
-				var blink := base * duration + int(target[channel]) * (duration - phase)
-				value = int((255 * blink + 50 * duration) / (100 * duration))
-			else:
-				var from_value := 100 + int(target[channel])
-				var numerator := from_value * (duration - phase) + 100 * phase
-				var denominator := 100 * duration
-				value = int((value * numerator + denominator / 2) / denominator)
-			value = clampi(value, 0, 255)
-		out[channel] = clampf(float(value) / 255.0, 0.0, 1.0)
-	return out
-
-
-func _apply_blend(node: Control, blend: int) -> void:
-	var mode := blend & 0xF
-	if mode == 0:
-		node.material = null
-		return
-	if not _blend_materials.has(mode):
-		var material := CanvasItemMaterial.new()
-		match mode:
-			1:
-				material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-			2:
-				material.blend_mode = CanvasItemMaterial.BLEND_MODE_SUB
-			3:
-				material.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
-			_:
-				material.blend_mode = CanvasItemMaterial.BLEND_MODE_MIX
-		_blend_materials[mode] = material
-	node.material = _blend_materials[mode]
-
-
-## Opcode 290. Args: [head, duration, lo, hi, v1, v2, v3]; the range is inclusive and may
-## arrive reversed. Returns false when no live picture falls inside it (Rust reports no-op).
+## Opcode 290. Args: [head, duration, lo, hi, v1, v2, v3]; inclusive range.
 func effect(kind: int, duration: int, args: Array) -> bool:
 	if kind < 0 or kind > 10 or kind == 6 or args.size() < 4:
 		return false
@@ -1488,135 +1263,11 @@ func effect(kind: int, duration: int, args: Array) -> bool:
 		var state: Dictionary = _states.get(number, {})
 		if state.is_empty():
 			var cmd: Dictionary = _cmds[number]
-			state = _new_state(cmd.get("args", []), int(cmd.get("anchor", 0)), _base_sizes.get(number, Vector2.ZERO))
-		_apply_effect(state, kind, duration, args)
+			state = _new_state(cmd.get("args", []), int(cmd.get("anchor", 0)), _base_sizes.get(number, Vector2.ZERO), cmd.get("flags", {}))
+		_effects.apply_effect(state, kind, duration, args)
 		_states[number] = state
 		_render_picture(number)
 	return true
-
-
-func _apply_effect(state: Dictionary, kind: int, duration: int, args: Array) -> void:
-	var v := [_arg(args, 4, 0), _arg(args, 5, 0), _arg(args, 6, 0)]
-	match kind:
-		0, 5:
-			if duration <= 0 or (v[0] == 0 and v[1] == 0 and v[2] == 0):
-				state["effects"] = []
-				if bool(state.get("zero_tone_hidden", false)):
-					state["hidden"] = true
-			else:
-				if bool(state.get("zero_tone_hidden", false)):
-					state["hidden"] = false
-				state["effects"] = [{
-					"kind": kind,
-					"duration": maxi(1, duration),
-					"target": v.duplicate(),
-					"age": 0,
-				}]
-		1:
-			state["color_corr"] = [clampi(v[0], -200, 200), clampi(v[1], -200, 200), clampi(v[2], -200, 200)]
-		2:
-			state["shift"] = [v[0], v[1]]
-		3:
-			if v[0] == 0 and v[1] == 0:
-				state["shake"] = null
-			else:
-				state["shake"] = {
-					"offset": [v[0], v[1]],
-					"count": maxi(0, v[2]),
-					"period": maxi(1, duration),
-					"elapsed": 0,
-				}
-		4:
-			var old_zoom: Variant = state.get("zoom", null)
-			var from_value := 100.0
-			if old_zoom != null:
-				from_value = _zoom_percent(old_zoom)
-			state["zoom"] = {
-				"centre": [v[0], v[1]],
-				"from": from_value,
-				"to": 100 if v[2] <= 0 else v[2],
-				"duration": maxi(0, duration),
-				"elapsed": 0,
-			}
-		7:
-			if v[0] == 0 and v[1] == 0:
-				state["breath"] = null
-			else:
-				var old: Variant = state.get("breath", null)
-				var same: bool = old != null and int(old["amp"][0]) == v[0] and int(old["amp"][1]) == v[1] and int(old["period"]) == duration and int(old["rest"]) == v[2]
-				if not same:
-					state["breath"] = {
-						"amp": [v[0], v[1]],
-						"period": duration,
-						"rest": v[2],
-						"elapsed": 0,
-					}
-		8, 9, 10:
-			# action time 0 is the stop spelling; a one-frame loop would alternate
-			# cells at frame rate (picture.rs 1679-1686).
-			if duration <= 0:
-				state["pattern"] = null
-			else:
-				var current: Variant = state.get("pattern", null)
-				var base := int(state.get("pattern_index", 1))
-				if current != null:
-					base = int(current.get("base", base))
-				state["pattern"] = {
-					"kind": kind,
-					"from": v[0],
-					"to": v[1],
-					"interval": maxi(1, duration),
-					"base": base,
-					"cell": v[0],
-					"direction": 1,
-					"done": false,
-					"elapsed": 0,
-				}
-
-
-func _step_pattern(pattern: Dictionary) -> void:
-	if bool(pattern.get("done", false)):
-		return
-	var cell := int(pattern.get("cell", 0))
-	var from_value := int(pattern.get("from", 0))
-	var to_value := int(pattern.get("to", 0))
-	var step := 1 if to_value >= from_value else -1
-	cell += step * int(pattern.get("direction", 1))
-	if cell > maxi(from_value, to_value) or cell < mini(from_value, to_value):
-		match int(pattern.get("kind", 8)):
-			8:
-				cell = int(pattern.get("base", 0))
-				pattern["done"] = true
-			9:
-				cell = from_value
-			10:
-				pattern["direction"] = -int(pattern.get("direction", 1))
-				cell += step * int(pattern["direction"]) * 2
-	pattern["cell"] = cell
-
-
-func _zoom_percent(zoom: Variant) -> float:
-	if zoom == null:
-		return 100.0
-	var z: Dictionary = zoom
-	var duration := int(z.get("duration", 0))
-	if duration <= 0 or int(z.get("elapsed", 0)) >= duration:
-		return float(z.get("to", 100))
-	return float(z.get("from", 100)) + (float(z.get("to", 100)) - float(z.get("from", 100))) * float(z["elapsed"]) / float(duration)
-
-
-func _breath_growth(breath: Variant) -> Vector2:
-	if breath == null:
-		return Vector2.ZERO
-	var b: Dictionary = breath
-	var period := maxi(1, int(b.get("period", 1)))
-	var rest := maxi(0, int(b.get("rest", 0)))
-	var phase := int(b.get("elapsed", 0)) % (period + rest)
-	if phase >= period:
-		return Vector2.ZERO
-	var amp: Array = b.get("amp", [0, 0])
-	var t := float(phase) / float(period)
-	return Vector2(round(float(amp[0]) * t), round(float(amp[1]) * t))
 
 
 func picture_count() -> int:
@@ -1643,8 +1294,7 @@ func picture_text(number: int) -> String:
 	return str(_cmds[number].get("text", ""))
 
 
-## Snapshot of the live picture slots, one dictionary per slot in ascending number order.
-## SavedPicture in SaveCodec.cs reads exactly these keys (W3 Day4 picture roundtrip).
+## Snapshot of live picture slots in ascending slot-number order for SaveState serialization.
 func picture_snapshots() -> Array:
 	var out: Array = []
 	var numbers: Array = _cmds.keys()
@@ -1663,6 +1313,7 @@ func restore_pictures(entries: Array) -> void:
 		if not entry is Dictionary:
 			continue
 		var cmd: Dictionary = entry
-		draw_picture(int(cmd.get("number", 0)), int(cmd.get("action", 0)), str(cmd.get("file", "")),
+		var restored_flags: Dictionary = cmd.get("flags", {}) if cmd.get("flags", null) is Dictionary else {}
+		draw_picture(int(cmd.get("number", 0)), 0, str(cmd.get("file", "")),
 			str(cmd.get("text", "")), cmd.get("args", []), int(cmd.get("anchor", 0)), int(cmd.get("kind", -1)),
-			cmd.get("animate", []))
+			cmd.get("animate", []), restored_flags)

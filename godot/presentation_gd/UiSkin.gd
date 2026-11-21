@@ -1,21 +1,17 @@
 class_name UiSkin
 extends RefCounted
-## Shared drawing helpers for the GDScript presentation layer (W2 Day 3/4).
+## Shared drawing helpers for the GDScript presentation layer.
 ##
-## The retail UI is DxLib art, not a Godot theme: every panel is an 18x18 nine-patch
-## (SystemFile/WindowBase.png) stretched with a 3 px corner, and every measurement is
-## taken at the 1024x576 logical resolution (DECISIONS D-09). Keeping the metric and the
-## nine-patch in one place is what makes the C# and GDScript screens agree pixel for pixel.
+## Every panel uses the 18x18 nine-patch (SystemFile/WindowBase.png) stretched with a 3 px
+## corner, and every measurement is taken at the 1024x576 logical resolution.
 
 const _AppPaths = preload("res://presentation_gd/AppPaths.gd")
+const _MediaPakReader = preload("res://presentation/MediaPakReader.cs")
 const WINDOW_BASE := "SystemFile/WindowBase.png"
 const WINDOW_CORNER := 3
 const BASE_FONT_SIZE := 20
 
-## The unpacked tree ships no font, so fall back to a system CJK face. Order matters:
-## Yu Gothic UI is the retail-feeling Windows face, MS Gothic its bitmap-era ancestor.
 const FONT_NAMES: Array[String] = [
-	# Retail uses LOLITA (ASCII/digits/JP) + rounded CJK fallback (YouYuan / YaHei / Noto).
 	"YouYuan",
 	"Microsoft YaHei UI",
 	"Microsoft YaHei",
@@ -25,7 +21,7 @@ const FONT_NAMES: Array[String] = [
 	"sans-serif",
 ]
 
-## SystemDB Type 12 text colour palette (`color[0..19]`).
+## SystemDB Type 12 text colour palette (color[0..29]).
 const TEXT_COLORS: Array[Color] = [
 	Color8(255, 255, 255), # 0 white
 	Color8(140, 175, 255), # 1 blue (weekday Sat)
@@ -47,6 +43,16 @@ const TEXT_COLORS: Array[Color] = [
 	Color8(255, 200, 200), # 17 pale red
 	Color8(200, 200, 255), # 18 pale blue
 	Color8(200, 200, 200), # 19 light grey
+	Color8(0, 0, 0),       # 20 black
+	Color8(0, 0, 0),       # 21 black
+	Color8(0, 0, 0),       # 22 black
+	Color8(0, 0, 0),       # 23 black
+	Color8(0, 0, 0),       # 24 black
+	Color8(0, 0, 0),       # 25 black
+	Color8(0, 0, 0),       # 26 black
+	Color8(0, 0, 0),       # 27 black
+	Color8(0, 0, 0),       # 28 black
+	Color8(0, 0, 0),       # 29 black
 ]
 
 static var _font: Font = null
@@ -55,7 +61,7 @@ static var _strict_font_override: int = -1
 
 
 ## Strict retail font mode: when enabled (or LWsmf_STRICT_FONT=1), skip the OS/CJK
-## fallback chain once Data/Lolita.ttf loads, so out-of-corpus glyphs behave like DxLib.
+## fallback chain once Lolita.ttf loads, so out-of-corpus glyphs behave like DxLib.
 static func is_strict_font_mode() -> bool:
 	if _strict_font_override >= 0:
 		return _strict_font_override == 1
@@ -75,16 +81,56 @@ static func clear_strict_font_mode_override() -> void:
 
 
 static func _find_retail_font_path() -> String:
-	var candidates := [
-		_AppPaths.package_root().path_join("Data/Lolita.ttf"),
-		_AppPaths.resource_root().path_join("Data/Lolita.ttf"),
-		OS.get_executable_path().get_base_dir().path_join("Data/Lolita.ttf"),
-		"E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy/Data/Lolita.ttf",
-	]
+	var candidates: Array[String] = []
+	var env_font := OS.get_environment("LWSMF_FONT_PATH").strip_edges()
+	if not env_font.is_empty():
+		candidates.append(env_font)
+	var pkg_root := _AppPaths.package_root()
+	var res_root := _AppPaths.resource_root()
+	var exe_dir := OS.get_executable_path().get_base_dir()
+	var data_root := pkg_root.path_join("work/all").simplify_path()
+	candidates.append_array([
+		data_root.path_join("Lolita.ttf"),
+		data_root.path_join("Data/Lolita.ttf"),
+		pkg_root.path_join("Lolita.ttf"),
+		pkg_root.path_join("Data/Lolita.ttf"),
+		res_root.path_join("Data/Lolita.ttf"),
+		exe_dir.path_join("Data/Lolita.ttf"),
+		exe_dir.path_join("work/all/Lolita.ttf"),
+	])
 	for p in candidates:
-		if FileAccess.file_exists(p):
+		if not p.is_empty() and FileAccess.file_exists(p):
 			return p
 	return ""
+
+
+static func _find_retail_font_bytes_in_pak() -> PackedByteArray:
+	var pak_candidates: Array[String] = []
+	var env_pak := OS.get_environment("LWsmf_MEDIA_PAK").strip_edges()
+	if not env_pak.is_empty():
+		pak_candidates.append(env_pak)
+	var pkg_root := _AppPaths.package_root()
+	var exe_dir := OS.get_executable_path().get_base_dir()
+	pak_candidates.append_array([
+		pkg_root.path_join("work/all/media.pak").simplify_path(),
+		pkg_root.path_join("media.pak").simplify_path(),
+		exe_dir.path_join("media.pak"),
+		exe_dir.path_join("work/all/media.pak"),
+	])
+	for pak_path in pak_candidates:
+		if pak_path.is_empty() or not FileAccess.file_exists(pak_path):
+			continue
+		var reader = _MediaPakReader.new()
+		if not reader.Open(pak_path):
+			continue
+		for entry_name in ["Lolita.ttf", "Data/Lolita.ttf"]:
+			if reader.Has(entry_name):
+				var bytes = reader.Read(entry_name)
+				if bytes != null and bytes.size() > 0:
+					reader.Close()
+					return bytes
+		reader.Close()
+	return PackedByteArray()
 
 
 static func _make_system_font(bold: bool) -> SystemFont:
@@ -97,21 +143,31 @@ static func _make_system_font(bold: bool) -> SystemFont:
 	return sys
 
 
+static func _configure_font_file(ff: FontFile, bold: bool, strict: bool) -> Font:
+	ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+	ff.allow_system_fallback = not strict
+	ff.fallbacks = [] if strict else [_make_system_font(bold)]
+	if bold:
+		var fv := FontVariation.new()
+		fv.base_font = ff
+		fv.variation_embolden = 0.22
+		return fv
+	return ff
+
+
 static func _build_font(bold: bool) -> Font:
 	var strict := is_strict_font_mode()
 	var ttf_path := _find_retail_font_path()
 	if not ttf_path.is_empty():
 		var ff := FontFile.new()
 		if ff.load_dynamic_font(ttf_path) == OK:
-			ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
-			ff.allow_system_fallback = not strict
-			ff.fallbacks = [] if strict else [_make_system_font(bold)]
-			if bold:
-				var fv := FontVariation.new()
-				fv.base_font = ff
-				fv.variation_embolden = 0.22
-				return fv
-			return ff
+			return _configure_font_file(ff, bold, strict)
+	var pak_bytes := _find_retail_font_bytes_in_pak()
+	if not pak_bytes.is_empty():
+		var ff := FontFile.new()
+		ff.data = pak_bytes
+		if ff.get_face_count() > 0:
+			return _configure_font_file(ff, bold, strict)
 	return _make_system_font(bold)
 
 
@@ -145,7 +201,6 @@ static func nine_patch(ci: CanvasItem, texture: Texture2D, rect: Rect2, corner: 
 	var tex_size := texture.get_size()
 	var c := float(corner)
 	var inner := Vector2(tex_size.x - c * 2.0, tex_size.y - c * 2.0)
-	# draw_texture_rect_region(texture, dst_rect, src_rect) -- nine slices of the 18x18 skin.
 	ci.draw_texture_rect_region(texture, Rect2(rect.position, Vector2(c, c)), Rect2(0, 0, c, c))
 	ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(rect.size.x - c, 0), Vector2(c, c)), Rect2(tex_size.x - c, 0, c, c))
 	ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(0, rect.size.y - c), Vector2(c, c)), Rect2(0, tex_size.y - c, c, c))
@@ -163,7 +218,7 @@ static func unit(raw: int) -> int:
 
 
 ## Picture anchor: 0 top-left, 1 centre, 2 bottom-left, 3 top-right, 4 bottom-right,
-## 5 bottom-centre, 6 top-centre (mirrors ScreenHostView.AnchorPosition).
+## 5 top-centre, 6 bottom-centre.
 static func anchor_position(anchor: int, x: int, y: int, size: Vector2) -> Vector2:
 	match anchor:
 		1:
@@ -182,10 +237,10 @@ static func anchor_position(anchor: int, x: int, y: int, size: Vector2) -> Vecto
 			return Vector2(x, y)
 
 
-## Stable pastel for a picture the install is missing (mirrors PlaceholderColor).
+## Stable pastel for a missing picture placeholder.
 static func placeholder_color(number: int, file: String) -> Color:
-	var hash := hash([number, file])
-	var r := 0.10 + (hash % 40) / 200.0
-	var g := 0.12 + ((hash >> 8) % 40) / 200.0
-	var b := 0.18 + ((hash >> 16) % 40) / 200.0
+	var h := hash([number, file])
+	var r := 0.10 + (h % 40) / 200.0
+	var g := 0.12 + ((h >> 8) % 40) / 200.0
+	var b := 0.18 + ((h >> 16) % 40) / 200.0
 	return Color(r, g, b, 0.92)

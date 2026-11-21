@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Lwsmf.Core;
 
@@ -21,15 +20,15 @@ public sealed class MenuSelection
 /// </summary>
 public sealed class BattleWiring
 {
-    public const int VarCommandPhase = 350;
-    public const int VarBattleActive = 340;
-    public const int VarBattleDecided = 343;
-    public const int EventCommandPhase = 242;
-    public const int EventTurnStart = 241;
-    public const int EventEnemyAction = 243;
-    public const int EventBattleDispatch = 253;
-    public const int EventBattleCaller = 239;
-    public const int EventCommandRegister = 157;
+    public const int VarCommandPhase = WolfIds.VarBattleCommandPhase;
+    public const int VarBattleActive = WolfIds.VarBattleActive;
+    public const int VarBattleDecided = WolfIds.VarBattleDecided;
+    public const int EventCommandPhase = WolfIds.BattleCommandPhase;
+    public const int EventTurnStart = WolfIds.BattleTurnStart;
+    public const int EventEnemyAction = WolfIds.BattleEnemyAction;
+    public const int EventBattleDispatch = WolfIds.BattleDispatch;
+    public const int EventBattleCaller = WolfIds.BattleCaller;
+    public const int EventCommandRegister = WolfIds.BattleCommandRegister;
     public const int CmdListType = 14;
     private const int ActingPartySlot = 1;
 
@@ -71,7 +70,7 @@ public sealed class BattleWiring
 
     public void SetCommandSchedule(IReadOnlyList<int> schedule)
     {
-        _schedule = schedule.Count == 0 ? [ActingPartySlot] : schedule.ToList();
+        _schedule = schedule.Count == 0 ? [ActingPartySlot] : new List<int>(schedule);
         _cursor = 0;
     }
 
@@ -83,10 +82,30 @@ public sealed class BattleWiring
 
     public static int CommandIndexForRow(int row) => Math.Clamp(row, 1, 8);
 
+    private static bool HasInstance(EventVm vm, int eventId)
+    {
+        var instances = vm.Instances;
+        for (int i = 0; i < instances.Count; i++)
+        {
+            if (instances[i].EventId == eventId) return true;
+        }
+        return false;
+    }
+
+    private static bool HasChildInstance(EventVm vm, int eventId)
+    {
+        var instances = vm.Instances;
+        for (int i = 0; i < instances.Count; i++)
+        {
+            var inst = instances[i];
+            if (inst.EventId == eventId && inst.ParentId.HasValue) return true;
+        }
+        return false;
+    }
+
     /// <summary>True when CE253 is resident or CE239 was started by a parent script.</summary>
     public static bool RealBattleRunning(EventVm vm)
-        => vm.Instances.Any(i => i.EventId == EventBattleDispatch)
-           || vm.Instances.Any(i => i.EventId == EventBattleCaller && i.ParentId.HasValue);
+        => HasInstance(vm, EventBattleDispatch) || HasChildInstance(vm, EventBattleCaller);
 
     /// <summary>
     /// Harvest command rows (CData type 14) once CE157 has advanced the committed cursor
@@ -153,11 +172,11 @@ public sealed class BattleWiring
     {
         if (!_sawDispatch)
         {
-            _sawDispatch = vm.Instances.Any(i => i.EventId == EventBattleDispatch);
+            _sawDispatch = HasInstance(vm, EventBattleDispatch);
         }
         if (!_sawCaller)
         {
-            _sawCaller = vm.Instances.Any(i => i.EventId == EventBattleCaller && i.ParentId.HasValue);
+            _sawCaller = HasChildInstance(vm, EventBattleCaller);
         }
         bool battleActive = vm.Vars.Get(VarBattleActive) != 0;
         bool rising = battleActive && !_prevBattleActive;
@@ -184,9 +203,9 @@ public sealed class BattleWiring
         if (vm.Vars.Get(VarBattleDecided) != 0) return null;
 
         int phase = vm.Vars.Get(VarCommandPhase);
-        bool c241 = vm.Instances.Any(i => i.EventId == EventTurnStart);
-        bool c242 = vm.Instances.Any(i => i.EventId == EventCommandPhase);
-        bool c243 = vm.Instances.Any(i => i.EventId == EventEnemyAction);
+        bool c241 = HasInstance(vm, EventTurnStart);
+        bool c242 = HasInstance(vm, EventCommandPhase);
+        bool c243 = HasInstance(vm, EventEnemyAction);
 
         if (rising && phase == 0 && !c242 && !c241 && !c243)
         {

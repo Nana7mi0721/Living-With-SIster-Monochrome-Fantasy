@@ -491,7 +491,10 @@ public static class SaveCodec
         }
         catch
         {
-            if (File.Exists(temp)) File.Delete(temp);
+            if (File.Exists(temp))
+            {
+                try { File.Delete(temp); } catch { }
+            }
             throw;
         }
     }

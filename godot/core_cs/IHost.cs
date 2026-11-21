@@ -24,6 +24,8 @@ public sealed class PictureCmd
     public int[] Animate { get; init; } = Array.Empty<int>();
     /// <summary>Head bits 20..23. Mode 3 means SCALE_Y is independent; otherwise it follows SCALE.</summary>
     public byte ScaleMode { get; init; }
+    /// <summary>Head bits 8..11: blend mode (0=normal, 1=add, 2=sub, 3=mul).</summary>
+    public byte BlendMode { get; init; }
     /// <summary>Head bit 0x0040_0000: a redraw keeps the running 290 shift.</summary>
     public bool KeepShift { get; init; }
     /// <summary>Head bit 0x0001_0000: X/Y are offsets from the slot's current position.</summary>

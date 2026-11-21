@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Lwsmf.Core;
 
@@ -24,22 +23,27 @@ public readonly struct AutoSyncReport
 
 /// <summary>
 /// Scheduler for run_condition == 2 common events, plus the two battle events
-/// (242/243) that the data gates on 2000350 but never calls. Mirrors the Rust
-/// engine's auto_events.rs: the scheduler is edge-triggered, so a coroutine that
-/// ended on its own is not restarted while its condition stays true. The two HUD
-/// painters 216/217 are the allow-listed exception and are replayed every frame.
-/// Event 43 is skipped here because this port's title menu is TitleMap event 2.
+/// (242/243) that the data gates on 2000350 without an explicit caller. Mirrors the
+/// edge-triggered scheduler semantics: a coroutine that ended on its own is not
+/// restarted while its condition stays true. The HUD painters (216/217) and battle/H-scene
+/// gauge painters (240/339) are allow-listed in ResumeOnLoad to replay every frame.
+/// Event 43 is skipped here because the title entry point starts it explicitly.
 /// </summary>
 public sealed class AutoEvents
 {
     /// <summary>Event 43 is the title menu; the title entry point starts it explicitly.</summary>
-    public static readonly int[] Skipped = { 43 };
+    public static readonly int[] Skipped = { WolfIds.TitleMenu };
 
     /// <summary>run_condition == 0 events the battle state machine needs woken by condition.</summary>
-    public static readonly int[] GatedCallOnly = { 242, 243 };
+    public static readonly int[] GatedCallOnly = { WolfIds.BattleCommandPhase, WolfIds.BattleEnemyAction };
 
-    /// <summary>Linear HUD painters that must be re-created every frame while their condition holds.</summary>
-    public static readonly int[] ResumeOnLoad = { 216, 217 };
+    /// <summary>Linear HUD and gauge painters that must be re-created every frame while their condition holds.</summary>
+    public static readonly int[] ResumeOnLoad =
+    {
+        WolfIds.HudPainterA,
+        WolfIds.HudPainterB,
+        WolfIds.HSceneGauge
+    };
 
     private readonly List<AutoEvent> _events;
     private readonly Dictionary<int, bool> _latched = new();
@@ -57,21 +61,23 @@ public sealed class AutoEvents
 
     public static AutoEvents FromPrograms(IEnumerable<Program> programs)
     {
-        var events = programs
-            .OrderBy(p => p.Id)
-            .Where(p => !Skipped.Contains(p.Id)
-                && (p.RunCondition == 2
-                    || (p.RunCondition == 0 && GatedCallOnly.Contains(p.Id))))
-            .Select(p => new AutoEvent
+        var events = new List<AutoEvent>();
+        foreach (var p in programs)
+        {
+            if (Array.IndexOf(Skipped, p.Id) >= 0) continue;
+            if (p.RunCondition != 2 && !(p.RunCondition == 0 && Array.IndexOf(GatedCallOnly, p.Id) >= 0))
+                continue;
+            events.Add(new AutoEvent
             {
                 Id = p.Id,
                 Title = p.Title,
                 Operator = p.ConditionOperator,
                 Variable = p.ConditionVariable,
                 Value = p.ConditionValue,
-                ResumeOnLoad = ResumeOnLoad.Contains(p.Id)
-            })
-            .ToList();
+                ResumeOnLoad = Array.IndexOf(ResumeOnLoad, p.Id) >= 0
+            });
+        }
+        events.Sort((a, b) => a.Id.CompareTo(b.Id));
         return new AutoEvents(events);
     }
 
@@ -127,8 +133,15 @@ public sealed class AutoEvents
         return new AutoSyncReport { Started = started, Stopped = stopped, Running = RunningCount(vm) };
     }
 
-    public int RunningCount(EventVm vm) =>
-        _running.Values.Count(id => vm.FindInstance(id) != null);
+    public int RunningCount(EventVm vm)
+    {
+        int count = 0;
+        foreach (int id in _running.Values)
+        {
+            if (vm.FindInstance(id) != null) count++;
+        }
+        return count;
+    }
 
     public bool IsRunning(EventVm vm, int eventId) =>
         _running.TryGetValue(eventId, out int id) && vm.FindInstance(id) != null;
@@ -161,7 +174,7 @@ public sealed class AutoEvents
     private static int ConditionValue(EventVm vm, int raw)
     {
         int index = raw - Magic.VarBase;
-        return index >= 0 && index < 800 ? vm.Vars.Get(index) : 0;
+        return index >= 0 && index < WolfIds.VarPollMax ? vm.Vars.Get(index) : 0;
     }
 
     private static bool ConditionMet(int op, int left, int right) => op switch

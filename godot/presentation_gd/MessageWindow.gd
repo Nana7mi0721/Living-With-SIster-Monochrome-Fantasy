@@ -1,14 +1,14 @@
 class_name MessageWindow
 extends Control
-## Opcode-101 dialog window, drawn by hand (W2 Day 4, docs/OPCODE_101.md).
+## Opcode-101 dialog window, drawn directly onto the canvas.
 ##
-## The retail window is a fixed 960x168 box hugging the bottom-right of the 1024x576
-## screen at (64, 408), with text starting two pixels lower so the first row clears the
-## title bar. Nothing here uses Label: the reveal animation needs per-character progress,
-## and Godot's rich-text flow cannot express \\. (a 0.25 s beat) or \\> (wait for input).
+## Uses custom drawing rather than Label so per-character typewriter reveal, \. beats,
+## and \> instant-reveal work deterministically inside the 960x168 logical box.
 
 signal reveal_finished
 signal confirm_requested
+
+const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
 
 const WINDOW_SIZE := Vector2(960, 168)
 const WINDOW_POS := Vector2(64, 408)
@@ -40,22 +40,11 @@ const TOP_PADDING := 8.0
 const CURSOR_TEXTURE := "BalloonBase_CafeLatte/[CafeLatte]pauseL.png"
 const CURSOR_FALLBACK_TEXTURE := "SystemFile/Text_Pause.png"
 const CURSOR_POS := Vector2(504, 544)
-# Pill skin colours + >=0.12 RGB sum for DialogDrawTest lit-pixel contract.
 const SKIN_BORDER := Color(1.0, 1.0, 1.0, 0.12)
 const SKIN_HIGHLIGHT := Color("f2f3f3")
 const SKIN_MID := Color("576062")
 const SKIN_FILL := Color(0.08, 0.09, 0.11, 0.78)
 const CENTER_FILL := Color(0.08, 0.09, 0.11, 0.72)
-const COLOR_TABLE: Array[Color] = [
-	Color.WHITE,
-	Color("80d0ff"),   # 1 -- the corpus' only non-white colours
-	Color("ffd070"),
-	Color("a0ffa0"),
-	Color("ff9aa8"),
-	Color("c8a6ff"),
-	Color("70e0d0"),
-	Color("ffe08a"),
-]
 
 var assets: AssetDB
 var visible_window := false
@@ -65,7 +54,7 @@ var waiting_for_confirm := false
 var finished := false
 var speed_override := 0.0
 var hover_enabled := false
-var position_mode := 2002  # 2002=bottom bar, 2005=centered borderless, 2008=top
+var position_mode: int = _WolfConst.MSG_POS_BOTTOM
 
 var _tokens: Array = []
 var _chars: Array = []        # [{ch, color, x, y, size, line, outline, instant}]
@@ -75,11 +64,14 @@ var _instant_index := -1
 var _pause_timer := 0.0
 var _cursor_time := 0.0
 var _center_content_height := CENTER_LINE_HEIGHT
-var _center_cursor_pos := Vector2(512, 320)
+
+var _style_center_halo: StyleBoxFlat
+var _style_center_core: StyleBoxFlat
+var _style_outer: StyleBoxFlat
+var _style_mid: StyleBoxFlat
+var _style_core: StyleBoxFlat
 
 ## Face bust drawn behind the frame: Sys0 / \f[n], or the "@n" prefix on the first line.
-## The retail install keeps only three faces (SysDB24 2/3/4), so anything else draws the
-## labelled placeholder rather than silently showing nothing.
 var face_number := 0
 const FACE_SIZE := Vector2(307, 230)
 const FACE_MAP := {2: "Picture/face01.png", 3: "Picture/face02.png", 4: "DLC_data/member_20_s.png"}
@@ -91,11 +83,35 @@ func _init(p_assets: AssetDB = null) -> void:
 	position = Vector2.ZERO
 	size = Vector2(1024, 576)
 
+	_style_center_halo = StyleBoxFlat.new()
+	_style_center_halo.bg_color = Color(0.04, 0.05, 0.07, 0.28)
+	_style_center_halo.set_corner_radius_all(26)
+
+	_style_center_core = StyleBoxFlat.new()
+	_style_center_core.bg_color = CENTER_FILL
+	_style_center_core.border_color = Color(1.0, 1.0, 1.0, 0.10)
+	_style_center_core.set_border_width_all(1)
+	_style_center_core.set_corner_radius_all(22)
+
+	_style_outer = StyleBoxFlat.new()
+	_style_outer.bg_color = Color(0.05, 0.06, 0.08, 0.26)
+	_style_outer.set_corner_radius_all(22)
+
+	_style_mid = StyleBoxFlat.new()
+	_style_mid.bg_color = Color(0.06, 0.07, 0.09, 0.42)
+	_style_mid.set_corner_radius_all(20)
+
+	_style_core = StyleBoxFlat.new()
+	_style_core.bg_color = SKIN_FILL
+	_style_core.border_color = SKIN_BORDER
+	_style_core.set_border_width_all(1)
+	_style_core.set_corner_radius_all(18)
+
 
 ## Open the window with one opcode-101 message. Text is tokenized once, then the reveal
 ## clock walks the laid-out characters.
 func open(text: String, p_face: int = 0) -> void:
-	# A leading "@<n>" picks the face and is not painted (docs/OPCODE_101.md §3.4).
+	# A leading "@<n>" selects the face bust and is not painted.
 	face_number = p_face if p_face >= 2 else 0
 	if text.length() >= 2 and text[0] == "@" and text[1].is_valid_int():
 		var end := 1
@@ -127,8 +143,7 @@ func is_open() -> bool:
 	return visible_window
 
 
-## True when the player pressing confirm would advance: either the text is still
-## revealing (reveal it all) or it is done and waiting.
+## True when confirming would reveal remaining text or advance past the message.
 func wants_confirm() -> bool:
 	return visible_window
 
@@ -186,7 +201,7 @@ func set_position_mode(mode: int) -> void:
 
 
 func bubble_rect() -> Rect2:
-	if position_mode == 2005:
+	if position_mode == _WolfConst.MSG_POS_CENTER:
 		var max_h := CENTER_SAFE_BOTTOM - CENTER_SAFE_TOP
 		var raw_h := maxf(CENTER_MIN_HEIGHT, _center_content_height + CENTER_PADDING_Y * 2.0 + CENTER_CURSOR_RESERVE)
 		var height := clampf(raw_h, CENTER_MIN_HEIGHT, max_h)
@@ -201,17 +216,17 @@ func bubble_rect() -> Rect2:
 		BUBBLE_MIN_HEIGHT,
 		WINDOW_SIZE.y
 	)
-	var top := 46.0 if position_mode == 2008 else clampf(bottom - height, WINDOW_POS.y, WINDOW_POS.y + WINDOW_SIZE.y - height)
+	var top := 46.0 if position_mode == _WolfConst.MSG_POS_TOP else clampf(bottom - height, WINDOW_POS.y, WINDOW_POS.y + WINDOW_SIZE.y - height)
 	return Rect2(BUBBLE_X, top, BUBBLE_WIDTH, height)
 
 
-## Lay every paintable character out in screen space (bottom bar or centered 2005).
+## Lay every paintable character out in screen space (bottom/top bar or centered 2005).
 func _layout() -> void:
 	_chars.clear()
 	_line_align.clear()
 	_instant_index = -1
 	var font := UiSkin.bold_font()
-	var is_center := position_mode == 2005
+	var is_center := position_mode == _WolfConst.MSG_POS_CENTER
 	var base_size := CENTER_FONT_SIZE if is_center else FONT_SIZE
 	var line_left := (CENTER_BOX_X + CENTER_PADDING_X) if is_center else (BUBBLE_X + BUBBLE_PADDING_X)
 	var x := line_left
@@ -226,6 +241,7 @@ func _layout() -> void:
 	_lines = 1
 	_line_align.append(align)
 	var line_widths: Array[float] = [0.0]
+	var line_has_chars := false
 	for token in _tokens:
 		match token.kind:
 			TextTokenizer.Kind.TEXT:
@@ -238,8 +254,10 @@ func _layout() -> void:
 						_lines += 1
 						_line_align.append(align)
 						line_widths.append(0.0)
+						line_has_chars = false
 					_chars.append({"ch": ch, "color": color, "x": x, "y": y, "size": glyph_size,
 						"line": _lines - 1, "outline": outline, "instant": instant})
+					line_has_chars = true
 					var line_width: float = x + width - line_left
 					if line_width > line_widths[_lines - 1]:
 						line_widths[_lines - 1] = line_width
@@ -252,8 +270,9 @@ func _layout() -> void:
 				_lines += 1
 				_line_align.append(align)
 				line_widths.append(0.0)
+				line_has_chars = false
 			TextTokenizer.Kind.COLOR, TextTokenizer.Kind.COLOR_SELF:
-				color = COLOR_TABLE[posmod(token.number, COLOR_TABLE.size())]
+				color = UiSkin.color_for_index(token.number)
 			TextTokenizer.Kind.CDB:
 				pass
 			TextTokenizer.Kind.FONT_SIZE:
@@ -266,13 +285,17 @@ func _layout() -> void:
 				outline = false
 			TextTokenizer.Kind.ALIGN_LEFT:
 				align = HORIZONTAL_ALIGNMENT_LEFT
-				_line_align[_lines - 1] = align
+				# Only apply to the current line before its first glyph; trailing <L> resets subsequent lines.
+				if not line_has_chars:
+					_line_align[_lines - 1] = align
 			TextTokenizer.Kind.ALIGN_CENTER:
 				align = HORIZONTAL_ALIGNMENT_CENTER
-				_line_align[_lines - 1] = align
+				if not line_has_chars:
+					_line_align[_lines - 1] = align
 			TextTokenizer.Kind.ALIGN_RIGHT:
 				align = HORIZONTAL_ALIGNMENT_RIGHT
-				_line_align[_lines - 1] = align
+				if not line_has_chars:
+					_line_align[_lines - 1] = align
 			TextTokenizer.Kind.INSTANT:
 				instant = true
 				if _instant_index < 0:
@@ -299,8 +322,6 @@ func _layout() -> void:
 			shift = inner_w - line_widths[line]
 		entry["x"] = float(entry["x"]) + shift
 		entry["y"] = float(entry["y"]) * compact_ratio + y_origin
-	if is_center:
-		_center_cursor_pos = Vector2(bubble.position.x + bubble.size.x * 0.5, bubble.end.y - 21.0)
 
 
 func laid_out_characters() -> int:
@@ -311,19 +332,18 @@ func line_count() -> int:
 	return _lines
 
 
-## Where a character lands, in screen coordinates (tests assert no overflow).
+## Where a character lands, in screen coordinates.
 func character_rect(index: int) -> Rect2:
 	if index < 0 or index >= _chars.size():
 		return Rect2()
 	var entry: Dictionary = _chars[index]
 	var size: int = entry["size"]
 	var width := UiSkin.bold_font().get_string_size(entry["ch"], HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-	var step_gap := (CENTER_LINE_HEIGHT - float(CENTER_FONT_SIZE)) if position_mode == 2005 else _effective_line_gap()
+	var step_gap := (CENTER_LINE_HEIGHT - float(CENTER_FONT_SIZE)) if position_mode == _WolfConst.MSG_POS_CENTER else _effective_line_gap()
 	return Rect2(entry["x"], entry["y"], width, float(size) + step_gap)
 
 
-## The bust hugs the bottom-right corner and overlaps the frame's top edge, exactly as
-## the retail 307x230 face art does.
+## The bust hugs the bottom-right corner and overlaps the frame's top edge.
 func face_rect() -> Rect2:
 	return Rect2(Vector2(1024.0 - FACE_SIZE.x, 576.0 - FACE_SIZE.y), FACE_SIZE)
 
@@ -334,32 +354,13 @@ func _draw() -> void:
 	if face_number > 0:
 		_draw_face()
 	var rect := bubble_rect()
-	if position_mode == 2005:
-		var halo := StyleBoxFlat.new()
-		halo.bg_color = Color(0.04, 0.05, 0.07, 0.28)
-		halo.set_corner_radius_all(26)
-		draw_style_box(halo, rect.grow(4.0))
-		var core := StyleBoxFlat.new()
-		core.bg_color = CENTER_FILL
-		core.border_color = Color(1.0, 1.0, 1.0, 0.10)
-		core.set_border_width_all(1)
-		core.set_corner_radius_all(22)
-		draw_style_box(core, rect)
+	if position_mode == _WolfConst.MSG_POS_CENTER:
+		draw_style_box(_style_center_halo, rect.grow(4.0))
+		draw_style_box(_style_center_core, rect)
 	else:
-		var outer := StyleBoxFlat.new()
-		outer.bg_color = Color(0.05, 0.06, 0.08, 0.26)
-		outer.set_corner_radius_all(22)
-		draw_style_box(outer, rect.grow(4.0))
-		var mid := StyleBoxFlat.new()
-		mid.bg_color = Color(0.06, 0.07, 0.09, 0.42)
-		mid.set_corner_radius_all(20)
-		draw_style_box(mid, rect.grow(2.0))
-		var core := StyleBoxFlat.new()
-		core.bg_color = SKIN_FILL
-		core.border_color = SKIN_BORDER
-		core.set_border_width_all(1)
-		core.set_corner_radius_all(18)
-		draw_style_box(core, rect)
+		draw_style_box(_style_outer, rect.grow(4.0))
+		draw_style_box(_style_mid, rect.grow(2.0))
+		draw_style_box(_style_core, rect)
 	var font := UiSkin.bold_font()
 	var limit := mini(int(revealed), _chars.size())
 	var outline_color := Color(0.0, 0.0, 0.0, 1.0)
@@ -397,7 +398,7 @@ func _draw_face() -> void:
 func _draw_cursor(bubble: Rect2) -> void:
 	var cursor: Texture2D = null
 	if assets != null:
-		if position_mode == 2005:
+		if position_mode == _WolfConst.MSG_POS_CENTER:
 			cursor = assets.texture(CURSOR_FALLBACK_TEXTURE)
 			if cursor == null:
 				cursor = assets.texture(CURSOR_TEXTURE)
@@ -419,7 +420,7 @@ func _draw_cursor(bubble: Rect2) -> void:
 		elif ch > 15.0 * 1.5 and int(ch) % 15 == 0:
 			frame_count = maxi(1, int(ch / 15.0))
 			fh = 15.0
-		var y_offset := -6.0 if position_mode == 2005 else -3.0
+		var y_offset := -6.0 if position_mode == _WolfConst.MSG_POS_CENTER else -3.0
 		var bob := sin(_cursor_time * 4.5) * 1.5 if frame_count == 1 else 0.0
 		var dst_pos := Vector2(bubble.position.x + (bubble.size.x - cw) * 0.5, bubble.end.y - fh + y_offset + bob)
 		if frame_count > 1:

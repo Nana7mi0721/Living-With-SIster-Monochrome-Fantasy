@@ -1,11 +1,9 @@
 class_name MapLayer
 extends Control
 
-## W3 Day3 map presentation. game_data/map_tiles.json carries the three tile-word
-## layers and the tileset passability words. The retail game does not display MapChip:
-## its bedrooms/title/event screens use full-screen Picture art, so the tile layer is
-## covered or empty. MapChip is WOLF's generic sample art (see D-21), not a content gap;
-## every chip stays a generated palette block for engine compatibility and tests.
+## Map tile presentation layer. game_data/map_tiles.json carries the three tile-word
+## layers and tileset passability words. Full-screen Picture art covers the tile layer in
+## bedrooms/events, so palette blocks stay hidden unless LWsmf_SHOW_MAP_DEBUG=1 is set.
 
 signal cell_clicked(cell: Vector2i)
 signal cell_hovered(cell: Vector2i)

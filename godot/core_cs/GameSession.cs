@@ -28,8 +28,9 @@ public interface IVmSession
     void StartReservedEvent();
     void StopAll();
     void ResetDiagnostics();
-    /// <summary>D-33/R7-NEW-04: clear session-scoped database overlays, vars and input policy.</summary>
+    /// <summary>Clear session-scoped database overlays, vars and input policy.</summary>
     void ResetSessionState();
+    void ReturnToTitle();
     bool IsWaitingForChoice();
     bool IsWaitingForMessage();
     string[] GetCurrentChoices();
@@ -67,9 +68,9 @@ public interface IGameSessionView
 }
 
 /// <summary>
-/// W3 Day4: the title -> new game -> map -> save/load chain extracted from the legacy title screen.
-/// Pure core code: it owns map state, the frame clock, the teleport queue and the save
-/// format, and talks to the VM and the screen through the two interfaces above.
+/// Core session orchestrating title, new game, map runtime, and save/load state.
+/// Owns map state, the frame clock, the teleport queue, and the save format, talking
+/// to the VM and presentation layers through <see cref="IVmSession"/> and <see cref="IGameSessionView"/>.
 /// </summary>
 public sealed class GameSession
 {
@@ -103,7 +104,7 @@ public sealed class GameSession
         _view = view;
         _dataPath = dataPath;
         _savePath = savePath;
-        // 220/221/222 must reach the session that owns the slot files (audit D1).
+        // 220/221/222 must reach the session that owns the slot files.
         _vm.SaveLoadHandler = HandleSaveLoad;
     }
 
@@ -120,7 +121,7 @@ public sealed class GameSession
     public bool MessageOpen => _messageOpen;
     /// <summary>Number of conditional common events tracked by the auto-event scheduler.</summary>
     public int AutoEventCount => EnsureAutoEvents().EventCount;
-    /// <summary>Fresh starts recorded for one auto event in this session (D-33 test hook).</summary>
+    /// <summary>Fresh starts recorded for one auto event in this session (test hook).</summary>
     public int AutoEventStarts(int eventId) => EnsureAutoEvents().StartsFor(eventId);
     /// <summary>True while a VM instance for the event is resident (test telemetry).</summary>
     public bool HasEvent(int eventId) => _vm.Vm.Instances.Any(inst => inst.EventId == eventId);
@@ -144,7 +145,7 @@ public sealed class GameSession
     }
     /// <summary>Rebuilt CE242 drive (crates/wolf-game/src/battle_wiring.rs).</summary>
     public BattleWiring BattleWiring => _battleWiring;
-    /// <summary>Direction/action bits currently denied by opcode 126 (D-20).</summary>
+    /// <summary>Direction/action bits currently denied by opcode 126.</summary>
     public uint MovementDeny => _vm.MovementDeny;
     public uint BasicAllDeny => _vm.BasicAllDeny;
     public bool ScriptedInput { get; set; }
@@ -198,17 +199,16 @@ public sealed class GameSession
     private int _titleMenuInstance = -1;
 
     /// <summary>
-    /// CE43 paints the three title rows as pictures 3/4/5 and highlights the row Sys20 names.
-    /// The port skipped it as dead code (docs/ENGINE_EVENTS.md), but the retail title menu is
-    /// exactly this event: run one parallel instance while the title choice is open.
+    /// CE43 paints the three title rows as pictures 3/4/5 and highlights the row Sys20 names
+    /// (docs/engine/ENGINE_EVENTS.md). Run one parallel instance while the title choice is open.
     /// </summary>
     public bool SetTitleMenuVisible(bool visible)
     {
-        // A restart creates a new instance each time the cursor moves; drop every live CE43
-        // first so a title hand-off never leaves a painter running in the map (perf gate).
+        // Drop every live CE43 before restarting so a title hand-off never leaves a
+        // painter running in the map.
         StopTitleMenuInstances();
         if (!visible) return true;
-        var inst = _vm.Vm.CreateInstance(43);
+        var inst = _vm.Vm.CreateInstance(WolfIds.TitleMenu);
         if (inst == null) return false;
         inst.IsParallel = true;
         _titleMenuInstance = inst.Id;
@@ -222,7 +222,7 @@ public sealed class GameSession
             var ids = new List<int>();
             foreach (var inst in _vm.Vm.Instances)
             {
-                if (inst.EventId == 43) ids.Add(inst.Id);
+                if (inst.EventId == WolfIds.TitleMenu) ids.Add(inst.Id);
             }
             foreach (var id in ids) _vm.Vm.StopInstance(id);
         }
@@ -258,17 +258,20 @@ public sealed class GameSession
         EnsureAutoEvents().Sync(_vm.Vm);
         _battleWiring.Tick(_vm.Vm, op => _vm.Database(op));
         _vm.StepFrame();
-        ApplyPending();
-        _vm.StartReservedEvent();
-        // TitleMap.mps event 2 is an autorun (trigger=1) map event: in retail WOLF it restarts
-        // from pc 0 once CE42 returns cleanly (e.g. canceling CE14/CE131 Save/Load UI) while still
-        // on the title screen, keeping the title menu operable instead of deadlocking.
-        if (Phase == "title" && _titleProgram != null && !_vm.Vm.EndGameRequested
-            && !_messageOpen && !_hasChoices && !_pendingLoad
-            && _teleports.Count == 0 && _pendingGameLoad == null
-            && !_vm.Vm.ForegroundBusy())
+        if (!_vm.Vm.ReturnToTitleRequested && !_vm.Vm.EndGameRequested)
         {
-            _vm.Vm.CreateInstance(_titleProgram);
+            ApplyPending();
+            _vm.StartReservedEvent();
+            // TitleMap.mps event 2 is an autorun (trigger=1) map event: in retail WOLF it restarts
+            // from pc 0 once CE42 returns cleanly (e.g. canceling CE14/CE131 Save/Load UI) while still
+            // on the title screen, keeping the title menu operable instead of deadlocking.
+            if (Phase == "title" && _titleProgram != null
+                && !_messageOpen && !_hasChoices && !_pendingLoad
+                && _teleports.Count == 0 && _pendingGameLoad == null
+                && !_vm.Vm.ForegroundBusy())
+            {
+                _vm.Vm.CreateInstance(_titleProgram);
+            }
         }
         if (_messageOpen && !_vm.IsWaitingForMessage())
         {
@@ -280,6 +283,11 @@ public sealed class GameSession
             _view.HideChoices();
         }
         UpdateMapHud(false);
+        if (_vm.Vm.ReturnToTitleRequested)
+        {
+            _vm.Vm.ReturnToTitleRequested = false;
+            _vm.ReturnToTitle();
+        }
     }
 
     private AutoEvents EnsureAutoEvents()
@@ -393,7 +401,7 @@ public sealed class GameSession
     {
         _view.SetStatus($"teleport map={request.Map} x={request.X} y={request.Y} options={request.Options}");
         // 130 target -1 (and legacy 0) is the leader; any other id names a different
-        // event, which the leader-mode session cannot move (round-4 review P1).
+        // event, which the leader-mode session cannot move.
         if (request.Target != -1 && request.Target != 0)
         {
             _view.SetStatus($"teleport target {request.Target} is not the leader; ignored");
@@ -588,7 +596,7 @@ public sealed class GameSession
             return false;
         }
 
-        // M5-D: resolve the destination before touching the live VM, so a stale slot
+        // Resolve the destination before touching the live VM, so a stale slot
         // cannot strand the player outside any map.
         if (!CanEnterMap(state.MapId))
         {
@@ -616,7 +624,7 @@ public sealed class GameSession
         return true;
     }
 
-    // ---- script save/load (opcodes 220/221/222, audit D1) ----------------
+    // ---- script save/load (opcodes 220/221/222) -------------------------
 
     /// <summary>
     /// Map a 220/221/222 file operand onto this port's slots. A numeric slot is one-based
@@ -937,7 +945,7 @@ public sealed class GameSession
         _leaderY = 0;
         _facing = 2;
 
-        var numbers = new List<int>(Enumerable.Repeat(0, 800));
+        var numbers = new List<int>(Enumerable.Repeat(0, WolfIds.VarPollMax));
         foreach (KeyValuePair<string, int> pair in data.Variables)
         {
             if (int.TryParse(pair.Key, out int index) && index >= 0 && index < numbers.Count)
@@ -948,8 +956,8 @@ public sealed class GameSession
         _vm.Vm.Vars.Restore(numbers, null, null, null);
         if (data.ChoiceAnchor is { Length: >= 2 })
         {
-            _vm.Vm.Vars.SetSys(3, data.ChoiceAnchor[0]);
-            _vm.Vm.Vars.SetSys(4, data.ChoiceAnchor[1]);
+            _vm.Vm.Vars.SetSys(WolfIds.SysChoiceAnchorX, data.ChoiceAnchor[0]);
+            _vm.Vm.Vars.SetSys(WolfIds.SysChoiceAnchorY, data.ChoiceAnchor[1]);
         }
 
         _vm.Vm.CommonSelf.Clear();
@@ -991,7 +999,7 @@ public sealed class GameSession
         EnsureAutoEvents().PrimeLatched(_vm.Vm);
         _view.RestorePictures(data.PictureStates);
         _started = true;
-        _view.SetStatus($"loaded retail save {slot.File} (map 1 day {_vm.Vm.Vars.Get(160)})");
+        _view.SetStatus($"loaded retail save {slot.File} (map 1 day {_vm.Vm.Vars.Get(WolfIds.VarDay)})");
         UpdateMapHud(false);
         return true;
     }
@@ -1004,9 +1012,9 @@ public sealed class GameSession
         _hasChoices = false;
         _view.HideMessage();
         _view.HideChoices();
-        // AutoEvents is session-scoped like Rust's Game::auto_events; StopAll does not
-        // clear its edge latch. Re-arming here would replay event 38 and shift instance ids
-        // (D-33). A fresh engine boot constructs a fresh scheduler instead.
+        // AutoEvents is session-scoped; StopAll does not clear its edge latch. Re-arming
+        // here would replay event 38 and shift instance ids. A fresh engine boot
+        // constructs a fresh scheduler instead.
         _vm.ResetDiagnostics();
         _vm.Vm.ResetInputPermissions();
         _vm.Vm.CommonSelf.Clear();

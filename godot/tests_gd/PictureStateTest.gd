@@ -296,7 +296,7 @@ func _ready() -> void:
 		check((rect.texture as AtlasTexture).region.position.x == cell_w, "pattern renders its second cell")
 
 	# Multiply blend forces alpha 1 so RGB modulation is not also dimmed.
-	stage.draw_picture(1361, 0, "", "mul probe", [0, 1, 1, 1, 128, 100, 100, 100, 3], 0, 2)
+	stage.draw_picture(1361, 0, "", "mul probe", [0, 1, 1, 1, 128, 100, 100, 100, 0], 0, 2, [], {"blend": 3})
 	var mul_holder: Control = stage._pictures.get(1361)
 	check(mul_holder != null and absf(mul_holder.modulate.a - 1.0) < 0.01, "multiply blend keeps alpha at 1")
 

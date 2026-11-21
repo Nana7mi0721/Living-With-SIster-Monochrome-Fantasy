@@ -8,8 +8,7 @@ using Lwsmf.Core;
 namespace Lwsmf.Presentation;
 
 /// <summary>
-/// VmBridge (interface frozen in M2 W1): the only boundary between the deterministic
-/// C# core and the presentation layer.
+/// VmBridge: the boundary between the deterministic C# core and the presentation layer.
 /// Emission: PictureRequested, SoundRequested, MessageRequested, MessageClosed,
 /// ChoicesRequested, ChoiceSelected, TeleportRequested, TransitionRequested,
 /// EffectRequested, EventFinished.
@@ -227,7 +226,10 @@ public partial class VmController : Node, IHost, IVmSession
         ActionKeyRequested = false;
 
         Vm.StepFrame();
-        Map?.StartPending(Vm);
+        if (!Vm.ReturnToTitleRequested && !Vm.EndGameRequested)
+        {
+            Map?.StartPending(Vm);
+        }
         _wheelDelta = 0;
     }
 
@@ -342,7 +344,7 @@ public partial class VmController : Node, IHost, IVmSession
     public string[] GetCurrentChoices() => _currentChoices;
 
     /// <summary>True once the core met an unhandled opcode. Presentation must stop the
-    /// clock and must never overwrite a save slot while this holds (DECISIONS D-13).</summary>
+    /// clock and must never overwrite a save slot while this holds (docs/godot/DECISIONS.md D-13).</summary>
     public bool StrictMode
     {
         get => Vm.StrictMode;
@@ -392,13 +394,13 @@ public partial class VmController : Node, IHost, IVmSession
         return null;
     }
 
-    // Part of the frozen IHost contract; common-event routing stays inside EventVm and
-    // has no presentation listener, so this no longer emits a signal (R10-A1).
+    // Part of the IHost contract; common-event routing stays inside EventVm, while
+    // presentation-only hooks (such as CE264 speaker nameplates) are forwarded below.
     public void CommonEventCall(int target, int[] args, string[] strings)
     {
         // Retail scripts pass speaker names into CE264 (bubble message interface) right
         // before opcode 101; forward it purely to the presentation nameplate.
-        if (target == 264)
+        if (target == WolfIds.SpeakerNameplate)
         {
             int windowId = args.Length > 0 ? args[0] : 0;
             int posMode = args.Length > 1 ? args[1] : 2002;
@@ -414,6 +416,8 @@ public partial class VmController : Node, IHost, IVmSession
     public bool EmitPictureSignals { get; set; } = true;
 
     private readonly System.Collections.Generic.List<PictureCmd> _pictureQueue = new();
+    private readonly System.Text.StringBuilder _picJsonSb = new(4096);
+    private readonly List<int> _pictureKeysToRemove = new();
 
     /// <summary>Queue picture commands as JSON for the presentation layer. Defaults on; set
     /// false only in focused tests that still consume the legacy PictureRequested signal.</summary>
@@ -427,7 +431,8 @@ public partial class VmController : Node, IHost, IVmSession
     {
         if (_pictureQueue.Count == 0)
             return string.Empty;
-        var sb = new System.Text.StringBuilder(256);
+        var sb = _picJsonSb;
+        sb.Clear();
         sb.Append('[');
         for (int i = 0; i < _pictureQueue.Count; i++)
         {
@@ -452,6 +457,7 @@ public partial class VmController : Node, IHost, IVmSession
             sb.Append("],\"anchor\":").Append(cmd.Anchor);
             sb.Append(",\"kind\":").Append(cmd.Kind);
             sb.Append(",\"scale_mode\":").Append(cmd.ScaleMode);
+            sb.Append(",\"blend\":").Append(cmd.BlendMode);
             sb.Append(",\"keep_shift\":").Append(cmd.KeepShift ? "true" : "false");
             sb.Append(",\"relative\":").Append(cmd.Relative ? "true" : "false");
             sb.Append(",\"has_span\":").Append(cmd.HasSpan ? "true" : "false");
@@ -506,19 +512,36 @@ public partial class VmController : Node, IHost, IVmSession
                 _pictures[cmd.Number] = cmd;
                 break;
             default:
-                // Erase and Hide both free the slot (crates/wolf-game/src/picture.rs).
-                if (cmd.HasSpan && cmd.Args is { Length: > 3 })
+                // Erase and Hide both drop the tracked slot here; PictureStage owns visual retention.
+                if (cmd.HasSpan)
                 {
-                    int lo = Math.Min(cmd.Number, cmd.Args[3]);
-                    int hi = Math.Max(cmd.Number, cmd.Args[3]);
-                    if ((long)hi - lo <= 256)
+                    int? endpoint = cmd.Action == PictureAction.Hide
+                        ? (cmd.Args is { Length: > 0 } ? cmd.Args[0] : null)
+                        : (cmd.Args is { Length: > 3 } ? cmd.Args[3] : null);
+                    if (endpoint.HasValue)
                     {
-                        for (int n = lo; n <= hi; n++) _pictures.Remove(n);
+                        int lo = Math.Min(cmd.Number, endpoint.Value);
+                        int hi = Math.Max(cmd.Number, endpoint.Value);
+                        if ((long)hi - lo <= 256)
+                        {
+                            for (int n = lo; n <= hi; n++) _pictures.Remove(n);
+                        }
+                        else
+                        {
+                            _pictureKeysToRemove.Clear();
+                            foreach (int key in _pictures.Keys)
+                            {
+                                if (key >= lo && key <= hi) _pictureKeysToRemove.Add(key);
+                            }
+                            for (int i = 0; i < _pictureKeysToRemove.Count; i++)
+                            {
+                                _pictures.Remove(_pictureKeysToRemove[i]);
+                            }
+                        }
                     }
                     else
                     {
-                        foreach (int key in _pictures.Keys.Where(k => k >= lo && k <= hi).ToArray())
-                            _pictures.Remove(key);
+                        _pictures.Remove(cmd.Number);
                     }
                 }
                 else
@@ -693,7 +716,7 @@ public partial class VmController : Node, IHost, IVmSession
 
     /// <summary>
     /// Opcode 124 0x3000. WOLF reports the three mouse buttons as a tri-state:
-    /// 0 = up, 1 = held, 2 = went down this frame (docs/OPCODE_124.md:97).
+    /// 0 = up, 1 = held, 2 = went down this frame (docs/engine/OPCODE_124.md:97).
     /// Field 7 is left, 8 right, 9 middle; each uses the same one-frame edge latch.
     /// </summary>
     public int? EngineState(int field)
@@ -835,7 +858,7 @@ public partial class VmController : Node, IHost, IVmSession
     /// <summary>
     /// Mask-to-code bridge for the GDScript router: C# statics are not visible from
     /// GDScript, so KeyCodes.Code (the single source of truth) is exposed here instead of
-    /// being mirrored in presentation_gd (W2-P2-02). A save/load list polls mask 771 to
+    /// being mirrored in presentation_gd. A save/load list polls mask 771 to
     /// read the signed wheel notch before the held bits are consulted.
     /// </summary>
     public int KeyCodeForPoll(uint mask, uint held, uint autoKeys, int wheelNotch)
@@ -846,7 +869,7 @@ public partial class VmController : Node, IHost, IVmSession
 
     // Opcode 123 hands the poll mask plus the bits opcode 125 auto-pressed to the host, and
     // mask 771 asks for a signed wheel notch rather than a key code. GDScript cannot marshal
-    // Func, so the host side is a Callable taking both numbers (W2-P1-03).
+    // Func, so the host side is a Callable taking both numbers.
     private Callable _keyStateProvider;
     private bool _hasKeyStateProvider;
 
@@ -880,8 +903,8 @@ public partial class VmController : Node, IHost, IVmSession
     public void ResetDiagnostics() => Vm.ResetDiagnostics();
 
     /// <summary>
-    /// D-33/R7-NEW-04: a rebuilt session must not inherit the previous run's 250 overlays,
-    /// variables or 126 input policy. AutoEvents is session-scoped; these live on the VM.
+    /// A rebuilt session must not inherit the previous run's 250 overlays,
+    /// variables, input policy, or UI/picture state. AutoEvents is session-scoped; these live on the VM.
     /// </summary>
     public void ResetSessionState()
     {
@@ -891,6 +914,16 @@ public partial class VmController : Node, IHost, IVmSession
         // Returning to the title drops every pending 211 reservation; a rebuilt
         // session must not fire the previous run's queued events (game.rs queue).
         _reservedEvents.Clear();
+        _pendingChoiceReply = null;
+        _isWaitingChoice = false;
+        _isWaitingMessage = false;
+        _messageDismissed = true;
+        _currentChoices = Array.Empty<string>();
+        _pictures.Clear();
+        _pictureQueue.Clear();
+        Vm.ReturnToTitleRequested = false;
+        Vm.EndGameRequested = false;
+        ResetPointer();
     }
 
     /// <summary>Apply retail SavePart3 database overlay cells to the shared database.</summary>
@@ -900,7 +933,7 @@ public partial class VmController : Node, IHost, IVmSession
     }
 
     /// Start a common event by id. The real starter returns Instance, a project type that
-    /// GDScript cannot marshal, so the presentation layer gets a bool (W3 Day 1).
+    /// GDScript cannot marshal, so the presentation layer gets a bool.
     public bool StartEvent(int eventId) => StartCommonEvent(eventId) != null;
 
     public void Effect(int kind, int duration, int[] args)

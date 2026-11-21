@@ -1,5 +1,5 @@
 extends Control
-## M5 first-run setup: when game_data is missing or incomplete, explain the local
+## First-run setup: when game_data is missing or incomplete, explain the local
 ## conversion path, validate the retail Data root, and run converter all in the background.
 ##
 ## A complete release package ships game_data/ and work/all; this wizard is the fallback

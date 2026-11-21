@@ -105,6 +105,78 @@ func _ready() -> void:
 	if int(_stage._cmds.get(91, {}).get("kind", -1)) != 3:
 		failures.append("restore_pictures must replay the saved kind")
 
+	# Blend mode comes from flags["blend"], not args[8], and child nodes inherit parent material.
+	var add_win = _stage.draw_picture(93, 0, "SystemFile/WindowBase.png", "",
+		[0, 120, 40, 0, 255, 100, 100, 100, 3], 0, 3, [], {"blend": 1})
+	if add_win == null or add_win.material == null or not (add_win.material is CanvasItemMaterial):
+		failures.append("flags['blend']=1 must assign a CanvasItemMaterial")
+	elif (add_win.material as CanvasItemMaterial).blend_mode != CanvasItemMaterial.BLEND_MODE_ADD:
+		failures.append("flags['blend']=1 must use BLEND_MODE_ADD (ignoring args[8]=3)")
+	if add_win != null and (add_win.get_child_count() == 0 or not (add_win.get_child(0) as CanvasItem).use_parent_material):
+		failures.append("window child must set use_parent_material = true")
+	var rot_only = _stage.draw_picture(94, 0, "SystemFile/WindowBase.png", "",
+		[0, 1, 1, 1, 255, 100, 100, 100, 900], 0, 0)
+	if rot_only != null and rot_only.material != null:
+		failures.append("args[8] rotation angle must not set blend material")
+
+	# ADD blend + tone=[0,0,0] stays visible (transparent add) and pulses via 290 kind=5 triangle wave.
+	var blink_cursor = _stage.draw_picture(95, 0, "SystemFile/WindowBase.png", "",
+		[0, 64, 32, 0, 255, 100, 100, 100, 0, 0, WolfConst.PIC_FLAG_TONE_MASK, 0, 0, 0, 0, 0],
+		0, 3, [], {"blend": 1})
+	if blink_cursor == null or not blink_cursor.visible or not is_equal_approx(blink_cursor.modulate.r, 0.0):
+		failures.append("blend=1 tone=[0,0,0] must stay visible with modulate.rgb=0")
+	_stage.effect(5, 4, [0, 4, 95, 95, 100, 100, 100])
+	for _t in 4:
+		_stage.tick()
+	if not is_equal_approx(blink_cursor.modulate.r, 1.0):
+		failures.append("290 kind=5 BLINK must peak at 1.0 at duration=4 (got %.3f)" % blink_cursor.modulate.r)
+	for _t in 4:
+		_stage.tick()
+	if not is_equal_approx(blink_cursor.modulate.r, 0.0):
+		failures.append("290 kind=5 BLINK must return to 0.0 at 2*duration (got %.3f)" % blink_cursor.modulate.r)
+
+	# Negative scale flips across the anchor edge for non-centered anchors.
+	var neg_left = _stage.draw_picture(96, 0, "SystemFile/WindowBase.png", "",
+		[0, 1, 1, 1, 255, 200, 200, -100], 0, 0)
+	if neg_left != null:
+		var expected_x: float = 200.0 - neg_left.size.x
+		if not is_equal_approx(neg_left.position.x, expected_x):
+			failures.append("anchor=0 scale=-100 must place left edge at x - w (got %.1f want %.1f)" % [neg_left.position.x, expected_x])
+		if not Rect2(neg_left.position, neg_left.size).is_equal_approx(_stage.picture_rect(96)):
+			failures.append("picture_rect must match flipped node position")
+
+	# scale == 0 hides the node so NinePatchRect min-size / text never leaks.
+	var zero_win = _stage.draw_picture(97, 0, "SystemFile/WindowBase.png", "",
+		[0, 120, 40, 0, 255, 100, 100, 0], 0, 3)
+	if zero_win == null or zero_win.visible:
+		failures.append("scale==0 must hide the picture node")
+
+	# Move preserves action=0, args[1..2], and blend in _cmds for save/restore roundtrip.
+	_stage.draw_picture(98, 0, "SystemFile/WindowBase.png", "",
+		[0, 300, 200, 0, 255, 100, 100, 100], 0, 3, [], {"blend": 1})
+	_stage.draw_picture(98, 1, "", "", [0, 0, 0, 0, 128, 320, 180, 100], 0, -1, [], {"blend": 15})
+	if int(_stage._cmds[98].get("action", -1)) != 0:
+		failures.append("Move must preserve action=0 in _cmds")
+	var moved_args: Array = _stage._cmds[98].get("args", [])
+	if moved_args.size() < 3 or int(moved_args[1]) != 300 or int(moved_args[2]) != 200:
+		failures.append("Move must preserve original args[1..2] window size in _cmds")
+	var snap98 := _stage.picture_snapshots()
+	_stage.clear_pictures()
+	_stage.restore_pictures(snap98)
+	var restored98: Control = _stage._pictures.get(98, null)
+	if restored98 == null or restored98.size != Vector2(300, 200) or not is_equal_approx(restored98.position.x, 320.0):
+		failures.append("restore_pictures must replay moved slot with original size and new pose")
+	if restored98 == null or restored98.material == null or (restored98.material as CanvasItemMaterial).blend_mode != CanvasItemMaterial.BLEND_MODE_ADD:
+		failures.append("restore_pictures must preserve blend flag across Move")
+
+	# 290 kind=10 ping-pong with from==to stays in range.
+	_stage.draw_picture(99, 0, "SystemFile/WindowBase.png", "", [0, 2, 1, 1, 255, 100, 100, 100], 0, 0)
+	_stage.effect(10, 1, [0, 1, 99, 99, 1, 1, 0])
+	_stage.tick()
+	_stage.tick()
+	if int(_stage._states[99]["pattern"]["cell"]) != 1:
+		failures.append("290 kind=10 with from==to must stay at 1 (got %d)" % int(_stage._states[99]["pattern"]["cell"]))
+
 	for failure in failures:
 		printerr("PICTURE_ROUNDTRIP_FAIL " + failure)
 	if failures.is_empty():

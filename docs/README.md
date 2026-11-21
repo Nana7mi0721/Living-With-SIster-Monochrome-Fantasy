@@ -69,6 +69,7 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 - [godot/RELEASE.md](godot/RELEASE.md) — 发布与导出说明：构建流程、导出预设与实测记录
 - [godot/LEGACY_RUST_AUDIT.md](godot/LEGACY_RUST_AUDIT.md) — 22 项旧 Rust 实现缺陷防范与 Godot 交互护栏
 - [godot/UI_UX_GROUND_TRUTH_SPEC.md](godot/UI_UX_GROUND_TRUTH_SPEC.md) — UI/UX/动效真相规格书：系统字体/窗口/光标/图层/转场硬证据与表现层审计
+- [godot/PRE_RELEASE_ORCHESTRATOR_AUDIT.md](godot/PRE_RELEASE_ORCHESTRATOR_AUDIT.md) — **现行 · 权威**：发版前全量审计报告（`W1-P0/P1` 修复清单、姊妹作查漏、优化项评估表、代码治理与包体瘦身账本）
 
 ---
 

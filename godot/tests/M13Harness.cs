@@ -51,8 +51,8 @@ internal static class M13Harness
         return inst;
     }
 
-    public static M13Run DriveAt(int eventId, int pc, (int Slot, int Value)[] selfs = null,
-        (int Id, int Value)[] globals = null, int maxFrames = 6000)
+    public static M13Run DriveAt(int eventId, int pc, (int Slot, int Value)[]? selfs = null,
+        (int Id, int Value)[]? globals = null, int maxFrames = 6000)
     {
         var vm = NewVm();
         var root = StartAt(vm, eventId, pc);

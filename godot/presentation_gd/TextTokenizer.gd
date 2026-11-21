@@ -1,16 +1,14 @@
 class_name TextTokenizer
 extends RefCounted
-## Tokenizer for WOLF opcode-101 message text (docs/TEXT_SPEC.md).
+## Tokenizer for WOLF opcode-101 message text.
 ##
-## Three invariants the tests enforce:
+## Three invariants:
 ##   1. lossless -- to_source(tokenize(s)) == s for every input, including malformed ones;
 ##   2. never panic -- an unclosed '[' or a lone backslash degrades to literal text;
 ##   3. unknown codes pass through as UNKNOWN tokens instead of being dropped.
 ##
-## The retail corpus only uses \E \c[n] \cself[n] \f[n] \v[n] \cdb[..] \sp[n]
-## \> \. \^ and <C>/<L>, but every other WOLF code still has to survive a round trip
-## because the CN patch adds strings the JP build never had. <C>/<L>/<R> are line
-## alignment tags (docs/TEXT_SPEC.md 2.6), never cursor control.
+## Every WOLF code survives a round trip so localized/patched strings pass through intact.
+## <C>/<L>/<R> are line alignment tags, never cursor control.
 
 enum Kind {
 	TEXT,
@@ -117,7 +115,7 @@ static func tokenize(source: String) -> Array:
 				if j < n and source[j] == "[":
 					var close := _find_bracket(source, j)
 					if close < 0:
-						# Unclosed bracket: the whole run is literal text (TEXT_SPEC rule 2).
+						# Unclosed bracket: treat the run as literal text.
 						literal += source.substr(i, j - i)
 						i = j
 						continue
@@ -180,16 +178,14 @@ static func _letter_token(name: String, body: String, raw: String) -> Token:
 		"sp":
 			return Token.new(Kind.SPEED, raw, "", number)
 		"cdb":
-			# \cdb[21:a:b] carries a database index plus two payload fields; keeping the
-			# whole bracket body means nothing is silently dropped (W2-P1-05).
+			# Preserve the full bracket body so database index and payload fields stay intact.
 			return Token.new(Kind.CDB, raw, body, number)
 		"N":
 			return Token.new(Kind.OUTLINE_OFF, raw)
 	return Token.new(Kind.UNKNOWN, raw)
 
 
-## Lenient first-integer scan: optional sign, then digits. \c[-1] keeps its minus sign
-## (W2-P1-05); a body with no digits at all reads 0 rather than failing.
+## Lenient first-integer scan: optional sign, then digits; returns 0 when no digits exist.
 static func _first_int(body: String) -> int:
 	var digits := ""
 	var index := 0

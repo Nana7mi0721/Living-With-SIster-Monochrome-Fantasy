@@ -117,6 +117,38 @@ func _ready() -> void:
 		elif not (ogg is AudioStreamOggVorbis):
 			failures.append(".ogg should decode to AudioStreamOggVorbis (got %s)" % ogg.get_class())
 
+	# 6. Cache key normalization, _store overwrite byte accounting, WebP-in-PNG magic sniffing,
+	#    and split texture vs audio basename resolution.
+	var harden_dir := base.path_join("harden")
+	DirAccess.make_dir_recursive_absolute(harden_dir.path_join("hword"))
+	DirAccess.make_dir_recursive_absolute(harden_dir.path_join("Picture"))
+	DirAccess.make_dir_recursive_absolute(harden_dir.path_join("Sound"))
+	var img_a := Image.create(4, 4, false, Image.FORMAT_RGBA8)
+	img_a.fill(Color.WHITE)
+	img_a.save_png(harden_dir.path_join("Picture/shared.png"))
+	img_a.save_png(harden_dir.path_join("hword/word_effect_test.png"))
+	img_a.save_webp(harden_dir.path_join("Picture/webp_as_png.png"))
+	_write_silence_wav(harden_dir.path_join("Sound/shared.wav"), 8)
+	var harden_db := AssetDB.new(harden_dir)
+	var t_slash := harden_db.texture("Picture/shared.png")
+	var t_backslash := harden_db.texture("Picture\\shared.png")
+	if t_slash == null or t_backslash != t_slash:
+		failures.append("normalized cache keys must hit across slashes and case")
+	var bytes_before_overwrite := harden_db.used_bytes
+	harden_db._store("picture/shared.png", t_slash, 64)
+	if harden_db.used_bytes != 64:
+		failures.append("_store overwrite must subtract prior entry bytes (got %d want 64)" % harden_db.used_bytes)
+	if bytes_before_overwrite <= 0:
+		failures.append("used_bytes should be positive before overwrite")
+	if harden_db.texture("Picture/webp_as_png.png") == null:
+		failures.append("magic-byte sniffing must decode WebP bytes inside a .png file")
+	if not harden_db.resolve("Picture/word_effect_test").to_lower().ends_with("hword/word_effect_test.png"):
+		failures.append("word_effect hword/ alias must probe texture extensions")
+	if not harden_db.resolve("shared", "texture").to_lower().ends_with("shared.png"):
+		failures.append("texture resolution must prefer image basenames over audio basenames")
+	if not harden_db.resolve("shared", "audio").to_lower().ends_with("shared.wav"):
+		failures.append("audio resolution must prefer audio basenames over image basenames")
+
 	if failures.is_empty():
 		print("ASSETDB_TEST_OK")
 		get_tree().quit(0)

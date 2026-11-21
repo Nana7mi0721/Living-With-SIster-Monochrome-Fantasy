@@ -2696,13 +2696,18 @@ fn execute(
             }
             220..=222 => {
                 // The file operand is the one place where the magic *type*
-                // matters: a string variable holds an explicit path while a
-                // numeric variable holds a slot number (docs/OPCODE_220_SAVE.md
-                // section 2.1). All other operands stay raw where they are
-                // addresses (221 arg0, 221/222 arg2) and are evaluated where they
-                // are values (220 mode, 222 source, the trailing flag).
+                // matters: a string variable (or CSelf string slot 5..=9 in each
+                // 100-slot group) holds an explicit path while a numeric variable
+                // holds a slot number (docs/engine/OPCODE_220_SAVE.md section 2.1).
+                // All other operands stay raw where they are addresses (221 arg0,
+                // 221/222 arg2) and are evaluated where they are values (220 mode,
+                // 222 source, the trailing flag).
                 let file_raw = arg(cmd, 1);
-                let file = if matches!(Magic::decode(file_raw).kind(), MagicKind::StrVar) {
+                let file_magic = Magic::decode(file_raw);
+                let is_str_file = matches!(file_magic.kind(), MagicKind::StrVar)
+                    || (matches!(file_magic.kind(), MagicKind::SelfVar)
+                        && (5..=9).contains(&(file_magic.index() % 100)));
+                let file = if is_str_file {
                     SaveTarget::Path(eval_str(file_raw, inst, vars))
                 } else {
                     SaveTarget::Slot(eval_num(file_raw, inst, vars))
