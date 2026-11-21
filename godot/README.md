@@ -25,16 +25,21 @@
 | 方向键 / WASD | 地图上移动（地形通行 + active 事件页阻挡；点击相邻格也会走一步） |
 | Enter / Z / Space | 决定（标题菜单、消息关闭、动作键） |
 | Esc / X | 取消 |
-| F5 | 保存到 slot 01（`user://save_01.json`） |
-| F9 | 读取 slot 01 |
+| F5 | 快速保存到 `user://quicksave.json`（与 `CE435` 原生自动存档槽 1 隔离） |
+| F9 | 快速读取 `user://quicksave.json` |
+| F8 | 切换缩放/纹理过滤模式（Integer / Fit-Nearest / Fit-Linear） |
+| F11 | 无边框全屏切换 |
+| F4 / F12 | 消息回顾 / 返回标题确认 |
+| F2 / F3 | 游玩倾向统计浮层 / 运行时调试浮层 |
 
-标题菜单第 2 行（"2"）同样会读取 slot 01。
+标题菜单第 2 行（"继续"）按原作公共事件读取存档。
 
-## 门槛命令（34 道，Windows / CI）
+## 门槛命令（38 道，Windows / CI）
 
 ```bash
-GODOT=/e/Study/tools/godot-4.7.2-mono/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe
-bash tools/godot_check.sh    # 末尾打印 GODOT_GATE_OK 即全绿
+export GODOT="/path/to/Godot_v4.7.2-stable_mono_win64_console.exe"   # 或已加入 PATH
+export DOTNET_ROOT="/path/to/dotnet8"                               # 若未在系统 PATH 中
+bash tools/godot_check.sh             # 末尾打印 GODOT_GATE_OK 即全绿
 LWsmf_RENDER=1 bash tools/godot_check.sh   # 带窗口的截图/渲染分支
 ```
 

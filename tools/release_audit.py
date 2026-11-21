@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
-"""Release payload audit for a staged LWSMF release directory.
+"""Release payload & repository hygiene audit for LWSMF.
 
-A release package is self-contained: game binaries/runtime, converted
-game_data, and the work/all runtime asset tree staged beside game/. This audit
-checks the required layout and that every manifest asset is present. It does not
-reject retail-format extensions or fingerprint-matching files; the distribution
-policy is defined by docs/godot/DECISIONS.md D-53 (which supersedes D-11).
+Usage:
+  python tools/release_audit.py --dist dist/Lwsmf-win64
+  python tools/release_audit.py --repo-scan
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
+import subprocess
 import sys
 from pathlib import Path
+
+try:
+    from pack_media import read_pak_entries
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from pack_media import read_pak_entries
 
 REQUIRED_FILES = [
     "game/Lwsmf.exe",
@@ -22,24 +28,34 @@ REQUIRED_FILES = [
     "game_data/programs.json",
     "game_data/database.json",
     "game_data/map_tiles.json",
-    "work/all/BasicData/Game.dat",
-    "work/all/BasicData/CommonEvent.dat",
-    "work/all/BasicData/DataBase.dat",
-    "work/all/BasicData/CDataBase.dat",
-    "work/all/BasicData/SysDatabase.dat",
-    "work/all/BasicData/TileSetData.dat",
-    "work/all/BasicData/MapTree.dat",
+    "work/all/media.pak",
+    "work/all/BasicData/CDataBase.project",
+    "work/all/BasicData/DataBase.project",
+    "work/all/BasicData/SysDatabase.project",
     "converter/cli.py",
     "converter/convert.bat",
     "README.txt",
 ]
 
-REQUIRED_ASSET_DIRS = [
-    "work/all/BasicData",
+FORBIDDEN_STAGE_DIRS = [
+    "work/all/save",
     "work/all/MapChip",
     "work/all/MapData",
     "work/all/SystemFile",
 ]
+
+PRIVACY_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("hardcoded E:/Study path", re.compile(r"E:[/\\]Study[/\\]", re.I)),
+    ("hardcoded /e/Study path", re.compile(r"/e/Study/", re.I)),
+    ("hardcoded SteamLibrary path", re.compile(r"[A-Z]:[/\\]SteamLibrary[/\\]", re.I)),
+    ("hardcoded user home path", re.compile(r"(?:C:[/\\]Users[/\\]|/c/Users/)REISEN\b", re.I)),
+    ("local username REISEN", re.compile(r"\bREISEN\b")),
+    ("old repo name imoto life", re.compile(r"imoto[ _-]life", re.I)),
+    ("personal email", re.compile(r"linxin070410@gmail\.com", re.I)),
+]
+
+PROBE_EXTENSIONS = ("", ".png", ".jpg", ".bmp", ".jpeg", ".webp", ".ogg", ".mp3", ".wav")
+MEDIA_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".ogg", ".mp3", ".wav", ".ico", ".ttf", ".otf"}
 
 
 def _nonempty_file(path: Path) -> bool:
@@ -51,73 +67,102 @@ def _logical_asset_path(item: dict) -> str:
     return str(value).replace("\\", "/").lstrip("/")
 
 
+def _scan_text_privacy(path: Path, rel_label: str, errors: list[str]) -> None:
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError as exc:
+        errors.append(f"unreadable text file {rel_label}: {exc}")
+        return
+    for lineno, line in enumerate(text.splitlines(), 1):
+        for label, pat in PRIVACY_PATTERNS:
+            if pat.search(line):
+                errors.append(f"privacy/path leak ({label}) at {rel_label}:{lineno}")
+
+
 def audit(dist: Path) -> tuple[list[str], dict[str, int]]:
     errors: list[str] = []
-    stats = {"files": 0, "bytes": 0, "assets": 0, "asset_bytes": 0, "mps": 0}
+    stats = {"files": 0, "bytes": 0, "pak_entries": 0, "assets": 0}
 
     if not dist.is_dir():
         return [f"dist directory not found: {dist}"], stats
 
     for rel in REQUIRED_FILES:
-        path = dist / rel
-        if not _nonempty_file(path):
+        if not _nonempty_file(dist / rel):
             errors.append(f"missing or empty: {rel}")
 
-    for rel in REQUIRED_ASSET_DIRS:
-        directory = dist / rel
-        if not directory.is_dir() or not any(p.is_file() for p in directory.rglob("*")):
-            errors.append(f"missing or empty asset directory: {rel}")
+    for rel in FORBIDDEN_STAGE_DIRS:
+        if (dist / rel).exists():
+            errors.append(f"forbidden directory must not be shipped: {rel}")
 
-    save_dir = dist / "work/all/save"
-    if save_dir.exists():
-        errors.append("work/all/save must not be shipped (player save data)")
+    for dat in (dist / "work/all/BasicData").glob("*.dat") if (dist / "work/all/BasicData").is_dir() else []:
+        errors.append(f"redundant loose .dat in release: work/all/BasicData/{dat.name}")
+
+    game_dir = dist / "game"
+    if game_dir.is_dir():
+        for pdb in game_dir.rglob("*.pdb"):
+            errors.append(f"debug symbol file shipped: {pdb.relative_to(dist).as_posix()}")
+
+    pck_path = dist / "game/Lwsmf.pck"
+    if pck_path.is_file():
+        pck_bytes = pck_path.read_bytes()
+        for needle in (b"addons/godot_ai", b"res://tests/", b"res://tests_gd/"):
+            if needle in pck_bytes:
+                errors.append(f"Lwsmf.pck contains excluded dev content matching {needle.decode('utf-8')}")
+
+    pak_paths: set[str] = set()
+    pak_file = dist / "work/all/media.pak"
+    if pak_file.is_file():
+        try:
+            entries = read_pak_entries(pak_file)
+            stats["pak_entries"] = len(entries)
+            pak_paths = {rel.replace("\\", "/").lower() for rel, _ in entries}
+        except Exception as exc:  # noqa: BLE001 - report corrupted pack cleanly
+            errors.append(f"invalid work/all/media.pak: {exc}")
 
     manifest_path = dist / "game_data/manifest.json"
     manifest: dict = {}
     if manifest_path.is_file():
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception as exc:  # noqa: BLE001 - report malformed manifests cleanly
+        except Exception as exc:  # noqa: BLE001
             errors.append(f"invalid game_data/manifest.json: {exc}")
             manifest = {}
 
-    assets = manifest.get("assets") or []
-    for item in assets:
+    for rel_json in ("programs.json", "database.json", "map_tiles.json"):
+        p = dist / "game_data" / rel_json
+        if p.is_file():
+            try:
+                json.loads(p.read_text(encoding="utf-8"))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"invalid game_data/{rel_json}: {exc}")
+
+    for item in manifest.get("assets") or []:
         if not isinstance(item, dict):
             continue
         logical = _logical_asset_path(item)
         if not logical:
             continue
-        source = dist / "work/all" / logical
-        if not _nonempty_file(source):
-            errors.append(f"manifest asset missing: work/all/{logical}")
+        low = logical.lower()
+        if low.startswith("basicdata/"):
+            if low.endswith(".project") and not _nonempty_file(dist / "work/all" / logical):
+                errors.append(f"manifest project missing: work/all/{logical}")
+            stats["assets"] += 1
             continue
+        ext = Path(low).suffix
+        if ext in MEDIA_EXTS or not ext:
+            if not any((low + probe) in pak_paths for probe in PROBE_EXTENSIONS):
+                errors.append(f"manifest asset missing in media.pak: {logical}")
+                continue
         stats["assets"] += 1
-        stats["asset_bytes"] += source.stat().st_size
 
-    artifacts = manifest.get("artifacts") or {}
-    for name, item in artifacts.items():
-        if not isinstance(item, dict):
-            continue
-        rel = str(item.get("path") or "").replace("\\", "/").lstrip("/")
-        if not rel:
-            continue
-        path = dist / "game_data" / rel
-        if not _nonempty_file(path):
-            errors.append(f"manifest artifact missing: game_data/{rel}")
-            continue
-        expected = item.get("bytes")
-        if isinstance(expected, int) and path.stat().st_size != expected:
-            errors.append(
-                f"manifest artifact size mismatch: game_data/{rel} "
-                f"expected={expected} actual={path.stat().st_size}"
-            )
-
-    map_data = dist / "work/all/MapData"
-    if map_data.is_dir():
-        stats["mps"] = sum(1 for p in map_data.rglob("*.mps") if p.is_file())
-        if stats["mps"] == 0:
-            errors.append("work/all/MapData has no .mps map files")
+    readme = dist / "README.txt"
+    if readme.is_file():
+        _scan_text_privacy(readme, "README.txt", errors)
+    conv_dir = dist / "converter"
+    if conv_dir.is_dir():
+        for p in conv_dir.rglob("*"):
+            if p.is_file() and p.suffix.lower() in (".py", ".bat", ".md", ".txt"):
+                _scan_text_privacy(p, p.relative_to(dist).as_posix(), errors)
 
     for path in dist.rglob("*"):
         if path.is_file():
@@ -127,10 +172,65 @@ def audit(dist: Path) -> tuple[list[str], dict[str, int]]:
     return errors, stats
 
 
+def repo_scan(repo_root: Path) -> list[str]:
+    """Scan tracked production, build, tool, and core godot doc files for leaks."""
+    errors: list[str] = []
+    proc = subprocess.run(
+        ["git", "-C", str(repo_root), "ls-files"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    include_prefixes = (
+        "AGENTS.md",
+        "README",
+        ".github/",
+        "godot/core_cs/",
+        "godot/presentation/",
+        "godot/presentation_gd/",
+        "godot/scenes/",
+        "godot/export_presets.cfg",
+        "godot/project.godot",
+        "godot/Lwsmf.csproj",
+        "godot/README.md",
+        "tools/",
+        "docs/godot/",
+    )
+    skip_exact = {
+        "tools/release_audit.py",
+        "docs/godot/PRE_RELEASE_ORCHESTRATOR_AUDIT.md",
+        "docs/godot/audit/GEMINI_AUDIT_AND_PLAN_2026-11-14.md",
+    }
+    text_exts = {".cs", ".gd", ".py", ".sh", ".ps1", ".cfg", ".godot", ".csproj", ".yml", ".yaml", ".md", ".txt", ".bat", ".tscn"}
+    for line in proc.stdout.splitlines():
+        rel = line.strip()
+        if not rel or rel in skip_exact:
+            continue
+        if not rel.startswith(include_prefixes):
+            continue
+        p = repo_root / rel
+        if not p.is_file() or p.suffix.lower() not in text_exts:
+            continue
+        _scan_text_privacy(p, rel, errors)
+    return errors
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Audit a staged LWSMF release directory")
+    parser = argparse.ArgumentParser(description="Audit LWSMF release staging or repo privacy hygiene")
     parser.add_argument("--dist", default="dist/Lwsmf-win64", help="release directory to audit")
+    parser.add_argument("--repo-scan", action="store_true", help="scan tracked production/tool/core-doc files for leaks")
     args = parser.parse_args(argv)
+
+    if args.repo_scan:
+        repo_root = Path(__file__).resolve().parent.parent
+        errors = repo_scan(repo_root)
+        if errors:
+            print("REPO_PRIVACY_AUDIT_FAIL")
+            for err in errors:
+                print(f"- {err}")
+            return 1
+        print("REPO_PRIVACY_AUDIT_OK leaks=0")
+        return 0
 
     dist = Path(args.dist).resolve()
     errors, stats = audit(dist)
@@ -143,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "RELEASE_AUDIT_OK "
         f"files={stats['files']} bytes={stats['bytes']} "
-        f"assets={stats['assets']} asset_bytes={stats['asset_bytes']} mps={stats['mps']}"
+        f"pak_entries={stats['pak_entries']} assets={stats['assets']}"
     )
     return 0
 

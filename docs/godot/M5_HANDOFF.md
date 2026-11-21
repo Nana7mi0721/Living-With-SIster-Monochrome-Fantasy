@@ -70,5 +70,5 @@
 
 ## 5. 下一步
 
-1. 发布包分发时确认 `dist/Lwsmf-win64/game/data_Lwsmf_windows_x86_64/` 与 exe 同目录；确认 `game_data/` 与 `work/all/` 已随包，发布 README 已写明正常游玩无需 Python。
-2. M5 变更提交后，将 §1 的仓库 HEAD 更新为提交号，并在根 `HANDOFF` / 文档索引中保留 M5 入口。
+1. 发布包分发时确认 `dist/Lwsmf-win64/game/data_Lwsmf_windows_x86_64/` 与 exe 同目录；确认 `game_data/` 与 `work/all/media.pak`（及 `BasicData/*.project`）已随包，发布 README 已写明正常游玩无需 Python。
+2. 发版收尾打包与验证见 [`RELEASE.md`](RELEASE.md) 与 [`PRE_RELEASE_ORCHESTRATOR_AUDIT.md`](PRE_RELEASE_ORCHESTRATOR_AUDIT.md)，文档统一以 [docs/README.md](../README.md) 为全局索引。

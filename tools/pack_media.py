@@ -1,0 +1,308 @@
+#!/usr/bin/env python3
+"""Pure-Python builder for WOLFMPK1 media packs (`media.pak`).
+
+Byte-exact wire format matching `godot/presentation/MediaPakReader.cs`:
+- 32-byte header: magic `WOLFMPK1`, uint16 version=1, uint16 flags=0,
+  uint32 count, uint64 indexOffset (16-byte aligned), uint64 indexSize.
+- 16-byte-aligned file bodies XORed with the splitmix64 offset keystream and
+  tagged with standard zlib CRC-32 of the plaintext bytes.
+- Trailing encrypted index: (uint16 pathLen, uint64 offset, uint64 size,
+  uint32 crc32, utf8 path) per entry, XORed from indexOffset.
+
+Supports both a loose retail asset directory (`--root`) and repacking an
+existing `media.pak` (`--from-pak`), with optional `--slim` WebP/lossless
+re-encoding via Pillow (and optional OGG/WAV transcoding if ffmpeg is on PATH).
+"""
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import io
+import os
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+import zlib
+from pathlib import Path
+
+MAGIC = b"WOLFMPK1"
+VERSION = 1
+HEADER_SIZE = 32
+DATA_ALIGNMENT = 16
+STREAM_BLOCK_SIZE = 64
+GOLDEN = 0x9E3779B97F4A7C15
+MASK64 = 0xFFFFFFFFFFFFFFFF
+
+SEED = bytes(
+    [
+        0x9F, 0x2E, 0x4B, 0xD7, 0x18, 0x63, 0xA5, 0x0C,
+        0xE4, 0x71, 0x35, 0x8A, 0xC2, 0x5D, 0x90, 0x26,
+        0x6B, 0xF3, 0x04, 0xBE, 0x57, 0xA1, 0xD8, 0x39,
+        0x82, 0x4C, 0xEF, 0x16, 0x75, 0xB0, 0x2D, 0x9A,
+    ]
+)
+SEED_WORDS = struct.unpack("<4Q", SEED)
+
+MEDIA_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".bmp",
+    ".webp",
+    ".ogg",
+    ".mp3",
+    ".wav",
+    ".ico",
+    ".ttf",
+    ".otf",
+}
+
+
+def _stream_block(block: int) -> bytes:
+    state = (block * GOLDEN) & MASK64
+    for seed_word in SEED_WORDS:
+        state = (((state + seed_word) & MASK64) * GOLDEN) & MASK64
+        state ^= state >> 29
+    out = bytearray(STREAM_BLOCK_SIZE)
+    for offset in range(0, STREAM_BLOCK_SIZE, 8):
+        state = (state + GOLDEN) & MASK64
+        val = state
+        val = (((val ^ (val >> 30)) & MASK64) * 0xBF58476D1CE4E5B9) & MASK64
+        val = (((val ^ (val >> 27)) & MASK64) * 0x94D049BB133111EB) & MASK64
+        val ^= val >> 31
+        struct.pack_into("<Q", out, offset, val)
+    return bytes(out)
+
+
+def xor_bytes(data: bytes | bytearray, offset: int) -> bytes:
+    """Apply the WOLFMPK1 offset-indexed splitmix64 XOR stream."""
+    n = len(data)
+    if n == 0:
+        return b""
+    out = bytearray(data)
+    first_block = offset // STREAM_BLOCK_SIZE
+    last_block = (offset + n - 1) // STREAM_BLOCK_SIZE
+    pad_front = offset % STREAM_BLOCK_SIZE
+    # Concatenate enough keystream blocks, then XOR in uint64 chunks via int.from_bytes
+    stream = b"".join(_stream_block(b) for b in range(first_block, last_block + 1))
+    key = stream[pad_front : pad_front + n]
+    val = int.from_bytes(out, "little") ^ int.from_bytes(key, "little")
+    return val.to_bytes(n, "little")
+
+
+def read_pak_entries(pak_path: Path) -> list[tuple[str, bytes]]:
+    """Read and verify all decrypted entries from an existing WOLFMPK1 file."""
+    with pak_path.open("rb") as f:
+        header = f.read(HEADER_SIZE)
+        if len(header) < HEADER_SIZE or header[:8] != MAGIC:
+            raise ValueError(f"{pak_path} is not a valid WOLFMPK1 pack")
+        ver, flags, count, index_offset, index_size = struct.unpack("<HHIQQ", header[8:])
+        if ver != VERSION or flags != 0:
+            raise ValueError(f"unsupported header version={ver} flags={flags}")
+        f.seek(index_offset)
+        idx = xor_bytes(f.read(index_size), index_offset)
+
+        items: list[tuple[str, bytes]] = []
+        pos = 0
+        for _ in range(count):
+            plen, off, sz, crc = struct.unpack_from("<HQQI", idx, pos)
+            pos += 22
+            rel = idx[pos : pos + plen].decode("utf-8")
+            pos += plen
+            f.seek(off)
+            plain = xor_bytes(f.read(sz), off)
+            actual = zlib.crc32(plain) & 0xFFFFFFFF
+            if actual != crc:
+                raise ValueError(f"CRC mismatch on {rel}: expected {crc:08X}, got {actual:08X}")
+            items.append((rel, plain))
+        return items
+
+
+def collect_loose_entries(root: Path) -> list[tuple[str, Path]]:
+    """Collect media assets from an unpacked retail Data directory."""
+    if not root.is_dir():
+        raise FileNotFoundError(f"asset root not found: {root}")
+    items: list[tuple[str, Path]] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d.lower() != "save"]
+        for name in filenames:
+            full = Path(dirpath) / name
+            rel = full.relative_to(root).as_posix()
+            # Skip BasicData/* except icon/image assets inside BasicData only when requested;
+            # CDataBase/DataBase/SysDatabase *.dat/*.project stay outside media.pak.
+            if rel.lower().startswith("basicdata/"):
+                continue
+            if full.suffix.lower() not in MEDIA_EXTENSIONS:
+                continue
+            items.append((rel, full))
+    items.sort(key=lambda kv: kv[0].lower())
+    return items
+
+
+def _slim_entry(rel: str, raw: bytes, quality_effects: int, ffmpeg_bin: str | None) -> tuple[str, bytes, str]:
+    """Transcode one entry if slimming saves >= 5% while keeping format fidelity."""
+    low = rel.lower()
+    ext = os.path.splitext(low)[1]
+
+    if ext in (".png", ".jpg", ".jpeg", ".bmp"):
+        try:
+            from PIL import Image
+        except ImportError:
+            return rel, raw, "kept"
+
+        try:
+            with Image.open(io.BytesIO(raw)) as img:
+                out = io.BytesIO()
+                if ext == ".png" and low.startswith("battleeffect/"):
+                    img.save(out, format="WEBP", quality=quality_effects, method=4)
+                elif ext == ".png":
+                    img.save(out, format="WEBP", lossless=True, method=4)
+                else:
+                    if img.mode not in ("RGB", "RGBA"):
+                        img = img.convert("RGB")
+                    img.save(out, format="WEBP", quality=88, method=4)
+                cand = out.getvalue()
+                if len(cand) <= int(len(raw) * 0.95):
+                    return rel, cand, "webp"
+        except Exception:
+            return rel, raw, "kept"
+
+    elif ext == ".wav" and ffmpeg_bin and b"smpl" not in raw and b"cue " not in raw:
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "in.wav"
+            dst = Path(tmp) / "out.ogg"
+            src.write_bytes(raw)
+            proc = subprocess.run(
+                [ffmpeg_bin, "-y", "-v", "error", "-i", str(src), "-c:a", "libvorbis", "-q:a", "5", str(dst)],
+                capture_output=True,
+                check=False,
+            )
+            if proc.returncode == 0 and dst.is_file():
+                cand = dst.read_bytes()
+                if len(cand) <= int(len(raw) * 0.95):
+                    return rel, cand, "ogg"
+
+    return rel, raw, "kept"
+
+
+def write_pak(entries: list[tuple[str, bytes]], out_path: Path) -> tuple[int, int]:
+    """Write entries into a valid WOLFMPK1 archive atomically via a temp sibling."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
+
+    # Sort deterministically, deduplicating case-insensitively.
+    seen: set[str] = set()
+    ordered: list[tuple[str, bytes]] = []
+    for rel, raw in sorted(entries, key=lambda kv: kv[0].lower()):
+        norm = rel.replace("\\", "/").lstrip("/")
+        low = norm.lower()
+        if low in seen:
+            continue
+        seen.add(low)
+        ordered.append((norm, raw))
+
+    total_raw = 0
+    toc_parts: list[bytes] = []
+
+    with tmp_path.open("wb") as f:
+        f.write(b"\x00" * HEADER_SIZE)
+        cursor = HEADER_SIZE
+
+        for rel, raw in ordered:
+            pad = (-cursor) & (DATA_ALIGNMENT - 1)
+            if pad:
+                f.write(b"\x00" * pad)
+                cursor += pad
+            crc = zlib.crc32(raw) & 0xFFFFFFFF
+            enc = xor_bytes(raw, cursor)
+            f.write(enc)
+            path_bytes = rel.encode("utf-8")
+            toc_parts.append(struct.pack("<HQQI", len(path_bytes), cursor, len(raw), crc) + path_bytes)
+            cursor += len(raw)
+            total_raw += len(raw)
+
+        pad = (-cursor) & (DATA_ALIGNMENT - 1)
+        if pad:
+            f.write(b"\x00" * pad)
+            cursor += pad
+
+        index_offset = cursor
+        index_plain = b"".join(toc_parts)
+        index_enc = xor_bytes(index_plain, index_offset)
+        f.write(index_enc)
+
+        f.seek(0)
+        header = struct.pack(
+            "<8sHHIQQ",
+            MAGIC,
+            VERSION,
+            0,
+            len(ordered),
+            index_offset,
+            len(index_plain),
+        )
+        f.write(header)
+        f.flush()
+        os.fsync(f.fileno())
+
+    os.replace(tmp_path, out_path)
+    return len(ordered), total_raw
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Build WOLFMPK1 media.pak with optional --slim WebP compression")
+    src = parser.add_mutually_exclusive_group(required=True)
+    src.add_argument("--root", type=Path, help="Loose asset root directory")
+    src.add_argument("--from-pak", type=Path, help="Existing WOLFMPK1 pack to repack")
+    parser.add_argument("--out", type=Path, required=True, help="Output media.pak path")
+    parser.add_argument("--slim", action="store_true", help="Lossless/near-lossless WebP image slimming & skip MapChip")
+    parser.add_argument("--keep-mapchip", action="store_true", help="Retain MapChip/ entries under --slim")
+    parser.add_argument("--effects-quality", type=int, default=90, help="WebP quality for BattleEffect/* under --slim")
+    parser.add_argument("--jobs", type=int, default=max(1, min(8, os.cpu_count() or 4)), help="Worker threads for --slim")
+    args = parser.parse_args(argv)
+
+    if args.from_pak:
+        raw_items = read_pak_entries(args.from_pak)
+    else:
+        raw_items = [(rel, path.read_bytes()) for rel, path in collect_loose_entries(args.root)]
+
+    if args.slim and not args.keep_mapchip:
+        raw_items = [(rel, data) for rel, data in raw_items if not rel.lower().startswith("mapchip/")]
+
+    orig_total = sum(len(d) for _, d in raw_items)
+    stats = {"webp": 0, "ogg": 0, "kept": 0}
+
+    if args.slim:
+        ffmpeg_bin = shutil.which("ffmpeg")
+        if args.jobs > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
+                results = list(
+                    pool.map(
+                        lambda item: _slim_entry(item[0], item[1], args.effects_quality, ffmpeg_bin),
+                        raw_items,
+                    )
+                )
+        else:
+            results = [_slim_entry(r, d, args.effects_quality, ffmpeg_bin) for r, d in raw_items]
+        final_items: list[tuple[str, bytes]] = []
+        for rel, data, kind in results:
+            final_items.append((rel, data))
+            stats[kind] += 1
+    else:
+        final_items = raw_items
+        stats["kept"] = len(final_items)
+
+    count, packed_raw = write_pak(final_items, args.out)
+    pak_size = args.out.stat().st_size
+    print(
+        f"PACK_MEDIA_OK entries={count} slim={args.slim} "
+        f"orig_bytes={orig_total} packed_bytes={packed_raw} pak_bytes={pak_size} "
+        f"webp={stats['webp']} ogg={stats['ogg']} kept={stats['kept']}"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

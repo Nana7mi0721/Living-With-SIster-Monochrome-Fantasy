@@ -46,7 +46,7 @@
 | **窗口失焦（`Alt+Tab`）防卡键** | **2 处细缺口** | **P2** | `GameRoot.gd:679-688` 失焦未清 `_modal_release_guard`、未调 `vm.ResetPointer()`、未调 `Input.flush_buffered_events()`。 |
 | **`174 ReturnToTitle` / `175 EndGame`** | **P1 帧中同步重入隐患** | **P1** | `EventVm.cs:1385` 在 `RunInstances` 循环内同步触发 `restart_title()` 重建 `Session`；应改帧尾延迟执行，`ResetSessionState()` 需补清等待态、`_pictures` 与 `_backlog`。 |
 | **存档格防单击误覆盖** | **与原作一致裸覆盖（槽 1 只读）** | **P2** | `CE131` 原生锁定槽 1 仅给 `CE435` 自动存档，槽 2..N 单击直接覆盖（底层有 `.bak`）。 |
-| **战斗 / H 场景并行与中断泄漏** | **`CE240`/`CE339` 仅边沿触发** | **P1** | `CE240`（战斗战力条）与 `CE339`（H 场景进度条）为无循环线性事件，未列入 `AutoEvents.ResumeOnLoad` 会导致数值变动时不重绘；需纳入 `ResumeOnLoad` 并做全量对拍回归验证。`CE362` 浴室计时器中断残留（`2000210` 仅自清）标为 P2 记录。 |
+| **战斗 / H 场景并行与中断泄漏** | **`CE240`/`CE339` 仅边沿触发** | **P1（`CE339` 已接入，`CE240` 定性保留）** | `CE339`（H 场景进度条，无 RNG）已纳入 `AutoEvents.ResumeOnLoad` 并全绿；实测证实 `CE240`（战力条）每次运行会执行 2 条 `0x6100` PRNG 抖动，每帧重放会改变战斗随机数序列并破坏 `BattleMenuBridgeTest` 回合数与 Oracle 一致性，故保持不纳入 `ResumeOnLoad`（见 D-62）。`CE362` 浴室计时器中断残留（`2000210` 仅自清）保留作已知边界。 |
 
 ---
 
@@ -101,4 +101,8 @@
 - **`MessageWindow.gd` & `Nameplate.gd`**：修复 `_draw()` 每帧 `StyleBoxFlat.new()`（改为 `_init()` 缓存复用）。
 - **`VmController.TakePicturesJson()`**：复用成员变量 `StringBuilder _picJsonSb`，消除活动帧 JSON 串构建分配；`AutoEvents` / `BattleWiring` 热点移除 LINQ 闭包。
 - **`AssetDB.gd`（384 MB LRU）**：修复逻辑路径反斜杠/前缀未归一化导致的重复解码、修复 `_store()` 覆写时 `used_bytes` 漏减、按图片/音频拆分扩展名解析防同名碰撞，并增加**文件头魔数嗅探**（`RIFF....WEBP` / `\x89PNG` / `\xFF\xD8` / `OggS`），确保 `--slim` 透明兼容。
-- **工程工具链**：新增纯 Python 零外部依赖的 `tools/pack_media.py`（字节级兼容 `MediaPakReader.cs` 的 `WOLFMPK1` + `--slim` Pillow WebP/无损重压并保留原始路径或兼容魔数加载）；升级 `tools/release_audit.py`（适配 `media.pak` + 隐私/路径/PDB/`addons` 扫描）；升级 `tools/package_release.sh`（先审计 `$STAGE` 再交换 `dist/`、Release 构建、`--slim` 开关、ZIP 压缩与 `SHA256SUMS.txt` 账本输出）。
+- **工程工具链**：已落地纯 Python 零外部依赖 `tools/pack_media.py`（`WOLFMPK1` + `--slim` Pillow WebP 压缩与 `MapChip/` 剔除）；升级 `tools/release_audit.py`（`media.pak` CRC/资产覆盖 + 0 `.pdb` + 0 `addons/`/`tests/` + `--repo-scan` 隐私扫描）；升级 `tools/package_release.sh`（pre-swap 审计、Release 构建、紧凑 JSON、`--slim` 切换、ZIP 与 `SHA256SUMS.txt`）。
+- **发版收尾实测（2026-11-21）**：
+  - 标准包 `dist/Lwsmf-win64`：`930.71 MB`（Zip `800.75 MB`），`RELEASE_AUDIT_OK files=215 bytes=975917746 pak_entries=3904 assets=172`；
+  - `--slim` 包 `dist/Lwsmf-win64-slim`：**`625.70 MB`（Zip `495.65 MB`，`media.pak` `423.78 MB` / WebP 替换 `3,436` 图）**，`RELEASE_AUDIT_OK files=215 bytes=656098759 pak_entries=3802 assets=172`；
+  - 双模式 38 项门禁 `LWsmf_RENDER=1 bash tools/godot_check.sh` 耗时 89s 全部通过（`GODOT_GATE_OK`，`PERFORMANCE_FRAME_STRICT_OK avg_ms=4.290 fps=233.1`），`dotnet build -c Release --no-incremental` 0 警告 0 错误，Slim 载荷魔数加载实测 `SLIM_PAYLOAD_SMOKE_OK misses=0`。

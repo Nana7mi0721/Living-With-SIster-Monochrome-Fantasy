@@ -1,8 +1,8 @@
 param(
-  [string]$Exe = 'E:\Study\github program\imoto life\work\runcopy\Game.exe',
-  [string]$WorkDir = 'E:\Study\github program\imoto life\work\runcopy',
-  [string]$OutDir = 'E:\Study\github program\imoto life\work\out\cap',
-  [string]$Ref = 'E:\Study\github program\imoto life\work\out\ScreenShot_2026_1028_21_21_35.png',
+  [string]$Exe = $(Join-Path (Split-Path -Parent $PSScriptRoot) 'work\runcopy\Game.exe'),
+  [string]$WorkDir = $(Join-Path (Split-Path -Parent $PSScriptRoot) 'work\runcopy'),
+  [string]$OutDir = $(Join-Path (Split-Path -Parent $PSScriptRoot) 'work\out\cap'),
+  [string]$Ref = '',
   [string]$Plan = 'w5000;R1024,576;w800;c;T;x',
   [int]$TitleTries = 8,
   [int]$Attach = 0,

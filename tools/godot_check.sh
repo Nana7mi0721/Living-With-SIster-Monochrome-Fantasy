@@ -3,13 +3,14 @@
 # GDScript 表现层测试。
 # 用法： tools/godot_check.sh                       全 headless（默认并行加速）
 #        LWsmf_GODOT_JOBS=1 tools/godot_check.sh    严格串行模式
+#        LWsmf_GATE_FAST=1 tools/godot_check.sh     跳过两个 M13 终局长回放（迭代用，合并前仍跑完整门禁）
 #        LWsmf_RENDER=1 tools/godot_check.sh        额外用真实渲染器跑 101/150 像素校验
 # 退出码 0 = 引擎+C#+场景+存档+Oracle 全部通过。
 set -euo pipefail
 
-GODOT="${GODOT:-/e/Study/tools/godot-4.7.2-mono/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe}"
+GODOT="${GODOT:-${GODOT_BIN:-$(command -v godot 2>/dev/null || command -v Godot_v4.7.2-stable_mono_win64_console.exe 2>/dev/null || true)}}"
 IMO="$(cd "$(dirname "$0")/.." && pwd)"
-DOTNET="${DOTNET:-/e/Study/tools/dotnet8/dotnet}"
+DOTNET="${DOTNET:-${DOTNET_BIN:-$(command -v dotnet 2>/dev/null || true)}}"
 # Isolate the gate from the player profile: 220/221/222 persist system data beside the save
 # slot, and a previous run's file would change the first-run route branches (Ce253 day 3).
 # GameSessionController.DefaultSavePath honours LWsmf_SAVE_DIR.
@@ -17,16 +18,23 @@ ROOT_TEMP="$(mktemp -d)"
 trap 'rm -rf "$ROOT_TEMP"' EXIT
 export LWsmf_SAVE_DIR="${LWsmf_SAVE_DIR:-$ROOT_TEMP/default_save}"
 mkdir -p "$LWsmf_SAVE_DIR" "$IMO/reports"
-export DOTNET_ROOT="${DOTNET_ROOT:-E:/Study/tools/dotnet8}"
-export PATH="/e/Study/tools/dotnet8:$PATH"
+if [ -n "$DOTNET" ]; then
+  DOTNET_DIR="$(cd "$(dirname "$DOTNET")" 2>/dev/null && pwd || dirname "$DOTNET")"
+  export DOTNET
+  export DOTNET_ROOT="${DOTNET_ROOT:-$DOTNET_DIR}"
+  export PATH="$DOTNET_DIR:$PATH"
+fi
 export LWsmf_QUIET_HUD="${LWsmf_QUIET_HUD:-1}"
+# A Roslyn compiler server started by `--build-solutions` inherits Godot's stdio, so Godot
+# blocks until that server idles out (10 minutes on a cold start). Compile in-process.
+export UseSharedCompilation=false MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 JOBS="${LWsmf_GODOT_JOBS:-8}"
 if [ "${LWsmf_SERIAL:-0}" = "1" ]; then
   JOBS=1
 fi
 
-if [ ! -x "$GODOT" ]; then
-  echo "godot not found: $GODOT" >&2
+if [ -z "$GODOT" ] || [ ! -x "$GODOT" ]; then
+  echo "godot not found: set GODOT=/path/to/Godot_v4.7.2-stable_mono_win64_console.exe" >&2
   exit 2
 fi
 
@@ -203,15 +211,21 @@ run_job_wrapper() {
   local job_save="$ROOT_TEMP/save_$idx"
   local job_log="$ROOT_TEMP/job_$idx.log"
   mkdir -p "$job_save"
-  if LWsmf_SAVE_DIR="$job_save" "$@" > "$job_log" 2>&1; then
+  local t0=$SECONDS rc=0
+  # The job body must run outside any `if`/`||` context: bash disables `set -e` there, which
+  # let a failing diff or grep in the middle of a job function be reported as success.
+  set +e
+  ( set -e; LWsmf_SAVE_DIR="$job_save" "$@" ) > "$job_log" 2>&1
+  rc=$?
+  set -e
+  echo "$((SECONDS - t0)) $label" > "$ROOT_TEMP/time_$idx"
+  if [ "$rc" -eq 0 ]; then
     cat "$job_log"
     return 0
-  else
-    local rc=$?
-    echo "=== JOB FAILED: $label (exit $rc) ==="
-    cat "$job_log"
-    return "$rc"
   fi
+  echo "=== JOB FAILED: $label (exit $rc) ==="
+  cat "$job_log"
+  return "$rc"
 }
 
 declare -a JOB_LABELS=()
@@ -224,7 +238,9 @@ add_job() {
 }
 
 # Schedule longest tests first to minimize tail latency across worker slots.
-if [ -f "$IMO/work/retail_backup/Save/SaveData01.sav" ]; then
+if [ "${LWsmf_GATE_FAST:-0}" = "1" ]; then
+  echo "[M13] skipped: LWsmf_GATE_FAST=1 (two ~1 min day-90 endgame replays; run the full gate before merging)"
+elif [ -f "$IMO/work/retail_backup/Save/SaveData01.sav" ]; then
   add_job "M13 slot 1" job_m13_slot 1
   add_job "M13 slot 8" job_m13_slot 8
 else
@@ -292,6 +308,9 @@ for p in "${ACTIVE_PIDS[@]+"${ACTIVE_PIDS[@]}"}"; do
     failures=$((failures + 1))
   fi
 done
+
+echo "[timing] slowest parallel jobs (seconds):"
+cat "$ROOT_TEMP"/time_* 2>/dev/null | sort -rn | head -6 | sed 's/^/  /'
 
 if [ "$failures" -ne 0 ]; then
   echo "GODOT_GATE_FAILED ($failures parallel job(s) failed)" >&2

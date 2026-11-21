@@ -12,7 +12,7 @@
 - **阶段/日期**：M1 纵向切片 / 2026-11-14
 - **仓库 HEAD**：`8c65153318e49d77711287d2a0226abc3d748b80`（工作区包含 M1 未提交实现，HEAD 只代表基线）
 - **Godot 版本/渲染器**：Godot 4.7.2-stable Mono Win64（`ed1daf0bf`），兼容渲染器
-- **.NET SDK**：.NET SDK 8.0.428（`E:\Study\tools\dotnet8`）
+- **.NET SDK**：.NET SDK 8.0.428
 - **数据根/夹具**：`work/all/`（BasicData、MapData、SystemFile）；`game_data/programs.json`；`work/all/MapData/SampleMapA_1.mps`
 - **是否可复现**：**是**。`bash tools/godot_check.sh` 全 headless，末尾输出 `GODOT_GATE_OK`。
 
@@ -62,7 +62,7 @@
 | --- | --- | --- |
 | 全门槛 | `bash tools/godot_check.sh` | 30/30，输出 `GODOT_GATE_OK` |
 | 整路线 Oracle | `res://tests/RouteTraceTest.tscn` + `python oracle/diff_route.py` | `73,814/73,814`，`ROUTE_DIFF_OK`，save/load 状态回路通过（§4.12/§4.23） |
-| C# 构建 | `DOTNET_ROOT=E:/Study/tools/dotnet8 /e/Study/tools/dotnet8/dotnet build godot/Lwsmf.csproj -v:minimal` | 0 warning / 0 error |
+| C# 构建 | `dotnet build godot/Lwsmf.csproj -v:minimal` | 0 warning / 0 error |
 | 标题事件 | `res://tests/TitleTest.tscn` | `TITLE_TEST_OK`；frames=4000 titleSteps=127 keyPolls=362 |
 | 新游戏链 | `res://tests/NewGameTest.tscn` | `NEW_GAME_TEST_OK`；program ニューゲーム処理 len=43 blocks=2；teleport map=1 |
 | 纵向呈现 | `res://tests/PresentationTest.tscn` | `PRESENTATION_TEST_OK phase=bedroom frames=418`；地图 1 12 事件、17 页、AUTO 0、PAR 3、3 个活实例 |
@@ -557,7 +557,7 @@
 
 来源：用户 m18936 的两阶段加固计划，阶段 A。
 
-- **A1 工作区**：4 份 `m3_round6/7/8/9_review*.md` 移到仓库外 `E:/Study/github program/_m3_reviews/`，删除 `CON` 设备文件，`git status --porcelain` 为空。
+- **A1 工作区**：4 份 `m3_round6/7/8/9_review*.md` 移至仓库外存档目录，删除 `CON` 设备文件，`git status --porcelain` 为空。
 - **A1 信号**：`VmController.QueuePictureSignals` 默认 `true`，只有仍消费旧 `PictureRequested` 的定点测试（`DayMenuTest`/`HSceneTest`/`WeekendMenuTest`）在连接前显式设 `false`；删除 `CommonEventCalled` 的 [Signal] delegate 与 emit，`CommonEventCall(int,int[],string[])` 保留空方法维持冻结的 IHost 契约（全仓库无监听者）。新增 `SignalStressTest`：断言默认 true 与 `has_signal("CommonEventCalled")==false`，500 次 `ShowChoices` 与 500 次 `Effect` 跨 C#/GDScript 边界，输出 `SIGNAL_STRESS_TEST_OK choices=500 effects=500`。`tools/godot_check.sh` 步骤标签全部 `/33]`→`/34]`，末尾新增 `[34/34]`。
 - **A2 矩阵单一真源**：`oracle/fixtures/content_matrix_injected.json`（10,710 B）定义 18 条用例（16 DLC + 特4-a/b，含 label/name/ce/pc/self/globals/expected/gate/max_frames/alias_of）、15 条 op111 gates（ce/pc/triples）与 5 条 `external_gates`；`godot/tests/ContentMatrixTest.cs` 用 `System.Text.Json` 读取，`crates/wolf-game/tests/m13_random_events_injected.rs` 用 `serde_json` 读取（`crates/wolf-game/Cargo.toml` 增 `[dev-dependencies] serde_json = "1"`）。C# 输出 `CONTENT_MATRIX_TEST_OK cases=18 unique=17 gates=15 external=5`，Rust `cargo test -p wolf-game --test m13_random_events_injected` 2 passed。
 - **A5 决策减负**：`docs/godot/DECISIONS.md` 只保留跨模块架构/契约决策；D-22/D-27/D-30/D-31/D-32/D-34/D-36/D-38/D-43/D-44/D-45/D-46/D-48/D-49/D-50/D-51 的单次测试夹具记录下沉到本文档 §4.16/4.22/4.25/4.26/4.27/4.28/4.29/4.30/4.34/4.35/4.36/4.37/4.38/4.39/4.40/4.41，文件首部保留 ID→章节索引；D-51 的 route2 已撤除，不再作为决策依据。

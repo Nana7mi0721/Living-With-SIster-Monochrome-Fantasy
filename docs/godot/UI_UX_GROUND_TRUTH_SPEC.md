@@ -4,7 +4,7 @@
 > **审计执行日期**：2026-11-21  
 > **审计原则**：严格只读挖掘、无盲目推测、全量硬证据锚定（事件 ID、PC、原始指令参数、数据库 Type/Row/Col 及 `Game.dat` 字段二进制偏移）。  
 > **数据基准**：
-> - Steam 零售版：`E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy\Data`（全部 23 个 `.wolf` 归档与 `Lolita.ttf`）
+> - Steam 零售版：`<SteamLibrary>/Living With SIster Monochrome Fantasy/Data`（全部 23 个 `.wolf` 归档与 `Lolita.ttf`）
 > - 零售全量解包：`work/retail_dat/`（4,062 资产文件）与 `game_data/`（WOLF 数据库与事件序列化 JSON）
 > - 表现层对照：`godot/presentation_gd/` 与 `godot/presentation/`
 

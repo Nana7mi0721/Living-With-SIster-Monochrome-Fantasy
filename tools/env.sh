@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# Source this in git-bash:  source "/e/Study/github program/imoto life/tools/env.sh"
-# NOTE: use msys paths (/c/..., /e/...). Windows-style paths (C:/...) DO NOT work in git-bash PATH.
-T="/e/Study/github program/imoto life/tools"
-export IMO="/e/Study/github program/imoto life"
-export PATH="$T/bin:$T/cmake/bin:$T/ffmpeg/bin:/c/Users/REISEN/.cargo/bin:$PATH"
-export RUSTUP_DIST_SERVER="https://mirrors.ustc.edu.cn/rust-static"
-export RUSTUP_UPDATE_ROOT="https://mirrors.ustc.edu.cn/rust-static/rustup"
-export CARGO_NET_GIT_FETCH_WITH_CLI=true
+# Optional developer helper for tools/ and Rust toolchain setup.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export LWSMF_ROOT="$ROOT"
+T="$ROOT/tools"
+export PATH="$T/bin:$T/cmake/bin:$T/ffmpeg/bin:${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
 echo "[env] rustc $(rustc --version 2>/dev/null | cut -d' ' -f2) | rg $(rg --version 2>/dev/null | head -1 | cut -d' ' -f2)"

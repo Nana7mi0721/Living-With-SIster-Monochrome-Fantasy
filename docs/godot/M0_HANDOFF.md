@@ -13,7 +13,7 @@
 - **阶段/日期**：M0（数据与工具链）/ 2026-11-14
 - **仓库 HEAD**：`8c65153318e49d77711287d2a0226abc3d748b80`
 - **Godot 版本/渲染器**：Godot 4.7.2-stable Mono Win64 (`ed1daf0bf`)，兼容渲染器（Compatibility Renderer）
-- **.NET SDK**：.NET SDK 8.0.428 (`E:\Study\tools\dotnet8`)，C# 运行时 8.0.34
+- **.NET SDK**：.NET SDK 8.0.428，C# 运行时 8.0.34
 - **数据根/夹具**：
   - WOLF 数据源：`work/retail_backup/Data/`（二进制基准，不进 git）
   - 零售存档源：`work/retail_backup/Save/SaveData01..08.sav`（不进 git）
