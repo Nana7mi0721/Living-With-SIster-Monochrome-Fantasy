@@ -173,11 +173,8 @@ fn h_word_effect_move_fade_is_visible() {
             if !saved && p.alpha() > 0.5 {
                 let mut atlas = Atlas::new();
                 let quads = game.picture_quads(&mut atlas);
-                let word_quads: Vec<SpriteQuad> = quads
-                    .iter()
-                    .filter(|q| q.number == 4000)
-                    .copied()
-                    .collect();
+                let word_quads: Vec<SpriteQuad> =
+                    quads.iter().filter(|q| q.number == 4000).copied().collect();
                 word_quad_count = word_quads.len();
                 png_lit = save_quads_png(&atlas, &word_quads, &out_path());
                 saved = true;

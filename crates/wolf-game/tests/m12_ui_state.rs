@@ -110,7 +110,9 @@ fn load_save01() -> Option<Game> {
 
 #[test]
 fn loading_save01_starts_the_hud_events_and_never_the_dlc_overlay() {
-    let Some(mut game) = load_save01() else { return };
+    let Some(mut game) = load_save01() else {
+        return;
+    };
 
     let running = game.auto_events.running_ids();
     assert!(
@@ -132,11 +134,16 @@ fn loading_save01_starts_the_hud_events_and_never_the_dlc_overlay() {
         game.key_bits = wolf_game::key::bits_for_code(10);
         game.frame();
         assert!(
-            !game.vm.instances().iter().any(|instance| instance.event == 506),
+            !game
+                .vm
+                .instances()
+                .iter()
+                .any(|instance| instance.event == 506),
             "event 506 must not run after load (frame {frame})"
         );
         assert!(
-            !game.screen
+            !game
+                .screen
                 .get(-6)
                 .map(|picture| picture.file.contains("dlc_imouto01_eye"))
                 .unwrap_or(false),
@@ -152,7 +159,9 @@ fn loading_save01_starts_the_hud_events_and_never_the_dlc_overlay() {
 
 #[test]
 fn load_then_sleep_repaints_the_hud_from_the_live_variables() {
-    let Some(mut game) = load_save01() else { return };
+    let Some(mut game) = load_save01() else {
+        return;
+    };
 
     // The saved HUD is the pre-sleep snapshot: 90日 21:40, action 75/120.
     assert_eq!(game.vm.vars.get(160), 90, "SaveData01 day");
@@ -172,8 +181,14 @@ fn load_then_sleep_repaints_the_hud_from_the_live_variables() {
     // old SavePart5 literals.
     assert_eq!(game.vm.vars.get(160), 91, "sleep advances to day 91");
     let (action, action_max, energy, energy_max, desire, money) = hud_values(&game);
-    assert_eq!((action, action_max), (game.vm.vars.get(14), game.vm.vars.get(13)));
-    assert_eq!((energy, energy_max), (game.vm.vars.get(16), game.vm.vars.get(15)));
+    assert_eq!(
+        (action, action_max),
+        (game.vm.vars.get(14), game.vm.vars.get(13))
+    );
+    assert_eq!(
+        (energy, energy_max),
+        (game.vm.vars.get(16), game.vm.vars.get(15))
+    );
     assert_eq!(desire, game.vm.vars.get(18));
     assert_eq!(money, game.vm.vars.get(7));
     assert_ne!(action, 75, "HUD must not stay at the SavePart5 snapshot");

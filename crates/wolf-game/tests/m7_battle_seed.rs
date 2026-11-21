@@ -67,8 +67,18 @@ fn run(with_seed: bool, frames: usize) -> Outcome {
         // identical to battle_seed::LEADER_STATS. Without HP>0 CE176 marks the single
         // ally dead and CE172 pc32 aborts 0==0. Kept local (battle_seed is private).
         for (col, val) in [
-            (20, 100), (21, 100), (22, 50), (23, 50), (24, 20), (25, 15),
-            (26, 10), (27, 30), (28, 30), (9, 20), (10, 10), (4, 10),
+            (20, 100),
+            (21, 100),
+            (22, 50),
+            (23, 50),
+            (24, 20),
+            (25, 15),
+            (26, 10),
+            (27, 30),
+            (28, 30),
+            (9, 20),
+            (10, 10),
+            (4, 10),
         ] {
             game.databases.set_num(Container::CData, 0, 12, col, val);
         }
@@ -86,11 +96,7 @@ fn run(with_seed: bool, frames: usize) -> Outcome {
     };
 
     for f in 0..frames {
-        game.key_bits = if f % 2 == 0 {
-            wolf_game::key::OK
-        } else {
-            0
-        };
+        game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
         let _ = game.frame();
         for inst in game.vm.instances() {
             match format!("{:?}", inst.event).as_str() {
@@ -101,8 +107,14 @@ fn run(with_seed: bool, frames: usize) -> Outcome {
             }
         }
         for row in 0..8 {
-            let code = game.databases.num(Container::CData, 19, row, 1).unwrap_or(0);
-            let selectable = game.databases.num(Container::CData, 19, row, 2).unwrap_or(0);
+            let code = game
+                .databases
+                .num(Container::CData, 19, row, 1)
+                .unwrap_or(0);
+            let selectable = game
+                .databases
+                .num(Container::CData, 19, row, 2)
+                .unwrap_or(0);
             if REAL_ATTACK_CODES.contains(&code) && selectable == 1 {
                 out.real_selectable = true;
             }
@@ -181,7 +193,10 @@ fn m7_battle_seed_makes_a_real_attack_selectable() {
         seeded.real_selectable,
         "with the seed a real attack (code 26/25/30/29) must be selectable"
     );
-    assert_eq!(seeded.warnings, 0, "seeded battle segment must log no warnings");
+    assert_eq!(
+        seeded.warnings, 0,
+        "seeded battle segment must log no warnings"
+    );
     assert_eq!(
         seeded.unanswered, 0,
         "seeded battle segment must leave no 250 unanswered database read"

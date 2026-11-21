@@ -86,7 +86,12 @@ const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
 fn day_row_texts(game: &Game) -> Vec<String> {
     DAY_ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -209,7 +214,12 @@ fn day2_evening_game() -> Option<Game> {
     click_at(&mut game, 512, 230 + 50 * row as i32);
     for _ in 0..2500 {
         game.frame();
-        if game.vm.instances().iter().all(|instance| instance.event != 251) {
+        if game
+            .vm
+            .instances()
+            .iter()
+            .all(|instance| instance.event != 251)
+        {
             break;
         }
     }
@@ -236,7 +246,9 @@ fn menu_picture_numbers(game: &Game) -> Vec<i32> {
 
 #[test]
 fn daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu() {
-    let Some(mut game) = day2_evening_game() else { return };
+    let Some(mut game) = day2_evening_game() else {
+        return;
+    };
 
     // --- The day/evening bedroom state, warning-free ---------------------------------
     assert_eq!(game.vm.vars.get(160), 2, "the day counter is day 2");
@@ -246,11 +258,19 @@ fn daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu() {
         game.vm.vars.get(4),
         game.vm.vars.get(5)
     );
-    assert_eq!(game.vm.vars.get(5), 30, "the evening settles on the half hour");
+    assert_eq!(
+        game.vm.vars.get(5),
+        30,
+        "the evening settles on the half hour"
+    );
     assert_eq!(game.stats.warnings, 0, "the evening scene is warning-free");
 
     // ev1 page 0's condition holds; the higher pages' conditions do not, so page 0 is active.
-    assert_eq!(game.vm.vars.get(69), 1, "page-0 condition var69 == 1 (day/evening flag)");
+    assert_eq!(
+        game.vm.vars.get(69),
+        1,
+        "page-0 condition var69 == 1 (day/evening flag)"
+    );
     assert_eq!(game.vm.vars.get(64), 0, "page-2 condition var64 == 0");
     assert_eq!(game.vm.vars.get(65), 0, "page-1 condition var65 == 0");
     assert_eq!(game.vm.vars.get(25), 0, "page-0 condition var25 == 0");
@@ -258,7 +278,11 @@ fn daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu() {
     assert_eq!(game.vm.vars.get(302), 0, "page-0 condition var302 == 0");
 
     // The expected output var68 is NOT injected: it must start at 0.
-    assert_eq!(game.vm.vars.get(68), 0, "the page-0 output flag var68 starts at 0 (not injected)");
+    assert_eq!(
+        game.vm.vars.get(68),
+        0,
+        "the page-0 output flag var68 starts at 0 (not injected)"
+    );
     assert!(game.choices.is_none(), "no prompt before the gesture");
 
     // --- Hit box: the real sister sprite, not a redrawn square ------------------------
@@ -271,7 +295,10 @@ fn daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu() {
         .get(120)
         .expect("the sister sprite is picture 120");
     assert_eq!(sister.scale, 100, "the sprite draws at scale 100");
-    assert_eq!(sister.kind as u8, 0, "picture 120 is a sprite, not a solid <SQUARE>");
+    assert_eq!(
+        sister.kind as u8, 0,
+        "picture 120 is a sprite, not a solid <SQUARE>"
+    );
     assert!(
         sister.file.contains("imouto"),
         "picture 120 is a sister sprite (imouto*.png), got {:?}",
@@ -282,7 +309,11 @@ fn daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu() {
     // --- Documented normalisation, then the natural gesture ---------------------------
     // Clear the stale first-dinner tip so the downstream ev4 page 0 can run past its pc1
     // break (a player who closed the status/skill screen leaves var295 == 0).
-    assert_eq!(game.vm.vars.get(295), 1, "the first-dinner tip flag is set on the fast-forward");
+    assert_eq!(
+        game.vm.vars.get(295),
+        1,
+        "the first-dinner tip flag is set on the fast-forward"
+    );
     game.vm.vars.set(295, 0);
     game.vm.vars.set(68, 0);
 
@@ -299,7 +330,11 @@ fn daytime_sister_sprite_click_writes_var68_and_opens_the_night_command_menu() {
         1,
         "hovering the sister sprite + Decide writes the page-0 output flag var68 = 1"
     );
-    assert_eq!(game.vm.vars.get(63), 0, "page 2's flag var63 was not touched");
+    assert_eq!(
+        game.vm.vars.get(63),
+        0,
+        "page 2's flag var63 was not touched"
+    );
     assert_eq!(game.stats.warnings, 0, "the click frame is warning-free");
 
     // --- Real downstream: ev4 page 0 consumes var68 and calls CE245 (夜コマンドメニュー) --

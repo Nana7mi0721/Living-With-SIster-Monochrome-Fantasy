@@ -151,7 +151,11 @@ fn the_leader_reports_the_placed_map_events_tile_and_direction() {
 
     assert_eq!(game.vm.vars.get(640), 63, "event tile x");
     assert_eq!(game.vm.vars.get(641), 35, "event tile y");
-    assert_eq!(game.vm.vars.get(642), 2, "event facing from the active page");
+    assert_eq!(
+        game.vm.vars.get(642),
+        2,
+        "event facing from the active page"
+    );
     assert_eq!(game.vm.vars.get(643), 13, "event id");
     assert_eq!(
         game.vm.vars.get(650),
@@ -182,7 +186,10 @@ fn the_leader_reports_the_placed_map_events_tile_and_direction() {
         424_242,
         "an absent map event leaves the destination alone"
     );
-    assert_eq!(game.stats.warnings, 0, "known character fields warn nothing");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "known character fields warn nothing"
+    );
 }
 
 #[test]
@@ -236,8 +243,16 @@ fn the_new_game_transfer_places_the_leader_on_the_destination_tile() {
         19,
         "leader tile y from the precise 130 destination (38 / 2)"
     );
-    assert_eq!(game.vm.vars.get(722), 62, "precise x is the raw 130 operand");
-    assert_eq!(game.vm.vars.get(723), 38, "precise y is the raw 130 operand");
+    assert_eq!(
+        game.vm.vars.get(722),
+        62,
+        "precise x is the raw 130 operand"
+    );
+    assert_eq!(
+        game.vm.vars.get(723),
+        38,
+        "precise y is the raw 130 operand"
+    );
     assert_eq!(
         game.vm.vars.get(724),
         424_242,
@@ -308,11 +323,23 @@ fn placements_follow_the_map_and_the_leader_needs_a_placement() {
         cmd(172, &[]),
     ];
     run_once(&mut game, 912, "m8 map003 placement", commands);
-    assert_eq!(game.vm.vars.get(690), 30, "skipped event keeps its placement");
+    assert_eq!(
+        game.vm.vars.get(690),
+        30,
+        "skipped event keeps its placement"
+    );
     assert_eq!(game.vm.vars.get(691), 17);
-    assert_eq!(game.vm.vars.get(692), 2, "page facing survives being skipped");
+    assert_eq!(
+        game.vm.vars.get(692),
+        2,
+        "page facing survives being skipped"
+    );
     assert_eq!(game.vm.vars.get(693), 1, "event id");
-    assert_eq!(game.vm.vars.get(694), 29, "inactive event still has a placement");
+    assert_eq!(
+        game.vm.vars.get(694),
+        29,
+        "inactive event still has a placement"
+    );
     assert_eq!(game.vm.vars.get(695), 17);
     assert_eq!(
         game.vm.vars.get(696),

@@ -145,11 +145,19 @@ fn picture_subops_read_the_requested_field_and_leave_unknowns_untouched() {
         .answer_picture(300, 2, 150);
     let report = vm.step_frame(&mut host);
     assert_eq!(vm.vars.get(0), 1, "hover answer for the five-digit picture");
-    assert_eq!(vm.vars.get(1), 150, "0x4400 routed like 0x4000 for a variable object");
+    assert_eq!(
+        vm.vars.get(1),
+        150,
+        "0x4400 routed like 0x4000 for a variable object"
+    );
     assert_eq!(vm.vars.get(2), 7, "unanswered field keeps the old value");
     assert_eq!(host.pictures, vec![(12_004, 8), (300, 2), (803, 77)]);
     assert_eq!(report.running, 0);
-    assert!(host.logs.is_empty(), "no diagnostic for known subs: {:?}", host.logs);
+    assert!(
+        host.logs.is_empty(),
+        "no diagnostic for known subs: {:?}",
+        host.logs
+    );
 }
 
 #[test]
@@ -189,12 +197,18 @@ fn engine_short_form_reads_host_state_and_field_18_from_the_interpreter() {
     ];
     let mut vm = vm_with(vec![event(55, "engine queries", commands)]);
     vm.start_event(55);
-    let mut host = Probe::default().answer_engine(20, 640).answer_engine(21, 360);
+    let mut host = Probe::default()
+        .answer_engine(20, 640)
+        .answer_engine(21, 360);
     vm.step_frame(&mut host);
     assert_eq!(vm.vars.get(0), 640);
     assert_eq!(vm.vars.get(1), 360);
     assert_eq!(vm.vars.get(2), 500_055, "event 55 + 500000");
-    assert_eq!(vm.vars.get(3), 7, "unanswered engine field keeps the old value");
+    assert_eq!(
+        vm.vars.get(3),
+        7,
+        "unanswered engine field keeps the old value"
+    );
     assert_eq!(
         host.engines,
         vec![20, 21, 99],
@@ -213,7 +227,11 @@ fn an_unknown_sub_keeps_the_destination_and_logs_one_info_line() {
     vm.start_event(12);
     let mut host = Probe::default();
     vm.step_frame(&mut host);
-    assert_eq!(vm.vars.get(0), 7, "unimplemented sub leaves the destination alone");
+    assert_eq!(
+        vm.vars.get(0),
+        7,
+        "unimplemented sub leaves the destination alone"
+    );
     assert_eq!(host.logs.len(), 1, "exactly one diagnostic");
     assert_eq!(host.logs[0].0, LogLevel::Info);
     assert!(
@@ -226,9 +244,9 @@ fn an_unknown_sub_keeps_the_destination_and_logs_one_info_line() {
 #[test]
 fn the_destination_magic_routes_to_normal_system_and_self_banks() {
     let commands = vec![
-        cmd(124, &[2_000_000, 0x3000, 20], &[]),  // normal variable 0
-        cmd(124, &[9_000_005, 0x3000, 20], &[]),   // system variable 5
-        cmd(124, &[1_600_002, 0x3000, 20], &[]),   // self variable 2 of this coroutine
+        cmd(124, &[2_000_000, 0x3000, 20], &[]), // normal variable 0
+        cmd(124, &[9_000_005, 0x3000, 20], &[]), // system variable 5
+        cmd(124, &[1_600_002, 0x3000, 20], &[]), // self variable 2 of this coroutine
         cmd(121, &[2_000_001, 1_600_002, 0, 0], &[]), // copy self 2 into normal 1
     ];
     let mut vm = vm_with(vec![event(13, "destination banks", commands)]);
@@ -251,8 +269,16 @@ fn an_unanswered_query_leaves_a_self_destination_untouched() {
     vm.start_event(14);
     let mut host = Probe::default();
     vm.step_frame(&mut host);
-    assert_eq!(host.pictures, vec![(12_004, 8)], "the query was still attempted");
-    assert_eq!(vm.vars.get(0), 9, "self destination untouched when the host is silent");
+    assert_eq!(
+        host.pictures,
+        vec![(12_004, 8)],
+        "the query was still attempted"
+    );
+    assert_eq!(
+        vm.vars.get(0),
+        9,
+        "self destination untouched when the host is silent"
+    );
 }
 
 #[test]

@@ -78,7 +78,7 @@ fn words(cmd: &Command) -> Vec<i32> {
         .collect()
 }
 
-fn cmd_ref<'a>(e: &'a CommonEvent, pc: usize) -> &'a Command {
+fn cmd_ref(e: &CommonEvent, pc: usize) -> &Command {
     match &e.commands[pc] {
         Slot::Command(c) => c.as_ref(),
         Slot::Blank => panic!("CE{} pc{} is Blank, expected a command", e.id, pc),
@@ -139,7 +139,7 @@ fn drive(g: &mut Game, answers: &BTreeMap<usize, usize>, frames: usize) -> Track
         g.frame();
         for inst in g.vm.instances() {
             t.seen.insert(inst.event);
-            let pc = inst.pc as usize;
+            let pc = inst.pc;
             let e = t.max_pc.entry(inst.event).or_insert(0);
             if pc > *e {
                 *e = pc;
@@ -151,18 +151,17 @@ fn drive(g: &mut Game, answers: &BTreeMap<usize, usize>, frames: usize) -> Track
         if let Some(ch) = &g.choices {
             if ch.frames >= 2 {
                 let nopts = ch.options.len();
-                let pc = g
-                    .vm
-                    .instances()
-                    .iter()
-                    .find(|i| i.event == 328)
-                    .map(|i| i.pc as usize)
-                    .unwrap_or(9999);
+                let pc =
+                    g.vm.instances()
+                        .iter()
+                        .find(|i| i.event == 328)
+                        .map(|i| i.pc)
+                        .unwrap_or(9999);
                 let ans = answers.get(&pc).copied().unwrap_or(0);
                 if answered_regions.insert(pc) {
                     t.menus.push((pc, nopts, ans));
                 }
-                let _ = g.reply(ChoiceReply::Index(ans));
+                g.reply(ChoiceReply::Index(ans));
             }
         }
     }
@@ -222,9 +221,18 @@ fn topic_menu_four_branches_diverge_to_bath_reset_not_h_cg() {
             t.ce328_pcs.contains(&1023),
             "topic {topic}: expected pc1023 bath reset terminal"
         );
-        assert!(!t.ce328_pcs.contains(&986), "topic {topic}: must not hit pc986");
-        assert!(!t.seen.contains(&402), "topic {topic}: CE402 must not spawn");
-        assert!(!t.seen.contains(&410), "topic {topic}: CE410 must not spawn");
+        assert!(
+            !t.ce328_pcs.contains(&986),
+            "topic {topic}: must not hit pc986"
+        );
+        assert!(
+            !t.seen.contains(&402),
+            "topic {topic}: CE402 must not spawn"
+        );
+        assert!(
+            !t.seen.contains(&410),
+            "topic {topic}: CE410 must not spawn"
+        );
         assert_eq!(
             t.max_pc.get(&328).copied().unwrap_or(0),
             1023,
@@ -268,8 +276,14 @@ fn var304_entry_short_circuits_to_ce332_and_never_h_cg() {
 #[test]
 fn no_shipped_save_reaches_the_ce402_call() {
     let saves = [
-        "SaveData01", "SaveData02", "SaveData03", "SaveData04", "SaveData05", "SaveData06",
-        "SaveData07", "SaveData08",
+        "SaveData01",
+        "SaveData02",
+        "SaveData03",
+        "SaveData04",
+        "SaveData05",
+        "SaveData06",
+        "SaveData07",
+        "SaveData08",
     ];
     for name in saves {
         for v304 in [0i32, 1] {
@@ -332,8 +346,14 @@ fn gate_graph_pins_the_only_route_to_the_ce402_call() {
     assert_eq!(cmd_ref(ce332, 125).opcode, 121);
     assert_eq!(words(cmd_ref(ce332, 125))[0..2], [2000304, 0]);
     let ce332_calls = op210_callers(&ce, 500332);
-    assert!(ce332_calls.contains(&(328, 711)), "CE332 called at CE328 pc711");
-    assert!(ce332_calls.contains(&(328, 740)), "CE332 called at CE328 pc740");
+    assert!(
+        ce332_calls.contains(&(328, 711)),
+        "CE332 called at CE328 pc711"
+    );
+    assert!(
+        ce332_calls.contains(&(328, 740)),
+        "CE332 called at CE328 pc740"
+    );
 
     let v304_one = op121_writers_val(&ce, 2000304, 1);
     assert_eq!(

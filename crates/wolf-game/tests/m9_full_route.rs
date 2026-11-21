@@ -14,6 +14,7 @@
 //!     one cosmetic command-menu header label, exactly as m7_day4_playable does;
 //!   * the first-dinner TIPS flag var295 (only if still set) and the ev4 gate var68 are
 //!     normalized before the natural night gesture, exactly as m6_night_sleep does.
+//!
 //! No settlement variable (2000340/2000343/2000350/2000352) is ever injected.
 //!
 //! Run: WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m9_full_route -- --nocapture
@@ -637,10 +638,7 @@ fn the_continuous_new_game_route_reaches_day_five_0830() {
         pre_power >= 200,
         "party power {pre_power} takes the CE253 HIGH branch"
     );
-    assert_eq!(
-        trace.max_ce242_pc, 866,
-        "CE242 reaches its cleanup pc"
-    );
+    assert_eq!(trace.max_ce242_pc, 866, "CE242 reaches its cleanup pc");
     assert!(settled, "the day-4 round must settle");
     assert_eq!(
         trace.v350_seq,

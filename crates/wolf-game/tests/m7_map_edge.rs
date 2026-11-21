@@ -277,5 +277,8 @@ fn a_dangling_map_id_is_skipped_without_a_read_error() {
             .any(|message| message.contains("cannot read")),
         "no failed read of the data root may happen, got {diagnostics:?}"
     );
-    assert_eq!(game.stats.warnings, 0, "skipping a dangling id is not a warning");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "skipping a dangling id is not a warning"
+    );
 }

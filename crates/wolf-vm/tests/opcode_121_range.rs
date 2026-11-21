@@ -125,7 +125,11 @@ fn a_large_range_writes_arg4_plus_one_slots() {
     for i in 0..=600 {
         assert_eq!(vm.vars.get(i as usize), 7, "slot {i} in the range");
     }
-    assert_eq!(vm.vars.get(601), 0, "slot after the range must be untouched");
+    assert_eq!(
+        vm.vars.get(601),
+        0,
+        "slot after the range must be untouched"
+    );
 }
 
 /// A short form that sets bit 0x10000 but omits arg[4] reads a missing argument

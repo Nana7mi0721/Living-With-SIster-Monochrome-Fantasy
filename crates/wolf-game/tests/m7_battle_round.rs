@@ -57,8 +57,18 @@ fn seed_party(game: &mut Game) {
             .set_num(Container::CData, 0, 12, 47 + i as i32, *v);
     }
     for (c, v) in [
-        (20, 100), (21, 100), (22, 50), (23, 50), (24, 20), (25, 15), (26, 10), (27, 30),
-        (28, 30), (9, 20), (10, 10), (4, 10),
+        (20, 100),
+        (21, 100),
+        (22, 50),
+        (23, 50),
+        (24, 20),
+        (25, 15),
+        (26, 10),
+        (27, 30),
+        (28, 30),
+        (9, 20),
+        (10, 10),
+        (4, 10),
     ] {
         game.databases.set_num(Container::CData, 0, 12, c, v);
     }
@@ -134,8 +144,14 @@ fn run_ce188_line(frames: usize) -> LineA {
         // Real attack row selectable = a 万能ウィンドウ row with a real attack code and
         // 選択可能(col2)=1.
         for row in 0..8 {
-            let code = game.databases.num(Container::CData, 19, row, 1).unwrap_or(0);
-            let selectable = game.databases.num(Container::CData, 19, row, 2).unwrap_or(0);
+            let code = game
+                .databases
+                .num(Container::CData, 19, row, 1)
+                .unwrap_or(0);
+            let selectable = game
+                .databases
+                .num(Container::CData, 19, row, 2)
+                .unwrap_or(0);
             if REAL_ATTACK_CODES.contains(&code) && selectable == 1 {
                 a.real_attack_selectable = true;
             }
@@ -146,8 +162,8 @@ fn run_ce188_line(frames: usize) -> LineA {
 }
 
 struct LineB {
-    saw_battle_active: bool,   // 2000340 == 1
-    saw_turn_set: bool,        // 2000349 == 1
+    saw_battle_active: bool, // 2000340 == 1
+    saw_turn_set: bool,      // 2000349 == 1
     ce242_started: bool,
     ce243_started: bool,
     saw_ce244: bool,
@@ -192,7 +208,16 @@ fn run_ce239_line(frames: usize) -> LineB {
             .vm
             .instances()
             .iter()
-            .map(|i| (i.id, if format!("{:?}", i.event) == "239" { i.pc as i32 } else { -1 }))
+            .map(|i| {
+                (
+                    i.id,
+                    if format!("{:?}", i.event) == "239" {
+                        i.pc as i32
+                    } else {
+                        -1
+                    },
+                )
+            })
             .collect();
         for (id, pc) in ids {
             if pc >= 0 {
@@ -249,11 +274,23 @@ fn run_ce239_line(frames: usize) -> LineB {
 fn m7_battle_round_real_line_and_ce244_blocker() {
     // ---- Scenario A: the real CE188 battle line boots and reaches command selection ----
     let a = run_ce188_line(400);
-    assert!(a.reached_ce143, "CE188 line must run CE143 主人公DB→戦闘DBコピー");
-    assert_eq!(a.copy_maxhp, 100, "CE143 must copy maxHP into type10 row0 col1");
+    assert!(
+        a.reached_ce143,
+        "CE188 line must run CE143 主人公DB→戦闘DBコピー"
+    );
+    assert_eq!(
+        a.copy_maxhp, 100,
+        "CE143 must copy maxHP into type10 row0 col1"
+    );
     assert_eq!(a.copy_hp, 100, "CE143 must copy HP into type10 row0 col2");
-    assert!(a.reached_ce152, "CE188 line must reach CE152 戦闘コマンド一覧算出");
-    assert!(a.reached_ce192, "CE188 line must reach CE192 味方コマンド選択");
+    assert!(
+        a.reached_ce152,
+        "CE188 line must reach CE152 戦闘コマンド一覧算出"
+    );
+    assert!(
+        a.reached_ce192,
+        "CE188 line must reach CE192 味方コマンド選択"
+    );
     assert!(
         a.real_attack_selectable,
         "a real attack row (code 26/25/30/29) must be selectable in the command window"
@@ -262,25 +299,60 @@ fn m7_battle_round_real_line_and_ce244_blocker() {
         a.reached_target_window,
         "confirming a command must open the CE157/CE158 target-selection window"
     );
-    assert!(!a.saw_ce244, "CE188 never calls CE244 — settlement is structurally out of this line");
-    assert!(a.warnings == 0, "scenario A must run with zero warnings, got {}", a.warnings);
+    assert!(
+        !a.saw_ce244,
+        "CE188 never calls CE244 — settlement is structurally out of this line"
+    );
+    assert!(
+        a.warnings == 0,
+        "scenario A must run with zero warnings, got {}",
+        a.warnings
+    );
 
     // ---- Scenario B: the real CE239 battle-caller line — pin the 2000350 deadlock ----
     let b = run_ce239_line(1600);
-    assert!(b.saw_battle_active, "CE239 must reach its battle-active case (2000340 = 1)");
-    assert!(b.saw_turn_set, "CE239 must set the elapsed-turn counter 2000349 = 1");
+    assert!(
+        b.saw_battle_active,
+        "CE239 must reach its battle-active case (2000340 = 1)"
+    );
+    assert!(
+        b.saw_turn_set,
+        "CE239 must set the elapsed-turn counter 2000349 = 1"
+    );
     // The crux: the 3-state command machine never leaves idle.
-    assert_eq!(b.v350_max, 0, "2000350 (コマンド処理中) must stay 0 — no state ever sets it to 1");
-    assert!(!b.ce242_started, "CE242 must never start (it needs 2000350 == 1)");
-    assert!(!b.ce243_started, "CE243 must never start (it needs 2000350 == 2)");
-    assert!(!b.saw_ce244, "CE244 settlement must never run (only 239/241/242/243 call it)");
-    assert_eq!(b.v352, 0, "2000352 (勝ち負け) stays 0 — CE244 never writes it");
-    assert_eq!(b.v343, 0, "2000343 (戦闘終了) stays 0 — CE244 never writes it");
+    assert_eq!(
+        b.v350_max, 0,
+        "2000350 (コマンド処理中) must stay 0 — no state ever sets it to 1"
+    );
+    assert!(
+        !b.ce242_started,
+        "CE242 must never start (it needs 2000350 == 1)"
+    );
+    assert!(
+        !b.ce243_started,
+        "CE243 must never start (it needs 2000350 == 2)"
+    );
+    assert!(
+        !b.saw_ce244,
+        "CE244 settlement must never run (only 239/241/242/243 call it)"
+    );
+    assert_eq!(
+        b.v352, 0,
+        "2000352 (勝ち負け) stays 0 — CE244 never writes it"
+    );
+    assert_eq!(
+        b.v343, 0,
+        "2000343 (戦闘終了) stays 0 — CE244 never writes it"
+    );
     assert!(
         !b.entered_end_judgment,
         "CE239 must not enter its end-judgment case2 (it blocks waiting on 2000343)"
     );
-    assert!(b.warnings == 0, "scenario B must run with zero warnings, got {}", b.warnings);
+    assert!(
+        b.warnings == 0,
+        "scenario B must run with zero warnings, got {}",
+        b.warnings
+    );
 
     eprintln!(
         "M7_BATTLE_ROUND: A(max188pc={}, ce143={}, copyHP={}/{}, ce152={}, ce192={}, target_win={}, real_attack_selectable={}, ce244={}, warns={}) | B(battle_active={}, turn_set={}, v350_max={}, ce242={}, ce243={}, ce244={}, v352={}, v343={}, max239pc={}, warns={})",

@@ -42,8 +42,8 @@ fn open_game() -> Option<Game> {
 struct NoopHost;
 impl Host for NoopHost {}
 
-const OUTCOME: usize = 352;   // 2000352
-const SETTLED: usize = 343;   // 2000343
+const OUTCOME: usize = 352; // 2000352
+const SETTLED: usize = 343; // 2000343
 const BOOTSTRAP: usize = 350; // 2000350
 const BATTLE_FLAG: usize = 354; // 2000354
 
@@ -71,14 +71,21 @@ fn ce244_settles_a_win_when_entered_with_no_extra_state() {
     let out = game.frame();
 
     assert_eq!(out.report.running, 0, "CE244 must finish within the frame");
-    assert!(out.report.finished >= 1, "CE244 must report a finished coroutine");
+    assert!(
+        out.report.finished >= 1,
+        "CE244 must report a finished coroutine"
+    );
     assert!(out.report.steps > 0, "CE244 must execute instructions");
 
     assert_eq!(game.vm.vars.get(OUTCOME), 1, "zero extra state is a win");
     assert_eq!(game.vm.vars.get(SETTLED), 1, "settlement flag set");
     assert_eq!(game.vm.vars.get(BOOTSTRAP), 0, "CE244 zeroes 2000350");
     assert_eq!(game.stats.warnings, 0, "no engine warnings");
-    assert!(game.diagnostics.is_empty(), "no diagnostics: {:?}", game.diagnostics);
+    assert!(
+        game.diagnostics.is_empty(),
+        "no diagnostics: {:?}",
+        game.diagnostics
+    );
 }
 
 #[test]
@@ -167,9 +174,17 @@ fn ce244_ignores_the_2000350_bootstrap_and_zeroes_it() {
         }
         let _ = vm.step_frame(&mut host);
     }
-    assert_eq!(vm.vars.get(OUTCOME), 1, "bootstrap must not change the outcome");
+    assert_eq!(
+        vm.vars.get(OUTCOME),
+        1,
+        "bootstrap must not change the outcome"
+    );
     assert_eq!(vm.vars.get(SETTLED), 1);
-    assert_eq!(vm.vars.get(BOOTSTRAP), 0, "CE244 clears the bootstrap variable");
+    assert_eq!(
+        vm.vars.get(BOOTSTRAP),
+        0,
+        "CE244 clears the bootstrap variable"
+    );
 }
 
 #[test]
@@ -189,4 +204,3 @@ fn seeding_the_battle_databases_then_settling_still_yields_the_same_outcome() {
     assert_eq!(game.vm.vars.get(SETTLED), 1);
     assert_eq!(game.stats.warnings, 0);
 }
-

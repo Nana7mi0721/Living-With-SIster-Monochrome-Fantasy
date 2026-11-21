@@ -49,7 +49,9 @@ fn repo_root() -> PathBuf {
 fn data_root() -> PathBuf {
     let raw = std::env::var("WOLF_DATA_ROOT").unwrap_or_else(|_| "work/all".into());
     let p = PathBuf::from(raw);
-    if p.is_absolute() { return p; }
+    if p.is_absolute() {
+        return p;
+    }
     repo_root().join(p)
 }
 
@@ -87,11 +89,22 @@ fn seed_full_battle_db(g: &mut Game) {
 
     // --- CData type0 row12: leader (character id 12) command slots + stats.
     for (i, v) in [3, 4, 6, 7, 0, 0, 0, 0].iter().enumerate() {
-        g.databases.set_num(Container::CData, 0, 12, 47 + i as i32, *v);
+        g.databases
+            .set_num(Container::CData, 0, 12, 47 + i as i32, *v);
     }
     for (c, v) in [
-        (20, 100), (21, 100), (22, 50), (23, 50), (24, 20), (25, 15), (26, 10), (27, 30),
-        (28, 30), (9, 20), (10, 10), (4, 10),
+        (20, 100),
+        (21, 100),
+        (22, 50),
+        (23, 50),
+        (24, 20),
+        (25, 15),
+        (26, 10),
+        (27, 30),
+        (28, 30),
+        (9, 20),
+        (10, 10),
+        (4, 10),
     ] {
         g.databases.set_num(Container::CData, 0, 12, c, v);
     }
@@ -108,7 +121,9 @@ fn reference_ce172_verdict(g: &Game) -> i32 {
         return -1; // pc32 deadAlly == allyCount -> defeat (also fires on ally_total == 0)
     }
     let enemy_total = cdata(g, 18, 69, 0);
-    let dead_enemy: i32 = (0..enemy_total.max(0)).map(|s| cdata(g, 10, 10 + s, 3)).sum();
+    let dead_enemy: i32 = (0..enemy_total.max(0))
+        .map(|s| cdata(g, 10, 10 + s, 3))
+        .sum();
     if dead_enemy == enemy_total {
         return 1; // pc53 deadEnemy == enemyCount -> victory (also fires on enemy_total == 0)
     }
@@ -140,10 +155,15 @@ fn run_ce188(g: &mut Game, frames: usize) -> Reached {
         for inst in g.vm.instances() {
             let id: i32 = format!("{:?}", inst.event).parse().unwrap_or(-1);
             let e = seen.entry(id).or_insert(-1);
-            if (inst.pc as i32) > *e { *e = inst.pc as i32; }
+            if (inst.pc as i32) > *e {
+                *e = inst.pc as i32;
+            }
         }
     }
-    Reached { seen, warnings: g.stats.warnings }
+    Reached {
+        seen,
+        warnings: g.stats.warnings,
+    }
 }
 
 #[test]
@@ -157,22 +177,46 @@ fn full_fixture_keeps_ce172_from_aborting_and_the_line_alive() {
     let _ = g.start_event(188);
 
     // Reference model over the fixture rows: dead(0) vs totals(1/1) => no abort.
-    assert_eq!(reference_ce172_verdict(&g), 0,
-        "full fixture must leave CE172 undecided (dead 0 != totals 1/1)");
+    assert_eq!(
+        reference_ce172_verdict(&g),
+        0,
+        "full fixture must leave CE172 undecided (dead 0 != totals 1/1)"
+    );
     // Literal interpreter also leaves it undecided (raw-literal bug).
     assert_eq!(literal_ce172_verdict(&g), 0);
 
     let r = run_ce188(&mut g, 240);
     assert!(r.seen.contains_key(&172), "CE172 must run");
     // No abort chain: CE172 abort routes to CE199/CE149/CE201, never CE192/CE152.
-    assert!(!r.seen.contains_key(&199), "CE172 must not enter defeat/abort chain CE199");
-    assert!(!r.seen.contains_key(&149), "CE172 must not enter abort chain CE149");
-    assert!(!r.seen.contains_key(&201), "CE172 must not enter abort chain CE201");
+    assert!(
+        !r.seen.contains_key(&199),
+        "CE172 must not enter defeat/abort chain CE199"
+    );
+    assert!(
+        !r.seen.contains_key(&149),
+        "CE172 must not enter abort chain CE149"
+    );
+    assert!(
+        !r.seen.contains_key(&201),
+        "CE172 must not enter abort chain CE201"
+    );
     // Line stays alive into command selection.
-    assert!(r.seen.contains_key(&152), "full fixture must still reach CE152 戦闘コマンド一覧算出");
-    assert!(r.seen.contains_key(&192), "full fixture must still reach CE192 味方コマンド選択");
-    assert_eq!(r.warnings, 0, "no interpreter warnings on the full-fixture battle line");
-    eprintln!("m10_battle_db_fixture full: reached={:?} warnings={}", r.seen, r.warnings);
+    assert!(
+        r.seen.contains_key(&152),
+        "full fixture must still reach CE152 戦闘コマンド一覧算出"
+    );
+    assert!(
+        r.seen.contains_key(&192),
+        "full fixture must still reach CE192 味方コマンド選択"
+    );
+    assert_eq!(
+        r.warnings, 0,
+        "no interpreter warnings on the full-fixture battle line"
+    );
+    eprintln!(
+        "m10_battle_db_fixture full: reached={:?} warnings={}",
+        r.seen, r.warnings
+    );
 }
 
 #[test]
@@ -185,8 +229,11 @@ fn empty_enemy_roster_would_abort_under_reference_model() {
     seed_full_battle_db(&mut g);
     g.databases.set_num(Container::CData, 18, 69, 0, 0); // empty enemy roster
 
-    assert_eq!(reference_ce172_verdict(&g), 1,
-        "empty enemy roster: deadEnemy 0 == enemyCount 0 -> victory-abort (PC53)");
+    assert_eq!(
+        reference_ce172_verdict(&g),
+        1,
+        "empty enemy roster: deadEnemy 0 == enemyCount 0 -> victory-abort (PC53)"
+    );
     // Control: the full fixture (r69=1) is undecided.
     let mut g2 = Game::new(data_root()).expect("Game::new");
     g2.load_save(&save01()).expect("load SaveData01");
@@ -198,8 +245,11 @@ fn empty_enemy_roster_would_abort_under_reference_model() {
     g3.load_save(&save01()).expect("load SaveData01");
     seed_full_battle_db(&mut g3);
     g3.databases.set_num(Container::CData, 10, 0, 3, 1); // ally slot 0 dead
-    assert_eq!(reference_ce172_verdict(&g3), -1,
-        "all-dead ally side: deadAlly == allyCount -> defeat-abort (PC32)");
+    assert_eq!(
+        reference_ce172_verdict(&g3),
+        -1,
+        "all-dead ally side: deadAlly == allyCount -> defeat-abort (PC32)"
+    );
 }
 
 #[test]
@@ -223,14 +273,28 @@ fn seeded_battle_db_stalls_downstream_not_at_ce172() {
         for inst in g.vm.instances() {
             let id: i32 = format!("{:?}", inst.event).parse().unwrap_or(-1);
             let e = seen.entry(id).or_insert(-1);
-            if (inst.pc as i32) > *e { *e = inst.pc as i32; }
+            if (inst.pc as i32) > *e {
+                *e = inst.pc as i32;
+            }
         }
     }
     let enemy_count = cdata(&g, 18, 69, 0);
-    assert!(enemy_count > 0, "CE190 must refill the enemy count from the group (got {})", enemy_count);
+    assert!(
+        enemy_count > 0,
+        "CE190 must refill the enemy count from the group (got {})",
+        enemy_count
+    );
     assert!(seen.contains_key(&172), "CE172 must run");
-    assert!(!seen.contains_key(&199) && !seen.contains_key(&149) && !seen.contains_key(&201),
-        "CE172 must NOT abort on a populated roster");
-    assert!(seen.contains_key(&65), "line reaches CE65 万能ウィンドウ before stalling");
-    eprintln!("m10_battle_db_fixture seeded-battle: enemy_count={} reached={:?}", enemy_count, seen);
+    assert!(
+        !seen.contains_key(&199) && !seen.contains_key(&149) && !seen.contains_key(&201),
+        "CE172 must NOT abort on a populated roster"
+    );
+    assert!(
+        seen.contains_key(&65),
+        "line reaches CE65 万能ウィンドウ before stalling"
+    );
+    eprintln!(
+        "m10_battle_db_fixture seeded-battle: enemy_count={} reached={:?}",
+        enemy_count, seen
+    );
 }

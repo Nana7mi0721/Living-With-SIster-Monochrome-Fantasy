@@ -131,7 +131,7 @@ fn run_deep(var23: i32, frame_budget: usize) -> DeepRun {
             g.vm.instances()
                 .iter()
                 .find(|i| i.event == 328)
-                .map(|i| i.pc as usize)
+                .map(|i| i.pc)
         {
             if prev328 != Some(pc) {
                 out.ce328_seq.push(pc);
@@ -150,7 +150,7 @@ fn run_deep(var23: i32, frame_budget: usize) -> DeepRun {
             g.vm.instances()
                 .iter()
                 .find(|i| i.event == 402)
-                .map(|i| i.pc as usize)
+                .map(|i| i.pc)
         {
             if prev402 != Some(pc) {
                 out.ce402_seq.push(pc);
@@ -162,7 +162,7 @@ fn run_deep(var23: i32, frame_budget: usize) -> DeepRun {
             g.vm.instances()
                 .iter()
                 .find(|i| i.event == 410)
-                .map(|i| i.pc as usize)
+                .map(|i| i.pc)
         {
             if prev410 != Some(pc) {
                 out.ce410_seq.push(pc);
@@ -191,12 +191,12 @@ fn run_deep(var23: i32, frame_budget: usize) -> DeepRun {
                 g.vm.instances()
                     .iter()
                     .find(|i| i.event == 328)
-                    .map(|i| i.pc as usize)
+                    .map(|i| i.pc)
                     .unwrap_or(usize::MAX);
             if answered.insert(pc) {
                 out.menus.push((pc, nopts, 0));
             }
-            let _ = g.reply(ChoiceReply::Index(0));
+            g.reply(ChoiceReply::Index(0));
         }
 
         // Done once CE410 has retired and CE328 itself has run out.

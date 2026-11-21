@@ -90,16 +90,25 @@ fn click_at(game: &mut Game, x: i32, y: i32) {
 /// canonical loop used by m6_night_menu.rs / m6_mainline.rs; the day-2 evening state
 /// (measured this range) is bit-identical to the state at the CE246 skinship menu,
 /// because merely opening the night command menu does not touch the intimacy variables.
-
 const DAY_COMMAND_LABELS: [&str; 6] = [
-    "给店里帮忙", "学习会", "基础锻炼", "攻击练习", "防御练习", "秘密特训",
+    "给店里帮忙",
+    "学习会",
+    "基础锻炼",
+    "攻击练习",
+    "防御练习",
+    "秘密特训",
 ];
 const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
 
 fn day_row_texts(game: &Game) -> Vec<String> {
     DAY_ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -165,7 +174,12 @@ fn day2_evening_game() -> Option<Game> {
     click_at(&mut game, 512, 230 + 50 * row as i32);
     for _ in 0..2500 {
         game.frame();
-        if game.vm.instances().iter().all(|instance| instance.event != 251) {
+        if game
+            .vm
+            .instances()
+            .iter()
+            .all(|instance| instance.event != 251)
+        {
             break;
         }
     }
@@ -227,9 +241,11 @@ fn h_mode_var_table_is_derived_from_the_retail_save() {
     let Some(fresh) = day2_evening_game() else {
         return;
     };
-    assert_eq!(fresh.stats.warnings, 0, "fresh day-2 evening is warning-free");
+    assert_eq!(
+        fresh.stats.warnings, 0,
+        "fresh day-2 evening is warning-free"
+    );
     assert_eq!(fresh.vm.vars.get(160), 2, "fresh baseline is day 2");
-
 
     // Mid-H retail snapshot.
     let Some(mut retail) = open_game() else {
@@ -240,8 +256,13 @@ fn h_mode_var_table_is_derived_from_the_retail_save() {
         eprintln!("skipping: {} missing", save.display());
         return;
     }
-    retail.load_save(&save).expect("load the mid-H SaveData08 snapshot");
-    assert_eq!(retail.stats.warnings, 0, "loading the retail save is warning-free");
+    retail
+        .load_save(&save)
+        .expect("load the mid-H SaveData08 snapshot");
+    assert_eq!(
+        retail.stats.warnings, 0,
+        "loading the retail save is warning-free"
+    );
 
     for (id, fresh_expected, retail_expected) in H_MODE_VARS {
         assert_eq!(
@@ -273,7 +294,11 @@ fn h_mode_var_table_is_derived_from_the_retail_save() {
     }
     // And the CE333 gate variable itself is different: 1 fresh, 12 in the mid-H save.
     assert_eq!(fresh.vm.vars.get(157), 1, "fresh var157");
-    assert_eq!(retail.vm.vars.get(157), 12, "retail var157 is 12, not the required 13");
+    assert_eq!(
+        retail.vm.vars.get(157),
+        12,
+        "retail var157 is 12, not the required 13"
+    );
 }
 
 /// Drive the CE246 性骚扰 -> 小鸟飞飞 (deep option 4) branch to completion after loading
@@ -378,16 +403,16 @@ fn ce333_deep_branch_needs_an_event_local_self_variable_gate() {
             return;
         }
     };
-    let common = wolf_format::commonevent::CommonEventData::parse(&bytes)
-        .expect("parse CommonEvent.dat");
+    let common =
+        wolf_format::commonevent::CommonEventData::parse(&bytes).expect("parse CommonEvent.dat");
     use wolf_format::command::Slot;
     let mut literal_values: Vec<i64> = Vec::new();
     let mut self_copies: Vec<(usize, usize, i64)> = Vec::new();
     for (event_index, event) in common.events.iter().enumerate() {
-        let mut pc = 0usize;
-        for slot in &event.commands {
+        for (pc, slot) in event.commands.iter().enumerate() {
             if let Slot::Command(cmd) = slot {
-                if cmd.opcode == 121 && cmd.params.len() >= 16 && le32(&cmd.params, 0) == 2_000_157 {
+                if cmd.opcode == 121 && cmd.params.len() >= 16 && le32(&cmd.params, 0) == 2_000_157
+                {
                     let a1 = le32(&cmd.params, 4);
                     if (1_000_000..2_000_000).contains(&a1) {
                         self_copies.push((event_index + 1, pc, a1));
@@ -396,7 +421,6 @@ fn ce333_deep_branch_needs_an_event_local_self_variable_gate() {
                     }
                 }
             }
-            pc += 1;
         }
     }
     literal_values.sort_unstable();
@@ -434,9 +458,18 @@ fn ce333_deep_branch_needs_an_event_local_self_variable_gate() {
         final_pc, None,
         "CE246 ends cleanly (returns to the night menu via pc2058 CALL ev245); no deadlock"
     );
-    assert_eq!(var157, 12, "the mid-H snapshot carries var157 == 12, not 13");
-    assert!(!ever_333, "CE333 (H CG) is NOT started by the deep variable state");
-    assert!(!ever_346, "CE346 (cut-in) is NOT started by the deep variable state");
+    assert_eq!(
+        var157, 12,
+        "the mid-H snapshot carries var157 == 12, not 13"
+    );
+    assert!(
+        !ever_333,
+        "CE333 (H CG) is NOT started by the deep variable state"
+    );
+    assert!(
+        !ever_346,
+        "CE346 (cut-in) is NOT started by the deep variable state"
+    );
 
     // Forcing the global gate each frame still cannot open CE333 — this is the blocker.
     let Some((forced_333, forced_346, _, _, forced_warnings, forced_var157)) =

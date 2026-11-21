@@ -73,7 +73,7 @@ fn words(cmd: &Command) -> Vec<i32> {
         .collect()
 }
 
-fn cmd_ref<'a>(e: &'a CommonEvent, pc: usize) -> &'a Command {
+fn cmd_ref(e: &CommonEvent, pc: usize) -> &Command {
     match &e.commands[pc] {
         Slot::Command(c) => c.as_ref(),
         Slot::Blank => panic!("CE{} pc{} is Blank, expected a command", e.id, pc),
@@ -108,7 +108,6 @@ fn op210_callers(ce: &CommonEventData, target: i32) -> BTreeSet<(u32, u32)> {
     out
 }
 
-
 struct Track {
     seen: BTreeSet<u32>,
     max_pc: BTreeMap<u32, usize>,
@@ -129,7 +128,7 @@ fn track(g: &mut Game, frames: usize, answer: Option<usize>) -> Track {
         g.frame();
         for inst in g.vm.instances() {
             t.seen.insert(inst.event);
-            let pc = inst.pc as usize;
+            let pc = inst.pc;
             let e = t.max_pc.entry(inst.event).or_insert(0);
             if pc > *e {
                 *e = pc;
@@ -143,7 +142,7 @@ fn track(g: &mut Game, frames: usize, answer: Option<usize>) -> Track {
             if !answered {
                 if let Some(c) = &g.choices {
                     if c.frames >= 1 {
-                        let _ = g.reply(ChoiceReply::Index(idx));
+                        g.reply(ChoiceReply::Index(idx));
                         answered = true;
                         g.auto_choice = true;
                         g.auto_choice_delay = 1;
@@ -167,8 +166,8 @@ fn buy_books(g: &mut Game) -> (i32, i32, usize) {
     for _ in 0..12000 {
         g.frame();
         for inst in g.vm.instances() {
-            if inst.event == 314 && (inst.pc as usize) > max_pc {
-                max_pc = inst.pc as usize;
+            if inst.event == 314 && inst.pc > max_pc {
+                max_pc = inst.pc;
             }
         }
         if g.vm.vars.get(276) >= 1 && g.vm.vars.get(277) >= 1 {
@@ -189,7 +188,7 @@ fn buy_books(g: &mut Game) -> (i32, i32, usize) {
                 } else {
                     0
                 };
-                let _ = g.reply(ChoiceReply::Index(pick));
+                g.reply(ChoiceReply::Index(pick));
                 g.auto_choice_delay = 1;
             }
         }
@@ -201,12 +200,12 @@ fn new_game() -> Game {
     Game::new(data_root()).expect("open game")
 }
 
-
 /// TEST 1 - the real bookstore menu buys both prerequisite skill books.
 #[test]
 fn bookstore_menu_buys_both_skill_books() {
     let mut g = new_game();
-    g.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    g.load_save(&save_path("SaveData01"))
+        .expect("load SaveData01");
     assert_eq!(g.vm.vars.get(276), 0, "SaveData01 ships var276==0");
     assert_eq!(g.vm.vars.get(277), 0, "SaveData01 ships var277==0");
 
@@ -226,12 +225,16 @@ fn bookstore_menu_buys_both_skill_books() {
 #[test]
 fn persisted_book_purchase_lets_ce301_learn_the_skill() {
     let mut a = new_game();
-    a.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    a.load_save(&save_path("SaveData01"))
+        .expect("load SaveData01");
     // Isolated single-event probe: clear the save's restored common-event self banks so
     // the save's own progression state cannot gate the events driven below.
     a.vm.clear_common_self();
     let (v276, v277, _) = buy_books(&mut a);
-    assert!(v276 >= 1 && v277 >= 1, "books purchased: v276={v276} v277={v277}");
+    assert!(
+        v276 >= 1 && v277 >= 1,
+        "books purchased: v276={v276} v277={v277}"
+    );
 
     let saved = out_path("m11_hscene_books_t2.sav");
     a.save_to(&saved).expect("persist purchased books");
@@ -265,7 +268,8 @@ fn persisted_book_purchase_lets_ce301_learn_the_skill() {
 fn real_chain_reaches_ce328_but_early_returns_at_pc741() {
     // Step A: buy both books via the real bookstore menu, persist.
     let mut a = new_game();
-    a.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    a.load_save(&save_path("SaveData01"))
+        .expect("load SaveData01");
     // Isolated single-event probe: clear the save's restored common-event self banks so
     // the save's own progression state cannot gate the events driven below.
     a.vm.clear_common_self();
@@ -292,15 +296,27 @@ fn real_chain_reaches_ce328_but_early_returns_at_pc741() {
     let t = track(&mut b, 4000, Some(5));
 
     assert!(t.seen.contains(&328), "night menu entered CE328");
-    assert_eq!(t.var304_peak, 1, "var304 became 1 on the real intimate route");
+    assert_eq!(
+        t.var304_peak, 1,
+        "var304 became 1 on the real intimate route"
+    );
     let ce328_max = *t.max_pc.get(&328).unwrap_or(&0);
     assert_eq!(
         ce328_max, 741,
         "CE328 H branch early-returns exactly at pc741 op172, got {ce328_max}"
     );
-    assert!(!t.seen.contains(&402), "CE402 is NEVER called on the real path");
-    assert!(!t.seen.contains(&410), "CE410 is NEVER reached on the real path");
-    assert_eq!(b.stats.warnings, 0, "the whole real chain emits no warnings");
+    assert!(
+        !t.seen.contains(&402),
+        "CE402 is NEVER called on the real path"
+    );
+    assert!(
+        !t.seen.contains(&410),
+        "CE410 is NEVER reached on the real path"
+    );
+    assert_eq!(
+        b.stats.warnings, 0,
+        "the whole real chain emits no warnings"
+    );
 }
 
 /// TEST 4 - the static gate graph behind tests 1-3.
@@ -362,7 +378,11 @@ fn gate_graph_pins_bookstore_and_ce328_deep_branch() {
     let c740 = cmd_ref(e328, 740);
     assert_eq!(c740.opcode, 210, "CE328 pc740 is a call");
     assert_eq!(words(c740)[0], 500332, "CE328 pc740 calls CE332");
-    assert_eq!(cmd_ref(e328, 741).opcode, 172, "CE328 pc741 op172 = END early-return");
+    assert_eq!(
+        cmd_ref(e328, 741).opcode,
+        172,
+        "CE328 pc741 op172 = END early-return"
+    );
     let c986 = cmd_ref(e328, 986);
     assert_eq!(c986.opcode, 210, "CE328 pc986 is a call");
     assert_eq!(words(c986)[0], 500402, "CE328 pc986 calls CE402");
@@ -376,7 +396,8 @@ fn gate_graph_pins_bookstore_and_ce328_deep_branch() {
 #[test]
 fn synthetic_var326_two_path_drives_ce402_to_ce410() {
     let mut g = new_game();
-    g.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    g.load_save(&save_path("SaveData01"))
+        .expect("load SaveData01");
     // Read-load fix removes the old spurious 506 coroutine; pin this fixture's event RNG
     // so its intended deterministic sequence is preserved.
     g.vm.rng.set_event_seed(6);
@@ -405,6 +426,12 @@ fn synthetic_var326_two_path_drives_ce402_to_ce410() {
         "CE402 body must run deep, got {:?}",
         t.max_pc.get(&402)
     );
-    assert!(t.seen.contains(&410), "CE410 (騎乗位系カットイン) must be entered");
-    assert_eq!(g.stats.warnings, 0, "synthetic CE402->CE410 emits no warnings");
+    assert!(
+        t.seen.contains(&410),
+        "CE410 (騎乗位系カットイン) must be entered"
+    );
+    assert_eq!(
+        g.stats.warnings, 0,
+        "synthetic CE402->CE410 emits no warnings"
+    );
 }

@@ -196,17 +196,24 @@ fn every_save_part_a_played_game_writes_round_trips() {
         written.part4, template.part4,
         "Part4 object tables must be carried from the write template"
     );
-    assert_eq!(written.part2.vars3_21[0], 987_654, "Part2 word 0 is the play time");
+    assert_eq!(
+        written.part2.vars3_21[0], 987_654,
+        "Part2 word 0 is the play time"
+    );
     assert_eq!(written.part2.vars3_21[9], 700, "Part2 word 9 is Sys3");
     assert_eq!(written.part2.vars3_21[10], 355, "Part2 word 10 is Sys4");
-    for index in 0..800 {
+    for (index, expected) in vars_before.iter().enumerate().take(800) {
         assert_eq!(
             written.part3.normal_var(index),
-            Some(vars_before[index]),
+            Some(*expected),
             "Part3 normal_var {index}"
         );
     }
-    assert_eq!(written.part5.events.len(), 3, "Part5 holds the three live pictures");
+    assert_eq!(
+        written.part5.events.len(),
+        3,
+        "Part5 holds the three live pictures"
+    );
 
     // Mutate the live game so a reload cannot pass by accident.
     for index in 0..800 {
@@ -232,9 +239,20 @@ fn every_save_part_a_played_game_writes_round_trips() {
         },
         "LoadedSave reports every part it restored"
     );
-    assert_eq!(normal_vars(&reloaded), vars_before, "Part3 normal variables round-trip");
-    assert_eq!(snapshot(&reloaded), pics_before, "Part5 picture records round-trip");
-    assert_eq!(reloaded.playtime_frames, 987_654, "Part2 play time round-trips");
+    assert_eq!(
+        normal_vars(&reloaded),
+        vars_before,
+        "Part3 normal variables round-trip"
+    );
+    assert_eq!(
+        snapshot(&reloaded),
+        pics_before,
+        "Part5 picture records round-trip"
+    );
+    assert_eq!(
+        reloaded.playtime_frames, 987_654,
+        "Part2 play time round-trips"
+    );
     assert_eq!(
         (reloaded.vm.vars.get_sys(3), reloaded.vm.vars.get_sys(4)),
         (700, 355),

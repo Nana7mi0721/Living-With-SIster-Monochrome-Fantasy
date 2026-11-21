@@ -913,7 +913,7 @@ impl Game {
         self.vm.vars.set_sys(3, 512);
         self.vm.vars.set_sys(4, 1000);
         let from_sys = self.sys(20);
-        self.choice_cursor = if from_sys >= 0 && from_sys < 3 {
+        self.choice_cursor = if (0..3).contains(&from_sys) {
             from_sys as usize
         } else {
             0
@@ -967,7 +967,9 @@ impl Game {
         };
         if let Some(instance) = self.vm.instance_mut(id) {
             instance.self_vars.set(wolf_vm::magic::SELF_ARG_BASE, 1);
-            instance.self_vars.set(wolf_vm::magic::SELF_ARG_BASE + 1, -1);
+            instance
+                .self_vars
+                .set(wolf_vm::magic::SELF_ARG_BASE + 1, -1);
         }
     }
 
@@ -1444,7 +1446,11 @@ impl Game {
                 )
             })
             .collect();
-        self.stale_clear_countdown = if self.stale_screen_layers.is_empty() { 0 } else { 4 };
+        self.stale_clear_countdown = if self.stale_screen_layers.is_empty() {
+            0
+        } else {
+            4
+        };
         self.screen_tint = ScreenTint::new();
         self.screen_transition.cancel();
     }
@@ -1989,13 +1995,7 @@ impl Game {
                     &advance,
                 )
             } else {
-                crate::textpic::layout(
-                    &picture.text,
-                    origin[0],
-                    origin[1],
-                    picture.anchor,
-                    &ctx,
-                )
+                crate::textpic::layout(&picture.text, origin[0], origin[1], picture.anchor, &ctx)
             };
             let alpha = picture.alpha();
             for run in runs {
@@ -2085,7 +2085,10 @@ impl Game {
         }
         let count = 3usize;
         let mut cursor = self.choice_cursor.min(count - 1);
-        if let Some(row) = (0..count).rev().find(|row| self.picture_hover(3 + *row as i32) == 1) {
+        if let Some(row) = (0..count)
+            .rev()
+            .find(|row| self.picture_hover(3 + *row as i32) == 1)
+        {
             cursor = row;
         }
         let pressed = self.key_bits & !self.previous_keys;
@@ -2119,7 +2122,10 @@ impl Game {
         // Re-applying it every idle frame would drag the cursor back to a resting
         // pointer and make UP/DOWN navigation appear stuck (RF-01).
         let pointer_moved = self.mouse != self.previous_mouse;
-        let prompt_fresh = self.choices.as_ref().is_some_and(|choices| choices.frames <= 1);
+        let prompt_fresh = self
+            .choices
+            .as_ref()
+            .is_some_and(|choices| choices.frames <= 1);
         if parked {
             // Event 43 paints the visible title menu into picture slots 3, 4, 5 and was
             // written to store the hovered row in Sys20 - but its own hover instructions
@@ -2192,8 +2198,7 @@ impl Game {
         // Only fresh presses count: holding a key must not scroll a menu at 60 steps a
         // second, which is what a level-triggered read would do. A 126 state-2 ban
         // also stops the cursor, matching the retail Ver3.582 behaviour.
-        let pressed =
-            self.key_bits & !self.previous_keys & !self.vm.input.basic_all_deny;
+        let pressed = self.key_bits & !self.previous_keys & !self.vm.input.basic_all_deny;
         if pressed & crate::key::UP != 0 {
             cursor = (cursor + count - 1) % count;
         }
@@ -2356,8 +2361,8 @@ impl Game {
             // map; WOLF keeps the facing it had, and a transfer carries none of
             // its own, so an unplaced leader stays without one.
             let facing = self.runtime.leader().and_then(|leader| leader.direction);
-            let hero = (request.target == -1)
-                .then_some((request.x, request.y, request.options, facing));
+            let hero =
+                (request.target == -1).then_some((request.x, request.y, request.options, facing));
             match self.switch_map(&path, hero) {
                 Ok(()) => {
                     self.diagnostics.insert(
@@ -2727,10 +2732,8 @@ fn hover_picture(screen: &Screen, assets: &mut Assets, mouse: [i32; 2], number: 
         return -1;
     };
     let (px, py) = (mouse[0] as f32, mouse[1] as f32);
-    let inside_screen = mouse[0] >= 0
-        && mouse[1] >= 0
-        && px < SCREEN_W as f32
-        && py < SCREEN_H as f32;
+    let inside_screen =
+        mouse[0] >= 0 && mouse[1] >= 0 && px < SCREEN_W as f32 && py < SCREEN_H as f32;
     let over = inside_screen
         && px >= dst[0]
         && px < dst[0] + dst[2]
@@ -2902,7 +2905,7 @@ impl Host for GameHost<'_> {
         let settled = self
             .choices
             .as_ref()
-            .map_or(true, |choices| choices.frames >= self.auto_choice_delay);
+            .is_none_or(|choices| choices.frames >= self.auto_choice_delay);
         if self.auto_choice && settled {
             *self.choices = None;
             let index = self.cursor;
@@ -3797,7 +3800,11 @@ mod tests {
         for _ in 0..4 {
             game.frame();
         }
-        assert_eq!(game.vm.vars.get_sys(20), 2, "hover should follow the pointer");
+        assert_eq!(
+            game.vm.vars.get_sys(20),
+            2,
+            "hover should follow the pointer"
+        );
     }
 
     #[test]
@@ -3883,7 +3890,10 @@ mod tests {
         // The second row starts at 200 + PADDING(14) + LINE_HEIGHT(30) = 244.
         game.mouse = [120, 250];
         game.handle_choice_input();
-        assert_eq!(game.choice_cursor, 1, "hover should preselect the second row");
+        assert_eq!(
+            game.choice_cursor, 1,
+            "hover should preselect the second row"
+        );
         assert_eq!(game.vm.vars.get_sys(20), 1, "Sys20 follows the hover");
         assert!(game.replies.is_empty(), "hover must not answer the prompt");
 
@@ -3910,7 +3920,10 @@ mod tests {
         game.previous_mouse_buttons = 0;
         game.mouse_buttons = 1;
         game.handle_choice_input();
-        assert!(game.replies.is_empty(), "a blank click must not confirm row 1");
+        assert!(
+            game.replies.is_empty(),
+            "a blank click must not confirm row 1"
+        );
         assert_eq!(game.choice_cursor, 1);
     }
 
@@ -4004,7 +4017,10 @@ mod tests {
         assert_eq!(game.stale_clear_countdown, 4);
         assert_eq!(game.stale_screen_layers.len(), 2);
         assert_eq!(game.screen_tint_rgb(), [1.0, 1.0, 1.0]);
-        assert!(!game.title_screen_active, "a new game leaves the title screen");
+        assert!(
+            !game.title_screen_active,
+            "a new game leaves the title screen"
+        );
         assert!(!game.title_menu_suspended);
     }
 
@@ -4031,7 +4047,10 @@ mod tests {
         let mut redraw = Picture::new(-1);
         redraw.file = "Picture/background.png".to_owned();
         game.screen.insert(redraw);
-        let new_generation = game.screen.generation(-1).expect("new slot has a generation");
+        let new_generation = game
+            .screen
+            .generation(-1)
+            .expect("new slot has a generation");
         assert_ne!(old_generation, new_generation);
 
         for _ in 0..4 {
@@ -4133,7 +4152,10 @@ mod tests {
         game.open_title_menu_choice();
         game.choose_title_menu_row(0);
         let request = game.map_requests.first().expect("new-game map request");
-        assert_eq!((request.target, request.map, request.x, request.y), (-1, 3, 60, 34));
+        assert_eq!(
+            (request.target, request.map, request.x, request.y),
+            (-1, 3, 60, 34)
+        );
         assert!(!game.title_menu_choice_active);
 
         game.title_screen_active = true;
@@ -4178,11 +4200,11 @@ mod tests {
         let Some(root) = have_data() else { return };
         let mut game = Game::new(&root).expect("game");
         for row in 0..3 {
-            let mut picture = Picture::new(3 + row as i32);
+            let mut picture = Picture::new(3 + row);
             picture.kind = PictureKind::Text;
             picture.window = Some((240, 52));
             picture.x = 10;
-            picture.y = 400 + 50 * row as i32;
+            picture.y = 400 + 50 * row;
             game.screen.insert(picture);
         }
         game.title_screen_active = true;
@@ -4214,7 +4236,10 @@ mod tests {
         let Some(root) = have_data() else { return };
         let mut game = Game::new(&root).expect("game");
         game.start_event(ROOM_MENU_EVENT);
-        for (number, file) in [(90, "Picture/stand_imouto_paja2.png"), (91, "Picture/room_a.png")] {
+        for (number, file) in [
+            (90, "Picture/stand_imouto_paja2.png"),
+            (91, "Picture/room_a.png"),
+        ] {
             let mut picture = Picture::new(number);
             picture.file = file.to_owned();
             game.screen.insert(picture);
@@ -4235,11 +4260,16 @@ mod tests {
             frames: 0,
         });
         game.restore_room_base_if_ready();
-        assert_eq!(game.screen.get(90).map(|p| p.file.as_str()), Some("Picture/stand_imouto_paja2.png"));
-        assert_eq!(game.screen.get(91).map(|p| p.file.as_str()), Some("Picture/room_a.png"));
+        assert_eq!(
+            game.screen.get(90).map(|p| p.file.as_str()),
+            Some("Picture/stand_imouto_paja2.png")
+        );
+        assert_eq!(
+            game.screen.get(91).map(|p| p.file.as_str()),
+            Some("Picture/room_a.png")
+        );
         assert!(!game.room_restore_pending);
     }
-
 
     #[test]
     fn room_base_pictures_are_restored_when_the_parent_menu_returns() {
@@ -4247,7 +4277,10 @@ mod tests {
         let mut game = Game::new(&root).expect("game");
         game.start_event(ROOM_MENU_ROOT_EVENT);
         game.start_event(ROOM_MENU_EVENT);
-        for (number, file) in [(90, "Picture/stand_imouto_paja2.png"), (91, "Picture/room_a.png")] {
+        for (number, file) in [
+            (90, "Picture/stand_imouto_paja2.png"),
+            (91, "Picture/room_a.png"),
+        ] {
             let mut picture = Picture::new(number);
             picture.file = file.to_owned();
             game.screen.insert(picture);
@@ -4267,14 +4300,24 @@ mod tests {
         // yet. The snapshot must survive this gap.
         game.choices = None;
         game.refresh_room_base_pictures();
-        assert_eq!(game.room_base_pictures.len(), 2, "snapshot survives the hand-off");
+        assert_eq!(
+            game.room_base_pictures.len(),
+            2,
+            "snapshot survives the hand-off"
+        );
         // CE245's top menu is drawn with picture slots 1200..=1213, not Choices.
         for number in [1200, 1201, 1212, 1213] {
             game.screen.insert(Picture::new(number));
         }
         game.restore_room_base_if_ready();
-        assert_eq!(game.screen.get(90).map(|p| p.file.as_str()), Some("Picture/stand_imouto_paja2.png"));
-        assert_eq!(game.screen.get(91).map(|p| p.file.as_str()), Some("Picture/room_a.png"));
+        assert_eq!(
+            game.screen.get(90).map(|p| p.file.as_str()),
+            Some("Picture/stand_imouto_paja2.png")
+        );
+        assert_eq!(
+            game.screen.get(91).map(|p| p.file.as_str()),
+            Some("Picture/room_a.png")
+        );
         assert!(!game.room_restore_pending);
     }
 
@@ -4309,7 +4352,10 @@ mod tests {
             Some("Picture/temporary_pose.png"),
             "a temporary CE218 pose owns the slot"
         );
-        assert!(game.screen.get(91).is_none(), "base must not be painted behind it");
+        assert!(
+            game.screen.get(91).is_none(),
+            "base must not be painted behind it"
+        );
         assert!(
             game.room_restore_pending,
             "a temporary pose defers the restore instead of consuming the request"
@@ -4327,7 +4373,10 @@ mod tests {
             game.screen.get(91).map(|p| p.file.as_str()),
             Some("Picture/base_91.png")
         );
-        assert!(!game.room_restore_pending, "a successful restore ends the request");
+        assert!(
+            !game.room_restore_pending,
+            "a successful restore ends the request"
+        );
     }
 
     #[test]
@@ -4344,7 +4393,10 @@ mod tests {
         // erase picture 120 (the sister) while clearing the HUD and message window.
         let _ = game.start_event(NIGHT_START_EVENT);
         for number in [1600, 1601, 108, 110, 118, 119] {
-            assert!(game.screen.get(number).is_none(), "slot {number} should be cleared");
+            assert!(
+                game.screen.get(number).is_none(),
+                "slot {number} should be cleared"
+            );
         }
         assert!(
             game.screen.get(120).is_some(),

@@ -63,8 +63,8 @@ fn data_root() -> PathBuf {
 /// EP marker pc for EP 0..=36 (comment positions in the decompiled 452 dump).
 const EP_PC: [i32; 37] = [
     5, 240, 402, 525, 656, 718, 825, 968, 1148, 1235, 1316, 1460, 1561, 1690, 1767, 2111, 2186,
-    2381, 2733, 2834, 2914, 3445, 3484, 3700, 3838, 4027, 4165, 4513, 4596, 4750, 4889, 4998,
-    5178, 5305, 5547, 5670, 5869,
+    2381, 2733, 2834, 2914, 3445, 3484, 3700, 3838, 4027, 4165, 4513, 4596, 4750, 4889, 4998, 5178,
+    5305, 5547, 5670, 5869,
 ];
 
 /// self group 6 slot 10 -> flat self-vars index 600 + 10 (holds the EP number).
@@ -150,8 +150,16 @@ fn run_ep(n: i32, var395: Option<i32>, stats: Option<i32>, frames: usize) -> EpR
         maxpc,
         ended,
         warnings: game.stats.warnings,
-        self10_after: game.vm.common_self(452).map(|b| b.get(SELF10)).unwrap_or(-1),
-        self11: game.vm.common_self(452).map(|b| b.get(SELF11)).unwrap_or(-1),
+        self10_after: game
+            .vm
+            .common_self(452)
+            .map(|b| b.get(SELF10))
+            .unwrap_or(-1),
+        self11: game
+            .vm
+            .common_self(452)
+            .map(|b| b.get(SELF11))
+            .unwrap_or(-1),
     }
 }
 
@@ -181,8 +189,16 @@ fn play_one_natural(game: &mut Game) -> (bool, i32, i32, i32) {
             }
         }
     }
-    let self10_after = game.vm.common_self(452).map(|b| b.get(SELF10)).unwrap_or(-1);
-    let self11 = game.vm.common_self(452).map(|b| b.get(SELF11)).unwrap_or(-1);
+    let self10_after = game
+        .vm
+        .common_self(452)
+        .map(|b| b.get(SELF10))
+        .unwrap_or(-1);
+    let self11 = game
+        .vm
+        .common_self(452)
+        .map(|b| b.get(SELF11))
+        .unwrap_or(-1);
     (ended, maxpc, self10_after, self11)
 }
 
@@ -288,9 +304,15 @@ fn dlc452_natural_chain_to_ep36_with_leveled_party() {
         );
         assert_eq!(game.stats.warnings, 0, "EP{ep}: no interpreter warnings");
         if ep <= 15 {
-            assert_eq!(v395, 0, "EP{ep}: var395 must still be 0 before the 献身 unlock");
+            assert_eq!(
+                v395, 0,
+                "EP{ep}: var395 must still be 0 before the 献身 unlock"
+            );
         } else {
-            assert_eq!(v395, 2, "EP{ep}: var395 must be the permanent 献身 flag (2)");
+            assert_eq!(
+                v395, 2,
+                "EP{ep}: var395 must be the permanent 献身 flag (2)"
+            );
         }
         if ep >= 36 {
             break;
@@ -343,7 +365,10 @@ fn dlc452_ep26_stall_is_unleveled_party_artifact() {
         game.vm.vars.get(VAR395)
     );
     assert_eq!(stall_ep, 26, "an unleveled party stalls exactly at EP26");
-    assert_eq!(last_ok_ep, 25, "EP0..EP25 complete without needing battle strength");
+    assert_eq!(
+        last_ok_ep, 25,
+        "EP0..EP25 complete without needing battle strength"
+    );
     assert_eq!(var619, 26, "var619 reached 26 before stalling");
     assert_eq!(s10, 26, "self10 is stuck at 26 (no +1 tail)");
     assert_eq!(s11, -1, "the EP26 embedded battle was lost");

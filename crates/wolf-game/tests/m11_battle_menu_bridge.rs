@@ -105,8 +105,14 @@ fn real_menu_registers_only_row_one_and_never_advances_input_position() {
         }
         let mut target_row: Option<i32> = None;
         for row in 0..8 {
-            let code = game.databases.num(Container::CData, 19, row, 1).unwrap_or(-1);
-            let selectable = game.databases.num(Container::CData, 19, row, 2).unwrap_or(0);
+            let code = game
+                .databases
+                .num(Container::CData, 19, row, 1)
+                .unwrap_or(-1);
+            let selectable = game
+                .databases
+                .num(Container::CData, 19, row, 2)
+                .unwrap_or(0);
             if SELECTABLE_CODES.contains(&code) && selectable == 1 && code == TARGET_CODE {
                 target_row = Some(row);
             }
@@ -140,7 +146,10 @@ fn real_menu_registers_only_row_one_and_never_advances_input_position() {
         }
     }
 
-    let input_pos = game.databases.num(Container::CData, 20, 73, 0).unwrap_or(-999);
+    let input_pos = game
+        .databases
+        .num(Container::CData, 20, 73, 0)
+        .unwrap_or(-999);
     eprintln!(
         "menu: registered_rows={:?} input_pos={} ce242={} v350={} warnings={}",
         registered_rows, input_pos, ce242_in_menu, v350, game.stats.warnings
@@ -151,7 +160,10 @@ fn real_menu_registers_only_row_one_and_never_advances_input_position() {
         vec![1],
         "the shipped menu registers the command into row 1 only (command index 1)"
     );
-    assert_eq!(input_pos, 0, "コマンド入力位置 stays 0: the CE157 producer never advances its cursor");
+    assert_eq!(
+        input_pos, 0,
+        "コマンド入力位置 stays 0: the CE157 producer never advances its cursor"
+    );
     assert!(!ce242_in_menu, "the CE188 menu line never starts CE242");
     assert_eq!(v350, 0, "command phase stays idle in the menu line");
     assert_eq!(game.stats.warnings, 0, "no warnings in the menu line");
@@ -172,7 +184,8 @@ fn successive_command_indexes_run_distinct_ce242_bodies_and_settle() {
     game.auto_choice = true;
     game.auto_choice_delay = 1;
     assert!(game.seed_battle_databases() > 0, "seed battle cells");
-    game.databases.set_text(Container::CData, 5, 16, 0, "┗ 状態リスト");
+    game.databases
+        .set_text(Container::CData, 5, 16, 0, "┗ 状態リスト");
     let _ = game.start_engine_events();
     game.set_battle_wiring(true);
     game.set_battle_round_loop(true);
@@ -265,13 +278,27 @@ fn successive_command_indexes_run_distinct_ce242_bodies_and_settle() {
 
     assert!(have_pre, "battle must become active");
     assert!(settled, "the real BOSS battle must settle");
-    assert!(rounds >= 2, "must run >= 2 real CE242 command rounds, got {}", rounds);
-    assert!(turn_starts >= 1, "the REAL CE241 turn-start must fire between rounds, got {}", turn_starts);
+    assert!(
+        rounds >= 2,
+        "must run >= 2 real CE242 command rounds, got {}",
+        rounds
+    );
+    assert!(
+        turn_starts >= 1,
+        "the REAL CE241 turn-start must fire between rounds, got {}",
+        turn_starts
+    );
     assert!(
         v350_seq.windows(2).any(|w| w[0] == 2 && w[1] == 0),
-        "phase must be reset 2 -> 0 by CE241, seq={:?}", v350_seq
+        "phase must be reset 2 -> 0 by CE241, seq={:?}",
+        v350_seq
     );
-    assert_eq!(pre, [5, 4, 3, 2], "CE239 must seed the four pools 5/4/3/2, got {:?}", pre);
+    assert_eq!(
+        pre,
+        [5, 4, 3, 2],
+        "CE239 must seed the four pools 5/4/3/2, got {:?}",
+        pre
+    );
     // Distinct CE242 bodies: index 1 body ends <= pc474, index 3 body runs to >= pc761.
     let has_low_body = round_body_max.iter().any(|&p| p > 200 && p <= 600);
     let has_high_body = round_body_max.iter().any(|&p| p >= 761);
@@ -281,8 +308,17 @@ fn successive_command_indexes_run_distinct_ce242_bodies_and_settle() {
     );
     // Distinct member pools: the two bodies drain different pools.
     let drained: Vec<usize> = (0..4).filter(|&i| post[i] < pre[i]).collect();
-    assert!(drained.len() >= 2, ">= 2 distinct member pools must be drained, pre={:?} post={:?}", pre, post);
+    assert!(
+        drained.len() >= 2,
+        ">= 2 distinct member pools must be drained, pre={:?} post={:?}",
+        pre,
+        post
+    );
     assert_eq!(v343, 1, "battle must be decided");
-    assert!(v352 == 1 || v352 == -1, "real CE244 result in {{1,-1}}, got {}", v352);
+    assert!(
+        v352 == 1 || v352 == -1,
+        "real CE244 result in {{1,-1}}, got {}",
+        v352
+    );
     assert_eq!(game.stats.warnings, 0, "no engine warnings");
 }

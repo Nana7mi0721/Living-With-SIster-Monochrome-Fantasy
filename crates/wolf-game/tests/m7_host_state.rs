@@ -38,7 +38,11 @@ fn data_root() -> PathBuf {
     if let Ok(value) = std::env::var("WOLF_DATA_ROOT") {
         if !value.is_empty() {
             let path = PathBuf::from(value);
-            return if path.is_absolute() { path } else { base.join(path) };
+            return if path.is_absolute() {
+                path
+            } else {
+                base.join(path)
+            };
         }
     }
     let all = base.join("work").join("all");
@@ -80,8 +84,8 @@ fn engine_state_reports_the_mouse_and_neutral_none_sentinels_through_opcode_124(
 
     game.mouse = [640, 300];
     game.mouse_buttons = 1; // left button down this frame, up last frame
-    // Seed the destinations with a poison value so "wrote 0 / wrote -1" is
-    // distinguishable from "host returned None and left the destination alone".
+                            // Seed the destinations with a poison value so "wrote 0 / wrote -1" is
+                            // distinguishable from "host returned None and left the destination alone".
     for index in [600usize, 601, 602, 603, 604, 605] {
         game.vm.vars.set(index, 424_242);
     }
@@ -177,13 +181,13 @@ fn picture_state_field_five_answers_zero_for_live_pictures_only() {
         game.vm.vars.set(index, 424_242);
     }
     let commands = vec![
-        cmd(124, &[2_000_610, 0x4000, 12_004, 0], &[]), // X
-        cmd(124, &[2_000_611, 0x4000, 12_004, 1], &[]), // Y
-        cmd(124, &[2_000_612, 0x4000, 12_004, 2], &[]), // scale
-        cmd(124, &[2_000_613, 0x4000, 12_004, 4], &[]), // pattern / extras[0]
-        cmd(124, &[2_000_614, 0x4000, 12_004, 5], &[]), // field 5: 0 for a live picture
+        cmd(124, &[2_000_610, 0x4000, 12_004, 0], &[]),   // X
+        cmd(124, &[2_000_611, 0x4000, 12_004, 1], &[]),   // Y
+        cmd(124, &[2_000_612, 0x4000, 12_004, 2], &[]),   // scale
+        cmd(124, &[2_000_613, 0x4000, 12_004, 4], &[]),   // pattern / extras[0]
+        cmd(124, &[2_000_614, 0x4000, 12_004, 5], &[]),   // field 5: 0 for a live picture
         cmd(124, &[2_000_615, 0x4000, 12_004, 700], &[]), // unknown field: None
-        cmd(124, &[2_000_616, 0x4000, 99_999, 5], &[]), // field 5, missing picture: None
+        cmd(124, &[2_000_616, 0x4000, 99_999, 5], &[]),   // field 5, missing picture: None
         cmd(172, &[], &[]),
     ];
     run_once(&mut game, 901, "host picture state", commands);
@@ -191,7 +195,11 @@ fn picture_state_field_five_answers_zero_for_live_pictures_only() {
     assert_eq!(game.vm.vars.get(611), 222, "field 1 = picture Y");
     assert_eq!(game.vm.vars.get(612), 150, "field 2 = picture scale");
     assert_eq!(game.vm.vars.get(613), 7, "field 4 = extras[0]");
-    assert_eq!(game.vm.vars.get(614), 0, "field 5 answers 0 for a live picture");
+    assert_eq!(
+        game.vm.vars.get(614),
+        0,
+        "field 5 answers 0 for a live picture"
+    );
     assert_eq!(
         game.vm.vars.get(615),
         424_242,

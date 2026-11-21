@@ -13,16 +13,13 @@ use wolf_game::auto_events::AutoEvents;
 use wolf_game::db::{Container, Databases};
 use wolf_game::game::{seed_battle_databases_into, BattleWiring};
 use wolf_game::map_runtime::MapRuntime;
-use wolf_vm::exec::EventId;
-use wolf_vm::{
-    ChoiceReply, DbOp, DbValue, Host, PictureCmd, Program, ProgramSet, SoundCmd, Vm,
-};
 use wolf_vm::exec::DbDirection;
+use wolf_vm::exec::EventId;
+use wolf_vm::{ChoiceReply, DbOp, DbValue, Host, PictureCmd, Program, ProgramSet, SoundCmd, Vm};
 
-use crate::{
-    json_args, json_escape, json_strings, picture_action, sound_action, sound_channel,
-};
+use crate::{json_args, json_escape, json_strings, picture_action, sound_action, sound_channel};
 
+#[allow(dead_code)]
 struct Teleport {
     target: i32,
     map: i32,
@@ -207,9 +204,9 @@ impl Host for RouteHost {
             if let Some(text) = databases.text(container, db_type, row, column) {
                 return Some(DbValue::Str(text.to_owned()));
             }
-        } else if row >= wolf_game::db::EXTENSION_ROW_BASE {
-            return Some(empty());
-        } else if row >= 0 && databases.has_runtime_row_count(container, db_type) {
+        } else if row >= wolf_game::db::EXTENSION_ROW_BASE
+            || (row >= 0 && databases.has_runtime_row_count(container, db_type))
+        {
             return Some(empty());
         }
         if databases
@@ -308,14 +305,27 @@ impl RouteHost {
             };
             let merged = PictureEntry {
                 kind: cmd.kind,
-                file: if cmd.file.is_empty() { prev.file } else { cmd.file.clone() },
-                text: if cmd.text.is_empty() { prev.text } else { cmd.text.clone() },
-                args: if cmd.args.is_empty() { prev.args } else { cmd.args.clone() },
+                file: if cmd.file.is_empty() {
+                    prev.file
+                } else {
+                    cmd.file.clone()
+                },
+                text: if cmd.text.is_empty() {
+                    prev.text
+                } else {
+                    cmd.text.clone()
+                },
+                args: if cmd.args.is_empty() {
+                    prev.args
+                } else {
+                    cmd.args.clone()
+                },
                 anchor: cmd.anchor,
                 base: (0.0, 0.0),
             };
             let base = picture_base(&merged);
-            self.pictures.insert(cmd.number, PictureEntry { base, ..merged });
+            self.pictures
+                .insert(cmd.number, PictureEntry { base, ..merged });
             return;
         }
         let mut entry = PictureEntry {
@@ -353,7 +363,11 @@ impl RouteHost {
             2 | 3 => Some(ui_unit(arg(entry.args.as_slice(), 7, 100))),
             4 => Some(arg(entry.args.as_slice(), 9, 0)),
             5 => Some(0),
-            10 => Some(if entry.kind == 2 || entry.kind == 4 { 1 } else { -1 }),
+            10 => Some(if entry.kind == 2 || entry.kind == 4 {
+                1
+            } else {
+                -1
+            }),
             _ => None,
         }
     }
@@ -507,11 +521,7 @@ impl Route {
             {
                 continue;
             }
-            let relative = self
-                .host
-                .databases
-                .map_path(request.map)
-                .map(str::to_owned);
+            let relative = self.host.databases.map_path(request.map).map(str::to_owned);
             let Some(relative) = relative else {
                 return;
             };
@@ -550,7 +560,7 @@ impl Route {
         let mut runtime = MapRuntime::collect(&map);
         runtime.place_leader(self.leader_x, self.leader_y, None);
         self.runtime = Some(runtime);
-        self.map_id = artifact_id_for_file(root, &relative).unwrap_or(map_id);
+        self.map_id = artifact_id_for_file(root, relative).unwrap_or(map_id);
         if let Some(runtime) = self.runtime.as_mut() {
             runtime.start_pending(&mut self.vm);
         }
@@ -573,7 +583,9 @@ fn artifact_id_for_file(root: &Path, relative: &str) -> Option<i32> {
         if name != target.as_ref() {
             continue;
         }
-        let stem = name.rsplit_once('.').map_or(name.as_str(), |(stem, _)| stem);
+        let stem = name
+            .rsplit_once('.')
+            .map_or(name.as_str(), |(stem, _)| stem);
         let digits: String = stem.chars().filter(char::is_ascii_digit).collect();
         return Some(if digits.is_empty() {
             1000 + index as i32
@@ -649,13 +661,16 @@ fn picture_base(entry: &PictureEntry) -> (f64, f64) {
         );
     }
     if kind == 3 && arg(&entry.args, 1, 0) > 2 && arg(&entry.args, 2, 0) > 2 {
-        return (f64::from(arg(&entry.args, 1, 0)), f64::from(arg(&entry.args, 2, 0)));
+        return (
+            f64::from(arg(&entry.args, 1, 0)),
+            f64::from(arg(&entry.args, 2, 0)),
+        );
     }
     (420.0, 140.0)
 }
 
 fn picture_hit_rect(number: i32, entry: &PictureEntry) -> (f64, f64, f64, f64) {
-    if number < 0 || number >= 12_000 {
+    if !(0..12_000).contains(&number) {
         return (0.0, 0.0, 1024.0, 576.0);
     }
     let (base_w, base_h) = entry.base;
@@ -721,7 +736,7 @@ pub fn run_route(root: &Path, frames: usize) -> ExitCode {
     }
 
     let mut map_by_frame: Vec<i32> = vec![-1; frames + 2];
-    for frame in 1..=frames {
+    for frame_slot in map_by_frame.iter_mut().take(frames + 1).skip(1) {
         if route.host.message_open {
             route.host.message_open = false;
             route.host.dismissed = true;
@@ -730,7 +745,7 @@ pub fn run_route(root: &Path, frames: usize) -> ExitCode {
             route.host.pending_choices = false;
             route.host.reply = Some(ChoiceReply::Index(0));
         }
-        map_by_frame[frame] = route.map_id;
+        *frame_slot = route.map_id;
         // GameSession writes the leader/facing/action-key state here; this route
         // never moves the player and never presses the action key. Auto events are
         // edge-synced before the VM step, exactly like Game::frame.
@@ -884,7 +899,10 @@ impl<'a> FullDriver<'a> {
 
     fn wait_clock(&mut self, day: i32, hour: i32, minute: i32, limit: usize) -> bool {
         for _ in 0..limit {
-            if self.route.var(160) == day && self.route.var(4) == hour && self.route.var(5) >= minute {
+            if self.route.var(160) == day
+                && self.route.var(4) == hour
+                && self.route.var(5) >= minute
+            {
                 return true;
             }
             self.step();
@@ -969,10 +987,7 @@ impl<'a> FullDriver<'a> {
         }
         let mut settled = false;
         for _ in 0..6000 {
-            if !self.route.has_event(300)
-                && !self.route.has_event(326)
-                && self.route.var(4) >= 18
-            {
+            if !self.route.has_event(300) && !self.route.has_event(326) && self.route.var(4) >= 18 {
                 settled = true;
                 break;
             }
@@ -1047,7 +1062,9 @@ impl<'a> FullDriver<'a> {
             self.step();
         }
         if !menu_after {
-            self.fail(format!("sleep day {day}: CE245 disappeared before sleep choice"));
+            self.fail(format!(
+                "sleep day {day}: CE245 disappeared before sleep choice"
+            ));
         }
         self.click_at(512, 450);
         let mut got_choice = false;

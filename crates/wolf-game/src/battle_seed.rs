@@ -44,52 +44,182 @@ pub struct Cell {
 /// (蓄力/防御/强斩/反击/普通攻击/empty...). CE143 copies type0 row12 cols 47..54 to the
 /// battle scratch table, and CE152 walks them to build the command window.
 pub const COMMAND_SLOTS: [Cell; 8] = [
-    Cell { db_type: 0, row: 12, column: 47, value: 3 },
-    Cell { db_type: 0, row: 12, column: 48, value: 4 },
-    Cell { db_type: 0, row: 12, column: 49, value: 6 },
-    Cell { db_type: 0, row: 12, column: 50, value: 7 },
-    Cell { db_type: 0, row: 12, column: 51, value: 0 },
-    Cell { db_type: 0, row: 12, column: 52, value: 0 },
-    Cell { db_type: 0, row: 12, column: 53, value: 0 },
-    Cell { db_type: 0, row: 12, column: 54, value: 0 },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 47,
+        value: 3,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 48,
+        value: 4,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 49,
+        value: 6,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 50,
+        value: 7,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 51,
+        value: 0,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 52,
+        value: 0,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 53,
+        value: 0,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 54,
+        value: 0,
+    },
 ];
 
 /// Leader stat block CE143 copies into the battle scratch row (maxHP, HP, attack,
 /// defence, ...). A fresh game leaves it 0, so the copied battle HP would be 0.
 pub const LEADER_STATS: [Cell; 12] = [
-    Cell { db_type: 0, row: 12, column: 20, value: 100 },
-    Cell { db_type: 0, row: 12, column: 21, value: 100 },
-    Cell { db_type: 0, row: 12, column: 22, value: 50 },
-    Cell { db_type: 0, row: 12, column: 23, value: 50 },
-    Cell { db_type: 0, row: 12, column: 24, value: 20 },
-    Cell { db_type: 0, row: 12, column: 25, value: 15 },
-    Cell { db_type: 0, row: 12, column: 26, value: 10 },
-    Cell { db_type: 0, row: 12, column: 27, value: 30 },
-    Cell { db_type: 0, row: 12, column: 28, value: 30 },
-    Cell { db_type: 0, row: 12, column: 9, value: 20 },
-    Cell { db_type: 0, row: 12, column: 10, value: 10 },
-    Cell { db_type: 0, row: 12, column: 4, value: 10 },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 20,
+        value: 100,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 21,
+        value: 100,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 22,
+        value: 50,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 23,
+        value: 50,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 24,
+        value: 20,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 25,
+        value: 15,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 26,
+        value: 10,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 27,
+        value: 30,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 28,
+        value: 30,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 9,
+        value: 20,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 10,
+        value: 10,
+    },
+    Cell {
+        db_type: 0,
+        row: 12,
+        column: 4,
+        value: 10,
+    },
 ];
 
 /// One copy of item 0, so CE152 pc91..pc93 sees a non-zero stock and keeps real attacks
 /// usable. Without it every real command row is written back as unusable.
-pub const ITEM_ZERO: Cell = Cell { db_type: 7, row: 0, column: 0, value: 1 };
+pub const ITEM_ZERO: Cell = Cell {
+    db_type: 7,
+    row: 0,
+    column: 0,
+    value: 1,
+};
 
 /// Starter weapon stock (所持武器個数) rows 0..2, so equipment lookups are not empty.
 pub const STARTER_WEAPONS: [Cell; 3] = [
-    Cell { db_type: 8, row: 0, column: 0, value: 1 },
-    Cell { db_type: 8, row: 1, column: 0, value: 1 },
-    Cell { db_type: 8, row: 2, column: 0, value: 1 },
+    Cell {
+        db_type: 8,
+        row: 0,
+        column: 0,
+        value: 1,
+    },
+    Cell {
+        db_type: 8,
+        row: 1,
+        column: 0,
+        value: 1,
+    },
+    Cell {
+        db_type: 8,
+        row: 2,
+        column: 0,
+        value: 1,
+    },
 ];
 
 /// Party-member count (type 18 row 4 column 0) CE190 places allies from.
-pub const PARTY_COUNT: Cell = Cell { db_type: 18, row: 4, column: 0, value: 1 };
+pub const PARTY_COUNT: Cell = Cell {
+    db_type: 18,
+    row: 4,
+    column: 0,
+    value: 1,
+};
 
 /// Enemy count (type 18 row 69 column 0). CE190 pc36 copies it to the enemy loop
 /// counter and CE162 pc12 reads it before it will place/select a target. A fresh
 /// game leaves it 0, which makes CE190's enemy loop empty and CE162 spin
 /// pc49<->pc50 forever. One enemy is enough for a single-target selection.
-pub const ENEMY_COUNT: Cell = Cell { db_type: 18, row: 69, column: 0, value: 1 };
+pub const ENEMY_COUNT: Cell = Cell {
+    db_type: 18,
+    row: 69,
+    column: 0,
+    value: 1,
+};
 
 /// Every cell `seed` writes, in a stable order.
 pub fn seed_cells() -> Vec<Cell> {
@@ -102,7 +232,6 @@ pub fn seed_cells() -> Vec<Cell> {
     cells.extend_from_slice(&STARTER_WEAPONS);
     cells
 }
-
 
 /// One **text** `CData` cell seeded into the engine text layer.
 ///
@@ -129,14 +258,54 @@ pub struct TextCell {
 /// 蓄力/防御/强斩/反击 and slots 5..8 fall back to 普通攻撃. The strings are the same
 /// values CE152 reads, so seeding them here exercises the exact label path CE64 draws.
 pub const COMMAND_MENU_TEXT: [TextCell; 8] = [
-    TextCell { db_type: 19, row: 0, column: 0, value: "蓄力" },
-    TextCell { db_type: 19, row: 1, column: 0, value: "防御" },
-    TextCell { db_type: 19, row: 2, column: 0, value: "强斩" },
-    TextCell { db_type: 19, row: 3, column: 0, value: "反击" },
-    TextCell { db_type: 19, row: 4, column: 0, value: "普通攻击" },
-    TextCell { db_type: 19, row: 5, column: 0, value: "普通攻击" },
-    TextCell { db_type: 19, row: 6, column: 0, value: "普通攻击" },
-    TextCell { db_type: 19, row: 7, column: 0, value: "普通攻击" },
+    TextCell {
+        db_type: 19,
+        row: 0,
+        column: 0,
+        value: "蓄力",
+    },
+    TextCell {
+        db_type: 19,
+        row: 1,
+        column: 0,
+        value: "防御",
+    },
+    TextCell {
+        db_type: 19,
+        row: 2,
+        column: 0,
+        value: "强斩",
+    },
+    TextCell {
+        db_type: 19,
+        row: 3,
+        column: 0,
+        value: "反击",
+    },
+    TextCell {
+        db_type: 19,
+        row: 4,
+        column: 0,
+        value: "普通攻击",
+    },
+    TextCell {
+        db_type: 19,
+        row: 5,
+        column: 0,
+        value: "普通攻击",
+    },
+    TextCell {
+        db_type: 19,
+        row: 6,
+        column: 0,
+        value: "普通攻击",
+    },
+    TextCell {
+        db_type: 19,
+        row: 7,
+        column: 0,
+        value: "普通攻击",
+    },
 ];
 
 /// Writes [`COMMAND_MENU_TEXT`] into the engine text layer. Returns how many labels landed.
@@ -151,8 +320,13 @@ pub const COMMAND_MENU_TEXT: [TextCell; 8] = [
 pub fn seed_menu_text(game: &mut Game) -> usize {
     let mut written = 0;
     for cell in COMMAND_MENU_TEXT {
-        game.databases
-            .set_text(Container::CData, cell.db_type, cell.row, cell.column, cell.value);
+        game.databases.set_text(
+            Container::CData,
+            cell.db_type,
+            cell.row,
+            cell.column,
+            cell.value,
+        );
         written += 1;
     }
     written
@@ -187,7 +361,13 @@ pub fn seed_databases(databases: &mut Databases) -> usize {
     // the returned numeric-cell count (kept at 26 so m7_battle_seed's documented
     // "1 party + 1 enemy + 8 slots + 12 stats + 1 item + 3 weapons" invariant stays exact).
     for cell in COMMAND_MENU_TEXT {
-        databases.set_text(Container::CData, cell.db_type, cell.row, cell.column, cell.value);
+        databases.set_text(
+            Container::CData,
+            cell.db_type,
+            cell.row,
+            cell.column,
+            cell.value,
+        );
     }
     written
 }

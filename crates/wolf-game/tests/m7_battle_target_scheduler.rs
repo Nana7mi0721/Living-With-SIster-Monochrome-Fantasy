@@ -38,7 +38,8 @@ fn data_root() -> PathBuf {
 }
 
 fn event_data() -> CommonEventData {
-    let bytes = std::fs::read(data_root().join("BasicData/CommonEvent.dat")).expect("CommonEvent.dat");
+    let bytes =
+        std::fs::read(data_root().join("BasicData/CommonEvent.dat")).expect("CommonEvent.dat");
     CommonEventData::parse(&bytes).expect("parse CommonEvent.dat")
 }
 
@@ -54,7 +55,9 @@ fn var(g: &Game, index: usize) -> i32 {
 }
 
 fn cdata(g: &Game, db_type: i32, row: i32, column: i32) -> i32 {
-    g.databases.num(Container::CData, db_type, row, column).unwrap_or(-9999)
+    g.databases
+        .num(Container::CData, db_type, row, column)
+        .unwrap_or(-9999)
 }
 
 fn instance_pc(g: &Game, event: &str) -> Option<i32> {
@@ -67,7 +70,9 @@ fn instance_pc(g: &Game, event: &str) -> Option<i32> {
 }
 
 fn has_instance(g: &Game, event: &str) -> bool {
-    g.vm.instances().iter().any(|i| format!("{:?}", i.event) == event)
+    g.vm.instances()
+        .iter()
+        .any(|i| format!("{:?}", i.event) == event)
 }
 
 fn seeded_game() -> Game {
@@ -85,7 +90,11 @@ fn seeded_game() -> Game {
 fn ce190_reads_type18_rows_4_69_72_and_production_seed_includes_enemy_count() {
     let d = event_data();
     let ce190 = d.event(190).expect("CE190");
-    assert!(ce190.title.contains("戦闘キャラ配置"), "CE190 title={}", ce190.title);
+    assert!(
+        ce190.title.contains("戦闘キャラ配置"),
+        "CE190 title={}",
+        ce190.title
+    );
 
     let mut row4 = false;
     let mut row69 = false;
@@ -124,8 +133,16 @@ fn ce190_reads_type18_rows_4_69_72_and_production_seed_includes_enemy_count() {
     assert!(call_enemy_layout, "CE190 must call CE175 enemy layout");
 
     let probe = seeded_game();
-    assert_eq!(cdata(&probe, 18, 4, 0), 1, "shipped seed sets type18 row4 col0 = 1 (party count)");
-    assert_eq!(cdata(&probe, 18, 69, 0), 1, "production seed includes type18 row69 (enemy count)");
+    assert_eq!(
+        cdata(&probe, 18, 4, 0),
+        1,
+        "shipped seed sets type18 row4 col0 = 1 (party count)"
+    );
+    assert_eq!(
+        cdata(&probe, 18, 69, 0),
+        1,
+        "production seed includes type18 row69 (enemy count)"
+    );
 }
 
 /// Runtime proof: clearing the production seed's type18 row69 makes CE162 spin at
@@ -135,14 +152,25 @@ fn enemy_count_seed_turns_the_ce162_spin_into_a_selectable_enemy() {
     // Control: production seed with only the enemy-count cell cleared.
     let mut control = seeded_game();
     control.databases.set_num(Container::CData, 18, 69, 0, 0);
-    assert_eq!(cdata(&control, 18, 69, 0), 0, "control starts with enemy count 0");
+    assert_eq!(
+        cdata(&control, 18, 69, 0),
+        0,
+        "control starts with enemy count 0"
+    );
     control.start_event(190);
     for f in 0..400 {
         control.key_bits = if f % 2 == 0 { key::OK } else { 0 };
         control.frame();
     }
-    assert_eq!(cdata(&control, 18, 69, 0), 0, "CE190 cannot invent an enemy count");
-    assert!(cdata(&control, 10, 0, 2) > 0, "CE144 still lands one enemy row in type10");
+    assert_eq!(
+        cdata(&control, 18, 69, 0),
+        0,
+        "CE190 cannot invent an enemy count"
+    );
+    assert!(
+        cdata(&control, 10, 0, 2) > 0,
+        "CE144 still lands one enemy row in type10"
+    );
 
     control.start_event(162);
     let mut control_selected = false;
@@ -153,13 +181,19 @@ fn enemy_count_seed_turns_the_ce162_spin_into_a_selectable_enemy() {
             control_selected = true;
         }
     }
-    assert!(!control_selected, "CE162 must not reach pc57 without an enemy count");
+    assert!(
+        !control_selected,
+        "CE162 must not reach pc57 without an enemy count"
+    );
     assert!(
         has_instance(&control, "162"),
         "CE162 remains active (spinning pc49/pc50) without a target"
     );
     let pc = instance_pc(&control, "162").expect("CE162 still running");
-    assert!(pc == 49 || pc == 50, "control CE162 stuck at pc49/pc50, got pc{pc}");
+    assert!(
+        pc == 49 || pc == 50,
+        "control CE162 stuck at pc49/pc50, got pc{pc}"
+    );
     assert_eq!(control.stats.warnings, 0);
 
     // Seeded: add ONLY CData type18 row69 = 1.
@@ -182,8 +216,14 @@ fn enemy_count_seed_turns_the_ce162_spin_into_a_selectable_enemy() {
             selected = true;
         }
     }
-    assert!(selected, "CE162 must reach pc57 (enemy index 0 selected) once row69=1");
-    assert!(!has_instance(&seeded, "162"), "CE162 exits after a successful selection");
+    assert!(
+        selected,
+        "CE162 must reach pc57 (enemy index 0 selected) once row69=1"
+    );
+    assert!(
+        !has_instance(&seeded, "162"),
+        "CE162 exits after a successful selection"
+    );
     assert_eq!(seeded.stats.warnings, 0);
 }
 
@@ -215,8 +255,15 @@ fn only_ce242_writes_2000350_one_and_nothing_calls_ce242() {
             }
         }
     }
-    assert_eq!(writers_one, vec![(242, 14)], "only CE242 pc14 writes 2000350=1");
-    assert!(callers_of_242.is_empty(), "no retail command calls CE242: {callers_of_242:?}");
+    assert_eq!(
+        writers_one,
+        vec![(242, 14)],
+        "only CE242 pc14 writes 2000350=1"
+    );
+    assert!(
+        callers_of_242.is_empty(),
+        "no retail command calls CE242: {callers_of_242:?}"
+    );
     assert!(
         writer_zero_ce239.contains(&98) && writer_zero_ce239.contains(&1043),
         "CE239 clears 2000350 at pc98 and pc1043, got {writer_zero_ce239:?}"
@@ -228,12 +275,11 @@ fn ce239_slot_probe(slot: i32) -> (i32, i32, i32, i32) {
     g.start_engine_events();
     g.vm.vars.set(495, 2); // 2000495 = 2 -> hotspring branch
     g.start_event(239);
-    let instance = g
-        .vm
-        .instances()
-        .into_iter()
-        .find(|i| format!("{:?}", i.event) == "239")
-        .map(|i| i.id);
+    let instance =
+        g.vm.instances()
+            .iter()
+            .find(|i| format!("{:?}", i.event) == "239")
+            .map(|i| i.id);
     if let Some(id) = instance {
         if let Some(inst) = g.vm.instance_mut(id) {
             inst.self_vars.set(2, slot);
@@ -255,10 +301,19 @@ fn ce239_slot_probe(slot: i32) -> (i32, i32, i32, i32) {
 fn ce239_slots_never_raise_2000350() {
     for slot in 0..=8 {
         let (max350, final350, v352, v343) = ce239_slot_probe(slot);
-        assert_eq!(max350, 0, "slot{slot}: CE239 must never raise 2000350, saw {max350}");
+        assert_eq!(
+            max350, 0,
+            "slot{slot}: CE239 must never raise 2000350, saw {max350}"
+        );
         assert_eq!(final350, 0, "slot{slot}: final 2000350");
-        assert_eq!(v352, 0, "slot{slot}: CE244 settlement variable 2000352 must stay 0");
-        assert_eq!(v343, 0, "slot{slot}: CE244 completion variable 2000343 must stay 0");
+        assert_eq!(
+            v352, 0,
+            "slot{slot}: CE244 settlement variable 2000352 must stay 0"
+        );
+        assert_eq!(
+            v343, 0,
+            "slot{slot}: CE244 completion variable 2000343 must stay 0"
+        );
     }
 }
 
@@ -270,13 +325,12 @@ fn injected_ce242_exposes_the_three_state_cycle() {
     let mut g = seeded_game();
     g.vm.vars.set(495, 2); // 2000495 = 2
     g.start_event(242);
-    let id = g
-        .vm
-        .instances()
-        .into_iter()
-        .find(|i| format!("{:?}", i.event) == "242")
-        .map(|i| i.id)
-        .expect("CE242 instance");
+    let id =
+        g.vm.instances()
+            .iter()
+            .find(|i| format!("{:?}", i.event) == "242")
+            .map(|i| i.id)
+            .expect("CE242 instance");
     g.vm.instance_mut(id).unwrap().self_vars.set(600, 1);
 
     let mut transitions: Vec<(i32, i32)> = vec![(0, var(&g, 350))];
@@ -295,13 +349,26 @@ fn injected_ce242_exposes_the_three_state_cycle() {
         }
     }
 
-    assert_eq!(transitions.first().map(|x| x.1), Some(0), "cycle starts at 0");
-    assert!(transitions.iter().any(|x| x.1 == 1), "cycle must expose state 1: {transitions:?}");
-    assert!(transitions.iter().any(|x| x.1 == 2), "cycle must expose state 2: {transitions:?}");
+    assert_eq!(
+        transitions.first().map(|x| x.1),
+        Some(0),
+        "cycle starts at 0"
+    );
+    assert!(
+        transitions.iter().any(|x| x.1 == 1),
+        "cycle must expose state 1: {transitions:?}"
+    );
+    assert!(
+        transitions.iter().any(|x| x.1 == 2),
+        "cycle must expose state 2: {transitions:?}"
+    );
     assert_eq!(var(&g, 350), 0, "cycle settles back to 0");
     assert_eq!(var(&g, 352), 1, "CE244 win path writes 2000352=1");
     assert_eq!(var(&g, 343), 1, "CE244 win path writes 2000343=1");
-    assert!(max242 >= 208, "CE242 reached its 2000350=2 exit at pc208, maxpc={max242}");
+    assert!(
+        max242 >= 208,
+        "CE242 reached its 2000350=2 exit at pc208, maxpc={max242}"
+    );
     assert_eq!(g.stats.warnings, 0);
 }
 /// Rebuilt wiring path (battle_wiring.rs, off by default): with
@@ -326,7 +393,11 @@ fn battle_wiring_advances_to_phase_two_but_ce244_gate_blocks_settlement() {
             }
         }
     }
-    assert_eq!(gate, Some(1600010), "CE244 settlement gate is 2000349 == self1600010");
+    assert_eq!(
+        gate,
+        Some(1600010),
+        "CE244 settlement gate is 2000349 == self1600010"
+    );
 
     let mut g = seeded_game();
     g.set_battle_wiring(true);
@@ -334,12 +405,11 @@ fn battle_wiring_advances_to_phase_two_but_ce244_gate_blocks_settlement() {
     g.vm.vars.set(495, 2); // 2000495 = 2 hotspring branch
     g.start_event(239);
     // Supply the command argument a real caller would pass (self1600003 -> 2000354).
-    if let Some(id) = g
-        .vm
-        .instances()
-        .into_iter()
-        .find(|i| format!("{:?}", i.event) == "239")
-        .map(|i| i.id)
+    if let Some(id) =
+        g.vm.instances()
+            .iter()
+            .find(|i| format!("{:?}", i.event) == "239")
+            .map(|i| i.id)
     {
         g.vm.instance_mut(id).unwrap().self_vars.set(603, 1);
     }
@@ -356,14 +426,28 @@ fn battle_wiring_advances_to_phase_two_but_ce244_gate_blocks_settlement() {
         }
         max340 = max340.max(var(&g, 340));
     }
-    assert_eq!(g.battle_wiring_rounds(), 1, "wiring must start CE242 once on the 0->1 edge");
+    assert_eq!(
+        g.battle_wiring_rounds(),
+        1,
+        "wiring must start CE242 once on the 0->1 edge"
+    );
     assert_eq!(max340, 1, "CE239 raises 2000340");
-    assert!(transitions.contains(&1), "phase 1 observed: {transitions:?}");
-    assert!(transitions.contains(&2), "phase 2 observed: {transitions:?}");
+    assert!(
+        transitions.contains(&1),
+        "phase 1 observed: {transitions:?}"
+    );
+    assert!(
+        transitions.contains(&2),
+        "phase 2 observed: {transitions:?}"
+    );
     // opcode-111 reference semantics: CE239 pc1043 (the 2->0 cleanup writer) plus CE241/CE242
     // let 2000350 cycle 0->1->2->0 instead of the literal-bug "stuck at 2". CE244 still writes
     // no result (2000349=1 != self1600010).
-    assert_eq!(var(&g, 350), 0, "command phase cycles 0->1->2->0 (old literal-bug stuck at 2)");
+    assert_eq!(
+        var(&g, 350),
+        0,
+        "command phase cycles 0->1->2->0 (old literal-bug stuck at 2)"
+    );
     assert_eq!(var(&g, 352), 0, "CE244 settlement never runs");
     assert_eq!(var(&g, 343), 0, "CE244 decided flag never runs");
     assert_eq!(var(&g, 349), 1, "CE239 leaves 2000349 = 1");

@@ -289,8 +289,8 @@ mod tests {
     fn panel_sentinel_is_below_script_layers_and_the_title_backdrop() {
         // Script picture numbers start at -2 (title art) and the title backdrop is -100;
         // a host panel identity must not alias either of them (NEW-1 in the review).
-        assert!(PANEL_PICTURE < -2);
-        assert!(PANEL_PICTURE < crate::picture::TITLE_BACKDROP_LAYER);
+        const { assert!(PANEL_PICTURE < -2) };
+        const { assert!(PANEL_PICTURE < crate::picture::TITLE_BACKDROP_LAYER) };
         assert_ne!(PANEL_PICTURE, crate::picture::TITLE_BACKDROP_LAYER);
     }
 

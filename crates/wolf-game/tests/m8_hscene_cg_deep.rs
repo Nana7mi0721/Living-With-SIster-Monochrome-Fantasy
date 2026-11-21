@@ -27,7 +27,7 @@
 //!        save is mutated.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use wolf_format::command::Slot;
 use wolf_format::commonevent::CommonEventData;
@@ -59,7 +59,10 @@ fn save_dir() -> PathBuf {
 }
 
 fn synth_path() -> PathBuf {
-    repo_root().join("work").join("out").join("m10_deep_synth.sav")
+    repo_root()
+        .join("work")
+        .join("out")
+        .join("m10_deep_synth.sav")
 }
 
 fn load_sample_map() -> Map {
@@ -86,7 +89,9 @@ fn words(cmd: &wolf_format::command::Command) -> Vec<i32> {
 }
 
 fn ce_cmd_pcs(data: &CommonEventData, event: u32, op: u32, first: i32) -> Vec<usize> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     ev.commands
         .iter()
         .enumerate()
@@ -100,7 +105,9 @@ fn ce_cmd_pcs(data: &CommonEventData, event: u32, op: u32, first: i32) -> Vec<us
 }
 
 fn ce_cond_triples(data: &CommonEventData, event: u32) -> Vec<(usize, i32, i32, i32)> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     let mut out = Vec::new();
     for (pc, slot) in ev.commands.iter().enumerate() {
         if let Slot::Command(cmd) = slot {
@@ -122,7 +129,7 @@ fn ce_cond_triples(data: &CommonEventData, event: u32) -> Vec<(usize, i32, i32, 
     out
 }
 
-fn map_event<'a>(map: &'a Map, id: u32) -> &'a wolf_format::mps::MapEvent {
+fn map_event(map: &Map, id: u32) -> &wolf_format::mps::MapEvent {
     map.events
         .iter()
         .find(|event| event.id == id)
@@ -171,7 +178,7 @@ fn build_synth_save() -> PathBuf {
     path
 }
 
-fn open_on(path: &PathBuf) -> Option<Game> {
+fn open_on(path: &Path) -> Option<Game> {
     if !path.exists() {
         eprintln!("skip: missing {}", path.display());
         return None;
@@ -214,7 +221,7 @@ fn open_synth_bare() -> Option<Game> {
     Some(game)
 }
 
-fn open_bare(path: &PathBuf) -> Option<Game> {
+fn open_bare(path: &Path) -> Option<Game> {
     let mut game = Game::new(data_root()).ok()?;
     game.load_save(path).ok()?;
     Some(game)
@@ -242,12 +249,18 @@ impl DeepRun {
         self.max_pc.get(&event).copied().unwrap_or(0)
     }
     fn h_s08_files(&self) -> usize {
-        self.files.iter().filter(|file| file.contains("h_s08")).count()
+        self.files
+            .iter()
+            .filter(|file| file.contains("h_s08"))
+            .count()
     }
 }
 
 fn run_started_event(game: &mut Game, event: u32, frames: usize) -> DeepRun {
-    assert!(game.start_event(event), "start_event({event}) spawns a coroutine");
+    assert!(
+        game.start_event(event),
+        "start_event({event}) spawns a coroutine"
+    );
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 2;
@@ -271,7 +284,12 @@ fn run_started_event(game: &mut Game, event: u32, frames: usize) -> DeepRun {
             }
         }
     }
-    DeepRun { max_pc, seen, files, warnings: game.stats.warnings }
+    DeepRun {
+        max_pc,
+        seen,
+        files,
+        warnings: game.stats.warnings,
+    }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -304,7 +322,12 @@ fn run_ev33_cluster(game: &mut Game, frames: usize) -> CgRun {
     for _ in 0..frames {
         game.frame();
         peak_460 = peak_460.max(game.vm.vars.get(460));
-        if game.vm.instances().iter().any(|instance| instance.event == 33) {
+        if game
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 33)
+        {
             saw_ev33 = true;
         }
         for picture in game.screen.iter() {
@@ -313,7 +336,12 @@ fn run_ev33_cluster(game: &mut Game, frames: usize) -> CgRun {
             }
         }
     }
-    CgRun { peak_460, saw_ev33, files, warnings: game.stats.warnings }
+    CgRun {
+        peak_460,
+        saw_ev33,
+        files,
+        warnings: game.stats.warnings,
+    }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -341,7 +369,9 @@ fn synthetic_save_opens_the_full_deep_gate_and_round_trips() {
 
     // The gate really is a gate: plain SaveData07 (the synth's source) fails it.
     let mut retail = Game::new(data_root()).expect("Game::new");
-    retail.load_save(&save_dir().join("SaveData07.sav")).expect("SaveData07");
+    retail
+        .load_save(&save_dir().join("SaveData07.sav"))
+        .expect("SaveData07");
     assert_eq!(retail.vm.vars.get(4), 19, "SaveData07 var4 = 19 < 21");
     assert_eq!(retail.vm.vars.get(102), 59, "SaveData07 var102 = 59 < 80");
 
@@ -376,13 +406,21 @@ fn synthetic_save_opens_the_full_deep_gate_and_round_trips() {
     assert!(ce_cond_triples(&data, 328)
         .iter()
         .any(|(pc, v, val, o)| *pc == 6 && *v == 2_000_104 && *val == 0 && *o == 2));
-    assert_eq!(ce_cmd_pcs(&data, 328, 210, 500_402), vec![986], "CE328 calls CE402 at pc986");
+    assert_eq!(
+        ce_cmd_pcs(&data, 328, 210, 500_402),
+        vec![986],
+        "CE328 calls CE402 at pc986"
+    );
 
     // Static: ev33's only callee is CE333 (a leaf), so the map path never enters the deep branch.
     let map = load_sample_map();
     let ev33 = map_event(&map, 33);
     let targets: BTreeSet<i32> = map_cmd_firsts(&ev33.pages[0], 210).into_iter().collect();
-    assert_eq!(targets, BTreeSet::from([500_333]), "ev33's only callee is CE333");
+    assert_eq!(
+        targets,
+        BTreeSet::from([500_333]),
+        "ev33's only callee is CE333"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -393,7 +431,9 @@ fn synthetic_save_opens_the_full_deep_gate_and_round_trips() {
 fn ce402_runs_its_deep_cutin_body_on_the_synthetic_save() {
     let mut profiles = Vec::new();
     for _ in 0..2 {
-        let Some(mut game) = open_synth_bare() else { panic!("synthetic save must load") };
+        let Some(mut game) = open_synth_bare() else {
+            panic!("synthetic save must load")
+        };
         let run = run_started_event(&mut game, 402, 1500);
         profiles.push(run);
     }
@@ -407,7 +447,10 @@ fn ce402_runs_its_deep_cutin_body_on_the_synthetic_save() {
             "{label}: CE402 reaches deep pc (got {} of 512)",
             run.max_pc_of(402)
         );
-        assert!(run.seen.contains(&410), "{label}: CE410 cutin child entered");
+        assert!(
+            run.seen.contains(&410),
+            "{label}: CE410 cutin child entered"
+        );
         assert!(run.max_pc_of(410) >= 1, "{label}: CE410 advanced");
         assert!(
             run.h_s08_files() >= 10,
@@ -415,7 +458,9 @@ fn ce402_runs_its_deep_cutin_body_on_the_synthetic_save() {
             run.h_s08_files()
         );
         assert!(
-            run.files.iter().any(|file| file.contains("hscene/h_bg_001")),
+            run.files
+                .iter()
+                .any(|file| file.contains("hscene/h_bg_001")),
             "{label}: H CG background h_bg_001 drawn"
         );
         assert!(
@@ -425,7 +470,10 @@ fn ce402_runs_its_deep_cutin_body_on_the_synthetic_save() {
     }
 
     // Determinism: same files and same CE402 max pc across the two runs.
-    assert_eq!(profiles[0].files, profiles[1].files, "file set deterministic across runs");
+    assert_eq!(
+        profiles[0].files, profiles[1].files,
+        "file set deterministic across runs"
+    );
     assert_eq!(
         profiles[0].max_pc_of(402),
         profiles[1].max_pc_of(402),
@@ -461,7 +509,9 @@ fn ce402_gates_are_necessary_plain_savedata07_aborts() {
 
 #[test]
 fn ev33_and_ce333_never_reach_the_deep_branch_even_when_gates_are_open() {
-    let Some(mut game) = open_synth() else { panic!("synthetic save must load") };
+    let Some(mut game) = open_synth() else {
+        panic!("synthetic save must load")
+    };
     drive(&mut game, 4);
     let run = run_ev33_cluster(&mut game, 400);
 
@@ -469,18 +519,29 @@ fn ev33_and_ce333_never_reach_the_deep_branch_even_when_gates_are_open() {
     assert!(run.saw_ev33, "map event 33 runs");
     assert_eq!(run.warnings, 0, "no warnings");
     assert!(
-        run.files.iter().filter(|f| f.contains("hscene/") || f.contains("cg/")).count() >= 12,
+        run.files
+            .iter()
+            .filter(|f| f.contains("hscene/") || f.contains("cg/"))
+            .count()
+            >= 12,
         "CE333 still draws the H CG cluster"
     );
 
     // But the deep branch is untouched: the leaf never instantiates CE246 / CE328 / CE402.
     for deep in [246u32, 328, 402] {
         assert!(
-            !game.vm.instances().iter().any(|instance| instance.event == deep),
+            !game
+                .vm
+                .instances()
+                .iter()
+                .any(|instance| instance.event == deep),
             "CE{deep} not running after ev33 -> CE333"
         );
     }
-    assert!(!run.files.iter().any(|file| file.contains("h_s08")), "no deep h_s08 drawn");
+    assert!(
+        !run.files.iter().any(|file| file.contains("h_s08")),
+        "no deep h_s08 drawn"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -489,7 +550,9 @@ fn ev33_and_ce333_never_reach_the_deep_branch_even_when_gates_are_open() {
 
 #[test]
 fn ce246_stateless_start_cannot_reach_its_deep_block() {
-    let Some(mut game) = open_synth_bare() else { panic!("synthetic save must load") };
+    let Some(mut game) = open_synth_bare() else {
+        panic!("synthetic save must load")
+    };
     let run = run_started_event(&mut game, 246, 1500);
 
     assert_eq!(run.warnings, 0, "no warnings");
@@ -504,8 +567,14 @@ fn ce246_stateless_start_cannot_reach_its_deep_block() {
         "CE246 stalls at its pc117 var151>=1 early gate (max pc {})",
         run.max_pc_of(246)
     );
-    assert!(!run.seen.contains(&333), "CE246's deep CE333 call is not reached");
-    assert!(!run.seen.contains(&346), "CE246's deep CE346 cutin call is not reached");
+    assert!(
+        !run.seen.contains(&333),
+        "CE246's deep CE333 call is not reached"
+    );
+    assert!(
+        !run.seen.contains(&346),
+        "CE246's deep CE346 cutin call is not reached"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -514,7 +583,9 @@ fn ce246_stateless_start_cannot_reach_its_deep_block() {
 
 #[test]
 fn ce328_runs_its_body_but_skips_the_ce402_sub_branch() {
-    let Some(mut game) = open_synth_bare() else { panic!("synthetic save must load") };
+    let Some(mut game) = open_synth_bare() else {
+        panic!("synthetic save must load")
+    };
     let run = run_started_event(&mut game, 328, 3000);
 
     assert_eq!(run.warnings, 0, "no warnings");
@@ -525,6 +596,13 @@ fn ce328_runs_its_body_but_skips_the_ce402_sub_branch() {
         run.max_pc_of(328)
     );
     // The pc986 騎乗位/夢精 sub-branch is the only CE402 entry from CE328; it is not taken here.
-    assert!(!run.seen.contains(&402), "CE402 never instantiated from CE328's own run");
-    assert_eq!(run.h_s08_files(), 0, "no CE402 h_s08 files drawn from the CE328 path");
+    assert!(
+        !run.seen.contains(&402),
+        "CE402 never instantiated from CE328's own run"
+    );
+    assert_eq!(
+        run.h_s08_files(),
+        0,
+        "no CE402 h_s08 files drawn from the CE328 path"
+    );
 }

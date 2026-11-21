@@ -52,12 +52,22 @@ fn samplemapa_selects_one_page_per_event() {
     // number of events the map has.
     assert!(runtime.len() <= map.events.len());
     for slot in runtime.slots() {
-        println!("  event {:2} page {} trigger {:?} slots {}", slot.event, slot.page, slot.trigger, slot.program.len());
+        println!(
+            "  event {:2} page {} trigger {:?} slots {}",
+            slot.event,
+            slot.page,
+            slot.trigger,
+            slot.program.len()
+        );
     }
     assert!(!runtime.is_empty(), "no active event at all");
     assert_eq!(started, runtime.len(), "every active page started once");
     for slot in runtime.slots() {
-        assert!(slot.trigger.is_automatic(), "{:?} is not automatic", slot.trigger);
+        assert!(
+            slot.trigger.is_automatic(),
+            "{:?} is not automatic",
+            slot.trigger
+        );
         assert_ne!(slot.trigger, Trigger::ActionKey);
         assert!(!slot.program.is_empty());
     }
@@ -103,7 +113,10 @@ fn a_variable_write_switches_the_active_page() {
         .into_iter()
         .find(|(id, _)| *id == 9)
         .and_then(|(_, page)| page);
-    println!("global 62 = 99 -> event 9 page {page:?} switches {}", runtime.switches);
+    println!(
+        "global 62 = 99 -> event 9 page {page:?} switches {}",
+        runtime.switches
+    );
     assert_eq!(page, None, "no page of event 9 asks for 99");
 }
 
@@ -117,7 +130,11 @@ fn parallel_pages_restart_when_their_stream_ends() {
     let mut vm = Vm::new(ProgramSet::default());
     let mut host = Quiet;
     runtime.start_pending(&mut vm);
-    assert_eq!(runtime.trigger_counts().get(&1), None, "autorun page still collected");
+    assert_eq!(
+        runtime.trigger_counts().get(&1),
+        None,
+        "autorun page still collected"
+    );
     let mut instructions = 0usize;
     for _ in 0..120 {
         runtime.start_pending(&mut vm);

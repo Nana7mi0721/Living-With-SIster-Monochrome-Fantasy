@@ -93,7 +93,9 @@ fn words(cmd: &wolf_format::command::Command) -> Vec<i32> {
 }
 
 fn ce_call_targets(data: &CommonEventData, event: u32) -> Vec<i32> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     let mut out = Vec::new();
     for slot in &ev.commands {
         if let Slot::Command(cmd) = slot {
@@ -108,7 +110,9 @@ fn ce_call_targets(data: &CommonEventData, event: u32) -> Vec<i32> {
 }
 
 fn ce_cmd_pcs(data: &CommonEventData, event: u32, op: u32, first: i32) -> Vec<usize> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     ev.commands
         .iter()
         .enumerate()
@@ -122,7 +126,9 @@ fn ce_cmd_pcs(data: &CommonEventData, event: u32, op: u32, first: i32) -> Vec<us
 }
 
 fn ce_opcode_count(data: &CommonEventData, event: u32, op: u32) -> usize {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     ev.commands
         .iter()
         .filter(|slot| matches!(slot, Slot::Command(cmd) if cmd.opcode == op))
@@ -130,7 +136,9 @@ fn ce_opcode_count(data: &CommonEventData, event: u32, op: u32) -> usize {
 }
 
 fn ce_cond_triples(data: &CommonEventData, event: u32) -> Vec<(usize, i32, i32, i32)> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     let mut out = Vec::new();
     for (pc, slot) in ev.commands.iter().enumerate() {
         if let Slot::Command(cmd) = slot {
@@ -152,7 +160,7 @@ fn ce_cond_triples(data: &CommonEventData, event: u32) -> Vec<(usize, i32, i32, 
     out
 }
 
-fn map_event<'a>(map: &'a Map, id: u32) -> &'a wolf_format::mps::MapEvent {
+fn map_event(map: &Map, id: u32) -> &wolf_format::mps::MapEvent {
     map.events
         .iter()
         .find(|event| event.id == id)
@@ -235,7 +243,12 @@ fn run_ev33_cg_cluster(game: &mut Game, frames: usize) -> CgRun {
     for _ in 0..frames {
         game.frame();
         peak_460 = peak_460.max(game.vm.vars.get(460));
-        if game.vm.instances().iter().any(|instance| instance.event == 33) {
+        if game
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 33)
+        {
             saw_ev33 = true;
         }
         for picture in game.screen.iter() {
@@ -244,7 +257,12 @@ fn run_ev33_cg_cluster(game: &mut Game, frames: usize) -> CgRun {
             }
         }
     }
-    CgRun { peak_460, saw_ev33, files, warnings: game.stats.warnings }
+    CgRun {
+        peak_460,
+        saw_ev33,
+        files,
+        warnings: game.stats.warnings,
+    }
 }
 
 fn has_file_containing(files: &BTreeSet<String>, needle: &str) -> bool {
@@ -261,7 +279,10 @@ fn h_scene_file_count(files: &BTreeSet<String>) -> usize {
 }
 
 fn assert_cg_cluster_rendered(label: &str, run: &CgRun) {
-    assert_eq!(run.peak_460, 1, "{label}: var460 reaches 1 (ev33 page condition)");
+    assert_eq!(
+        run.peak_460, 1,
+        "{label}: var460 reaches 1 (ev33 page condition)"
+    );
     assert!(run.saw_ev33, "{label}: map event 33 runs");
     assert_eq!(run.warnings, 0, "{label}: no engine warnings");
     assert!(
@@ -293,20 +314,33 @@ fn assert_cg_cluster_rendered(label: &str, run: &CgRun) {
 
 #[test]
 fn ev33_renders_the_h_cg_cluster_on_the_mid_h_save() {
-    let Some(mut game) = open_resumed_on(8) else { return };
+    let Some(mut game) = open_resumed_on(8) else {
+        return;
+    };
     drive(&mut game, 60);
     assert_eq!(game.vm.vars.get(62), 1, "SaveData08 starts on H UI stage 1");
 
     let run = run_ev33_cg_cluster(&mut game, 160);
     assert_cg_cluster_rendered("SaveData08", &run);
 
-    assert_eq!(game.vm.vars.get(137), 8, "SaveData08 stage selector var137 == 8");
+    assert_eq!(
+        game.vm.vars.get(137),
+        8,
+        "SaveData08 stage selector var137 == 8"
+    );
     assert!(
         has_file_containing(&run.files, "hscene/h_s10"),
         "SaveData08 draws the h_s10 pose sheet for var137 == 8"
     );
-    assert!(!game.vm.instances().is_empty(), "engine instances still running");
-    assert_eq!(game.vm.vars.get(62), 1, "H UI still on stage 1 after the CG overlay");
+    assert!(
+        !game.vm.instances().is_empty(),
+        "engine instances still running"
+    );
+    assert_eq!(
+        game.vm.vars.get(62),
+        1,
+        "H UI still on stage 1 after the CG overlay"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -317,14 +351,19 @@ fn ev33_renders_the_h_cg_cluster_on_the_mid_h_save() {
 fn ev33_renders_the_cg_cluster_on_savedata07_and_savedata04() {
     let mut ran = 0;
     for index in [7u32, 4u32] {
-        let Some(mut game) = open_resumed_on(index) else { continue };
+        let Some(mut game) = open_resumed_on(index) else {
+            continue;
+        };
         drive(&mut game, 60);
         let run = run_ev33_cg_cluster(&mut game, 160);
         let label = format!("SaveData{index:02}");
         assert_cg_cluster_rendered(&label, &run);
         ran += 1;
     }
-    assert_eq!(ran, 2, "both SaveData07 and SaveData04 exist and drive the cluster");
+    assert_eq!(
+        ran, 2,
+        "both SaveData07 and SaveData04 exist and drive the cluster"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -338,7 +377,11 @@ fn ev33_calls_only_ce333_which_is_a_leaf_cg_body() {
 
     let ev33 = map_event(&map, 33);
     let conds = enabled_conditions(&ev33.pages[0]);
-    assert_eq!(conds.len(), 1, "ev33 page0 has exactly one enabled condition");
+    assert_eq!(
+        conds.len(),
+        1,
+        "ev33 page0 has exactly one enabled condition"
+    );
     assert_eq!(conds[0].variable, 2_000_460, "ev33 gated on var460");
     assert_eq!(conds[0].operator, PageCondition::OP_EQUAL);
     assert_eq!(conds[0].value, 1);
@@ -406,7 +449,10 @@ fn deep_cg_gates_are_not_jointly_satisfied_by_any_real_save() {
     assert!(
         ce_cond_triples(&data, 246)
             .iter()
-            .any(|(pc, var, value, op)| *pc == 1943 && *var == 2_000_157 && *value == 13 && *op == 2),
+            .any(|(pc, var, value, op)| *pc == 1943
+                && *var == 2_000_157
+                && *value == 13
+                && *op == 2),
         "CE246 pc1943 gates its deep body on var157 == 13"
     );
     assert!(
@@ -448,7 +494,9 @@ fn deep_cg_gates_are_not_jointly_satisfied_by_any_real_save() {
         if !save.exists() {
             continue;
         }
-        let Ok(mut game) = Game::new(data_root()) else { continue };
+        let Ok(mut game) = Game::new(data_root()) else {
+            continue;
+        };
         if game.load_save(&save).is_err() {
             continue;
         }
@@ -469,14 +517,39 @@ fn deep_cg_gates_are_not_jointly_satisfied_by_any_real_save() {
         if ce328_entry_ok {
             ce328_entry_saves.push(index);
         }
-        rows.push((index, v157, v104, v105, v4, v102, v16, v22, ce246_ok, ce328_entry_ok, ce402_internal_ok));
+        rows.push((
+            index,
+            v157,
+            v104,
+            v105,
+            v4,
+            v102,
+            v16,
+            v22,
+            ce246_ok,
+            ce328_entry_ok,
+            ce402_internal_ok,
+        ));
     }
     assert!(rows.len() >= 7, "read {} retail saves", rows.len());
 
-    assert_eq!(ce246_saves, vec![7], "only SaveData07 has var157 == 13 (CE246 deep gate)");
-    assert!(ce328_entry_saves.contains(&7), "SaveData07 clears the CE328 entry gate");
-    assert!(!ce328_entry_saves.contains(&4), "SaveData04 fails var104/var105 == 0 entry");
-    assert!(!ce328_entry_saves.contains(&5), "SaveData05 fails var104/var105 == 0 entry");
+    assert_eq!(
+        ce246_saves,
+        vec![7],
+        "only SaveData07 has var157 == 13 (CE246 deep gate)"
+    );
+    assert!(
+        ce328_entry_saves.contains(&7),
+        "SaveData07 clears the CE328 entry gate"
+    );
+    assert!(
+        !ce328_entry_saves.contains(&4),
+        "SaveData04 fails var104/var105 == 0 entry"
+    );
+    assert!(
+        !ce328_entry_saves.contains(&5),
+        "SaveData05 fails var104/var105 == 0 entry"
+    );
 
     let save07 = rows.iter().find(|row| row.0 == 7).expect("SaveData07 row");
     assert!(save07.8, "SaveData07 has var157 == 13");
@@ -498,5 +571,8 @@ fn deep_cg_gates_are_not_jointly_satisfied_by_any_real_save() {
     let save04 = rows.iter().find(|row| row.0 == 4).expect("SaveData04 row");
     assert_eq!(save04.2, 1, "SaveData04 var104 = 1 (fails CE328 entry)");
     assert_eq!(save04.3, 2, "SaveData04 var105 = 2 (fails CE328 entry)");
-    assert!(save04.4 >= 21, "SaveData04 var4 >= 21 (only CE402 inner gate it satisfies)");
+    assert!(
+        save04.4 >= 21,
+        "SaveData04 var4 >= 21 (only CE402 inner gate it satisfies)"
+    );
 }

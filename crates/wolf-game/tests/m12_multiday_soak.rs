@@ -67,14 +67,24 @@ fn has(game: &Game, event: u32) -> bool {
 const SLEEP_OPTIONS: [&str; 3] = ["恶作剧", "轻轻把被子盖好", "今天还是睡吧"];
 const CONFIRM_OPTIONS: [&str; 2] = ["是的", "再想想"];
 const DAY_LABELS: [&str; 6] = [
-    "给店里帮忙", "学习会", "基础锻炼", "攻击练习", "防御练习", "秘密特训",
+    "给店里帮忙",
+    "学习会",
+    "基础锻炼",
+    "攻击练习",
+    "防御练习",
+    "秘密特训",
 ];
 const ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
 
 fn rows(game: &Game) -> Vec<String> {
     ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -184,7 +194,11 @@ fn play_day(game: &mut Game, day: i32) -> (i32, DayReport) {
             }
         }
 
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         game.key_bits = 0;
         let current_day = game.vm.vars.get(160);
@@ -231,7 +245,11 @@ fn sleep_to_next_morning(game: &mut Game, day: i32) {
     game.vm.vars.set(63, 1);
     let mut options = Vec::new();
     for frame in 0..2400 {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         if let Some(choice) = &game.choices {
             options = choice.options.clone();
@@ -241,7 +259,10 @@ fn sleep_to_next_morning(game: &mut Game, day: i32) {
     game.key_bits = 0;
     assert_eq!(
         options,
-        SLEEP_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+        SLEEP_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
         "day {day}: unexpected sleep menu at {}:{} live={:?}",
         game.vm.vars.get(4),
         game.vm.vars.get(5),
@@ -263,7 +284,10 @@ fn sleep_to_next_morning(game: &mut Game, day: i32) {
     }
     assert_eq!(
         confirm,
-        CONFIRM_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+        CONFIRM_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
         "day {day}: unexpected sleep confirm"
     );
     game.set_choice_cursor(0); // 是的
@@ -390,7 +414,10 @@ fn thirty_days_advance_without_deadlock_or_warnings() {
     };
 
     assert_eq!(summary.reached, TARGET + 1, "day 31 reached");
-    assert!(summary.battle_days.contains(&4), "day 4 is the forced CE253 battle");
+    assert!(
+        summary.battle_days.contains(&4),
+        "day 4 is the forced CE253 battle"
+    );
     assert!(
         summary.battle_days.iter().any(|day| *day > 10),
         "later story battles must also settle (day 11+ CE305 -> CE239), got {:?}",
@@ -413,7 +440,10 @@ fn thirty_days_advance_without_deadlock_or_warnings() {
         "weekdays must draw the CE251 workday menu repeatedly, got {:?}",
         summary.weekday_days
     );
-    assert!(summary.jumped_days.is_empty(), "no story jump inside 30 days");
+    assert!(
+        summary.jumped_days.is_empty(),
+        "no story jump inside 30 days"
+    );
 }
 
 /// The same driver over the whole retail-style long run. Ignored by default because
@@ -434,5 +464,8 @@ fn ninety_days_survive_story_day_jumps() {
     }
     assert!(summary.battle_days.contains(&4));
     assert!(summary.battle_days.len() >= 10, "many story battles settle");
-    assert!(summary.weekend_days.len() >= 20, "weekends keep drawing CE310");
+    assert!(
+        summary.weekend_days.len() >= 20,
+        "weekends keep drawing CE310"
+    );
 }

@@ -302,7 +302,7 @@ fn capture_scene(baseline: &'static Baseline) -> Option<Metrics> {
         );
         return None;
     }
-    if baseline.args.iter().any(|arg| *arg == "--load-save") && !save_fixture().is_file() {
+    if baseline.args.contains(&"--load-save") && !save_fixture().is_file() {
         eprintln!(
             "skipping {}: save fixture {} is missing",
             baseline.name,

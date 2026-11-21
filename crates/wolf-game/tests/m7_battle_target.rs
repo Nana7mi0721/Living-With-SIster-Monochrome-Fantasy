@@ -46,8 +46,7 @@ fn instance_pc(g: &Game, event: &str) -> Option<i32> {
 }
 
 fn has_instance(g: &Game, event: &str) -> bool {
-    g.vm
-        .instances()
+    g.vm.instances()
         .iter()
         .any(|i| format!("{:?}", i.event) == event)
 }
@@ -71,10 +70,15 @@ fn drive(g: &mut Game, frames: usize) {
 /// Static contract: CE162 reads type18 row69, and the production seed now fills it.
 #[test]
 fn production_seed_carries_the_enemy_count_ce162_reads() {
-    let bytes = std::fs::read(data_root().join("BasicData/CommonEvent.dat")).expect("CommonEvent.dat");
+    let bytes =
+        std::fs::read(data_root().join("BasicData/CommonEvent.dat")).expect("CommonEvent.dat");
     let events = CommonEventData::parse(&bytes).expect("parse CommonEvent.dat");
     let ce162 = events.event(162).expect("CE162");
-    assert!(ce162.title.contains("敵対象選択実行"), "CE162 title={}", ce162.title);
+    assert!(
+        ce162.title.contains("敵対象選択実行"),
+        "CE162 title={}",
+        ce162.title
+    );
 
     let mut reads_row69 = false;
     for slot in &ce162.commands {
@@ -95,12 +99,19 @@ fn production_seed_carries_the_enemy_count_ce162_reads() {
 
     let mut g = seeded_game();
     assert_eq!(cdata(&g, 18, 4, 0), 1, "party count is seeded");
-    assert_eq!(cdata(&g, 18, 69, 0), 1, "production seed now writes the enemy count");
+    assert_eq!(
+        cdata(&g, 18, 69, 0),
+        1,
+        "production seed now writes the enemy count"
+    );
 
     g.start_event(190);
     drive(&mut g, 600);
     assert_eq!(cdata(&g, 18, 69, 0), 1, "CE190 preserves the enemy count");
-    assert!(cdata(&g, 10, 0, 2) > 0, "CE144 copied a live enemy HP row into type10");
+    assert!(
+        cdata(&g, 10, 0, 2) > 0,
+        "CE144 copied a live enemy HP row into type10"
+    );
     assert_eq!(cdata(&g, 18, 35, 0), 512, "CE175 enemy x");
     // CE175 pc72 is one op121 with an inclusive last offset of 3, so it scales
     // all four consecutive coordinates (x, y, x-scale, y-scale) by 1/10, not
@@ -130,9 +141,18 @@ fn seeded_enemy_count_lets_ce162_select_enemy_index_zero() {
             pcs.insert(pc);
         }
     }
-    assert!(pcs.contains(&12), "CE162 must read the enemy count at pc12, saw {pcs:?}");
-    assert!(pcs.contains(&57), "CE162 must reach pc57 (enemy index 0 selected), saw {pcs:?}");
-    assert!(!has_instance(&g, "162"), "CE162 exits after a successful selection");
+    assert!(
+        pcs.contains(&12),
+        "CE162 must read the enemy count at pc12, saw {pcs:?}"
+    );
+    assert!(
+        pcs.contains(&57),
+        "CE162 must reach pc57 (enemy index 0 selected), saw {pcs:?}"
+    );
+    assert!(
+        !has_instance(&g, "162"),
+        "CE162 exits after a successful selection"
+    );
     assert_eq!(g.stats.warnings, 0);
 }
 
@@ -145,8 +165,15 @@ fn without_enemy_count_ce162_spins_at_pc49_pc50() {
 
     g.start_event(190);
     drive(&mut g, 400);
-    assert_eq!(cdata(&g, 18, 69, 0), 0, "CE190 cannot invent an enemy count");
-    assert!(cdata(&g, 10, 0, 2) > 0, "CE144 still lands one type10 enemy row");
+    assert_eq!(
+        cdata(&g, 18, 69, 0),
+        0,
+        "CE190 cannot invent an enemy count"
+    );
+    assert!(
+        cdata(&g, 10, 0, 2) > 0,
+        "CE144 still lands one type10 enemy row"
+    );
 
     assert!(g.start_event(162), "CE162 starts");
     let mut saw57 = false;
@@ -162,8 +189,14 @@ fn without_enemy_count_ce162_spins_at_pc49_pc50() {
         }
     }
     assert!(!saw57, "CE162 must not reach pc57 without an enemy count");
-    assert!(has_instance(&g, "162"), "CE162 stays active, spinning pc49/pc50");
+    assert!(
+        has_instance(&g, "162"),
+        "CE162 stays active, spinning pc49/pc50"
+    );
     let pc = instance_pc(&g, "162").expect("CE162 still running");
-    assert!(pc == 49 || pc == 50, "control CE162 stuck at pc49/pc50, got pc{pc} (max {max_pc})");
+    assert!(
+        pc == 49 || pc == 50,
+        "control CE162 stuck at pc49/pc50, got pc{pc} (max {max_pc})"
+    );
     assert_eq!(g.stats.warnings, 0);
 }

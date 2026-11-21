@@ -69,7 +69,8 @@ fn run_battle_with_schedule(schedule: Vec<i32>) -> BattleRun {
     game.auto_choice = true;
     game.auto_choice_delay = 1;
     assert!(game.seed_battle_databases() > 0, "battle cells must seed");
-    game.databases.set_text(Container::CData, 5, 16, 0, "state list");
+    game.databases
+        .set_text(Container::CData, 5, 16, 0, "state list");
     let _ = game.start_engine_events();
     game.set_battle_wiring(true);
     game.set_battle_command_schedule(schedule);
@@ -155,8 +156,14 @@ fn drive_real_menu_to_code(target_code: i32) -> (Option<i32>, i32, i32, i32, boo
         }
         let mut target_row: Option<i32> = None;
         for row in 0..8 {
-            let code = game.databases.num(Container::CData, 19, row, 1).unwrap_or(-1);
-            let selectable = game.databases.num(Container::CData, 19, row, 2).unwrap_or(0);
+            let code = game
+                .databases
+                .num(Container::CData, 19, row, 1)
+                .unwrap_or(-1);
+            let selectable = game
+                .databases
+                .num(Container::CData, 19, row, 2)
+                .unwrap_or(0);
             if SELECTABLE_CODES.contains(&code) && selectable == 1 && code == target_code {
                 target_row = Some(row);
             }
@@ -192,22 +199,46 @@ fn drive_real_menu_to_code(target_code: i32) -> (Option<i32>, i32, i32, i32, boo
     let activator = registered_row
         .and_then(|r| game.databases.num(Container::CData, 14, r, 0))
         .unwrap_or(-999);
-    let input_pos = game.databases.num(Container::CData, 20, 73, 0).unwrap_or(-999);
-    (registered_row, registered_code, activator, input_pos, ce242_seen, v350, game.stats.warnings)
+    let input_pos = game
+        .databases
+        .num(Container::CData, 20, 73, 0)
+        .unwrap_or(-999);
+    (
+        registered_row,
+        registered_code,
+        activator,
+        input_pos,
+        ce242_seen,
+        v350,
+        game.stats.warnings,
+    )
 }
 
 #[test]
 fn live_menu_selection_feeds_the_driver_and_settles() {
-    let (registered_row, registered_code, activator, input_pos, ce242_in_menu, v350_menu, warn_menu) =
-        drive_real_menu_to_code(NON_DEFAULT_CODE);
+    let (
+        registered_row,
+        registered_code,
+        activator,
+        input_pos,
+        ce242_in_menu,
+        v350_menu,
+        warn_menu,
+    ) = drive_real_menu_to_code(NON_DEFAULT_CODE);
 
     eprintln!(
         "menu: registered_row={registered_row:?} code={registered_code} activator={activator} input_pos={input_pos} ce242={ce242_in_menu} v350={v350_menu} warnings={warn_menu}"
     );
 
     let row = registered_row.expect("the real menu must register the chosen command");
-    assert_eq!(row, 1, "the shipped single-input menu registers row1 (command index 1)");
-    assert_eq!(registered_code, NON_DEFAULT_CODE, "registered 発動技能 code");
+    assert_eq!(
+        row, 1,
+        "the shipped single-input menu registers row1 (command index 1)"
+    );
+    assert_eq!(
+        registered_code, NON_DEFAULT_CODE,
+        "registered 発動技能 code"
+    );
     assert_eq!(activator, 0, "発動者番号 col0 is 0 for the first input");
     assert_eq!(input_pos, 0, "CData type20 row73 コマンド入力位置 stays 0");
     assert!(!ce242_in_menu, "the CE188 menu line never starts CE242");
@@ -224,14 +255,27 @@ fn live_menu_selection_feeds_the_driver_and_settles() {
         run.ce242, run.max_ce242_pc, run.v350_seq, run.pre_pools, run.post_pools, run.v352, run.v343, run.settled, run.warnings
     );
 
-    assert!(run.ce242, "the bridge must start CE242 from the battle-active edge");
-    assert!(run.max_ce242_pc >= 200, "CE242 must reach its action body, got pc {}", run.max_ce242_pc);
+    assert!(
+        run.ce242,
+        "the bridge must start CE242 from the battle-active edge"
+    );
+    assert!(
+        run.max_ce242_pc >= 200,
+        "CE242 must reach its action body, got pc {}",
+        run.max_ce242_pc
+    );
     assert!(
         run.post_pools[0] < run.pre_pools[0],
         "command index {} must drain pool 2000345: pre {:?} post {:?}",
-        row, run.pre_pools, run.post_pools
+        row,
+        run.pre_pools,
+        run.post_pools
     );
-    assert!(run.v352 == 1 || run.v352 == -1, "CE244 must settle 2000352 in {{1,-1}}, got {}", run.v352);
+    assert!(
+        run.v352 == 1 || run.v352 == -1,
+        "CE244 must settle 2000352 in {{1,-1}}, got {}",
+        run.v352
+    );
     assert_eq!(run.v343, 1, "CE244 must set 2000343 = 1");
     assert!(run.settled, "the battle must settle");
     assert_eq!(run.warnings, 0, "no engine warnings allowed");
@@ -246,17 +290,33 @@ fn driver_honours_nondefault_index_but_the_menu_cannot_supply_it() {
     );
 
     assert!(run.ce242, "CE242 must start");
-    assert!(run.max_ce242_pc >= 761, "index 3 must dispatch to the slot-3 CE242 body (>= pc761), got pc {}", run.max_ce242_pc);
+    assert!(
+        run.max_ce242_pc >= 761,
+        "index 3 must dispatch to the slot-3 CE242 body (>= pc761), got pc {}",
+        run.max_ce242_pc
+    );
     assert!(
         run.post_pools[1] < run.pre_pools[1],
         "command index 3 must drain pool 2000346: pre {:?} post {:?}",
-        run.pre_pools, run.post_pools
+        run.pre_pools,
+        run.post_pools
     );
-    assert!(run.v352 == 1 || run.v352 == -1, "battle must still settle, got v352={}", run.v352);
+    assert!(
+        run.v352 == 1 || run.v352 == -1,
+        "battle must still settle, got v352={}",
+        run.v352
+    );
     assert_eq!(run.v343, 1);
     assert_eq!(run.warnings, 0);
 
     let (row, _code, _act, input_pos, _c, _v, _w) = drive_real_menu_to_code(NON_DEFAULT_CODE);
-    assert_eq!(row, Some(1), "the real menu can only register row 1, i.e. command index 1");
-    assert_eq!(input_pos, 0, "コマンド入力位置 stays 0: no shipped multi-input path to index > 1 (documented gap)");
+    assert_eq!(
+        row,
+        Some(1),
+        "the real menu can only register row 1, i.e. command index 1"
+    );
+    assert_eq!(
+        input_pos, 0,
+        "コマンド入力位置 stays 0: no shipped multi-input path to index > 1 (documented gap)"
+    );
 }

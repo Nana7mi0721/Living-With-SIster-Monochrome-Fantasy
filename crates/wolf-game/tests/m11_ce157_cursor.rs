@@ -53,8 +53,12 @@ fn registered_rows(game: &Game) -> Vec<(i32, i32, i32)> {
         .map(|r| {
             (
                 r,
-                game.databases.num(Container::CData, CMD_LIST_TYPE, r, 0).unwrap_or(-1),
-                game.databases.num(Container::CData, CMD_LIST_TYPE, r, 3).unwrap_or(-1),
+                game.databases
+                    .num(Container::CData, CMD_LIST_TYPE, r, 0)
+                    .unwrap_or(-1),
+                game.databases
+                    .num(Container::CData, CMD_LIST_TYPE, r, 3)
+                    .unwrap_or(-1),
             )
         })
         .collect()
@@ -73,7 +77,10 @@ fn live_menu_registers_multiple_rows_and_advances_the_cursor() {
 
     let mut best_rows = registered_rows(&game);
     let mut best_n = best_rows.iter().filter(|t| t.1 >= 0).count();
-    let mut best_inpos = game.databases.num(Container::CData, INPUT_POS_TYPE, 73, 0).unwrap_or(-1);
+    let mut best_inpos = game
+        .databases
+        .num(Container::CData, INPUT_POS_TYPE, 73, 0)
+        .unwrap_or(-1);
     let mut last_inc = 0usize;
     let mut ce157_starts = 0u32;
     let mut saw157 = false;
@@ -109,7 +116,10 @@ fn live_menu_registers_multiple_rows_and_advances_the_cursor() {
         if n > best_n {
             best_n = n;
             best_rows = rows;
-            best_inpos = game.databases.num(Container::CData, INPUT_POS_TYPE, 73, 0).unwrap_or(-1);
+            best_inpos = game
+                .databases
+                .num(Container::CData, INPUT_POS_TYPE, 73, 0)
+                .unwrap_or(-1);
             last_inc = f;
         }
         // Stop once the registration set has been stable for a while after it grew.
@@ -126,18 +136,33 @@ fn live_menu_registers_multiple_rows_and_advances_the_cursor() {
         ce192_starts >= best_n as u32,
         "each registered row should come from a CE192 member window: starts={ce192_starts} rows={best_n}"
     );
-    assert!(ce157_starts >= best_n as u32, "CE157 must be invoked per confirm");
+    assert!(
+        ce157_starts >= best_n as u32,
+        "CE157 must be invoked per confirm"
+    );
 
     // Every registered row carries the activator/slot in col0 == row-1, and a
     // materialised action field in col3 (not the -1 sentinel of an empty slot).
     let mut distinct = std::collections::BTreeSet::new();
     for r in 1..=best_n as i32 {
         let (_, c0, c3) = best_rows[r as usize];
-        assert_eq!(c0, r - 1, "row {r} activator/slot should be {} got {c0}", r - 1);
-        assert!(c3 >= 0, "row {r} should carry a non-sentinel action field, got {c3}");
+        assert_eq!(
+            c0,
+            r - 1,
+            "row {r} activator/slot should be {} got {c0}",
+            r - 1
+        );
+        assert!(
+            c3 >= 0,
+            "row {r} should carry a non-sentinel action field, got {c3}"
+        );
         distinct.insert(c0);
     }
-    assert_eq!(distinct.len(), best_n, "registered rows must be distinct: {best_rows:?}");
+    assert_eq!(
+        distinct.len(),
+        best_n,
+        "registered rows must be distinct: {best_rows:?}"
+    );
 
     // The cursor advanced exactly once per registration: it starts at 1 after the
     // clear-all and ends at 1 + registrations.
@@ -149,8 +174,14 @@ fn live_menu_registers_multiple_rows_and_advances_the_cursor() {
 
     // The old probe read the wrong physical cell; pin that trap so nobody
     // regresses to type 20 again.
-    let wrong = game.databases.num(Container::CData, WRONG_POS_TYPE, 73, 0).unwrap_or(-1);
-    assert_eq!(wrong, 0, "physical type 20 row 73 is NOT the command-input position (always 0)");
+    let wrong = game
+        .databases
+        .num(Container::CData, WRONG_POS_TYPE, 73, 0)
+        .unwrap_or(-1);
+    assert_eq!(
+        wrong, 0,
+        "physical type 20 row 73 is NOT the command-input position (always 0)"
+    );
 }
 
 #[test]
@@ -170,16 +201,24 @@ fn input_position_is_physical_type_18_row_73() {
     for f in 0..1200 {
         game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
         game.frame();
-        let real = game.databases.num(Container::CData, INPUT_POS_TYPE, 73, 0).unwrap_or(0);
+        let real = game
+            .databases
+            .num(Container::CData, INPUT_POS_TYPE, 73, 0)
+            .unwrap_or(0);
         if real >= 3 {
             advanced = true;
             assert_eq!(
-                game.databases.num(Container::CData, WRONG_POS_TYPE, 73, 0).unwrap_or(0),
+                game.databases
+                    .num(Container::CData, WRONG_POS_TYPE, 73, 0)
+                    .unwrap_or(0),
                 0,
                 "type 20 row 73 (wrong cell) must stay 0 while type 18 advances to {real}"
             );
             break;
         }
     }
-    assert!(advanced, "the real command-input position (type 18 row 73) should advance past 2");
+    assert!(
+        advanced,
+        "the real command-input position (type 18 row 73) should advance past 2"
+    );
 }

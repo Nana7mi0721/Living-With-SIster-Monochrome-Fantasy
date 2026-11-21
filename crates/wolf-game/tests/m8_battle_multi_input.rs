@@ -106,8 +106,14 @@ fn drive_ce188_menu() -> MenuObserve {
         // Navigate the CE65 cursor to the row holding TARGET_CODE, then confirm.
         let mut target_row: Option<i32> = None;
         for row in 0..8 {
-            let code = game.databases.num(Container::CData, 19, row, 1).unwrap_or(-1);
-            let selectable = game.databases.num(Container::CData, 19, row, 2).unwrap_or(0);
+            let code = game
+                .databases
+                .num(Container::CData, 19, row, 1)
+                .unwrap_or(-1);
+            let selectable = game
+                .databases
+                .num(Container::CData, 19, row, 2)
+                .unwrap_or(0);
             if SELECTABLE_CODES.contains(&code) && selectable == 1 && code == TARGET_CODE {
                 target_row = Some(row);
             }
@@ -132,7 +138,10 @@ fn drive_ce188_menu() -> MenuObserve {
 
         // Record every command row that ever carries a real ability code.
         for row in 0..16 {
-            let code = game.databases.num(Container::CData, 14, row, 3).unwrap_or(-1);
+            let code = game
+                .databases
+                .num(Container::CData, 14, row, 3)
+                .unwrap_or(-1);
             if SELECTABLE_CODES.contains(&code) && !rows_with_selectable.contains(&row) {
                 rows_with_selectable.push(row);
             }
@@ -208,7 +217,10 @@ fn live_menu_registers_one_command_and_never_advances_input_position() {
         obs.max_input_pos, 0,
         "コマンド入力位置 (CData 20,73) never leaves 0 across 2400 frames"
     );
-    assert_eq!(obs.final_input_pos, 0, "コマンド入力位置 stays 0 at the end");
+    assert_eq!(
+        obs.final_input_pos, 0,
+        "コマンド入力位置 stays 0 at the end"
+    );
 
     // CE194 is the multi-command consumer; it is never reached by the menu line.
     assert!(
@@ -247,14 +259,23 @@ fn ce157_registers_row_one_but_never_advances_input_position() {
 
     let row1_code = game.databases.num(Container::CData, 14, 1, 3).unwrap_or(-1);
     let row2_code = game.databases.num(Container::CData, 14, 2, 3).unwrap_or(-1);
-    let input_pos = game.databases.num(Container::CData, 20, 73, 0).unwrap_or(-1);
+    let input_pos = game
+        .databases
+        .num(Container::CData, 20, 73, 0)
+        .unwrap_or(-1);
     eprintln!(
         "ce157: max_pc={max_pc} row1_code={row1_code} row2_code={row2_code} input_pos={input_pos} warnings={}",
         game.stats.warnings
     );
 
-    assert!(max_pc >= 82, "CE157 must execute its registration body, got pc {max_pc}");
-    assert_eq!(row1_code, 26, "CE157 writes the command code into row 1 col3");
+    assert!(
+        max_pc >= 82,
+        "CE157 must execute its registration body, got pc {max_pc}"
+    );
+    assert_eq!(
+        row1_code, 26,
+        "CE157 writes the command code into row 1 col3"
+    );
     assert_ne!(row2_code, 26, "CE157 never writes a second command row");
     assert_eq!(
         input_pos, 0,

@@ -93,23 +93,121 @@ fn run_case(case: &PollCase, inject: bool, frames: usize) -> BTreeSet<i32> {
 const CASES: &[PollCase] = &[
     // ---- CE346 (2 polls) -------------------------------------------------
     // args [2,1,1] -> block 4/5 poll @ pc48; retry pc52, continue pc55
-    PollCase { label: "CE346 args[2,1,1] poll#1 pc48", event: 346, args: [2, 1, 1], extra_vars: &[], retry_pc: 52, cont_pc: 55 },
+    PollCase {
+        label: "CE346 args[2,1,1] poll#1 pc48",
+        event: 346,
+        args: [2, 1, 1],
+        extra_vars: &[],
+        retry_pc: 52,
+        cont_pc: 55,
+    },
     // args [4,0,1] -> block 11/12 poll @ pc119; retry pc123, continue pc126
-    PollCase { label: "CE346 args[4,0,1] poll#2 pc119", event: 346, args: [4, 0, 1], extra_vars: &[], retry_pc: 123, cont_pc: 126 },
+    PollCase {
+        label: "CE346 args[4,0,1] poll#2 pc119",
+        event: 346,
+        args: [4, 0, 1],
+        extra_vars: &[],
+        retry_pc: 123,
+        cont_pc: 126,
+    },
     // ---- CE371 (7 polls, one per global 2000218 stage) -------------------
-    PollCase { label: "CE371 var218=1 poll pc74", event: 371, args: [1, 0, 0], extra_vars: &[(218, 1)], retry_pc: 79, cont_pc: 83 },
-    PollCase { label: "CE371 var218=2 poll pc157", event: 371, args: [1, 0, 0], extra_vars: &[(218, 2)], retry_pc: 162, cont_pc: 166 },
-    PollCase { label: "CE371 var218=3 poll pc239", event: 371, args: [1, 0, 0], extra_vars: &[(218, 3)], retry_pc: 244, cont_pc: 248 },
-    PollCase { label: "CE371 var218=4 poll pc326", event: 371, args: [1, 0, 0], extra_vars: &[(218, 4)], retry_pc: 331, cont_pc: 335 },
-    PollCase { label: "CE371 var218=5 poll pc412", event: 371, args: [1, 0, 0], extra_vars: &[(218, 5)], retry_pc: 417, cont_pc: 421 },
-    PollCase { label: "CE371 var218=6 poll pc502", event: 371, args: [1, 0, 0], extra_vars: &[(218, 6)], retry_pc: 507, cont_pc: 511 },
-    PollCase { label: "CE371 var218=7 poll pc586", event: 371, args: [1, 0, 0], extra_vars: &[(218, 7)], retry_pc: 591, cont_pc: 595 },
+    PollCase {
+        label: "CE371 var218=1 poll pc74",
+        event: 371,
+        args: [1, 0, 0],
+        extra_vars: &[(218, 1)],
+        retry_pc: 79,
+        cont_pc: 83,
+    },
+    PollCase {
+        label: "CE371 var218=2 poll pc157",
+        event: 371,
+        args: [1, 0, 0],
+        extra_vars: &[(218, 2)],
+        retry_pc: 162,
+        cont_pc: 166,
+    },
+    PollCase {
+        label: "CE371 var218=3 poll pc239",
+        event: 371,
+        args: [1, 0, 0],
+        extra_vars: &[(218, 3)],
+        retry_pc: 244,
+        cont_pc: 248,
+    },
+    PollCase {
+        label: "CE371 var218=4 poll pc326",
+        event: 371,
+        args: [1, 0, 0],
+        extra_vars: &[(218, 4)],
+        retry_pc: 331,
+        cont_pc: 335,
+    },
+    PollCase {
+        label: "CE371 var218=5 poll pc412",
+        event: 371,
+        args: [1, 0, 0],
+        extra_vars: &[(218, 5)],
+        retry_pc: 417,
+        cont_pc: 421,
+    },
+    PollCase {
+        label: "CE371 var218=6 poll pc502",
+        event: 371,
+        args: [1, 0, 0],
+        extra_vars: &[(218, 6)],
+        retry_pc: 507,
+        cont_pc: 511,
+    },
+    PollCase {
+        label: "CE371 var218=7 poll pc586",
+        event: 371,
+        args: [1, 0, 0],
+        extra_vars: &[(218, 7)],
+        retry_pc: 591,
+        cont_pc: 595,
+    },
     // ---- CE410 (5 polls, one per arg[0] 1..5) ----------------------------
-    PollCase { label: "CE410 args[1,0,0] poll pc40", event: 410, args: [1, 0, 0], extra_vars: &[(143, 0), (144, 0)], retry_pc: 44, cont_pc: 47 },
-    PollCase { label: "CE410 args[2,0,0] poll pc87", event: 410, args: [2, 0, 0], extra_vars: &[(143, 0), (144, 0)], retry_pc: 91, cont_pc: 94 },
-    PollCase { label: "CE410 args[3,0,0] poll pc134", event: 410, args: [3, 0, 0], extra_vars: &[(143, 0), (144, 0)], retry_pc: 138, cont_pc: 141 },
-    PollCase { label: "CE410 args[4,0,0] poll pc177", event: 410, args: [4, 0, 0], extra_vars: &[(143, 0), (144, 0)], retry_pc: 181, cont_pc: 184 },
-    PollCase { label: "CE410 args[5,0,0] poll pc221", event: 410, args: [5, 0, 0], extra_vars: &[(143, 0), (144, 0)], retry_pc: 225, cont_pc: 228 },
+    PollCase {
+        label: "CE410 args[1,0,0] poll pc40",
+        event: 410,
+        args: [1, 0, 0],
+        extra_vars: &[(143, 0), (144, 0)],
+        retry_pc: 44,
+        cont_pc: 47,
+    },
+    PollCase {
+        label: "CE410 args[2,0,0] poll pc87",
+        event: 410,
+        args: [2, 0, 0],
+        extra_vars: &[(143, 0), (144, 0)],
+        retry_pc: 91,
+        cont_pc: 94,
+    },
+    PollCase {
+        label: "CE410 args[3,0,0] poll pc134",
+        event: 410,
+        args: [3, 0, 0],
+        extra_vars: &[(143, 0), (144, 0)],
+        retry_pc: 138,
+        cont_pc: 141,
+    },
+    PollCase {
+        label: "CE410 args[4,0,0] poll pc177",
+        event: 410,
+        args: [4, 0, 0],
+        extra_vars: &[(143, 0), (144, 0)],
+        retry_pc: 181,
+        cont_pc: 184,
+    },
+    PollCase {
+        label: "CE410 args[5,0,0] poll pc221",
+        event: 410,
+        args: [5, 0, 0],
+        extra_vars: &[(143, 0), (144, 0)],
+        retry_pc: 225,
+        cont_pc: 228,
+    },
 ];
 
 #[test]
@@ -194,6 +292,12 @@ fn h_scene_polls_advance_only_with_the_ok_key() {
         CASES.len()
     );
     assert_eq!(advanced, CASES.len(), "all 14 polls must be exercised");
-    assert_eq!(warnings_seen, 0, "no engine warnings during H-scene advance");
-    assert!(quads >= 39, "H layer must stay >= 39 textured quads, got {quads}");
+    assert_eq!(
+        warnings_seen, 0,
+        "no engine warnings during H-scene advance"
+    );
+    assert!(
+        quads >= 39,
+        "H layer must stay >= 39 textured quads, got {quads}"
+    );
 }

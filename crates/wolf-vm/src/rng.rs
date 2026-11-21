@@ -387,7 +387,13 @@ mod tests {
         assert_eq!(raw, vec![7086, 1060, 5553, 18415, 25972]);
         assert_eq!(
             states,
-            vec![464_430_666, 69_489_637, 2_511_435_540, 3_354_364_295, 3_849_641_518]
+            vec![
+                464_430_666,
+                69_489_637,
+                2_511_435_540,
+                3_354_364_295,
+                3_849_641_518
+            ]
         );
         // new() == from_seed(DEFAULT_SEED).
         let mut a = WolfRng::new();
@@ -414,7 +420,10 @@ mod tests {
         );
         // Every draw stays inside the retail ceiling.
         for draw in event_vectors(1, 200) {
-            assert!((1..=2_000_000_000).contains(&draw), "out of ceiling: {draw}");
+            assert!(
+                (1..=2_000_000_000).contains(&draw),
+                "out of ceiling: {draw}"
+            );
         }
         // The event stream is independent of the MSVC stream.
         let mut rng = WolfRng::from_seeds(22_227, 1);
@@ -430,7 +439,10 @@ mod tests {
         // the seed.
         let mut rng = WolfRng::from_event_seed(2_000_000_001);
         let first = rng.next_event_draw();
-        assert!(first <= 2_000_000_000, "rejected the oversized state: {first}");
+        assert!(
+            first <= 2_000_000_000,
+            "rejected the oversized state: {first}"
+        );
         // Reproduce the loop by hand for the same seed.
         let mut state = u64::from(2_000_000_001u32);
         loop {
@@ -519,7 +531,10 @@ mod tests {
         let mut b = WolfRng::from_seed(25_684);
         let first: Vec<u16> = (0..32).map(|_| a.next_raw()).collect();
         let second: Vec<u16> = (0..32).map(|_| b.next_raw()).collect();
-        assert_ne!(first, second, "different seeds must produce different streams");
+        assert_ne!(
+            first, second,
+            "different seeds must produce different streams"
+        );
 
         let mut c = WolfRng::from_event_seed(1);
         let mut d = WolfRng::from_event_seed(2);

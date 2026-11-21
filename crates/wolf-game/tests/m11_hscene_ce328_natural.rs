@@ -139,17 +139,27 @@ fn run_natural(var23: i32, frame_budget: usize) -> NaturalRun {
         out.frames = f;
         g.frame();
         if g.choices.is_some() {
-            let _ = g.reply(ChoiceReply::Index(0));
+            g.reply(ChoiceReply::Index(0));
         }
 
-        if let Some(pc) = g.vm.instances().iter().find(|i| i.event == 328).map(|i| i.pc as usize) {
+        if let Some(pc) =
+            g.vm.instances()
+                .iter()
+                .find(|i| i.event == 328)
+                .map(|i| i.pc)
+        {
             out.ce328_maxpc = out.ce328_maxpc.max(pc);
             if prev328 != Some(pc) {
                 out.ce328_seq.push(pc);
                 prev328 = Some(pc);
             }
         }
-        if let Some(pc) = g.vm.instances().iter().find(|i| i.event == 402).map(|i| i.pc as usize) {
+        if let Some(pc) =
+            g.vm.instances()
+                .iter()
+                .find(|i| i.event == 402)
+                .map(|i| i.pc)
+        {
             out.ce402_maxpc = out.ce402_maxpc.max(pc);
             if prev402 != Some(pc) {
                 out.ce402_seq.push(pc);
@@ -158,18 +168,22 @@ fn run_natural(var23: i32, frame_budget: usize) -> NaturalRun {
         }
         // Record every distinct CE410 instance and the act number it was called with
         // (self var at SELF_ARG_BASE).  A fresh instance id == a fresh call.
-        if let Some((id, a)) = g
-            .vm
-            .instances()
-            .iter()
-            .find(|i| i.event == 410)
-            .map(|i| (i.id, i.self_vars.get(wolf_vm::magic::SELF_ARG_BASE)))
+        if let Some((id, a)) =
+            g.vm.instances()
+                .iter()
+                .find(|i| i.event == 410)
+                .map(|i| (i.id, i.self_vars.get(wolf_vm::magic::SELF_ARG_BASE)))
         {
             if last410_id != Some(id) {
                 out.ce410_acts.push(a);
                 last410_id = Some(id);
             }
-            if let Some(pc) = g.vm.instances().iter().find(|i| i.event == 410).map(|i| i.pc as usize) {
+            if let Some(pc) =
+                g.vm.instances()
+                    .iter()
+                    .find(|i| i.event == 410)
+                    .map(|i| i.pc)
+            {
                 out.ce410_maxpc = out.ce410_maxpc.max(pc);
             }
             ce410_done_at = None;
@@ -177,7 +191,10 @@ fn run_natural(var23: i32, frame_budget: usize) -> NaturalRun {
             ce410_done_at = Some(f);
         }
 
-        let cg_active = g.vm.instances().iter().any(|i| i.event == 402 || i.event == 410);
+        let cg_active =
+            g.vm.instances()
+                .iter()
+                .any(|i| i.event == 402 || i.event == 410);
         if cg_active {
             for pic in g.screen.iter() {
                 let file = pic.file.clone();
@@ -203,9 +220,24 @@ fn run_natural(var23: i32, frame_budget: usize) -> NaturalRun {
 #[test]
 fn natural_frame_timing_runs_ce328_ce402_ce410() {
     let run = run_natural(6, 200_000);
-    println!("SEQ_328_tail={:?}", run.ce328_seq.iter().filter(|p| **p >= 680).collect::<Vec<_>>());
-    println!("SEQ_402_tail={:?}", run.ce402_seq.iter().filter(|p| **p >= 470).collect::<Vec<_>>());
-    println!("CE410_ACTS={:?} maxpc410={}", run.ce410_acts, run.ce410_maxpc);
+    println!(
+        "SEQ_328_tail={:?}",
+        run.ce328_seq
+            .iter()
+            .filter(|p| **p >= 680)
+            .collect::<Vec<_>>()
+    );
+    println!(
+        "SEQ_402_tail={:?}",
+        run.ce402_seq
+            .iter()
+            .filter(|p| **p >= 470)
+            .collect::<Vec<_>>()
+    );
+    println!(
+        "CE410_ACTS={:?} maxpc410={}",
+        run.ce410_acts, run.ce410_maxpc
+    );
 
     assert_eq!(run.warnings, 0, "engine warnings must stay at zero");
 
@@ -215,7 +247,10 @@ fn natural_frame_timing_runs_ce328_ce402_ce410() {
     assert!(
         run.ce328_seq.contains(&1023),
         "CE328 must run through to its route tail (pc1023); tail={:?}",
-        run.ce328_seq.iter().filter(|p| **p >= 680).collect::<Vec<_>>()
+        run.ce328_seq
+            .iter()
+            .filter(|p| **p >= 680)
+            .collect::<Vec<_>>()
     );
     // The reachable route to the CE402 call does not write var64 (pc964 悪戯へ branch).
     assert_eq!(run.var64_end, 0, "the CE402 route must not write var64");
@@ -226,7 +261,10 @@ fn natural_frame_timing_runs_ce328_ce402_ce410() {
         "CE402 must run past pc500 under natural timing; max={}",
         run.ce402_maxpc
     );
-    assert!(!run.ce402_seq.is_empty(), "CE402 must actually run as a child of CE328");
+    assert!(
+        !run.ce402_seq.is_empty(),
+        "CE402 must actually run as a child of CE328"
+    );
 
     // CE402 drove CE410 several times (one instance per act call), starting from act 1.
     assert!(
@@ -234,15 +272,26 @@ fn natural_frame_timing_runs_ce328_ce402_ce410() {
         "CE402 must call CE410 at least 3 times; acts={:?}",
         run.ce410_acts
     );
-    assert_eq!(run.ce410_acts.first(), Some(&1), "first CE410 call uses act 1");
+    assert_eq!(
+        run.ce410_acts.first(),
+        Some(&1),
+        "first CE410 call uses act 1"
+    );
 
     // Real H assets were shown while CE402/CE410 were live.
-    assert!(!run.cg_files.is_empty(), "at least one CG image must be visible");
+    assert!(
+        !run.cg_files.is_empty(),
+        "at least one CG image must be visible"
+    );
     let has_cg = run
         .cg_files
         .iter()
         .any(|f| f.contains("cutin") || f.contains("hscene/") || f.contains("cg/"));
-    assert!(has_cg, "expected a cutin/hscene asset; saw {:?}", run.cg_files);
+    assert!(
+        has_cg,
+        "expected a cutin/hscene asset; saw {:?}",
+        run.cg_files
+    );
 
     // Natural timing is far cheaper than the one-instruction probe (>100k frames).
     assert!(

@@ -136,7 +136,10 @@ mod tests {
             "# comment\n\n280\t8\t\\\\Ehello\nbad line\n281\tx\tnope\n282\t3\t\n",
         );
         assert_eq!(table.len(), 1);
-        assert_eq!(table.entries.get(&(280, 8)).map(String::as_str), Some("\\Ehello"));
+        assert_eq!(
+            table.entries.get(&(280, 8)).map(String::as_str),
+            Some("\\Ehello")
+        );
     }
 
     #[test]

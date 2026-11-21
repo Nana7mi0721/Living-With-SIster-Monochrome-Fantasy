@@ -84,6 +84,7 @@
 //!        CE241 is alive), start the REAL CE241 turn-start, which resets 2000350 = 0;
 //!     3. once the turn start has finished (2000350 == 0, CE241 gone), start the next CE242
 //!        with the next scheduled command index, and so on.
+//!
 //!   The schedule rotates command indices (e.g. [1, 3]) so successive rounds act with
 //!   different party members and drain their distinct pools - a genuine multi-member proof.
 //!
@@ -344,7 +345,10 @@ impl BattleWiring {
     /// the ability code), so it cannot invent a code -> index map.
     #[must_use]
     pub fn harvested_command_indexes(&self) -> Vec<i32> {
-        self.menu_selections.iter().map(|s| s.command_index).collect()
+        self.menu_selections
+            .iter()
+            .map(|s| s.command_index)
+            .collect()
     }
 
     /// Harvest real menu confirmations from live CE157 (コマンド登録) instances. While a CE157
@@ -357,7 +361,11 @@ impl BattleWiring {
         // Only harvest while a real command-registration coroutine is live (the CE188 -> CE192
         // -> CE157 menu is open in ordinary map state, before the rebuilt drive arms). Gating on
         // a live CE157 keeps stale command rows from a previous fight out of a later battle.
-        if !vm.instances().iter().any(|i| i.event == EVENT_COMMAND_REGISTER) {
+        if !vm
+            .instances()
+            .iter()
+            .any(|i| i.event == EVENT_COMMAND_REGISTER)
+        {
             return 0;
         }
         let mut added = 0usize;
@@ -442,9 +450,10 @@ impl BattleWiring {
         vm.instances()
             .iter()
             .any(|instance| instance.event == EVENT_BATTLE_DISPATCH)
-            || vm.instances().iter().any(|instance| {
-                instance.event == EVENT_BATTLE_CALLER && instance.parent.is_some()
-            })
+            || vm
+                .instances()
+                .iter()
+                .any(|instance| instance.event == EVENT_BATTLE_CALLER && instance.parent.is_some())
     }
 
     /// One engine tick, called at the top of Game::frame after the automatic events
@@ -514,7 +523,10 @@ impl BattleWiring {
         }
         let phase = vm.vars.get(VAR_COMMAND_PHASE);
         let c241 = vm.instances().iter().any(|i| i.event == EVENT_TURN_START);
-        let c242 = vm.instances().iter().any(|i| i.event == EVENT_COMMAND_PHASE);
+        let c242 = vm
+            .instances()
+            .iter()
+            .any(|i| i.event == EVENT_COMMAND_PHASE);
         let c243 = vm.instances().iter().any(|i| i.event == EVENT_ENEMY_ACTION);
 
         // 1. Battle just became active: open the first command round.

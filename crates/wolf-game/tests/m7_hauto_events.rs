@@ -30,7 +30,11 @@ fn repo_root() -> PathBuf {
 fn data_root() -> PathBuf {
     let raw = std::env::var("WOLF_DATA_ROOT").unwrap_or_else(|_| "work/all".to_owned());
     let p = PathBuf::from(raw);
-    if p.is_absolute() { p } else { repo_root().join(p) }
+    if p.is_absolute() {
+        p
+    } else {
+        repo_root().join(p)
+    }
 }
 
 fn save_path() -> PathBuf {
@@ -41,7 +45,10 @@ fn open() -> Option<Game> {
     match Game::new(data_root()) {
         Ok(g) => Some(g),
         Err(e) => {
-            eprintln!("skipping: could not open data root ({}); set WOLF_DATA_ROOT", e);
+            eprintln!(
+                "skipping: could not open data root ({}); set WOLF_DATA_ROOT",
+                e
+            );
             None
         }
     }
@@ -129,7 +136,11 @@ fn scheduler_tracks_all_seven_h_text_events() {
     let running: std::collections::BTreeSet<u32> =
         game.auto_events.running_ids().into_iter().collect();
     for &(ev, _) in H_TEXT_EVENTS {
-        assert!(running.contains(&ev), "event {} missing from running_ids", ev);
+        assert!(
+            running.contains(&ev),
+            "event {} missing from running_ids",
+            ev
+        );
     }
 }
 
@@ -150,25 +161,40 @@ fn scheduling_ev353_draws_h_text_and_a_visible_h_cg() {
         .filter(|p| p.file.to_lowercase().contains("word_effect"))
         .map(|p| (p.number, p.file.clone()))
         .collect();
-    assert!(base.screen.get(1185).is_none(), "CG 1185 must not exist before 353 runs");
+    assert!(
+        base.screen.get(1185).is_none(),
+        "CG 1185 must not exist before 353 runs"
+    );
 
     let mut game = boot();
     game.vm.vars.set(99, 1);
     for _ in 0..200 {
         game.frame();
     }
-    assert!(game.auto_events.instance(353).is_some(), "353 was not scheduled after var99=1");
+    assert!(
+        game.auto_events.instance(353).is_some(),
+        "353 was not scheduled after var99=1"
+    );
 
-    let cg = game.screen.get(1185).expect("event 353 should draw picture 1185");
+    let cg = game
+        .screen
+        .get(1185)
+        .expect("event 353 should draw picture 1185");
     assert!(
         cg.file.to_lowercase().contains("h_s10_sonyuu01"),
         "expected hscene/h_s10_sonyuu01.png, got {:?}",
         cg.file
     );
     assert!(!cg.hidden, "the insertion CG must be visible, not hidden");
-    assert!(cg.opacity > 0, "the insertion CG must have positive opacity");
+    assert!(
+        cg.opacity > 0,
+        "the insertion CG must have positive opacity"
+    );
     let quads = game.picture_quads(&mut Atlas::new()).len();
-    assert!(quads > base_quads, "scheduling 353 should add a visible quad");
+    assert!(
+        quads > base_quads,
+        "scheduling 353 should add a visible quad"
+    );
 
     // The event re-draws the hword/word_effect* text layer, so at least one word slot
     // now holds a different text image than baseline. NOTE: the retail script immediately
@@ -182,5 +208,8 @@ fn scheduling_ev353_draws_h_text_and_a_visible_h_cg() {
         .filter(|p| base_word_slots.get(&p.number) != Some(&p.file))
         .map(|p| (p.number, p.file.clone()))
         .collect();
-    assert!(!changed_text.is_empty(), "scheduling 353 should re-draw an hword/word_effect text slot");
+    assert!(
+        !changed_text.is_empty(),
+        "scheduling 353 should re-draw an hword/word_effect text slot"
+    );
 }

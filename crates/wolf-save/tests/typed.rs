@@ -299,11 +299,8 @@ fn out_of_range_indexes_are_refused() {
         return;
     }
     let (_, save) = &saves[0];
-    assert_eq!(
-        save.part3.normal_var(799).is_some() && save.part3.normal_var(800).is_none(),
-        true
-    );
-    assert_eq!(save.part3.self_var(0, 99).is_some(), true);
+    assert!(save.part3.normal_var(799).is_some() && save.part3.normal_var(800).is_none());
+    assert!(save.part3.self_var(0, 99).is_some());
     assert!(save.part3.self_var(0, 100).is_none(), "100 words per group");
     assert!(
         save.part3
@@ -320,6 +317,6 @@ fn out_of_range_indexes_are_refused() {
     assert!(!edited.part3.set_normal_var(800, 1));
     assert!(!edited.part3.set_self_var(0, 100, 1));
     assert!(!edited.part3.set_self_string(0, 5, "x"));
-    assert_eq!(edited.set_normal_var(800, 1).expect("set"), false);
-    assert_eq!(edited.set_self_var(0, 100, 1).expect("set"), false);
+    assert!(!edited.set_normal_var(800, 1).expect("set"));
+    assert!(!edited.set_self_var(0, 100, 1).expect("set"));
 }

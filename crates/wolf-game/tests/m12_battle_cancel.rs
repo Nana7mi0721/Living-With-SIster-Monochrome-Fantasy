@@ -136,7 +136,9 @@ fn event_self(game: &Game, id: u32, slot: usize) -> Option<i32> {
 fn command_rows(game: &Game) -> Vec<(i32, i32, i32)> {
     (0..16)
         .filter_map(|row| {
-            let activator = game.databases.num(Container::CData, CMD_LIST_TYPE, row, 0)?;
+            let activator = game
+                .databases
+                .num(Container::CData, CMD_LIST_TYPE, row, 0)?;
             (activator >= 0).then(|| {
                 (
                     row,
@@ -185,11 +187,27 @@ fn cancel_at_the_action_window_reopens_without_registering() {
             reached = true;
             break;
         }
-        step(&mut game, if frame % 2 == 0 { wolf_game::key::OK } else { 0 });
+        step(
+            &mut game,
+            if frame % 2 == 0 {
+                wolf_game::key::OK
+            } else {
+                0
+            },
+        );
     }
-    assert!(reached, "the real action window (CE191 -> CE65) never opened");
-    assert_eq!(ce157_starts, 0, "no command may be registered before the window opens");
-    assert!(command_rows(&game).is_empty(), "command list must still be empty");
+    assert!(
+        reached,
+        "the real action window (CE191 -> CE65) never opened"
+    );
+    assert_eq!(
+        ce157_starts, 0,
+        "no command may be registered before the window opens"
+    );
+    assert!(
+        command_rows(&game).is_empty(),
+        "command list must still be empty"
+    );
 
     // Cancel once at the selector. The real engine closes the window and CE191's loop
     // reopens it; the important part is that no command row and no CE157 appear.
@@ -218,15 +236,28 @@ fn cancel_at_the_action_window_reopens_without_registering() {
         saw_cancel_return,
         "CE65 must return -100 to CE191's self1600015 on the cancel path"
     );
-    assert!(reopened, "the action window must be reopened after a cancel");
-    assert!(!live_event(&game, 192), "a cancel must not advance to CE192");
-    assert_eq!(ce157_starts, 0, "a cancel must never start a command registration");
+    assert!(
+        reopened,
+        "the action window must be reopened after a cancel"
+    );
+    assert!(
+        !live_event(&game, 192),
+        "a cancel must not advance to CE192"
+    );
+    assert_eq!(
+        ce157_starts, 0,
+        "a cancel must never start a command registration"
+    );
     assert!(
         command_rows(&game).is_empty(),
         "a cancel must not write a command row: {:?}",
         command_rows(&game)
     );
-    assert_eq!(game.vm.vars.get(99), 0, "the cancel path leaves the battle flag idle");
+    assert_eq!(
+        game.vm.vars.get(99),
+        0,
+        "the cancel path leaves the battle flag idle"
+    );
     assert_eq!(game.stats.warnings, 0, "the cancel path must not warn");
 }
 
@@ -251,10 +282,23 @@ fn cancel_in_the_member_command_window_backs_out_and_a_later_confirm_still_regis
             reached = true;
             break;
         }
-        step(&mut game, if frame % 2 == 0 { wolf_game::key::OK } else { 0 });
+        step(
+            &mut game,
+            if frame % 2 == 0 {
+                wolf_game::key::OK
+            } else {
+                0
+            },
+        );
     }
-    assert!(reached, "the real member command selection (CE192) never started");
-    assert_eq!(ce157_starts, 0, "no row may exist before the first confirmation");
+    assert!(
+        reached,
+        "the real member command selection (CE192) never started"
+    );
+    assert_eq!(
+        ce157_starts, 0,
+        "no row may exist before the first confirmation"
+    );
     assert!(
         command_rows(&game).is_empty(),
         "CE192 opens with an empty command list"
@@ -269,7 +313,10 @@ fn cancel_in_the_member_command_window_backs_out_and_a_later_confirm_still_regis
         live_event(&game, 192),
         "CE192 must keep waiting at the command window with no input"
     );
-    assert!(command_rows(&game).is_empty(), "waiting must not register a row");
+    assert!(
+        command_rows(&game).is_empty(),
+        "waiting must not register a row"
+    );
 
     // Cancel at the first fresh CE65 selection loop that belongs to CE192.
     let mut last_ce65 = None;
@@ -289,7 +336,10 @@ fn cancel_in_the_member_command_window_backs_out_and_a_later_confirm_still_regis
             break;
         }
     }
-    assert!(cancel_sent, "the CE192 command window never reached a pollable state");
+    assert!(
+        cancel_sent,
+        "the CE192 command window never reached a pollable state"
+    );
     assert!(ended, "a cancel must back out of the member command window");
     assert!(
         command_rows(&game).is_empty(),
@@ -312,7 +362,14 @@ fn cancel_in_the_member_command_window_backs_out_and_a_later_confirm_still_regis
             ce157_starts += 1;
         }
         saw_ce157 = live;
-        step(&mut game, if frame % 2 == 0 { wolf_game::key::OK } else { 0 });
+        step(
+            &mut game,
+            if frame % 2 == 0 {
+                wolf_game::key::OK
+            } else {
+                0
+            },
+        );
         if command_rows(&game).len() >= 2 {
             registered = true;
             break;
@@ -332,5 +389,8 @@ fn cancel_in_the_member_command_window_backs_out_and_a_later_confirm_still_regis
         ce157_starts, 2,
         "each real confirmation starts exactly one CE157 registration"
     );
-    assert_eq!(game.stats.warnings, 0, "the whole cancel/confirm flow must not warn");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the whole cancel/confirm flow must not warn"
+    );
 }

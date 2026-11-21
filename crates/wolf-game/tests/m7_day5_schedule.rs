@@ -22,7 +22,9 @@ use wolf_game::Game;
 
 fn resolve_root(raw: &str) -> PathBuf {
     let p = PathBuf::from(raw);
-    if p.is_absolute() { return p; }
+    if p.is_absolute() {
+        return p;
+    }
     let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     base.pop();
     base.pop();
@@ -48,7 +50,10 @@ fn data_root() -> PathBuf {
 fn open_game() -> Option<Game> {
     match Game::new(data_root()) {
         Ok(g) => Some(g),
-        Err(e) => { eprintln!("skip m7_day5_schedule: {e}"); None }
+        Err(e) => {
+            eprintln!("skip m7_day5_schedule: {e}");
+            None
+        }
     }
 }
 
@@ -83,7 +88,10 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
     let options = wait_for_choice(game, 500, "sleep menu");
     assert_eq!(
         options,
-        SLEEP_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+        SLEEP_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
         "day {day}: unexpected sleep menu"
     );
     game.set_choice_cursor(2); // 今天还是睡吧
@@ -91,7 +99,10 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
     let confirm = wait_for_choice(game, 300, "sleep confirm");
     assert_eq!(
         confirm,
-        CONFIRM_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+        CONFIRM_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
         "day {day}: unexpected confirm menu"
     );
     game.set_choice_cursor(0); // 是的
@@ -124,8 +135,14 @@ fn finish_day_after_battle(game: &mut Game, day: i32) {
         }
     }
     game.key_bits = 0;
-    assert!(finished, "day {day}: daytime command never returned after the battle");
-    assert_eq!(game.stats.warnings, 0, "day {day}: warnings after the battle");
+    assert!(
+        finished,
+        "day {day}: daytime command never returned after the battle"
+    );
+    assert_eq!(
+        game.stats.warnings, 0,
+        "day {day}: warnings after the battle"
+    );
     assert_eq!(game.vm.vars.get(160), day);
     assert!(
         game.vm.vars.get(4) >= 16,
@@ -156,16 +173,25 @@ fn finish_day_after_battle(game: &mut Game, day: i32) {
 
 /// Click the first workday command button (row0 鍛錬) and let the day run through
 /// 17:00 to the 19:30 bedroom.  Days 2 and 3 only (day 4 is the forced battle).
-
 const DAY_COMMAND_LABELS: [&str; 6] = [
-    "给店里帮忙", "学习会", "基础锻炼", "攻击练习", "防御练习", "秘密特训",
+    "给店里帮忙",
+    "学习会",
+    "基础锻炼",
+    "攻击练习",
+    "防御练习",
+    "秘密特训",
 ];
 const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
 
 fn day_row_texts(game: &Game) -> Vec<String> {
     DAY_ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -197,9 +223,13 @@ fn spend_day_choosing_row(game: &mut Game, day: i32) {
     let energy_before = game.vm.vars.get(14);
     let y = 230 + 50 * row as i32;
     game.mouse = [512, y];
-    for _ in 0..10 { game.frame(); }
+    for _ in 0..10 {
+        game.frame();
+    }
     game.mouse_buttons = 1;
-    for _ in 0..5 { game.frame(); }
+    for _ in 0..5 {
+        game.frame();
+    }
     game.mouse_buttons = 0;
     let mut finished = false;
     for _ in 0..2500 {
@@ -209,16 +239,22 @@ fn spend_day_choosing_row(game: &mut Game, day: i32) {
             break;
         }
     }
-    assert!(finished, "day {day}: daytime command never returned ({label})");
+    assert!(
+        finished,
+        "day {day}: daytime command never returned ({label})"
+    );
     assert_eq!(game.stats.warnings, 0, "day {day}: warnings during day");
     assert_eq!(game.vm.vars.get(4), 17, "day {day}: expected 17:00");
     assert_eq!(game.vm.vars.get(5), 0, "day {day}: expected 17:00");
     assert_eq!(game.vm.vars.get(160), day);
-    assert!(game.vm.vars.get(14) < energy_before, "day {day}: energy not spent");
+    assert!(
+        game.vm.vars.get(14) < energy_before,
+        "day {day}: energy not spent"
+    );
     let mut evening = false;
     for _ in 0..6000 {
         game.frame();
-        if !evening_work(&game) && game.vm.vars.get(4) >= 18 {
+        if !evening_work(game) && game.vm.vars.get(4) >= 18 {
             evening = true;
             break;
         }
@@ -230,7 +266,11 @@ fn spend_day_choosing_row(game: &mut Game, day: i32) {
         game.vm.vars.get(5)
     );
     assert_eq!(game.vm.vars.get(160), day);
-    assert_eq!(game.vm.vars.get(5), 30, "day {day}: evening settles on the half hour");
+    assert_eq!(
+        game.vm.vars.get(5),
+        30,
+        "day {day}: evening settles on the half hour"
+    );
     assert_eq!(game.stats.warnings, 0, "day {day}: warnings in evening");
 }
 
@@ -247,8 +287,11 @@ fn day_five_morning_is_reachable_after_settling_the_forced_day4_battle() {
     game.set_choice_cursor(0);
     game.auto_choice = true;
     game.auto_choice_delay = 2;
-    game.start_map_event_by_name("SampleMapA", 0).expect("entry event");
-    for _ in 0..1600 { game.frame(); }
+    game.start_map_event_by_name("SampleMapA", 0)
+        .expect("entry event");
+    for _ in 0..1600 {
+        game.frame();
+    }
     assert_eq!(game.stats.warnings, 0);
     assert_eq!(game.vm.vars.get(4), 18, "day1 should start at 18:30");
     assert_eq!(game.vm.vars.get(5), 30);
@@ -278,7 +321,10 @@ fn day_five_morning_is_reachable_after_settling_the_forced_day4_battle() {
     // cosmetic command-menu section-header label a fresh save leaves blank.  No
     // settlement variable is seeded.
     let seeded = game.seed_battle_databases();
-    assert!(seeded > 0, "seed_battle_databases must seed the battle cells");
+    assert!(
+        seeded > 0,
+        "seed_battle_databases must seed the battle cells"
+    );
     game.databases
         .set_text(Container::CData, 5, 16, 0, "┗ 状態リスト");
     let _ = game.start_engine_events();
@@ -293,14 +339,24 @@ fn day_five_morning_is_reachable_after_settling_the_forced_day4_battle() {
     for f in 0..4000 {
         game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
         game.frame();
-        if has_event(&game, 253) { saw_253 = true; }
-        if has_event(&game, 239) { saw_239 = true; }
-        if has_event(&game, 242) { saw_242 = true; }
+        if has_event(&game, 253) {
+            saw_253 = true;
+        }
+        if has_event(&game, 239) {
+            saw_239 = true;
+        }
+        if has_event(&game, 242) {
+            saw_242 = true;
+        }
         if let Some(choice) = &game.choices {
-            if choice.options.len() == 5 { saw_training_menu = true; }
+            if choice.options.len() == 5 {
+                saw_training_menu = true;
+            }
         }
         let v352 = game.vm.vars.get(352);
-        if v352.abs() > v352_peak.abs() { v352_peak = v352; }
+        if v352.abs() > v352_peak.abs() {
+            v352_peak = v352;
+        }
         v343_peak = v343_peak.max(game.vm.vars.get(343));
         if game.vm.vars.get(343) == 1 && game.vm.vars.get(350) == 0 {
             settled = true;
@@ -312,14 +368,22 @@ fn day_five_morning_is_reachable_after_settling_the_forced_day4_battle() {
         for f in 0..2000 {
             game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
             game.frame();
-            if !has_event(&game, 239) { break; }
+            if !has_event(&game, 239) {
+                break;
+            }
         }
     }
     game.key_bits = 0;
     assert!(saw_253, "day4 should dispatch CE253 地域貢献");
     assert!(saw_239, "CE253 should call the real battle event CE239");
-    assert!(saw_242, "the auto-armed drive must start the CE242 command phase");
-    assert!(!saw_training_menu, "day4 must not draw the 5-row workday menu");
+    assert!(
+        saw_242,
+        "the auto-armed drive must start the CE242 command phase"
+    );
+    assert!(
+        !saw_training_menu,
+        "day4 must not draw the 5-row workday menu"
+    );
     assert!(settled, "the day-4 fight must settle without injection");
     assert!(
         v352_peak == 1 || v352_peak == -1,
@@ -327,7 +391,10 @@ fn day_five_morning_is_reachable_after_settling_the_forced_day4_battle() {
     );
     assert_eq!(v343_peak, 1, "CE244 must set 2000343 = 1");
     assert!(!has_event(&game, 239), "CE239 must return after settlement");
-    assert_eq!(game.stats.warnings, 0, "no warnings through the day-4 battle");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "no warnings through the day-4 battle"
+    );
 
     // ---- real evening chain after the battle returns -------------------------
     finish_day_after_battle(&mut game, 4);
@@ -345,7 +412,10 @@ fn day_five_morning_is_reachable_after_settling_the_forced_day4_battle() {
     assert_eq!(game.vm.vars.get(5), 30, "day5 08:30");
     assert!(game.screen.len() > 20, "day5 screen should be populated");
     assert!(
-        game.vm.instances().iter().any(|i| i.event == 317 || i.event == 329 || i.event == 4),
+        game.vm
+            .instances()
+            .iter()
+            .any(|i| i.event == 317 || i.event == 329 || i.event == 4),
         "morning schedule instances should be live on day5"
     );
 

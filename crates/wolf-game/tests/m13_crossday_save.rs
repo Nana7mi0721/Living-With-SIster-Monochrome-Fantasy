@@ -46,13 +46,21 @@ fn repo_root() -> PathBuf {
 fn data_root() -> PathBuf {
     let raw = std::env::var("WOLF_DATA_ROOT").unwrap_or_else(|_| "work/all".into());
     let p = PathBuf::from(raw);
-    if p.is_absolute() { p } else { repo_root().join(p) }
+    if p.is_absolute() {
+        p
+    } else {
+        repo_root().join(p)
+    }
 }
 
 fn retail_save_dir() -> Option<PathBuf> {
     if let Ok(dir) = std::env::var("WOLF_RETAIL_SAVE_DIR") {
         let dir = PathBuf::from(dir);
-        let dir = if dir.is_absolute() { dir } else { repo_root().join(dir) };
+        let dir = if dir.is_absolute() {
+            dir
+        } else {
+            repo_root().join(dir)
+        };
         return dir.is_dir().then_some(dir);
     }
     let dir = repo_root().join("work/retail_backup/Save");
@@ -85,14 +93,24 @@ fn has(game: &Game, event: u32) -> bool {
 const SLEEP_OPTIONS: [&str; 3] = ["恶作剧", "轻轻把被子盖好", "今天还是睡吧"];
 const CONFIRM_OPTIONS: [&str; 2] = ["是的", "再想想"];
 const DAY_LABELS: [&str; 6] = [
-    "给店里帮忙", "学习会", "基础锻炼", "攻击练习", "防御练习", "秘密特训",
+    "给店里帮忙",
+    "学习会",
+    "基础锻炼",
+    "攻击练习",
+    "防御练习",
+    "秘密特训",
 ];
 const ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
 
 fn rows(game: &Game) -> Vec<String> {
     ROW_PICS
         .iter()
-        .map(|&n| game.screen.get(n).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&n| {
+            game.screen
+                .get(n)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -106,9 +124,13 @@ fn evening_work(game: &Game) -> bool {
 fn click_picture(game: &mut Game, number: i32) {
     let p = game.screen.get(number).expect("menu picture").clone();
     game.mouse = [p.x, p.y];
-    for _ in 0..10 { game.frame(); }
+    for _ in 0..10 {
+        game.frame();
+    }
     game.mouse_buttons = 1;
-    for _ in 0..5 { game.frame(); }
+    for _ in 0..5 {
+        game.frame();
+    }
     game.mouse_buttons = 0;
     game.mouse = [-1, -1];
 }
@@ -126,8 +148,14 @@ fn play_day(game: &mut Game, day: i32) -> i32 {
             .iter()
             .any(|t| DAY_LABELS.iter().any(|l| t.contains(l)) || t.contains("地区贡献"))
             && has(game, 251);
-        let key = (game.vm.vars.get(4), game.vm.vars.get(5), if weekend { 2 } else { 1 });
-        if last == Some(key) && frame.saturating_sub(last_frame) > 400 { last = None; }
+        let key = (
+            game.vm.vars.get(4),
+            game.vm.vars.get(5),
+            if weekend { 2 } else { 1 },
+        );
+        if last == Some(key) && frame.saturating_sub(last_frame) > 400 {
+            last = None;
+        }
         let can = last != Some(key);
         if can && weekend {
             let rest = game.vm.vars.get(14) < 30;
@@ -140,7 +168,9 @@ fn play_day(game: &mut Game, day: i32) -> i32 {
             };
             if let Some(r) = row {
                 click_picture(game, ROW_PICS[r]);
-                last = Some(key); last_frame = frame; continue;
+                last = Some(key);
+                last_frame = frame;
+                continue;
             }
         }
         if can && weekday {
@@ -151,22 +181,41 @@ fn play_day(game: &mut Game, day: i32) -> i32 {
             if let Some(r) = row {
                 let y = 230 + 50 * r as i32;
                 game.mouse = [512, y];
-                for _ in 0..10 { game.frame(); }
+                for _ in 0..10 {
+                    game.frame();
+                }
                 game.mouse_buttons = 1;
-                for _ in 0..5 { game.frame(); }
+                for _ in 0..5 {
+                    game.frame();
+                }
                 game.mouse_buttons = 0;
                 game.mouse = [-1, -1];
-                last = Some(key); last_frame = frame; continue;
+                last = Some(key);
+                last_frame = frame;
+                continue;
             }
         }
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         game.key_bits = 0;
         let cur = game.vm.vars.get(160);
-        if cur != day { return cur; }
-        if !evening_work(game) && game.vm.vars.get(4) >= 18 { return day; }
+        if cur != day {
+            return cur;
+        }
+        if !evening_work(game) && game.vm.vars.get(4) >= 18 {
+            return day;
+        }
     }
-    panic!("play_day stuck at day {day}: {}:{} warnings={}", game.vm.vars.get(4), game.vm.vars.get(5), game.stats.warnings);
+    panic!(
+        "play_day stuck at day {day}: {}:{} warnings={}",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5),
+        game.stats.warnings
+    );
 }
 
 fn sleep_to_next_morning(game: &mut Game, day: i32) {
@@ -175,26 +224,55 @@ fn sleep_to_next_morning(game: &mut Game, day: i32) {
     game.vm.vars.set(63, 1);
     let mut options = Vec::new();
     for frame in 0..2400 {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
-        if let Some(c) = &game.choices { options = c.options.clone(); break; }
+        if let Some(c) = &game.choices {
+            options = c.options.clone();
+            break;
+        }
     }
     game.key_bits = 0;
-    assert_eq!(options, SLEEP_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(), "day {day}: sleep menu not reached at {}:{}", game.vm.vars.get(4), game.vm.vars.get(5));
+    assert_eq!(
+        options,
+        SLEEP_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
+        "day {day}: sleep menu not reached at {}:{}",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5)
+    );
     game.set_choice_cursor(2);
     decide(game);
     let mut confirm = Vec::new();
     for _ in 0..300 {
         game.frame();
-        if let Some(c) = &game.choices { confirm = c.options.clone(); break; }
+        if let Some(c) = &game.choices {
+            confirm = c.options.clone();
+            break;
+        }
     }
-    assert_eq!(confirm, CONFIRM_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(), "day {day}: sleep confirm not reached");
+    assert_eq!(
+        confirm,
+        CONFIRM_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
+        "day {day}: sleep confirm not reached"
+    );
     game.set_choice_cursor(0);
     decide(game);
     let mut arrived = false;
     for _ in 0..2400 {
         game.frame();
-        if game.vm.vars.get(160) == expected { arrived = true; break; }
+        if game.vm.vars.get(160) == expected {
+            arrived = true;
+            break;
+        }
     }
     assert!(arrived, "day {expected}: morning not reached");
 }
@@ -281,7 +359,9 @@ fn persisted_banks(game: &Game) -> Vec<(u32, Vec<i32>)> {
     events.dedup();
     let mut out = Vec::new();
     for ev in events {
-        if let Some(v) = written_bank(game, ev) { out.push((ev, v)); }
+        if let Some(v) = written_bank(game, ev) {
+            out.push((ev, v));
+        }
     }
     out
 }
@@ -299,20 +379,36 @@ fn all_common_banks(game: &Game) -> Vec<(u32, Vec<i32>)> {
 fn assert_banks_preserved(expected: &[(u32, Vec<i32>)], reloaded: &Game) -> (usize, usize) {
     let mut nonzero = 0usize;
     for (ev, want) in expected {
-        if want.iter().any(|v| *v != 0) { nonzero += 1; }
+        if want.iter().any(|v| *v != 0) {
+            nonzero += 1;
+        }
         match reloaded.vm.common_self(*ev) {
             Some(b) => {
                 let got: Vec<i32> = (0..100).map(|s| b.get(600 + s)).collect();
-                assert_eq!(&got, want, "event {ev}: persistent self bank changed across save/reload");
+                assert_eq!(
+                    &got, want,
+                    "event {ev}: persistent self bank changed across save/reload"
+                );
             }
-            None => assert!(want.iter().all(|v| *v == 0), "event {ev}: non-zero bank lost across reload"),
+            None => assert!(
+                want.iter().all(|v| *v == 0),
+                "event {ev}: non-zero bank lost across reload"
+            ),
         }
     }
     (expected.len(), nonzero)
 }
 
 fn chunk_names() -> [&'static str; 7] {
-    ["SavePart1", "SavePart2", "SavePart3", "SavePart4", "SavePart5", "VariableDatabase", "SavePart7"]
+    [
+        "SavePart1",
+        "SavePart2",
+        "SavePart3",
+        "SavePart4",
+        "SavePart5",
+        "VariableDatabase",
+        "SavePart7",
+    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -335,7 +431,8 @@ fn eight_retail_slots_round_trip_idempotent_and_continuous() {
         let original = std::fs::read(&source).unwrap_or_else(|e| panic!("read {name}: {e}"));
 
         let mut g = Game::new(root.clone()).expect("game");
-        g.load_save(&source).unwrap_or_else(|e| panic!("load {name}: {e}"));
+        g.load_save(&source)
+            .unwrap_or_else(|e| panic!("load {name}: {e}"));
         let a_day = g.vm.vars.get(160);
         let a_clock = (g.vm.vars.get(4), g.vm.vars.get(5));
         let a_wd = g.vm.vars.get(6);
@@ -347,26 +444,67 @@ fn eight_retail_slots_round_trip_idempotent_and_continuous() {
         let a_banks = all_common_banks(&g);
 
         let pa = out.join(format!("A_{name}"));
-        g.save_to(&pa).unwrap_or_else(|e| panic!("save A {name}: {e}"));
+        g.save_to(&pa)
+            .unwrap_or_else(|e| panic!("save A {name}: {e}"));
         let bytes_a = std::fs::read(&pa).expect("read A");
         assert_eq!(bytes_a, original, "{name}: load -> save must reproduce the official bytes (idempotent at the first write)");
 
         let mut g2 = Game::new(root.clone()).expect("game2");
-        g2.load_save(&pa).unwrap_or_else(|e| panic!("reload {name}: {e}"));
-        assert_eq!(vars800(&g2), a_vars, "{name}: 800 normal variables changed across the reload");
-        assert_eq!(g2.vm.vars.get(160), a_day, "{name}: day changed across the reload");
-        assert_eq!((g2.vm.vars.get(4), g2.vm.vars.get(5)), a_clock, "{name}: clock changed across the reload");
-        assert_eq!(g2.vm.vars.get(6), a_wd, "{name}: weekday changed across the reload");
-        assert_eq!(g2.vm.vars.get(7), a_money, "{name}: money changed across the reload");
-        assert_eq!(picture_snapshot(&g2), a_pics, "{name}: picture table changed across the reload");
-        assert_eq!(g2.playtime_frames, a_playtime, "{name}: play time changed across the reload");
-        assert_eq!((g2.vm.vars.get_sys(3), g2.vm.vars.get_sys(4)), a_anchor, "{name}: choice anchor changed across the reload");
-        assert_eq!(all_common_banks(&g2), a_banks, "{name}: common-event self banks changed across the reload");
+        g2.load_save(&pa)
+            .unwrap_or_else(|e| panic!("reload {name}: {e}"));
+        assert_eq!(
+            vars800(&g2),
+            a_vars,
+            "{name}: 800 normal variables changed across the reload"
+        );
+        assert_eq!(
+            g2.vm.vars.get(160),
+            a_day,
+            "{name}: day changed across the reload"
+        );
+        assert_eq!(
+            (g2.vm.vars.get(4), g2.vm.vars.get(5)),
+            a_clock,
+            "{name}: clock changed across the reload"
+        );
+        assert_eq!(
+            g2.vm.vars.get(6),
+            a_wd,
+            "{name}: weekday changed across the reload"
+        );
+        assert_eq!(
+            g2.vm.vars.get(7),
+            a_money,
+            "{name}: money changed across the reload"
+        );
+        assert_eq!(
+            picture_snapshot(&g2),
+            a_pics,
+            "{name}: picture table changed across the reload"
+        );
+        assert_eq!(
+            g2.playtime_frames, a_playtime,
+            "{name}: play time changed across the reload"
+        );
+        assert_eq!(
+            (g2.vm.vars.get_sys(3), g2.vm.vars.get_sys(4)),
+            a_anchor,
+            "{name}: choice anchor changed across the reload"
+        );
+        assert_eq!(
+            all_common_banks(&g2),
+            a_banks,
+            "{name}: common-event self banks changed across the reload"
+        );
 
         let pb = out.join(format!("B_{name}"));
-        g2.save_to(&pb).unwrap_or_else(|e| panic!("save B {name}: {e}"));
+        g2.save_to(&pb)
+            .unwrap_or_else(|e| panic!("save B {name}: {e}"));
         let bytes_b = std::fs::read(&pb).expect("read B");
-        assert_eq!(bytes_b, bytes_a, "{name}: second load -> save must equal the first written bytes");
+        assert_eq!(
+            bytes_b, bytes_a,
+            "{name}: second load -> save must equal the first written bytes"
+        );
 
         let parsed = wolf_save::SaveFile::parse(&bytes_b).expect("parse B");
         let names: Vec<&str> = parsed.chunks().iter().map(|c| c.name).collect();
@@ -378,7 +516,9 @@ fn eight_retail_slots_round_trip_idempotent_and_continuous() {
         ));
         checked += 1;
     }
-    for l in &lines { eprintln!("{l}"); }
+    for l in &lines {
+        eprintln!("{l}");
+    }
     let _ = std::fs::remove_dir_all(&out);
     assert_eq!(checked, 8, "all eight retail slots were validated");
 }
@@ -399,11 +539,15 @@ fn boot_fresh() -> Game {
     g.auto_choice = true;
     g.auto_choice_delay = 2;
     g.set_choice_cursor(0);
-    g.start_map_event_by_name("SampleMapA", 0).expect("new-game entry event");
-    for _ in 0..1600 { g.frame(); }
+    g.start_map_event_by_name("SampleMapA", 0)
+        .expect("new-game entry event");
+    for _ in 0..1600 {
+        g.frame();
+    }
     assert_eq!(g.vm.vars.get(160), 1, "boot must land on day 1");
     assert!(g.seed_battle_databases() > 0, "battle databases seeded");
-    g.databases.set_text(Container::CData, 5, 16, 0, "┗ 状態リスト");
+    g.databases
+        .set_text(Container::CData, 5, 16, 0, "┗ 状態リスト");
     let _ = g.start_engine_events();
     g
 }
@@ -441,16 +585,36 @@ fn run_cross_day(target: i32, tag: &str) -> CrossDay {
 
     let mut g2 = Game::new(data_root()).expect("game2");
     g2.load_save(&s1).expect("reload S1");
-    assert_eq!(g2.vm.vars.get(160), arrival_day, "day changed across reload");
-    assert_eq!((g2.vm.vars.get(4), g2.vm.vars.get(5)), clock, "clock changed across reload");
+    assert_eq!(
+        g2.vm.vars.get(160),
+        arrival_day,
+        "day changed across reload"
+    );
+    assert_eq!(
+        (g2.vm.vars.get(4), g2.vm.vars.get(5)),
+        clock,
+        "clock changed across reload"
+    );
     assert_eq!(g2.vm.vars.get(6), weekday, "weekday changed across reload");
     assert_eq!(g2.vm.vars.get(7), money, "money changed across reload");
-    assert_eq!(vars800(&g2), vars, "800 normal variables changed across reload");
+    assert_eq!(
+        vars800(&g2),
+        vars,
+        "800 normal variables changed across reload"
+    );
     // Picture continuity: the picture slots and every real image file survive the reload.
     // Text message-box dimensions are now preserved too; the byte fixed point below
     // (S1 == S2) proves the whole picture layer round-trips without a second-cycle repair.
-    assert_eq!(pic_continuity(&g2), pics_cont, "picture slots / image files changed across reload");
-    assert_eq!(g2.screen.iter().count(), pic_count, "picture count changed across reload");
+    assert_eq!(
+        pic_continuity(&g2),
+        pics_cont,
+        "picture slots / image files changed across reload"
+    );
+    assert_eq!(
+        g2.screen.iter().count(),
+        pic_count,
+        "picture count changed across reload"
+    );
     let (banks_n, nonzero) = assert_banks_preserved(&banks_before, &g2);
 
     let s2 = out.join("S2.sav");
@@ -461,13 +625,23 @@ fn run_cross_day(target: i32, tag: &str) -> CrossDay {
     let s3 = out.join("S3.sav");
     g3.save_to(&s3).expect("save S3");
     let b3 = std::fs::read(&s3).expect("read S3");
-    assert_eq!(b2, b1, "the FIRST mid-scene save must already be a fixed point (S1 == S2)");
-    assert_eq!(b3, b2, "the reload -> save fixed point must be stable (S2 == S3)");
+    assert_eq!(
+        b2, b1,
+        "the FIRST mid-scene save must already be a fixed point (S1 == S2)"
+    );
+    assert_eq!(
+        b3, b2,
+        "the reload -> save fixed point must be stable (S2 == S3)"
+    );
 
     let p1 = wolf_save::SaveFile::parse(&b1).expect("parse S1");
     let p2 = wolf_save::SaveFile::parse(&b2).expect("parse S2");
     for id in 0..=6u32 {
-        assert_eq!(p1.chunk_bytes(id), p2.chunk_bytes(id), "segment {id} changed between the first and second save");
+        assert_eq!(
+            p1.chunk_bytes(id),
+            p2.chunk_bytes(id),
+            "segment {id} changed between the first and second save"
+        );
     }
     let mut differ: Vec<i32> = Vec::new();
     for (r1, r2) in p1.part5.events.iter().zip(p2.part5.events.iter()) {
@@ -477,7 +651,9 @@ fn run_cross_day(target: i32, tag: &str) -> CrossDay {
             && r1.var6 == r2.var6
             && r1.md1 == r2.md1
             && r1.vars7_18 == r2.vars7_18;
-        if !same { differ.push(r1.var1 as i32); }
+        if !same {
+            differ.push(r1.var1 as i32);
+        }
     }
     assert!(differ.is_empty(), "the first mid-scene save must be a fixed point; pictures changed on reload -> save: {differ:?}");
 
@@ -486,7 +662,11 @@ fn run_cross_day(target: i32, tag: &str) -> CrossDay {
         clock.0, clock.1, b1.len(), t0.elapsed()
     );
     let _ = std::fs::remove_dir_all(&out);
-    CrossDay { arrival_day, pics: pic_count, nonzero_banks: nonzero }
+    CrossDay {
+        arrival_day,
+        pics: pic_count,
+        nonzero_banks: nonzero,
+    }
 }
 
 #[test]
@@ -496,8 +676,16 @@ fn cross_day_play_save_reload_keeps_state_and_converges() {
         return;
     }
     let s = run_cross_day(4, "short");
-    assert!(s.arrival_day >= 4, "advanced to at least day 4, got {}", s.arrival_day);
-    assert!(s.nonzero_banks > 0, "at least one non-zero common-event self bank must be exercised and preserved, got {}", s.nonzero_banks);
+    assert!(
+        s.arrival_day >= 4,
+        "advanced to at least day 4, got {}",
+        s.arrival_day
+    );
+    assert!(
+        s.nonzero_banks > 0,
+        "at least one non-zero common-event self bank must be exercised and preserved, got {}",
+        s.nonzero_banks
+    );
     assert!(s.pics > 0, "the picture table round-trips");
 }
 
@@ -509,6 +697,10 @@ fn ten_days_then_save_reload_converges() {
         return;
     }
     let s = run_cross_day(11, "long");
-    assert!(s.arrival_day >= 11, "advanced to at least day 11, got {}", s.arrival_day);
+    assert!(
+        s.arrival_day >= 11,
+        "advanced to at least day 11, got {}",
+        s.arrival_day
+    );
     assert!(s.nonzero_banks > 0, "non-zero self banks preserved");
 }

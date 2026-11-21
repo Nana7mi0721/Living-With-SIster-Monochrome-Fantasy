@@ -20,7 +20,7 @@
 //! not fail) when the data root is missing, exactly like the rest of the suite. The
 //! `#[ignore]` tests drive the interpreter and are a longer matrix.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use wolf_format::command::{Command, Slot};
 use wolf_format::commonevent::CommonEventData;
@@ -68,7 +68,7 @@ fn command_refs(slots: &[Slot]) -> Vec<&Command> {
         .collect()
 }
 
-fn find_first(root: &PathBuf, names: &[&str]) -> Option<PathBuf> {
+fn find_first(root: &Path, names: &[&str]) -> Option<PathBuf> {
     names
         .iter()
         .map(|name| root.join(name))
@@ -86,7 +86,10 @@ fn find_first(root: &PathBuf, names: &[&str]) -> Option<PathBuf> {
 fn ce436_recomputes_and_persists_ngplus_points() {
     let root = data_root();
     let Ok(bytes) = std::fs::read(root.join("BasicData").join("CommonEvent.dat")) else {
-        eprintln!("skipping: BasicData/CommonEvent.dat missing under {}", root.display());
+        eprintln!(
+            "skipping: BasicData/CommonEvent.dat missing under {}",
+            root.display()
+        );
         return;
     };
     let ce = CommonEventData::parse(&bytes).expect("CommonEvent.dat parses");
@@ -126,7 +129,10 @@ fn ce436_recomputes_and_persists_ngplus_points() {
             w.len() >= 3 && w[0] == 2_000_550 && w[2] == 2_000_550
         }
     });
-    assert!(reads_550, "CE436 must read var550 (2_000_550) back via op221");
+    assert!(
+        reads_550,
+        "CE436 must read var550 (2_000_550) back via op221"
+    );
 
     // Two op220 saves: the system2.sav back-up and the System.sav write-back.
     let saves = cmds.iter().filter(|cmd| cmd.opcode == 220).count();
@@ -139,8 +145,8 @@ fn ce436_recomputes_and_persists_ngplus_points() {
         .filter_map(|cmd| words(cmd).get(1).copied())
         .collect();
     for var in [
-        2_000_040, 2_000_042, 2_000_044, 2_000_053, 2_000_534, 2_000_519, 2_000_367,
-        2_000_490, 2_000_492, 2_000_503, 2_000_470, 2_000_474, 2_000_476,
+        2_000_040, 2_000_042, 2_000_044, 2_000_053, 2_000_534, 2_000_519, 2_000_367, 2_000_490,
+        2_000_492, 2_000_503, 2_000_470, 2_000_474, 2_000_476,
     ] {
         assert!(
             tested.contains(&var),
@@ -156,7 +162,10 @@ fn ce436_recomputes_and_persists_ngplus_points() {
 fn sample_map_a_event0_is_autorun_and_has_the_inheritance_table() {
     let root = data_root();
     let Ok(bytes) = std::fs::read(root.join("MapData").join("SampleMapA.mps")) else {
-        eprintln!("skipping: MapData/SampleMapA.mps missing under {}", root.display());
+        eprintln!(
+            "skipping: MapData/SampleMapA.mps missing under {}",
+            root.display()
+        );
         return;
     };
     let map = Map::parse(&bytes).expect("SampleMapA parses");
@@ -238,7 +247,12 @@ fn retail_system_sav_carries_ngplus_points() {
     let root = data_root();
     let Some(path) = find_first(
         &root,
-        &["Save/System.sav", "Save/system.sav", "System.sav", "system.sav"],
+        &[
+            "Save/System.sav",
+            "Save/system.sav",
+            "System.sav",
+            "system.sav",
+        ],
     ) else {
         eprintln!("skipping: no System.sav under {}", root.display());
         return;
@@ -277,7 +291,12 @@ fn boot_loads_ngplus_points_from_system_sav() {
     let root = data_root();
     let Some(path) = find_first(
         &root,
-        &["Save/System.sav", "Save/system.sav", "System.sav", "system.sav"],
+        &[
+            "Save/System.sav",
+            "Save/system.sav",
+            "System.sav",
+            "system.sav",
+        ],
     ) else {
         eprintln!("skipping: no System.sav under {}", root.display());
         return;

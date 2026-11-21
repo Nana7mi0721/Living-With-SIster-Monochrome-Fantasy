@@ -67,7 +67,10 @@ fn open_resumed() -> Option<Game> {
         return None;
     }
     if !data_root().join("MapData").join("SampleMapA.mps").exists() {
-        eprintln!("skip: missing SampleMapA.mps under {}", data_root().display());
+        eprintln!(
+            "skip: missing SampleMapA.mps under {}",
+            data_root().display()
+        );
         return None;
     }
     let mut game = match Game::new(data_root()) {
@@ -103,20 +106,22 @@ fn click_at(game: &mut Game, x: i32, y: i32) {
 }
 
 fn file_present(game: &Game, needle: &str) -> bool {
-    game.screen.iter().any(|picture| picture.file.contains(needle))
+    game.screen
+        .iter()
+        .any(|picture| picture.file.contains(needle))
 }
 
 const H_LAYER_FILES: &[&str] = &[
-    "hscene/h_bg_001.jpg",              // background A
-    "hscene/h_bg_002.png",              // background overlay B
-    "hscene/h_s10_pose03.png",          // character pose
-    "hscene/h_s10_face_mayu.png",       // eyebrows
-    "hscene/h_s10_face_eye.png",        // eyes
-    "hscene/h_s10_face_kuchi.png",      // mouth
-    "hscene/h_s10_ef_syasei03.png",     // effect (body fluid)
-    "hscene/h_s10_action_vibrator2.png",// prop/action layer
-    "hscene/h_frame.png",               // H frame
-    "hword/word_effect98.png",          // h-word overlay
+    "hscene/h_bg_001.jpg",               // background A
+    "hscene/h_bg_002.png",               // background overlay B
+    "hscene/h_s10_pose03.png",           // character pose
+    "hscene/h_s10_face_mayu.png",        // eyebrows
+    "hscene/h_s10_face_eye.png",         // eyes
+    "hscene/h_s10_face_kuchi.png",       // mouth
+    "hscene/h_s10_ef_syasei03.png",      // effect (body fluid)
+    "hscene/h_s10_action_vibrator2.png", // prop/action layer
+    "hscene/h_frame.png",                // H frame
+    "hword/word_effect98.png",           // h-word overlay
 ];
 
 const H_BUTTON_FILES: &[&str] = &[
@@ -129,7 +134,9 @@ const H_BUTTON_FILES: &[&str] = &[
 
 #[test]
 fn retail_mid_h_save_resumes_the_full_layer_stack() {
-    let Some(mut game) = open_resumed() else { return; };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
 
     for _ in 0..120 {
         game.frame();
@@ -160,7 +167,11 @@ fn retail_mid_h_save_resumes_the_full_layer_stack() {
     // tutorial block and forcing var364 to 1 - the old assertion here encoded that bug.
     assert_eq!(game.vm.vars.get(62), 1, "late-night stage index var62");
     assert_eq!(game.vm.vars.get(137), 8, "H act selector var137");
-    assert_eq!(game.vm.vars.get(364), 0, "tutorial gate from restored CE335 self20");
+    assert_eq!(
+        game.vm.vars.get(364),
+        0,
+        "tutorial gate from restored CE335 self20"
+    );
 
     // No deadlock: the engine keeps making progress and never warns while it idles on the H
     // scene. A stuck coroutine would freeze the instruction counter.
@@ -173,8 +184,14 @@ fn retail_mid_h_save_resumes_the_full_layer_stack() {
         game.stats.instructions > before_instr,
         "engine stopped executing ({before_instr} instructions frozen)"
     );
-    assert!(game.stats.frames > before_frames, "frame counter did not advance");
-    assert_eq!(game.stats.warnings, 0, "idling on the H scene must not warn");
+    assert!(
+        game.stats.frames > before_frames,
+        "frame counter did not advance"
+    );
+    assert_eq!(
+        game.stats.warnings, 0,
+        "idling on the H scene must not warn"
+    );
     assert!(
         game.screen.len() >= 80,
         "the H stack thinned out to {} pictures",
@@ -184,7 +201,9 @@ fn retail_mid_h_save_resumes_the_full_layer_stack() {
 
 #[test]
 fn real_mouse_clicks_advance_the_late_night_stage_index() {
-    let Some(mut game) = open_resumed() else { return; };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
 
     for _ in 0..60 {
         game.frame();
@@ -199,7 +218,11 @@ fn real_mouse_clicks_advance_the_late_night_stage_index() {
     }
 
     assert_eq!(game.stats.warnings, 0, "clearing the gate must not warn");
-    assert_eq!(game.vm.vars.get(62), 1, "stage index starts at the base menu");
+    assert_eq!(
+        game.vm.vars.get(62),
+        1,
+        "stage index starts at the base menu"
+    );
 
     // Walk the menu the way the retail UI does: at each stage click the first visible H
     // button whose real click advances the stage index (var62). Screen iteration order is
@@ -210,9 +233,7 @@ fn real_mouse_clicks_advance_the_late_night_stage_index() {
         let buttons: Vec<(i32, i32, i32)> = game
             .screen
             .iter()
-            .filter(|picture| {
-                picture.file.contains("h_button") || picture.file.contains("hbutton")
-            })
+            .filter(|picture| picture.file.contains("h_button") || picture.file.contains("hbutton"))
             .map(|picture| (picture.number, picture.x, picture.y))
             .collect();
 
@@ -249,9 +270,12 @@ fn real_mouse_clicks_advance_the_late_night_stage_index() {
     visited.dedup();
     assert!(visited.len() >= 4, "stage index visited only {visited:?}");
 
-    assert_eq!(game.stats.warnings, started, "interactive clicks must not warn");
+    assert_eq!(
+        game.stats.warnings, started,
+        "interactive clicks must not warn"
+    );
     assert!(
-        game.stats.instructions > 0 && game.screen.len() > 0,
+        game.stats.instructions > 0 && !game.screen.is_empty(),
         "engine deadlocked during menu interaction"
     );
 }

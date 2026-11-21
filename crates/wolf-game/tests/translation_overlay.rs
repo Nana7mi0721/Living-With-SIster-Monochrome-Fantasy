@@ -34,7 +34,11 @@ fn rewrites_a_real_message_slot_and_reports_the_count() {
     assert_eq!(overlay.len(), 1);
     assert_eq!(overlay.apply(&mut events), 1);
 
-    let event = events.events.iter().find(|event| event.id == 280).expect("CE280");
+    let event = events
+        .events
+        .iter()
+        .find(|event| event.id == 280)
+        .expect("CE280");
     match &event.commands[8] {
         Slot::Command(command) => {
             assert_eq!(command.opcode, 101);
@@ -92,7 +96,11 @@ fn every_generated_overlay_row_applies_to_a_real_message() {
     let bytes = std::fs::read(root.join("BasicData/CommonEvent.dat")).expect("CommonEvent.dat");
     let mut events = CommonEventData::parse(&bytes).expect("parse");
     let overlay = TextOverlay::parse(&body);
-    assert!(overlay.len() > 7000, "expected the full generated table, got {}", overlay.len());
+    assert!(
+        overlay.len() > 7000,
+        "expected the full generated table, got {}",
+        overlay.len()
+    );
     assert_eq!(
         overlay.apply(&mut events),
         overlay.len(),
@@ -133,5 +141,8 @@ fn every_generated_overlay_row_tokenises_without_literal_escapes() {
         }
         checked += 1;
     }
-    assert!(checked > 7000, "expected the full generated table, checked {checked}");
+    assert!(
+        checked > 7000,
+        "expected the full generated table, checked {checked}"
+    );
 }

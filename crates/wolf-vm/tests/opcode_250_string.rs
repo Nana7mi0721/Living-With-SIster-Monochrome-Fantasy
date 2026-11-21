@@ -71,15 +71,10 @@ fn vm_with(events: Vec<CommonEvent>) -> Vm {
 }
 
 /// Host that records every 250 op and answers every *read* with a fixed string.
+#[derive(Default)]
 struct DbHost {
     ops: Vec<DbOp>,
     read_answer: Option<DbValue>,
-}
-
-impl Default for DbHost {
-    fn default() -> Self {
-        Self { ops: Vec::new(), read_answer: None }
-    }
 }
 
 impl Host for DbHost {

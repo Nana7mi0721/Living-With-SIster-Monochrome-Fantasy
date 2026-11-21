@@ -16,6 +16,7 @@
 //!   * ten sequential 111 blocks compare self10 against 0..39 and jump to the
 //!     matching EP body (EP number == self10),
 //!   * @pc 6087 does self10 += 1 and the event ends.
+//!
 //! So one invocation plays exactly ONE EP. To play EP n we start CE452 and seed
 //! self10 = n; var619 must come out equal to n and the pc must reach that EP's
 //! marker. The seed uses self group 6 slot 10 = flat self-vars index 600 + 10 = 610.
@@ -62,8 +63,8 @@ fn data_root() -> PathBuf {
 /// EP marker pc for EP 0..=36 (comment positions in the decompiled 452 dump).
 const EP_PC: [i32; 37] = [
     5, 240, 402, 525, 656, 718, 825, 968, 1148, 1235, 1316, 1460, 1561, 1690, 1767, 2111, 2186,
-    2381, 2733, 2834, 2914, 3445, 3484, 3700, 3838, 4027, 4165, 4513, 4596, 4750, 4889, 4998,
-    5178, 5305, 5547, 5670, 5869,
+    2381, 2733, 2834, 2914, 3445, 3484, 3700, 3838, 4027, 4165, 4513, 4596, 4750, 4889, 4998, 5178,
+    5305, 5547, 5670, 5869,
 ];
 
 struct EpRun {
@@ -179,9 +180,18 @@ fn dlc452_entry_wiring_from_ce251() {
         calls_common_event(&game, 251, 452),
         "CE251 must call CE452 (500452), the hot-spring-work entry"
     );
-    assert!(calls_common_event(&game, 251, 446), "CE251 must call CE446 (DLC final battle)");
-    assert!(calls_common_event(&game, 251, 447), "CE251 must call CE447 (DLC ending)");
-    assert!(calls_common_event(&game, 251, 426), "CE251 must call CE426 (hot-spring subjugation)");
+    assert!(
+        calls_common_event(&game, 251, 446),
+        "CE251 must call CE446 (DLC final battle)"
+    );
+    assert!(
+        calls_common_event(&game, 251, 447),
+        "CE251 must call CE447 (DLC ending)"
+    );
+    assert!(
+        calls_common_event(&game, 251, 426),
+        "CE251 must call CE426 (hot-spring subjugation)"
+    );
 
     let ep0 = run_ep(0, 4000);
     assert_eq!(ep0.var619, 0, "entry passes self10=0 -> var619 must be 0");
@@ -227,7 +237,10 @@ fn dlc447_ending_reaches_endroll() {
     let (maxpc, warnings, messages, _instructions) = run_event(447, 4000);
     assert_eq!(warnings, 0, "CE447: no interpreter warnings");
     assert!(messages > 0, "CE447 must show dialogue");
-    assert!(maxpc >= 172, "CE447 must reach the endroll @172 (got pc {maxpc})");
+    assert!(
+        maxpc >= 172,
+        "CE447 must reach the endroll @172 (got pc {maxpc})"
+    );
 }
 
 // ---------------------------------------------------------------------------

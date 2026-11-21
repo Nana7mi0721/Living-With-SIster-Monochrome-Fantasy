@@ -1130,9 +1130,9 @@ impl Sha256 {
             0xc67178f2,
         ];
         let mut w = [0u32; 64];
-        for index in 0..16 {
+        for (index, slot) in w.iter_mut().enumerate().take(16) {
             let offset = index * 4;
-            w[index] = u32::from_be_bytes([
+            *slot = u32::from_be_bytes([
                 block[offset],
                 block[offset + 1],
                 block[offset + 2],

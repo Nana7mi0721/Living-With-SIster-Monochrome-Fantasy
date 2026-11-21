@@ -72,20 +72,14 @@ fn layer_bands_match_the_retail_composition_order() {
 
 #[test]
 fn panel_sentinel_does_not_collide_with_the_title_backdrop() {
-    assert!(
-        window::PANEL_PICTURE < TITLE_BACKDROP_LAYER,
-        "PANEL_PICTURE={} must sort below TITLE_BACKDROP_LAYER={}",
-        window::PANEL_PICTURE,
-        TITLE_BACKDROP_LAYER
-    );
+    const {
+        assert!(window::PANEL_PICTURE < TITLE_BACKDROP_LAYER);
+        assert!(window::PANEL_PICTURE < -2);
+    }
     assert_ne!(
         window::PANEL_PICTURE,
         TITLE_BACKDROP_LAYER,
         "a host panel sentinel must never equal a real script layer"
-    );
-    assert!(
-        window::PANEL_PICTURE < -2,
-        "strictly below the lowest normal negative script layer"
     );
 }
 

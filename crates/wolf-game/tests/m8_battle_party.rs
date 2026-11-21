@@ -75,7 +75,10 @@ fn open_battle(wiring: bool) -> Game {
     game.auto_choice = true;
     game.auto_choice_delay = 1;
     let seeded = game.seed_battle_databases();
-    assert!(seeded > 0, "seed_battle_databases must seed the battle cells");
+    assert!(
+        seeded > 0,
+        "seed_battle_databases must seed the battle cells"
+    );
     game.databases
         .set_text(wolf_game::db::Container::CData, 5, 16, 0, "┗ 状態リスト");
     let _ = game.start_engine_events();
@@ -148,7 +151,15 @@ fn run_command(cmd: i32) -> CmdRun {
             }
         }
     }
-    CmdRun { started, pre, post: pools(&game), max_242_pc, v352, v343, warnings: game.stats.warnings }
+    CmdRun {
+        started,
+        pre,
+        post: pools(&game),
+        max_242_pc,
+        v352,
+        v343,
+        warnings: game.stats.warnings,
+    }
 }
 
 /// Expected: (command, pool index that loses one point or 4 = none, body_pc_lo,
@@ -171,8 +182,14 @@ fn multi_member_commands_map_to_distinct_party_pools() {
     let init = [5i32, 4, 3, 2];
     for (cmd, pool_idx, lo, hi, settles) in EXPECT {
         let r = run_command(cmd);
-        assert!(r.started, "cmd {cmd}: CE242 must start once battle is active");
-        assert_eq!(r.pre, init, "cmd {cmd}: CE239 must seed the four party pools 5/4/3/2");
+        assert!(
+            r.started,
+            "cmd {cmd}: CE242 must start once battle is active"
+        );
+        assert_eq!(
+            r.pre, init,
+            "cmd {cmd}: CE239 must seed the four party pools 5/4/3/2"
+        );
         // (a) the command index really reaches its own command body.
         assert!(
             r.max_242_pc >= lo && r.max_242_pc < hi,
@@ -183,19 +200,37 @@ fn multi_member_commands_map_to_distinct_party_pools() {
         for i in 0..4 {
             let expected = if i == pool_idx { init[i] - 1 } else { init[i] };
             assert_eq!(
-                r.post[i], expected,
+                r.post[i],
+                expected,
                 "cmd {cmd}: pool {} = {} (want {expected}); pre={:?} post={:?}",
-                [345, 346, 347, 348][i], r.post[i], r.pre, r.post
+                [345, 346, 347, 348][i],
+                r.post[i],
+                r.pre,
+                r.post
             );
         }
         // Settlement depends on the member's damage (opcode-111 reference semantics):
         // members 1/2 settle in one command, members 3/4 and the generic body do not.
         if settles {
-            assert_eq!(r.v343, 1, "cmd {cmd}: strong command must decide the battle");
-            assert!(r.v352 == 1 || r.v352 == -1, "cmd {cmd}: 2000352 must be a real result, got {}", r.v352);
+            assert_eq!(
+                r.v343, 1,
+                "cmd {cmd}: strong command must decide the battle"
+            );
+            assert!(
+                r.v352 == 1 || r.v352 == -1,
+                "cmd {cmd}: 2000352 must be a real result, got {}",
+                r.v352
+            );
         } else {
-            assert_eq!(r.v343, 0, "cmd {cmd}: weak command leaves the enemy alive (needs a 2nd round)");
-            assert_eq!(r.v352, 0, "cmd {cmd}: no decisive result written yet, got {}", r.v352);
+            assert_eq!(
+                r.v343, 0,
+                "cmd {cmd}: weak command leaves the enemy alive (needs a 2nd round)"
+            );
+            assert_eq!(
+                r.v352, 0,
+                "cmd {cmd}: no decisive result written yet, got {}",
+                r.v352
+            );
         }
         assert_eq!(r.warnings, 0, "cmd {cmd}: no script warnings allowed");
         println!(
@@ -237,14 +272,31 @@ fn single_shot_wiring_settles_in_one_command_round() {
     }
     println!(
         "single_shot default: v350_seq={:?} rounds={} v352={} v343={} warnings={} settled={}",
-        v350_seq, game.battle_wiring_rounds(), v352, v343, game.stats.warnings, settled
+        v350_seq,
+        game.battle_wiring_rounds(),
+        v352,
+        v343,
+        game.stats.warnings,
+        settled
     );
     assert!(settled, "battle must settle");
     assert_eq!(v343, 1, "battle decided");
     assert!(v352 == 1 || v352 == -1, "real result, got {v352}");
-    assert_eq!(game.battle_wiring_rounds(), 1, "shipped battle settles in exactly one command round");
-    assert_eq!(*v350_seq.first().unwrap_or(&-1), 0, "command phase starts at 0");
+    assert_eq!(
+        game.battle_wiring_rounds(),
+        1,
+        "shipped battle settles in exactly one command round"
+    );
+    assert_eq!(
+        *v350_seq.first().unwrap_or(&-1),
+        0,
+        "command phase starts at 0"
+    );
     assert!(v350_seq.contains(&1), "command phase 1 observed");
-    assert_eq!(*v350_seq.last().unwrap_or(&-1), 0, "command phase ends back at 0");
+    assert_eq!(
+        *v350_seq.last().unwrap_or(&-1),
+        0,
+        "command phase ends back at 0"
+    );
     assert_eq!(game.stats.warnings, 0, "no warnings");
 }

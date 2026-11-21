@@ -19,6 +19,7 @@
 //!   * option 0 「力量锻炼」: energy var14 100 -> 80 (-20), its stat var170 +2.
 //!   * option 1 「空挥」:     energy var14 100 -> 80 (-20), its stat var172 +2.
 //!   * option 2 「冥想」:     energy var14 100 -> 90 (-10), its stat var171 +2.
+//!
 //! The five status stats are var170..var174; each option only touches its own stat, and
 //! var48 (day-command id) stays 0 because this is the bedroom action, not the daytime
 //! CE251 menu.
@@ -97,7 +98,9 @@ fn open_training_menu(game: &mut Game) {
 
 #[test]
 fn the_bedroom_training_icon_opens_the_three_way_training_menu() {
-    let Some(mut game) = bedroom_game() else { return };
+    let Some(mut game) = bedroom_game() else {
+        return;
+    };
 
     // The room is the 18:30 day-1 bedroom, warning-free, with the training icon drawn.
     assert_eq!(game.vm.vars.get(4), 18, "the bedroom clock is 18:00");
@@ -127,11 +130,18 @@ fn the_bedroom_training_icon_opens_the_three_way_training_menu() {
         "event 245 offers the three-way training prompt"
     );
     assert!(
-        game.vm.instances().iter().any(|instance| instance.event == 245),
+        game.vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 245),
         "the event-245 menu coroutine is alive while the prompt is open"
     );
     // The prompt is drawn over the description picture the click raised.
-    let texts: Vec<&str> = game.screen.iter().map(|picture| picture.text.as_str()).collect();
+    let texts: Vec<&str> = game
+        .screen
+        .iter()
+        .map(|picture| picture.text.as_str())
+        .collect();
     assert!(
         texts.iter().any(|text| text.contains("自主训练")),
         "the training description is drawn: {texts:?}"
@@ -151,9 +161,14 @@ fn every_training_option_advances_the_clock_and_applies_its_real_effect() {
     ];
 
     for (cursor, stat_var, stat_gain, energy_cost) in cases {
-        let Some(mut game) = bedroom_game() else { return };
+        let Some(mut game) = bedroom_game() else {
+            return;
+        };
         open_training_menu(&mut game);
-        assert!(game.choices.is_some(), "menu is open before choosing option {cursor}");
+        assert!(
+            game.choices.is_some(),
+            "menu is open before choosing option {cursor}"
+        );
 
         let before_time = (game.vm.vars.get(4), game.vm.vars.get(5));
         let before_energy = game.vm.vars.get(14);
@@ -174,7 +189,11 @@ fn every_training_option_advances_the_clock_and_applies_its_real_effect() {
         let mut settled = false;
         for frame in 0..4000 {
             game.frame();
-            let running = game.vm.instances().iter().any(|instance| instance.event == 245);
+            let running = game
+                .vm
+                .instances()
+                .iter()
+                .any(|instance| instance.event == 245);
             if !running && game.choices.is_none() && frame > 30 {
                 settled = true;
                 break;
@@ -188,7 +207,11 @@ fn every_training_option_advances_the_clock_and_applies_its_real_effect() {
             (19, 30),
             "option {cursor} advances the clock to 19:30"
         );
-        assert_eq!(game.vm.vars.get(160), 1, "option {cursor} does not roll the day over");
+        assert_eq!(
+            game.vm.vars.get(160),
+            1,
+            "option {cursor} does not roll the day over"
+        );
         assert_eq!(
             game.vm.vars.get(stat_var),
             before_stat + stat_gain,
@@ -199,7 +222,14 @@ fn every_training_option_advances_the_clock_and_applies_its_real_effect() {
             before_energy - energy_cost,
             "option {cursor} spends {energy_cost} energy"
         );
-        assert_eq!(game.vm.vars.get(48), 0, "the bedroom action is not a CE251 day command");
-        assert!(game.choices.is_none(), "option {cursor} leaves no prompt open");
+        assert_eq!(
+            game.vm.vars.get(48),
+            0,
+            "the bedroom action is not a CE251 day command"
+        );
+        assert!(
+            game.choices.is_none(),
+            "option {cursor} leaves no prompt open"
+        );
     }
 }

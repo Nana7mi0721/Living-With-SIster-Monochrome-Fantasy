@@ -146,8 +146,8 @@ fn a_moved_loaded_picture_writes_the_new_position_and_keeps_the_unmodelled_banks
     let source = save_path(&retail, "SaveData01.sav");
     game.load_save(&source).expect("load SaveData01");
 
-    let original = SaveFile::parse(&std::fs::read(&source).expect("read"))
-        .expect("parse retail save");
+    let original =
+        SaveFile::parse(&std::fs::read(&source).expect("read")).expect("parse retail save");
     let before = original
         .part5
         .events

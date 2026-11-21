@@ -83,7 +83,12 @@ const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
 fn day_row_texts(game: &Game) -> Vec<String> {
     DAY_ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -216,7 +221,11 @@ fn hovering_sister_at_deep_night_writes_var63_and_opens_the_sleep_choice() {
         game.vm.vars.get(4),
         game.vm.vars.get(5)
     );
-    assert_eq!(game.vm.vars.get(5), 30, "the evening settles on the half hour");
+    assert_eq!(
+        game.vm.vars.get(5),
+        30,
+        "the evening settles on the half hour"
+    );
     assert_eq!(game.stats.warnings, 0, "the evening scene is warning-free");
     assert_eq!(game.vm.vars.get(69), 1, "the evening-day flag var69 is set");
     assert_eq!(game.vm.vars.get(64), 0, "var64 (deep-night) is not set yet");

@@ -22,19 +22,25 @@ use wolf_vm::Magic;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap()
-        .parent().unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
         .to_path_buf()
 }
 
 fn data_root() -> PathBuf {
     let raw = std::env::var("WOLF_DATA_ROOT").unwrap_or_else(|_| "work/all".to_string());
     let p = PathBuf::from(raw);
-    if p.is_absolute() { p } else { repo_root().join(p) }
+    if p.is_absolute() {
+        p
+    } else {
+        repo_root().join(p)
+    }
 }
 
 fn new_game() -> Game {
-    Game::new(&data_root()).expect("Game::new")
+    Game::new(data_root()).expect("Game::new")
 }
 
 /// Decode a command argument (little-endian i32 at param index i).
@@ -58,8 +64,16 @@ struct Run {
 /// Drive one event. selfvars are (flat self-var slot, value) pairs; the common
 /// selector self#n lives at flat slot 600+n (COMMON_SELF_BASE + SELF_ARG_BASE).
 /// pc optionally overrides the entry pc to jump straight into a block.
-fn drive(game: &mut Game, ce: u32, selfvars: &[(usize, i32)], pc: Option<usize>, max_frames: usize) -> Run {
-    let iid = game.vm.start_event(ce)
+fn drive(
+    game: &mut Game,
+    ce: u32,
+    selfvars: &[(usize, i32)],
+    pc: Option<usize>,
+    max_frames: usize,
+) -> Run {
+    let iid = game
+        .vm
+        .start_event(ce)
         .unwrap_or_else(|| panic!("start_event CE{ce} returned None"));
     {
         let inst = game.vm.instance_mut(iid).expect("instance");
@@ -79,7 +93,11 @@ fn drive(game: &mut Game, ce: u32, selfvars: &[(usize, i32)], pc: Option<usize>,
     for frame in 0..max_frames {
         // UI-06 made message dismissal edge-triggered, so the driver has to pulse OK
         // instead of holding it: a held key is never a fresh press.
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         for m in &game.messages {
             let c = clean(&m.text);
@@ -92,7 +110,11 @@ fn drive(game: &mut Game, ce: u32, selfvars: &[(usize, i32)], pc: Option<usize>,
             break;
         }
     }
-    Run { messages, warnings: game.stats.warnings, ended }
+    Run {
+        messages,
+        warnings: game.stats.warnings,
+        ended,
+    }
 }
 
 fn assert_reached(label: &str, run: &Run, expected: &str) {
@@ -102,7 +124,11 @@ fn assert_reached(label: &str, run: &Run, expected: &str) {
         "{label}: did not render expected substring {expected:?}\n  warnings={} ended={} messages={:?}",
         run.warnings, run.ended, run.messages
     );
-    assert_eq!(run.warnings, 0, "{label}: warnings while running; messages={:?}", run.messages);
+    assert_eq!(
+        run.warnings, 0,
+        "{label}: warnings while running; messages={:?}",
+        run.messages
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -113,8 +139,14 @@ fn assert_reached(label: &str, run: &Run, expected: &str) {
 // 'ズ—ム'/'マップをズーム' (em-dash typo, no such event). Never executed in play,
 // but recorded here so a regression elsewhere is still caught.
 const DEAD_ALLOW: &[(u32, usize)] = &[
-    (270, 631), (270, 637), (270, 705), (270, 711),
-    (270, 2065), (270, 2071), (270, 2112), (270, 2119),
+    (270, 631),
+    (270, 637),
+    (270, 705),
+    (270, 711),
+    (270, 2065),
+    (270, 2071),
+    (270, 2112),
+    (270, 2119),
 ];
 
 #[test]
@@ -127,20 +159,27 @@ fn all_call_targets_resolve() {
     let mut dead: Vec<String> = Vec::new();
 
     for id in 0u32..2000 {
-        let Some(prog) = progs.event(id) else { continue };
+        let Some(prog) = progs.event(id) else {
+            continue;
+        };
         for (pc, slot) in prog.slots.iter().enumerate() {
             let Slot::Command(cmd) = slot else { continue };
             match cmd.opcode {
                 210 => {
                     let raw = carg(cmd, 0);
-                    if Magic::decode(raw).is_storage() { dynamic += 1; continue; }
+                    if Magic::decode(raw).is_storage() {
+                        dynamic += 1;
+                        continue;
+                    }
                     let ev = match raw {
                         500_000..=599_999 => Some((raw - 500_000) as u32),
                         600_000..=699_999 => Some((raw - 600_000) as u32),
                         _ => None,
                     };
                     let Some(ev) = ev else {
-                        dead.push(format!("CE{id}@{pc} op210 literal target {raw} unsupported"));
+                        dead.push(format!(
+                            "CE{id}@{pc} op210 literal target {raw} unsupported"
+                        ));
                         continue;
                     };
                     checked += 1;
@@ -150,7 +189,10 @@ fn all_call_targets_resolve() {
                 }
                 211 => {
                     let raw = carg(cmd, 0);
-                    if Magic::decode(raw).is_storage() { dynamic += 1; continue; }
+                    if Magic::decode(raw).is_storage() {
+                        dynamic += 1;
+                        continue;
+                    }
                     let ev = match raw {
                         500_000..=599_999 => (raw - 500_000) as u32,
                         600_000..=699_999 => (raw - 600_000) as u32,
@@ -163,7 +205,11 @@ fn all_call_targets_resolve() {
                 }
                 300 => {
                     let name = cmd.strings.first().cloned().unwrap_or_default();
-                    if name.is_empty() || name.contains('\\') || name.contains("cself") || name.contains('{') {
+                    if name.is_empty()
+                        || name.contains('\\')
+                        || name.contains("cself")
+                        || name.contains('{')
+                    {
                         dynamic += 1;
                         continue;
                     }
@@ -181,7 +227,12 @@ fn all_call_targets_resolve() {
         }
     }
     eprintln!("call-targets: checked={checked} dynamic(skipped)={dynamic} allowed(dormant)={allowed} dead={}", dead.len());
-    assert!(dead.is_empty(), "{} dead call target(s):\n{}", dead.len(), dead.join("\n"));
+    assert!(
+        dead.is_empty(),
+        "{} dead call target(s):\n{}",
+        dead.len(),
+        dead.join("\n")
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -197,11 +248,24 @@ fn pool_dispatch_reaches_expected_block() {
         (278, 10, 1, 11, "竟然是熊头", "CE278 #15 クマヘッド稽古"),
         (279, 0, 3, 1, "亲亲我我的时间", "CE279 #5/#33 いちゃつく"),
         (279, 0, 4, 1, "留的作业很难", "CE279 #94 勉強教える"),
-        (280, 0, 4, 0, "吃东西得再买一点", "CE280 #110 どか食い気絶部"),
+        (
+            280,
+            0,
+            4,
+            0,
+            "吃东西得再买一点",
+            "CE280 #110 どか食い気絶部",
+        ),
     ];
     for &(ce, sel_fn, sel_val, cond_pc, expected, label) in cases {
         let mut game = new_game();
-        let run = drive(&mut game, ce, &[(600 + sel_fn, sel_val)], Some(cond_pc), 2000);
+        let run = drive(
+            &mut game,
+            ce,
+            &[(600 + sel_fn, sel_val)],
+            Some(cond_pc),
+            2000,
+        );
         assert_reached(label, &run, expected);
     }
 }
@@ -247,9 +311,15 @@ fn cond_triples(program: &wolf_vm::Program, pc: usize) -> Vec<(i32, i32, i32)> {
     assert_eq!(cmd.opcode, 111, "pc {pc} opcode {} is not 111", cmd.opcode);
     let head = carg(cmd, 0);
     let count = (head & 0x0F) as usize;
-    (0..count).map(|i| (
-        carg(cmd, 1 + 3 * i), carg(cmd, 2 + 3 * i), carg(cmd, 3 + 3 * i)
-    )).collect()
+    (0..count)
+        .map(|i| {
+            (
+                carg(cmd, 1 + 3 * i),
+                carg(cmd, 2 + 3 * i),
+                carg(cmd, 3 + 3 * i),
+            )
+        })
+        .collect()
 }
 
 #[test]
@@ -259,7 +329,10 @@ fn verified_gate_conditions_present() {
     let check = |ce: u32, pc: usize, want: &[(i32, i32, i32)]| {
         let prog = progs.event(ce).unwrap_or_else(|| panic!("CE{ce} missing"));
         let got = cond_triples(prog, pc);
-        assert_eq!(got, want, "CE{ce}@{pc} condition triples differ from M13_CONTENT_MATRIX");
+        assert_eq!(
+            got, want,
+            "CE{ce}@{pc} condition triples differ from M13_CONTENT_MATRIX"
+        );
     };
     // 参军 END (CE326@35 Comment 親父帰宅END): 信頼(21)<=5 && 機嫌(23)<=1.
     check(326, 36, &[(2_000_021, 5, 3)]);
@@ -284,26 +357,42 @@ fn full_pool_dispatch_sweep() {
     for v in 1..=15i32 {
         let mut game = new_game();
         let run = drive(&mut game, 277, &[(600, v)], Some(1), 2000);
-        assert_eq!(run.warnings, 0, "CE277 sel={v} warnings; msgs={:?}", run.messages);
+        assert_eq!(
+            run.warnings, 0,
+            "CE277 sel={v} warnings; msgs={:?}",
+            run.messages
+        );
         assert!(run.ended, "CE277 sel={v} did not end");
         eprintln!("CE277 sel={v:2} first={:?}", run.messages.first());
     }
     for v in 1..=10i32 {
         let mut game = new_game();
         let run = drive(&mut game, 279, &[(600, v)], Some(1), 2000);
-        assert_eq!(run.warnings, 0, "CE279 sel={v} warnings; msgs={:?}", run.messages);
+        assert_eq!(
+            run.warnings, 0,
+            "CE279 sel={v} warnings; msgs={:?}",
+            run.messages
+        );
         eprintln!("CE279 sel={v:2} first={:?}", run.messages.first());
     }
     for v in 1..=4i32 {
         let mut game = new_game();
         let run = drive(&mut game, 280, &[(600, v)], Some(0), 2000);
-        assert_eq!(run.warnings, 0, "CE280 sel={v} warnings; msgs={:?}", run.messages);
+        assert_eq!(
+            run.warnings, 0,
+            "CE280 sel={v} warnings; msgs={:?}",
+            run.messages
+        );
         eprintln!("CE280 sel={v} first={:?}", run.messages.first());
     }
     for v in 1..=9i32 {
         let mut game = new_game();
         let run = drive(&mut game, 278, &[(610, v)], Some(11), 2000);
-        assert_eq!(run.warnings, 0, "CE278 sel={v} warnings; msgs={:?}", run.messages);
+        assert_eq!(
+            run.warnings, 0,
+            "CE278 sel={v} warnings; msgs={:?}",
+            run.messages
+        );
         eprintln!("CE278 sel={v} first={:?}", run.messages.first());
     }
 }

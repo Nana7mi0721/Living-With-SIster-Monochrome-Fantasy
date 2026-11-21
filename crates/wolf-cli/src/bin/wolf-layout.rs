@@ -65,20 +65,8 @@ fn tag(kind: u8) -> &'static str {
 
 fn dump_pictures(commands: &[Slot]) {
     println!(
-        "{:<5} {:<8} {:<4} {:>7} {:>5} {:>5} {:>8} {:>5} {:>5} {:>7} {:>5} {:>6}  {}",
-        "pc",
-        "kind",
-        "cmd",
-        "#pic",
-        "boxW",
-        "boxH",
-        "opacity",
-        "x",
-        "y",
-        "scale",
-        "anch",
-        "blend",
-        "text"
+        "{:<5} {:<8} {:<4} {:>7} {:>5} {:>5} {:>8} {:>5} {:>5} {:>7} {:>5} {:>6}  text",
+        "pc", "kind", "cmd", "#pic", "boxW", "boxH", "opacity", "x", "y", "scale", "anch", "blend"
     );
     for (pc, slot) in commands.iter().enumerate() {
         let Slot::Command(cmd) = slot else { continue };

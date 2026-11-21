@@ -22,8 +22,7 @@ use wolf_format::mps::Map;
 use wolf_game::key;
 use wolf_game::Game;
 
-const TITLE_TO_MAP003: &str =
-    "130 Teleport: MapData/Map003.mps at (60, 34) target -1 options 0x1";
+const TITLE_TO_MAP003: &str = "130 Teleport: MapData/Map003.mps at (60, 34) target -1 options 0x1";
 const MAP003_TO_SAMPLE: &str =
     "130 Teleport: MapData/SampleMapA.mps at (62, 38) target -1 options 0x1";
 
@@ -150,11 +149,16 @@ fn the_retail_title_menu_boots_a_new_game_through_map003_into_sample_map_a() {
         game.frame();
     }
     assert!(
-        game.screen.iter().any(|picture| picture.file.contains("title01")),
+        game.screen
+            .iter()
+            .any(|picture| picture.file.contains("title01")),
         "the boot chain did not reach the title art"
     );
     assert!(
-        !game.diagnostics.keys().any(|line| line.contains("MapData/Map003.mps")),
+        !game
+            .diagnostics
+            .keys()
+            .any(|line| line.contains("MapData/Map003.mps")),
         "a new game must not start before the title menu is answered"
     );
 
@@ -166,7 +170,11 @@ fn the_retail_title_menu_boots_a_new_game_through_map003_into_sample_map_a() {
         game.frame();
     }
     let menu = game.choices.as_ref().expect("the title menu is open");
-    assert_eq!(menu.options, ["1", "2", "3"], "the retail title menu options");
+    assert_eq!(
+        menu.options,
+        ["1", "2", "3"],
+        "the retail title menu options"
+    );
 
     // Answer option 1 = new game, exactly the player's action.
     game.set_choice_cursor(0);
@@ -199,15 +207,24 @@ fn the_retail_title_menu_boots_a_new_game_through_map003_into_sample_map_a() {
         "missing the exact Map003 -> SampleMapA hop {MAP003_TO_SAMPLE:?}; got {diagnostics:?}"
     );
 
-    let expected: Vec<String> = ["广阔的战场", "广袤的森林", "微风吹拂而过的麦田", "有人在等我的家"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let expected: Vec<String> = [
+        "广阔的战场",
+        "广袤的森林",
+        "微风吹拂而过的麦田",
+        "有人在等我的家",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
     assert_eq!(
-        opening_prompt, Some(expected),
+        opening_prompt,
+        Some(expected),
         "the new game did not reach SampleMapA's opening prompt"
     );
-    assert_eq!(game.stats.warnings, 0, "the new-game route produced warnings");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the new-game route produced warnings"
+    );
     assert!(
         game.stats.instructions > 10_000,
         "the title path plus the opening runs a real script: {} instructions",
@@ -219,5 +236,8 @@ fn the_retail_title_menu_boots_a_new_game_through_map003_into_sample_map_a() {
         .filter(|picture| picture.number < 0 && picture.file.contains("TitleGraphic"))
         .map(|picture| picture.file.as_str())
         .collect();
-    assert!(stale.is_empty(), "title art survived the map switch: {stale:?}");
+    assert!(
+        stale.is_empty(),
+        "title art survived the map switch: {stale:?}"
+    );
 }

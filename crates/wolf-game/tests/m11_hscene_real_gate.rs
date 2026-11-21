@@ -13,6 +13,7 @@
 //! saves:
 //!   * var304 == 0 in every save  -> CE328 (the UNIQUE caller of CE402, pc986) never enters.
 //!   * var326 == 0 in every save  -> CE402's own body gate (pc6 var326>=2) never passes.
+//!
 //! Every one of these variables DOES have a normal gameplay writer (traced below, so this is
 //! NOT a data bug), but no snapshot captures the required state. Only a synthetic,
 //! engine-injected save opens it - which is why the deep branch is reproducible only in
@@ -55,7 +56,10 @@ fn save_dir() -> PathBuf {
 }
 
 fn synth_path() -> PathBuf {
-    repo_root().join("work").join("out").join("m11_real_gate_synth.sav")
+    repo_root()
+        .join("work")
+        .join("out")
+        .join("m11_real_gate_synth.sav")
 }
 
 fn load_sample_map() -> Map {
@@ -98,7 +102,9 @@ fn call_sites(data: &CommonEventData, target: i32) -> Vec<(u32, usize)> {
 
 // Every op121 write site (first word == target variable address) in a common event.
 fn write_sites(data: &CommonEventData, event: u32, target: i32) -> Vec<(usize, Vec<i32>)> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     let mut out = Vec::new();
     for (pc, slot) in ev.commands.iter().enumerate() {
         if let Slot::Command(cmd) = slot {
@@ -142,7 +148,9 @@ fn map_var_writers(map: &Map, target: i32) -> BTreeSet<String> {
 }
 
 fn ce_cond_triples(data: &CommonEventData, event: u32) -> Vec<(usize, i32, i32, i32)> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     let mut out = Vec::new();
     for (pc, slot) in ev.commands.iter().enumerate() {
         if let Slot::Command(cmd) = slot {
@@ -164,7 +172,7 @@ fn ce_cond_triples(data: &CommonEventData, event: u32) -> Vec<(usize, i32, i32, 
     out
 }
 
-fn map_event<'a>(map: &'a Map, id: u32) -> &'a wolf_format::mps::MapEvent {
+fn map_event(map: &Map, id: u32) -> &wolf_format::mps::MapEvent {
     map.events
         .iter()
         .find(|event| event.id == id)
@@ -206,15 +214,15 @@ fn compare(lhs: i32, rhs: i32, operator: i32) -> bool {
 // CE402 body + CE328-entry + dispatcher conjunction, i.e. the necessary-and-sufficient gate
 // set proven by m8_hscene_cg_deep.rs (a save holding all nine drives CE402 -> CE410).
 const DEEP_GATE: [(usize, i32, i32); 9] = [
-    (157, 2, 13),  // CE246 deep-body chapter gate (op2 ==)
-    (104, 2, 0),   // CE328 entry gate (op2 ==)
-    (105, 2, 0),   // CE328 entry gate (op2 ==)
-    (4, 1, 21),    // CE402 inner gate (op1 >=)
-    (102, 1, 80),  // CE402 inner gate (op1 >=)
-    (16, 1, 1),    // CE402 inner gate (op1 >=)
-    (22, 1, 180),  // CE402 inner gate (op1 >=)
-    (326, 1, 2),   // CE402 inner gate (op1 >=) - learned 騎乗位 skill
-    (364, 2, 0),   // dispatcher gate (documented normalization, op2 ==)
+    (157, 2, 13), // CE246 deep-body chapter gate (op2 ==)
+    (104, 2, 0),  // CE328 entry gate (op2 ==)
+    (105, 2, 0),  // CE328 entry gate (op2 ==)
+    (4, 1, 21),   // CE402 inner gate (op1 >=)
+    (102, 1, 80), // CE402 inner gate (op1 >=)
+    (16, 1, 1),   // CE402 inner gate (op1 >=)
+    (22, 1, 180), // CE402 inner gate (op1 >=)
+    (326, 1, 2),  // CE402 inner gate (op1 >=) - learned 騎乗位 skill
+    (364, 2, 0),  // dispatcher gate (documented normalization, op2 ==)
 ];
 
 // CE328 entry conjunction (pc4/6/15/20): var105==0 & var104==0 & var304>=1 & var4 in {18,19,20}.
@@ -292,7 +300,10 @@ fn open_bare(n: u32) -> Option<Game> {
 }
 
 fn drive_started(game: &mut Game, event: u32, frames: usize) -> (usize, bool, u64) {
-    assert!(game.start_event(event), "start_event({event}) spawns a coroutine");
+    assert!(
+        game.start_event(event),
+        "start_event({event}) spawns a coroutine"
+    );
     game.auto_advance = true;
     game.auto_choice = true;
     game.auto_choice_delay = 2;
@@ -324,7 +335,11 @@ fn build_synth_save() -> PathBuf {
     }
     std::fs::create_dir_all(path.parent().unwrap()).ok();
     let bytes = game.save_to(&path).expect("save_to synthetic save");
-    assert!(bytes > 0 && path.exists(), "synthetic save written to {}", path.display());
+    assert!(
+        bytes > 0 && path.exists(),
+        "synthetic save written to {}",
+        path.display()
+    );
     path
 }
 
@@ -370,14 +385,26 @@ fn gate_graph_and_writers_are_as_documented() {
 
     // (4) CE328 entry conjunction (pc4/6/15/20).
     let e328 = ce_cond_triples(&data, 328);
-    assert!(e328.iter().any(|(pc, v, val, o)| *pc == 4 && *v == 2_000_105 && *val == 0 && *o == 2),
-        "CE328 entry var105 == 0 at pc4");
-    assert!(e328.iter().any(|(pc, v, val, o)| *pc == 6 && *v == 2_000_104 && *val == 0 && *o == 2),
-        "CE328 entry var104 == 0 at pc6");
-    assert!(e328.iter().any(|(pc, v, val, o)| *pc == 15 && *v == 2_000_304 && *val == 1 && *o == 1),
-        "CE328 entry var304 >= 1 at pc15");
     assert!(
-        e328.iter().filter(|(pc, v, _, _)| *pc == 20 && *v == 2_000_004).count() == 3,
+        e328.iter()
+            .any(|(pc, v, val, o)| *pc == 4 && *v == 2_000_105 && *val == 0 && *o == 2),
+        "CE328 entry var105 == 0 at pc4"
+    );
+    assert!(
+        e328.iter()
+            .any(|(pc, v, val, o)| *pc == 6 && *v == 2_000_104 && *val == 0 && *o == 2),
+        "CE328 entry var104 == 0 at pc6"
+    );
+    assert!(
+        e328.iter()
+            .any(|(pc, v, val, o)| *pc == 15 && *v == 2_000_304 && *val == 1 && *o == 1),
+        "CE328 entry var304 >= 1 at pc15"
+    );
+    assert!(
+        e328.iter()
+            .filter(|(pc, v, _, _)| *pc == 20 && *v == 2_000_004)
+            .count()
+            == 3,
         "CE328 entry var4 in {{18,19,20}} at pc20 (three op2 arms)"
     );
 
@@ -388,26 +415,51 @@ fn gate_graph_and_writers_are_as_documented() {
         "var326 has exactly two writers, both in CE301"
     );
     let w326 = write_sites(&data, 301, 2_000_326);
-    assert!(w326.iter().all(|(_, ints)| ints == &vec![2, 0, 0]), "CE301 sets var326 = 2");
     assert!(
-        ce_cond_triples(&data, 301).iter().any(|(_, v, val, o)| *v == 2_000_326 && *val == 0 && *o == 2),
+        w326.iter().all(|(_, ints)| ints == &vec![2, 0, 0]),
+        "CE301 sets var326 = 2"
+    );
+    assert!(
+        ce_cond_triples(&data, 301)
+            .iter()
+            .any(|(_, v, val, o)| *v == 2_000_326 && *val == 0 && *o == 2),
         "CE301 guards its 騎乗位 grant on var326 == 0"
     );
-    assert!(map_var_writers(&load_sample_map(), 2_000_326).is_empty(), "no map writes var326");
+    assert!(
+        map_var_writers(&load_sample_map(), 2_000_326).is_empty(),
+        "no map writes var326"
+    );
 
     // (6) var304 (intimate-route flag) is set to 1 by the two night-menu routes only.
-    assert!(write_sites(&data, 245, 2_000_304).iter().any(|(pc, ints)| *pc == 779 && ints == &vec![1, 0, 0]),
-        "CE245 pc779 sets var304 = 1 (intimate route)");
-    assert!(write_sites(&data, 290, 2_000_304).iter().any(|(pc, ints)| *pc == 403 && ints == &vec![1, 0, 0]),
-        "CE290 pc403 sets var304 = 1 (intimate route)");
-    assert!(write_sites(&data, 332, 2_000_304).iter().any(|(pc, ints)| *pc == 125 && ints == &vec![0, 0, 0]),
-        "CE332 pc125 clears var304 = 0 (night reset)");
+    assert!(
+        write_sites(&data, 245, 2_000_304)
+            .iter()
+            .any(|(pc, ints)| *pc == 779 && ints == &vec![1, 0, 0]),
+        "CE245 pc779 sets var304 = 1 (intimate route)"
+    );
+    assert!(
+        write_sites(&data, 290, 2_000_304)
+            .iter()
+            .any(|(pc, ints)| *pc == 403 && ints == &vec![1, 0, 0]),
+        "CE290 pc403 sets var304 = 1 (intimate route)"
+    );
+    assert!(
+        write_sites(&data, 332, 2_000_304)
+            .iter()
+            .any(|(pc, ints)| *pc == 125 && ints == &vec![0, 0, 0]),
+        "CE332 pc125 clears var304 = 0 (night reset)"
+    );
 
     // (7) ev33 still only ever calls the CE333 leaf (so the map path cannot reach the deep node).
     let map = load_sample_map();
-    let ev33_targets: BTreeSet<i32> =
-        map_cmd_firsts(&map_event(&map, 33).pages[0], 210).into_iter().collect();
-    assert_eq!(ev33_targets, BTreeSet::from([500_333]), "ev33's only callee is CE333");
+    let ev33_targets: BTreeSet<i32> = map_cmd_firsts(&map_event(&map, 33).pages[0], 210)
+        .into_iter()
+        .collect();
+    assert_eq!(
+        ev33_targets,
+        BTreeSet::from([500_333]),
+        "ev33's only callee is CE333"
+    );
 }
 
 // =======================================================================================
@@ -417,7 +469,8 @@ fn gate_graph_and_writers_are_as_documented() {
 #[test]
 fn gate_matrix_over_the_eight_retail_saves_is_all_fail() {
     // Raw matrix (v4,v16,v22,v102,v104,v105,v157,v304,v326,v364) - pins the inputs.
-    let expected: [(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32); 8] = [
+    type GateRow = (i32, i32, i32, i32, i32, i32, i32, i32, i32, i32);
+    let expected: [GateRow; 8] = [
         (21, 4, 347, 120, 0, 0, 12, 0, 0, 0), // SaveData01
         (18, 4, 0, 12, 0, 0, 1, 0, 0, 0),     // SaveData02
         (22, 4, 102, 52, 0, 0, 10, 0, 0, 0),  // SaveData03
@@ -435,40 +488,73 @@ fn gate_matrix_over_the_eight_retail_saves_is_all_fail() {
     for n in 1..=8u32 {
         let v = load_vals(n).unwrap_or_else(|| panic!("SaveData{n:02}.sav must load"));
         let e = expected[(n - 1) as usize];
-        let got = (v.v4, v.v16, v.v22, v.v102, v.v104, v.v105, v.v157, v.v304, v.v326, v.v364);
+        let got = (
+            v.v4, v.v16, v.v22, v.v102, v.v104, v.v105, v.v157, v.v304, v.v326, v.v364,
+        );
         assert_eq!(got, e, "SaveData{n:02}.sav variable snapshot");
         vals.push(v);
     }
 
     // Universal blockers: var304 == 0 (entry) and var326 == 0 (body) in EVERY save.
     for (n, v) in vals.iter().enumerate() {
-        assert_eq!(v.v304, 0, "SaveData{:02}: var304 == 0 (CE328 never enters)", n + 1);
-        assert_eq!(v.v326, 0, "SaveData{:02}: var326 == 0 (CE402 body gate var326>=2 fails)", n + 1);
+        assert_eq!(
+            v.v304,
+            0,
+            "SaveData{:02}: var304 == 0 (CE328 never enters)",
+            n + 1
+        );
+        assert_eq!(
+            v.v326,
+            0,
+            "SaveData{:02}: var326 == 0 (CE402 body gate var326>=2 fails)",
+            n + 1
+        );
     }
 
     // CE328 entry fails for EVERY save (var304==0 universal); the var4-range candidates
     // {02,06,07} are the only ones that would otherwise qualify on var104/105/var4.
     let mut entry_candidates = Vec::new();
     for (n, v) in vals.iter().enumerate() {
-        assert!(!ce328_entry_ok(v), "SaveData{:02} cannot enter CE328 (var304==0)", n + 1);
+        assert!(
+            !ce328_entry_ok(v),
+            "SaveData{:02} cannot enter CE328 (var304==0)",
+            n + 1
+        );
         if v.v105 == 0 && v.v104 == 0 && (18..=20).contains(&v.v4) {
             entry_candidates.push(n + 1);
         }
     }
-    assert_eq!(entry_candidates, vec![2, 6, 7], "var4-in-range entry candidates are SaveData02/06/07");
+    assert_eq!(
+        entry_candidates,
+        vec![2, 6, 7],
+        "var4-in-range entry candidates are SaveData02/06/07"
+    );
 
     // Full DEEP_GATE conjunction is NEVER satisfied; the pass-count vector matches.
     let mut best = (0usize, 0usize); // (pass_count, save_number)
     for (n, v) in vals.iter().enumerate() {
         let passes = body_passes(v);
         let count = passes.iter().filter(|p| **p).count();
-        assert_eq!(count, expected_pass[n], "SaveData{:02} DEEP_GATE pass count", n + 1);
-        assert!(count < DEEP_GATE.len(), "SaveData{:02} does NOT satisfy the full deep gate", n + 1);
+        assert_eq!(
+            count,
+            expected_pass[n],
+            "SaveData{:02} DEEP_GATE pass count",
+            n + 1
+        );
+        assert!(
+            count < DEEP_GATE.len(),
+            "SaveData{:02} does NOT satisfy the full deep gate",
+            n + 1
+        );
         if count > best.0 {
             best = (count, n + 1);
         }
     }
-    assert_eq!(best, (7, 1), "closest save is SaveData01 with 7/9 predicates");
+    assert_eq!(
+        best,
+        (7, 1),
+        "closest save is SaveData01 with 7/9 predicates"
+    );
 
     // Quantify the closest save: fails exactly {var157==13, var326>=2}.
     let s01 = vals[0];
@@ -478,7 +564,11 @@ fn gate_matrix_over_the_eight_retail_saves_is_all_fail() {
         .filter(|(_, p)| !**p)
         .map(|(i, _)| DEEP_GATE[i].0)
         .collect();
-    assert_eq!(fails, vec![157, 326], "SaveData01 fails exactly var157 and var326");
+    assert_eq!(
+        fails,
+        vec![157, 326],
+        "SaveData01 fails exactly var157 and var326"
+    );
 }
 
 // =======================================================================================
@@ -489,17 +579,33 @@ fn gate_matrix_over_the_eight_retail_saves_is_all_fail() {
 #[test]
 fn ce402_aborts_and_ce328_skips_the_deep_branch_on_every_retail_save() {
     for n in 1..=8u32 {
-        let Some(mut game) = open_bare(n) else { panic!("SaveData{n:02}.sav must load") };
+        let Some(mut game) = open_bare(n) else {
+            panic!("SaveData{n:02}.sav must load")
+        };
         let (max402, saw410, warn402) = drive_started(&mut game, 402, 300);
         assert_eq!(warn402, 0, "SaveData{n:02}: CE402 run has no warnings");
-        assert!(max402 < 20, "SaveData{n:02}: CE402 aborts at its first gate (max pc {max402})");
-        assert!(!saw410, "SaveData{n:02}: CE410 never entered from a bare CE402 start");
+        assert!(
+            max402 < 20,
+            "SaveData{n:02}: CE402 aborts at its first gate (max pc {max402})"
+        );
+        assert!(
+            !saw410,
+            "SaveData{n:02}: CE410 never entered from a bare CE402 start"
+        );
 
-        let Some(mut game) = open_bare(n) else { panic!("SaveData{n:02}.sav must load") };
+        let Some(mut game) = open_bare(n) else {
+            panic!("SaveData{n:02}.sav must load")
+        };
         let (max328, saw410, warn328) = drive_started(&mut game, 328, 3000);
         assert_eq!(warn328, 0, "SaveData{n:02}: CE328 run has no warnings");
-        assert!(max328 >= 1000, "SaveData{n:02}: CE328 advances its own body (max pc {max328})");
-        assert!(!saw410, "SaveData{n:02}: CE328 never reaches the pc986 CE402 sub-branch");
+        assert!(
+            max328 >= 1000,
+            "SaveData{n:02}: CE328 advances its own body (max pc {max328})"
+        );
+        assert!(
+            !saw410,
+            "SaveData{n:02}: CE328 never reaches the pc986 CE402 sub-branch"
+        );
     }
 }
 
@@ -515,7 +621,10 @@ fn synthetic_deep_gate_drives_ce402_to_ce410_proving_state_is_the_only_blocker()
     game.load_save(&path).expect("reload synthetic save");
     for (var, op, value) in DEEP_GATE {
         let lhs = game.vm.vars.get(var);
-        assert!(compare(lhs, value, op), "synthetic var{var} satisfies the gate (op{op} {value})");
+        assert!(
+            compare(lhs, value, op),
+            "synthetic var{var} satisfies the gate (op{op} {value})"
+        );
     }
     drop(game);
 
@@ -526,7 +635,13 @@ fn synthetic_deep_gate_drives_ce402_to_ce410_proving_state_is_the_only_blocker()
     game.vm.rng.set_event_seed(6);
     let (max402, saw410, warnings) = drive_started(&mut game, 402, 1500);
     assert_eq!(warnings, 0, "synthetic CE402 run has no engine warnings");
-    assert!(max402 >= 300, "synthetic CE402 runs its deep body (max pc {max402} of 512)");
-    assert!(saw410, "synthetic CE402 enters the CE410 騎乗位系カットイン child");
+    assert!(
+        max402 >= 300,
+        "synthetic CE402 runs its deep body (max pc {max402} of 512)"
+    );
+    assert!(
+        saw410,
+        "synthetic CE402 enters the CE410 騎乗位系カットイン child"
+    );
     std::fs::remove_file(&path).ok();
 }

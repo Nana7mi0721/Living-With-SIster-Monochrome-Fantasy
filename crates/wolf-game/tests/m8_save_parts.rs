@@ -224,10 +224,10 @@ fn every_serialized_field_round_trips() {
     );
     assert_eq!(written.part2.vars3_21[9], 700, "Part2 word 9 is Sys3");
     assert_eq!(written.part2.vars3_21[10], 355, "Part2 word 10 is Sys4");
-    for index in 0..800 {
+    for (index, expected_val) in vars_before.iter().enumerate().take(800) {
         assert_eq!(
             written.part3.normal_var(index),
-            Some(vars_before[index]),
+            Some(*expected_val),
             "Part3 normal_var {index}"
         );
     }
@@ -384,12 +384,16 @@ fn common_event_self_variables_are_written_and_restored() {
     {
         let instance = reloaded.vm.instance_mut(first).expect("the CE244 instance");
         assert_eq!(
-            instance.self_vars.get(wolf_vm::program::COMMON_SELF_BASE + 3),
+            instance
+                .self_vars
+                .get(wolf_vm::program::COMMON_SELF_BASE + 3),
             1234,
             "the saved common-event self variable is restored from Part3"
         );
         assert_eq!(
-            instance.self_vars.get_str(wolf_vm::program::COMMON_SELF_BASE + 5),
+            instance
+                .self_vars
+                .get_str(wolf_vm::program::COMMON_SELF_BASE + 5),
             "held",
             "the saved common-event self string is restored from Part3"
         );
@@ -410,14 +414,21 @@ fn common_event_self_variables_are_written_and_restored() {
         .map(|instance| instance.id)
         .expect("the restarted CE244 instance");
     {
-        let instance = reloaded.vm.instance_mut(second).expect("the CE244 instance");
+        let instance = reloaded
+            .vm
+            .instance_mut(second)
+            .expect("the CE244 instance");
         assert_eq!(
-            instance.self_vars.get(wolf_vm::program::COMMON_SELF_BASE + 3),
+            instance
+                .self_vars
+                .get(wolf_vm::program::COMMON_SELF_BASE + 3),
             1234,
             "a common event's self variable persists across invocations"
         );
         assert_eq!(
-            instance.self_vars.get_str(wolf_vm::program::COMMON_SELF_BASE + 5),
+            instance
+                .self_vars
+                .get_str(wolf_vm::program::COMMON_SELF_BASE + 5),
             "held",
             "a common event's self string persists across invocations"
         );

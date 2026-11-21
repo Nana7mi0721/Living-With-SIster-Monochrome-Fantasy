@@ -201,6 +201,7 @@ struct Expected {
     flags: &'static str,
 }
 
+#[rustfmt::skip]
 const EXPECTED: &[Expected] = &[
     Expected { rel: "BGM/Acoustic_High_Collar.ogg", start: 1360911, len: Some(2589511), frames: 2589511, seam_abs: 0.0195, step: 0.0010, ratio: 20.02, rms_jump: 0.0830, dc_delta: 0.0005, tier: "A", flags: "SEAM_RATIO,OVERRUN,LEN_EQUALS_TRACK" },
     Expected { rel: "BGM/Across_-Battle_Results-.ogg", start: 2357360, len: Some(617983), frames: 2975616, seam_abs: 0.0174, step: 0.0241, ratio: 0.72, rms_jump: 0.2047, dc_delta: 0.0129, tier: "C", flags: "RMS_JUMP" },
@@ -251,7 +252,9 @@ struct Measured {
 }
 
 fn measure(root: &Path, path: &Path) -> Option<Measured> {
-    let Ok(bytes) = fs::read(path) else { return None };
+    let Ok(bytes) = fs::read(path) else {
+        return None;
+    };
     let start = raw_tag(&bytes, b"LOOPSTART");
     let length = raw_tag(&bytes, b"LOOPLENGTH");
     if start.is_none() && length.is_none() {
@@ -313,7 +316,7 @@ fn measure(root: &Path, path: &Path) -> Option<Measured> {
                 flags.push("LEN_EQUALS_TRACK");
             }
         }
-        if start.map_or(false, |v| v >= frames as u64) {
+        if start.is_some_and(|v| v >= frames as u64) {
             flags.push("START_OOB");
         }
     } else {
@@ -371,13 +374,23 @@ fn m11_audio_loop_regression() {
         EXPECTED.len(),
         rows.len()
     );
-    assert_eq!(EXPECTED_LOOP_TAGGED, EXPECTED.len(), "EXPECTED table and count disagree");
+    assert_eq!(
+        EXPECTED_LOOP_TAGGED,
+        EXPECTED.len(),
+        "EXPECTED table and count disagree"
+    );
 
     for (r, e) in rows.iter().zip(EXPECTED.iter()) {
-        assert_eq!(r.rel, e.rel, "track order/name drifted; expected {} got {}", e.rel, r.rel);
+        assert_eq!(
+            r.rel, e.rel,
+            "track order/name drifted; expected {} got {}",
+            e.rel, r.rel
+        );
 
         // ---- tag -> decoded region contract --------------------------------
-        let (ls, le) = r.decoded.unwrap_or_else(|| panic!("{} has no usable decoded loop region", r.rel));
+        let (ls, le) = r
+            .decoded
+            .unwrap_or_else(|| panic!("{} has no usable decoded loop region", r.rel));
         assert_eq!(r.start, Some(e.start), "{} LOOPSTART drifted", r.rel);
         assert_eq!(r.length, e.len, "{} LOOPLENGTH drifted", r.rel);
         assert_eq!(r.frames, e.frames, "{} decoded frame count drifted", r.rel);
@@ -386,7 +399,11 @@ fn m11_audio_loop_regression() {
             None => e.frames as u64,
         };
         assert_eq!(ls, e.start, "{} decoded loop_start != LOOPSTART", r.rel);
-        assert_eq!(le, expect_le, "{} decoded loop_end != min(LOOPSTART+LOOPLENGTH, frames)", r.rel);
+        assert_eq!(
+            le, expect_le,
+            "{} decoded loop_end != min(LOOPSTART+LOOPLENGTH, frames)",
+            r.rel
+        );
 
         // ---- per-track metric pins -----------------------------------------
         close(&r.rel, "seam_abs", r.seam_abs, e.seam_abs, 5e-4, 0.0);
@@ -415,20 +432,47 @@ fn m11_audio_loop_regression() {
         }
     }
     rows2.sort_by(|a, b| a.rel.cmp(&b.rel));
-    assert_eq!(rows.len(), rows2.len(), "second pass changed the track count");
+    assert_eq!(
+        rows.len(),
+        rows2.len(),
+        "second pass changed the track count"
+    );
     for (a, b) in rows.iter().zip(rows2.iter()) {
         assert_eq!(a.rel, b.rel, "second pass reordered tracks");
-        assert_eq!(a.seam_abs.to_bits(), b.seam_abs.to_bits(), "{} seam_abs not deterministic", a.rel);
-        assert_eq!(a.rms_jump.to_bits(), b.rms_jump.to_bits(), "{} rms_jump not deterministic", a.rel);
-        assert_eq!(a.ratio.to_bits(), b.ratio.to_bits(), "{} ratio not deterministic", a.rel);
-        assert_eq!(a.dc_delta.to_bits(), b.dc_delta.to_bits(), "{} dc_delta not deterministic", a.rel);
+        assert_eq!(
+            a.seam_abs.to_bits(),
+            b.seam_abs.to_bits(),
+            "{} seam_abs not deterministic",
+            a.rel
+        );
+        assert_eq!(
+            a.rms_jump.to_bits(),
+            b.rms_jump.to_bits(),
+            "{} rms_jump not deterministic",
+            a.rel
+        );
+        assert_eq!(
+            a.ratio.to_bits(),
+            b.ratio.to_bits(),
+            "{} ratio not deterministic",
+            a.rel
+        );
+        assert_eq!(
+            a.dc_delta.to_bits(),
+            b.dc_delta.to_bits(),
+            "{} dc_delta not deterministic",
+            a.rel
+        );
     }
 
     // ---- stable listening manifest ------------------------------------------
     let mut manifest = String::new();
     manifest.push_str("# M11 audio loop listening manifest\n\n");
-    manifest.push_str("Generated deterministically by crates/wolf-audio/tests/m11_audio_loop_regression.rs.\n");
-    manifest.push_str("Tier A = objective seam defect (seam_abs>=0.20 or ratio>=8) -> must audition; ");
+    manifest.push_str(
+        "Generated deterministically by crates/wolf-audio/tests/m11_audio_loop_regression.rs.\n",
+    );
+    manifest
+        .push_str("Tier A = objective seam defect (seam_abs>=0.20 or ratio>=8) -> must audition; ");
     manifest.push_str("B = metadata anomaly (OVERRUN/LEN_EQUALS_TRACK); C = loudness/DC step (rms_jump>=0.10 or dc_delta>=0.05); ");
     manifest.push_str("D = no objective flag.\n\n");
     manifest.push_str("## Tracks by tier\n\n");
@@ -445,10 +489,14 @@ fn m11_audio_loop_regression() {
     }
     manifest.push_str("## Human audition checklist\n\n");
     manifest.push_str("1. For every Tier A track, loop it and listen for a click/pop at the wrap; note the exact track.\n");
-    manifest.push_str("2. For every Tier C track, listen for a loudness or DC step at the loop point.\n");
+    manifest.push_str(
+        "2. For every Tier C track, listen for a loudness or DC step at the loop point.\n",
+    );
     manifest.push_str("3. For every OVERRUN / LEN_EQUALS_TRACK track, confirm the loop length matches the audible musical phrase.\n");
     manifest.push_str("4. Confirm no track audible silence gap at the seam.\n");
-    manifest.push_str("5. Record results in docs/research/M11_AUDIO_LOOP_REGRESSION.md (human sign-off table).\n");
+    manifest.push_str(
+        "5. Record results in docs/research/M11_AUDIO_LOOP_REGRESSION.md (human sign-off table).\n",
+    );
 
     println!(
         "\n=== M11 audio loop regression: {} loop-tagged track(s), all pinned ===\n",
@@ -456,8 +504,8 @@ fn m11_audio_loop_regression() {
     );
     println!("{manifest}");
 
-    let out = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../work/out/m11_audio_loop_manifest.md");
+    let out =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../work/out/m11_audio_loop_manifest.md");
     if let Some(parent) = out.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -471,6 +519,9 @@ fn m11_audio_loop_regression() {
     let count = |t: &str| EXPECTED.iter().filter(|e| e.tier == t).count();
     println!(
         "tier distribution: A={} B={} C={} D={}",
-        count("A"), count("B"), count("C"), count("D")
+        count("A"),
+        count("B"),
+        count("C"),
+        count("D")
     );
 }

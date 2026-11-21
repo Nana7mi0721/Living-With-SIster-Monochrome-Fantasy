@@ -77,7 +77,10 @@ fn open_resumed() -> Option<Game> {
         return None;
     }
     if !data_root().join("MapData").join("SampleMapA.mps").exists() {
-        eprintln!("skip: missing SampleMapA.mps under {}", data_root().display());
+        eprintln!(
+            "skip: missing SampleMapA.mps under {}",
+            data_root().display()
+        );
         return None;
     }
     let mut game = match Game::new(data_root()) {
@@ -119,7 +122,9 @@ fn endbutton_pos(game: &Game) -> Option<(i32, i32)> {
 }
 
 fn file_present(game: &Game, needle: &str) -> bool {
-    game.screen.iter().any(|picture| picture.file.contains(needle))
+    game.screen
+        .iter()
+        .any(|picture| picture.file.contains(needle))
 }
 
 /// Drive the real H UI to stage 13 by clicking whichever on-screen \`h_button\` advances
@@ -133,9 +138,7 @@ fn nav_to_terminal_stage(game: &mut Game) -> bool {
         let buttons: Vec<(i32, i32)> = game
             .screen
             .iter()
-            .filter(|picture| {
-                picture.file.contains("h_button") || picture.file.contains("hbutton")
-            })
+            .filter(|picture| picture.file.contains("h_button") || picture.file.contains("hbutton"))
             .map(|picture| (picture.x, picture.y))
             .collect();
         let mut advanced = false;
@@ -186,7 +189,9 @@ fn settle_frames(game: &mut Game, frames: usize) {
 
 #[test]
 fn end_button_exits_h_scene_from_terminal_stage_13() {
-    let Some(mut game) = open_resumed() else { return; };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
     settle_frames(&mut game, 60);
 
     // The ONE documented engine-state normalisation used across the M7/M8 H tests: the retail
@@ -210,14 +215,21 @@ fn end_button_exits_h_scene_from_terminal_stage_13() {
     }
 
     assert_eq!(game.vm.vars.get(62), 13, "seeded terminal stage index");
-    assert_eq!(game.vm.vars.get(64), 1, "pajama flag var64 is set on the H path");
+    assert_eq!(
+        game.vm.vars.get(64),
+        1,
+        "pajama flag var64 is set on the H path"
+    );
     assert_eq!(
         game.vm.vars.get_sys(12),
         0,
         "message window (system var 12) must be idle before the end button can dispatch"
     );
     let (x, y) = endbutton_pos(&game).expect("stage 13 draws Picture/endbutton.png (picture 294)");
-    assert!(file_present(&game, "hscene/h_s10_pose"), "H pose layer is on screen at stage 13");
+    assert!(
+        file_present(&game, "hscene/h_s10_pose"),
+        "H pose layer is on screen at stage 13"
+    );
 
     let (seen, clicked) = press_end(&mut game, 300);
     assert!(clicked, "end button must be clickable");
@@ -227,11 +239,28 @@ fn end_button_exits_h_scene_from_terminal_stage_13() {
         seen.contains(&345),
         "event 25 must dispatch CE345 深夜終了コマンド (seen {seen:?})"
     );
-    assert!(seen.contains(&222), "CE345 teardown saves through CE222 (seen {seen:?})");
-    assert_eq!(game.vm.vars.get(62), 0, "exit resets the stage index var62 13 -> 0");
-    assert_eq!(game.vm.vars.get(64), 0, "exit clears the pajama flag var64 (CE345 pc341)");
-    assert!(!file_present(&game, "hscene/h_s10_pose"), "the H pose layer is torn down on exit");
-    assert_eq!(game.stats.warnings, 0, "the whole exit sequence must be warning-free");
+    assert!(
+        seen.contains(&222),
+        "CE345 teardown saves through CE222 (seen {seen:?})"
+    );
+    assert_eq!(
+        game.vm.vars.get(62),
+        0,
+        "exit resets the stage index var62 13 -> 0"
+    );
+    assert_eq!(
+        game.vm.vars.get(64),
+        0,
+        "exit clears the pajama flag var64 (CE345 pc341)"
+    );
+    assert!(
+        !file_present(&game, "hscene/h_s10_pose"),
+        "the H pose layer is torn down on exit"
+    );
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the whole exit sequence must be warning-free"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +269,9 @@ fn end_button_exits_h_scene_from_terminal_stage_13() {
 
 #[test]
 fn real_navigation_to_stage_13_then_end_button_exits() {
-    let Some(mut game) = open_resumed() else { return; };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
     settle_frames(&mut game, 60);
     game.vm.vars.set(364, 0);
     settle_frames(&mut game, 40);
@@ -254,8 +285,16 @@ fn real_navigation_to_stage_13_then_end_button_exits() {
         nav_to_terminal_stage(&mut game),
         "real pointer navigation must reach stage 13 (var62==13)"
     );
-    assert_eq!(game.vm.vars.get(62), 13, "reached the terminal stage by real clicks");
-    assert_eq!(game.vm.vars.get(64), 1, "pajama flag set on the reached terminal stage");
+    assert_eq!(
+        game.vm.vars.get(62),
+        13,
+        "reached the terminal stage by real clicks"
+    );
+    assert_eq!(
+        game.vm.vars.get(64),
+        1,
+        "pajama flag set on the reached terminal stage"
+    );
 
     // With auto-advance on, the message window is idle, so system var 12 == 0.
     for _ in 0..120 {
@@ -268,8 +307,15 @@ fn real_navigation_to_stage_13_then_end_button_exits() {
 
     let (seen, clicked) = press_end(&mut game, 300);
     assert!(clicked, "end button clickable after real navigation");
-    assert!(seen.contains(&345), "CE345 runs from the reached terminal stage (seen {seen:?})");
-    assert_eq!(game.vm.vars.get(62), 0, "real-path exit resets var62 13 -> 0");
+    assert!(
+        seen.contains(&345),
+        "CE345 runs from the reached terminal stage (seen {seen:?})"
+    );
+    assert_eq!(
+        game.vm.vars.get(62),
+        0,
+        "real-path exit resets var62 13 -> 0"
+    );
     assert_eq!(game.vm.vars.get(64), 0, "real-path exit clears var64");
     assert_eq!(game.stats.warnings, 0, "real-path exit is warning-free");
 }
@@ -281,23 +327,45 @@ fn real_navigation_to_stage_13_then_end_button_exits() {
 
 #[test]
 fn end_button_exit_is_gated_on_the_message_window() {
-    let Some(mut game) = open_resumed() else { return; };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
     settle_frames(&mut game, 60);
     game.vm.vars.set(364, 0);
     settle_frames(&mut game, 40);
 
     // No auto-advance: the retail save resumes with a message window open (system var 12 == 1).
-    assert!(nav_to_terminal_stage(&mut game), "reach stage 13 without auto-advance");
+    assert!(
+        nav_to_terminal_stage(&mut game),
+        "reach stage 13 without auto-advance"
+    );
     assert_eq!(game.vm.vars.get(62), 13, "at terminal stage 13");
     let sys12_before = game.vm.vars.get_sys(12);
-    assert_eq!(sys12_before, 1, "save resumes with the message window open (system var 12 == 1)");
+    assert_eq!(
+        sys12_before, 1,
+        "save resumes with the message window open (system var 12 == 1)"
+    );
 
     let (seen, clicked) = press_end(&mut game, 90);
-    assert!(clicked, "end button still hoverable while the message window is open");
+    assert!(
+        clicked,
+        "end button still hoverable while the message window is open"
+    );
     // Event 11 still records the press (var61 = 49) ...
-    assert_eq!(game.vm.vars.get(61), 49, "the end button press writes var61=49 through event 11");
+    assert_eq!(
+        game.vm.vars.get(61),
+        49,
+        "the end button press writes var61=49 through event 11"
+    );
     // ... but event 25 page 0 pc9 (9000012 == 0) skips CE345, so the H scene stays put.
-    assert!(!seen.contains(&345), "CE345 must NOT run while system var 12 != 0 (seen {seen:?})");
-    assert_eq!(game.vm.vars.get(62), 13, "the H scene does not exit while the message window is open");
+    assert!(
+        !seen.contains(&345),
+        "CE345 must NOT run while system var 12 != 0 (seen {seen:?})"
+    );
+    assert_eq!(
+        game.vm.vars.get(62),
+        13,
+        "the H scene does not exit while the message window is open"
+    );
     assert_eq!(game.stats.warnings, 0, "the blocked press is warning-free");
 }

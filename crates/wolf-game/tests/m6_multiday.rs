@@ -189,12 +189,12 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
 /// one appears is a retail-PRNG draw — a player picks a training row, so the tests
 /// do the same instead of assuming row 0 is 学习会.
 const DAY_COMMANDS: [(&str, i32, Option<usize>); 6] = [
-    ("给店里帮忙", 1, None),       // pays money (var7) instead of a stat
-    ("学习会", 2, Some(171)),      // 賢さ
-    ("基础锻炼", 3, Some(174)),    // 根性
-    ("攻击练习", 4, Some(170)),    // 攻撃技術
-    ("防御练习", 5, Some(173)),    // 防御技術
-    ("秘密特训", 6, Some(174)),    // 根性
+    ("给店里帮忙", 1, None),    // pays money (var7) instead of a stat
+    ("学习会", 2, Some(171)),   // 賢さ
+    ("基础锻炼", 3, Some(174)), // 根性
+    ("攻击练习", 4, Some(170)), // 攻撃技術
+    ("防御练习", 5, Some(173)), // 防御技術
+    ("秘密特训", 6, Some(174)), // 根性
 ];
 
 /// The stat a day-command raises (None = 给店里帮忙 pays money into var7).
@@ -212,7 +212,12 @@ const DAY_ROW_Y: i32 = 230;
 fn day_row_texts(game: &Game) -> Vec<String> {
     DAY_ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -251,8 +256,9 @@ fn spend_day_to_evening(game: &mut Game, day: i32) {
             break;
         }
     }
-    let (row, label, command_id, stat) =
-        chosen.unwrap_or_else(|| panic!("day {day}: CE251 draws no CE252 day command; labels={labels:?}"));
+    let (row, label, command_id, stat) = chosen.unwrap_or_else(|| {
+        panic!("day {day}: CE251 draws no CE252 day command; labels={labels:?}")
+    });
     assert!(
         !label.is_empty() && label != "\\f[20]0",
         "day {day}: the day-command label is a string, not the numeric self slot: {label:?}"

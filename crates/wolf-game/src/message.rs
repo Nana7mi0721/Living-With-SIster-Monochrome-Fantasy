@@ -524,12 +524,7 @@ pub(crate) fn inline_runs_with(
     runs
 }
 
-fn push_inline_run(
-    runs: &mut Vec<Run>,
-    text: &mut String,
-    width: &mut f32,
-    style: Option<Style>,
-) {
+fn push_inline_run(runs: &mut Vec<Run>, text: &mut String, width: &mut f32, style: Option<Style>) {
     let Some(style) = style else {
         return;
     };

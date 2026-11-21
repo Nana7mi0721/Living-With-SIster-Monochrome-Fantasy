@@ -23,11 +23,13 @@
 //!       447), and picture 447 is drawn by event 9 page 0 only when `var111 >= 100`;
 //!     - CE345's `var460 = 1` (pc49) is behind `var98 >= 1` (already inserted);
 //!     - CE347 is reached from CE344.
+//!
 //!   On `SaveData08` the two insertion events abort before raising `var111`:
 //!     - event 26 (浅い) gains `var111 += 8` only under `var267 == 0`; the save has
 //!       `var267 == 1`, so it skips that block and never sets `var460`;
 //!     - event 28 (アナル) gains `var111 = 119 + var111` only after `var100 >= 12`; the
 //!       save has `var100 == 0`, so it takes the pc638 "现在还插不进来" abort branch.
+//!
 //!   Consequently the 射精 button is never drawn, `var61` never becomes 48, CE344/CE347
 //!   never run, `var460` stays 0, `ev33` never activates and the H insert-pull animation
 //!   (and its CE333 calls) cannot be entered from this forward playthrough.
@@ -88,8 +90,14 @@ fn common_events() -> CommonEventData {
 
 /// Integer arguments of one common-event command slot.
 fn ce_ints(data: &CommonEventData, event: u32, pc: usize) -> Vec<i32> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
-    let Slot::Command(cmd) = ev.commands.get(pc).unwrap_or_else(|| panic!("CE{event} pc{pc}")) else {
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
+    let Slot::Command(cmd) = ev
+        .commands
+        .get(pc)
+        .unwrap_or_else(|| panic!("CE{event} pc{pc}"))
+    else {
         panic!("CE{event} pc{pc} is blank");
     };
     cmd.params
@@ -100,7 +108,9 @@ fn ce_ints(data: &CommonEventData, event: u32, pc: usize) -> Vec<i32> {
 
 /// All pcs of `op210 target` calls in a common event.
 fn call_pcs(data: &CommonEventData, event: u32, target: i32) -> Vec<usize> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     ev.commands
         .iter()
         .enumerate()
@@ -119,7 +129,9 @@ fn call_pcs(data: &CommonEventData, event: u32, target: i32) -> Vec<usize> {
 
 /// All pcs in a common event whose opcode-121 first argument is `target`.
 fn write_pcs(data: &CommonEventData, event: u32, target: i32) -> Vec<usize> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     ev.commands
         .iter()
         .enumerate()
@@ -159,7 +171,10 @@ fn open_resumed() -> Option<Game> {
         return None;
     }
     if !data_root().join("MapData").join("SampleMapA.mps").exists() {
-        eprintln!("skip: missing SampleMapA.mps under {}", data_root().display());
+        eprintln!(
+            "skip: missing SampleMapA.mps under {}",
+            data_root().display()
+        );
         return None;
     }
     let mut game = match Game::new(data_root()) {
@@ -201,7 +216,11 @@ fn click_at(game: &mut Game, x: i32, y: i32) {
 /// picture is absent (the H UI draws/blinks its buttons, so absence is meaningful).
 fn click_picture(game: &mut Game, number: i32, budget: usize, settle: usize) -> bool {
     for _ in 0..budget {
-        if let Some((x, y)) = game.screen.get(number).map(|picture| (picture.x, picture.y)) {
+        if let Some((x, y)) = game
+            .screen
+            .get(number)
+            .map(|picture| (picture.x, picture.y))
+        {
             click_at(game, x, y);
             for _ in 0..settle {
                 game.frame();
@@ -226,7 +245,11 @@ fn click_picture_tracked(
     seen: &mut BTreeSet<u32>,
 ) -> bool {
     for _ in 0..budget {
-        if let Some((x, y)) = game.screen.get(number).map(|picture| (picture.x, picture.y)) {
+        if let Some((x, y)) = game
+            .screen
+            .get(number)
+            .map(|picture| (picture.x, picture.y))
+        {
             game.mouse = [x, y];
             game.mouse_buttons = 0;
             game.frame();
@@ -254,7 +277,9 @@ fn alive_events(game: &Game) -> BTreeSet<u32> {
 }
 
 fn file_present(game: &Game, needle: &str) -> bool {
-    game.screen.iter().any(|picture| picture.file.contains(needle))
+    game.screen
+        .iter()
+        .any(|picture| picture.file.contains(needle))
 }
 
 /// Step `frames` frames, collecting every coroutine event id and the max pc of watched ids.
@@ -285,18 +310,32 @@ fn run_frames(
 
 #[test]
 fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
-    let Some(mut game) = open_resumed() else { return; };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
 
     for _ in 0..60 {
         game.frame();
     }
     assert_eq!(game.stats.warnings, 0, "the resumed H scene must not warn");
-    assert_eq!(game.vm.vars.get(62), 1, "late-night stage index var62 starts at the base menu");
+    assert_eq!(
+        game.vm.vars.get(62),
+        1,
+        "late-night stage index var62 starts at the base menu"
+    );
     // The retail snapshot this task is driven from: no pleasure, no stamina, "inside" flag
     // set, pose 8, not inserted. These are exactly the gates the forward actions read.
-    assert_eq!(game.vm.vars.get(111), 0, "v111 pleasure/effect meter at resume");
+    assert_eq!(
+        game.vm.vars.get(111),
+        0,
+        "v111 pleasure/effect meter at resume"
+    );
     assert_eq!(game.vm.vars.get(100), 0, "v100 stamina at resume");
-    assert_eq!(game.vm.vars.get(267), 1, "v267 insertion/latch flag at resume");
+    assert_eq!(
+        game.vm.vars.get(267),
+        1,
+        "v267 insertion/latch flag at resume"
+    );
     assert_eq!(game.vm.vars.get(137), 8, "v137 pose selector at resume");
     assert_eq!(game.vm.vars.get(98), 0, "v98 inserted-now flag at resume");
     assert_eq!(game.vm.vars.get(460), 0, "v460 (ev33 activation) at resume");
@@ -307,11 +346,23 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
     for _ in 0..60 {
         game.frame();
     }
-    assert_eq!(game.stats.warnings, 0, "opening the dispatcher gate must not warn");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "opening the dispatcher gate must not warn"
+    );
     let events = alive_events(&game);
-    assert!(events.contains(&9), "event 9 (■深夜UI表示1) should run after the gate");
-    assert!(events.contains(&11), "event 11 (■深夜UI判定) should run after the gate");
-    assert!(events.contains(&14), "event 14 (■深夜UI処理) should run after the gate");
+    assert!(
+        events.contains(&9),
+        "event 9 (■深夜UI表示1) should run after the gate"
+    );
+    assert!(
+        events.contains(&11),
+        "event 11 (■深夜UI判定) should run after the gate"
+    );
+    assert!(
+        events.contains(&14),
+        "event 14 (■深夜UI処理) should run after the gate"
+    );
 
     // Auto-advance messages and answer the H UI's yes/no prompts (cursor 0 = first option).
     game.auto_advance = true;
@@ -347,23 +398,38 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
     }
     game.mouse_buttons = 0;
     pic447_seen |= game.screen.get(447).is_some();
-    assert!(seen.contains(&21), "the wipe action must reach map event 21 (■■処理さわる左)");
+    assert!(
+        seen.contains(&21),
+        "the wipe action must reach map event 21 (■■処理さわる左)"
+    );
     assert!(
         wipe_max >= 981,
         "map event 21 code53 must reach the CE343/CE333 call region (pc963/986), max pc {wipe_max}"
     );
-    assert_eq!(game.vm.vars.get(458), 0, "v458 selects CE333's bedroom body, not the bath branch");
+    assert_eq!(
+        game.vm.vars.get(458),
+        0,
+        "v458 selects CE333's bedroom body, not the bath branch"
+    );
     assert_eq!(game.stats.warnings, 0, "the wipe action must not warn");
 
     // --- 1b. Real stage navigation: h_button_s01 (picture 400, code 1) advances 1 -> 2.
     //         The wipe action leaves the base stage and its button set in place. ---
-    assert_eq!(game.vm.vars.get(62), 1, "the wipe action keeps the base stage");
+    assert_eq!(
+        game.vm.vars.get(62),
+        1,
+        "the wipe action keeps the base stage"
+    );
     assert!(
         click_picture(&mut game, 400, 400, 30),
         "h_button_s01 (picture 400) must be on the base page"
     );
     stage_trace.push((400, 1, game.vm.vars.get(62)));
-    assert_eq!(game.vm.vars.get(62), 2, "s01 sets var61=1 -> ev14 advances var62 1 -> 2");
+    assert_eq!(
+        game.vm.vars.get(62),
+        2,
+        "s01 sets var61=1 -> ev14 advances var62 1 -> 2"
+    );
     assert_eq!(game.stats.warnings, 0, "stage navigation must not warn");
 
     // --- 1c. The end button (picture 294, code 49; drawn on every UI page) reaches map
@@ -376,15 +442,28 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
     );
     run_frames(&mut game, 1200, &mut seen, &[25, 345], &mut [0usize; 2]);
     pic447_seen |= game.screen.get(447).is_some();
-    assert!(seen.contains(&25), "the end button must run map event 25 (深夜終了処理)");
-    assert!(seen.contains(&345), "map event 25 must call CE345 (深夜終了コマンド)");
-    assert_eq!(game.vm.vars.get(98), 0, "the save is not in the inserted state");
+    assert!(
+        seen.contains(&25),
+        "the end button must run map event 25 (深夜終了処理)"
+    );
+    assert!(
+        seen.contains(&345),
+        "map event 25 must call CE345 (深夜終了コマンド)"
+    );
+    assert_eq!(
+        game.vm.vars.get(98),
+        0,
+        "the save is not in the inserted state"
+    );
     assert_eq!(
         game.vm.vars.get(460),
         end_before,
         "CE345 must not reach its pc49 var460=1 write while var98 == 0"
     );
-    assert_eq!(game.stats.warnings, 0, "the end-button branch must not warn");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the end-button branch must not warn"
+    );
     assert_eq!(
         game.vm.vars.get(62),
         0,
@@ -400,13 +479,19 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
     //         (the value SaveData08's Part5 snapshot actually ships).  Before the fix an
     //         all-zero self bank made this replay wrongly reroll 4100 to word_effect102. ---
     {
-        let Some(mut ce333) = open_resumed() else { return; };
-        for _ in 0..60 { ce333.frame(); }
+        let Some(mut ce333) = open_resumed() else {
+            return;
+        };
+        for _ in 0..60 {
+            ce333.frame();
+        }
         let before_3208 = ce333.screen.get(3208).map(|p| p.file.clone());
         let before_4100 = ce333.screen.get(4100).map(|p| p.file.clone());
         let instructions = ce333.stats.instructions;
         ce333.start_event(333);
-        for _ in 0..5 { ce333.frame(); }
+        for _ in 0..5 {
+            ce333.frame();
+        }
         assert!(
             ce333.stats.instructions > instructions,
             "CE333 must execute instructions at this save state"
@@ -437,11 +522,17 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
     let mut insertion_447 = false;
     {
         // 浅い insertion (picture 440, code 32): blocked at var267 == 0.
-        let Some(mut shallow) = open_resumed() else { return; };
-        for _ in 0..60 { shallow.frame(); }
+        let Some(mut shallow) = open_resumed() else {
+            return;
+        };
+        for _ in 0..60 {
+            shallow.frame();
+        }
         shallow.vm.vars.set(364, 0);
         shallow.auto_advance = true;
-        for _ in 0..60 { shallow.frame(); }
+        for _ in 0..60 {
+            shallow.frame();
+        }
         let before = shallow.vm.vars.get(62);
         assert!(
             click_picture(&mut shallow, 403, 400, 30),
@@ -449,31 +540,74 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
         );
         let after = shallow.vm.vars.get(62);
         stage_trace.push((403, before, after));
-        assert_eq!((before, after), (1, 11), "s04 sets var61=10 -> ev14 advances var62 1 -> 11");
+        assert_eq!(
+            (before, after),
+            (1, 11),
+            "s04 sets var61=10 -> ev14 advances var62 1 -> 11"
+        );
         let mut shallow_seen: BTreeSet<u32> = BTreeSet::new();
         assert!(
-            click_picture_tracked(&mut shallow, 440, 400, 120, 26, &mut shallow_max[0], &mut shallow_seen),
+            click_picture_tracked(
+                &mut shallow,
+                440,
+                400,
+                120,
+                26,
+                &mut shallow_max[0],
+                &mut shallow_seen
+            ),
             "shallow run: hbutton_m30 (picture 440) must be on stage 11"
         );
-        run_frames(&mut shallow, 300, &mut shallow_seen, &[26], &mut shallow_max);
+        run_frames(
+            &mut shallow,
+            300,
+            &mut shallow_seen,
+            &[26],
+            &mut shallow_max,
+        );
         insertion_447 |= shallow.screen.get(447).is_some();
         insertion_seen.extend(shallow_seen.iter().copied());
         assert!(shallow_seen.contains(&26), "clicking 浅い must start CE26");
-        assert_eq!(shallow.vm.vars.get(267), 1, "CE26's var111 gain is gated by var267 == 0");
-        assert_eq!(shallow.vm.vars.get(111), 0, "CE26 does not gain v111 when var267 != 0");
-        assert_eq!(shallow.vm.vars.get(460), 0, "CE26 does not raise var460 on this branch");
-        assert_eq!(shallow.vm.vars.get(62), 1, "the aborted insertion returns to the base stage");
+        assert_eq!(
+            shallow.vm.vars.get(267),
+            1,
+            "CE26's var111 gain is gated by var267 == 0"
+        );
+        assert_eq!(
+            shallow.vm.vars.get(111),
+            0,
+            "CE26 does not gain v111 when var267 != 0"
+        );
+        assert_eq!(
+            shallow.vm.vars.get(460),
+            0,
+            "CE26 does not raise var460 on this branch"
+        );
+        assert_eq!(
+            shallow.vm.vars.get(62),
+            1,
+            "the aborted insertion returns to the base stage"
+        );
         assert_eq!(shallow.stats.warnings, 0, "the 浅い branch must not warn");
-        assert!(shallow.stats.frames < 2500, "the shallow run must be bounded");
+        assert!(
+            shallow.stats.frames < 2500,
+            "the shallow run must be bounded"
+        );
     }
     let mut anal_max = [0usize; 2];
     {
         // アナル insertion (picture 418, code 34): blocked at var100 >= 12.
-        let Some(mut anal) = open_resumed() else { return; };
-        for _ in 0..60 { anal.frame(); }
+        let Some(mut anal) = open_resumed() else {
+            return;
+        };
+        for _ in 0..60 {
+            anal.frame();
+        }
         anal.vm.vars.set(364, 0);
         anal.auto_advance = true;
-        for _ in 0..60 { anal.frame(); }
+        for _ in 0..60 {
+            anal.frame();
+        }
         assert!(
             click_picture(&mut anal, 403, 400, 30),
             "anal run: h_button_s04 (picture 403) must be on the base page"
@@ -481,13 +615,24 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
         assert_eq!(anal.vm.vars.get(62), 11, "anal run: stage 11");
         let mut anal_seen: BTreeSet<u32> = BTreeSet::new();
         assert!(
-            click_picture_tracked(&mut anal, 418, 400, 120, 28, &mut anal_max[0], &mut anal_seen),
+            click_picture_tracked(
+                &mut anal,
+                418,
+                400,
+                120,
+                28,
+                &mut anal_max[0],
+                &mut anal_seen
+            ),
             "anal run: hbutton_m31 (picture 418) must be on stage 11"
         );
         run_frames(&mut anal, 300, &mut anal_seen, &[28], &mut anal_max);
         insertion_447 |= anal.screen.get(447).is_some();
         insertion_seen.extend(anal_seen.iter().copied());
-        assert!(anal_seen.contains(&28), "anal run: the anal button must start CE28");
+        assert!(
+            anal_seen.contains(&28),
+            "anal run: the anal button must start CE28"
+        );
         assert!(
             anal_max[0] >= 638,
             "CE28 must reach its low-stamina branch at pc638, max pc {}",
@@ -502,9 +647,20 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
             "v100 must stay below the pc124 >= 12 gate, got {}",
             anal.vm.vars.get(100)
         );
-        assert_eq!(anal.vm.vars.get(111), 0, "the low-stamina branch never gains v111");
-        assert_eq!(anal.vm.vars.get(460), 0, "the anal abort branch never raises var460");
-        assert_eq!(anal.stats.warnings, 0, "the anal abort branch must not warn");
+        assert_eq!(
+            anal.vm.vars.get(111),
+            0,
+            "the low-stamina branch never gains v111"
+        );
+        assert_eq!(
+            anal.vm.vars.get(460),
+            0,
+            "the anal abort branch never raises var460"
+        );
+        assert_eq!(
+            anal.stats.warnings, 0,
+            "the anal abort branch must not warn"
+        );
         assert!(anal.stats.frames < 2500, "the anal run must be bounded");
     }
     pic447_seen |= insertion_447;
@@ -515,11 +671,24 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
         !seen.contains(&33),
         "map event 33 (挿入抜く) must never activate while var460 == 0"
     );
-    assert!(!seen.contains(&344), "CE344 (射精コマンド) must never start");
+    assert!(
+        !seen.contains(&344),
+        "CE344 (射精コマンド) must never start"
+    );
     assert!(!seen.contains(&347), "CE347 (射精処理) must never start");
-    assert_eq!(game.vm.vars.get(460), 0, "var460 stayed 0 for the whole run");
-    assert!(!pic447_seen, "picture 447 (射精) was never drawn, so var61 never became 48");
-    assert_eq!(game.stats.warnings, 0, "the whole forward run stayed warning-free");
+    assert_eq!(
+        game.vm.vars.get(460),
+        0,
+        "var460 stayed 0 for the whole run"
+    );
+    assert!(
+        !pic447_seen,
+        "picture 447 (射精) was never drawn, so var61 never became 48"
+    );
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the whole forward run stayed warning-free"
+    );
     assert!(
         game.stats.frames < 6500,
         "the forward run must be bounded, {} frames",
@@ -539,11 +708,22 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
 
     // --- 1e. Static data graph: pin the exact pcs that make the blocker exact. ---
     let map = load_sample_map();
-    let ev33 = map.events.iter().find(|event| event.id == 33).expect("map ev33");
+    let ev33 = map
+        .events
+        .iter()
+        .find(|event| event.id == 33)
+        .expect("map ev33");
     let conds = ev33.pages[0].conditions();
     let enabled: Vec<_> = conds.iter().filter(|condition| condition.enabled).collect();
-    assert_eq!(enabled.len(), 1, "ev33 page 0 has exactly one activation condition");
-    assert_eq!(enabled[0].variable, 2_000_460, "ev33 page 0 watches global var460");
+    assert_eq!(
+        enabled.len(),
+        1,
+        "ev33 page 0 has exactly one activation condition"
+    );
+    assert_eq!(
+        enabled[0].variable, 2_000_460,
+        "ev33 page 0 watches global var460"
+    );
     assert_eq!(enabled[0].value, 1, "ev33 activates on var460 == 1");
     let ev33_calls = ev33.pages[0]
         .commands
@@ -551,8 +731,10 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
         .enumerate()
         .filter_map(|(pc, slot)| match slot {
             Slot::Command(cmd) if cmd.opcode == 210 => {
-                let first =
-                    cmd.params.get(0..4).map(|word| i32::from_le_bytes([word[0], word[1], word[2], word[3]]))?;
+                let first = cmd
+                    .params
+                    .get(0..4)
+                    .map(|word| i32::from_le_bytes([word[0], word[1], word[2], word[3]]))?;
                 (first == 500_333).then_some(pc)
             }
             _ => None,
@@ -576,14 +758,25 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
         vec![872, 928, 980, 1001, 1057, 1505],
         "CE347 (射精処理) var460=1 writes"
     );
-    assert_eq!(write_pcs(&data, 345, 2_000_460), vec![49], "CE345 (深夜終了コマンド) var460=1 write");
+    assert_eq!(
+        write_pcs(&data, 345, 2_000_460),
+        vec![49],
+        "CE345 (深夜終了コマンド) var460=1 write"
+    );
     assert_eq!(
         call_pcs(&data, 344, 500_347),
-        vec![146, 187, 222, 254, 292, 312, 369, 381, 407, 421, 453, 472, 504, 516, 538, 550, 582, 598],
+        vec![
+            146, 187, 222, 254, 292, 312, 369, 381, 407, 421, 453, 472, 504, 516, 538, 550, 582,
+            598
+        ],
         "CE344 -> CE347 call sites"
     );
     // Picture 447 -> var61 = 48 in the dispatcher (map event 11 pc1078/1090).
-    let ev11 = map.events.iter().find(|event| event.id == 11).expect("map ev11");
+    let ev11 = map
+        .events
+        .iter()
+        .find(|event| event.id == 11)
+        .expect("map ev11");
     let mut pic447_code = Vec::new();
     let mut last_hover = None;
     for (pc, slot) in ev11.pages[0].commands.iter().enumerate() {
@@ -606,15 +799,21 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
         "map event 11 polls picture 447 and sets var61 = 48 (the 射精 code)"
     );
     // The wipe branch's callee call sites (map event 21 page 0).
-    let ev21 = map.events.iter().find(|event| event.id == 21).expect("map ev21");
+    let ev21 = map
+        .events
+        .iter()
+        .find(|event| event.id == 21)
+        .expect("map ev21");
     let calls_in_ev21: Vec<(usize, i32)> = ev21.pages[0]
         .commands
         .iter()
         .enumerate()
         .filter_map(|(pc, slot)| match slot {
             Slot::Command(cmd) if cmd.opcode == 210 => {
-                let first =
-                    cmd.params.get(0..4).map(|word| i32::from_le_bytes([word[0], word[1], word[2], word[3]]))?;
+                let first = cmd
+                    .params
+                    .get(0..4)
+                    .map(|word| i32::from_le_bytes([word[0], word[1], word[2], word[3]]))?;
                 Some((pc, first))
             }
             _ => None,
@@ -635,7 +834,11 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
     );
 
     // Event 9 page 0 draws picture 447 only under v111 >= 100.
-    let ev9 = map.events.iter().find(|event| event.id == 9).expect("map ev9");
+    let ev9 = map
+        .events
+        .iter()
+        .find(|event| event.id == 9)
+        .expect("map ev9");
     let mut draw_447 = Vec::new();
     for (pc, slot) in ev9.pages[0].commands.iter().enumerate() {
         let Slot::Command(cmd) = slot else { continue };
@@ -649,8 +852,14 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
             }
         }
     }
-    assert_eq!(draw_447, vec![358], "event 9 page 0 draws picture 447 at pc358");
-    let Slot::Command(ev9_gate) = &ev9.pages[0].commands[336] else { panic!("ev9 pc336") };
+    assert_eq!(
+        draw_447,
+        vec![358],
+        "event 9 page 0 draws picture 447 at pc358"
+    );
+    let Slot::Command(ev9_gate) = &ev9.pages[0].commands[336] else {
+        panic!("ev9 pc336")
+    };
     let ev9_gate_ints: Vec<i32> = ev9_gate
         .params
         .chunks_exact(4)
@@ -662,24 +871,44 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
         "event 9's picture-447 arm is gated by v111 >= 100 (and v60 == 1)"
     );
     // Map events 26/28 are the 浅い/アナル insertion scripts; pin their v111 gates.
-    let ev26 = map.events.iter().find(|event| event.id == 26).expect("map ev26");
+    let ev26 = map
+        .events
+        .iter()
+        .find(|event| event.id == 26)
+        .expect("map ev26");
     let (_, ev26_gate) = op111_at_map(&ev26.pages[0], 475);
-    assert_eq!(ev26_gate, vec![1, 2_000_267, 0, 2], "ev26 pc475 guard: v267 == 0");
-    let Slot::Command(ev26_gain) = &ev26.pages[0].commands[482] else { panic!("ev26 pc482") };
+    assert_eq!(
+        ev26_gate,
+        vec![1, 2_000_267, 0, 2],
+        "ev26 pc475 guard: v267 == 0"
+    );
+    let Slot::Command(ev26_gain) = &ev26.pages[0].commands[482] else {
+        panic!("ev26 pc482")
+    };
     let ev26_gain_ints: Vec<i32> = ev26_gain
         .params
         .chunks_exact(4)
         .map(|word| i32::from_le_bytes([word[0], word[1], word[2], word[3]]))
         .collect();
-    assert_eq!(&ev26_gain_ints[0..2], &[2_000_111, 8], "ev26 pc482: v111 += 8");
-    let ev28 = map.events.iter().find(|event| event.id == 28).expect("map ev28");
+    assert_eq!(
+        &ev26_gain_ints[0..2],
+        &[2_000_111, 8],
+        "ev26 pc482: v111 += 8"
+    );
+    let ev28 = map
+        .events
+        .iter()
+        .find(|event| event.id == 28)
+        .expect("map ev28");
     let (_, ev28_gate) = op111_at_map(&ev28.pages[0], 124);
     assert_eq!(
         ev28_gate,
         vec![2, 2_000_100, 12, 1, 2_000_100, 0, 1],
         "ev28 pc124: v100 >= 12 selects the real insertion; else the pc638 abort"
     );
-    let Slot::Command(ev28_gain) = &ev28.pages[0].commands[159] else { panic!("ev28 pc159") };
+    let Slot::Command(ev28_gain) = &ev28.pages[0].commands[159] else {
+        panic!("ev28 pc159")
+    };
     let ev28_gain_ints: Vec<i32> = ev28_gain
         .params
         .chunks_exact(4)
@@ -695,7 +924,11 @@ fn map_h_button_forward_chain_reaches_ce333_and_pins_the_ejaculation_gate() {
         vec![1, 2_000_098, 1, 1],
         "CE345 pc44 guard: v98 >= 1"
     );
-    assert_eq!(&ce_ints(&data, 345, 49)[0..2], &[2_000_460, 1], "CE345 pc49: var460 = 1");
+    assert_eq!(
+        &ce_ints(&data, 345, 49)[0..2],
+        &[2_000_460, 1],
+        "CE345 pc49: var460 = 1"
+    );
 
     println!(
         "\nH FORWARD: stage_trace={stage_trace:?} wipe_ev21_maxpc={} ev26_seen={} ev28_maxpc={} \
@@ -773,13 +1006,19 @@ fn answer_choice(game: &mut Game, wanted: &[&str]) -> Option<Vec<String>> {
 #[test]
 fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
     // --- A1. CE246 (スキンシップ) light option -> CE217 (時刻表示) + CE216 header bar. ---
-    let Some(mut light) = save_game() else { return; };
+    let Some(mut light) = save_game() else {
+        return;
+    };
     light.auto_choice = false;
     let id = light.vm.start_event(246).expect("CE246 exists");
     let _ = id;
     let mut seen_light: BTreeSet<u32> = BTreeSet::new();
     let mut light_answered = false;
-    let before_clock = (light.vm.vars.get(4), light.vm.vars.get(5), light.vm.vars.get(6));
+    let before_clock = (
+        light.vm.vars.get(4),
+        light.vm.vars.get(5),
+        light.vm.vars.get(6),
+    );
     let before_text: Vec<(i32, String)> = [6200, 6210, 6211]
         .iter()
         .filter_map(|n| light.screen.get(*n).map(|p| (*n, p.text.clone())))
@@ -797,12 +1036,19 @@ fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
         // CE217 (時刻表示) is a one-frame HUD child: it draws the clock and ends inside the
         // same vm step, so it is proven by its side effect on the clock text, not by a live
         // instance. Stop once the clock picture has been redrawn.
-        if light_answered && light.screen.get(6200).map(|p| &p.text) != before_text.iter().find(|(n, _)| *n == 6200).map(|(_, t)| t) {
+        if light_answered
+            && light.screen.get(6200).map(|p| &p.text)
+                != before_text.iter().find(|(n, _)| *n == 6200).map(|(_, t)| t)
+        {
             break;
         }
         let _ = frame;
     }
-    let after_clock = (light.vm.vars.get(4), light.vm.vars.get(5), light.vm.vars.get(6));
+    let after_clock = (
+        light.vm.vars.get(4),
+        light.vm.vars.get(5),
+        light.vm.vars.get(6),
+    );
     let after_text: Vec<(i32, String)> = [6200, 6210, 6211]
         .iter()
         .filter_map(|n| light.screen.get(*n).map(|p| (*n, p.text.clone())))
@@ -826,7 +1072,10 @@ fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
         file_present(&light, "header_bar"),
         "CE216 must draw hscene/header_bar.jpg for the light option"
     );
-    assert_eq!(light.stats.warnings, 0, "the CE246 light branch must not warn");
+    assert_eq!(
+        light.stats.warnings, 0,
+        "the CE246 light branch must not warn"
+    );
     println!(
         "CE246 light: clock_after={:?} header_bar={} npics={} warnings={}",
         after_clock,
@@ -837,7 +1086,9 @@ fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
 
     // --- A2. CE246 deep option -> CE346 (カットイン). Replays m7_hscene_deep.rs inside this
     //         sibling survey (same save, same real replies). ---
-    let Some(mut deep) = save_game() else { return; };
+    let Some(mut deep) = save_game() else {
+        return;
+    };
     deep.auto_choice = false;
     deep.start_event(246);
     let mut seen_deep: BTreeSet<u32> = BTreeSet::new();
@@ -850,20 +1101,41 @@ fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
                 ce346_max_pc = ce346_max_pc.max(inst.pc);
             }
         }
-        answer_choice(&mut deep, &["性骚扰", "让我看裸体", "让我看更多些", "看破！"]);
+        answer_choice(
+            &mut deep,
+            &["性骚扰", "让我看裸体", "让我看更多些", "看破！"],
+        );
         if seen_deep.contains(&346) && !deep.vm.instances().iter().any(|i| i.event == 246) {
             break;
         }
     }
-    assert!(seen_deep.contains(&346), "CE246 deep branch must start CE346 (カットイン)");
-    assert!(ce346_max_pc >= 180, "CE346 must execute its whole script, max pc {ce346_max_pc}");
     assert!(
-        deep.screen.iter().any(|picture| picture.file.starts_with("cutin/cutin_") && picture.opacity == 255),
+        seen_deep.contains(&346),
+        "CE246 deep branch must start CE346 (カットイン)"
+    );
+    assert!(
+        ce346_max_pc >= 180,
+        "CE346 must execute its whole script, max pc {ce346_max_pc}"
+    );
+    assert!(
+        deep.screen
+            .iter()
+            .any(|picture| picture.file.starts_with("cutin/cutin_") && picture.opacity == 255),
         "CE346 must draw a visible cutin layer"
     );
-    assert!(!seen_deep.contains(&333), "CE246's deep branch must not start CE333 on this save (var23 >= 1)");
-    assert_eq!(deep.vm.vars.get(166), 0, "CE333's var166 bad-end marker must stay 0");
-    assert_eq!(deep.stats.warnings, 0, "the CE246 deep branch must not warn");
+    assert!(
+        !seen_deep.contains(&333),
+        "CE246's deep branch must not start CE333 on this save (var23 >= 1)"
+    );
+    assert_eq!(
+        deep.vm.vars.get(166),
+        0,
+        "CE333's var166 bad-end marker must stay 0"
+    );
+    assert_eq!(
+        deep.stats.warnings, 0,
+        "the CE246 deep branch must not warn"
+    );
     println!(
         "CE246 deep: ce346={} maxpc={ce346_max_pc} var166={} warnings={}",
         seen_deep.contains(&346),
@@ -873,7 +1145,9 @@ fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
 
     // --- B. CE323 (■トイレ) -> CE372/CE371. The toilet wrapper is reached through the
     //        real menu (偷窥 -> 偷窥 -> 是); var218 = 2 selects the CE371 stage. ---
-    let Some(mut toilet) = save_game() else { return; };
+    let Some(mut toilet) = save_game() else {
+        return;
+    };
     toilet.auto_choice = false;
     let id = toilet.vm.start_event(323).expect("CE323 exists");
     if let Some(instance) = toilet.vm.instance_mut(id) {
@@ -899,25 +1173,39 @@ fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
             }
         }
         if frame % 500 == 0 {
-            stage_samples.push((frame as i32, toilet.vm.vars.get(218)));
+            stage_samples.push((frame, toilet.vm.vars.get(218)));
         }
     }
     assert!(seen_toilet.contains(&323), "CE323 must run");
-    assert!(seen_toilet.contains(&372), "the toilet menu must call CE372");
-    assert!(seen_toilet.contains(&371), "CE372 must call CE371 (トイレタイマー)");
-    assert!(ev372_max_pc >= 30, "CE372 must execute its stage body, max pc {ev372_max_pc}");
+    assert!(
+        seen_toilet.contains(&372),
+        "the toilet menu must call CE372"
+    );
+    assert!(
+        seen_toilet.contains(&371),
+        "CE372 must call CE371 (トイレタイマー)"
+    );
+    assert!(
+        ev372_max_pc >= 30,
+        "CE372 must execute its stage body, max pc {ev372_max_pc}"
+    );
     // opcode-111 reference semantics: CE371's timer now advances var218 0->2->1->0 so
     // stage 2 is transient instead of the literal-bug pinning it at 2 at run end.
     assert_eq!(
-        var218_max,
-        2,
+        var218_max, 2,
         "CE372 [arg0=0, arg1=1] selects var218 = 2 (peak across the run)"
     );
     assert!(
-        toilet.screen.iter().any(|picture| picture.file.contains("cutin/cutin_")),
+        toilet
+            .screen
+            .iter()
+            .any(|picture| picture.file.contains("cutin/cutin_")),
         "CE372 must draw its cutin layer"
     );
-    assert_eq!(toilet.stats.warnings, 0, "the CE323/CE372 wrapper must not warn");
+    assert_eq!(
+        toilet.stats.warnings, 0,
+        "the CE323/CE372 wrapper must not warn"
+    );
     println!(
         "CE323/CE372: choices={toilet_choices:?} seen372={} ev372_maxpc={ev372_max_pc} v218={} \
          stage_samples={stage_samples:?} warnings={}",
@@ -928,7 +1216,9 @@ fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
 
     // --- C. CE328 (就寝前パジャマ) -> CE402: the wrapper exits before the CE402 call on
     //        this save. Pin the exact gate. ---
-    let Some(mut bedtime) = save_game() else { return; };
+    let Some(mut bedtime) = save_game() else {
+        return;
+    };
     bedtime.auto_choice = true;
     bedtime.auto_choice_delay = 2;
     bedtime.set_choice_cursor(0);
@@ -942,12 +1232,19 @@ fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
         seen_bedtime.extend(alive_events(&bedtime));
     }
     assert!(seen_bedtime.contains(&328), "CE328 must run");
-    assert!(seen_bedtime.contains(&435), "CE328 must call CE435 before its early return");
+    assert!(
+        seen_bedtime.contains(&435),
+        "CE328 must call CE435 before its early return"
+    );
     assert!(
         !seen_bedtime.contains(&402),
         "CE328 must NOT reach CE402 while var104/var105 are 0"
     );
-    assert_eq!((v104, v105), (0, 0), "SaveData08 pajama flags gate CE328 at pc4/pc6");
+    assert_eq!(
+        (v104, v105),
+        (0, 0),
+        "SaveData08 pajama flags gate CE328 at pc4/pc6"
+    );
     assert_eq!(
         v4, 0,
         "SaveData08 clock is midnight; CE402's own pc4 gate needs var4 >= 21 anyway"
@@ -962,28 +1259,70 @@ fn sibling_wrappers_reach_ce246_ce217_ce346_and_pin_ce323_ce372_ce328_ce402() {
 
     // --- D. Static call-graph evidence for the sibling wrappers. ---
     let data = common_events();
-    assert_eq!(call_pcs(&data, 328, 500_402), vec![986], "CE328 -> CE402 call site");
+    assert_eq!(
+        call_pcs(&data, 328, 500_402),
+        vec![986],
+        "CE328 -> CE402 call site"
+    );
     assert!(
         write_pcs(&data, 402, 2_000_137).contains(&136),
         "CE402 sets the pose selector (v137=6) at pc136"
     );
     // CE328's early-return gate: pc4 v105==0, pc6 v104==0 -> CE435, pc9 BreakEvent.
-    assert_eq!(ce_ints(&data, 328, 4), vec![1, 2_000_105, 0, 2], "CE328 pc4: v105 == 0 early-exit arm");
-    assert_eq!(ce_ints(&data, 328, 6), vec![1, 2_000_104, 0, 2], "CE328 pc6: v104 == 0 -> CE435");
+    assert_eq!(
+        ce_ints(&data, 328, 4),
+        vec![1, 2_000_105, 0, 2],
+        "CE328 pc4: v105 == 0 early-exit arm"
+    );
+    assert_eq!(
+        ce_ints(&data, 328, 6),
+        vec![1, 2_000_104, 0, 2],
+        "CE328 pc6: v104 == 0 -> CE435"
+    );
     // CE402's own gates: v16 >= 1, v22 >= 180, v4 >= 21, v326 == 2, v102 >= 80.
-    assert_eq!(ce_ints(&data, 402, 0), vec![17, 2_000_016, 1, 1], "CE402 pc0: v16 >= 1");
-    assert_eq!(ce_ints(&data, 402, 2), vec![17, 2_000_022, 180, 1], "CE402 pc2: v22 >= 180");
-    assert_eq!(ce_ints(&data, 402, 4), vec![17, 2_000_004, 21, 1], "CE402 pc4: v4 >= 21");
-    assert_eq!(ce_ints(&data, 402, 6), vec![17, 2_000_326, 2, 1], "CE402 pc6: v326 == 2");
-    assert_eq!(ce_ints(&data, 402, 8), vec![17, 2_000_102, 80, 1], "CE402 pc8: v102 >= 80");
+    assert_eq!(
+        ce_ints(&data, 402, 0),
+        vec![17, 2_000_016, 1, 1],
+        "CE402 pc0: v16 >= 1"
+    );
+    assert_eq!(
+        ce_ints(&data, 402, 2),
+        vec![17, 2_000_022, 180, 1],
+        "CE402 pc2: v22 >= 180"
+    );
+    assert_eq!(
+        ce_ints(&data, 402, 4),
+        vec![17, 2_000_004, 21, 1],
+        "CE402 pc4: v4 >= 21"
+    );
+    assert_eq!(
+        ce_ints(&data, 402, 6),
+        vec![17, 2_000_326, 2, 1],
+        "CE402 pc6: v326 == 2"
+    );
+    assert_eq!(
+        ce_ints(&data, 402, 8),
+        vec![17, 2_000_102, 80, 1],
+        "CE402 pc8: v102 >= 80"
+    );
     // CE323's real parent edges and CE372's stage table.
     let ce372_calls = call_pcs(&data, 323, 500_372);
     for pc in [120, 232, 240] {
-        assert!(ce372_calls.contains(&pc), "CE323 -> CE372 call site pc{pc}: {ce372_calls:?}");
+        assert!(
+            ce372_calls.contains(&pc),
+            "CE323 -> CE372 call site pc{pc}: {ce372_calls:?}"
+        );
     }
-    assert!(ce372_calls.len() >= 40, "CE323 polls many CE372 branches: {} sites", ce372_calls.len());
+    assert!(
+        ce372_calls.len() >= 40,
+        "CE323 polls many CE372 branches: {} sites",
+        ce372_calls.len()
+    );
     let ce374_calls = call_pcs(&data, 323, 500_374);
-    assert!(ce374_calls.contains(&194), "CE323 -> CE374 call sites include pc194: {ce374_calls:?}");
+    assert!(
+        ce374_calls.contains(&194),
+        "CE323 -> CE374 call sites include pc194: {ce374_calls:?}"
+    );
     assert_eq!(
         write_pcs(&data, 372, 2_000_218),
         vec![14, 22, 28, 42, 48, 59, 82, 90, 99, 110, 119, 128, 139, 149],

@@ -112,7 +112,11 @@ fn has_event(game: &Game, event: u32) -> bool {
 }
 
 fn event_pc(game: &Game, event: u32) -> Option<usize> {
-    game.vm.instances().iter().find(|i| i.event == event).map(|i| i.pc)
+    game.vm
+        .instances()
+        .iter()
+        .find(|i| i.event == event)
+        .map(|i| i.pc)
 }
 
 fn evname<E: std::fmt::Debug>(e: &E) -> String {
@@ -132,7 +136,10 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
     game.set_choice_cursor(2); // 今天还是睡吧
     decide(game);
     let options = wait_for_choice(game, 500, "sleep confirm");
-    assert_eq!(options, CONFIRM_OPTIONS, "day {day}: unexpected confirm menu");
+    assert_eq!(
+        options, CONFIRM_OPTIONS,
+        "day {day}: unexpected confirm menu"
+    );
     game.set_choice_cursor(0); // 是的
     decide(game);
     let mut arrived = false;
@@ -152,18 +159,31 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
     assert_eq!(game.vm.vars.get(6), expected - 1, "weekday advanced");
     assert_eq!(game.vm.vars.get(4), 8, "morning hour");
     assert_eq!(game.vm.vars.get(5), 30, "morning minute");
-    assert!(game.screen.len() > 20, "day {expected}: morning scene drawn");
+    assert!(
+        game.screen.len() > 20,
+        "day {expected}: morning scene drawn"
+    );
 }
 
 const DAY_COMMAND_LABELS: [&str; 6] = [
-    "给店里帮忙", "学习会", "基础锻炼", "攻击练习", "防御练习", "秘密特训",
+    "给店里帮忙",
+    "学习会",
+    "基础锻炼",
+    "攻击练习",
+    "防御练习",
+    "秘密特训",
 ];
 const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
 
 fn day_row_texts(game: &Game) -> Vec<String> {
     DAY_ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -209,16 +229,22 @@ fn spend_day_choosing_row(game: &mut Game, day: i32) {
             break;
         }
     }
-    assert!(finished, "day {day}: daytime command never returned ({label})");
+    assert!(
+        finished,
+        "day {day}: daytime command never returned ({label})"
+    );
     assert_eq!(game.stats.warnings, 0, "day {day}: warnings during day");
     assert_eq!(game.vm.vars.get(4), 17, "day {day}: expected 17:00");
     assert_eq!(game.vm.vars.get(5), 0, "day {day}: expected 17:00");
     assert_eq!(game.vm.vars.get(160), day);
-    assert!(game.vm.vars.get(14) < energy_before, "day {day}: energy not spent");
+    assert!(
+        game.vm.vars.get(14) < energy_before,
+        "day {day}: energy not spent"
+    );
     let mut evening = false;
     for _ in 0..6000 {
         game.frame();
-        if !evening_work(&game) && game.vm.vars.get(4) >= 18 {
+        if !evening_work(game) && game.vm.vars.get(4) >= 18 {
             evening = true;
             break;
         }
@@ -230,7 +256,11 @@ fn spend_day_choosing_row(game: &mut Game, day: i32) {
         game.vm.vars.get(5)
     );
     assert_eq!(game.vm.vars.get(160), day);
-    assert_eq!(game.vm.vars.get(5), 30, "day {day}: evening settles on the half hour");
+    assert_eq!(
+        game.vm.vars.get(5),
+        30,
+        "day {day}: evening settles on the half hour"
+    );
     assert_eq!(game.stats.warnings, 0, "day {day}: warnings in evening");
 }
 
@@ -245,8 +275,14 @@ fn finish_day_after_battle(game: &mut Game, day: i32) {
         }
     }
     game.key_bits = 0;
-    assert!(finished, "day {day}: daytime command never returned after the battle");
-    assert_eq!(game.stats.warnings, 0, "day {day}: warnings after the battle");
+    assert!(
+        finished,
+        "day {day}: daytime command never returned after the battle"
+    );
+    assert_eq!(
+        game.stats.warnings, 0,
+        "day {day}: warnings after the battle"
+    );
     assert_eq!(game.vm.vars.get(160), day);
     assert!(
         game.vm.vars.get(4) >= 16,
@@ -294,7 +330,10 @@ fn sleep_naturally_into_next_morning(game: &mut Game, day: i32) {
     for _ in 0..40 {
         game.frame();
     }
-    assert!(has_event(game, 245), "day {day}: the night command menu is open");
+    assert!(
+        has_event(game, 245),
+        "day {day}: the night command menu is open"
+    );
     click_at(game, 512, 450); // 今天先休息吧
     let mut options: Option<Vec<String>> = None;
     for _ in 0..400 {
@@ -328,7 +367,10 @@ fn sleep_naturally_into_next_morning(game: &mut Game, day: i32) {
     assert_eq!(game.vm.vars.get(6), expected - 1, "weekday advanced");
     assert_eq!(game.vm.vars.get(4), 8, "morning hour");
     assert_eq!(game.vm.vars.get(5), 30, "morning minute");
-    assert!(game.screen.len() > 20, "day {expected}: morning scene drawn");
+    assert!(
+        game.screen.len() > 20,
+        "day {expected}: morning scene drawn"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -434,7 +476,8 @@ fn natural_day4_battle_settles_without_wiring_flag() {
 
     // Drive the genuine new-game schedule to day 4 08:30 (same entry as m7_day4_playable),
     // with no test-only shortcuts and NO set_battle_wiring flag.
-    game.start_map_event_by_name("SampleMapA", 0).expect("entry event");
+    game.start_map_event_by_name("SampleMapA", 0)
+        .expect("entry event");
     for _ in 0..1600 {
         game.frame();
     }
@@ -460,7 +503,10 @@ fn natural_day4_battle_settles_without_wiring_flag() {
     game.auto_choice = true;
     game.auto_choice_delay = 1;
     let seeded = game.seed_battle_databases();
-    assert!(seeded > 0, "seed_battle_databases must seed the battle cells");
+    assert!(
+        seeded > 0,
+        "seed_battle_databases must seed the battle cells"
+    );
     game.databases
         .set_text(Container::CData, 5, 16, 0, "┗ 状態リスト");
     let _ = game.start_engine_events(); // production boot analogue; NOT a battle flag
@@ -481,15 +527,33 @@ fn natural_day4_battle_settles_without_wiring_flag() {
         "AUTOSTART (a) RESULT: ce253={} ce239={} ce242={} ce243={} ce241={} rounds={} \
          battle_active_f={:?} v350_seq={:?} v352_peak={} v343_peak={} max239pc={} max242pc={} \
          ce239_alive={} ce239_pc={:?} warnings={} unanswered250={}",
-        t.ce253_started, t.ce239_started, t.ce242_started, t.ce243_started, t.ce241_started,
-        t.wiring_rounds, t.battle_active_frame, t.v350_seq, t.v352_peak, t.v343_peak,
-        t.max_ce239_pc, t.max_ce242_pc, t.ce239_alive_at_end, t.ce239_stuck_pc,
-        t.warnings, t.unanswered_250
+        t.ce253_started,
+        t.ce239_started,
+        t.ce242_started,
+        t.ce243_started,
+        t.ce241_started,
+        t.wiring_rounds,
+        t.battle_active_frame,
+        t.v350_seq,
+        t.v352_peak,
+        t.v343_peak,
+        t.max_ce239_pc,
+        t.max_ce242_pc,
+        t.ce239_alive_at_end,
+        t.ce239_stuck_pc,
+        t.warnings,
+        t.unanswered_250
     );
 
     assert!(t.ce253_started, "day4 must dispatch CE253 地域貢献");
-    assert!(t.ce239_started, "CE253 must call the real battle event CE239");
-    assert!(t.max_ce239_pc >= 700, "CE239 must reach its battle-start staging (>=pc700)");
+    assert!(
+        t.ce239_started,
+        "CE253 must call the real battle event CE239"
+    );
+    assert!(
+        t.max_ce239_pc >= 700,
+        "CE239 must reach its battle-start staging (>=pc700)"
+    );
     assert!(t.battle_active_frame.is_some(), "2000340 must rise");
     assert!(
         t.wiring_rounds >= 1,
@@ -502,22 +566,40 @@ fn natural_day4_battle_settles_without_wiring_flag() {
         "2000350 must start idle and enter the command phase, got {:?}",
         t.v350_seq
     );
-    assert!(t.v352_peak == 1 || t.v352_peak == -1, "CE244 must settle (2000352 in {{1,-1}}), got {}", t.v352_peak);
+    assert!(
+        t.v352_peak == 1 || t.v352_peak == -1,
+        "CE244 must settle (2000352 in {{1,-1}}), got {}",
+        t.v352_peak
+    );
     assert_eq!(t.v343_peak, 1, "CE244 must set 2000343 = 1");
-    assert!(!t.ce239_alive_at_end, "CE239 must return after settlement, pc {:?}", t.ce239_stuck_pc);
+    assert!(
+        !t.ce239_alive_at_end,
+        "CE239 must return after settlement, pc {:?}",
+        t.ce239_stuck_pc
+    );
     assert_eq!(t.warnings, 0, "no warnings in the day-4 battle");
-    assert!(t.unanswered_250 <= 1, "at most the one cosmetic menu-label read");
+    assert!(
+        t.unanswered_250 <= 1,
+        "at most the one cosmetic menu-label read"
+    );
 
     // ---- rest of day 4 and the natural night sleep reach day 5 ----
     finish_day_after_battle(&mut game, 4);
     sleep_naturally_into_next_morning(&mut game, 4);
     assert_eq!(game.vm.vars.get(340), 0, "post-battle 2000340 idle again");
-    assert_eq!(game.vm.vars.get(343), 0, "CE239 clears 2000343 when it returns");
+    assert_eq!(
+        game.vm.vars.get(343),
+        0,
+        "CE239 clears 2000343 when it returns"
+    );
     assert_eq!(game.vm.vars.get(160), 5, "day 5 counter");
     assert_eq!(game.vm.vars.get(6), 4, "day 5 is Friday");
     assert_eq!(game.vm.vars.get(4), 8, "day 5 08:30");
     assert_eq!(game.vm.vars.get(5), 30, "day 5 08:30");
-    assert_eq!(game.stats.warnings, 0, "the whole day4->day5 run is warning-free");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the whole day4->day5 run is warning-free"
+    );
     eprintln!(
         "m11_battle_autostart [A]: natural day-4 CE253->CE239 settled with NO set_battle_wiring \
          (rounds={}, 2000352={}, 2000343=1) -> day 5 08:30; warnings={}, frames={}",
@@ -671,7 +753,11 @@ fn two_member_queue_dispatches_distinct_bodies_under_auto_drive() {
     );
 
     assert!(settled, "the automatic drive must settle the BOSS battle");
-    assert_eq!(game.battle_wiring_rounds(), 4, "four queued command rounds must run");
+    assert_eq!(
+        game.battle_wiring_rounds(),
+        4,
+        "four queued command rounds must run"
+    );
     assert_eq!(first_pcs.len(), 4, "four command rounds captured");
     let mut uniq = first_pcs.clone();
     uniq.sort_unstable();
@@ -682,14 +768,26 @@ fn two_member_queue_dispatches_distinct_bodies_under_auto_drive() {
         "each queued index must reach a DISTINCT CE242 command body, got {:?}",
         first_pcs
     );
-    assert!(first_pcs.iter().all(|&p| p > 143), "each body advanced past dispatch ({:?})", first_pcs);
-    assert_eq!(arg0s, vec![1, 2, 3, 4], "the queue is consumed front-first under auto drive");
+    assert!(
+        first_pcs.iter().all(|&p| p > 143),
+        "each body advanced past dispatch ({:?})",
+        first_pcs
+    );
+    assert_eq!(
+        arg0s,
+        vec![1, 2, 3, 4],
+        "the queue is consumed front-first under auto drive"
+    );
     assert_eq!(
         final_pools,
         [3, 2, 3, 2],
         "pools 2000345 and 2000346 must drain (multi-member data under the auto drive)"
     );
-    assert!(settle.0 == 1 || settle.0 == -1, "real settlement result, got {:?}", settle);
+    assert!(
+        settle.0 == 1 || settle.0 == -1,
+        "real settlement result, got {:?}",
+        settle
+    );
     assert_eq!(settle.1, 1, "2000343 decided");
     assert_eq!(warnings, 0, "no warnings under the auto drive");
 }
@@ -735,7 +833,10 @@ fn explicit_disable_overrides_auto_arm() {
          v352={v352} v343={v343} warnings={}",
         game.stats.warnings
     );
-    assert!(battle_active, "CE253/CE239 must reach the battle-active flag");
+    assert!(
+        battle_active,
+        "CE253/CE239 must reach the battle-active flag"
+    );
     assert_eq!(rounds, 0, "explicit disable must not start CE242");
     assert_eq!(max350, 0, "2000350 must stay 0 (shipped stall preserved)");
     assert_eq!(v352, 0, "no settlement under explicit disable");

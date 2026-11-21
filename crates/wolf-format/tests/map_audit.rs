@@ -84,9 +84,9 @@ fn page_count(map: &Map) -> usize {
     map.events.iter().map(|event| event.pages.len()).sum()
 }
 
-fn shapes(
-    game: &[(&'static str, Map)],
-) -> Vec<(&'static str, u32, u32, u32, bool, usize, usize, usize)> {
+type MapShape = (&'static str, u32, u32, u32, bool, usize, usize, usize);
+
+fn shapes(game: &[(&'static str, Map)]) -> Vec<MapShape> {
     game.iter()
         .map(|(name, map)| {
             (
@@ -104,7 +104,7 @@ fn shapes(
 }
 
 /// width, height, tileset index, has tile data, events, pages, slots (audit doc 1.2).
-const EXPECTED_SHAPES: [(&str, u32, u32, u32, bool, usize, usize, usize); 9] = [
+const EXPECTED_SHAPES: [MapShape; 9] = [
     ("TitleMap.mps", 53, 30, 4, true, 1, 1, 133),
     ("SampleMapA.mps", 64, 36, 4, true, 40, 93, 31083),
     ("SampleMapA_1.mps", 64, 36, 4, true, 12, 17, 5752),
@@ -123,7 +123,7 @@ fn shipped_maps_match_the_audited_shapes() {
         return;
     };
     let actual = shapes(&game);
-    let expected: Vec<(&str, u32, u32, u32, bool, usize, usize, usize)> = EXPECTED_SHAPES.to_vec();
+    let expected: Vec<MapShape> = EXPECTED_SHAPES.to_vec();
     assert_eq!(
         actual, expected,
         "map shapes drifted from docs/MAP_AUDIT.md section 1.2"
@@ -236,12 +236,16 @@ fn condition_histogram<'a>(game: impl IntoIterator<Item = &'a Map>) -> Condition
         for event in &map.events {
             for page in &event.pages {
                 let conditions = page.conditions();
-                for slot in 0..wolf_format::mps::CONDITION_SLOTS {
+                for (slot, cond) in conditions
+                    .iter()
+                    .enumerate()
+                    .take(wolf_format::mps::CONDITION_SLOTS)
+                {
                     slots += 1;
                     *raw.entry(page.trigger_switches[slot]).or_insert(0) += 1;
-                    if conditions[slot].enabled {
+                    if cond.enabled {
                         enabled += 1;
-                        *operators.entry(conditions[slot].operator).or_insert(0) += 1;
+                        *operators.entry(cond.operator).or_insert(0) += 1;
                     }
                 }
             }
@@ -300,7 +304,8 @@ fn fresh_vm_activates_the_expected_pages() {
     };
     // (event id, page index, trigger, command count) at a fresh VM, all variables 0.
     // Audit doc section 3.
-    let expected: [(&str, Vec<(u32, usize, u8, usize)>); 7] = [
+    type ExpectedPage = (u32, usize, u8, usize);
+    let expected: [(&str, Vec<ExpectedPage>); 7] = [
         ("TitleMap.mps", vec![(2, 0, 1, 133)]),
         (
             "SampleMapA.mps",

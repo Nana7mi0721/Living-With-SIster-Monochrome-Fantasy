@@ -64,7 +64,12 @@ const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
 fn day_row_texts(game: &Game) -> Vec<String> {
     DAY_ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -182,7 +187,12 @@ fn day2_evening_game() -> Option<Game> {
     click_at(&mut game, 512, 230 + 50 * row as i32);
     for _ in 0..2500 {
         game.frame();
-        if game.vm.instances().iter().all(|instance| instance.event != 251) {
+        if game
+            .vm
+            .instances()
+            .iter()
+            .all(|instance| instance.event != 251)
+        {
             break;
         }
     }

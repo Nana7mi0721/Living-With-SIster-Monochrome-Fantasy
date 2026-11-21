@@ -86,31 +86,87 @@ fn the_real_skin_grid_has_the_measured_three_pixel_frame() {
     let image = image::open(&path)
         .expect("decode SystemFile/WindowBase.png")
         .to_rgba8();
-    assert_eq!(image.dimensions(), (18, 18), "the skin is an 18x18 nine-slice asset");
+    assert_eq!(
+        image.dimensions(),
+        (18, 18),
+        "the skin is an 18x18 nine-slice asset"
+    );
 
     // The four extreme corners are fully transparent: the frame only starts one
     // texel in, which is why the 3 px cut includes the empty corner.
     for (x, y) in [(0, 0), (17, 0), (0, 17), (17, 17)] {
-        assert_eq!(pixel(&image, x, y), [255, 255, 255, 0], "corner {x},{y} is transparent");
+        assert_eq!(
+            pixel(&image, x, y),
+            [255, 255, 255, 0],
+            "corner {x},{y} is transparent"
+        );
     }
     // The task-cited colours are all present, at the measured positions:
     // 0x424242 is the outermost border run, 0xf2f3f3 the highlight bevel and
     // 0x1f2425/0xdf the translucent body.
-    assert_eq!(pixel(&image, 5, 0), [0x42, 0x42, 0x42, 0xff], "top outer border");
-    assert_eq!(pixel(&image, 0, 5), [0x42, 0x42, 0x42, 0xff], "left outer border");
-    assert_eq!(pixel(&image, 5, 1), [0xf2, 0xf3, 0xf3, 0xff], "top highlight bevel");
-    assert_eq!(pixel(&image, 1, 5), [0xf2, 0xf3, 0xf3, 0xff], "left highlight bevel");
-    assert_eq!(pixel(&image, 5, 2), [0x57, 0x60, 0x62, 0xff], "top transition line");
-    assert_eq!(pixel(&image, 2, 5), [0x57, 0x60, 0x62, 0xff], "left transition line");
+    assert_eq!(
+        pixel(&image, 5, 0),
+        [0x42, 0x42, 0x42, 0xff],
+        "top outer border"
+    );
+    assert_eq!(
+        pixel(&image, 0, 5),
+        [0x42, 0x42, 0x42, 0xff],
+        "left outer border"
+    );
+    assert_eq!(
+        pixel(&image, 5, 1),
+        [0xf2, 0xf3, 0xf3, 0xff],
+        "top highlight bevel"
+    );
+    assert_eq!(
+        pixel(&image, 1, 5),
+        [0xf2, 0xf3, 0xf3, 0xff],
+        "left highlight bevel"
+    );
+    assert_eq!(
+        pixel(&image, 5, 2),
+        [0x57, 0x60, 0x62, 0xff],
+        "top transition line"
+    );
+    assert_eq!(
+        pixel(&image, 2, 5),
+        [0x57, 0x60, 0x62, 0xff],
+        "left transition line"
+    );
     assert_eq!(pixel(&image, 5, 5), [0x1f, 0x24, 0x25, 0xdf], "body fill");
-    assert_eq!(pixel(&image, 14, 14), [0x1f, 0x24, 0x25, 0xdf], "body centre");
-    assert_eq!(pixel(&image, 5, 15), [0x57, 0x60, 0x62, 0xff], "bottom transition line");
-    assert_eq!(pixel(&image, 5, 16), [0xf2, 0xf3, 0xf3, 0xff], "bottom highlight bevel");
-    assert_eq!(pixel(&image, 5, 17), [0x42, 0x42, 0x42, 0xff], "bottom outer border");
+    assert_eq!(
+        pixel(&image, 14, 14),
+        [0x1f, 0x24, 0x25, 0xdf],
+        "body centre"
+    );
+    assert_eq!(
+        pixel(&image, 5, 15),
+        [0x57, 0x60, 0x62, 0xff],
+        "bottom transition line"
+    );
+    assert_eq!(
+        pixel(&image, 5, 16),
+        [0xf2, 0xf3, 0xf3, 0xff],
+        "bottom highlight bevel"
+    );
+    assert_eq!(
+        pixel(&image, 5, 17),
+        [0x42, 0x42, 0x42, 0xff],
+        "bottom outer border"
+    );
     // The corner 3x3 differs from the edge 3x3 only at its first texel; that is
     // why the 3 px frame cannot be reproduced by stretching a single row.
-    assert_eq!(pixel(&image, 1, 1), [0x88, 0x88, 0x88, 0xff], "corner bevel");
-    assert_eq!(pixel(&image, 2, 2), [0xd9, 0xdc, 0xdd, 0xff], "corner transition");
+    assert_eq!(
+        pixel(&image, 1, 1),
+        [0x88, 0x88, 0x88, 0xff],
+        "corner bevel"
+    );
+    assert_eq!(
+        pixel(&image, 2, 2),
+        [0xd9, 0xdc, 0xdd, 0xff],
+        "corner transition"
+    );
 }
 
 #[test]
@@ -119,7 +175,11 @@ fn a_normal_300x200_window_uses_3px_corners_and_a_stretched_middle() {
     assert_eq!(pieces.len(), 9, "18x18 skin yields nine pieces");
     assert_eq!(pieces[0].rect, [100.0, 50.0, 3.0, 3.0], "top-left");
     assert_eq!(pieces[0].src, [0, 0, 3, 3]);
-    assert_eq!(pieces[4].rect, [103.0, 53.0, 294.0, 194.0], "stretched centre");
+    assert_eq!(
+        pieces[4].rect,
+        [103.0, 53.0, 294.0, 194.0],
+        "stretched centre"
+    );
     assert_eq!(pieces[4].src, [3, 3, 12, 12]);
     assert_eq!(pieces[8].rect, [397.0, 247.0, 3.0, 3.0], "bottom-right");
     assert_eq!(pieces[8].src, [15, 15, 3, 3]);
@@ -135,29 +195,53 @@ fn zero_box_windows_and_the_type3_12005_triangle_do_not_paint_a_panel() {
     // self-variable sized (and zero at this point). It must become a drawing, never
     // nine stretched skin quads.
     let mut screen = Screen::new();
-    screen.apply(&picture(12005, 3, "<TRI-RIGHT>", &[0, 0, 0, 1, 255, 100, 100, 100, 0]));
+    screen.apply(&picture(
+        12005,
+        3,
+        "<TRI-RIGHT>",
+        &[0, 0, 0, 1, 255, 100, 100, 100, 0],
+    ));
     let p = screen.get(12005).expect("12005 exists");
     assert_eq!(p.kind, PictureKind::WindowFile);
-    assert_eq!(p.window, None, "zero box stays None; MIN_BOX also rejects 1x1");
+    assert_eq!(
+        p.window, None,
+        "zero box stays None; MIN_BOX also rejects 1x1"
+    );
     let mut atlas = Atlas::with_size(128, 128);
-    let skin = atlas
-        .add(window::SKIN, &skin_image(1))
-        .expect("skin");
+    let skin = atlas.add(window::SKIN, &skin_image(1)).expect("skin");
     let mut assets = Assets::new("no-such-root");
     let quads = atlas.sprites(&screen, &mut assets);
     assert!(quads.iter().all(|q| q.number == 12005));
-    assert_eq!(atlas.entry(window::SKIN), Some(skin), "no new skin pack was requested");
+    assert_eq!(
+        atlas.entry(window::SKIN),
+        Some(skin),
+        "no new skin pack was requested"
+    );
 
     // A type-4 window with an explicit 0x0 box is the other fallback spelling.
     screen.apply(&picture(12500, 4, "", &[0, 0, 0, 1, 255, 100, 100, 100, 0]));
-    assert_eq!(screen.get(12500).unwrap().window, None, "0x0 type-4 box is not a panel");
-    assert!(atlas.sprites(&screen, &mut assets).is_empty(), "no panel and no content");
-    assert_eq!(atlas.entry(window::SKIN), Some(skin), "skin was not packed again");
+    assert_eq!(
+        screen.get(12500).unwrap().window,
+        None,
+        "0x0 type-4 box is not a panel"
+    );
+    assert!(
+        atlas.sprites(&screen, &mut assets).is_empty(),
+        "no panel and no content"
+    );
+    assert_eq!(
+        atlas.entry(window::SKIN),
+        Some(skin),
+        "skin was not packed again"
+    );
 
     // The 1x1 sentinel WOLF writes for self-sizing text is rejected by MIN_BOX.
     screen.apply(&picture(12501, 4, "", &[0, 1, 1, 1, 255, 100, 100, 100, 0]));
     assert_eq!(screen.get(12501).unwrap().window, Some((1, 1)));
-    assert!(atlas.sprites(&screen, &mut assets).is_empty(), "1x1 is below MIN_BOX");
+    assert!(
+        atlas.sprites(&screen, &mut assets).is_empty(),
+        "1x1 is below MIN_BOX"
+    );
 }
 
 #[test]
@@ -165,7 +249,12 @@ fn several_windows_at_once_each_get_their_own_nine_slice_in_number_order() {
     let mut screen = Screen::new();
     // #10: 300x200 at (100,50); #20: 200x100 at (500,300); #5: 100x80 at (700,100).
     screen.apply(&picture(10, 4, "", &[0, 300, 200, 1, 255, 100, 50, 100, 0]));
-    screen.apply(&picture(20, 4, "", &[0, 200, 100, 1, 255, 500, 300, 100, 0]));
+    screen.apply(&picture(
+        20,
+        4,
+        "",
+        &[0, 200, 100, 1, 255, 500, 300, 100, 0],
+    ));
     screen.apply(&picture(5, 4, "", &[0, 100, 80, 1, 255, 700, 100, 100, 0]));
     let mut atlas = Atlas::with_size(64, 64);
     pack_skin(&mut atlas);
@@ -176,9 +265,9 @@ fn several_windows_at_once_each_get_their_own_nine_slice_in_number_order() {
     assert!(quads.iter().all(|q| q.tint == [1.0, 1.0, 1.0]));
     assert_eq!(
         quads.iter().map(|q| q.number).collect::<Vec<_>>(),
-        std::iter::repeat(5).take(9)
-            .chain(std::iter::repeat(10).take(9))
-            .chain(std::iter::repeat(20).take(9))
+        std::iter::repeat_n(5, 9)
+            .chain(std::iter::repeat_n(10, 9))
+            .chain(std::iter::repeat_n(20, 9))
             .collect::<Vec<_>>(),
         "panels and their content are sorted by picture number"
     );
@@ -259,8 +348,12 @@ fn the_shipped_data_census_has_667_window_commands_and_no_literal_12505() {
             if !name.to_string_lossy().ends_with(".mps") {
                 continue;
             }
-            let Ok(bytes) = std::fs::read(entry.path()) else { continue };
-            let Ok(map) = Map::parse(&bytes) else { continue };
+            let Ok(bytes) = std::fs::read(entry.path()) else {
+                continue;
+            };
+            let Ok(map) = Map::parse(&bytes) else {
+                continue;
+            };
             for event in &map.events {
                 for page in &event.pages {
                     for slot in &page.commands {
@@ -302,6 +395,13 @@ fn the_shipped_data_census_has_667_window_commands_and_no_literal_12505() {
     assert_eq!(total, 667, "shipped opcode-150 window command sites");
     assert_eq!(type3, 576, "type-3 WindowFile sites");
     assert_eq!(type4, 91, "type-4 WindowString sites");
-    assert_eq!(literal_12500, vec![94], "only CE94 draws the fixed 300x200 #12500");
-    assert_eq!(literal_12505, 0, "no literal #12505 exists in the shipped data");
+    assert_eq!(
+        literal_12500,
+        vec![94],
+        "only CE94 draws the fixed 300x200 #12500"
+    );
+    assert_eq!(
+        literal_12505, 0,
+        "no literal #12505 exists in the shipped data"
+    );
 }

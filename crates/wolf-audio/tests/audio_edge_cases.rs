@@ -42,11 +42,18 @@ fn malformed_26_byte_fmt_chunk_wav_now_decodes() {
     let audio = decode_file(&path).expect("tolerant WAV/PCM decode of the 26-byte fmt file");
 
     // The canonical 16-byte PCM fields are: PCM, mono, 44100 Hz, 16-bit, blockAlign 2.
-    assert_eq!(audio.sample_rate, 44_100, "sample rate must be read from the canonical fields");
+    assert_eq!(
+        audio.sample_rate, 44_100,
+        "sample rate must be read from the canonical fields"
+    );
     assert_eq!(audio.channels, 1, "mono file must decode as 1 channel");
     assert!(audio.frames() > 0, "repaired file must yield frames");
     // 73648 data bytes / 2 bytes-per-frame = 36824 frames = 0.835 s.
-    assert_eq!(audio.frames(), 36_824, "frame count must match the data chunk");
+    assert_eq!(
+        audio.frames(),
+        36_824,
+        "frame count must match the data chunk"
+    );
     assert!(
         (audio.duration_secs() - 0.835).abs() < 0.01,
         "duration {} s should be ~0.835 s",
@@ -54,11 +61,17 @@ fn malformed_26_byte_fmt_chunk_wav_now_decodes() {
     );
     assert!(!audio.samples.is_empty());
     assert!(
-        audio.samples.iter().all(|s| s.is_finite() && s.abs() <= 1.0),
+        audio
+            .samples
+            .iter()
+            .all(|s| s.is_finite() && s.abs() <= 1.0),
         "all decoded samples must be finite and within [-1, 1]"
     );
     // Pure PCM WAV carries no Vorbis loop tags.
-    assert!(!audio.has_loop_points(), "plain WAV must not report loop points");
+    assert!(
+        !audio.has_loop_points(),
+        "plain WAV must not report loop points"
+    );
 
     // The in-memory path must decode the identical bytes the same way.
     let bytes = std::fs::read(&path).expect("read wav bytes");
@@ -82,7 +95,10 @@ fn truncated_wav_data_is_still_rejected() {
     // reject the truncated data chunk instead of returning a bogus buffer.
     let truncated = full[..200.min(full.len())].to_vec();
     let err = decode_bytes(truncated).expect_err("truncated wav must be rejected");
-    assert!(is_clean_audio_error(&err), "expected a clean AudioError, got: {err}");
+    assert!(
+        is_clean_audio_error(&err),
+        "expected a clean AudioError, got: {err}"
+    );
     let text = err.to_string();
     assert!(
         text.contains("truncated") || text.contains("malformed") || text.contains("probe"),
@@ -94,15 +110,23 @@ fn truncated_wav_data_is_still_rejected() {
 fn random_garbage_bytes_are_rejected_without_panicking() {
     // Not a RIFF/WAVE stream and not any supported container: must be a clean error.
     let err = decode_bytes(vec![0u8; 64]).expect_err("garbage must be rejected");
-    assert!(is_clean_audio_error(&err), "expected a clean AudioError, got: {err}");
+    assert!(
+        is_clean_audio_error(&err),
+        "expected a clean AudioError, got: {err}"
+    );
 }
 
 #[test]
 fn missing_asset_returns_clean_error_not_panic() {
     // Direct decoder path: a missing file is an Io error, never a panic.
-    let missing = asset_root().join("SE").join("__wolf_audio_definitely_missing__.wav");
+    let missing = asset_root()
+        .join("SE")
+        .join("__wolf_audio_definitely_missing__.wav");
     let err = decode_file(&missing).expect_err("missing file must be an Err");
-    assert!(is_clean_audio_error(&err), "expected a clean AudioError, got: {err}");
+    assert!(
+        is_clean_audio_error(&err),
+        "expected a clean AudioError, got: {err}"
+    );
     assert!(
         err.to_string().starts_with("audio io error:"),
         "missing file should be an Io error, got: {err}"
@@ -114,15 +138,24 @@ fn missing_asset_returns_clean_error_not_panic() {
     let se_err = engine
         .play_se("SE/__wolf_audio_definitely_missing__.wav")
         .expect_err("engine play_se on a missing path must be an Err");
-    assert!(is_clean_audio_error(&se_err), "expected a clean AudioError, got: {se_err}");
-    assert_eq!(engine.se_count(), 0, "no SE voice should be queued for a missing asset");
+    assert!(
+        is_clean_audio_error(&se_err),
+        "expected a clean AudioError, got: {se_err}"
+    );
+    assert_eq!(
+        engine.se_count(),
+        0,
+        "no SE voice should be queued for a missing asset"
+    );
 }
 
 #[test]
 fn repaired_file_mixes_to_completion_and_loops_as_bgm() {
     let path = malformed_wav_path();
     if !path.is_file() {
-        eprintln!("skipping repaired_file_mixes_to_completion_and_loops_as_bgm: work/all asset missing");
+        eprintln!(
+            "skipping repaired_file_mixes_to_completion_and_loops_as_bgm: work/all asset missing"
+        );
         return;
     }
 
@@ -135,16 +168,27 @@ fn repaired_file_mixes_to_completion_and_loops_as_bgm() {
     mixer.play_se(audio.clone(), 1.0);
     assert_eq!(mixer.se_count(), 1);
     let out = mixer.render(frames);
-    assert_eq!(out.len(), frames * channels, "render length must be frames * channels");
+    assert_eq!(
+        out.len(),
+        frames * channels,
+        "render length must be frames * channels"
+    );
     assert!(
         out.iter().any(|s| s.abs() > 1e-4),
         "repaired SE rendered only silence"
     );
-    assert_eq!(mixer.se_count(), 0, "a non-looping SE voice must be dropped after it ends");
+    assert_eq!(
+        mixer.se_count(),
+        0,
+        "a non-looping SE voice must be dropped after it ends"
+    );
 
     // BGM loop: the same buffer played looping must still be live after a full pass.
     let mut mixer = Mixer::new(audio.sample_rate, audio.channels);
     mixer.play_bgm(audio, true, 1.0);
     let _ = mixer.render(frames + 16);
-    assert!(mixer.bgm_playing(), "looping BGM must still be playing after one full pass");
+    assert!(
+        mixer.bgm_playing(),
+        "looping BGM must still be playing after one full pass"
+    );
 }

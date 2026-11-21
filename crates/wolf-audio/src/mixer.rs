@@ -107,10 +107,8 @@ impl Voice {
                 }
             }
             true
-        } else if self.pos >= total {
-            false
         } else {
-            true
+            self.pos < total
         }
     }
 }
@@ -225,7 +223,7 @@ impl Mixer {
                 if !voice.advance(out_rate) {
                     voice.done = true;
                 }
-                if voice.fade.as_ref().map_or(false, |fade| fade.is_done()) {
+                if voice.fade.as_ref().is_some_and(|fade| fade.is_done()) {
                     voice.done = true;
                 }
             }
@@ -245,7 +243,7 @@ impl Mixer {
             }
         }
 
-        if self.bgm.as_ref().map_or(false, |v| v.done) {
+        if self.bgm.as_ref().is_some_and(|v| v.done) {
             self.bgm = None;
         }
         self.ses.retain(|v| !v.done);

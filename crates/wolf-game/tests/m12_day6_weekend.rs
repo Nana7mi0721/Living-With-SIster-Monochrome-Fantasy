@@ -95,7 +95,10 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
     let options = wait_for_choice(game, 500, "sleep menu");
     assert_eq!(
         options,
-        SLEEP_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+        SLEEP_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
         "day {day}: unexpected sleep menu"
     );
     game.set_choice_cursor(2); // 今天还是睡吧
@@ -103,7 +106,10 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
     let confirm = wait_for_choice(game, 300, "sleep confirm");
     assert_eq!(
         confirm,
-        CONFIRM_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+        CONFIRM_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
         "day {day}: unexpected confirm menu"
     );
     game.set_choice_cursor(0); // 是的
@@ -132,7 +138,11 @@ fn sleep_with_confirm_edge(game: &mut Game, day: i32) -> (i32, i32, i32, i32) {
     game.vm.vars.set(63, 1);
     let mut options = Vec::new();
     for frame in 0..1600 {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         if let Some(choice) = &game.choices {
             options = choice.options.clone();
@@ -142,7 +152,10 @@ fn sleep_with_confirm_edge(game: &mut Game, day: i32) -> (i32, i32, i32, i32) {
     game.key_bits = 0;
     assert_eq!(
         options,
-        SLEEP_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+        SLEEP_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
         "day {day}: unexpected sleep menu"
     );
     game.set_choice_cursor(2); // 今天还是睡吧
@@ -157,7 +170,10 @@ fn sleep_with_confirm_edge(game: &mut Game, day: i32) -> (i32, i32, i32, i32) {
     }
     assert_eq!(
         confirm,
-        CONFIRM_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+        CONFIRM_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
         "day {day}: unexpected confirm menu"
     );
     game.set_choice_cursor(0); // 是的
@@ -188,7 +204,11 @@ fn sleep_with_confirm_edge(game: &mut Game, day: i32) -> (i32, i32, i32, i32) {
 fn finish_day_after_battle(game: &mut Game, day: i32) {
     let mut finished = false;
     for frame in 0..4000 {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         if game.vm.instances().iter().all(|i| i.event != 251) {
             finished = true;
@@ -196,8 +216,14 @@ fn finish_day_after_battle(game: &mut Game, day: i32) {
         }
     }
     game.key_bits = 0;
-    assert!(finished, "day {day}: daytime command never returned after the battle");
-    assert_eq!(game.stats.warnings, 0, "day {day}: warnings after the battle");
+    assert!(
+        finished,
+        "day {day}: daytime command never returned after the battle"
+    );
+    assert_eq!(
+        game.stats.warnings, 0,
+        "day {day}: warnings after the battle"
+    );
     assert_eq!(game.vm.vars.get(160), day);
     assert!(
         game.vm.vars.get(4) >= 16,
@@ -207,7 +233,11 @@ fn finish_day_after_battle(game: &mut Game, day: i32) {
     );
     let mut dinner_done = false;
     for frame in 0..6000 {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         let alive300 = game.vm.instances().iter().any(|i| i.event == 300);
         let alive326 = game.vm.instances().iter().any(|i| i.event == 326);
@@ -229,14 +259,24 @@ fn finish_day_after_battle(game: &mut Game, day: i32) {
 /// Click the first workday command button (row 0 鍛錬) and let the day run through
 /// 17:00 to the 18:30 bedroom. Days 2 and 3, plus day 5.
 const DAY_COMMAND_LABELS: [&str; 6] = [
-    "给店里帮忙", "学习会", "基础锻炼", "攻击练习", "防御练习", "秘密特训",
+    "给店里帮忙",
+    "学习会",
+    "基础锻炼",
+    "攻击练习",
+    "防御练习",
+    "秘密特训",
 ];
 const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
 
 fn day_row_texts(game: &Game) -> Vec<String> {
     DAY_ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -284,12 +324,18 @@ fn spend_day_choosing_row(game: &mut Game, day: i32) {
             break;
         }
     }
-    assert!(finished, "day {day}: daytime command never returned ({label})");
+    assert!(
+        finished,
+        "day {day}: daytime command never returned ({label})"
+    );
     assert_eq!(game.stats.warnings, 0, "day {day}: warnings during day");
     assert_eq!(game.vm.vars.get(4), 17, "day {day}: expected 17:00");
     assert_eq!(game.vm.vars.get(5), 0, "day {day}: expected 17:00");
     assert_eq!(game.vm.vars.get(160), day);
-    assert!(game.vm.vars.get(14) < energy_before, "day {day}: energy not spent");
+    assert!(
+        game.vm.vars.get(14) < energy_before,
+        "day {day}: energy not spent"
+    );
     let mut evening = false;
     for _ in 0..6000 {
         game.frame();
@@ -305,7 +351,11 @@ fn spend_day_choosing_row(game: &mut Game, day: i32) {
         game.vm.vars.get(5)
     );
     assert_eq!(game.vm.vars.get(160), day);
-    assert_eq!(game.vm.vars.get(5), 30, "day {day}: evening settles on the half hour");
+    assert_eq!(
+        game.vm.vars.get(5),
+        30,
+        "day {day}: evening settles on the half hour"
+    );
     assert_eq!(game.stats.warnings, 0, "day {day}: warnings in evening");
 }
 
@@ -344,7 +394,11 @@ fn click_label_row(game: &mut Game, label: &str) -> (i32, i32) {
 /// Feed OK until the weekend menu (CE310) is drawn with its five/fewer buttons.
 fn wait_for_weekend_menu(game: &mut Game, budget: usize) -> Vec<String> {
     for frame in 0..budget {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         let rows = day_row_texts(game);
         if rows.iter().any(|text| text.contains("悠然自得")) && has_event(game, 310) {
@@ -367,7 +421,8 @@ fn day_five_work_rolls_into_the_weekend_and_day_seven_menu() {
     game.set_choice_cursor(0);
     game.auto_choice = true;
     game.auto_choice_delay = 2;
-    game.start_map_event_by_name("SampleMapA", 0).expect("entry event");
+    game.start_map_event_by_name("SampleMapA", 0)
+        .expect("entry event");
     for _ in 0..1600 {
         game.frame();
     }
@@ -398,7 +453,11 @@ fn day_five_work_rolls_into_the_weekend_and_day_seven_menu() {
 
     let mut settled = false;
     for frame in 0..4000 {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         if game.vm.vars.get(343) == 1 && game.vm.vars.get(350) == 0 {
             settled = true;
@@ -407,7 +466,11 @@ fn day_five_work_rolls_into_the_weekend_and_day_seven_menu() {
     }
     assert!(settled, "the day-4 fight must settle without injection");
     for frame in 0..2000 {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         if !has_event(&game, 239) {
             break;
@@ -415,7 +478,10 @@ fn day_five_work_rolls_into_the_weekend_and_day_seven_menu() {
     }
     game.key_bits = 0;
     assert!(!has_event(&game, 239), "CE239 must return after settlement");
-    assert_eq!(game.stats.warnings, 0, "no warnings through the day-4 battle");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "no warnings through the day-4 battle"
+    );
     finish_day_after_battle(&mut game, 4);
     sleep_into_next_morning(&mut game, 4); // day5 08:30, weekday 4 (Fri)
 
@@ -429,7 +495,11 @@ fn day_five_work_rolls_into_the_weekend_and_day_seven_menu() {
     game.auto_choice_delay = 1;
     let mut greetings = 0usize;
     for frame in 0..2500 {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         if let Some(choice) = &game.choices {
             if choice.frames == 1 {
@@ -469,8 +539,15 @@ fn day_five_work_rolls_into_the_weekend_and_day_seven_menu() {
 
     // ---- day 6 (Saturday): CE310 weekend menu, three slots, dinner, sleep ----
     let (day, weekday, hour, minute) = sleep_with_confirm_edge(&mut game, 5);
-    assert_eq!((day, weekday, hour, minute), (6, 5, 9, 30), "day 6 is Saturday 09:30");
-    assert!(!has_event(&game, 251), "the weekday command menu must not run on Saturday");
+    assert_eq!(
+        (day, weekday, hour, minute),
+        (6, 5, 9, 30),
+        "day 6 is Saturday 09:30"
+    );
+    assert!(
+        !has_event(&game, 251),
+        "the weekday command menu must not run on Saturday"
+    );
 
     let weekend = wait_for_weekend_menu(&mut game, 2000);
     assert_eq!(
@@ -500,7 +577,11 @@ fn day_five_work_rolls_into_the_weekend_and_day_seven_menu() {
     eprintln!("weekend training clicked at ({x},{y})");
     let mut trained = false;
     for frame in 0..3000 {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         if game.vm.vars.get(4) == 12 && game.vm.vars.get(5) == 0 && has_event(&game, 310) {
             trained = true;
@@ -521,7 +602,11 @@ fn day_five_work_rolls_into_the_weekend_and_day_seven_menu() {
     eprintln!("weekend relax 1 clicked at ({x},{y})");
     let mut relaxed = false;
     for frame in 0..3000 {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         if game.vm.vars.get(4) == 15 && game.vm.vars.get(5) == 0 && has_event(&game, 310) {
             relaxed = true;
@@ -540,7 +625,11 @@ fn day_five_work_rolls_into_the_weekend_and_day_seven_menu() {
     eprintln!("weekend relax 2 clicked at ({x},{y})");
     let mut ended = false;
     for frame in 0..3000 {
-        game.key_bits = if frame % 2 == 0 { wolf_game::key::OK } else { 0 };
+        game.key_bits = if frame % 2 == 0 {
+            wolf_game::key::OK
+        } else {
+            0
+        };
         game.frame();
         if game.vm.vars.get(4) == 17 && !has_event(&game, 310) {
             ended = true;
@@ -571,21 +660,31 @@ fn day_five_work_rolls_into_the_weekend_and_day_seven_menu() {
         game.vm.vars.get(4),
         game.vm.vars.get(5)
     );
-    assert_eq!(game.vm.vars.get(5), 30, "day6 evening settles on the half hour");
+    assert_eq!(
+        game.vm.vars.get(5),
+        30,
+        "day6 evening settles on the half hour"
+    );
 
     let (day, weekday, hour, minute) = sleep_with_confirm_edge(&mut game, 6);
-    assert_eq!((day, weekday, hour, minute), (7, 6, 9, 30), "day 7 is Sunday 09:30");
+    assert_eq!(
+        (day, weekday, hour, minute),
+        (7, 6, 9, 30),
+        "day 7 is Sunday 09:30"
+    );
     let sunday = wait_for_weekend_menu(&mut game, 2000);
     assert_eq!(
-        sunday,
-        weekend,
+        sunday, weekend,
         "Sunday draws the same five weekend commands after the 09:30 morning scene"
     );
     assert_eq!(game.vm.vars.get(4), 9, "Sunday menu is on screen at 09:30");
     assert_eq!(game.vm.vars.get(5), 30, "Sunday menu stays at 09:30");
     assert_eq!(game.vm.vars.get(160), 7, "day counter reached 7");
     assert_eq!(game.vm.vars.get(6), 6, "day7 weekday = Sunday");
-    assert_eq!(game.stats.warnings, 0, "the whole day5 -> day7 run is warning-free");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the whole day5 -> day7 run is warning-free"
+    );
 
     eprintln!(
         "m12_day6_weekend: day5 08:30 -> day6 Sat 09:30 -> day7 Sun 09:30 OK; \

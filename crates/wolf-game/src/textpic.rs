@@ -550,7 +550,12 @@ impl<'a, 'b> Builder<'a, 'b> {
 /// the database cell, not the control code. Keeping one evaluator means the message
 /// window and the HUD cannot disagree about what a variable means.
 pub(crate) fn resolve_var_text(var: &VarRef, vars: &dyn Vars, cells: &dyn Cells) -> String {
-    VarResolver { vars, cells, depth: 0 }.var_text(var)
+    VarResolver {
+        vars,
+        cells,
+        depth: 0,
+    }
+    .var_text(var)
 }
 
 /// Shared recursive evaluator for `\v`, `\s`, `\cself` and the database escapes.

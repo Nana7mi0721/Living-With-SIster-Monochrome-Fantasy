@@ -18,7 +18,7 @@
 //! `capture --map` composite the fade over the tiles and the pictures they draw.
 
 /// Whole-screen fade used by opcodes 160/161/162.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct ScreenTransition {
     /// Frames advanced so far.
     elapsed: u32,
@@ -26,16 +26,6 @@ pub struct ScreenTransition {
     duration: u32,
     /// True between the 162 execute and the end of the animation.
     active: bool,
-}
-
-impl Default for ScreenTransition {
-    fn default() -> Self {
-        Self {
-            elapsed: 0,
-            duration: 0,
-            active: false,
-        }
-    }
 }
 
 impl ScreenTransition {

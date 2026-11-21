@@ -42,15 +42,19 @@ const BOSS_GAUGE: i32 = 4000;
 fn data_root() -> PathBuf {
     let raw = std::env::var("WOLF_DATA_ROOT").unwrap_or_else(|_| "work/all".into());
     let p = PathBuf::from(raw);
-    if p.is_absolute() { return p; }
+    if p.is_absolute() {
+        return p;
+    }
     let mut b = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    b.pop(); b.pop();
+    b.pop();
+    b.pop();
     b.join(p)
 }
 
 fn save01() -> PathBuf {
     let mut b = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    b.pop(); b.pop();
+    b.pop();
+    b.pop();
     b.join("work/retail_backup/Save/SaveData01.sav")
 }
 
@@ -65,7 +69,8 @@ fn open_boss_battle(round_loop: bool) -> Game {
     game.auto_choice = true;
     game.auto_choice_delay = 1;
     assert!(game.seed_battle_databases() > 0, "seed battle cells");
-    game.databases.set_text(wolf_game::db::Container::CData, 5, 16, 0, "┗ 状態リスト");
+    game.databases
+        .set_text(wolf_game::db::Container::CData, 5, 16, 0, "┗ 状態リスト");
     let _ = game.start_engine_events();
     game.set_battle_wiring(true);
     game.set_battle_round_loop(round_loop);
@@ -77,7 +82,12 @@ fn open_boss_battle(round_loop: bool) -> Game {
 }
 
 fn pools(game: &Game) -> [i32; 4] {
-    [game.vm.vars.get(345), game.vm.vars.get(346), game.vm.vars.get(347), game.vm.vars.get(348)]
+    [
+        game.vm.vars.get(345),
+        game.vm.vars.get(346),
+        game.vm.vars.get(347),
+        game.vm.vars.get(348),
+    ]
 }
 
 #[test]
@@ -94,15 +104,26 @@ fn boss_battle_runs_multiple_rounds_and_settles() {
     for f in 0..40000usize {
         game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
         let _ = game.frame();
-        if !have_pre && game.vm.vars.get(340) != 0 { pre = pools(&game); have_pre = true; }
+        if !have_pre && game.vm.vars.get(340) != 0 {
+            pre = pools(&game);
+            have_pre = true;
+        }
         for inst in game.vm.instances() {
-            if inst.event == 242 && inst.pc as i32 > max242_pc { max242_pc = inst.pc as i32; }
+            if inst.event == 242 && inst.pc as i32 > max242_pc {
+                max242_pc = inst.pc as i32;
+            }
         }
         let v350 = game.vm.vars.get(350);
-        if v350 != last350 { v350_seq.push(v350); last350 = v350; }
+        if v350 != last350 {
+            v350_seq.push(v350);
+            last350 = v350;
+        }
         v352 = game.vm.vars.get(352);
         v343 = game.vm.vars.get(343);
-        if v343 == 1 && v350 == 0 { settled = true; break; }
+        if v343 == 1 && v350 == 0 {
+            settled = true;
+            break;
+        }
     }
     for f in 0..1200usize {
         game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
@@ -116,15 +137,30 @@ fn boss_battle_runs_multiple_rounds_and_settles() {
         pre, post, game.stats.warnings);
     assert!(have_pre, "battle must become active");
     assert!(settled, "BOSS battle must settle");
-    assert!(rounds >= 2, "must run >= 2 real CE242 command rounds, got {rounds}");
-    assert!(turn_starts >= 1, "CE241 turn-start must fire between rounds, got {turn_starts}");
+    assert!(
+        rounds >= 2,
+        "must run >= 2 real CE242 command rounds, got {rounds}"
+    );
+    assert!(
+        turn_starts >= 1,
+        "CE241 turn-start must fire between rounds, got {turn_starts}"
+    );
     // CE241 reset: the phase sequence must contain a 2 -> 0 transition.
-    assert!(v350_seq.windows(2).any(|w| w[0] == 2 && w[1] == 0),
-        "phase must be reset 2 -> 0 by CE241, seq={v350_seq:?}");
+    assert!(
+        v350_seq.windows(2).any(|w| w[0] == 2 && w[1] == 0),
+        "phase must be reset 2 -> 0 by CE241, seq={v350_seq:?}"
+    );
     // Distinct member pools: the rotating command schedule must drain at least two members.
-    assert_eq!(pre, [5, 4, 3, 2], "CE239 must seed the four pools 5/4/3/2, got {pre:?}");
+    assert_eq!(
+        pre,
+        [5, 4, 3, 2],
+        "CE239 must seed the four pools 5/4/3/2, got {pre:?}"
+    );
     let drained: Vec<usize> = (0..4).filter(|&i| post[i] < pre[i]).collect();
-    assert!(drained.len() >= 2, ">= 2 distinct member pools must be drained, pre={pre:?} post={post:?}");
+    assert!(
+        drained.len() >= 2,
+        ">= 2 distinct member pools must be drained, pre={pre:?} post={post:?}"
+    );
     assert_eq!(v343, 1, "battle decided");
     assert!(v352 == 1 || v352 == -1, "real result, got {v352}");
     assert_eq!(game.stats.warnings, 0, "no warnings");

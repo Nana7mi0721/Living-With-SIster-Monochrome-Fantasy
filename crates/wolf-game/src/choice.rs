@@ -111,11 +111,7 @@ pub fn text_width_at(text: &str, font_px: f32) -> f32 {
 /// characters and the frame widened around codes nobody sees. Measuring the styled
 /// runs keeps the frame and the glyphs on the same arithmetic.
 /// [styled_width] with live variable/database resolution.
-fn styled_width_with(
-    text: &str,
-    font_px: f32,
-    vars: Option<&crate::textpic::Ctx<'_>>,
-) -> f32 {
+fn styled_width_with(text: &str, font_px: f32, vars: Option<&crate::textpic::Ctx<'_>>) -> f32 {
     message::inline_runs_with(text, font_px, &WhiteColours, vars)
         .iter()
         .map(|run| run.rect[2])
@@ -262,6 +258,7 @@ pub fn skin_pieces(layout: &ChoiceLayout, skin_w: u32, skin_h: u32) -> Vec<Windo
 /// The selected row is marked with a leading angle quote because the port has no
 /// cursor sprite wired up yet; the sprite in `SystemGraphic/cursol.png` would be the
 /// faithful choice.
+#[allow(clippy::too_many_arguments)]
 fn draw(
     atlas: &mut Atlas,
     assets: &mut Assets,
@@ -393,6 +390,7 @@ pub fn overlay_at_sized(
 
 /// overlay_at_sized with the SysDatabase palette, so `\c[n]` and `\E` in an option
 /// resolve the same way they do in a message or a text picture.
+#[allow(clippy::too_many_arguments)]
 pub fn overlay_at_sized_styled(
     atlas: &mut Atlas,
     assets: &mut Assets,
@@ -407,6 +405,7 @@ pub fn overlay_at_sized_styled(
 }
 
 /// [overlay_at_sized_styled] with live variable/database resolution for option text.
+#[allow(clippy::too_many_arguments)]
 pub fn overlay_at_sized_styled_with(
     atlas: &mut Atlas,
     assets: &mut Assets,

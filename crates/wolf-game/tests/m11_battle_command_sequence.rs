@@ -35,14 +35,54 @@ struct BodyInfo {
 }
 
 const BODIES: [BodyInfo; 8] = [
-    BodyInfo { cmd: 1, first_lo: 145, first_hi_excl: 475, pool: 0 },
-    BodyInfo { cmd: 2, first_lo: 476, first_hi_excl: 761, pool: 0 },
-    BodyInfo { cmd: 3, first_lo: 761, first_hi_excl: 970, pool: 1 },
-    BodyInfo { cmd: 4, first_lo: 972, first_hi_excl: 1057, pool: 1 },
-    BodyInfo { cmd: 5, first_lo: 1057, first_hi_excl: 1134, pool: 2 },
-    BodyInfo { cmd: 6, first_lo: 1134, first_hi_excl: 1194, pool: 3 },
-    BodyInfo { cmd: 7, first_lo: 1196, first_hi_excl: 1403, pool: 2 },
-    BodyInfo { cmd: 8, first_lo: 1405, first_hi_excl: 1436, pool: 4 },
+    BodyInfo {
+        cmd: 1,
+        first_lo: 145,
+        first_hi_excl: 475,
+        pool: 0,
+    },
+    BodyInfo {
+        cmd: 2,
+        first_lo: 476,
+        first_hi_excl: 761,
+        pool: 0,
+    },
+    BodyInfo {
+        cmd: 3,
+        first_lo: 761,
+        first_hi_excl: 970,
+        pool: 1,
+    },
+    BodyInfo {
+        cmd: 4,
+        first_lo: 972,
+        first_hi_excl: 1057,
+        pool: 1,
+    },
+    BodyInfo {
+        cmd: 5,
+        first_lo: 1057,
+        first_hi_excl: 1134,
+        pool: 2,
+    },
+    BodyInfo {
+        cmd: 6,
+        first_lo: 1134,
+        first_hi_excl: 1194,
+        pool: 3,
+    },
+    BodyInfo {
+        cmd: 7,
+        first_lo: 1196,
+        first_hi_excl: 1403,
+        pool: 2,
+    },
+    BodyInfo {
+        cmd: 8,
+        first_lo: 1405,
+        first_hi_excl: 1436,
+        pool: 4,
+    },
 ];
 
 fn body(cmd: i32) -> BodyInfo {
@@ -81,7 +121,11 @@ fn pools(game: &Game) -> [i32; 4] {
 }
 
 fn count_event(game: &Game, event: u32) -> usize {
-    game.vm.instances().iter().filter(|i| i.event == event).count()
+    game.vm
+        .instances()
+        .iter()
+        .filter(|i| i.event == event)
+        .count()
 }
 
 #[derive(Debug, Clone)]
@@ -228,7 +272,10 @@ fn drive(schedule: &[i32]) -> Trace {
             break;
         }
     }
-    assert!(settled, "battle must settle (real CE244 result) within 40000 frames");
+    assert!(
+        settled,
+        "battle must settle (real CE244 result) within 40000 frames"
+    );
 
     // Drain the CE239 end sequence after settlement so warnings/return paths run.
     for f in 0..600usize {
@@ -301,7 +348,8 @@ fn assert_rounds(trace: &Trace, expected: &[i32]) {
                 rec.pre[slot]
             };
             assert_eq!(
-                rec.post[slot], want_pool,
+                rec.post[slot],
+                want_pool,
                 "round {i} cmd {want}: pool {} must be {} (pre {:?} post {:?})",
                 [345, 346, 347, 348][slot],
                 want_pool,
@@ -315,8 +363,14 @@ fn assert_rounds(trace: &Trace, expected: &[i32]) {
 fn assert_common_real_event_evidence(trace: &Trace) {
     assert!(trace.ce239_seen, "real CE239 battle caller must be live");
     assert!(trace.ce253_seen, "real CE253 battle chain must be live");
-    assert!(trace.ce242_live_frames > 0, "real CE242 command scripts must run");
-    assert!(trace.ce243_live_frames > 0, "real CE243 enemy-action scripts must run");
+    assert!(
+        trace.ce242_live_frames > 0,
+        "real CE242 command scripts must run"
+    );
+    assert!(
+        trace.ce243_live_frames > 0,
+        "real CE243 enemy-action scripts must run"
+    );
     assert!(
         trace.ce241_live_frames > 0,
         "real CE241 turn-start must run between rounds"
@@ -380,12 +434,20 @@ fn four_round_sequence_maps_each_command_to_its_ce242_body_and_pool() {
             r.index, r.arg0, r.first_pc, r.start_frame, r.end_frame, r.pre, r.post
         );
     }
-    assert_eq!(trace.rounds.len(), 4, "the requested four indices must be four command rounds");
+    assert_eq!(
+        trace.rounds.len(),
+        4,
+        "the requested four indices must be four command rounds"
+    );
     assert_rounds(&trace, &[1, 2, 3, 4]);
     assert_common_real_event_evidence(&trace);
     // Requested sequence: members 1 and 2 act twice each.
     let post = trace.rounds[3].post;
-    assert_eq!(post, [3, 2, 3, 2], "the four commands drain pools 345 twice and 346 twice");
+    assert_eq!(
+        post,
+        [3, 2, 3, 2],
+        "the four commands drain pools 345 twice and 346 twice"
+    );
 }
 
 #[test]
@@ -412,13 +474,17 @@ fn four_member_rotation_drains_all_four_action_point_pools() {
             r.index, r.arg0, r.first_pc, r.start_frame, r.end_frame, r.pre, r.post
         );
     }
-    assert!(trace.rounds.len() >= 4, "at least the four distinct member rounds must run");
+    assert!(
+        trace.rounds.len() >= 4,
+        "at least the four distinct member rounds must run"
+    );
     assert_rounds(&trace, &[1, 3, 5, 6]);
     assert_common_real_event_evidence(&trace);
     // The first four rounds collectively drained all four pools once: [5,4,3,2] -> [4,3,2,1].
     let after_four = trace.rounds[3].post;
     assert_eq!(
-        after_four, [4, 3, 2, 1],
+        after_four,
+        [4, 3, 2, 1],
         "commands 1/3/5/6 must drain pools 345/346/347/348 respectively"
     );
 }

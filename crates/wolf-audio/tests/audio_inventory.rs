@@ -147,12 +147,9 @@ fn scan_sound_paths(bytes: &[u8]) -> Vec<String> {
 fn resolve_ref(root: &Path, rel: &str) -> Option<PathBuf> {
     let normalised = rel.replace('\\', "/");
     let p = Path::new(&normalised);
-    for cand in [p.to_path_buf(), root.join(p), root.join("Data").join(p)] {
-        if cand.is_file() {
-            return Some(cand);
-        }
-    }
-    None
+    [p.to_path_buf(), root.join(p), root.join("Data").join(p)]
+        .into_iter()
+        .find(|cand| cand.is_file())
 }
 
 #[test]
@@ -228,7 +225,10 @@ fn audio_inventory() {
             sanity.push(format!("{}: zero frames", r.rel));
         }
         if r.sample_rate == 0 || r.sample_rate > 192_000 {
-            sanity.push(format!("{}: implausible sample_rate {}", r.rel, r.sample_rate));
+            sanity.push(format!(
+                "{}: implausible sample_rate {}",
+                r.rel, r.sample_rate
+            ));
         }
         if r.channels == 0 || r.channels > 8 {
             sanity.push(format!("{}: implausible channels {}", r.rel, r.channels));
@@ -266,7 +266,12 @@ fn audio_inventory() {
             }
         }
     }
-    for name in ["CommonEvent.dat", "SysDatabase.dat", "DataBase.dat", "CDataBase.dat"] {
+    for name in [
+        "CommonEvent.dat",
+        "SysDatabase.dat",
+        "DataBase.dat",
+        "CDataBase.dat",
+    ] {
         let p = root.join("BasicData").join(name);
         if let Ok(bytes) = fs::read(&p) {
             refs.extend(scan_sound_paths(&bytes));
@@ -308,7 +313,10 @@ fn audio_inventory() {
     println!("digital-silent files: {}", digital_silent.len());
 
     if !rows.is_empty() {
-        let min_dur = rows.iter().map(|r| r.duration).fold(f32::INFINITY, f32::min);
+        let min_dur = rows
+            .iter()
+            .map(|r| r.duration)
+            .fold(f32::INFINITY, f32::min);
         let max_dur = rows.iter().map(|r| r.duration).fold(0.0f32, f32::max);
         let min_peak = rows.iter().map(|r| r.peak).fold(f32::INFINITY, f32::min);
         let min_rms = rows.iter().map(|r| r.rms).fold(f32::INFINITY, f32::min);
@@ -336,11 +344,19 @@ fn audio_inventory() {
         }
     }
     if !digital_silent.is_empty() {
-        println!("\nDIGITAL-SILENT ({}): {:?}", digital_silent.len(), digital_silent);
+        println!(
+            "\nDIGITAL-SILENT ({}): {:?}",
+            digital_silent.len(),
+            digital_silent
+        );
     }
 
     // ---- hard assertions -------------------------------------------------------
-    assert!(!files.is_empty(), "found no audio files under {}", root.display());
+    assert!(
+        !files.is_empty(),
+        "found no audio files under {}",
+        root.display()
+    );
     // One shipped retail WAV is malformed: SE/（Action）跳ね.wav has a 26-byte fmt chunk
     // (PCM fmt must be 16/18/40 bytes), which symphonia correctly rejects. That is an
     // asset defect we can only report, not fix here (no production edits). Every *other*
@@ -356,10 +372,23 @@ fn audio_inventory() {
         unexpected.len(),
         unexpected
     );
-    assert!(sanity.is_empty(), "{} audio file(s) failed sanity checks", sanity.len());
-    assert!(dir_counts.get("BGM").copied().unwrap_or(0) >= 40, "expected >=40 BGM files");
-    assert!(dir_counts.get("SE").copied().unwrap_or(0) >= 250, "expected >=250 SE files");
-    assert!(loop_tagged >= 20, "expected >=20 loop-tagged files, found {loop_tagged}");
+    assert!(
+        sanity.is_empty(),
+        "{} audio file(s) failed sanity checks",
+        sanity.len()
+    );
+    assert!(
+        dir_counts.get("BGM").copied().unwrap_or(0) >= 40,
+        "expected >=40 BGM files"
+    );
+    assert!(
+        dir_counts.get("SE").copied().unwrap_or(0) >= 250,
+        "expected >=250 SE files"
+    );
+    assert!(
+        loop_tagged >= 20,
+        "expected >=20 loop-tagged files, found {loop_tagged}"
+    );
     // Every audio path the game data references must resolve, except the one known missing
     // retail file (documented in docs/AUDIO.md / ASSET_AUDIT.md).
     let expected_missing: BTreeSet<String> = ["BGM/kana.mp3".to_string()].into_iter().collect();
@@ -368,7 +397,11 @@ fn audio_inventory() {
         got_missing, expected_missing,
         "unexpected missing sound references (data references audio not present in the tree)"
     );
-    assert!(digital_silent.is_empty(), "{} audio file(s) are digital silence", digital_silent.len());
+    assert!(
+        digital_silent.is_empty(),
+        "{} audio file(s) are digital silence",
+        digital_silent.len()
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -416,7 +449,10 @@ fn engine_bgm_loop_wrap_is_sample_continuous() {
             "frame {i}: got {g}, want {w} (loop wrap not continuous)"
         );
     }
-    assert!(engine.bgm_playing(), "BGM must keep playing across the loop seam");
+    assert!(
+        engine.bgm_playing(),
+        "BGM must keep playing across the loop seam"
+    );
 }
 
 #[test]
@@ -429,7 +465,10 @@ fn engine_bgm_stop_with_fade_ends_silent() {
         out.last().copied().unwrap().abs() < 1e-3,
         "last frame of a completed fade must be ~silent"
     );
-    assert!(!engine.bgm_playing(), "BGM must stop once the fade completes");
+    assert!(
+        !engine.bgm_playing(),
+        "BGM must stop once the fade completes"
+    );
 }
 
 #[test]
@@ -440,7 +479,10 @@ fn engine_stop_bgm_zero_is_immediate() {
     engine.stop_bgm(0);
     assert!(!engine.bgm_playing());
     let out = engine.render_offline(16);
-    assert!(out.iter().all(|s| s.abs() < 1e-6), "immediate stop must render silence");
+    assert!(
+        out.iter().all(|s| s.abs() < 1e-6),
+        "immediate stop must render silence"
+    );
 }
 
 #[test]
@@ -452,7 +494,10 @@ fn engine_se_voices_overlap_and_sum() {
     let out = engine.render_offline(256);
     // Each frame = 0.2 + 0.3 = 0.5.
     for s in &out {
-        assert!((s - 0.5).abs() < 1e-3, "overlapping SE voices should sum to 0.5, got {s}");
+        assert!(
+            (s - 0.5).abs() < 1e-3,
+            "overlapping SE voices should sum to 0.5, got {s}"
+        );
     }
 }
 
@@ -469,7 +514,10 @@ fn engine_volume_scaling_halves_amplitude() {
     half.play_se_audio(make(), 0.5);
     let r_half = rms_of(&half.render_offline(2048));
 
-    assert!((r_full - 0.6).abs() < 1e-3, "full-volume rms {r_full} != 0.6");
+    assert!(
+        (r_full - 0.6).abs() < 1e-3,
+        "full-volume rms {r_full} != 0.6"
+    );
     let ratio = r_full / r_half;
     assert!(
         (ratio - 2.0).abs() < 0.02,

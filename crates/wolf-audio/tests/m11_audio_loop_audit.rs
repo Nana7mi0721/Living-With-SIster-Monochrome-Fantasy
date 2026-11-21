@@ -203,7 +203,9 @@ struct Row {
 }
 
 fn audit_row(root: &Path, path: &Path) -> Option<Row> {
-    let Ok(bytes) = fs::read(path) else { return None };
+    let Ok(bytes) = fs::read(path) else {
+        return None;
+    };
     let start = raw_tag(&bytes, b"LOOPSTART");
     let length = raw_tag(&bytes, b"LOOPLENGTH");
     if start.is_none() && length.is_none() {
@@ -270,7 +272,7 @@ fn audit_row(root: &Path, path: &Path) -> Option<Row> {
                 flags.push("LEN_EQUALS_TRACK");
             }
         }
-        if start.map_or(false, |v| v >= frames as u64) {
+        if start.is_some_and(|v| v >= frames as u64) {
             flags.push("START_OOB");
         }
     } else {
@@ -370,12 +372,36 @@ fn m11_audio_loop_audit() {
         rows.len()
     );
     for r in &rows {
-        assert_eq!(r.ext, "ogg", "loop tags must be on ogg, got {} ({})", r.rel, r.ext);
-        assert!(r.start.is_some(), "{} has LOOPLENGTH but no LOOPSTART", r.rel);
-        assert!(r.decoded.is_some(), "{} has no usable decoded loop region", r.rel);
-        assert!(!r.flags.contains(&"START_OOB"), "{} loop start is past end of file", r.rel);
-        assert!(!r.flags.contains(&"NO_USABLE_LOOP"), "{} decoded loop is unusable", r.rel);
-        assert!(r.sample_rate > 0 && r.frames > 0, "{} decoded to nothing usable", r.rel);
+        assert_eq!(
+            r.ext, "ogg",
+            "loop tags must be on ogg, got {} ({})",
+            r.rel, r.ext
+        );
+        assert!(
+            r.start.is_some(),
+            "{} has LOOPLENGTH but no LOOPSTART",
+            r.rel
+        );
+        assert!(
+            r.decoded.is_some(),
+            "{} has no usable decoded loop region",
+            r.rel
+        );
+        assert!(
+            !r.flags.contains(&"START_OOB"),
+            "{} loop start is past end of file",
+            r.rel
+        );
+        assert!(
+            !r.flags.contains(&"NO_USABLE_LOOP"),
+            "{} decoded loop is unusable",
+            r.rel
+        );
+        assert!(
+            r.sample_rate > 0 && r.frames > 0,
+            "{} decoded to nothing usable",
+            r.rel
+        );
         for (name, v) in [
             ("seam_abs", r.seam_abs),
             ("step", r.step),
@@ -396,8 +422,16 @@ fn m11_audio_loop_audit() {
             Some(len) => start.saturating_add(len).min(r.frames as u64),
             None => r.frames as u64,
         };
-        assert_eq!(ls, start, "{} decoded loop_start differs from LOOPSTART", r.rel);
-        assert_eq!(le, expected_end, "{} decoded loop_end differs from clamped tag end", r.rel);
+        assert_eq!(
+            ls, start,
+            "{} decoded loop_start differs from LOOPSTART",
+            r.rel
+        );
+        assert_eq!(
+            le, expected_end,
+            "{} decoded loop_end differs from clamped tag end",
+            r.rel
+        );
     }
 
     // Determinism: a second in-memory pass over the already-sorted rows must be identical.

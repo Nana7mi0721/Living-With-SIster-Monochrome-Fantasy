@@ -43,12 +43,12 @@ fn open_game() -> Option<Game> {
 /// (CE253/CE254). Which task lands on row 1 is therefore a retail-PRNG draw, so the
 /// test picks the first CE252 row the way a player would instead of assuming 学习会.
 const DAY_COMMANDS: [(&str, i32, Option<usize>); 6] = [
-    ("给店里帮忙", 1, None),       // pays money (var7)
-    ("学习会", 2, Some(171)),      // 賢さ
-    ("基础锻炼", 3, Some(174)),    // 根性
-    ("攻击练习", 4, Some(170)),    // 攻撃技術
-    ("防御练习", 5, Some(173)),    // 防御技術
-    ("秘密特训", 6, Some(174)),    // 根性
+    ("给店里帮忙", 1, None),    // pays money (var7)
+    ("学习会", 2, Some(171)),   // 賢さ
+    ("基础锻炼", 3, Some(174)), // 根性
+    ("攻击练习", 4, Some(170)), // 攻撃技術
+    ("防御练习", 5, Some(173)), // 防御技術
+    ("秘密特训", 6, Some(174)), // 根性
 ];
 
 fn day_command(label: &str) -> Option<(i32, Option<usize>)> {
@@ -63,7 +63,12 @@ const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
 fn day_row_texts(game: &Game) -> Vec<String> {
     DAY_ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -112,7 +117,11 @@ fn new_game_story_runs_on_the_background_scheduler_without_deadlock() {
         game.stats.peak_instances
     );
     assert_eq!(game.stats.warnings, 0, "no interpreter warnings");
-    assert!(game.screen.len() > 30, "the room and HUD stay drawn: {} pictures", game.screen.len());
+    assert!(
+        game.screen.len() > 30,
+        "the room and HUD stay drawn: {} pictures",
+        game.screen.len()
+    );
 
     // Every engine-always coroutine was started, plus the auto-start event and the
     // boot-time conditional event 38. The rest of the 97 are variable-gated UI states
@@ -123,15 +132,20 @@ fn new_game_story_runs_on_the_background_scheduler_without_deadlock() {
             "ENGINE_ALWAYS event {id} must run in every session"
         );
     }
-    assert!(game.vm.started_events.contains(&241), "auto-start event 241 runs");
-    assert!(game.vm.started_events.contains(&38), "boot-time conditional event 38 runs");
+    assert!(
+        game.vm.started_events.contains(&241),
+        "auto-start event 241 runs"
+    );
+    assert!(
+        game.vm.started_events.contains(&38),
+        "boot-time conditional event 38 runs"
+    );
     assert!(
         game.vm.started_events.len() >= 13,
         "at least 10 always + auto-start + implicit + 38: {}",
         game.vm.started_events.len()
     );
 }
-
 
 #[test]
 fn the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room() {
@@ -153,13 +167,20 @@ fn the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room() {
     }
 
     assert_eq!(game.stats.frames, 3200);
-    assert_eq!(game.stats.warnings, 0, "no interpreter warnings on the boot path");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "no interpreter warnings on the boot path"
+    );
     assert!(
         game.stats.instructions > 100_000,
         "the title path runs the splashes plus the room: {} instructions",
         game.stats.instructions
     );
-    assert!(game.screen.len() > 30, "the room and HUD are drawn: {} pictures", game.screen.len());
+    assert!(
+        game.screen.len() > 30,
+        "the room and HUD are drawn: {} pictures",
+        game.screen.len()
+    );
     // The sample title art lives in a negative (whole-screen) slot. Once the menu
     // answers with its 130, that layer belongs to the old map and must be gone.
     let stale: Vec<String> = game
@@ -186,8 +207,6 @@ fn the_title_menu_new_game_path_no_longer_leaves_title_art_over_the_room() {
     );
 }
 
-
-
 #[test]
 fn clicking_the_reading_icon_in_the_bedroom_runs_the_first_playable_action() {
     let Some(mut game) = open_game() else { return };
@@ -202,7 +221,10 @@ fn clicking_the_reading_icon_in_the_bedroom_runs_the_first_playable_action() {
     for _ in 0..1500 {
         game.frame();
     }
-    assert!(game.screen.len() > 30, "the bedroom is drawn before the click");
+    assert!(
+        game.screen.len() > 30,
+        "the bedroom is drawn before the click"
+    );
     assert_eq!(game.stats.warnings, 0);
 
     // The bedroom menu is mouse driven: one left click on the 读书 icon
@@ -229,8 +251,6 @@ fn clicking_the_reading_icon_in_the_bedroom_runs_the_first_playable_action() {
     );
     assert_eq!(game.stats.warnings, 0);
 }
-
-
 
 fn click_icon(game: &mut Game, x: i32, y: i32) {
     game.auto_advance = false;
@@ -272,8 +292,6 @@ fn the_bedroom_actions_can_be_played_one_after_another() {
     );
     assert_eq!(game.stats.warnings, 0);
 }
-
-
 
 /// Strips WOLF text escape commands so a live picture's text and its
 /// save-restored (plain) text compare equal in what the player actually sees.
@@ -376,7 +394,9 @@ fn a_live_played_scene_survives_a_save_and_reload() {
         "the visible picture layer changed across save -> reload"
     );
     assert_eq!(
-        (0..800).map(|index| reloaded.vm.vars.get(index)).collect::<Vec<_>>(),
+        (0..800)
+            .map(|index| reloaded.vm.vars.get(index))
+            .collect::<Vec<_>>(),
         vars_before,
         "the 800 normal variables changed across save -> reload"
     );
@@ -386,7 +406,6 @@ fn a_live_played_scene_survives_a_save_and_reload() {
     );
     let _ = std::fs::remove_dir_all(&out);
 }
-
 
 #[test]
 fn the_sleep_event_rolls_over_to_the_next_morning() {
@@ -417,8 +436,16 @@ fn the_sleep_event_rolls_over_to_the_next_morning() {
     assert_eq!(game.stats.warnings, 0, "no interpreter warnings");
     assert_eq!(game.vm.vars.get(4), 8, "the next morning starts at 8");
     assert_eq!(game.vm.vars.get(5), 30, "and 30 minutes");
-    assert_eq!(game.vm.vars.get(160), 4, "the day counter advanced to day 4");
-    assert_eq!(game.vm.vars.get(6), 2, "and the weekday advanced to Wednesday");
+    assert_eq!(
+        game.vm.vars.get(160),
+        4,
+        "the day counter advanced to day 4"
+    );
+    assert_eq!(
+        game.vm.vars.get(6),
+        2,
+        "and the weekday advanced to Wednesday"
+    );
     assert!(
         game.screen.len() > 20,
         "the morning scene is drawn: {} pictures",
@@ -472,7 +499,11 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
     let sleep_options = sleep_options.expect("the sister sleep prompt should open");
     assert_eq!(
         sleep_options,
-        vec!["恶作剧".to_owned(), "轻轻把被子盖好".to_owned(), "今天还是睡吧".to_owned()],
+        vec![
+            "恶作剧".to_owned(),
+            "轻轻把被子盖好".to_owned(),
+            "今天还是睡吧".to_owned()
+        ],
         "the prompt is the three-way night choice"
     );
 
@@ -510,13 +541,32 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
             break;
         }
     }
-    assert_eq!(game.stats.warnings, 0, "the sleep transition is warning-free");
-    assert_eq!(game.vm.vars.get(160), 2, "the day counter advanced to day 2");
-    assert_eq!(game.vm.vars.get(6), 1, "and the weekday advanced to Tuesday");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the sleep transition is warning-free"
+    );
+    assert_eq!(
+        game.vm.vars.get(160),
+        2,
+        "the day counter advanced to day 2"
+    );
+    assert_eq!(
+        game.vm.vars.get(6),
+        1,
+        "and the weekday advanced to Tuesday"
+    );
     assert_eq!(game.vm.vars.get(4), 8, "the next morning starts at 8");
     assert_eq!(game.vm.vars.get(5), 30, "and 30 minutes");
-    assert!(game.screen.len() > 20, "the morning scene is drawn: {} pictures", game.screen.len());
-    assert!(game.stats.instructions > 120_000, "the whole loop really ran: {} instructions", game.stats.instructions);
+    assert!(
+        game.screen.len() > 20,
+        "the morning scene is drawn: {} pictures",
+        game.screen.len()
+    );
+    assert!(
+        game.stats.instructions > 120_000,
+        "the whole loop really ran: {} instructions",
+        game.stats.instructions
+    );
 
     // The morning lands in CE251, whose day-command buttons draw `\f[20]\cself[5]`
     // and friends. The self string bank holds the label, so \cself must prefer it over
@@ -537,9 +587,8 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
             break;
         }
     }
-    let (row, label, expected_command, stat) = chosen.unwrap_or_else(|| {
-        panic!("CE251 draws no CE252 day command; labels={labels:?}")
-    });
+    let (row, label, expected_command, stat) =
+        chosen.unwrap_or_else(|| panic!("CE251 draws no CE252 day command; labels={labels:?}"));
     assert_ne!(
         label, "\\f[20]0",
         "the day-command label is a string, not the numeric self slot"
@@ -568,12 +617,21 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
     game.mouse_buttons = 0;
     for _ in 0..2500 {
         game.frame();
-        if game.vm.instances().iter().all(|instance| instance.event != 251) {
+        if game
+            .vm
+            .instances()
+            .iter()
+            .all(|instance| instance.event != 251)
+        {
             break;
         }
     }
     assert_eq!(game.stats.warnings, 0, "the day command is warning-free");
-    assert_eq!(game.vm.vars.get(4), 17, "the action spends the day until 17:00");
+    assert_eq!(
+        game.vm.vars.get(4),
+        17,
+        "the action spends the day until 17:00"
+    );
     assert_eq!(game.vm.vars.get(5), 0);
     assert_eq!(
         game.vm.vars.get(48),
@@ -600,7 +658,10 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
         game.vm.vars.get(14)
     );
     assert!(
-        game.vm.instances().iter().all(|instance| instance.event != 251),
+        game.vm
+            .instances()
+            .iter()
+            .all(|instance| instance.event != 251),
         "the day-command script finishes after the action"
     );
 
@@ -623,16 +684,28 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
         "the evening scene settles into the bedroom (clock={}:{}, instances={:?})",
         game.vm.vars.get(4),
         game.vm.vars.get(5),
-        game.vm.instances().iter().map(|i| i.event).collect::<Vec<_>>()
+        game.vm
+            .instances()
+            .iter()
+            .map(|i| i.event)
+            .collect::<Vec<_>>()
     );
-    assert_eq!(game.vm.vars.get(160), 2, "still day 2 after the evening scene");
+    assert_eq!(
+        game.vm.vars.get(160),
+        2,
+        "still day 2 after the evening scene"
+    );
     assert!(
         game.vm.vars.get(4) >= 18,
         "the evening reaches an evening hour ({}:{})",
         game.vm.vars.get(4),
         game.vm.vars.get(5)
     );
-    assert_eq!(game.vm.vars.get(5), 30, "the evening settles on the half hour");
+    assert_eq!(
+        game.vm.vars.get(5),
+        30,
+        "the evening settles on the half hour"
+    );
 
     game.auto_choice = false;
     game.vm.vars.set(63, 1);
@@ -648,7 +721,14 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
     }
     assert_eq!(
         second_options.as_deref(),
-        Some(["恶作剧".to_owned(), "轻轻把被子盖好".to_owned(), "今天还是睡吧".to_owned()].as_slice()),
+        Some(
+            [
+                "恶作剧".to_owned(),
+                "轻轻把被子盖好".to_owned(),
+                "今天还是睡吧".to_owned()
+            ]
+            .as_slice()
+        ),
         "the second night opens the same three-way sleep prompt"
     );
     game.set_choice_cursor(2);
@@ -680,7 +760,10 @@ fn the_bedroom_sleep_menu_choice_rolls_over_to_a_new_day() {
             break;
         }
     }
-    assert_eq!(game.stats.warnings, 0, "the second day loop is warning-free");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the second day loop is warning-free"
+    );
     assert_eq!(game.vm.vars.get(160), 3, "the loop advances to day 3");
     assert_eq!(game.vm.vars.get(6), 2, "and to Wednesday");
     assert_eq!(game.vm.vars.get(4), 8, "the third morning starts at 8");

@@ -250,7 +250,9 @@ impl Engine {
     // --- internals ----------------------------------------------------------
 
     fn lock(&self) -> MutexGuard<'_, Mixer> {
-        self.mixer.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.mixer
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     fn warn_once(&mut self, file: &str, err: &AudioError) {
@@ -295,14 +297,14 @@ fn build_stream(
     sample_format: SampleFormat,
 ) -> Result<Stream, String> {
     match sample_format {
-        SampleFormat::F32 => build_generic::<f32>(device, config.clone(), mixer),
-        SampleFormat::I16 => build_generic::<i16>(device, config.clone(), mixer),
-        SampleFormat::U16 => build_generic::<u16>(device, config.clone(), mixer),
-        SampleFormat::I32 => build_generic::<i32>(device, config.clone(), mixer),
-        SampleFormat::U32 => build_generic::<u32>(device, config.clone(), mixer),
-        SampleFormat::I8 => build_generic::<i8>(device, config.clone(), mixer),
-        SampleFormat::U8 => build_generic::<u8>(device, config.clone(), mixer),
-        SampleFormat::F64 => build_generic::<f64>(device, config.clone(), mixer),
+        SampleFormat::F32 => build_generic::<f32>(device, *config, mixer),
+        SampleFormat::I16 => build_generic::<i16>(device, *config, mixer),
+        SampleFormat::U16 => build_generic::<u16>(device, *config, mixer),
+        SampleFormat::I32 => build_generic::<i32>(device, *config, mixer),
+        SampleFormat::U32 => build_generic::<u32>(device, *config, mixer),
+        SampleFormat::I8 => build_generic::<i8>(device, *config, mixer),
+        SampleFormat::U8 => build_generic::<u8>(device, *config, mixer),
+        SampleFormat::F64 => build_generic::<f64>(device, *config, mixer),
         other => Err(format!("unsupported output sample format: {other}")),
     }
 }
@@ -324,9 +326,11 @@ where
                     return;
                 }
                 let frames = data.len() / channels;
-                let mut guard = mixer.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                let mut guard = mixer
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 let rendered = guard.render(frames);
-                for (dst, src) in data.iter_mut().zip(rendered.into_iter()) {
+                for (dst, src) in data.iter_mut().zip(rendered) {
                     *dst = T::from_sample(src);
                 }
             },

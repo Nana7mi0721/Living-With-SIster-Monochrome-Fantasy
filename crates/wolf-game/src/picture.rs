@@ -501,7 +501,7 @@ impl Shake {
             return (0, 0);
         }
         // Integer division is the whole waveform: the sign flips at every period boundary.
-        if (self.elapsed / self.period) % 2 == 0 {
+        if (self.elapsed / self.period).is_multiple_of(2) {
             self.offset
         } else {
             (-self.offset.0, -self.offset.1)

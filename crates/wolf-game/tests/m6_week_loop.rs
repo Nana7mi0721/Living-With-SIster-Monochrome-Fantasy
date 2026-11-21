@@ -109,7 +109,10 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
     let options = wait_for_choice(game, 400, "the three-way sleep prompt");
     assert_eq!(
         options,
-        SLEEP_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+        SLEEP_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
         "day {day}: the night prompt is 恶作剧 / 轻轻把被子盖好 / 今天还是睡吧"
     );
     game.set_choice_cursor(2);
@@ -117,7 +120,10 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
     let confirm = wait_for_choice(game, 200, "the sleep confirmation prompt");
     assert_eq!(
         confirm,
-        CONFIRM_OPTIONS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+        CONFIRM_OPTIONS
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>(),
         "day {day}: the confirmation prompt is 是的 / 再想想"
     );
     game.set_choice_cursor(0);
@@ -125,19 +131,43 @@ fn sleep_into_next_morning(game: &mut Game, day: i32) {
     let mut arrived = false;
     for _ in 0..800 {
         game.frame();
-        if game.vm.vars.get(160) == expected_day && game.vm.vars.get(4) == 8 && game.vm.vars.get(5) >= 30 {
+        if game.vm.vars.get(160) == expected_day
+            && game.vm.vars.get(4) == 8
+            && game.vm.vars.get(5) >= 30
+        {
             arrived = true;
             break;
         }
     }
-    assert!(arrived, "day {expected_day} 08:30 bedroom was reached (no deadlock in CE329)");
-    assert_eq!(game.stats.warnings, 0, "day {expected_day}: the sleep transition is warning-free");
-    assert_eq!(game.vm.vars.get(160), expected_day, "the day counter advanced to day {expected_day}");
-    assert_eq!(game.vm.vars.get(6), expected_day - 1, "weekday var6 is {expected_day}-1 for day {expected_day}");
+    assert!(
+        arrived,
+        "day {expected_day} 08:30 bedroom was reached (no deadlock in CE329)"
+    );
+    assert_eq!(
+        game.stats.warnings, 0,
+        "day {expected_day}: the sleep transition is warning-free"
+    );
+    assert_eq!(
+        game.vm.vars.get(160),
+        expected_day,
+        "the day counter advanced to day {expected_day}"
+    );
+    assert_eq!(
+        game.vm.vars.get(6),
+        expected_day - 1,
+        "weekday var6 is {expected_day}-1 for day {expected_day}"
+    );
     assert_eq!(game.vm.vars.get(4), 8, "the morning starts at 8");
     assert_eq!(game.vm.vars.get(5), 30, "and 30 minutes");
-    assert!(game.screen.len() > 20, "the day {expected_day} morning scene is drawn: {} pictures", game.screen.len());
-    assert!(!has_battle(game), "day {expected_day} 08:30: no resident 253/239 battle coroutine");
+    assert!(
+        game.screen.len() > 20,
+        "the day {expected_day} morning scene is drawn: {} pictures",
+        game.screen.len()
+    );
+    assert!(
+        !has_battle(game),
+        "day {expected_day} 08:30: no resident 253/239 battle coroutine"
+    );
 }
 
 /// The CE251 day-command rows that route to CE252 (the normal daytime tasks).
@@ -168,7 +198,12 @@ const DAY_ROW_Y: i32 = 230;
 fn day_row_texts(game: &Game) -> Vec<String> {
     DAY_ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -234,7 +269,13 @@ fn spend_day_choosing_row(game: &mut Game, day: i32) -> i32 {
             battle = true;
             break;
         }
-        if game.vm.instances().iter().all(|instance| instance.event != 251) && game.vm.vars.get(4) == 17 {
+        if game
+            .vm
+            .instances()
+            .iter()
+            .all(|instance| instance.event != 251)
+            && game.vm.vars.get(4) == 17
+        {
             finished = true;
             break;
         }
@@ -249,12 +290,31 @@ fn spend_day_choosing_row(game: &mut Game, day: i32) -> i32 {
         );
     }
     assert!(finished, "day {day}: {label} (y={y}) day-command did not finish at 17:00 (instances={:?}, clock={}:{}, var48={var48})", instances_events(game), game.vm.vars.get(4), game.vm.vars.get(5));
-    assert_eq!(game.stats.warnings, 0, "day {day}: the day command is warning-free");
-    assert_eq!(game.vm.vars.get(4), 17, "day {day}: {label} spends the day until 17:00");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "day {day}: the day command is warning-free"
+    );
+    assert_eq!(
+        game.vm.vars.get(4),
+        17,
+        "day {day}: {label} spends the day until 17:00"
+    );
     assert_eq!(game.vm.vars.get(5), 0, "day {day}: on the hour");
-    assert_eq!(game.vm.vars.get(160), day, "day {day}: the day command does not roll the day over");
-    assert_eq!(var48, command_id, "day {day}: {label} writes its real command id");
-    assert!(game.vm.vars.get(14) < energy_before, "day {day}: {label} spends energy ({} -> {})", energy_before, game.vm.vars.get(14));
+    assert_eq!(
+        game.vm.vars.get(160),
+        day,
+        "day {day}: the day command does not roll the day over"
+    );
+    assert_eq!(
+        var48, command_id,
+        "day {day}: {label} writes its real command id"
+    );
+    assert!(
+        game.vm.vars.get(14) < energy_before,
+        "day {day}: {label} spends energy ({} -> {})",
+        energy_before,
+        game.vm.vars.get(14)
+    );
     if let (Some(addr), Some(before)) = (stat, stat_before) {
         assert!(
             game.vm.vars.get(addr) > before,
@@ -280,12 +340,38 @@ fn spend_day_choosing_row(game: &mut Game, day: i32) -> i32 {
             break;
         }
     }
-    assert!(evening, "day {day}: the evening scene settles into the bedroom (instances={:?}, clock={}:{})", instances_events(game), game.vm.vars.get(4), game.vm.vars.get(5));
-    assert_eq!(game.stats.warnings, 0, "day {day}: the evening scene is warning-free");
-    assert_eq!(game.vm.vars.get(160), day, "day {day}: still day {day} after the evening scene");
-    assert!(game.vm.vars.get(4) >= 18, "day {day}: the evening reaches an evening hour ({}:{})", game.vm.vars.get(4), game.vm.vars.get(5));
-    assert_eq!(game.vm.vars.get(5), 30, "day {day}: the evening settles on the half hour");
-    assert!(game.screen.len() > 20, "day {day}: the evening bedroom is drawn: {} pictures", game.screen.len());
+    assert!(
+        evening,
+        "day {day}: the evening scene settles into the bedroom (instances={:?}, clock={}:{})",
+        instances_events(game),
+        game.vm.vars.get(4),
+        game.vm.vars.get(5)
+    );
+    assert_eq!(
+        game.stats.warnings, 0,
+        "day {day}: the evening scene is warning-free"
+    );
+    assert_eq!(
+        game.vm.vars.get(160),
+        day,
+        "day {day}: still day {day} after the evening scene"
+    );
+    assert!(
+        game.vm.vars.get(4) >= 18,
+        "day {day}: the evening reaches an evening hour ({}:{})",
+        game.vm.vars.get(4),
+        game.vm.vars.get(5)
+    );
+    assert_eq!(
+        game.vm.vars.get(5),
+        30,
+        "day {day}: the evening settles on the half hour"
+    );
+    assert!(
+        game.screen.len() > 20,
+        "day {day}: the evening bedroom is drawn: {} pictures",
+        game.screen.len()
+    );
     var48
 }
 
@@ -320,9 +406,16 @@ fn day_four_morning_is_forced_into_the_subjugation_battle_wall() {
     assert_eq!(game.vm.vars.get(6), 3, "on weekday index 3");
     assert_eq!(game.vm.vars.get(4), 8, "at 08:30");
     assert_eq!(game.vm.vars.get(5), 30, "at 08:30");
-    assert!(game.screen.len() > 20, "the day-4 morning scene is drawn: {} pictures", game.screen.len());
+    assert!(
+        game.screen.len() > 20,
+        "the day-4 morning scene is drawn: {} pictures",
+        game.screen.len()
+    );
     assert_eq!(game.stats.warnings, 0, "day 4 08:30 is warning-free");
-    assert!(!has_battle(&game), "day 4 08:30: no battle coroutine is resident yet");
+    assert!(
+        !has_battle(&game),
+        "day 4 08:30: no battle coroutine is resident yet"
+    );
 
     // From 08:30 the day-4 morning plays a forced story into CE253 -> CE239. Answer the
     // single-option cutscene choices (auto_choice stays off so the story is not silently
@@ -335,10 +428,12 @@ fn day_four_morning_is_forced_into_the_subjugation_battle_wall() {
     let mut menu_rows = 0usize;
     for _ in 0..600 {
         game.frame();
-        if label_pics
-            .iter()
-            .any(|&i| game.screen.get(i).map(|p| !p.text.is_empty()).unwrap_or(false))
-        {
+        if label_pics.iter().any(|&i| {
+            game.screen
+                .get(i)
+                .map(|p| !p.text.is_empty())
+                .unwrap_or(false)
+        }) {
             menu_rows += 1;
         }
         if let Some(choices) = game.choices.clone() {
@@ -352,21 +447,42 @@ fn day_four_morning_is_forced_into_the_subjugation_battle_wall() {
             break;
         }
     }
-    assert_eq!(menu_rows, 0, "day 4 draws NO training menu (no non-empty 1201/1203/1205/1207/1209 label)");
+    assert_eq!(
+        menu_rows, 0,
+        "day 4 draws NO training menu (no non-empty 1201/1203/1205/1207/1209 label)"
+    );
     assert!(battle_seen, "day 4 daytime is forced into the CE253/CE239 subjugation battle (instances={:?}, clock={}:{})", instances_events(&game), game.vm.vars.get(4), game.vm.vars.get(5));
-    assert!(has_battle(&game), "the CE253/CE239 battle coroutine is resident (instances={:?})", instances_events(&game));
-    assert_eq!(game.stats.warnings, 0, "the forced day-4 story is warning-free (no deadlock before the battle)");
+    assert!(
+        has_battle(&game),
+        "the CE253/CE239 battle coroutine is resident (instances={:?})",
+        instances_events(&game)
+    );
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the forced day-4 story is warning-free (no deadlock before the battle)"
+    );
     assert_eq!(
         game.vm.vars.get(160),
         4,
         "day 4 never rolls over while the rebuilt battle wiring is off: day 5 is unreachable here"
     );
-    assert_eq!(game.vm.vars.get(4), 8, "the day-4 story consumes no clock time before the battle");
-    assert_eq!(game.vm.vars.get(5), 30, "clock still 08:30 at the battle wall");
+    assert_eq!(
+        game.vm.vars.get(4),
+        8,
+        "the day-4 story consumes no clock time before the battle"
+    );
+    assert_eq!(
+        game.vm.vars.get(5),
+        30,
+        "clock still 08:30 at the battle wall"
+    );
 
     let frames = game.stats.frames;
     let instructions = game.stats.instructions;
     eprintln!("m6_week_loop: reached day 4 08:30; day-4 daytime forced into CE253/CE239 battle (day 5 unreachable with the wiring off) after {frames} frames, {instructions} instructions");
-    assert!(instructions > 200_000, "several days of real story ran: {instructions} instructions");
+    assert!(
+        instructions > 200_000,
+        "several days of real story ran: {instructions} instructions"
+    );
     assert!(frames > 4_000, "the loop really ticked frames: {frames}");
 }

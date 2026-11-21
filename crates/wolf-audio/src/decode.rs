@@ -82,8 +82,8 @@ impl DecodedAudio {
 /// unchanged, so genuinely invalid files are still rejected.
 pub fn decode_file(path: impl AsRef<Path>) -> Result<DecodedAudio, AudioError> {
     let path = path.as_ref();
-    let file = File::open(path)
-        .map_err(|e| AudioError::Io(format!("open {}: {e}", path.display())))?;
+    let file =
+        File::open(path).map_err(|e| AudioError::Io(format!("open {}: {e}", path.display())))?;
     let mut hint = Hint::new();
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         hint.with_extension(ext);
@@ -121,10 +121,7 @@ fn is_probe_failure(msg: &str) -> bool {
     msg.starts_with("probe:")
 }
 
-fn decode_source(
-    source: Box<dyn MediaSource>,
-    hint: &Hint,
-) -> Result<DecodedAudio, AudioError> {
+fn decode_source(source: Box<dyn MediaSource>, hint: &Hint) -> Result<DecodedAudio, AudioError> {
     let mss = MediaSourceStream::new(source, Default::default());
 
     let mut format: Box<dyn FormatReader> = symphonia::default::get_probe()
@@ -333,10 +330,14 @@ fn try_decode_wav_pcm_tolerant(bytes: &[u8]) -> Option<Result<DecodedAudio, Audi
     }
 
     let Some(fmt) = fmt else {
-        return Some(Err(AudioError::Unsupported("wav: missing fmt chunk".into())));
+        return Some(Err(AudioError::Unsupported(
+            "wav: missing fmt chunk".into(),
+        )));
     };
     let Some((data_start, data_end, data_size)) = data else {
-        return Some(Err(AudioError::Unsupported("wav: missing data chunk".into())));
+        return Some(Err(AudioError::Unsupported(
+            "wav: missing data chunk".into(),
+        )));
     };
 
     // Only integer PCM (audioFormat == 1) is handled here. Other codecs are left to
@@ -409,12 +410,7 @@ fn decode_pcm_sample(bytes: &[u8], off: usize, bits: u16) -> f32 {
             ((v << 8) >> 8) as f32 / 8_388_608.0
         }
         32 => {
-            i32::from_le_bytes([
-                bytes[off],
-                bytes[off + 1],
-                bytes[off + 2],
-                bytes[off + 3],
-            ]) as f32
+            i32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]]) as f32
                 / 2_147_483_648.0
         }
         _ => 0.0,

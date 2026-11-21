@@ -38,7 +38,8 @@ pub struct LoadedSave {
 
 /// Reads and decrypts one save file.
 pub fn read_save(path: &Path) -> Result<SaveFile, String> {
-    let bytes = std::fs::read(path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+    let bytes =
+        std::fs::read(path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
     SaveFile::parse(&bytes).map_err(|err| format!("cannot parse {}: {err}", path.display()))
 }
 
@@ -69,8 +70,10 @@ pub enum SaveRequest {
 
 /// Parses \`path\` and applies it to \`game\`.
 pub fn load_into(game: &mut Game, path: &Path) -> Result<LoadedSave, String> {
-    let bytes = std::fs::read(path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
-    let save = SaveFile::parse(&bytes).map_err(|err| format!("cannot parse {}: {err}", path.display()))?;
+    let bytes =
+        std::fs::read(path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+    let save =
+        SaveFile::parse(&bytes).map_err(|err| format!("cannot parse {}: {err}", path.display()))?;
     let loaded = apply(game, &save);
     // The file just loaded becomes the template for the next write. A full save needs
     // the map snapshot (Part1) and the object-table continuation (Part4), which the
@@ -250,7 +253,7 @@ pub fn picture_from_record(record: &SavePart5_1) -> Option<Picture> {
         let columns = u32::try_from(w).unwrap_or(1).max(1);
         let rows = u32::try_from(h).unwrap_or(1).max(1);
         picture.split = (columns, rows);
-        picture.pattern_index = u32::try_from(v[4]).unwrap_or(1).max(1);
+        picture.pattern_index = v[4].max(1);
     }
     picture.anchor = record.var4 as u8;
     // Keep the record as the write baseline: fields this runtime does not model
@@ -282,9 +285,7 @@ pub fn picture_to_record(picture: &Picture) -> SavePart5_1 {
         // becomes `\f[n]`), so re-encoding unchanged text would shorten or reshape the byte
         // stream. Keep the retail bytes while the text still matches what was decoded.
         match saved {
-            Some(saved)
-                if saved.var5 == 1 && decode_picture_text(&saved.md1) == picture.text =>
-            {
+            Some(saved) if saved.var5 == 1 && decode_picture_text(&saved.md1) == picture.text => {
                 saved.md1.clone()
             }
             _ => encode_picture_text(&picture.text),
@@ -304,9 +305,7 @@ pub fn picture_to_record(picture: &Picture) -> SavePart5_1 {
         // falling back to `split`, which is always (1, 1) for text.
         match picture.window {
             Some((width, height)) => (width, height),
-            None => saved.map_or((1, 1), |s| {
-                (s.vars7_18[2] as i32, s.vars7_18[3] as i32)
-            }),
+            None => saved.map_or((1, 1), |s| (s.vars7_18[2] as i32, s.vars7_18[3] as i32)),
         }
     } else {
         match picture.window {
@@ -343,9 +342,7 @@ pub fn picture_to_record(picture: &Picture) -> SavePart5_1 {
     // vertical factor while the live scale still equals the saved horizontal one; a
     // scripted scale change makes both factors the new uniform value.
     v[10] = match saved {
-        Some(saved)
-            if saved.vars7_18[9] == v[9] && saved.vars7_18[10] != saved.vars7_18[9] =>
-        {
+        Some(saved) if saved.vars7_18[9] == v[9] && saved.vars7_18[10] != saved.vars7_18[9] => {
             saved.vars7_18[10]
         }
         _ => v[9],
@@ -481,13 +478,11 @@ pub fn decode_picture_text(bytes: &[u8]) -> String {
                     }
                 }
             }
-            6 => {
-                if payload.first() == Some(&2) {
-                    if let Some(code) = payload.get(3) {
-                        let index = *code as i32 - 14;
-                        if (0..=30).contains(&index) {
-                            out.push_str(&format!("\\c[{index}]"));
-                        }
+            6 if payload.first() == Some(&2) => {
+                if let Some(code) = payload.get(3) {
+                    let index = *code as i32 - 14;
+                    if (0..=30).contains(&index) {
+                        out.push_str(&format!("\\c[{index}]"));
                     }
                 }
             }
@@ -558,7 +553,10 @@ mod tests {
         let written = picture_to_record(&picture);
         assert_eq!(written.vars7_18[2], 7680, "message-box width must survive");
         assert_eq!(written.vars7_18[3], 1200, "message-box height must survive");
-        assert_eq!(written.vars7_18, record.vars7_18, "the whole tail must be unchanged");
+        assert_eq!(
+            written.vars7_18, record.vars7_18,
+            "the whole tail must be unchanged"
+        );
         assert_eq!(written.var5, 1);
         assert_eq!(written.var6, 0);
     }
@@ -644,7 +642,12 @@ mod tests {
             let reencoded = encode_picture_text(&text);
             // Escape 04 is a font-plus-letter-spacing variant; it decodes to the same
             // [n] text and re-encodes as the plain 05 font, so compare decoded text.
-            assert_eq!(decode_picture_text(&reencoded), text, "picture {}", record.var1);
+            assert_eq!(
+                decode_picture_text(&reencoded),
+                text,
+                "picture {}",
+                record.var1
+            );
             checked += 1;
         }
         assert!(checked > 20, "checked {checked} text records");
@@ -659,14 +662,31 @@ mod tests {
             var4: 0,
             var5: 0,
             var6: 1,
-            vars7_18: [492, 57, 215, 6, 1, 128, 0, u32::MAX, 1, (-100i32) as u32, 100, 0],
+            vars7_18: [
+                492,
+                57,
+                215,
+                6,
+                1,
+                128,
+                0,
+                u32::MAX,
+                1,
+                (-100i32) as u32,
+                100,
+                0,
+            ],
             md1: b"<SQUARE>\0".to_vec(),
             ..SavePart5_1::default()
         };
         let picture = picture_from_record(&record).expect("a window picture");
         assert_eq!(picture.scale, -100);
         let written = picture_to_record(&picture);
-        assert_eq!(written.vars7_18[9], (-100i32) as u32, "negative scale must be kept");
+        assert_eq!(
+            written.vars7_18[9],
+            (-100i32) as u32,
+            "negative scale must be kept"
+        );
     }
 
     #[test]

@@ -890,8 +890,7 @@ impl Databases {
 fn normalise_label(label: &str) -> String {
     label
         .trim_end_matches(char::from(0))
-        .replace('—', "-")
-        .replace('―', "-")
+        .replace(['—', '―'], "-")
         .replace('　', " ")
         .trim()
         .to_owned()

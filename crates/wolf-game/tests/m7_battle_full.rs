@@ -136,8 +136,14 @@ fn run_ce188_line(frames: usize) -> Ce188 {
             a.copy_hp = game.databases.num(Container::CData, 10, 0, 2).unwrap_or(-1);
         }
         for row in 0..8 {
-            let code = game.databases.num(Container::CData, 19, row, 1).unwrap_or(0);
-            let sel = game.databases.num(Container::CData, 19, row, 2).unwrap_or(0);
+            let code = game
+                .databases
+                .num(Container::CData, 19, row, 1)
+                .unwrap_or(0);
+            let sel = game
+                .databases
+                .num(Container::CData, 19, row, 2)
+                .unwrap_or(0);
             if REAL_ATTACK_CODES.contains(&code) && sel == 1 {
                 a.real_attack_selectable = true;
             }
@@ -326,7 +332,12 @@ fn run_ce239_unwind(frames: usize) -> Unwind {
     game.vm.vars.set(343usize, 1); // 2000343 戦闘終了 = 1
     game.vm.vars.set(352usize, 1); // 2000352 勝ち負け = 1
     let _ = game.start_event(239);
-    let mut u = Unwind { entered_victory_case: false, max_ce239_pc: 0, alive_at_end: true, warnings: 0 };
+    let mut u = Unwind {
+        entered_victory_case: false,
+        max_ce239_pc: 0,
+        alive_at_end: true,
+        warnings: 0,
+    };
     for _f in 0..frames {
         game.key_bits = wolf_game::key::OK;
         let _ = game.frame();
@@ -362,14 +373,37 @@ fn m7_battle_full_settles_via_ce244_and_pins_real_entry_gap() {
         c.reached_target_window, c.real_attack_selectable, c.max_ce65_pc, c.ce65_left_spin,
         c.unanswered_250, c.warnings
     );
-    assert!(c.reached_ce143, "CE188 line must run CE143 主人公DB→戦闘DBコピー");
-    assert_eq!(c.copy_maxhp, 100, "CE143 must copy maxHP into type10 row0 col1");
+    assert!(
+        c.reached_ce143,
+        "CE188 line must run CE143 主人公DB→戦闘DBコピー"
+    );
+    assert_eq!(
+        c.copy_maxhp, 100,
+        "CE143 must copy maxHP into type10 row0 col1"
+    );
     assert_eq!(c.copy_hp, 100, "CE143 must copy HP into type10 row0 col2");
-    assert!(c.reached_ce152, "CE188 line must reach CE152 戦闘コマンド一覧算出");
-    assert!(c.reached_ce192, "CE188 line must reach CE192 味方コマンド選択");
-    assert!(c.real_attack_selectable, "a real attack row (code 26/25/30/29) must be selectable");
-    assert!(c.max_ce65_pc >= 78, "CE65 万能ウィンドウ must open (pc >= 78), got {}", c.max_ce65_pc);
-    assert!(c.warnings == 0, "scenario 0 must run with zero warnings, got {}", c.warnings);
+    assert!(
+        c.reached_ce152,
+        "CE188 line must reach CE152 戦闘コマンド一覧算出"
+    );
+    assert!(
+        c.reached_ce192,
+        "CE188 line must reach CE192 味方コマンド選択"
+    );
+    assert!(
+        c.real_attack_selectable,
+        "a real attack row (code 26/25/30/29) must be selectable"
+    );
+    assert!(
+        c.max_ce65_pc >= 78,
+        "CE65 万能ウィンドウ must open (pc >= 78), got {}",
+        c.max_ce65_pc
+    );
+    assert!(
+        c.warnings == 0,
+        "scenario 0 must run with zero warnings, got {}",
+        c.warnings
+    );
 
     // ---- Scenario 1: command phase -> CE244 settlement, the reachable round ----
     let r = run_ce242_settlement(200);
@@ -378,8 +412,14 @@ fn m7_battle_full_settles_via_ce244_and_pins_real_entry_gap() {
         r.v350_seq, r.saw_350_eq_1, r.saw_350_eq_2, r.v352_final, r.v343_final, r.v349_final,
         r.final_v350, r.frames_run, r.warnings
     );
-    assert!(r.saw_350_eq_1, "CE242 pc14 must drive 2000350 -> 1 (command phase)");
-    assert!(r.saw_350_eq_2, "CE242 pc208 must hand off 2000350 -> 2 (execute phase)");
+    assert!(
+        r.saw_350_eq_1,
+        "CE242 pc14 must drive 2000350 -> 1 (command phase)"
+    );
+    assert!(
+        r.saw_350_eq_2,
+        "CE242 pc208 must hand off 2000350 -> 2 (execute phase)"
+    );
     assert_eq!(r.final_v350, 0, "the turn must return 2000350 to idle (0)");
     assert!(
         r.v352_final == 1 || r.v352_final == -1,
@@ -387,7 +427,11 @@ fn m7_battle_full_settles_via_ce244_and_pins_real_entry_gap() {
         r.v352_final
     );
     assert_eq!(r.v343_final, 1, "CE244 must write 2000343 (戦闘終了) = 1");
-    assert_eq!(r.warnings, 0, "scenario 1 must run with zero warnings, got {}", r.warnings);
+    assert_eq!(
+        r.warnings, 0,
+        "scenario 1 must run with zero warnings, got {}",
+        r.warnings
+    );
 
     // ---- Scenario 2: real caller CE239 reaches CE244 but cannot settle ----
     let e = run_ce239_real_entry(900);
@@ -396,10 +440,19 @@ fn m7_battle_full_settles_via_ce244_and_pins_real_entry_gap() {
         e.battle_active, e.turn_set, e.v350_max, e.v352, e.v343, e.max_ce239_pc,
         e.saw_hotspring_region, e.saw_else_region, e.entered_end_judgment, e.warnings
     );
-    assert!(e.battle_active, "CE239 must reach its battle-active case (2000340 = 1)");
+    assert!(
+        e.battle_active,
+        "CE239 must reach its battle-active case (2000340 = 1)"
+    );
     assert!(e.turn_set, "CE239 must set 2000349 = 1");
-    assert_eq!(e.v350_max, 0, "2000350 must stay 0 — CE242/CE243 never start (bootstrap gap)");
-    assert_eq!(e.v352, 0, "CE244 never settles from the real-entry path: 2000352 stays 0");
+    assert_eq!(
+        e.v350_max, 0,
+        "2000350 must stay 0 — CE242/CE243 never start (bootstrap gap)"
+    );
+    assert_eq!(
+        e.v352, 0,
+        "CE244 never settles from the real-entry path: 2000352 stays 0"
+    );
     assert_eq!(e.v343, 0, "2000343 stays 0 from the real-entry path");
     assert!(
         e.saw_hotspring_region && !e.saw_else_region,
@@ -410,7 +463,11 @@ fn m7_battle_full_settles_via_ce244_and_pins_real_entry_gap() {
         "CE239 must run past the pc795 210 500244 edge (max pc {}), proving the real CE244 call site is executed",
         e.max_ce239_pc
     );
-    assert!(e.warnings == 0, "scenario 2 must run with zero warnings, got {}", e.warnings);
+    assert!(
+        e.warnings == 0,
+        "scenario 2 must run with zero warnings, got {}",
+        e.warnings
+    );
 
     // ---- Scenario 3: CE239 end-judgment unwind returns once 2000343 = 1 exists ----
     let u = run_ce239_unwind(1200);
@@ -418,7 +475,10 @@ fn m7_battle_full_settles_via_ce244_and_pins_real_entry_gap() {
         "SC3 CE239 unwind: entered_victory_case={} max_pc={} alive_at_end={} warns={}",
         u.entered_victory_case, u.max_ce239_pc, u.alive_at_end, u.warnings
     );
-    assert!(u.entered_victory_case, "CE239 must enter its case2 victory branch (pc >= 876) when 2000343 = 1");
+    assert!(
+        u.entered_victory_case,
+        "CE239 must enter its case2 victory branch (pc >= 876) when 2000343 = 1"
+    );
     assert!(
         u.max_ce239_pc >= 1099,
         "CE239 must unwind past the victory display / pc1099 child to its return region, got {}",
@@ -428,5 +488,9 @@ fn m7_battle_full_settles_via_ce244_and_pins_real_entry_gap() {
         !u.alive_at_end,
         "CE239 must finish (instance gone) after the victory unwind, proving it runs through its return at pc1104/1106"
     );
-    assert!(u.warnings == 0, "scenario 3 must run with zero warnings, got {}", u.warnings);
+    assert!(
+        u.warnings == 0,
+        "scenario 3 must run with zero warnings, got {}",
+        u.warnings
+    );
 }

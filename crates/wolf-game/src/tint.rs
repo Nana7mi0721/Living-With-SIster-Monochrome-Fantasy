@@ -159,9 +159,9 @@ mod tests {
     #[test]
     fn zero_frames_applies_immediately() {
         let mut tint = ScreenTint::new();
-        tint.set(0x00_64_64_64, 0); // 100/100/100 neutral, no flash
+        tint.set(0x0064_6464, 0); // 100/100/100 neutral, no flash
         assert_eq!(tint.rgb(), [1.0, 1.0, 1.0]);
-        tint.set(0x00_32_32_32, 0); // 50/50/50 instantly
+        tint.set(0x0032_3232, 0); // 50/50/50 instantly
         assert!((tint.rgb()[0] - 0.5).abs() < 1e-6);
     }
 
@@ -174,7 +174,7 @@ mod tests {
             tint.tick();
         }
         assert!(!tint.is_neutral());
-        tint.set(0x00_64_64_64, 15);
+        tint.set(0x0064_6464, 15);
         for _ in 0..15 {
             tint.tick();
         }

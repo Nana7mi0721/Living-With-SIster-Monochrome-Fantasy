@@ -19,13 +19,19 @@ use wolf_save::SaveFile;
 use wolf_vm::exec::ChoiceReply;
 
 fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
 }
 fn data_root() -> PathBuf {
     match std::env::var("WOLF_DATA_ROOT") {
         Ok(value) if !value.is_empty() => {
             let path = PathBuf::from(value);
-            if path.is_absolute() { path } else { repo_root().join(path) }
+            if path.is_absolute() {
+                path
+            } else {
+                repo_root().join(path)
+            }
         }
         _ => repo_root().join("work/all"),
     }
@@ -76,10 +82,10 @@ fn drive(save: u32, deep_index: usize, force_v23: Option<i32>) -> DeepRun {
                 i
             } else if opts.iter().any(|o| o == "小鸟飞飞") {
                 deep_index.min(opts.len() - 1)
-            } else if let Some(i) = opts.iter().position(|o| o == "让我看更多些") {
-                i
             } else {
-                0
+                opts.iter()
+                    .position(|o| o == "让我看更多些")
+                    .unwrap_or_default()
             };
             game.reply(ChoiceReply::Index(idx));
         }
@@ -127,15 +133,26 @@ fn ce346_cutin_deep_branch_reachable_from_real_savedata08() {
     let run = drive(8, 1, None);
     println!(
         "CE346 deep: deep={} ce346={} maxpc={} frames={} var166={} cutin={:?} warn={}",
-        run.deep_reached, run.ce346_seen, run.ce346_maxpc, run.ce346_frames, run.var166,
-        run.cutin_visible, run.warnings,
+        run.deep_reached,
+        run.ce346_seen,
+        run.ce346_maxpc,
+        run.ce346_frames,
+        run.var166,
+        run.cutin_visible,
+        run.warnings,
     );
-    assert!(run.deep_reached, "性骚扰 deep submenu (5 options) must be reachable");
+    assert!(
+        run.deep_reached,
+        "性骚扰 deep submenu (5 options) must be reachable"
+    );
     assert!(
         run.ce346_seen,
         "CE346 (H cut-in) must actually start on the real-gate 裸体 path of SaveData08"
     );
-    assert!(run.ce346_maxpc > 0, "CE346 instance must advance through its program");
+    assert!(
+        run.ce346_maxpc > 0,
+        "CE346 instance must advance through its program"
+    );
     assert!(
         !run.cutin_visible.is_empty(),
         "at least one visible cutin/cutin_*.png layer must be on screen while CE346 runs"
@@ -144,17 +161,26 @@ fn ce346_cutin_deep_branch_reachable_from_real_savedata08() {
         run.cutin_visible.iter().any(|(_, _, op)| *op == 255),
         "cutin layer must reach full opacity (255)"
     );
-    assert_eq!(run.warnings, 0, "no engine warnings driving the deep H branch");
+    assert_eq!(
+        run.warnings, 0,
+        "no engine warnings driving the deep H branch"
+    );
 }
 
 #[test]
 fn ce333_requires_v23_zero_which_no_retail_save_has() {
     // (1) No retail save carries v23 == 0 (the value CE333's ELSE needs).
     for n in 1..=8u32 {
-        let bytes = std::fs::read(save_path(n)).unwrap_or_else(|e| panic!("read SaveData{n:02}: {e}"));
+        let bytes =
+            std::fs::read(save_path(n)).unwrap_or_else(|e| panic!("read SaveData{n:02}: {e}"));
         let save = SaveFile::parse(&bytes).unwrap_or_else(|e| panic!("parse SaveData{n:02}: {e}"));
-        let v23 = save.normal_var(23).unwrap_or_else(|| panic!("SaveData{n:02} has no var23"));
-        assert!(v23 >= 6, "SaveData{n:02}: v23={v23} expected >=6; CE333 needs v23==0, absent everywhere");
+        let v23 = save
+            .normal_var(23)
+            .unwrap_or_else(|| panic!("SaveData{n:02} has no var23"));
+        assert!(
+            v23 >= 6,
+            "SaveData{n:02}: v23={v23} expected >=6; CE333 needs v23==0, absent everywhere"
+        );
     }
 
     // (2) Real SaveData08 on 小鸟飞飞 takes a success case; CE333 bad-end is NOT entered.
@@ -164,8 +190,14 @@ fn ce333_requires_v23_zero_which_no_retail_save_has() {
         real.deep_reached, real.var166, real.explosion_seen,
     );
     assert!(real.deep_reached, "小鸟飞飞 deep option must be reachable");
-    assert_eq!(real.var166, 0, "real save keeps var166=0 (CE333 branch not entered)");
-    assert!(!real.explosion_seen, "real save shows no 妹爆発 explosion CG");
+    assert_eq!(
+        real.var166, 0,
+        "real save keeps var166=0 (CE333 branch not entered)"
+    );
+    assert!(
+        !real.explosion_seen,
+        "real save shows no 妹爆発 explosion CG"
+    );
 
     // (3) Only v23 == 0 (fabricated, no retail save has it) reaches the CE333 ELSE bad-end.
     let fab = drive(8, 4, Some(0));
@@ -173,6 +205,12 @@ fn ce333_requires_v23_zero_which_no_retail_save_has() {
         "CE333 v23:=0: deep={} var166={} explosion={}",
         fab.deep_reached, fab.var166, fab.explosion_seen,
     );
-    assert_eq!(fab.var166, 1, "var166=1 is written at pc1982 immediately before CE333 pc1983");
-    assert!(fab.explosion_seen, "CE333 bad-end branch draws cg/explosion* cutscenes");
+    assert_eq!(
+        fab.var166, 1,
+        "var166=1 is written at pc1982 immediately before CE333 pc1983"
+    );
+    assert!(
+        fab.explosion_seen,
+        "CE333 bad-end branch draws cg/explosion* cutscenes"
+    );
 }

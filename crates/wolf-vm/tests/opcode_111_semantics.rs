@@ -95,7 +95,14 @@ fn run(commands: Vec<Slot>, seeds: &[(usize, i32)]) -> Vm {
 ///   dest = else_value
 ///   if (var OP value) { dest = then_value }
 /// The 401 marker opens the then body, 499 closes the block.
-fn guarded(var: i32, value: i32, operator: i32, dest: usize, then_value: i32, else_value: i32) -> Vec<Slot> {
+fn guarded(
+    var: i32,
+    value: i32,
+    operator: i32,
+    dest: usize,
+    then_value: i32,
+    else_value: i32,
+) -> Vec<Slot> {
     let dest_magic = 2_000_000 + dest as i32;
     vec![
         cmd(121, &[dest_magic, else_value, 0, 0], &[]),

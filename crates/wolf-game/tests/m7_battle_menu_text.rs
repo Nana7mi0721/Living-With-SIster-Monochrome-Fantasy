@@ -36,7 +36,14 @@ const REAL_ATTACK_CODES: [i32; 4] = [26, 25, 30, 29];
 /// The command-name labels CE152 copies out of `Data type 6` column 0 for the four real
 /// attacks seeded into slots 1..4, plus 普通攻撃 for the empty tail slots.
 const EXPECTED_LABELS: [&str; 8] = [
-    "蓄力", "防御", "强斩", "反击", "普通攻击", "普通攻击", "普通攻击", "普通攻击",
+    "蓄力",
+    "防御",
+    "强斩",
+    "反击",
+    "普通攻击",
+    "普通攻击",
+    "普通攻击",
+    "普通攻击",
 ];
 
 fn unanswered(game: &Game) -> u64 {
@@ -72,16 +79,29 @@ fn run(with_seed: bool, frames: usize) -> Outcome {
         // needs a nonzero ally count (type18 row4 col0) or it aborts 0==0 before
         // CE192. Seed just the party; item/weapon/command cells stay empty so a
         // real attack is still unselectable in the control run.
-        game.databases.set_num(wolf_game::db::Container::CData, 18, 4, 0, 1);
+        game.databases
+            .set_num(wolf_game::db::Container::CData, 18, 4, 0, 1);
         // One enemy (type18 row69 col0): 0 enemies makes CE172 pc42/pc53 see 0==0 and
         // victory-abort before CE192; one enemy keeps the line alive. Not a seed that
         // makes real attacks selectable.
-        game.databases.set_num(wolf_game::db::Container::CData, 18, 69, 0, 1);
+        game.databases
+            .set_num(wolf_game::db::Container::CData, 18, 69, 0, 1);
         for (col, val) in [
-            (20, 100), (21, 100), (22, 50), (23, 50), (24, 20), (25, 15),
-            (26, 10), (27, 30), (28, 30), (9, 20), (10, 10), (4, 10),
+            (20, 100),
+            (21, 100),
+            (22, 50),
+            (23, 50),
+            (24, 20),
+            (25, 15),
+            (26, 10),
+            (27, 30),
+            (28, 30),
+            (9, 20),
+            (10, 10),
+            (4, 10),
         ] {
-            game.databases.set_num(wolf_game::db::Container::CData, 0, 12, col, val);
+            game.databases
+                .set_num(wolf_game::db::Container::CData, 0, 12, col, val);
         }
     }
     let _ = game.start_event(188);
@@ -110,8 +130,14 @@ fn run(with_seed: bool, frames: usize) -> Outcome {
             }
         }
         for row in 0..8 {
-            let code = game.databases.num(wolf_game::db::Container::CData, 19, row, 1).unwrap_or(0);
-            let selectable = game.databases.num(wolf_game::db::Container::CData, 19, row, 2).unwrap_or(0);
+            let code = game
+                .databases
+                .num(wolf_game::db::Container::CData, 19, row, 1)
+                .unwrap_or(0);
+            let selectable = game
+                .databases
+                .num(wolf_game::db::Container::CData, 19, row, 2)
+                .unwrap_or(0);
             if REAL_ATTACK_CODES.contains(&code) && selectable == 1 {
                 out.real_selectable = true;
                 if out.attack_labels.is_empty() {
@@ -125,7 +151,7 @@ fn run(with_seed: bool, frames: usize) -> Outcome {
                         .collect();
                     // Capture the first frame CE152 has filled the four real-attack
                     // labels (row0..3 = 蓄力/防御/强斩/反击).
-                    if labels.get(0).map(String::as_str) == Some("蓄力")
+                    if labels.first().map(String::as_str) == Some("蓄力")
                         && labels.get(1).map(String::as_str) == Some("防御")
                         && labels.get(2).map(String::as_str) == Some("强斩")
                         && labels.get(3).map(String::as_str) == Some("反击")
@@ -161,7 +187,8 @@ fn m7_battle_menu_text_is_seeded_and_the_line_runs_clean() {
     );
     for (row, expected) in EXPECTED_LABELS.iter().enumerate() {
         assert_eq!(
-            game.databases.text(wolf_game::db::Container::CData, 19, row as i32, 0),
+            game.databases
+                .text(wolf_game::db::Container::CData, 19, row as i32, 0),
             Some(*expected),
             "type19 row {row} column 0 項目文 = {expected}"
         );
@@ -196,14 +223,23 @@ fn m7_battle_menu_text_is_seeded_and_the_line_runs_clean() {
     let control = run(false, 300);
     let seeded = run(true, 300);
 
-    assert!(control.reached_ce192, "control must still reach CE192 味方コマンド選択");
+    assert!(
+        control.reached_ce192,
+        "control must still reach CE192 味方コマンド選択"
+    );
     assert!(
         !control.real_selectable,
         "without the seed an empty inventory must leave real attacks unselectable"
     );
 
-    assert!(seeded.reached_ce152, "seeded run must reach CE152 戦闘コマンド一覧算出");
-    assert!(seeded.reached_ce192, "seeded run must reach CE192 味方コマンド選択");
+    assert!(
+        seeded.reached_ce152,
+        "seeded run must reach CE152 戦闘コマンド一覧算出"
+    );
+    assert!(
+        seeded.reached_ce192,
+        "seeded run must reach CE192 味方コマンド選択"
+    );
     assert!(
         seeded.real_selectable,
         "with the seed a real attack (code 26/25/30/29) must be selectable"
@@ -230,7 +266,10 @@ fn m7_battle_menu_text_is_seeded_and_the_line_runs_clean() {
         "no command row may stay blank after CE152 runs: {:?}",
         seeded.post_run_labels
     );
-    assert_eq!(seeded.warnings, 0, "seeded battle segment must log no warnings");
+    assert_eq!(
+        seeded.warnings, 0,
+        "seeded battle segment must log no warnings"
+    );
     assert_eq!(
         seeded.unanswered, 0,
         "seeded battle segment must leave no 250 unanswered database read"
@@ -242,7 +281,7 @@ fn m7_battle_menu_text_is_seeded_and_the_line_runs_clean() {
 
     eprintln!(
         "m7_battle_menu_text: seeded labels={:?} | control(selectable={}) seeded(selectable={}, ce152={}, ce192={}, target_win={}, warnings={}, unanswered={}) | post-run type19 col0={:?} | attack-frame labels={:?}",
-        &EXPECTED_LABELS,
+        EXPECTED_LABELS,
         control.real_selectable,
         seeded.real_selectable,
         seeded.reached_ce152,

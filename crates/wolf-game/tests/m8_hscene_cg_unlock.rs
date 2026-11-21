@@ -35,7 +35,7 @@
 //! Run: `WOLF_DATA_ROOT=work/all cargo test -q -p wolf-game --test m8_hscene_cg_unlock`
 //! Data root: `work/all`; save: `work/retail_backup/Save/SaveData08.sav`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use wolf_format::command::Slot;
 use wolf_format::commonevent::CommonEventData;
@@ -95,7 +95,9 @@ fn words(cmd: &wolf_format::command::Command) -> Vec<i32> {
 
 /// Every (var, value, op) triple tested by an opcode-111 conditional in a common event.
 fn ce_cond_triples(data: &CommonEventData, event: u32) -> Vec<(usize, i32, i32, i32)> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     let mut out = Vec::new();
     for (pc, slot) in ev.commands.iter().enumerate() {
         if let Slot::Command(cmd) = slot {
@@ -117,7 +119,7 @@ fn ce_cond_triples(data: &CommonEventData, event: u32) -> Vec<(usize, i32, i32, 
     out
 }
 
-fn map_event<'a>(map: &'a Map, id: u32) -> &'a wolf_format::mps::MapEvent {
+fn map_event(map: &Map, id: u32) -> &wolf_format::mps::MapEvent {
     map.events
         .iter()
         .find(|event| event.id == id)
@@ -125,7 +127,11 @@ fn map_event<'a>(map: &'a Map, id: u32) -> &'a wolf_format::mps::MapEvent {
 }
 
 fn map_ints(page: &MapEventPage, pc: usize) -> Vec<i32> {
-    match page.commands.get(pc).unwrap_or_else(|| panic!("map pc{pc} exists")) {
+    match page
+        .commands
+        .get(pc)
+        .unwrap_or_else(|| panic!("map pc{pc} exists"))
+    {
         Slot::Command(cmd) => words(cmd),
         _ => panic!("map pc{pc} is blank"),
     }
@@ -180,7 +186,7 @@ fn map_cond_triples(page: &MapEventPage) -> Vec<(usize, i32, i32, i32)> {
 // Live game harness (mirrors m8_hscene_forward.rs / m7_hscene_playable.rs).
 // ---------------------------------------------------------------------------------------
 
-fn load_save_into(save: &PathBuf) -> Option<Game> {
+fn load_save_into(save: &Path) -> Option<Game> {
     if !save.exists() {
         return None;
     }
@@ -202,7 +208,10 @@ fn load_save_into(save: &PathBuf) -> Option<Game> {
 fn open_resumed() -> Option<Game> {
     let save = save_path();
     if !data_root().join("MapData").join("SampleMapA.mps").exists() {
-        eprintln!("skip: missing SampleMapA.mps under {}", data_root().display());
+        eprintln!(
+            "skip: missing SampleMapA.mps under {}",
+            data_root().display()
+        );
         return None;
     }
     let mut game = load_save_into(&save)?;
@@ -224,7 +233,9 @@ fn drive(game: &mut Game, frames: usize) {
 
 #[test]
 fn insertion_hover_35_arms_var460_and_opens_event_33() {
-    let Some(mut game) = open_resumed() else { return };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
     drive(&mut game, 60);
 
     // Only normalization: the shipped save has the "dispatcher open" flag var364 already
@@ -250,13 +261,21 @@ fn insertion_hover_35_arms_var460_and_opens_event_33() {
     for _ in 0..120 {
         game.frame();
         peak_460 = peak_460.max(game.vm.vars.get(460));
-        if game.vm.instances().iter().any(|instance| instance.event == 33) {
+        if game
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 33)
+        {
             saw_event_33 = true;
         }
     }
 
     assert_eq!(peak_460, 1, "var460 reaches 1 (ev33 page condition)");
-    assert!(saw_event_33, "map event 33 (挿入抜く / CE333 anim) activates");
+    assert!(
+        saw_event_33,
+        "map event 33 (挿入抜く / CE333 anim) activates"
+    );
     assert_eq!(game.stats.warnings, 0, "no engine warnings");
 }
 
@@ -266,7 +285,9 @@ fn insertion_hover_35_arms_var460_and_opens_event_33() {
 
 #[test]
 fn without_the_insertion_hover_event_33_stays_closed() {
-    let Some(mut game) = open_resumed() else { return };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
     drive(&mut game, 60);
 
     game.vm.vars.set(364, 0);
@@ -285,7 +306,12 @@ fn without_the_insertion_hover_event_33_stays_closed() {
     for _ in 0..120 {
         game.frame();
         peak_460 = peak_460.max(game.vm.vars.get(460));
-        if game.vm.instances().iter().any(|instance| instance.event == 33) {
+        if game
+            .vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 33)
+        {
             saw_event_33 = true;
         }
     }
@@ -307,7 +333,11 @@ fn h_cg_cluster_writers_and_readers_are_present_in_the_data() {
     // ev33's only enabled page-0 condition is var460 == 1, and its body calls CE333 many times.
     let ev33 = map_event(&map, 33);
     let conds = enabled_conditions(&ev33.pages[0]);
-    assert_eq!(conds.len(), 1, "ev33 page0 has exactly one enabled condition");
+    assert_eq!(
+        conds.len(),
+        1,
+        "ev33 page0 has exactly one enabled condition"
+    );
     assert_eq!(conds[0].variable, 2_000_460, "ev33 gated on global var460");
     assert_eq!(conds[0].operator, PageCondition::OP_EQUAL);
     assert_eq!(conds[0].value, 1);
@@ -329,13 +359,19 @@ fn h_cg_cluster_writers_and_readers_are_present_in_the_data() {
 
     // Track events also arm var460 and add to var111.
     let ev26 = map_event(&map, 26);
-    assert!(!map_cmd_pcs(&ev26.pages[0], 121, 2_000_460).is_empty(), "EV26 writes var460");
+    assert!(
+        !map_cmd_pcs(&ev26.pages[0], 121, 2_000_460).is_empty(),
+        "EV26 writes var460"
+    );
     assert!(
         map_cmd_pcs(&ev26.pages[0], 121, 2_000_111).contains(&482),
         "EV26 pc482 raises var111"
     );
     let ev28 = map_event(&map, 28);
-    assert!(!map_cmd_pcs(&ev28.pages[0], 121, 2_000_460).is_empty(), "EV28 writes var460");
+    assert!(
+        !map_cmd_pcs(&ev28.pages[0], 121, 2_000_460).is_empty(),
+        "EV28 writes var460"
+    );
     assert_eq!(
         map_ints(&ev28.pages[0], 159),
         vec![2_000_111, 119, 2_000_111, 4352],
@@ -388,7 +424,9 @@ fn retail_saves_carry_zero_gauge_and_split_on_the_energy_state() {
     let mut checked = 0;
     for index in 1..=8 {
         let save = save_dir().join(format!("SaveData{index:02}.sav"));
-        let Some(game) = load_save_into(&save) else { continue };
+        let Some(game) = load_save_into(&save) else {
+            continue;
+        };
         checked += 1;
         let get = |n| game.vm.vars.get(n);
 
@@ -409,7 +447,11 @@ fn retail_saves_carry_zero_gauge_and_split_on_the_energy_state() {
 
     // Deep-gate carriers worth knowing about.
     if let Some(game) = load_save_into(&save_dir().join("SaveData07.sav")) {
-        assert_eq!(game.vm.vars.get(157), 13, "SAVE07 carries the CE246 var157 = 13 gate");
+        assert_eq!(
+            game.vm.vars.get(157),
+            13,
+            "SAVE07 carries the CE246 var157 = 13 gate"
+        );
     }
     if let Some(game) = load_save_into(&save_dir().join("SaveData04.sav")) {
         assert_ne!(game.vm.vars.get(104), 0);
@@ -424,7 +466,9 @@ fn retail_saves_carry_zero_gauge_and_split_on_the_energy_state() {
 
 #[test]
 fn var111_reaches_100_through_real_insertion_hover_codes() {
-    let Some(mut game) = open_resumed() else { return };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
     drive(&mut game, 60);
 
     game.vm.vars.set(364, 0);
@@ -455,6 +499,9 @@ fn var111_reaches_100_through_real_insertion_hover_codes() {
         }
     }
 
-    assert!(peak >= 100, "var111 reaches the 射精 threshold (peak {peak})");
+    assert!(
+        peak >= 100,
+        "var111 reaches the 射精 threshold (peak {peak})"
+    );
     assert_eq!(game.stats.warnings, 0, "no engine warnings");
 }

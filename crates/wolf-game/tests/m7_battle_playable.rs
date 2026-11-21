@@ -71,7 +71,10 @@ fn run_playable(frames: usize, verbose: bool) -> (Trace, Game) {
     game.auto_choice_delay = 1;
     // Task-19 real battle databases (party count, command slots, item stock).
     let seeded = game.seed_battle_databases();
-    assert!(seeded > 0, "seed_battle_databases must seed the battle cells");
+    assert!(
+        seeded > 0,
+        "seed_battle_databases must seed the battle cells"
+    );
     // The command-menu (`万能ウィンドウ`) that CE242 renders reads one section header
     // label from CData (5, 16, 0); a fresh SaveData leaves it blank, so the cosmetic
     // `250 DatabaseAccess` read comes back "unanswered". This is a display label, not a
@@ -116,12 +119,16 @@ fn run_playable(frames: usize, verbose: bool) -> (Trace, Game) {
                 "239" => {
                     t.ce239_started = true;
                     let pc = inst.pc as i32;
-                    if pc > t.max_ce239_pc { t.max_ce239_pc = pc; }
+                    if pc > t.max_ce239_pc {
+                        t.max_ce239_pc = pc;
+                    }
                 }
                 "242" => {
                     t.ce242_started = true;
                     let pc = inst.pc as i32;
-                    if pc > t.max_ce242_pc { t.max_ce242_pc = pc; }
+                    if pc > t.max_ce242_pc {
+                        t.max_ce242_pc = pc;
+                    }
                 }
                 "243" => t.ce243_started = true,
                 "241" => t.ce241_started = true,
@@ -153,19 +160,37 @@ fn run_playable(frames: usize, verbose: bool) -> (Trace, Game) {
                 let v350b = game.vm.vars.get(350);
                 if v350b != last350 {
                     if verbose {
-                        println!("f{} (drain) v350={} v352={} v343={}", t.frames_run, v350b, game.vm.vars.get(352), game.vm.vars.get(343));
+                        println!(
+                            "f{} (drain) v350={} v352={} v343={}",
+                            t.frames_run,
+                            v350b,
+                            game.vm.vars.get(352),
+                            game.vm.vars.get(343)
+                        );
                     }
                     t.v350_seq.push(v350b);
                     last350 = v350b;
                 }
                 t.v352_peak = if game.vm.vars.get(352).abs() > t.v352_peak.abs() {
                     game.vm.vars.get(352)
-                } else { t.v352_peak };
+                } else {
+                    t.v352_peak
+                };
                 t.v343_peak = t.v343_peak.max(game.vm.vars.get(343));
                 for inst in game.vm.instances() {
                     match event_num(&inst.event).as_str() {
-                        "239" => { let pc = inst.pc as i32; if pc > t.max_ce239_pc { t.max_ce239_pc = pc; } }
-                        "242" => { let pc = inst.pc as i32; if pc > t.max_ce242_pc { t.max_ce242_pc = pc; } }
+                        "239" => {
+                            let pc = inst.pc as i32;
+                            if pc > t.max_ce239_pc {
+                                t.max_ce239_pc = pc;
+                            }
+                        }
+                        "242" => {
+                            let pc = inst.pc as i32;
+                            if pc > t.max_ce242_pc {
+                                t.max_ce242_pc = pc;
+                            }
+                        }
                         "243" => t.ce243_started = true,
                         "241" => t.ce241_started = true,
                         _ => {}
@@ -205,18 +230,34 @@ fn real_day4_battle_settles_with_rebuilt_wiring() {
     for (msg, n) in &_game.diagnostics {
         println!("  x{n}: {msg}");
     }
-    let alive: Vec<String> = _game.vm.instances().iter()
+    let alive: Vec<String> = _game
+        .vm
+        .instances()
+        .iter()
         .map(|i| format!("{}@{}:{:?}", event_num(&i.event), i.pc, i.wait))
         .collect();
     println!("ALIVE_AT_END: [{}]", alive.join(", "));
-    assert!(t.ce253_started, "CE253 (real day-4 battle wrapper) must start");
-    assert!(t.ce239_started, "CE239 (battle caller) must be reached from CE253");
-    assert!(t.battle_active_frame.is_some(), "2000340 (battle-active) must rise");
-    assert!(t.wiring_rounds >= 1, "rebuilt wiring must start CE242 on the battle-active edge");
+    assert!(
+        t.ce253_started,
+        "CE253 (real day-4 battle wrapper) must start"
+    );
+    assert!(
+        t.ce239_started,
+        "CE239 (battle caller) must be reached from CE253"
+    );
+    assert!(
+        t.battle_active_frame.is_some(),
+        "2000340 (battle-active) must rise"
+    );
+    assert!(
+        t.wiring_rounds >= 1,
+        "rebuilt wiring must start CE242 on the battle-active edge"
+    );
     assert!(t.ce242_started, "CE242 (command phase) must run");
     assert!(
         t.v350_seq.contains(&1),
-        "the 2000350 state machine must enter the command phase (1), got {:?}", t.v350_seq
+        "the 2000350 state machine must enter the command phase (1), got {:?}",
+        t.v350_seq
     );
     assert!(
         t.max_ce242_pc >= 200,
@@ -225,11 +266,15 @@ fn real_day4_battle_settles_with_rebuilt_wiring() {
     );
     assert!(
         t.v352_peak == 1 || t.v352_peak == -1,
-        "CE244 must settle: 2000352 in {{1,-1}}, got {}", t.v352_peak
+        "CE244 must settle: 2000352 in {{1,-1}}, got {}",
+        t.v352_peak
     );
     assert_eq!(t.v343_peak, 1, "CE244 must set 2000343 = 1");
     assert_eq!(t.warnings, 0, "no warnings allowed");
-    assert_eq!(t.unanswered_250, 0, "no unanswered 250 reads in the battle section");
+    assert_eq!(
+        t.unanswered_250, 0,
+        "no unanswered 250 reads in the battle section"
+    );
     assert!(
         !t.ce239_alive_at_end,
         "CE239 must return (leave its end-judgment loop) after 2000343 = 1, max pc was {}",

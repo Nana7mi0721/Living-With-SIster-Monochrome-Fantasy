@@ -200,7 +200,10 @@ fn natural_menu_confirmations_harvest_into_ce242_rounds() {
         "real menu must register at least two command rows, got {:?}",
         best_rows
     );
-    assert!(ce157_starts >= 2, "each confirm must spawn a CE157 registration");
+    assert!(
+        ce157_starts >= 2,
+        "each confirm must spawn a CE157 registration"
+    );
     // The command-list rows the real menu produced, in row order. By the documented contract
     // (row index == CE242 command index) these are the harvested command indexes.
     let harvested: Vec<i32> = best_rows.iter().map(|r| r.row.clamp(1, 8)).collect();
@@ -277,7 +280,10 @@ fn natural_menu_confirmations_harvest_into_ce242_rounds() {
     );
 
     assert!(settled, "the auto-armed battle must settle");
-    assert!(rounds >= 2, "must run >= 2 real CE242 command rounds, got {rounds}");
+    assert!(
+        rounds >= 2,
+        "must run >= 2 real CE242 command rounds, got {rounds}"
+    );
     assert!(
         turn_starts >= 1,
         "the REAL CE241 turn-start must fire between rounds, got {turn_starts}"
@@ -287,7 +293,10 @@ fn natural_menu_confirmations_harvest_into_ce242_rounds() {
     // harvester. The default rotating schedule is [1, 3]; the harvested sequence contains 2, so
     // a match on that position proves the harvest (not the schedule) fed the drive.
     let k = harvested.len().min(arg0s.len());
-    assert!(k >= 2, "need at least two harvested rounds, harvested={harvested:?} arg0s={arg0s:?}");
+    assert!(
+        k >= 2,
+        "need at least two harvested rounds, harvested={harvested:?} arg0s={arg0s:?}"
+    );
     assert_eq!(
         &arg0s[..k],
         &harvested[..k],
@@ -295,12 +304,30 @@ fn natural_menu_confirmations_harvest_into_ce242_rounds() {
     );
     // Distinct CE242 bodies for the first two rounds (different members -> different bodies).
     let body2 = first_pcs.iter().take(2).copied().collect::<BTreeSet<_>>();
-    assert_eq!(body2.len(), 2, "first two rounds must reach distinct CE242 bodies: {first_pcs:?}");
+    assert_eq!(
+        body2.len(),
+        2,
+        "first two rounds must reach distinct CE242 bodies: {first_pcs:?}"
+    );
     // Distinct party pools must drain.
-    assert_eq!(pool_pre[0], [5, 4, 3, 2], "CE239 must seed four pools 5/4/3/2, got {:?}", pool_pre[0]);
+    assert_eq!(
+        pool_pre[0],
+        [5, 4, 3, 2],
+        "CE239 must seed four pools 5/4/3/2, got {:?}",
+        pool_pre[0]
+    );
     let drained = (0..4).filter(|i| final_pools[*i] < pool_pre[0][*i]).count();
-    assert!(drained >= 2, ">= 2 member pools must drain, pre={:?} post={:?}", pool_pre[0], final_pools);
-    assert!(settle.0 == 1 || settle.0 == -1, "real CE244 result in {{1,-1}}, got {:?}", settle);
+    assert!(
+        drained >= 2,
+        ">= 2 member pools must drain, pre={:?} post={:?}",
+        pool_pre[0],
+        final_pools
+    );
+    assert!(
+        settle.0 == 1 || settle.0 == -1,
+        "real CE244 result in {{1,-1}}, got {:?}",
+        settle
+    );
     assert_eq!(settle.1, 1, "2000343 decided");
     assert_eq!(warnings, 0, "battle must not warn");
 }

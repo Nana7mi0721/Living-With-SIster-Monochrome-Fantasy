@@ -612,19 +612,28 @@ fn natural_day_four_battle_runs_genuine_multi_round_and_settles() {
     // Frame indices shift 134 frames earlier than the pre-M13 baseline because persisted
     // common-event self (CE251 etc.) advances the day-flow clock; the phase trajectory,
     // round count and pools above are unchanged.
-    assert_eq!(settle, 884, "CE244 settles on the exact deterministic frame");
+    assert_eq!(
+        settle, 884,
+        "CE244 settles on the exact deterministic frame"
+    );
     let command_rounds = main_phases.iter().filter(|v| **v == 1).count();
     let action_phases = main_phases.iter().filter(|v| **v == 2).count();
     assert_eq!(command_rounds, 2, "exactly two command rounds");
     assert_eq!(action_phases, 1, "exactly one enemy-action phase");
-    assert_eq!(trace.v349_at_settle, 2, "2000349 = two command rounds elapsed");
+    assert_eq!(
+        trace.v349_at_settle, 2,
+        "2000349 = two command rounds elapsed"
+    );
     assert_eq!(
         trace.pools_at_settle,
         [4, 3, 3, 2],
         "member pools (2000345/346/347/348) at settle"
     );
     assert_eq!(trace.ce241_frames, 86, "CE241 turn-start live-frame count");
-    assert_eq!(trace.ce243_frames, 98, "CE243 enemy-action live-frame count");
+    assert_eq!(
+        trace.ce243_frames, 98,
+        "CE243 enemy-action live-frame count"
+    );
     assert_eq!(
         trace.ce243_first_frame,
         Some(641),
@@ -641,7 +650,10 @@ fn natural_day_four_battle_runs_genuine_multi_round_and_settles() {
         "2000342 drained to <= 0 on the settle frame"
     );
     assert_eq!(trace.v342_min, 0, "enemy gauge drained to exactly 0");
-    assert_eq!(trace.max_ce239_pc, 1099, "CE239 reaches its cleanup tail pc");
+    assert_eq!(
+        trace.max_ce239_pc, 1099,
+        "CE239 reaches its cleanup tail pc"
+    );
     assert_eq!(trace.max_ce242_pc, 866, "CE242 reaches its cleanup pc");
     // Deterministic victory: the reference-semantics day-4 fight always ends 2000352 = 1 (win);
     // this is NOT a {1,-1} coin flip (proven stable across process restarts by task-79).

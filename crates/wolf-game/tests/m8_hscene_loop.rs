@@ -84,8 +84,14 @@ fn common_events() -> CommonEventData {
 }
 
 fn ce_ints(data: &CommonEventData, event: u32, pc: usize) -> Vec<i32> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
-    let Slot::Command(cmd) = ev.commands.get(pc).unwrap_or_else(|| panic!("CE{event} pc{pc}")) else {
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
+    let Slot::Command(cmd) = ev
+        .commands
+        .get(pc)
+        .unwrap_or_else(|| panic!("CE{event} pc{pc}"))
+    else {
         panic!("CE{event} pc{pc} is blank");
     };
     cmd.params
@@ -95,7 +101,9 @@ fn ce_ints(data: &CommonEventData, event: u32, pc: usize) -> Vec<i32> {
 }
 
 fn call_pcs(data: &CommonEventData, event: u32, target: i32) -> Vec<usize> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     ev.commands
         .iter()
         .enumerate()
@@ -113,7 +121,9 @@ fn call_pcs(data: &CommonEventData, event: u32, target: i32) -> Vec<usize> {
 }
 
 fn write_pcs(data: &CommonEventData, event: u32, target: i32) -> Vec<usize> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     ev.commands
         .iter()
         .enumerate()
@@ -137,7 +147,10 @@ fn open_resumed() -> Option<Game> {
         return None;
     }
     if !data_root().join("MapData").join("SampleMapA.mps").exists() {
-        eprintln!("skip: missing SampleMapA.mps under {}", data_root().display());
+        eprintln!(
+            "skip: missing SampleMapA.mps under {}",
+            data_root().display()
+        );
         return None;
     }
     let mut game = match Game::new(data_root()) {
@@ -177,7 +190,9 @@ fn endbutton_pos(game: &Game) -> Option<(i32, i32)> {
 }
 
 fn file_present(game: &Game, needle: &str) -> bool {
-    game.screen.iter().any(|picture| picture.file.contains(needle))
+    game.screen
+        .iter()
+        .any(|picture| picture.file.contains(needle))
 }
 
 fn nav_to_terminal_stage(game: &mut Game) -> bool {
@@ -188,9 +203,7 @@ fn nav_to_terminal_stage(game: &mut Game) -> bool {
         let buttons: Vec<(i32, i32)> = game
             .screen
             .iter()
-            .filter(|picture| {
-                picture.file.contains("h_button") || picture.file.contains("hbutton")
-            })
+            .filter(|picture| picture.file.contains("h_button") || picture.file.contains("hbutton"))
             .map(|picture| (picture.x, picture.y))
             .collect();
         let mut advanced = false;
@@ -245,7 +258,10 @@ fn press_end_through_teardown(game: &mut Game, frames: usize) -> (BTreeSet<u32>,
         }
         if let Some(choice) = &game.choices {
             let options = choice.options.clone();
-            let index = options.iter().position(|o| o == "是" || o == "是的").unwrap_or(0);
+            let index = options
+                .iter()
+                .position(|o| o == "是" || o == "是的")
+                .unwrap_or(0);
             game.reply(ChoiceReply::Index(index));
         }
     }
@@ -260,7 +276,10 @@ fn drive_to_next_morning(game: &mut Game, expected_day: i32, seen: &mut BTreeSet
         }
         if let Some(choice) = &game.choices {
             let options = choice.options.clone();
-            let index = options.iter().position(|o| o == "是" || o == "是的").unwrap_or(0);
+            let index = options
+                .iter()
+                .position(|o| o == "是" || o == "是的")
+                .unwrap_or(0);
             game.reply(ChoiceReply::Index(index));
         }
         if game.vm.vars.get(160) == expected_day
@@ -286,13 +305,22 @@ fn h_overlay_files(game: &Game) -> Vec<(i32, String, bool, i32)> {
             picture.number != 6000
                 && (picture.file.contains("hscene/") || picture.file.contains("cutin/"))
         })
-        .map(|picture| (picture.number, picture.file.clone(), picture.hidden, picture.opacity))
+        .map(|picture| {
+            (
+                picture.number,
+                picture.file.clone(),
+                picture.hidden,
+                picture.opacity,
+            )
+        })
         .collect()
 }
 
 #[test]
 fn full_loop_enters_stage13_exits_and_rolls_to_next_morning() {
-    let Some(mut game) = open_resumed() else { return; };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
     for _ in 0..60 {
         game.frame();
     }
@@ -309,8 +337,16 @@ fn full_loop_enters_stage13_exits_and_rolls_to_next_morning() {
         nav_to_terminal_stage(&mut game),
         "real pointer navigation must reach terminal stage 13"
     );
-    assert_eq!(game.vm.vars.get(62), 13, "reached the terminal stage by real clicks");
-    assert_eq!(game.vm.vars.get(64), 1, "pajama flag var64 is set on the H path");
+    assert_eq!(
+        game.vm.vars.get(62),
+        13,
+        "reached the terminal stage by real clicks"
+    );
+    assert_eq!(
+        game.vm.vars.get(64),
+        1,
+        "pajama flag var64 is set on the H path"
+    );
 
     spin_to_message_idle(&mut game);
     assert_eq!(
@@ -318,18 +354,38 @@ fn full_loop_enters_stage13_exits_and_rolls_to_next_morning() {
         0,
         "message window (system var 12) must be idle before the end button can dispatch"
     );
-    assert!(endbutton_pos(&game).is_some(), "stage 13 draws Picture/endbutton.png (picture 294)");
-    assert!(file_present(&game, "hscene/h_s10_pose"), "H pose layer is on screen at stage 13");
+    assert!(
+        endbutton_pos(&game).is_some(),
+        "stage 13 draws Picture/endbutton.png (picture 294)"
+    );
+    assert!(
+        file_present(&game, "hscene/h_s10_pose"),
+        "H pose layer is on screen at stage 13"
+    );
 
     game.auto_choice = true;
     game.auto_choice_delay = 2;
     game.set_choice_cursor(0);
     let (mut seen, clicked) = press_end_through_teardown(&mut game, 400);
     assert!(clicked, "end button must be clickable");
-    assert!(seen.contains(&345), "event 25 must dispatch CE345 深夜終了コマンド (seen {seen:?})");
-    assert!(seen.contains(&222), "CE345 teardown saves through CE222 (seen {seen:?})");
-    assert_eq!(game.vm.vars.get(62), 0, "exit resets the stage index var62 -> 0");
-    assert_eq!(game.vm.vars.get(64), 0, "exit clears the pajama flag var64 (CE345 pc341)");
+    assert!(
+        seen.contains(&345),
+        "event 25 must dispatch CE345 深夜終了コマンド (seen {seen:?})"
+    );
+    assert!(
+        seen.contains(&222),
+        "CE345 teardown saves through CE222 (seen {seen:?})"
+    );
+    assert_eq!(
+        game.vm.vars.get(62),
+        0,
+        "exit resets the stage index var62 -> 0"
+    );
+    assert_eq!(
+        game.vm.vars.get(64),
+        0,
+        "exit clears the pajama flag var64 (CE345 pc341)"
+    );
     assert_eq!(game.vm.vars.get(63), 0, "exit clears var63 (CE345 pc340)");
     assert_eq!(game.vm.vars.get(106), 0, "exit clears var106 (CE345 pc342)");
     assert_eq!(game.vm.vars.get(241), 0, "exit clears var241 (CE345 pc343)");
@@ -349,8 +405,15 @@ fn full_loop_enters_stage13_exits_and_rolls_to_next_morning() {
         day_before + 1,
         "ending the H scene advances the day counter (CE329 pc406 var160 += 1)"
     );
-    assert!(game.vm.vars.get(4) >= 7, "the clock is back in the morning (var4 = {})", game.vm.vars.get(4));
-    assert_eq!(game.stats.warnings, 0, "the whole loop -- exit, sleep and morning -- must be warning-free");
+    assert!(
+        game.vm.vars.get(4) >= 7,
+        "the clock is back in the morning (var4 = {})",
+        game.vm.vars.get(4)
+    );
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the whole loop -- exit, sleep and morning -- must be warning-free"
+    );
 
     assert!(
         game.screen
@@ -363,8 +426,14 @@ fn full_loop_enters_stage13_exits_and_rolls_to_next_morning() {
         "the H overlay (hscene/ + cutin/ layers) must be gone after the sleep teardown: {:?}",
         h_overlay_files(&game)
     );
-    assert!(file_present(&game, "bg_01_home"), "the normal home background is back");
-    assert!(file_present(&game, "stand_imouto"), "the sister stand-up portrait is drawn in the morning scene");
+    assert!(
+        file_present(&game, "bg_01_home"),
+        "the normal home background is back"
+    );
+    assert!(
+        file_present(&game, "stand_imouto"),
+        "the sister stand-up portrait is drawn in the morning scene"
+    );
     assert!(
         file_present(&game, "sub_button"),
         "the morning day-command scene exposes its command buttons"
@@ -376,8 +445,14 @@ fn full_loop_enters_stage13_exits_and_rolls_to_next_morning() {
     );
 
     let alive: BTreeSet<u32> = game.vm.instances().iter().map(|inst| inst.event).collect();
-    assert!(alive.contains(&4), "the map メニュー処理 rollover event stays live after the loop: {alive:?}");
-    assert!(!alive.is_empty(), "the map runtime is still running after the loop");
+    assert!(
+        alive.contains(&4),
+        "the map メニュー処理 rollover event stays live after the loop: {alive:?}"
+    );
+    assert!(
+        !alive.is_empty(),
+        "the map runtime is still running after the loop"
+    );
 
     let visible_hword: Vec<_> = game
         .screen
@@ -406,7 +481,9 @@ fn full_loop_enters_stage13_exits_and_rolls_to_next_morning() {
 
 #[test]
 fn no_end_press_holds_stage_13_without_rollover() {
-    let Some(mut game) = open_resumed() else { return; };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
     for _ in 0..60 {
         game.frame();
     }
@@ -423,8 +500,16 @@ fn no_end_press_holds_stage_13_without_rollover() {
     for _ in 0..700 {
         game.frame();
     }
-    assert_eq!(game.vm.vars.get(62), 13, "without the end button the wrapper holds stage 13");
-    assert_eq!(game.vm.vars.get(64), 1, "the pajama flag stays set while the scene holds");
+    assert_eq!(
+        game.vm.vars.get(62),
+        13,
+        "without the end button the wrapper holds stage 13"
+    );
+    assert_eq!(
+        game.vm.vars.get(64),
+        1,
+        "the pajama flag stays set while the scene holds"
+    );
     assert_eq!(
         game.vm.vars.get(160),
         day_before,
@@ -435,15 +520,32 @@ fn no_end_press_holds_stage_13_without_rollover() {
 
 #[test]
 fn named_cg_chain_is_gated_and_rollover_is_wired_through_ce329() {
-    let Some(game) = open_resumed() else { return; };
-    assert_eq!(game.vm.vars.get(460), 0, "SaveData08 carries var460 = 0 (deep-CG chain inactive)");
+    let Some(game) = open_resumed() else {
+        return;
+    };
+    assert_eq!(
+        game.vm.vars.get(460),
+        0,
+        "SaveData08 carries var460 = 0 (deep-CG chain inactive)"
+    );
 
     let map = load_sample_map();
-    let ev33 = map.events.iter().find(|event| event.id == 33).expect("map ev33");
+    let ev33 = map
+        .events
+        .iter()
+        .find(|event| event.id == 33)
+        .expect("map ev33");
     let conditions = ev33.pages[0].conditions();
     let enabled: Vec<_> = conditions.iter().filter(|c| c.enabled).collect();
-    assert_eq!(enabled.len(), 1, "ev33 page 0 has exactly one activation condition");
-    assert_eq!(enabled[0].variable, 2_000_460, "ev33 page 0 watches global var460");
+    assert_eq!(
+        enabled.len(),
+        1,
+        "ev33 page 0 has exactly one activation condition"
+    );
+    assert_eq!(
+        enabled[0].variable, 2_000_460,
+        "ev33 page 0 watches global var460"
+    );
     assert_eq!(enabled[0].value, 1, "ev33 activates only on var460 == 1");
 
     let data = common_events();
@@ -452,11 +554,37 @@ fn named_cg_chain_is_gated_and_rollover_is_wired_through_ce329() {
         ce345_calls.contains(&361) && ce345_calls.contains(&364),
         "CE345 tail must call CE329 就寝処理: {ce345_calls:?}"
     );
-    assert!(call_pcs(&data, 345, 500_222).contains(&348), "CE345 saves through CE222 at pc348");
-    assert!(call_pcs(&data, 345, 500_217).contains(&353), "CE345 refreshes the clock through CE217 at pc353");
-    assert_eq!(write_pcs(&data, 329, 2_000_160), vec![406], "CE329 pc406 increments the day counter var160");
-    assert_eq!(ce_ints(&data, 329, 385), vec![2_000_004, 7, 0, 0], "CE329 pc385 sets the clock hour var4");
-    assert_eq!(ce_ints(&data, 329, 386), vec![2_000_005, 45, 0, 0], "CE329 pc386 sets the clock minute var5");
-    assert_eq!(ce_ints(&data, 345, 339), vec![2_000_062, 0, 0, 0], "CE345 pc339 var62 = 0");
-    assert_eq!(ce_ints(&data, 345, 341), vec![2_000_064, 0, 0, 0], "CE345 pc341 var64 = 0");
+    assert!(
+        call_pcs(&data, 345, 500_222).contains(&348),
+        "CE345 saves through CE222 at pc348"
+    );
+    assert!(
+        call_pcs(&data, 345, 500_217).contains(&353),
+        "CE345 refreshes the clock through CE217 at pc353"
+    );
+    assert_eq!(
+        write_pcs(&data, 329, 2_000_160),
+        vec![406],
+        "CE329 pc406 increments the day counter var160"
+    );
+    assert_eq!(
+        ce_ints(&data, 329, 385),
+        vec![2_000_004, 7, 0, 0],
+        "CE329 pc385 sets the clock hour var4"
+    );
+    assert_eq!(
+        ce_ints(&data, 329, 386),
+        vec![2_000_005, 45, 0, 0],
+        "CE329 pc386 sets the clock minute var5"
+    );
+    assert_eq!(
+        ce_ints(&data, 345, 339),
+        vec![2_000_062, 0, 0, 0],
+        "CE345 pc339 var62 = 0"
+    );
+    assert_eq!(
+        ce_ints(&data, 345, 341),
+        vec![2_000_064, 0, 0, 0],
+        "CE345 pc341 var64 = 0"
+    );
 }

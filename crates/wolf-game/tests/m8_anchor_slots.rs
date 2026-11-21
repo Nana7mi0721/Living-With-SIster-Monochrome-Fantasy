@@ -41,7 +41,8 @@ fn every_anchor_code_places_the_extent_against_its_edges() {
     // shipped scripts: bottom description text at (10,570), right HUD text at x=140,
     // the verified 101 window at (1024,570), 718x700 album art at x=512 and the
     // 482x225 menu icons at y=576.
-    let cases: &[(u8, i32, i32, u32, u32, [f32; 4])] = &[
+    type AnchorCase = (u8, i32, i32, u32, u32, [f32; 4]);
+    let cases: &[AnchorCase] = &[
         (
             ANCHOR_TOP_LEFT,
             512,

@@ -63,8 +63,18 @@ fn seed_party(game: &mut Game) {
             .set_num(Container::CData, 0, 12, 47 + i as i32, *v);
     }
     for (c, v) in [
-        (20, 100), (21, 100), (22, 50), (23, 50), (24, 20), (25, 15), (26, 10), (27, 30),
-        (28, 30), (9, 20), (10, 10), (4, 10),
+        (20, 100),
+        (21, 100),
+        (22, 50),
+        (23, 50),
+        (24, 20),
+        (25, 15),
+        (26, 10),
+        (27, 30),
+        (28, 30),
+        (9, 20),
+        (10, 10),
+        (4, 10),
     ] {
         game.databases.set_num(Container::CData, 0, 12, c, v);
     }
@@ -105,11 +115,7 @@ fn run(with_inventory: bool, frames: usize) -> Outcome {
             game.databases.set_num(Container::CData, 7, 0, 0, 1);
         }
         // Plain "Decide" pulse; the shop/battle windows only need the press edge.
-        game.key_bits = if f % 2 == 0 {
-            wolf_game::key::OK
-        } else {
-            0
-        };
+        game.key_bits = if f % 2 == 0 { wolf_game::key::OK } else { 0 };
         let _ = game.frame();
 
         for inst in game.vm.instances() {
@@ -124,8 +130,14 @@ fn run(with_inventory: bool, frames: usize) -> Outcome {
         // A real attack row is selectable when a 万能ウィンドウ row carries one of the
         // real command codes and its 選択可能 cell is 1.
         for row in 0..8 {
-            let code = game.databases.num(Container::CData, 19, row, 1).unwrap_or(0);
-            let selectable = game.databases.num(Container::CData, 19, row, 2).unwrap_or(0);
+            let code = game
+                .databases
+                .num(Container::CData, 19, row, 1)
+                .unwrap_or(0);
+            let selectable = game
+                .databases
+                .num(Container::CData, 19, row, 2)
+                .unwrap_or(0);
             if REAL_ATTACK_CODES.contains(&code) && selectable == 1 {
                 out.real_selectable = true;
             }
@@ -162,7 +174,10 @@ fn m6_battle_commands_real_attack_selectable_with_inventory() {
         "with item 0 in stock a real attack row (code 26/25/30/29) must be selectable"
     );
     // Honest boundary: a full turn settlement is not reachable from CE188.
-    assert!(!seeded.saw_ce244, "CE188 line must not call CE244 (structural boundary)");
+    assert!(
+        !seeded.saw_ce244,
+        "CE188 line must not call CE244 (structural boundary)"
+    );
     assert!(!control.saw_ce244, "control must not reach CE244 either");
 
     eprintln!(

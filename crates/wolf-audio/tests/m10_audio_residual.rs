@@ -227,7 +227,7 @@ fn loop_tag_audit() {
                 }
                 let _ = raw_end;
             }
-            if start.map_or(false, |value| value >= frames as u64) {
+            if start.is_some_and(|value| value >= frames as u64) {
                 flags.push("START_OOB");
             }
             rows.push(Row {
@@ -261,10 +261,24 @@ fn loop_tag_audit() {
         }
     }
 
-    println!("\n=== m10 loop_tag_audit: {} loop-tagged audio file(s) ===", rows.len());
+    println!(
+        "\n=== m10 loop_tag_audit: {} loop-tagged audio file(s) ===",
+        rows.len()
+    );
     println!(
         "{:>44} {:>4} {:>6} {:>2} {:>10} {:>10} {:>10} {:>22} {:>8} {:>6} {:>6} {:>7}  flags",
-        "file", "ext", "rate", "ch", "frames", "start", "length", "decoded_region", "loop_s", "seam", "step", "ratio"
+        "file",
+        "ext",
+        "rate",
+        "ch",
+        "frames",
+        "start",
+        "length",
+        "decoded_region",
+        "loop_s",
+        "seam",
+        "step",
+        "ratio"
     );
     for row in &rows {
         let region = row
@@ -278,7 +292,11 @@ fn loop_tag_audit() {
                 (le - ls) as f32 / row.sample_rate as f32
             }
         });
-        let ratio = if row.step > 0.0 { row.seam / row.step } else { 0.0 };
+        let ratio = if row.step > 0.0 {
+            row.seam / row.step
+        } else {
+            0.0
+        };
         println!(
             "{:>44} {:>4} {:>6} {:>2} {:>10} {:>10} {:>10} {:>22} {:>8.3} {:>6.3} {:>6.4} {:>7.1}  {}",
             row.rel,
@@ -298,7 +316,11 @@ fn loop_tag_audit() {
     }
 
     let flagged: Vec<&Row> = rows.iter().filter(|row| !row.flags.is_empty()).collect();
-    println!("\nloop-tagged: {} (all ext ogg expected), flagged: {}", rows.len(), flagged.len());
+    println!(
+        "\nloop-tagged: {} (all ext ogg expected), flagged: {}",
+        rows.len(),
+        flagged.len()
+    );
     for row in &flagged {
         println!("  RISK {} [{}]", row.rel, row.flags.join(","));
     }
@@ -306,14 +328,41 @@ fn loop_tag_audit() {
         println!("decode errors: {decode_errors:?}");
     }
 
-    assert!(decode_errors.is_empty(), "loop-tagged files must decode: {decode_errors:?}");
-    assert_eq!(rows.len(), 31, "expected the retail tree's 31 loop-tagged files");
+    assert!(
+        decode_errors.is_empty(),
+        "loop-tagged files must decode: {decode_errors:?}"
+    );
+    assert_eq!(
+        rows.len(),
+        31,
+        "expected the retail tree's 31 loop-tagged files"
+    );
     for row in &rows {
-        assert_eq!(row.ext, "ogg", "loop tags must be on ogg, got {} ({})", row.rel, row.ext);
-        assert!(row.start.is_some(), "{} has LOOPLENGTH but no LOOPSTART", row.rel);
-        assert!(row.decoded.is_some(), "{} has no usable decoded loop region", row.rel);
-        assert!(!row.flags.contains(&"START_OOB"), "{} loop start is past end of file", row.rel);
-        assert!(!row.flags.contains(&"NO_USABLE_LOOP"), "{} decoded loop is unusable", row.rel);
+        assert_eq!(
+            row.ext, "ogg",
+            "loop tags must be on ogg, got {} ({})",
+            row.rel, row.ext
+        );
+        assert!(
+            row.start.is_some(),
+            "{} has LOOPLENGTH but no LOOPSTART",
+            row.rel
+        );
+        assert!(
+            row.decoded.is_some(),
+            "{} has no usable decoded loop region",
+            row.rel
+        );
+        assert!(
+            !row.flags.contains(&"START_OOB"),
+            "{} loop start is past end of file",
+            row.rel
+        );
+        assert!(
+            !row.flags.contains(&"NO_USABLE_LOOP"),
+            "{} decoded loop is unusable",
+            row.rel
+        );
     }
 
     // The raw values must explain the clamped decoder output exactly.
@@ -324,8 +373,16 @@ fn loop_tag_audit() {
             Some(len) => start.saturating_add(len).min(row.frames as u64),
             None => row.frames as u64,
         };
-        assert_eq!(ls, start, "{} decoded loop_start differs from LOOPSTART", row.rel);
-        assert_eq!(le, expected_end, "{} decoded loop_end differs from clamped tag end", row.rel);
+        assert_eq!(
+            ls, start,
+            "{} decoded loop_start differs from LOOPSTART",
+            row.rel
+        );
+        assert_eq!(
+            le, expected_end,
+            "{} decoded loop_end differs from clamped tag end",
+            row.rel
+        );
     }
 }
 
@@ -338,7 +395,12 @@ fn missing_bgm_kana_is_registered_but_not_referenced_by_events() {
 
     let needle = b"BGM/kana.mp3";
     let mut basic_counts: Vec<(String, usize)> = Vec::new();
-    for name in ["CommonEvent.dat", "DataBase.dat", "CDataBase.dat", "SysDatabase.dat"] {
+    for name in [
+        "CommonEvent.dat",
+        "DataBase.dat",
+        "CDataBase.dat",
+        "SysDatabase.dat",
+    ] {
         let path = root.join("BasicData").join(name);
         let count = fs::read(&path).map_or(0, |bytes| count_sub(&bytes, needle));
         basic_counts.push((name.to_string(), count));
@@ -364,14 +426,20 @@ fn missing_bgm_kana_is_registered_but_not_referenced_by_events() {
         "\n=== m10 missing BGM/kana.mp3 ===\nbasic counts: {basic_counts:?}\nmap refs: {map_refs}"
     );
 
-    assert_eq!(sys_count, 1, "BGM/kana.mp3 should appear exactly once in SysDatabase.dat");
+    assert_eq!(
+        sys_count, 1,
+        "BGM/kana.mp3 should appear exactly once in SysDatabase.dat"
+    );
     for (name, count) in &basic_counts {
         if name != "SysDatabase.dat" {
             assert_eq!(*count, 0, "unexpected BGM/kana.mp3 mention in {name}");
         }
     }
     assert_eq!(map_refs, 0, "no map script should reference BGM/kana.mp3");
-    assert!(!root.join("BGM").join("kana.mp3").is_file(), "kana.mp3 unexpectedly exists");
+    assert!(
+        !root.join("BGM").join("kana.mp3").is_file(),
+        "kana.mp3 unexpectedly exists"
+    );
 
     let mut audio_files = Vec::new();
     collect_audio(&root, &mut audio_files);
@@ -385,7 +453,10 @@ fn missing_bgm_kana_is_registered_but_not_referenced_by_events() {
         })
         .map(|path| rel(&root, path))
         .collect();
-    assert!(same_name.is_empty(), "found a same-name kana.mp3 alternative: {same_name:?}");
+    assert!(
+        same_name.is_empty(),
+        "found a same-name kana.mp3 alternative: {same_name:?}"
+    );
 
     assert!(decode_file(root.join("BGM").join("kana.mp3")).is_err());
     let mut engine = Engine::null();
@@ -399,7 +470,13 @@ fn missing_bgm_kana_is_registered_but_not_referenced_by_events() {
         frames: 0,
     };
     engine.apply_sound_cmd(&cmd);
-    assert!(!engine.bgm_playing(), "a missing BGM must not create a voice");
+    assert!(
+        !engine.bgm_playing(),
+        "a missing BGM must not create a voice"
+    );
     let silence = engine.render_offline(128);
-    assert!(silence.iter().all(|sample| *sample == 0.0), "missing BGM must stay silent");
+    assert!(
+        silence.iter().all(|sample| *sample == 0.0),
+        "missing BGM must stay silent"
+    );
 }

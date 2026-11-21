@@ -60,7 +60,10 @@ fn save_dir() -> PathBuf {
 }
 
 fn synth_path() -> PathBuf {
-    repo_root().join("work").join("out").join("m10_cutin_synth.sav")
+    repo_root()
+        .join("work")
+        .join("out")
+        .join("m10_cutin_synth.sav")
 }
 
 fn common_events() -> CommonEventData {
@@ -82,7 +85,9 @@ fn words(cmd: &wolf_format::command::Command) -> Vec<i32> {
 
 /// Every pc in CE `event` whose op `op` has `first` as its first parameter word.
 fn ce_cmd_pcs(data: &CommonEventData, event: u32, op: u32, first: i32) -> Vec<usize> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     ev.commands
         .iter()
         .enumerate()
@@ -97,7 +102,9 @@ fn ce_cmd_pcs(data: &CommonEventData, event: u32, op: u32, first: i32) -> Vec<us
 
 /// Every (pc, var, value, op) triple encoded by an op111 condition command in CE `event`.
 fn ce_cond_triples(data: &CommonEventData, event: u32) -> Vec<(usize, i32, i32, i32)> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     let mut out = Vec::new();
     for (pc, slot) in ev.commands.iter().enumerate() {
         if let Slot::Command(cmd) = slot {
@@ -121,7 +128,9 @@ fn ce_cond_triples(data: &CommonEventData, event: u32) -> Vec<(usize, i32, i32, 
 
 /// Every CE246 op210 whose target (words[0]) is `target`, returned as (pc, self-args).
 fn op210_sites(data: &CommonEventData, event: u32, target: i32) -> Vec<(usize, Vec<i32>)> {
-    let ev = data.event(event).unwrap_or_else(|| panic!("CE{event} exists"));
+    let ev = data
+        .event(event)
+        .unwrap_or_else(|| panic!("CE{event} exists"));
     ev.commands
         .iter()
         .enumerate()
@@ -133,7 +142,10 @@ fn op210_sites(data: &CommonEventData, event: u32, target: i32) -> Vec<(usize, V
                 }
                 let status = ints.get(1).copied().unwrap_or(0);
                 let count = (status & 0xF).max(0) as usize;
-                let args = ints.get(2..2 + count).map(|s| s.to_vec()).unwrap_or_default();
+                let args = ints
+                    .get(2..2 + count)
+                    .map(|s| s.to_vec())
+                    .unwrap_or_default();
                 Some((pc, args))
             }
             _ => None,
@@ -326,8 +338,17 @@ fn run_ce346(args: [i32; 3], frames: usize) -> ExecRun {
             }
         }
     }
-    let alive = game.vm.instances().iter().any(|instance| instance.event == 346);
-    ExecRun { max_pc, files, alive, warnings: game.stats.warnings }
+    let alive = game
+        .vm
+        .instances()
+        .iter()
+        .any(|instance| instance.event == 346);
+    ExecRun {
+        max_pc,
+        files,
+        alive,
+        warnings: game.stats.warnings,
+    }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -342,7 +363,11 @@ fn ce246_calls_ce346_with_the_real_self_args() {
     // 7 call sites, 6 with args [24,1,1] and pc1543 with [25,1,1].
     let sites = op210_sites(&data, 246, 500_346);
     let pcs: Vec<usize> = sites.iter().map(|(pc, _)| *pc).collect();
-    assert_eq!(pcs, vec![695, 906, 1477, 1543, 1598, 1692, 1799], "CE246 CE346 call pcs");
+    assert_eq!(
+        pcs,
+        vec![695, 906, 1477, 1543, 1598, 1692, 1799],
+        "CE246 CE346 call pcs"
+    );
     let args_by_pc: BTreeMap<usize, Vec<i32>> = sites.into_iter().collect();
     assert_eq!(args_by_pc[&1543], vec![25, 1, 1], "pc1543 passes [25,1,1]");
     let arg24 = args_by_pc
@@ -354,34 +379,60 @@ fn ce246_calls_ce346_with_the_real_self_args() {
     // CE346 gates its body on the self args (magic 1_600_000+i is self group 6, slot i).
     let gt = ce_cond_triples(&data, 346);
     let has = |pc: usize, var: i32, value: i32, op: i32| {
-        gt.iter().any(|(p, v, val, o)| *p == pc && *v == var && *val == value && *o == op)
+        gt.iter()
+            .any(|(p, v, val, o)| *p == pc && *v == var && *val == value && *o == op)
     };
     for value in [0, 1] {
-        assert!(has(2, 1_600_001, value, 2), "CE346 pc2 gates SV1600001 in {{0,1}} (value {value})");
+        assert!(
+            has(2, 1_600_001, value, 2),
+            "CE346 pc2 gates SV1600001 in {{0,1}} (value {value})"
+        );
     }
     for value in [1, 2, 3] {
-        assert!(has(12, 1_600_002, value, 2), "CE346 pc12 gates SV1600002 in {{1,2,3}} (value {value})");
-        assert!(has(22, 1_600_000, value, 2), "CE346 pc22 gates SV1600000 in {{1,2,3}} (value {value})");
+        assert!(
+            has(12, 1_600_002, value, 2),
+            "CE346 pc12 gates SV1600002 in {{1,2,3}} (value {value})"
+        );
+        assert!(
+            has(22, 1_600_000, value, 2),
+            "CE346 pc22 gates SV1600000 in {{1,2,3}} (value {value})"
+        );
     }
     for value in [4, 24, 25] {
-        assert!(has(108, 1_600_000, value, 2), "CE346 pc108 gates SV1600000 in {{4,24,25}} (value {value})");
+        assert!(
+            has(108, 1_600_000, value, 2),
+            "CE346 pc108 gates SV1600000 in {{4,24,25}} (value {value})"
+        );
     }
     // The real arg 24 is exactly one of the pc108 branch selectors.
-    assert!(has(108, 1_600_000, 24, 2), "real arg 24 opens the pc108 cut-in branch");
+    assert!(
+        has(108, 1_600_000, 24, 2),
+        "real arg 24 opens the pc108 cut-in branch"
+    );
 
     // CE346 spawns CE217 (ウェイト/演出 helper) at pc81 and pc103.
-    assert_eq!(ce_cmd_pcs(&data, 346, 210, 500_217), vec![81, 103], "CE346 calls CE217 at 81/103");
+    assert_eq!(
+        ce_cmd_pcs(&data, 346, 210, 500_217),
+        vec![81, 103],
+        "CE346 calls CE217 at 81/103"
+    );
 
     // The constructed save round-trips: every WIN_VARS value survives save_to/load_save.
     let path = build_synth_save();
     let mut game = Game::new(data_root()).expect("Game::new");
     game.load_save(&path).expect("reload synthetic save");
     for (index, value) in WIN_VARS {
-        assert_eq!(game.vm.vars.get(index), value, "synth var{index} round-trips to {value}");
+        assert_eq!(
+            game.vm.vars.get(index),
+            value,
+            "synth var{index} round-trips to {value}"
+        );
     }
     // And plain SaveData07 really has the lower raw values (the state is constructed, not shipped).
     let mut retail = Game::new(data_root()).expect("Game::new");
-    retail.load_save(&save_dir().join("SaveData07.sav")).expect("SaveData07");
+    retail
+        .load_save(&save_dir().join("SaveData07.sav"))
+        .expect("SaveData07");
     assert_eq!(retail.vm.vars.get(4), 19, "raw SaveData07 var4 = 19");
     assert_eq!(retail.vm.vars.get(102), 59, "raw SaveData07 var102 = 59");
 }
@@ -399,22 +450,43 @@ fn ce346_executor_runs_the_cutin_and_terminates() {
     for (n, run) in profiles.iter().enumerate() {
         let label = format!("CE346 [24,1,1] run#{}", n + 1);
         assert_eq!(run.warnings, 0, "{label}: no engine warnings");
-        assert!(run.max_pc >= 108, "{label}: CE346 passes its pc108 branch gate (max pc {})", run.max_pc);
-        assert!(run.max_pc >= 180, "{label}: CE346 reaches the cut-in tail (max pc {})", run.max_pc);
+        assert!(
+            run.max_pc >= 108,
+            "{label}: CE346 passes its pc108 branch gate (max pc {})",
+            run.max_pc
+        );
+        assert!(
+            run.max_pc >= 180,
+            "{label}: CE346 reaches the cut-in tail (max pc {})",
+            run.max_pc
+        );
         assert!(
             run.files.iter().any(|file| file.contains("cutin")),
             "{label}: a cutin/*.png is drawn (files: {:?})",
             run.files
         );
-        assert!(!run.alive, "{label}: CE346 completes and its instance is reaped");
+        assert!(
+            !run.alive,
+            "{label}: CE346 completes and its instance is reaped"
+        );
     }
-    assert_eq!(profiles[0].max_pc, profiles[1].max_pc, "CE346 max pc deterministic");
-    assert_eq!(profiles[0].files, profiles[1].files, "CE346 drawn files deterministic");
+    assert_eq!(
+        profiles[0].max_pc, profiles[1].max_pc,
+        "CE346 max pc deterministic"
+    );
+    assert_eq!(
+        profiles[0].files, profiles[1].files,
+        "CE346 drawn files deterministic"
+    );
 
     // The alt branch [25,1,1] also takes the pc108 selector and completes.
     let alt = run_ce346([25, 1, 1], 1500);
     assert_eq!(alt.warnings, 0, "CE346 [25,1,1]: no warnings");
-    assert!(alt.max_pc >= 108, "CE346 [25,1,1] reaches its cut-in branch (max pc {})", alt.max_pc);
+    assert!(
+        alt.max_pc >= 108,
+        "CE346 [25,1,1] reaches its cut-in branch (max pc {})",
+        alt.max_pc
+    );
     assert!(!alt.alive, "CE346 [25,1,1] completes");
 }
 
@@ -431,13 +503,20 @@ fn legit_ce246_menu_walk_reaches_and_completes_ce346() {
     for (n, run) in profiles.iter().enumerate() {
         let label = format!("CE246 menu run#{}", n + 1);
         assert_eq!(run.warnings, 0, "{label}: no engine warnings");
-        assert!(run.saw_346, "{label}: CE246 reaches the pc1477 積極的 branch and spawns CE346");
+        assert!(
+            run.saw_346,
+            "{label}: CE246 reaches the pc1477 積極的 branch and spawns CE346"
+        );
         assert!(
             run.max_246 >= 1477,
             "{label}: CE246 advances into its 積極的 sub-branch (max pc {})",
             run.max_246
         );
-        assert!(run.max_346 >= 108, "{label}: CE346 runs its cut-in branch (max pc {})", run.max_346);
+        assert!(
+            run.max_346 >= 108,
+            "{label}: CE346 runs its cut-in branch (max pc {})",
+            run.max_346
+        );
         assert!(
             run.cutin.iter().any(|file| file.contains("cutin_161")),
             "{label}: CE346 draws cutin_161 (real file: {:?})",
@@ -445,12 +524,24 @@ fn legit_ce246_menu_walk_reaches_and_completes_ce346() {
         );
         assert!(run.completed_346, "{label}: the CE346 child completes");
         assert!(!run.alive_346, "{label}: no CE346 coroutine left running");
-        assert!(!run.prompts.is_empty(), "{label}: the menu prompted for choices");
+        assert!(
+            !run.prompts.is_empty(),
+            "{label}: the menu prompted for choices"
+        );
     }
     // Determinism.
-    assert_eq!(profiles[0].max_246, profiles[1].max_246, "CE246 max pc deterministic");
-    assert_eq!(profiles[0].max_346, profiles[1].max_346, "CE346 max pc deterministic");
-    assert_eq!(profiles[0].cutin, profiles[1].cutin, "cutin files deterministic");
+    assert_eq!(
+        profiles[0].max_246, profiles[1].max_246,
+        "CE246 max pc deterministic"
+    );
+    assert_eq!(
+        profiles[0].max_346, profiles[1].max_346,
+        "CE346 max pc deterministic"
+    );
+    assert_eq!(
+        profiles[0].cutin, profiles[1].cutin,
+        "cutin files deterministic"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -461,7 +552,10 @@ fn legit_ce246_menu_walk_reaches_and_completes_ce346() {
 fn ce246_active_branch_gates_are_necessary() {
     // Control: an unrelated counter (var23) can be zeroed and CE346 is still reached.
     let control = run_ce246(Some(23), 9000);
-    assert!(control.saw_346, "zeroing var23 does not block the branch (control)");
+    assert!(
+        control.saw_346,
+        "zeroing var23 does not block the branch (control)"
+    );
     assert_eq!(control.warnings, 0, "control: no warnings");
 
     // Every var in the winning chain is individually necessary.

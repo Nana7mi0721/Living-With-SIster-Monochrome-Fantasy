@@ -44,16 +44,40 @@ fn the_default_skin_is_a_grey_18px_asset() {
     let image = image::open(&path)
         .expect("decode SystemFile/WindowBase.png")
         .to_rgba8();
-    assert_eq!(image.dimensions(), (18, 18), "the skin must be an 18x18 nine-slice");
+    assert_eq!(
+        image.dimensions(),
+        (18, 18),
+        "the skin must be an 18x18 nine-slice"
+    );
     // Outer corner is fully transparent, then the light bevel, then the transition line:
     // the three rows/cols the 3 px frame cuts.
-    assert_eq!(pixel(&image, 0, 0), [255, 255, 255, 0], "outer corner is transparent");
-    assert_eq!(pixel(&image, 1, 1), [136, 136, 136, 255], "1 px is the light bevel 0x888888");
-    assert_eq!(pixel(&image, 2, 2), [217, 220, 221, 255], "2 px is the transition line 0xd9dcdd");
+    assert_eq!(
+        pixel(&image, 0, 0),
+        [255, 255, 255, 0],
+        "outer corner is transparent"
+    );
+    assert_eq!(
+        pixel(&image, 1, 1),
+        [136, 136, 136, 255],
+        "1 px is the light bevel 0x888888"
+    );
+    assert_eq!(
+        pixel(&image, 2, 2),
+        [217, 220, 221, 255],
+        "2 px is the transition line 0xd9dcdd"
+    );
     // The body the nine-slice stretches: translucent grey, identical in a corner and at
     // the very centre.
-    assert_eq!(pixel(&image, 5, 5), [31, 36, 37, 223], "body is the translucent grey 0x1f2425/0xdf");
-    assert_eq!(pixel(&image, 9, 9), [31, 36, 37, 223], "the centre of the body is the same grey");
+    assert_eq!(
+        pixel(&image, 5, 5),
+        [31, 36, 37, 223],
+        "body is the translucent grey 0x1f2425/0xdf"
+    );
+    assert_eq!(
+        pixel(&image, 9, 9),
+        [31, 36, 37, 223],
+        "the centre of the body is the same grey"
+    );
 }
 
 #[test]
@@ -63,7 +87,8 @@ fn the_navy_sample_asset_is_not_the_default_skin() {
     assert_eq!(window::SKIN, "SystemFile/WindowBase.png");
     assert_eq!(wolf_game::db::WINDOW_SKIN_FILE, window::SKIN);
     assert_ne!(
-        window::SKIN, "SystemGraphic/WindowBase.png",
+        window::SKIN,
+        "SystemGraphic/WindowBase.png",
         "the navy SystemGraphic sample must not be the default window skin"
     );
 
@@ -111,8 +136,16 @@ fn the_message_window_box_is_covered_by_the_18px_nine_slice() {
 
     // 3 px frame, stretched body: the centre is 960-6 = 954 wide and 168-6 = 162 tall.
     assert_eq!(pieces[0].rect, [32.0, 396.0, 3.0, 3.0], "top-left corner");
-    assert_eq!(pieces[4].rect, [35.0, 399.0, 954.0, 162.0], "stretched centre");
-    assert_eq!(pieces[8].rect, [989.0, 561.0, 3.0, 3.0], "bottom-right corner");
+    assert_eq!(
+        pieces[4].rect,
+        [35.0, 399.0, 954.0, 162.0],
+        "stretched centre"
+    );
+    assert_eq!(
+        pieces[8].rect,
+        [989.0, 561.0, 3.0, 3.0],
+        "bottom-right corner"
+    );
 
     // Exact coverage: the nine pieces tile the box with no gap and no overlap.
     let dst_area: f32 = pieces.iter().map(|p| p.rect[2] * p.rect[3]).sum();
@@ -121,9 +154,14 @@ fn the_message_window_box_is_covered_by_the_18px_nine_slice() {
         "the nine pieces cover the box exactly, area {dst_area}"
     );
     for piece in &pieces {
-        assert!(piece.rect[0] >= 32.0 && piece.rect[1] >= 396.0, "piece escapes the box: {:?}", piece.rect);
         assert!(
-            piece.rect[0] + piece.rect[2] <= 992.0 + 1e-3 && piece.rect[1] + piece.rect[3] <= 564.0 + 1e-3,
+            piece.rect[0] >= 32.0 && piece.rect[1] >= 396.0,
+            "piece escapes the box: {:?}",
+            piece.rect
+        );
+        assert!(
+            piece.rect[0] + piece.rect[2] <= 992.0 + 1e-3
+                && piece.rect[1] + piece.rect[3] <= 564.0 + 1e-3,
             "piece overflows the box: {:?}",
             piece.rect
         );
@@ -131,6 +169,10 @@ fn the_message_window_box_is_covered_by_the_18px_nine_slice() {
 
     // The whole 18x18 skin is used exactly once across the nine source rectangles.
     let src_area: u32 = pieces.iter().map(|p| p.src[2] * p.src[3]).sum();
-    assert_eq!(src_area, skin_w * skin_h, "the nine pieces consume every skin texel once");
+    assert_eq!(
+        src_area,
+        skin_w * skin_h,
+        "the nine pieces consume every skin texel once"
+    );
     assert_eq!(src_area, 18 * 18);
 }

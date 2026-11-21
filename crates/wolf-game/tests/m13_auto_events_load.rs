@@ -95,7 +95,11 @@ fn loading_a_retail_save_does_not_start_506_or_draw_the_eye_overlay() {
         for frame in 0..8 {
             game.frame();
             assert!(
-                !game.vm.instances().iter().any(|instance| instance.event == 506),
+                !game
+                    .vm
+                    .instances()
+                    .iter()
+                    .any(|instance| instance.event == 506),
                 "{name}: event 506 must not be running after load (frame {frame})"
             );
             assert!(
@@ -117,7 +121,10 @@ fn a_fresh_boot_still_starts_its_run_condition_two_events() {
         "fresh boot starts at least event 38, got {report:?}"
     );
     assert!(
-        game.vm.instances().iter().any(|instance| instance.event == 38),
+        game.vm
+            .instances()
+            .iter()
+            .any(|instance| instance.event == 38),
         "event 38 must start on a fresh boot"
     );
     assert!(

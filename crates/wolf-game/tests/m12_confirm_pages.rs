@@ -21,7 +21,7 @@
 //! Skips when the unpacked data root is absent.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use wolf_format::command::Slot;
 use wolf_format::commonevent::CommonEventData;
@@ -44,7 +44,7 @@ fn data_root() -> PathBuf {
     }
 }
 
-fn load_map(root: &PathBuf, name: &str) -> Option<Map> {
+fn load_map(root: &Path, name: &str) -> Option<Map> {
     let path = root.join("MapData").join(name);
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
@@ -56,7 +56,7 @@ fn load_map(root: &PathBuf, name: &str) -> Option<Map> {
     Some(Map::parse(&bytes).expect("parse map"))
 }
 
-fn load_common_events(root: &PathBuf) -> Option<CommonEventData> {
+fn load_common_events(root: &Path) -> Option<CommonEventData> {
     let path = root.join("BasicData").join("CommonEvent.dat");
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
@@ -289,9 +289,21 @@ fn the_confirm_tiles_sit_under_picture_hitboxes_not_under_event_grid_clicks() {
     // Picture 107 is the bottom-left sub button: its rectangle is the hit area the
     // player uses, and it does not follow the event tile grid.
     let button = game.screen.get(107).expect("sub button picture 107");
-    assert_eq!((button.x, button.y), (20, 505), "retail sub-button placement");
+    assert_eq!(
+        (button.x, button.y),
+        (20, 505),
+        "retail sub-button placement"
+    );
     game.mouse = [20, 505];
-    assert_eq!(game.picture_hover(107), 1, "the drawn rectangle is the hit box");
+    assert_eq!(
+        game.picture_hover(107),
+        1,
+        "the drawn rectangle is the hit box"
+    );
     game.mouse = [19, 505];
-    assert_eq!(game.picture_hover(107), 0, "one pixel left is outside the picture");
+    assert_eq!(
+        game.picture_hover(107),
+        0,
+        "one pixel left is outside the picture"
+    );
 }

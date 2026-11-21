@@ -959,13 +959,7 @@ pub struct Vm {
     pub step_trace: Option<Vec<StepTraceEntry>>,
     /// Variable snapshots taken before the most recent traced instruction.
     /// Ordinary/system values first, then the instance's self bank.
-    trace_before: Option<(
-        InstanceId,
-        Vec<(i32, i32)>,
-        Vec<(i32, String)>,
-        Vec<(i32, i32)>,
-        Vec<(i32, String)>,
-    )>,
+    trace_before: Option<TraceSnapshot>,
     /// Input policy set by opcodes 125 and 126.
     pub input: InputState,
     /// Transition setting shared by 160/161/162.
@@ -1077,7 +1071,6 @@ impl Vm {
         self.common_self.clear();
         self.common_self_dirty.clear();
     }
-
 
     /// Fold a finished/stopped common-event bank into the persistent store.
     ///
@@ -1457,6 +1450,7 @@ impl Vm {
     }
 
     /// Create the child coroutine of a `210`/`300` and block the caller.
+    #[allow(clippy::too_many_arguments)]
     fn spawn_child(
         &mut self,
         caller: usize,
@@ -1886,22 +1880,26 @@ fn compare(lhs: i32, rhs: i32, operator: i32) -> bool {
     }
 }
 
+type TraceSnapshot = (
+    InstanceId,
+    Vec<(i32, i32)>,
+    Vec<(i32, String)>,
+    Vec<(i32, i32)>,
+    Vec<(i32, String)>,
+);
+
 /// Finalize the most recent traced instruction with the variable delta and the
 /// effects the host recorded while running it.
 fn finalize_trace(
     trace: &mut Option<Vec<StepTraceEntry>>,
-    before: &mut Option<(
-        InstanceId,
-        Vec<(i32, i32)>,
-        Vec<(i32, String)>,
-        Vec<(i32, i32)>,
-        Vec<(i32, String)>,
-    )>,
+    before: &mut Option<TraceSnapshot>,
     vars: &Variables,
     self_vars: &SelfVars,
     host: &mut dyn Host,
 ) {
-    let Some((_before_instance, before_vars, before_strs, before_self, before_self_strs)) = before.take() else {
+    let Some((_before_instance, before_vars, before_strs, before_self, before_self_strs)) =
+        before.take()
+    else {
         return;
     };
     let Some(entry) = trace.as_mut().and_then(|log| log.last_mut()) else {
@@ -2001,6 +1999,7 @@ fn diff_str_snapshots(
 }
 
 /// Execute one coroutine until it blocks, ends, or the budget runs out.
+#[allow(clippy::too_many_arguments)]
 fn execute(
     inst: &mut Instance,
     _programs: &ProgramSet,
@@ -2015,13 +2014,7 @@ fn execute(
     frame: u64,
     event: EventId,
     trace: &mut Option<Vec<StepTraceEntry>>,
-    trace_before: &mut Option<(
-        InstanceId,
-        Vec<(i32, i32)>,
-        Vec<(i32, String)>,
-        Vec<(i32, i32)>,
-        Vec<(i32, String)>,
-    )>,
+    trace_before: &mut Option<TraceSnapshot>,
 ) -> BlockResult {
     // Holds the jump table and the instruction stream. Cloning the Arc (not the
     // Program) keeps the `&Command` borrow pointing at this local instead of at
@@ -2056,8 +2049,10 @@ fn execute(
             _ => 0,
         };
         if let Some(log) = trace.as_mut() {
-            if let (Some(entry), Some((before_instance, before_vars, before_strs, before_self, before_self_strs))) =
-                (log.last_mut(), trace_before.as_ref())
+            if let (
+                Some(entry),
+                Some((before_instance, before_vars, before_strs, before_self, before_self_strs)),
+            ) = (log.last_mut(), trace_before.as_ref())
             {
                 // The snapshot belongs to the coroutine that ran the previous
                 // instruction. When a new instance starts, do not diff against
@@ -2505,7 +2500,13 @@ fn execute(
             }
             130 => {
                 // Raw layout is target, x, y, map, options - not map-first.
-                host.teleport(arg(cmd, 0), arg(cmd, 3), arg(cmd, 1), arg(cmd, 2), arg(cmd, 4));
+                host.teleport(
+                    arg(cmd, 0),
+                    arg(cmd, 3),
+                    arg(cmd, 1),
+                    arg(cmd, 2),
+                    arg(cmd, 4),
+                );
                 // The map load is instant in the original; one frame of slack
                 // keeps the host from having to re-enter the interpreter.
                 inst.wait = WaitState::Frames(1);
@@ -3460,11 +3461,11 @@ mod tests {
                 cmd(123, &[2_000_001, 240], &[]),
                 cmd(126, &[0x0F0], &[]), // restore directions
                 cmd(123, &[2_000_002, 240], &[]),
-                cmd(125, &[1], &[]), // auto OK
+                cmd(125, &[1], &[]),     // auto OK
                 cmd(126, &[0x201], &[]), // OK: both blocked, auto must not bypass
                 cmd(123, &[2_000_003, 1], &[]),
-                cmd(126, &[0x001], &[]), // restore basic OK
-                cmd(125, &[0], &[]), // release auto input
+                cmd(126, &[0x001], &[]),      // restore basic OK
+                cmd(125, &[0], &[]),          // release auto input
                 cmd(126, &[0x10000101], &[]), // device form: deny
                 cmd(123, &[2_000_004, 1], &[]),
                 cmd(126, &[0x10000001], &[]), // device form: allow
@@ -4104,7 +4105,9 @@ mod tests {
         vm.start_event_resuming(1).unwrap();
         vm.step_frame(&mut host); // run 121, finish, reap, store the bank
         assert_eq!(
-            vm.common_self(1).expect("event 1 bank stored").get(600 + 51),
+            vm.common_self(1)
+                .expect("event 1 bank stored")
+                .get(600 + 51),
             4,
             "self51 kept after the first invocation"
         );
@@ -4197,7 +4200,11 @@ mod tests {
         vm.step_frame(&mut host);
         // The run wrote self51 = 5 internally, but it must not reach the store.
         let stored = vm.common_self(1).expect("seeded bank still present");
-        assert_eq!(stored.get(600 + 51), 9, "fresh run did not overwrite the bank");
+        assert_eq!(
+            stored.get(600 + 51),
+            9,
+            "fresh run did not overwrite the bank"
+        );
         assert!(
             !vm.common_self_dirty().contains(&1),
             "fresh run did not mark the event dirty"

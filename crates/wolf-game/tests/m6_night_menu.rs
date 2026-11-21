@@ -76,7 +76,12 @@ const DAY_ROW_PICS: [i32; 5] = [1201, 1203, 1205, 1207, 1209];
 fn day_row_texts(game: &Game) -> Vec<String> {
     DAY_ROW_PICS
         .iter()
-        .map(|&number| game.screen.get(number).map(|p| p.text.clone()).unwrap_or_default())
+        .map(|&number| {
+            game.screen
+                .get(number)
+                .map(|p| p.text.clone())
+                .unwrap_or_default()
+        })
         .collect()
 }
 
@@ -206,7 +211,12 @@ fn day2_evening_game() -> Option<Game> {
     click_at(&mut game, 512, 230 + 50 * row as i32);
     for _ in 0..2500 {
         game.frame();
-        if game.vm.instances().iter().all(|instance| instance.event != 251) {
+        if game
+            .vm
+            .instances()
+            .iter()
+            .all(|instance| instance.event != 251)
+        {
             break;
         }
     }
@@ -264,7 +274,9 @@ fn menu_picture_numbers(game: &Game) -> Vec<i32> {
 
 #[test]
 fn hovering_the_sister_and_pressing_decide_opens_the_night_command_menu() {
-    let Some(mut game) = day2_evening_game() else { return };
+    let Some(mut game) = day2_evening_game() else {
+        return;
+    };
 
     // The bedroom is day 2 in the evening, warning-free, with no menu up and no var64 injected.
     assert_eq!(game.vm.vars.get(160), 2, "the day counter is day 2");
@@ -274,7 +286,11 @@ fn hovering_the_sister_and_pressing_decide_opens_the_night_command_menu() {
         game.vm.vars.get(4),
         game.vm.vars.get(5)
     );
-    assert_eq!(game.vm.vars.get(5), 30, "the evening settles on the half hour");
+    assert_eq!(
+        game.vm.vars.get(5),
+        30,
+        "the evening settles on the half hour"
+    );
     assert_eq!(game.stats.warnings, 0, "the evening scene is warning-free");
     assert_eq!(game.vm.vars.get(64), 0, "no var64 injection is needed");
     assert_eq!(game.vm.vars.get(69), 1, "the evening-day flag var69 is set");
@@ -302,7 +318,11 @@ fn hovering_the_sister_and_pressing_decide_opens_the_night_command_menu() {
     open_night_menu(&mut game);
 
     // The hover+Decide set var68, which lets autorun ev4 page0 reach its CE245 call.
-    assert_eq!(game.vm.vars.get(68), 1, "the sister-click flag var68 is set");
+    assert_eq!(
+        game.vm.vars.get(68),
+        1,
+        "the sister-click flag var68 is set"
+    );
     assert_eq!(game.stats.warnings, 0, "opening the menu is warning-free");
     assert!(
         game.vm
@@ -320,7 +340,11 @@ fn hovering_the_sister_and_pressing_decide_opens_the_night_command_menu() {
             "menu picture {expected} is drawn; got {numbers:?}"
         );
     }
-    let texts: Vec<&str> = game.screen.iter().map(|picture| picture.text.as_str()).collect();
+    let texts: Vec<&str> = game
+        .screen
+        .iter()
+        .map(|picture| picture.text.as_str())
+        .collect();
     for label in ["身体接触", "沟通", "洗澡", "泡茶", "今天先休息吧"] {
         assert!(
             texts.iter().any(|text| text.contains(label)),
@@ -332,7 +356,9 @@ fn hovering_the_sister_and_pressing_decide_opens_the_night_command_menu() {
 
 #[test]
 fn clicking_rest_in_the_night_menu_raises_the_confirm_choice() {
-    let Some(mut game) = day2_evening_game() else { return };
+    let Some(mut game) = day2_evening_game() else {
+        return;
+    };
     open_night_menu(&mut game);
     assert!(
         game.vm

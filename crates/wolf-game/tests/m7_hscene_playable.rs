@@ -70,7 +70,10 @@ fn open_resumed() -> Option<Game> {
         return None;
     }
     if !data_root().join("MapData").join("SampleMapA.mps").exists() {
-        eprintln!("skip: missing SampleMapA.mps under {}", data_root().display());
+        eprintln!(
+            "skip: missing SampleMapA.mps under {}",
+            data_root().display()
+        );
         return None;
     }
     let mut game = match Game::new(data_root()) {
@@ -106,7 +109,9 @@ fn click_at(game: &mut Game, x: i32, y: i32) {
 }
 
 fn file_present(game: &Game, needle: &str) -> bool {
-    game.screen.iter().any(|picture| picture.file.contains(needle))
+    game.screen
+        .iter()
+        .any(|picture| picture.file.contains(needle))
 }
 
 /// The live coroutine event ids, as a set, so a test can diff before/after a click.
@@ -160,10 +165,15 @@ fn play_wrapper(game: &mut Game, max_steps: usize, trace: &mut Vec<StageStep>) {
         let buttons: Vec<(i32, String, i32, i32)> = game
             .screen
             .iter()
-            .filter(|picture| {
-                picture.file.contains("h_button") || picture.file.contains("hbutton")
+            .filter(|picture| picture.file.contains("h_button") || picture.file.contains("hbutton"))
+            .map(|picture| {
+                (
+                    picture.number,
+                    basename(&picture.file),
+                    picture.x,
+                    picture.y,
+                )
             })
-            .map(|picture| (picture.number, basename(&picture.file), picture.x, picture.y))
             .collect();
 
         let mut advanced = false;
@@ -175,7 +185,8 @@ fn play_wrapper(game: &mut Game, max_steps: usize, trace: &mut Vec<StageStep>) {
             let after = game.vm.vars.get(62);
             if after != before && game.stats.warnings == warnings_before {
                 let events_after = alive_events(game);
-                let new_events: Vec<u32> = events_after.difference(&events_before).copied().collect();
+                let new_events: Vec<u32> =
+                    events_after.difference(&events_before).copied().collect();
                 trace.push(StageStep {
                     button: number,
                     file,
@@ -200,7 +211,9 @@ fn basename(path: &str) -> String {
 
 #[test]
 fn h_wrapper_plays_through_five_real_clicks_with_clean_warnings() {
-    let Some(mut game) = open_resumed() else { return; };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
 
     for _ in 0..60 {
         game.frame();
@@ -209,10 +222,16 @@ fn h_wrapper_plays_through_five_real_clicks_with_clean_warnings() {
 
     // At the resumed base page (stage 1) the whole H stack and every H button are drawn.
     for file in H_LAYER_FILES {
-        assert!(file_present(&game, file), "missing H layer {file} on the resumed page");
+        assert!(
+            file_present(&game, file),
+            "missing H layer {file} on the resumed page"
+        );
     }
     for file in H_BUTTON_FILES {
-        assert!(file_present(&game, file), "missing H button {file} on the resumed page");
+        assert!(
+            file_present(&game, file),
+            "missing H button {file} on the resumed page"
+        );
     }
 
     // Open the dispatcher gate (the only injected value). Then play the menu.
@@ -220,7 +239,11 @@ fn h_wrapper_plays_through_five_real_clicks_with_clean_warnings() {
     for _ in 0..15 {
         game.frame();
     }
-    assert_eq!(game.vm.vars.get(62), 1, "stage index starts at the base menu");
+    assert_eq!(
+        game.vm.vars.get(62),
+        1,
+        "stage index starts at the base menu"
+    );
 
     let mut ever: BTreeSet<u32> = alive_events(&game);
     let mut trace: Vec<StageStep> = Vec::new();
@@ -236,7 +259,13 @@ fn h_wrapper_plays_through_five_real_clicks_with_clean_warnings() {
     let path: Vec<(i32, i32, i32)> = trace.iter().map(|s| (s.button, s.from, s.to)).collect();
     assert_eq!(
         path,
-        vec![(400, 1, 2), (410, 2, 6), (421, 6, 1), (500, 1, 4), (510, 4, 13)],
+        vec![
+            (400, 1, 2),
+            (410, 2, 6),
+            (421, 6, 1),
+            (500, 1, 4),
+            (510, 4, 13)
+        ],
         "late-night playable stage trace changed: {trace:#?}"
     );
     assert!(
@@ -247,22 +276,33 @@ fn h_wrapper_plays_through_five_real_clicks_with_clean_warnings() {
     // The real UI events really ran: the two display pages, the click dispatcher and the
     // processor, plus the expression/effect helpers (18/19) that draw the h_s10 face layers.
     for wanted in [9u32, 10, 11, 14, 18, 19] {
-        assert!(ever.contains(&wanted), "UI event {wanted} never ran: {ever:?}");
+        assert!(
+            ever.contains(&wanted),
+            "UI event {wanted} never ran: {ever:?}"
+        );
     }
 
     assert_eq!(game.vm.vars.get(62), 13, "walk must end at stage 13");
-    assert_eq!(game.stats.warnings, 0, "the whole play session must stay warning-free");
+    assert_eq!(
+        game.stats.warnings, 0,
+        "the whole play session must stay warning-free"
+    );
 
     // The CE333 expression/effect helper has no trackable coroutine id here, but its DRAWN
     // output must be on screen at the terminal stage: the full H character/effect layer stack.
     for file in H_LAYER_FILES {
-        assert!(file_present(&game, file), "missing H layer {file} at terminal stage");
+        assert!(
+            file_present(&game, file),
+            "missing H layer {file} at terminal stage"
+        );
     }
     // Terminal pages draw their own subset of H buttons (plus the end button); at least one
     // clickable button must remain, otherwise the page would be a dead end we cannot explain.
     assert!(
         game.screen.iter().any(|p| {
-            p.file.contains("h_button") || p.file.contains("hbutton") || p.file.contains("endbutton")
+            p.file.contains("h_button")
+                || p.file.contains("hbutton")
+                || p.file.contains("endbutton")
         }),
         "terminal stage has no clickable button at all"
     );
@@ -270,7 +310,9 @@ fn h_wrapper_plays_through_five_real_clicks_with_clean_warnings() {
 
 #[test]
 fn terminal_stage_13_holds_without_exiting_or_deadlocking() {
-    let Some(mut game) = open_resumed() else { return; };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
 
     for _ in 0..60 {
         game.frame();
@@ -282,7 +324,11 @@ fn terminal_stage_13_holds_without_exiting_or_deadlocking() {
 
     let mut trace = Vec::new();
     play_wrapper(&mut game, 12, &mut trace);
-    assert_eq!(game.vm.vars.get(62), 13, "expected to reach terminal stage 13");
+    assert_eq!(
+        game.vm.vars.get(62),
+        13,
+        "expected to reach terminal stage 13"
+    );
 
     // Clicking every visible button at stage 13 must NOT push the stage index past 13: the menu
     // has no further page. (A button toggles the selection code var61 and a background click
@@ -298,7 +344,10 @@ fn terminal_stage_13_holds_without_exiting_or_deadlocking() {
         })
         .map(|picture| (picture.x, picture.y))
         .collect();
-    assert!(!terminal_buttons.is_empty(), "expected clickable terminal-page buttons");
+    assert!(
+        !terminal_buttons.is_empty(),
+        "expected clickable terminal-page buttons"
+    );
     for (x, y) in &terminal_buttons {
         click_at(&mut game, *x, *y);
         let stage = game.vm.vars.get(62);
@@ -307,7 +356,10 @@ fn terminal_stage_13_holds_without_exiting_or_deadlocking() {
             "a terminal-page click jumped the stage index out of range: {stage}"
         );
     }
-    assert_eq!(game.stats.warnings, warnings_before, "terminal clicks must not warn");
+    assert_eq!(
+        game.stats.warnings, warnings_before,
+        "terminal clicks must not warn"
+    );
 
     // Re-reach a stable terminal page and idle: the scene must keep running (no deadlock) and
     // must stay in the H UI (not return to the map / not blank out).
@@ -337,15 +389,27 @@ fn terminal_stage_13_holds_without_exiting_or_deadlocking() {
         game.screen.len()
     );
     // Still inside the H scene, not back on the map: the character pose and frame layers remain.
-    assert!(file_present(&game, "hscene/h_s10_pose03.png"), "left the H scene");
-    assert!(file_present(&game, "hscene/h_frame.png"), "lost the H frame");
+    assert!(
+        file_present(&game, "hscene/h_s10_pose03.png"),
+        "left the H scene"
+    );
+    assert!(
+        file_present(&game, "hscene/h_frame.png"),
+        "lost the H frame"
+    );
     // var137 is the act selector; it stays on the h_s10 stage throughout, proving no route exit.
-    assert_eq!(game.vm.vars.get(137), 8, "act selector should stay on h_s10");
+    assert_eq!(
+        game.vm.vars.get(137),
+        8,
+        "act selector should stay on h_s10"
+    );
 }
 
 #[test]
 fn stage_index_is_advanced_by_clicks_not_by_time() {
-    let Some(mut game) = open_resumed() else { return; };
+    let Some(mut game) = open_resumed() else {
+        return;
+    };
 
     for _ in 0..60 {
         game.frame();

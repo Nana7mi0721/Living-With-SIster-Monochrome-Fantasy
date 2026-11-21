@@ -119,7 +119,7 @@ fn drive(g: &mut Game, frames: usize, answer: Option<usize>) -> Track {
         g.frame();
         for inst in g.vm.instances() {
             t.seen.insert(inst.event);
-            let pc = inst.pc as usize;
+            let pc = inst.pc;
             let e = t.max_pc.entry(inst.event).or_insert(0);
             if pc > *e {
                 *e = pc;
@@ -136,7 +136,7 @@ fn drive(g: &mut Game, frames: usize, answer: Option<usize>) -> Track {
             if !answered {
                 if let Some(c) = &g.choices {
                     if c.frames >= 1 {
-                        let _ = g.reply(ChoiceReply::Index(idx));
+                        g.reply(ChoiceReply::Index(idx));
                         answered = true;
                         g.auto_choice = true;
                         g.auto_choice_delay = 1;
@@ -153,7 +153,8 @@ fn drive(g: &mut Game, frames: usize, answer: Option<usize>) -> Track {
 #[test]
 fn real_night_menu_sets_var304_and_calls_ce328() {
     let mut g = Game::new(data_root()).expect("open game");
-    g.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    g.load_save(&save_path("SaveData01"))
+        .expect("load SaveData01");
     assert_eq!(g.vm.vars.get(304), 0, "SaveData01 ships var304==0");
 
     g.auto_advance = true;
@@ -162,10 +163,19 @@ fn real_night_menu_sets_var304_and_calls_ce328() {
     g.start_event(290);
     let t = drive(&mut g, 2500, Some(5));
 
-    assert_eq!(t.var304_max, 1, "night-menu option 5 writes var304=1 (CE290 pc403)");
-    assert!(t.ce328_spawned, "night-menu option 5 calls CE328 (CE290 pc406 op210 500328)");
+    assert_eq!(
+        t.var304_max, 1,
+        "night-menu option 5 writes var304=1 (CE290 pc403)"
+    );
+    assert!(
+        t.ce328_spawned,
+        "night-menu option 5 calls CE328 (CE290 pc406 op210 500328)"
+    );
     let ce328_max = *t.max_pc.get(&328).unwrap_or(&0);
-    assert!(ce328_max >= 640, "CE328 should run its H script, got max pc {ce328_max}");
+    assert!(
+        ce328_max >= 640,
+        "CE328 should run its H script, got max pc {ce328_max}"
+    );
     assert_eq!(g.stats.warnings, 0, "no warnings");
 }
 
@@ -173,7 +183,8 @@ fn real_night_menu_sets_var304_and_calls_ce328() {
 #[test]
 fn real_ce301_skill_event_sets_var326_given_books() {
     let mut g = Game::new(data_root()).expect("open game");
-    g.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    g.load_save(&save_path("SaveData01"))
+        .expect("load SaveData01");
     // Isolated single-event probe: clear restored common-event self banks so the
     // save's own progression state cannot gate CE301 driven directly below.
     g.vm.clear_common_self();
@@ -235,8 +246,14 @@ fn bookstore_gate_pins_var326_unreachable_from_shipped_saves() {
     );
 
     for name in [
-        "SaveData01", "SaveData02", "SaveData03", "SaveData04", "SaveData05", "SaveData06",
-        "SaveData07", "SaveData08",
+        "SaveData01",
+        "SaveData02",
+        "SaveData03",
+        "SaveData04",
+        "SaveData05",
+        "SaveData06",
+        "SaveData07",
+        "SaveData08",
     ] {
         let mut g = Game::new(data_root()).expect("open game");
         if g.load_save(&save_path(name)).is_err() {
@@ -259,9 +276,15 @@ fn bookstore_gate_pins_var326_unreachable_from_shipped_saves() {
         let t = drive(&mut g, 4000, None);
         let m = *t.max_pc.get(&ev).unwrap_or(&0);
         if ev == 314 {
-            assert!(m < 200, "direct CE314 start aborts before bookstore, got {m}");
+            assert!(
+                m < 200,
+                "direct CE314 start aborts before bookstore, got {m}"
+            );
         }
-        assert!(!t.seen.contains(&314) || ev == 314, "CE{ev} must not reach bookstore CE314");
+        assert!(
+            !t.seen.contains(&314) || ev == 314,
+            "CE{ev} must not reach bookstore CE314"
+        );
         assert_eq!(g.vm.vars.get(277), 0, "driving CE{ev} must not set var277");
     }
 }
@@ -270,7 +293,8 @@ fn bookstore_gate_pins_var326_unreachable_from_shipped_saves() {
 #[test]
 fn full_chain_still_does_not_reach_ce402() {
     let mut g = Game::new(data_root()).expect("open game");
-    g.load_save(&save_path("SaveData01")).expect("load SaveData01");
+    g.load_save(&save_path("SaveData01"))
+        .expect("load SaveData01");
     g.vm.clear_common_self();
     g.auto_advance = true;
     g.auto_choice = true;
@@ -290,7 +314,13 @@ fn full_chain_still_does_not_reach_ce402() {
     assert_eq!(t.var304_max, 1, "menu option 5 writes var304=1");
     assert!(t.ce328_spawned, "CE328 was spawned");
     let ce328_max = *t.max_pc.get(&328).unwrap_or(&0);
-    assert!(!t.seen.contains(&402), "CE402 must not be entered (max CE328 pc {ce328_max})");
-    assert!(ce328_max < 985, "CE328 H script stops before the CE402 call pc986, got {ce328_max}");
+    assert!(
+        !t.seen.contains(&402),
+        "CE402 must not be entered (max CE328 pc {ce328_max})"
+    );
+    assert!(
+        ce328_max < 985,
+        "CE328 H script stops before the CE402 call pc986, got {ce328_max}"
+    );
     assert_eq!(g.stats.warnings, 0, "no warnings");
 }

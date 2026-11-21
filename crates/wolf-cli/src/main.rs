@@ -499,9 +499,16 @@ fn main() -> ExitCode {
             play::run(&root, frame_limit, entry)
         }
         Some("run") => match (map.as_deref(), event) {
-            (Some(name), Some(id)) => {
-                run_map_event(&root, name, id, frames, trace, answer, hot, step_trace.as_deref())
-            }
+            (Some(name), Some(id)) => run_map_event(
+                &root,
+                name,
+                id,
+                frames,
+                trace,
+                answer,
+                hot,
+                step_trace.as_deref(),
+            ),
             (Some(_), None) => {
                 eprintln!("run --map needs --event <ID>");
                 ExitCode::from(2)
@@ -649,7 +656,7 @@ fn key_bits_for_frame(
         bits |= wolf_game::key::bits_for_code(*code as i32);
     }
     for (every, code) in press_every {
-        if *every > 0 && frame % *every == 0 {
+        if *every > 0 && frame.is_multiple_of(*every) {
             bits |= wolf_game::key::bits_for_code(*code as i32);
         }
     }
@@ -1437,7 +1444,12 @@ impl Host for TraceHost {
         ));
     }
 
-    fn common_event_call(&mut self, target: wolf_vm::exec::EventId, args: &[i32], _strings: &[String]) {
+    fn common_event_call(
+        &mut self,
+        target: wolf_vm::exec::EventId,
+        args: &[i32],
+        _strings: &[String],
+    ) {
         self.trace_effects.push(format!(
             "{{\"kind\":\"call\",\"target_event_id\":{},\"args\":{}}}",
             target,
@@ -1850,6 +1862,7 @@ fn normalise_var_addr(addr: u32) -> usize {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_dump(
     root: &Path,
     event: Option<u32>,
@@ -2513,6 +2526,7 @@ fn print_background_report(game: &Game) {
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_capture(
     root: &Path,
     out: Option<PathBuf>,
@@ -3152,7 +3166,7 @@ fn run_blocks(root: &Path, map_name: Option<&str>, event: Option<u32>, page: usi
             "  block {index:>3} {:?} head {:>4} {:?} cases {:?} else {:?} cancel {:?} end {:?}",
             block.kind,
             block.head,
-            head.map(|(opcode, ints)| (opcode, ints)),
+            head,
             block.cases,
             block.else_pc,
             block.cancel_pc,
@@ -3176,6 +3190,7 @@ fn ints_of(cmd: &wolf_format::command::Command) -> Vec<i32> {
         .map(|word| i32::from_le_bytes([word[0], word[1], word[2], word[3]]))
         .collect()
 }
+#[allow(clippy::too_many_arguments)]
 fn run_map_event(
     root: &Path,
     map_name: &str,
@@ -3350,7 +3365,11 @@ fn run_map_event(
             eprintln!("  ! cannot write step trace {}: {err}", path.display());
             return ExitCode::FAILURE;
         }
-        println!("  step trace       {} ({} steps)", path.display(), entries.len());
+        println!(
+            "  step trace       {} ({} steps)",
+            path.display(),
+            entries.len()
+        );
     }
 
     println!();
