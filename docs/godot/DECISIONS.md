@@ -126,6 +126,7 @@
 | MapChip 零售贴图 | 引擎通用示例素材，正片未使用；不接入生产，调色板占位仅兼容/测试 | 不适用（D-21） |
 | 整路线内 101/102 逐指令与更长路线 | 1500 帧只含标题菜单 1 次选择；消息/选择另测 | M3 内容对齐前 |
 | 白天 CE251/CE310 端到端回归 | 菜单点击/确认/日程/体力已由 `DayMenuTest`/`WeekendMenuTest` 覆盖（§4.16）；从冷启动进入白天仍需剧情夹具 | M3 内容对齐前 |
+| `D-66` | **门禁并行任务失败必须传播，并关闭 Roslyn 编译服务器（2026-11-21）** | `tools/godot_check.sh` 的 `run_job_wrapper` 原先用 `if job; then` 调用任务函数，bash 在该上下文中禁用 `set -e`，函数中途的 `diff_route.py`/`grep -q` 失败被当作成功；现改为在子 shell 内 `set -e` 运行并读取退出码，同时打印最慢 6 个并行任务耗时。另外导出 `UseSharedCompilation=false`/`MSBUILDDISABLENODEREUSE=1`：`--build-solutions` 冷启动的 VBCSCompiler 继承 Godot 标准流，Godot 会等其 10 分钟空闲退出。新增 `LWsmf_GATE_FAST=1` 跳过两个 M13 终局回放（仅迭代用） | 完整门禁 856 s → 68 s（其中约 10 分钟为编译服务器等待）；`M4FullRouteTrace` 在第 362832 步（CE406 op121，bit `0x04` 字面量 a）的真实分歧由此暴露，原 Rust 夹具 `m4_full_route_rust_trace.json.gz` 早于 `54687c0` 的 op121 语义修复，需用新 Rust 重新生成 |
 
 ## 6. 变更规则
 
