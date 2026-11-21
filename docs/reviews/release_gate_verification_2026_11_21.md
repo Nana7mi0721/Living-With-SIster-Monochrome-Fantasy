@@ -29,7 +29,7 @@
 - Opcode `102` 的 `bit4` 取消许可已透传至选择窗口；禁止取消的选项会忽略右键、Esc 等取消动作。
 - 空格恢复为确认键，不再与取消键混用；对话中的取消与滚轮不会跳过未读文本，模态关闭后会等待物理释放，避免点击穿透到底层地图或图片热区。
 - 消息或选择被键盘/鼠标确认关闭后，若决定输入仍按住，[InputRouter.gd](../../godot/presentation_gd/InputRouter.gd) 会把 OK 位屏蔽到物理释放；这覆盖“确认 Tips 选项后同一按键立刻关闭教学图”的路径。
-- [MessageWindow.gd](../../godot/presentation_gd/MessageWindow.gd) 已接入逐字速度、`\.` 停顿、`\|`/`\!` 继续等待、语音触发和中文避头尾换行；[ChoiceWindow.gd](../../godot/presentation_gd/ChoiceWindow.gd) 的取消权限、尺寸、行高、显式坐标和 `-1` 居中哨兵均有回归覆盖。
+- [MessageWindow.gd](../../godot/presentation_gd/MessageWindow.gd) 已接入逐字速度、`\.` 停顿、`\|`/`\!` 继续等待和中文避头尾换行（原版语音均通过独立 `140` 指令由 [AudioManager.gd](../../godot/presentation_gd/AudioManager.gd) 的 SE 声部池触发，101 对白文本不含内嵌语音控制码）；[ChoiceWindow.gd](../../godot/presentation_gd/ChoiceWindow.gd) 的取消权限、尺寸、行高、显式坐标和 `-1` 居中哨兵均有回归覆盖。
 
 ### 2.3 存读档与故障可见性
 

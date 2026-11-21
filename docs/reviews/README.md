@@ -8,6 +8,7 @@
 
 | 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
 | :--- | :---: | :--- | :--- |
+| [consolidated_audit_report_2026_11_21.md](consolidated_audit_report_2026_11_21.md) | 2026-11-21 | **`c61d762` 统一核验、深度摸排与 CI 诊断** | 核验 `c61d762` 落地情况，定位并收口 1 项 P1 串态 + 7 项 P2 缺陷以及 Rust `fmt`/CI 问题（详见 `D-71`） |
 | [lwsmf_8fa1189_audit_remediation_2026_11_21.md](lwsmf_8fa1189_audit_remediation_2026_11_21.md) | 2026-11-21 | **两份 `8fa1189` 游玩/UI 审计的逐项修复闭环** | P0/P1/P2 均已落到代码、数据语义或测试；`101+102` 同屏、`124` 缩放字段、Tips 点击穿透与 13 张素材核对完成 |
 | [release_gate_verification_2026_11_21.md](release_gate_verification_2026_11_21.md) | 2026-11-21 | **基线 `8fa1189` 的修复与无头 38 项门禁验证** | Release 构建 0 警告/0 错误；无头门禁 38/38；418 夹具 2461/2461；主路线 149655/149655；M4 989439/989439；本轮未执行 OpenGL3 渲染门禁 |
 | [m4_oracle_refresh_2026_11_21.md](m4_oracle_refresh_2026_11_21.md) | 2026-11-21 | **M4 Oracle 夹具刷新（历史快照）** | 第 362832 步分歧来自早于 op121 语义修复的旧夹具；该次刷新记录为 990102 步 100% 一致。当前 `124` 语义修复后的计数以 [release_gate_verification_2026_11_21.md](release_gate_verification_2026_11_21.md) 为准 |
