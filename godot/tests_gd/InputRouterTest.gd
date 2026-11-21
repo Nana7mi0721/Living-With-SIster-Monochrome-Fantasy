@@ -123,13 +123,20 @@ func _ready() -> void:
 		failures.append("wheel down should be notch -1 (got %d)" % _router.wheel_notch())
 	_router.clear_frame_latches()
 
-	# 9. A left click is also the decide key for 123 polls, again for one frame only.
+	# 9. Held left button keeps MASK_OK set across clear_frame_latches() until release,
+	# while suppressing entry still blocks OK until release or clear_suppression().
 	_router.handle_event(_mouse(MOUSE_BUTTON_LEFT))
 	if (_router.held_mask() & InputRouter.MASK_OK) == 0:
 		failures.append("left click should latch MASK_OK for the VM")
 	_router.clear_frame_latches()
+	if (_router.held_mask() & InputRouter.MASK_OK) == 0:
+		failures.append("held left button must keep MASK_OK set across frames")
+	var left_release := _mouse(MOUSE_BUTTON_LEFT)
+	left_release.pressed = false
+	_router.handle_event(left_release)
+	_router.clear_frame_latches()
 	if (_router.held_mask() & InputRouter.MASK_OK) != 0:
-		failures.append("click latch must expire after one frame")
+		failures.append("releasing left button must clear MASK_OK")
 
 	# 10. Any mask other than 771 ignores the notch and reports the held bits; opcode 125
 	# auto keys are merged into the same C# lookup.
@@ -206,6 +213,13 @@ func _ready() -> void:
 	_router.handle_event(_mouse(MOUSE_BUTTON_LEFT))
 	if (_router.held_mask() & InputRouter.MASK_OK) == 0 or not _router.left_frame_pressed():
 		failures.append("a fresh click after release must reach the next poll")
+	_router.suppress_action_until_release()
+	_router.clear_suppression()
+	if _router.action_entry_suppressed():
+		failures.append("clear_suppression() must clear entry suppression after focus loss")
+	var final_left_release := _mouse(MOUSE_BUTTON_LEFT)
+	final_left_release.pressed = false
+	_router.handle_event(final_left_release)
 
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")

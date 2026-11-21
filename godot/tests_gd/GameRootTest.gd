@@ -741,6 +741,17 @@ func _ready() -> void:
 	if not item_root.router.action_entry_suppressed():
 		failures.append("root foreground event entry while action held must suppress until release")
 	item_root.router.handle_event(click_check_up)
+	# Transient reset clears tint, speaker, 2005 center message mode, and suppression; modal pauses message typewriter.
+	item_root.stage.set_screen_tint(0x323250, 0)
+	item_root._on_message_options_changed(0, 2005, 0, "妹妹", "")
+	item_root.message.open("night narration")
+	item_root.open_backlog()
+	item_root._process(item_root.STEP)
+	if not item_root.message.paused:
+		failures.append("opening backlog modal must pause message typewriter")
+	item_root._reset_presentation_transient_state()
+	if item_root.message.paused or item_root._active_msg_pos_mode != item_root._WolfConst.MSG_POS_BOTTOM or item_root.stage.screen_tint_multiplier() != Color.WHITE:
+		failures.append("transient reset must restore bottom message mode, clear tint, and clear modal pause")
 	item_root.queue_free()
 
 	if failures.is_empty():

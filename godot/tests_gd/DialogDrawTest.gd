@@ -312,15 +312,15 @@ func _ready() -> void:
 	if pause_tex != null and (pause_tex.get_width() != 17 or pause_tex.get_height() != 90):
 		failures.append("SystemFile/Text_Pause.png should be 17x90 (got %dx%d)" % [pause_tex.get_width(), pause_tex.get_height()])
 
-	# 3g. Nameplate: 28px tall capsule pill with 16px bold text and double border.
+	# 3g. Nameplate: 28px tall capsule pill with 18px pure white text, charcoal ring, and flat grey fill.
 	var plate := Nameplate.new(assets)
 	add_child(plate)
-	plate.show_speaker("Sister", Vector2(188, 464))
+	plate.show_speaker("妹妹", Vector2(188, 464))
 	var plate_r := plate.plate_rect()
 	if not plate.is_visible or not is_equal_approx(plate_r.size.y, 28.0) or plate_r.size.x < Nameplate.MIN_WIDTH:
 		failures.append("nameplate pill rect mismatch (got %s)" % str(plate_r))
-	if plate._style.bg_color != Nameplate.BACKGROUND or plate._style.corner_radius_top_left != 14 or plate._inner_style.border_width_top != 1:
-		failures.append("nameplate must use the retail grey fill, 14px capsule radius, and double ring")
+	if plate._style.bg_color != Nameplate.BACKGROUND or plate._style.corner_radius_top_left != 14 or plate._inner_style.bg_color != Nameplate.INNER_COLOR or plate._inner_style.border_width_top != 0:
+		failures.append("nameplate must use the dark charcoal outer band, 14px capsule radius, and flat grey fill")
 
 	# 4. The choice window stacks rows without overlap and stays anchored on Sys3/Sys4.
 	var choice := ChoiceWindow.new(assets)
@@ -438,7 +438,7 @@ func _ready() -> void:
 	var drawn_plate := Nameplate.new(assets)
 	stage.layer(PictureStage.LAYER_NAMEPLATE).add_child(drawn_plate)
 	var db := drawn.bubble_rect()
-	drawn_plate.show_speaker("Sister", Vector2(db.position.x + 12.0, db.position.y - 22.0))
+	drawn_plate.show_speaker("妹妹", Vector2(db.position.x + 14.0, db.position.y - 28.0))
 	var drawn_choice := ChoiceWindow.new(assets)
 	stage.layer(PictureStage.LAYER_CHOICE_PANEL).add_child(drawn_choice)
 	drawn_choice.open(PackedStringArray(["New game", "Load", "Quit"]), Vector2(-1, -1), true, 0)

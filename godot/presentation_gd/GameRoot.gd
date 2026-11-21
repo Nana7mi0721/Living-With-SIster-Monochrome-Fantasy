@@ -188,6 +188,8 @@ func _on_setup_completed() -> void:
 func _process(delta: float) -> void:
 	if overlays != null:
 		overlays.tick_toast()
+	if message != null:
+		message.paused = _modal_window_open()
 	if phase == "failed" or phase == "setup" or faulted:
 		if phase == "failed" and overlays != null:
 			report_fault(_failure_reason())
@@ -512,7 +514,7 @@ func _sync_active_nameplate() -> void:
 		nameplate.hide_speaker()
 		return
 	var bubble := message.bubble_rect()
-	nameplate.show_speaker(_active_speaker, Vector2(bubble.position.x + 14.0, bubble.position.y - 24.0))
+	nameplate.show_speaker(_active_speaker, Vector2(bubble.position.x + 14.0, bubble.position.y - 28.0))
 
 
 func _on_message(text: String, face: int) -> void:
@@ -829,6 +831,7 @@ func _reset_presentation_transient_state() -> void:
 	_active_speaker = ""
 	_active_msg_pos_mode = _WolfConst.MSG_POS_BOTTOM
 	if message != null:
+		message.paused = false
 		message.close()
 		message.set_position_mode(_WolfConst.MSG_POS_BOTTOM)
 	if choice != null:
@@ -842,6 +845,8 @@ func _reset_presentation_transient_state() -> void:
 	_clean_scene_image = null
 	if stage != null:
 		stage.reset_screen_tint()
+	if router != null:
+		router.clear_suppression()
 	_sync_screen_tint()
 
 
@@ -915,6 +920,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if key.keycode == KEY_F3:
 		if overlays != null:
 			overlays.toggle_debug()
+		get_viewport().set_input_as_handled()
+		return
+	if key.keycode == KEY_F6:
+		if stage != null:
+			stage.dump_pictures(true)
+			_show_toast("已导出图层槽位 user://picture_dump.txt")
 		get_viewport().set_input_as_handled()
 		return
 	if key.keycode == KEY_F4:

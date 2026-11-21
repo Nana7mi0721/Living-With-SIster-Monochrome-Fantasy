@@ -815,6 +815,9 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 		label.add_theme_color_override("font_color", Color(0, 0, 0, 0))
 		label.queue_redraw()
 		holder.add_child(label)
+	elif file.replace("\\", "/").to_lower().begins_with("save/"):
+		# Save-slot thumbnails absent for empty slots must stay transparent under blend=3.
+		size = Vector2.ZERO
 	else:
 		size = Vector2(420, 140)
 		if OS.is_debug_build():
@@ -1310,6 +1313,48 @@ func effect(kind: int, duration: int, args: Array) -> bool:
 
 func picture_count() -> int:
 	return _pictures.size()
+
+
+## Format active slots for diagnostics (F6 dump + tests) and optionally save user://picture_dump.txt.
+func dump_pictures(write_file: bool = true) -> String:
+	var numbers: Array = _cmds.keys()
+	numbers.sort()
+	var lines := PackedStringArray(["number | file | kind | anchor | blend | tone | opacity | rect"])
+	for number in numbers:
+		var cmd: Dictionary = _cmds[number]
+		var st: Dictionary = _states.get(number, {})
+		if bool(st.get("hidden", false)):
+			continue
+		var file_label := str(cmd.get("file", ""))
+		if file_label.is_empty():
+			var text_preview := str(cmd.get("text", "")).replace("\n", " ")
+			file_label = "<text:%s>" % (text_preview.left(24) + ("..." if text_preview.length() > 24 else ""))
+		var kind := int(cmd.get("kind", -1))
+		var anchor := int(st.get("anchor", cmd.get("anchor", 0)))
+		var blend := int(st.get("blend", 0))
+		var corr: Dictionary = st.get("color_corr", {}) if st.get("color_corr", null) is Dictionary else {}
+		var tone_r := int(corr.get("r", 100))
+		var tone_g := int(corr.get("g", 100))
+		var tone_b := int(corr.get("b", 100))
+		var tone_s := "%d,%d,%d" % [tone_r, tone_g, tone_b]
+		var cur: Dictionary = st.get("current", {}) if st.get("current", null) is Dictionary else {}
+		var opacity := int(cur.get("opacity", st.get("opacity", 255)))
+		var rect := Rect2()
+		var node: Variant = _pictures.get(number, null)
+		if node is Control and is_instance_valid(node):
+			var ctrl := node as Control
+			rect = Rect2(ctrl.position, ctrl.size)
+		lines.append("%d | %s | %d | %d | %d | %s | %d | %s" % [
+			int(number), file_label, kind, anchor, blend, tone_s, opacity, str(rect)
+		])
+	var text := "\n".join(lines)
+	print("[PictureDump]\n%s" % text)
+	if write_file:
+		var f := FileAccess.open("user://picture_dump.txt", FileAccess.WRITE)
+		if f != null:
+			f.store_string(text + "\n")
+			f.close()
+	return text
 
 
 func clear_pictures() -> void:

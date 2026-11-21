@@ -37,14 +37,14 @@ const CENTER_TEXT_SPEED := 35.0
 const PAUSE_SECONDS := 0.25      # \\. beat
 const CURSOR_TEXTURE := "BalloonBase_CafeLatte/[CafeLatte]pauseL.png"
 const CURSOR_FALLBACK_TEXTURE := "SystemFile/Text_Pause.png"
-const BUBBLE_FEATHER_PAD := 14.0
+const BUBBLE_FEATHER_PAD := 11.0
 const BUBBLE_CORNER_RADIUS := 18.0
 const BUBBLE_SDF_SHADER := """
 shader_type canvas_item;
 uniform vec2 box_size = vec2(740.0, 84.0);
 uniform float corner_radius = 18.0;
-uniform float feather = 14.0;
-uniform float max_alpha = 0.80;
+uniform float feather = 11.0;
+uniform float max_alpha = 0.85;
 
 float rounded_box_sdf(vec2 p, vec2 half_extents, float r) {
 	vec2 q = abs(p) - half_extents + vec2(r);
@@ -57,7 +57,7 @@ void fragment() {
 	float d = rounded_box_sdf(local_px, inner_half, corner_radius);
 	float alpha = (1.0 - smoothstep(-2.0, feather, d)) * max_alpha;
 	float grad = clamp(UV.y, 0.0, 1.0);
-	vec3 col = mix(vec3(0.22, 0.22, 0.23), vec3(0.11, 0.11, 0.12), grad);
+	vec3 col = mix(vec3(0.15, 0.15, 0.16), vec3(0.08, 0.08, 0.09), grad);
 	COLOR = vec4(col, alpha);
 }
 """
@@ -72,6 +72,7 @@ var waiting_for_continue := false
 var finished := false
 var speed_override := 0.0
 var hover_enabled := false
+var paused := false
 var _choice_attached := false
 var position_mode: int = _WolfConst.MSG_POS_BOTTOM
 
@@ -213,7 +214,7 @@ func confirm() -> void:
 
 
 func _process(delta: float) -> void:
-	if not visible_window:
+	if not visible_window or paused:
 		return
 	_cursor_time += delta
 	if finished:

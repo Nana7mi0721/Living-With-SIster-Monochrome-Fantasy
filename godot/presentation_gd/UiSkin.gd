@@ -209,7 +209,11 @@ static func _configure_font_file(ff: FontFile, bold: bool, strict: bool) -> Font
 
 
 static func _record_font_source(src: String, built: Font) -> void:
-	_font_source = "%s (cjk=%s)" % [src, str(built.has_char(0x4E2D))]
+	var cjk := built.has_char(0x4E2D)
+	var s_wo := built.has_char(0x6211)
+	var s_mei := built.has_char(0x59B9)
+	var s_cun := built.has_char(0x5B58)
+	_font_source = "%s (cjk=%s samples=%s/%s/%s)" % [src, str(cjk), str(s_wo), str(s_mei), str(s_cun)]
 	if not _font_logged:
 		_font_logged = true
 		print("[UiSkin] font=%s" % _font_source)
@@ -237,15 +241,21 @@ static func _build_font(bold: bool) -> Font:
 		var cache_dir := ProjectSettings.globalize_path("user://cache")
 		DirAccess.make_dir_recursive_absolute(cache_dir)
 		var cache_path := cache_dir.path_join("Lolita.ttf")
-		var cf := FileAccess.open(cache_path, FileAccess.WRITE)
-		if cf != null:
-			cf.store_buffer(pak_bytes)
-			cf.close()
-			var ff_cached := FontFile.new()
-			if ff_cached.load_dynamic_font(cache_path) == OK and ff_cached.has_char(0x4E2D):
-				var built := _configure_font_file(ff_cached, bold, strict)
-				_record_font_source("pak:" + entry, built)
-				return built
+		var needs_write := true
+		if FileAccess.file_exists(cache_path):
+			var existing := FileAccess.open(cache_path, FileAccess.READ)
+			if existing != null and existing.get_length() == pak_bytes.size():
+				needs_write = false
+		if needs_write:
+			var cf := FileAccess.open(cache_path, FileAccess.WRITE)
+			if cf != null:
+				cf.store_buffer(pak_bytes)
+				cf.close()
+		var ff_cached := FontFile.new()
+		if ff_cached.load_dynamic_font(cache_path) == OK and ff_cached.has_char(0x4E2D):
+			var built := _configure_font_file(ff_cached, bold, strict)
+			_record_font_source("pak:" + entry, built)
+			return built
 		var ff := FontFile.new()
 		ff.data = pak_bytes
 		if ff.has_char(0x4E2D) or ff.get_face_count() > 0:

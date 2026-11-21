@@ -162,7 +162,7 @@ func held_mask(allow_mouse: bool = true) -> int:
 	var mask := scripted_key_mask if scripted_key_mask >= 0 else _physical_mask()
 	mask |= _wheel_bits
 	if allow_mouse:
-		if _click_latch:
+		if pointer_pressed or _click_latch:
 			mask |= MASK_OK
 		if right_pressed or _right_click_latch:
 			mask |= MASK_CANCEL

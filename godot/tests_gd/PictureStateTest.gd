@@ -340,6 +340,15 @@ func _ready() -> void:
 	var pic_effects := PictureEffects.new()
 	var col_done: Color = pic_effects.tone_color(fx_done)
 	check(absf(col_done.r - 1.0) < 0.02, "one-shot FLASH clamps cleanly at age==duration instead of wrapping")
+	# Missing save/*.jpg thumbnails render transparent with zero placeholder boxes, and dump_pictures formats slots.
+	stage.draw_picture(12104, 0, "save/SaveData99.jpg", "", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 0)
+	check(stage.picture_rect(12104).size == Vector2.ZERO, "missing save/*.jpg thumbnail must render transparent with zero size")
+	var missing_save_holder: Control = stage._pictures.get(12104, null)
+	check(missing_save_holder != null and missing_save_holder.get_child_count() == 0,
+		"missing save/*.jpg thumbnail must not emit opaque placeholder rects")
+	var dump_text: String = stage.dump_pictures(false)
+	check(dump_text.contains("12104 | save/SaveData99.jpg") and dump_text.contains("1362 |"),
+		"dump_pictures formats active slots cleanly")
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await _check_multiply_alpha_fade()
