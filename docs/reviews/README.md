@@ -8,6 +8,7 @@
 
 | 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
 | :--- | :---: | :--- | :--- |
+| [m4_oracle_refresh_2026_11_21.md](m4_oracle_refresh_2026_11_21.md) | 2026-11-21 | **M4 Oracle 夹具刷新与双模式门禁恢复** | 第 362832 步分歧来自早于 op121 语义修复的旧夹具；刷新脚本补齐数据根、.NET 环境与原子替换；Rust/C# 990102 步 100% 一致，双模式门禁全绿 |
 | [deepseek_retail_mechanism_audit_2026_11_20.md](deepseek_retail_mechanism_audit_2026_11_20.md) | 2026-11-20 | **标题机制、全新封面、字体回退综合核查** | “开始咯”不调用 CE14；全新三段封面分别为 `title01.jpg` / `TitleGraphic.jpg` / `TitleGraphic.png`；Lolita 完整覆盖出货文本，正常文本不触发中文回退 |
 | [deepseek_title_newgame_interaction_2026_11_20.md](deepseek_title_newgame_interaction_2026_11_20.md) | 2026-11-20 | **CE42/CE43 点击链路与 Map003 时序** | CE42 新游戏分支无存档钩子；CE43 仅绘制/高亮；Map003 两段 `180[50]` 是数据脚本节奏 |
 | [deepseek_title_graphics_fresh_state_2026_11_20.md](deepseek_title_graphics_fresh_state_2026_11_20.md) | 2026-11-20 | **全新 V300/V499/V503/V550 分支与封面** | TitleMap 显示 `title01`，CE42 菜单显示 `TitleGraphic.jpg`，Map003 过渡显示 `TitleGraphic.png` |

@@ -103,6 +103,7 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 - [reviews/deepseek_font_fallback_chain_2026_11_20.md](reviews/deepseek_font_fallback_chain_2026_11_20.md) — DxLib 字体绑定与缺字回退分项报告
 - [reviews/bug_inspection_report_2026_11_20.md](reviews/bug_inspection_report_2026_11_20.md) — **现行·重点**：右键点击失效、素材缺失、文本解析内部代号泄露深度审查报告
 - [reviews/bug_fix_and_gate_opt_2026_11_20.md](reviews/bug_fix_and_gate_opt_2026_11_20.md) — **现行·记录**：输入/文本/VM 修复、Oracle 对齐与 38 项门禁并行加速总结
+- [reviews/m4_oracle_refresh_2026_11_21.md](reviews/m4_oracle_refresh_2026_11_21.md) — **现行·记录**：M4 Oracle 夹具刷新、刷新脚本修复与双模式门禁恢复
 - [reviews/m5_round12_review_2026_11_19.md](reviews/m5_round12_review_2026_11_19.md) — M5 发布前夕全景审查与收口验证
 - [reviews/m4_round11_review_2026_11_18.md](reviews/m4_round11_review_2026_11_18.md) — M4 对齐 Oracle 与长程 Soak 稳定性审查
 - [reviews/m2w4_round5_repo_review_2026_11_15.md](reviews/m2w4_round5_repo_review_2026_11_15.md) — M2W4 仓库代码整洁度与模块依赖审计
