@@ -8,8 +8,13 @@
 # 退出码 0 = 引擎+C#+场景+存档+Oracle 全部通过。
 set -euo pipefail
 
-GODOT="${GODOT:-${GODOT_BIN:-$(command -v godot 2>/dev/null || command -v Godot_v4.7.2-stable_mono_win64_console.exe 2>/dev/null || true)}}"
 IMO="$(cd "$(dirname "$0")/.." && pwd)"
+# Per-machine overrides (GODOT, DOTNET, ...) live in an untracked file so no local path is committed.
+if [ -f "$IMO/tools/local.env.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$IMO/tools/local.env.sh"
+fi
+GODOT="${GODOT:-${GODOT_BIN:-$(command -v godot 2>/dev/null || command -v Godot_v4.7.2-stable_mono_win64_console.exe 2>/dev/null || true)}}"
 DOTNET="${DOTNET:-${DOTNET_BIN:-$(command -v dotnet 2>/dev/null || true)}}"
 # Isolate the gate from the player profile: 220/221/222 persist system data beside the save
 # slot, and a previous run's file would change the first-run route branches (Ce253 day 3).

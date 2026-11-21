@@ -43,6 +43,7 @@ __pycache__/
 /tools/wgpusmoke/target/
 
 # Local Tools & Binaries
+/tools/local.env.sh
 /tools/bin/
 /tools/cmake/
 /tools/ffmpeg/
