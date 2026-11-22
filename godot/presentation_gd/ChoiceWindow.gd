@@ -236,7 +236,7 @@ func _draw() -> void:
 	var rect := window_rect()
 	var texture: Texture2D = assets.texture(UiSkin.WINDOW_BASE) if assets != null else null
 	if texture != null:
-		UiSkin.nine_patch(self, texture, rect)
+		UiSkin.nine_patch(self, texture, rect, UiSkin.WINDOW_CORNER, assets.hd_scale(UiSkin.WINDOW_BASE))
 	else:
 		draw_rect(rect, Color(0.10, 0.11, 0.12, 0.92))
 		draw_rect(rect, Color(0.90, 0.90, 0.90, 0.85), false, 1.0)
@@ -250,7 +250,7 @@ func _draw() -> void:
 		var box := Rect2(rect.position.x + 5.0, row.position.y, rect.size.x - 10.0, row.size.y)
 		if i == selected:
 			if cursor_tex != null:
-				UiSkin.nine_patch(self, cursor_tex, box)
+				UiSkin.nine_patch(self, cursor_tex, box, UiSkin.WINDOW_CORNER, assets.hd_scale(CURSOR_TEXTURE))
 			else:
 				draw_rect(box, Color(1.0, 1.0, 1.0, 0.22))
 				draw_rect(box, Color(1.0, 1.0, 1.0, 0.85), false, 1.0)

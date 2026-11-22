@@ -112,6 +112,9 @@ func _ready() -> void:
 		root.overlays.hide_fault_modal()
 		if root.fault_modal_visible():
 			failures.append("hide_fault_modal should hide the fault modal for inspection")
+		if root.handle_back_request() != "fault_modal_reopened" or not root.fault_modal_visible():
+			failures.append("handle_back_request while faulted must reopen a hidden FaultModal")
+		root.overlays.hide_fault_modal()
 		var reopen_esc := InputEventKey.new()
 		reopen_esc.keycode = KEY_ESCAPE
 		reopen_esc.pressed = true
@@ -884,6 +887,18 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 		failures.append("in-game back request must open return-to-title confirmation")
 	root.cancel_return_to_title()
 	root.phase = prev_phase
+
+	# Window clamping and aspect="keep" safe-area letterbox subtraction.
+	if script.fit_window_size(Vector2i(2048, 1152), Rect2i(0, 0, 1920, 1040)) != Vector2i(1848, 1040):
+		failures.append("fit_window_size must shrink 2048x1152 proportionally inside 1920x1040")
+	if script.fit_window_size(Vector2i(1024, 576), Rect2i(0, 0, 1920, 1040)) != Vector2i(1024, 576):
+		failures.append("fit_window_size must not enlarge windows already inside usable rect")
+	var insets_bar_only: Dictionary = script.safe_area_insets(Vector2i(2400, 1080), Rect2i(120, 0, 2280, 1080), Vector2i(1024, 576), false)
+	if absf(float(insets_bar_only.get("left", -1.0))) > 0.01:
+		failures.append("cutout inside 240px left letterbox bar must yield 0 design inset, got %s" % str(insets_bar_only))
+	var insets_overlap: Dictionary = script.safe_area_insets(Vector2i(2400, 1080), Rect2i(270, 0, 2130, 1080), Vector2i(1024, 576), false)
+	if absf(float(insets_overlap.get("left", -1.0)) - 16.0) > 0.01:
+		failures.append("30px overlap past 240px letterbox bar at 1.875x must yield 16 design px, got %s" % str(insets_overlap))
 
 	root._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
 	if not root.modal_release_guard():

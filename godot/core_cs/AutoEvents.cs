@@ -113,7 +113,8 @@ public sealed class AutoEvents
             }
             else
             {
-                // Match Rust auto_events.rs edge-triggered parity: only ResumeOnLoad checks !alive.
+                // Keep Rust auto_events.rs edge-triggered parity when LoopVisualPainters is false;
+                // live play sets LoopVisualPainters = true, which enforces !alive above.
                 shouldStart = ev.ResumeOnLoad && now ? !alive : now && !before;
             }
             if (shouldStart)

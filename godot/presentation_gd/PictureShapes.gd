@@ -143,7 +143,7 @@ func sysgraphic_texture(spec: Dictionary, w: int, h: int) -> Texture2D:
 
 ## Build the TextureRect (SysGraphic) or NinePatchRect (raster window) child Control.
 ## Both inherit the parent Picture holder's material so blend modes apply directly.
-func build_window_node(spec: Dictionary, texture: Texture2D, args: Array, assets: AssetDB) -> Control:
+func build_window_node(spec: Dictionary, texture: Texture2D, args: Array, assets: AssetDB, texture_path: String = "") -> Control:
 	var sw := maxi(0, int(args[1]) if args.size() > 1 else (0 if not spec.is_empty() else 18))
 	var sh := maxi(0, int(args[2]) if args.size() > 2 else (0 if not spec.is_empty() else 18))
 	if not spec.is_empty():
@@ -163,11 +163,11 @@ func build_window_node(spec: Dictionary, texture: Texture2D, args: Array, assets
 	# Args[1]/args[2] specify window box dimensions, rendered as an 18x18 nine-patch.
 	var win_size := Vector2(maxi(1, sw if args.size() > 1 else 18), maxi(1, sh if args.size() > 2 else 18))
 	var win_tex := texture
+	var skin_key := texture_path if texture != null and not texture_path.is_empty() else UiSkin.WINDOW_BASE
 	if win_tex == null and assets != null:
 		win_tex = assets.texture(UiSkin.WINDOW_BASE)
-	var art_scale := 1.0
-	if win_tex != null and win_tex.get_width() >= 27:
-		art_scale = float(win_tex.get_width()) / 18.0
+		skin_key = UiSkin.WINDOW_BASE
+	var art_scale := assets.hd_scale(skin_key) if assets != null and win_tex != null else 1.0
 	if art_scale > 1.01:
 		# A NinePatchRect would draw its patch margins in design pixels, so 2x art
 		# would double the frame thickness. Slice it with separate source/dest corners.
@@ -176,7 +176,7 @@ func build_window_node(spec: Dictionary, texture: Texture2D, args: Array, assets
 		art.use_parent_material = true
 		art.size = win_size
 		art.set_meta("window_size", win_size)
-		art.draw.connect(func() -> void: UiSkin.nine_patch(art, win_tex, Rect2(Vector2.ZERO, art.size)))
+		art.draw.connect(func() -> void: UiSkin.nine_patch(art, win_tex, Rect2(Vector2.ZERO, art.size), UiSkin.WINDOW_CORNER, art_scale))
 		art.resized.connect(art.queue_redraw)
 		return art
 	var nine := NinePatchRect.new()

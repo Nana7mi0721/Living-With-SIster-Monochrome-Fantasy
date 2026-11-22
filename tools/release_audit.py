@@ -296,8 +296,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.hd_root:
-        import subprocess
-        import sys
         tool = Path(__file__).resolve().parent / "verify_hd_manifest.py"
         rc = subprocess.call([sys.executable, str(tool), "--hd", args.hd_root])
         if rc != 0:

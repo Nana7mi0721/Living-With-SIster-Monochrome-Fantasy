@@ -80,8 +80,12 @@ echo "[2/38] build core library"
 
 # The GDScript presentation layer (W2) resolves other scripts by class_name, so the global
 # class cache has to exist before any tests_gd scene runs in parallel.
+# Isolate editor config dirs so host EditorSettings (update checks, ADB, concurrent editor runs) cannot block --quit.
 echo "[13/38] gdscript class cache"
-"$GODOT" --headless --path "$IMO/godot" --import --quit
+mkdir -p "$ROOT_TEMP/appdata" "$ROOT_TEMP/localappdata" "$ROOT_TEMP/xdg_cfg" "$ROOT_TEMP/xdg_data"
+APPDATA="$ROOT_TEMP/appdata" LOCALAPPDATA="$ROOT_TEMP/localappdata" \
+  XDG_CONFIG_HOME="$ROOT_TEMP/xdg_cfg" XDG_DATA_HOME="$ROOT_TEMP/xdg_data" \
+  "$GODOT" --headless --path "$IMO/godot" --import --quit
 
 run_godot_marker() {
   local label="$1"

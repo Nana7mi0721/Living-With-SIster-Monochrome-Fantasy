@@ -757,7 +757,7 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 			th = 1
 		base = Vector2(tw, th)
 	elif not file.is_empty() and assets != null and assets.texture(file) != null:
-		base = _texture_cell_size(assets.texture(file), _arg(args, 1, 1), _arg(args, 2, 1))
+		base = _texture_cell_size(assets.texture(file), _arg(args, 1, 1), _arg(args, 2, 1), assets.hd_scale(file))
 	elif not text.is_empty():
 		base = _measure_text(text)["size"]
 	else:
@@ -776,23 +776,26 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 	var is_window := kind == 3 or kind == 4
 	var sys_spec := _PictureShapes.parse_sysgraphic(file) if is_window else {}
 	var texture: Texture2D = null
+	var resolved_file := file
 	if sys_spec.is_empty() and not file.is_empty() and assets != null:
 		texture = assets.texture(file)
 		# Fall back to the SystemGraphic banner when Picture/title* is absent in unpacked trees.
 		if texture == null and not is_window \
 				and (number == _WolfConst.PIC_SLOT_TITLE_BG or file.begins_with("Picture/title") or file.begins_with("SystemGraphic/Title")):
 			texture = assets.texture("SystemGraphic/TitleGraphic.png")
+			if texture != null:
+				resolved_file = "SystemGraphic/TitleGraphic.png"
 
 	var size: Vector2
 	if is_window:
-		var win_child := _shapes.build_window_node(sys_spec, texture, args, assets)
+		var win_child := _shapes.build_window_node(sys_spec, texture, args, assets, resolved_file)
 		size = win_child.get_meta("window_size", win_child.size)
 		holder.add_child(win_child)
 		win_child.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	elif texture != null:
 		var columns := maxi(1, _arg(args, 1, 1))
 		var rows := maxi(1, _arg(args, 2, 1))
-		var art_scale := assets.hd_scale(file) if assets != null else 1.0
+		var art_scale := assets.hd_scale(resolved_file) if assets != null else 1.0
 		size = _texture_cell_size(texture, columns, rows, art_scale)
 		var shown := texture
 		if columns > 1 or rows > 1:

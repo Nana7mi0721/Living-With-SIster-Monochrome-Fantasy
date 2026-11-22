@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import shutil
 import struct
 import sys
 import tempfile
@@ -99,8 +98,9 @@ def align4(value: int) -> int:
 
 
 def parse_lang_id(raw: str) -> int:
+    """Parse a LCID: ``0x`` prefix means hex, bare digits are decimal (2052 == 0x0804)."""
     text = raw.strip()
-    base = 16 if text.lower().startswith("0x") or (len(text) == 4 and all(c in "0123456789abcdefABCDEF" for c in text)) else 10
+    base = 16 if text.lower().startswith("0x") else 10
     try:
         val = int(text, base)
     except ValueError as exc:
@@ -245,6 +245,13 @@ def find_version_resources(data: bytes | bytearray, pe: PEInfo) -> list[VersionR
                 raise PEFormatError("RT_VERSION level 2 entry does not point to a subdirectory")
             dir3_off = rsrc_base + (off2 & 0x7FFFFFFF)
             _, _, lvl3 = _read_resource_dir_entries(data, dir3_off)
+            seen_langs: set[int] = set()
+            for _, lang_raw, _ in lvl3:
+                if lang_raw & IMAGE_RESOURCE_NAME_IS_STRING:
+                    continue
+                if (lang_raw & 0xFFFF) in seen_langs:
+                    raise PEFormatError(f"duplicate RT_VERSION language {lang_raw & 0xFFFF:#06x} in one resource")
+                seen_langs.add(lang_raw & 0xFFFF)
             for lang_entry_off, lang_raw, off3 in lvl3:
                 if off3 & IMAGE_RESOURCE_DATA_IS_DIRECTORY:
                     raise PEFormatError("RT_VERSION level 3 entry unexpectedly points to a directory")
@@ -255,6 +262,10 @@ def find_version_resources(data: bytes | bytearray, pe: PEInfo) -> list[VersionR
                     raise PEFormatError("IMAGE_RESOURCE_DATA_ENTRY out of bounds")
                 data_rva, data_size, _, _ = struct.unpack_from("<IIII", data, data_entry_off)
                 data_off = pe.rva_to_file_offset(data_rva, data_size)
+                if data_off + data_size > len(data):
+                    raise PEFormatError(
+                        f"RT_VERSION data ({data_size} bytes at {data_off:#x}) runs past end of file"
+                    )
                 refs.append(
                     VersionResourceRef(
                         dir_offset=dir3_off,
@@ -428,6 +439,15 @@ def localize_pe_bytes(
             f"no RT_VERSION resource with source_lang={source_lang:#06x} or target_lang={target_lang:#06x} "
             f"(found: {langs_str})"
         )
+
+    if source_lang != target_lang and not check_only:
+        langs_by_dir: dict[int, set[int]] = {}
+        for ref in matching_refs:
+            langs_by_dir.setdefault(ref.dir_offset, set()).add(ref.lang_id)
+        if any({source_lang, target_lang} <= langs for langs in langs_by_dir.values()):
+            raise PEFormatError(
+                f"RT_VERSION already has {target_lang:#06x}; patching {source_lang:#06x} would duplicate the language entry"
+            )
 
     touched_dirs: set[int] = set()
     rebuild_required = file_version is not None or product_version is not None

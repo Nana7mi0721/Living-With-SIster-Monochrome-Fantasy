@@ -1688,9 +1688,11 @@ public static class VmTest
         vm.RegisterProgram(prog);
         vm.CreateInstance(122);
         vm.StepFrame();
-        if (vm.EnteredInstanceCount != 0 || vm.Instances.Count != 0)
-            throw new Exception($"op174 must clear entered instances and instances: entered={vm.EnteredInstanceCount} inst={vm.Instances.Count}");
+        if (vm.EnteredInstanceCount != 0 || vm.Instances.Count != 0
+            || vm.TransitionPrepared || vm.TransitionPhase != 0)
+            throw new Exception($"op174 must clear entered instances, instances and transition state: entered={vm.EnteredInstanceCount} inst={vm.Instances.Count} prep={vm.TransitionPrepared}");
 
+        vm.ReturnToTitleRequested = false;
         var prep = Program.FromSlots(123, "PrepOnly", new List<Slot>
         {
             Slot.Command(160, [2, 5]),
@@ -1705,6 +1707,47 @@ public static class VmTest
         vm.StopAll();
         if (vm.TransitionPrepared || vm.TransitionPhase != 0 || vm.EnteredInstanceCount != 0)
             throw new Exception($"StopAll must reset transition state and entered ids: prep={vm.TransitionPrepared} phase={vm.TransitionPhase}");
+
+        var endGame = Program.FromSlots(126, "TransitionAnd175", new List<Slot>
+        {
+            Slot.Command(160, [1, 4]),
+            Slot.Command(161),
+            Slot.Command(175)
+        });
+        vm.RegisterProgram(endGame);
+        vm.CreateInstance(126);
+        vm.StepFrame();
+        if (!vm.EndGameRequested || vm.TransitionPrepared || vm.TransitionPhase != 0)
+            throw new Exception($"op175 must reset transition state: prep={vm.TransitionPrepared} phase={vm.TransitionPhase}");
+
+        vm.EndGameRequested = false;
+        var autoKeyHost = new AutoKeyTestHost();
+        vm.Host = autoKeyHost;
+        var injector = Program.FromSlots(127, "AutoKeyInject", new List<Slot>
+        {
+            Slot.Command(125, [1]),
+            Slot.Command(172)
+        });
+        var waiter = Program.FromSlots(128, "AutoKeyWait", new List<Slot>
+        {
+            Slot.Command(123, [2_000_000, 0x10]),
+            Slot.Command(180, [10])
+        });
+        vm.RegisterProgram(injector);
+        vm.RegisterProgram(waiter);
+        vm.CreateInstance(127);
+        var autoInst = vm.CreateInstance(128)!;
+        vm.StepFrame();
+        if (vm.AutoKeysDeliveredCount != 1)
+            throw new Exception($"expected 1 delivered auto-key entry, got {vm.AutoKeysDeliveredCount}");
+        vm.StopInstance(autoInst.Id);
+        if (vm.AutoKeysDeliveredCount != 0)
+            throw new Exception($"StopInstance must clear _autoKeysDelivered, got {vm.AutoKeysDeliveredCount}");
+    }
+
+    private sealed class AutoKeyTestHost : NullHost
+    {
+        public override int KeyCodeAuto(uint mask, uint autoKeys) => autoKeys != 0 ? KeyCodes.CodeOk : 0;
     }
 
     private static void TestMalformedSlotBoundsAndCallStrings()
@@ -1743,6 +1786,7 @@ public static class VmTest
         public int LeaderFacing { get; set; } = 2;
         public uint MovementDeny => Vm.MovementDeny;
         public uint BasicAllDeny => Vm.BasicAllDeny;
+        public bool ChoiceAllowsCancel { get; set; } = true;
         public string MapPath(int mapId) => "";
         public bool ActionKeyRequested { get; set; }
         public bool Faulted => Vm.Faulted;
@@ -1775,13 +1819,15 @@ public static class VmTest
 
     private sealed class StubSessionView : IGameSessionView
     {
+        public int HideMessageCalls { get; private set; }
+        public int HideChoicesCalls { get; private set; }
         public void SetStatus(string text) { }
         public void SetMapHud(int leaderX, int leaderY, string text) { }
         public void ShowMap(MapDefinition map, MapRuntime runtime, int leaderX, int leaderY) { }
         public void ShowMessage(string text, int face) { }
-        public void HideMessage() { }
+        public void HideMessage() => HideMessageCalls++;
         public void ShowChoices(string[] options, int selected) { }
-        public void HideChoices() { }
+        public void HideChoices() => HideChoicesCalls++;
         public void ClearPictures() { }
         public void RestorePictures(IReadOnlyList<SavedPicture> pictures) { }
         public IReadOnlyList<SavedPicture> SnapshotPictures() => Array.Empty<SavedPicture>();
@@ -1803,11 +1849,15 @@ public static class VmTest
               "common_events": [
                 { "id": 50, "title": "NormalCe", "slots": [{ "op": 180, "params": [10] }, { "op": 172 }] },
                 { "id": 51, "title": "ChildCe", "slots": [{ "op": 180, "params": [10] }, { "op": 172 }] },
-                { "id": 52, "title": "ParallelCe", "run_condition_op_var_val": [2, 2, 2000000, 1], "slots": [{ "op": 180, "params": [10] }, { "op": 172 }] }
+                { "id": 52, "title": "ParallelCe", "run_condition_op_var_val": [2, 2, 2000000, 1], "slots": [{ "op": 180, "params": [10] }, { "op": 172 }] },
+                { "id": 242, "title": "BattleCommandCe", "slots": [{ "op": 180, "params": [10] }, { "op": 172 }] }
               ],
               "maps": [
                 { "id": 1, "file": "TitleMap.mps", "name": "Title", "width": 5, "height": 5, "events": [
                   { "id": 2, "page": 0, "trigger": 1, "stats": { "real_instructions": 1 }, "slots": [{ "op": 180, "params": [10] }] }
+                ]},
+                { "id": 3, "file": "Map003.mps", "name": "NewGame", "width": 5, "height": 5, "events": [
+                  { "id": 1, "page": 0, "trigger": 1, "stats": { "real_instructions": 1 }, "slots": [{ "op": 180, "params": [10] }] }
                 ]},
                 { "id": 10, "file": "SampleMapA.mps", "name": "Room", "width": 5, "height": 5, "events": [
                   { "id": 4, "page": 0, "trigger": 2, "stats": { "real_instructions": 1 }, "slots": [{ "op": 180, "params": [10] }] }
@@ -1819,15 +1869,28 @@ public static class VmTest
             System.IO.File.WriteAllText(progPath, progJson);
             string savePath = System.IO.Path.Combine(tmpDir, "save_01.json");
 
+            var stubView = new StubSessionView();
             var stubVm = new StubVmSession();
             foreach (var p in ProgramLoader.LoadCommonEvents(progPath).Values) stubVm.Vm.RegisterProgram(p);
-            var session = new GameSession(stubVm, new StubSessionView(), progPath, savePath);
+            var session = new GameSession(stubVm, stubView, progPath, savePath);
 
             stubVm.Vm.Vars.Set(12, 99);
             if (!session.StartTitle())
                 throw new Exception("StartTitle failed on synthetic programs.json");
             if (stubVm.ResetSessionCalls != 1 || stubVm.Vm.Vars.Get(12) != 0)
                 throw new Exception($"StartTitle must call ResetSessionState and clear vars (calls={stubVm.ResetSessionCalls}, v12={stubVm.Vm.Vars.Get(12)})");
+
+            // StartNewGameNow (teleport to map 3) must clear op250 DB overlays while preserving TitleMap vars.
+            stubVm.Vm.Vars.SetSys(100, 60);
+            stubVm.ChoiceAllowsCancel = false;
+            session.ShowChoices(new[] { "A", "B" });
+            stubVm.ChoiceAllowsCancel = true;
+            session.QueueTeleport(-1, 3, 60, 34, 1);
+            int hideBefore = stubView.HideChoicesCalls;
+            session.AdvanceFrame();
+            if (stubVm.ResetSessionCalls != 2 || stubVm.Vm.Vars.GetSys(100) != 60
+                || !session.ChoiceAllowsCancel || stubView.HideChoicesCalls <= hideBefore)
+                throw new Exception($"StartNewGameNow must reset session overlays/choices while keeping TitleMap vars (calls={stubVm.ResetSessionCalls}, sys100={stubVm.Vm.Vars.GetSys(100)})");
 
             // Load a slot containing:
             // - map instance (kind="map", page=0) -> RetainAfterFinish must be true
@@ -1848,7 +1911,9 @@ public static class VmTest
                     new SavedInstance { Id = 10, EventId = 4, Kind = "map", Page = 0, Pc = 0, IsParallel = true },
                     new SavedInstance { Id = 11, ParentId = 10, EventId = 51, Kind = "ce", Pc = 0, IsParallel = null },
                     new SavedInstance { Id = 12, EventId = 50, Kind = "ce", Pc = 0, IsParallel = true },
-                    new SavedInstance { Id = 13, EventId = 50, Kind = "ce", Pc = 0, IsParallel = false }
+                    new SavedInstance { Id = 13, EventId = 50, Kind = "ce", Pc = 0, IsParallel = false },
+                    new SavedInstance { Id = 14, EventId = 242, Kind = "ce", Pc = 0, IsParallel = null },
+                    new SavedInstance { Id = 15, ParentId = 14, EventId = 51, Kind = "ce", Pc = 0, IsParallel = null }
                 }
             };
             SaveCodec.Write(savePath, state);
@@ -1859,6 +1924,8 @@ public static class VmTest
             var legacyChild = stubVm.Vm.FindInstance(11);
             var explicitParallel = stubVm.Vm.FindInstance(12);
             var explicitFg = stubVm.Vm.FindInstance(13);
+            var gatedParallel = stubVm.Vm.FindInstance(14);
+            var gatedChild = stubVm.Vm.FindInstance(15);
             if (mapInst == null || !mapInst.RetainAfterFinish || !mapInst.IsParallel)
                 throw new Exception($"restored map instance must have RetainAfterFinish=true and IsParallel=true");
             if (legacyChild == null || !legacyChild.IsParallel)
@@ -1867,6 +1934,8 @@ public static class VmTest
                 throw new Exception("saved IsParallel=true must round-trip on CE");
             if (explicitFg == null || explicitFg.IsParallel)
                 throw new Exception("saved IsParallel=false must stay false on CE");
+            if (gatedParallel == null || !gatedParallel.IsParallel || gatedChild == null || !gatedChild.IsParallel)
+                throw new Exception("InferLegacyParallel must treat GatedCallOnly (CE242) and its children as parallel");
 
             SaveState? rebuilt = session.BuildSaveState();
             var rebuilt12 = rebuilt?.Instances.Find(i => i.Id == 12);

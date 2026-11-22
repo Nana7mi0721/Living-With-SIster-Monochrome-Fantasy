@@ -308,7 +308,8 @@ static func color_for_index(index: int) -> Color:
 
 ## Draw an 18x18 nine-patch into [param rect]. Falls back to a flat box when the
 ## install has no window skin, so a missing asset never blanks the dialog.
-static func nine_patch(ci: CanvasItem, texture: Texture2D, rect: Rect2, corner: int = WINDOW_CORNER) -> void:
+## [param art_scale] is the texture-pixels-per-design-pixel ratio from AssetDB.hd_scale().
+static func nine_patch(ci: CanvasItem, texture: Texture2D, rect: Rect2, corner: int = WINDOW_CORNER, art_scale: float = 1.0) -> void:
 	if texture == null:
 		ci.draw_rect(rect, Color(0.12, 0.14, 0.15, 0.87))
 		ci.draw_rect(rect, Color(0.95, 0.95, 0.95, 0.55), false, 1.0)
@@ -322,8 +323,8 @@ static func nine_patch(ci: CanvasItem, texture: Texture2D, rect: Rect2, corner: 
 	# while still drawing it at 3 design pixels, or the frame becomes 2x too thick.
 	var dst := clampf(float(maxi(0, corner)), 0.0, minf(rect.size.x, rect.size.y) * 0.5)
 	var src := dst
-	if tex_size.x >= 27.0:
-		src = dst * (tex_size.x / 18.0)
+	if art_scale > 1.01:
+		src = dst * art_scale
 	src = clampf(src, 0.0, minf(tex_size.x, tex_size.y) * 0.5)
 	var inner := Vector2(maxf(0.0, tex_size.x - src * 2.0), maxf(0.0, tex_size.y - src * 2.0))
 	var mid_w := maxf(0.0, rect.size.x - dst * 2.0)

@@ -20,9 +20,6 @@ var show_ui := true
 
 var _manifest: Dictionary = {}
 var _entries: Array = []
-var _part_path := ""
-var _target_path := ""
-var _current_logical := ""
 var _total_bytes := 0
 var _copied_bytes := 0
 var _running := false
@@ -248,12 +245,9 @@ func _begin() -> void:
 		return
 	_join_worker()
 	_running = true
-	_part_path = ""
-	_target_path = ""
 	_entries.clear()
 	_mutex.lock()
 	_copied_bytes = 0
-	_current_logical = ""
 	_abort_requested = false
 	_worker_done = false
 	_worker_ok = false
@@ -375,10 +369,6 @@ func _worker_run(job: Dictionary) -> void:
 		var dst_abs: String = item["dst_abs"]
 		var part_abs: String = item["part_abs"]
 		var dir_abs: String = item["dir_abs"]
-
-		_mutex.lock()
-		_current_logical = logical
-		_mutex.unlock()
 
 		if DirAccess.make_dir_recursive_absolute(dir_abs) != OK:
 			_finish_worker(false, "无法创建数据目录：%s" % logical.get_base_dir())
@@ -589,8 +579,6 @@ static func _write_text_atomic_abs(target_abs: String, content: String) -> bool:
 
 func _fail(message: String) -> void:
 	_join_worker()
-	if not _part_path.is_empty() and FileAccess.file_exists(_part_path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(_part_path))
 	_running = false
 	set_process(false)
 	push_error("[MobileDataBootstrap] " + message)

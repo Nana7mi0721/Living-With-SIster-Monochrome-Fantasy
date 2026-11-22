@@ -97,6 +97,8 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 系统性代码审查（Code Review）、跨仓库审计与缺陷追踪记录：
 
 - [reviews/README.md](reviews/README.md) — 代码审查台账总览索引
+- [reviews/acceptance_audit_89fc8f5_remediation_2026_11_23.md](reviews/acceptance_audit_89fc8f5_remediation_2026_11_23.md) — **现行·闭环**：`89fc8f5` 验收审查全部增量项收口、P1-6/P2-11 保留设计依据与双模式门禁验证
+- [reviews/acceptance_audit_89fc8f5_2026_11_23.md](reviews/acceptance_audit_89fc8f5_2026_11_23.md) — **现行·台账**：Commit `89fc8f5` 整改验收与增量回归审查（6 P1 / 14 P2 / 12 P3）
 - [reviews/sister_ux_multiplatform_adaptation_2026_11_22.md](reviews/sister_ux_multiplatform_adaptation_2026_11_22.md) — **现行·闭环**：姊妹作 UX 优化、移动端零拷贝/触控/返回键与跨端存档互导落地报告（见 D-83）
 - [reviews/full_static_audit_59268ac_remediation_2026_11_22.md](reviews/full_static_audit_59268ac_remediation_2026_11_22.md) — **现行·闭环**：`59268ac` 全量静态审查 67 项缺陷修复与双模式门禁验证（见 D-82）
 - [reviews/full_static_audit_59268ac_2026_11_22.md](reviews/full_static_audit_59268ac_2026_11_22.md) — **现行·台账**：Commit `59268ac` 全仓库静态代码审查（4 P0 / 24 P1 / 26 P2 / 13 P3）

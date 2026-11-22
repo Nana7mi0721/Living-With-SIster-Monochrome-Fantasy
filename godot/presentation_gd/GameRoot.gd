@@ -216,6 +216,7 @@ func _build_overlays() -> void:
 	overlays = _PlayOverlays.new()
 	add_child(overlays)
 	overlays.backlog_closed.connect(func() -> void: _arm_modal_release_guard())
+	overlays.drawer_closed.connect(func() -> void: _arm_modal_release_guard())
 	overlays.title_cancelled.connect(func() -> void: _arm_modal_release_guard())
 	overlays.title_confirmed.connect(_on_title_confirmed)
 	overlays.save_overwrite_confirmed.connect(_on_save_overwrite_confirmed)
@@ -1190,6 +1191,31 @@ static func clamp_window_size(desired: Vector2i, usable: Rect2i) -> Vector2i:
 	)
 
 
+## Shrinks [param desired] uniformly until it fits [param usable]; never enlarges.
+static func fit_window_size(desired: Vector2i, usable: Rect2i) -> Vector2i:
+	if usable.size.x <= 0 or usable.size.y <= 0 or desired.x <= 0 or desired.y <= 0:
+		return desired
+	var factor := minf(1.0, minf(float(usable.size.x) / float(desired.x), float(usable.size.y) / float(desired.y)))
+	if factor >= 1.0:
+		return desired
+	return Vector2i(maxi(1, int(floorf(desired.x * factor))), maxi(1, int(floorf(desired.y * factor))))
+
+
+func _fit_window_to_usable_area() -> void:
+	if _is_headless() or DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+		return
+	var usable := DisplayServer.screen_get_usable_rect()
+	var current := DisplayServer.window_get_size()
+	var fitted := fit_window_size(current, usable)
+	if fitted == current:
+		return
+	DisplayServer.window_set_size(fitted)
+	var pos := DisplayServer.window_get_position()
+	DisplayServer.window_set_position(Vector2i(
+		clampi(pos.x, usable.position.x, maxi(usable.position.x, usable.end.x - fitted.x)),
+		clampi(pos.y, usable.position.y, maxi(usable.position.y, usable.end.y - fitted.y))))
+
+
 func _apply_scaling_mode() -> void:
 	if _is_headless() or not is_inside_tree():
 		return
@@ -1243,6 +1269,8 @@ func _save_display_settings() -> void:
 	cfg.set_value("display", "fullscreen", _fullscreen)
 	cfg.set_value("display", "perf_tier", _perf_tier)
 	cfg.set_value("display", "show_title_fps", _show_title_fps)
+	if assets != null:
+		cfg.set_value("display", "hd_textures", assets.hd_enabled)
 	if win_size.x > 0 and win_size.y > 0:
 		cfg.set_value("display", "window_width", win_size.x)
 		cfg.set_value("display", "window_height", win_size.y)
@@ -1254,6 +1282,7 @@ func _load_display_settings() -> void:
 		return
 	var cfg := ConfigFile.new()
 	if cfg.load(DISPLAY_SETTINGS_PATH) != OK:
+		_fit_window_to_usable_area()
 		_apply_scaling_mode()
 		_apply_performance_tier()
 		return
@@ -1262,8 +1291,8 @@ func _load_display_settings() -> void:
 	_show_title_fps = bool(cfg.get_value("display", "show_title_fps", false))
 	_apply_scaling_mode()
 	_apply_performance_tier()
-	if assets != null:
-		assets.set_hd_enabled(bool(cfg.get_value("display", "hd_textures", true)))
+	if assets != null and cfg.has_section_key("display", "hd_textures"):
+		assets.set_hd_enabled(bool(cfg.get_value("display", "hd_textures", assets.hd_enabled)))
 	var w := int(cfg.get_value("display", "window_width", 0))
 	var h := int(cfg.get_value("display", "window_height", 0))
 	var want_fs := bool(cfg.get_value("display", "fullscreen", false))
@@ -1273,6 +1302,8 @@ func _load_display_settings() -> void:
 		_windowed_size = clamped
 		if not want_fs:
 			DisplayServer.window_set_size(clamped)
+	elif not want_fs:
+		_fit_window_to_usable_area()
 	if want_fs:
 		_windowed_position = DisplayServer.window_get_position()
 		if _windowed_size == Vector2i.ZERO:
@@ -1709,14 +1740,32 @@ func _apply_safe_area() -> void:
 	if win_size.x <= 0 or win_size.y <= 0 or safe.size.x <= 0 or safe.size.y <= 0:
 		overlays.apply_safe_area({})
 		return
-	var sx := 1024.0 / float(win_size.x)
-	var sy := 576.0 / float(win_size.y)
-	overlays.apply_safe_area({
-		"left": maxf(0.0, float(safe.position.x) * sx),
-		"top": maxf(0.0, float(safe.position.y) * sy),
-		"right": maxf(0.0, float(win_size.x - safe.end.x) * sx),
-		"bottom": maxf(0.0, float(win_size.y - safe.end.y) * sy),
-	})
+	var base := Vector2i(1024, 576)
+	var integer_stretch := false
+	var win := get_window() if is_inside_tree() else null
+	if win != null:
+		if win.content_scale_size.x > 0 and win.content_scale_size.y > 0:
+			base = win.content_scale_size
+		integer_stretch = win.content_scale_stretch == Window.CONTENT_SCALE_STRETCH_INTEGER
+	overlays.apply_safe_area(safe_area_insets(win_size, safe, base, integer_stretch))
+
+
+## Display safe-area insets in design pixels. Under aspect keep the content is centred
+## with letterbox bars, so only the part of the cutout that overlaps the content counts.
+static func safe_area_insets(win_size: Vector2i, safe: Rect2i, base: Vector2i, integer_stretch: bool = false) -> Dictionary:
+	if win_size.x <= 0 or win_size.y <= 0 or base.x <= 0 or base.y <= 0:
+		return {}
+	var ratio := minf(float(win_size.x) / float(base.x), float(win_size.y) / float(base.y))
+	if integer_stretch and ratio >= 1.0:
+		ratio = floorf(ratio)
+	var bar_x := maxf(0.0, (float(win_size.x) - float(base.x) * ratio) * 0.5)
+	var bar_y := maxf(0.0, (float(win_size.y) - float(base.y) * ratio) * 0.5)
+	return {
+		"left": maxf(0.0, float(safe.position.x) - bar_x) / ratio,
+		"top": maxf(0.0, float(safe.position.y) - bar_y) / ratio,
+		"right": maxf(0.0, float(win_size.x - safe.end.x) - bar_x) / ratio,
+		"bottom": maxf(0.0, float(win_size.y - safe.end.y) - bar_y) / ratio,
+	}
 
 
 func _sync_mobile_and_overlay_state(delta: float) -> void:
@@ -1897,6 +1946,9 @@ func handle_back_request() -> String:
 		if not is_ios_platform() and not _is_headless():
 			get_tree().quit()
 		return "fault_quit"
+	if faulted and overlays != null and not overlays.fault_modal_visible():
+		overlays.show_fault_modal(_failure_reason(), session != null and session.HasSave)
+		return "fault_modal_reopened"
 	if phase == "bootstrap":
 		return "bootstrap_ignored"
 	if overlays != null and overlays.is_modal_open():

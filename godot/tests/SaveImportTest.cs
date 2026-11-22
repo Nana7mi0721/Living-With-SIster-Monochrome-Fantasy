@@ -150,6 +150,15 @@ public partial class SaveImportTest : Node
             return false;
         }
 
+        // A truncated multibyte lead must not swallow the next valid character.
+        string truncatedLead = LegacySaveImporter.DecodePictureText(
+            new byte[] { 0xE3, 0xE3, 0x81, 0x82, 0 }, new List<string>(), "picture_lead");
+        if (truncatedLead != "\uFFFD\u3042")
+        {
+            GD.PrintErr($"SAVE_IMPORT_VALIDATION_FAILED: truncated multibyte lead swallowed next character: '{truncatedLead}'");
+            return false;
+        }
+
         // ReadBytes integer-overflow guard: Position + count overflow must throw InvalidDataException.
         var overflowReader = new LegacySaveImporter.SaveReader(new byte[16], 8);
         bool readBytesThrew = false;
@@ -487,9 +496,16 @@ public partial class SaveImportTest : Node
             SaveState? imported = SaveCodec.Read(slot2Path);
             if (imported == null || imported.Vars.Count != WolfIds.VarPollMax || imported.PlayFrames <= 0
                 || imported.MapId != 1005 || imported.CommonSelf.Count == 0
-                || !imported.MapEvents.Exists(e => e.Id == 0 && !e.Runs))
+                || !imported.MapEvents.Exists(e => e.Id == 0 && !e.Runs)
+                || !imported.Pictures.Exists(p => p.Number < 0))
             {
                 GD.PrintErr("SAVE_TRANSFER_FAILED: imported save_02.json missing expected state");
+                return false;
+            }
+            var rawSlot = LegacySaveImporter.ImportFile(sampleSav, 1);
+            if (rawSlot.Recovered.DatabaseCells.Count > 0 && string.IsNullOrEmpty(harness.Session.LastImportNotice))
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: LastImportNotice must warn when retail DatabaseCells are dropped");
                 return false;
             }
 
@@ -534,6 +550,17 @@ public partial class SaveImportTest : Node
             if (!harness.Session.LoadGameFrom(slot2Path) || harness.Session.Phase != "bedroom")
             {
                 GD.PrintErr("SAVE_TRANSFER_FAILED: imported save_02.json failed to load into live session");
+                return false;
+            }
+
+            harness.Session.ShowMessage("stale", 0);
+            harness.Session.ShowChoices(new[] { "stale" });
+            if (!harness.Session.LoadRetailSave(sampleSav, 0)
+                || !harness.Session.ChoiceAllowsCancel
+                || harness.Session.MessageOpen || harness.Session.HasChoices
+                || harness.View.HasMessage || harness.View.HasChoices)
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: LoadRetailSave did not clear stale choice/popup state");
                 return false;
             }
         }

@@ -52,6 +52,7 @@ public partial class MediaPakReader : RefCounted
         long Length { get; }
         long Position { set; }
         void ReadExactly(Span<byte> destination);
+        byte[] ReadBytes(int length);
     }
 
     private sealed class FileStreamAdapter : IPakReaderStream
@@ -71,6 +72,13 @@ public partial class MediaPakReader : RefCounted
         }
 
         public void ReadExactly(Span<byte> destination) => _stream.ReadExactly(destination);
+
+        public byte[] ReadBytes(int length)
+        {
+            byte[] bytes = new byte[length];
+            _stream.ReadExactly(bytes);
+            return bytes;
+        }
 
         public void Dispose() => _stream.Dispose();
     }
@@ -116,17 +124,24 @@ public partial class MediaPakReader : RefCounted
 
         public void ReadExactly(Span<byte> destination)
         {
-            if (_file == null)
-                throw new IOException("Media pack stream is disposed");
             if (destination.IsEmpty)
                 return;
-            byte[] chunk = _file.GetBuffer(destination.Length);
-            if (chunk.Length != destination.Length)
+            ReadBytes(destination.Length).AsSpan().CopyTo(destination);
+        }
+
+        public byte[] ReadBytes(int length)
+        {
+            if (_file == null)
+                throw new IOException("Media pack stream is disposed");
+            if (length <= 0)
+                return Array.Empty<byte>();
+            byte[] chunk = _file.GetBuffer(length);
+            if (chunk.Length != length)
             {
                 throw new EndOfStreamException(
-                    $"Unexpected EOF reading media pack: expected {destination.Length} bytes, got {chunk.Length}");
+                    $"Unexpected EOF reading media pack: expected {length} bytes, got {chunk.Length}");
             }
-            chunk.AsSpan().CopyTo(destination);
+            return chunk;
         }
 
         public void Dispose()
@@ -201,29 +216,29 @@ public partial class MediaPakReader : RefCounted
                     return false;
                 }
 
-                byte[] header = new byte[HeaderSize];
+                Span<byte> header = stackalloc byte[HeaderSize];
                 stream.ReadExactly(header);
-                if (!header.AsSpan(0, 8).SequenceEqual(Magic))
+                if (!header[..8].SequenceEqual(Magic))
                 {
                     _lastError = "media pack has bad magic";
                     return false;
                 }
-                ushort version = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(8, 2));
+                ushort version = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(8, 2));
                 if (version != 1)
                 {
                     _lastError = $"unsupported media pack version {version}";
                     return false;
                 }
-                ushort flags = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(10, 2));
+                ushort flags = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(10, 2));
                 if (flags != 0)
                 {
                     _lastError = $"unsupported media pack header flags 0x{flags:X4}";
                     return false;
                 }
 
-                uint count = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(12, 4));
-                ulong indexOffset = BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(16, 8));
-                ulong indexSize = BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(24, 8));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(12, 4));
+                ulong indexOffset = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(16, 8));
+                ulong indexSize = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(24, 8));
                 if (indexOffset < HeaderSize || (indexOffset & (DataAlignment - 1)) != 0)
                 {
                     _lastError = $"media pack index offset {indexOffset} is invalid";
@@ -245,9 +260,8 @@ public partial class MediaPakReader : RefCounted
                     return false;
                 }
 
-                byte[] index = new byte[(int)indexSize];
                 stream.Position = (long)indexOffset;
-                stream.ReadExactly(index);
+                byte[] index = stream.ReadBytes((int)indexSize);
                 XorBytes(index, indexOffset);
                 if (!ParseIndex(index, count, indexOffset, out string parseError))
                 {
@@ -353,9 +367,8 @@ public partial class MediaPakReader : RefCounted
 
             try
             {
-                byte[] bytes = new byte[(int)entry.Size];
                 _file.Position = (long)entry.Offset;
-                _file.ReadExactly(bytes);
+                byte[] bytes = _file.ReadBytes((int)entry.Size);
                 XorBytes(bytes, entry.Offset);
                 uint actual = Crc32(bytes);
                 if (actual != entry.Crc)

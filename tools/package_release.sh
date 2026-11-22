@@ -311,7 +311,8 @@ def sha256_file(path: Path) -> str:
 sha_lines = [f"{sha256_file(zip_path)}  {zip_path.name}"]
 exe = out_dir / "game/Lwsmf.exe"
 pak = out_dir / "work/all/media.pak"
-for item in (exe, pak):
+pak_hd = out_dir / "work/all/media_hd.pak"
+for item in (exe, pak, pak_hd):
     if item.is_file():
         sha_lines.append(f"{sha256_file(item)}  {out_dir.name}/{item.relative_to(out_dir).as_posix()}")
 sha_file = zip_path.parent / "SHA256SUMS.txt"

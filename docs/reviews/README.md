@@ -8,6 +8,8 @@
 
 | 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
 | :--- | :---: | :--- | :--- |
+| [acceptance_audit_89fc8f5_remediation_2026_11_23.md](acceptance_audit_89fc8f5_remediation_2026_11_23.md) | 2026-11-23 | **`89fc8f5` 验收审查问题收口与回归验证报告** | 完成 6 项新增 P1、14 项 P2、12 项 P3 与残余项修复，记录 P1-6/P2-11 保留原设计依据，双模式门禁与 Python/Rust 单测全绿 |
+| [acceptance_audit_89fc8f5_2026_11_23.md](acceptance_audit_89fc8f5_2026_11_23.md) | 2026-11-23 | **Commit `89fc8f5` 整改验收与增量回归审查报告** | 复核 67 项基线（59 全通过 / 7 部分 / 1 未通过）并提出 32 项增量改进清单 |
 | [sister_ux_multiplatform_adaptation_2026_11_22.md](sister_ux_multiplatform_adaptation_2026_11_22.md) | 2026-11-22 | **姊妹作交互优化与多平台适配落地报告** | 落地移动端零拷贝与分级缓存、iOS 路径/退出合规、触控手势与 7 级返回、存单确认/跨端 `.zip`/`.sav` 互导与 PE 中文本地化，双模式门禁全绿（见 `D-83`） |
 | [full_static_audit_59268ac_remediation_2026_11_22.md](full_static_audit_59268ac_remediation_2026_11_22.md) | 2026-11-22 | **`59268ac` 全量静态审查 67 项缺陷修复闭环报告** | 4 P0 / 24 P1 / 26 P2 / 13 P3 收口，无头 38 项与 OpenGL3 双门禁全绿（见 `D-82`） |
 | [full_static_audit_59268ac_2026_11_22.md](full_static_audit_59268ac_2026_11_22.md) | 2026-11-22 | **Commit `59268ac` 全仓库静态代码审查报告** | 识别 4 P0 / 24 P1 / 26 P2 / 13 P3 缺陷与 D-01～D-08 残余缺口 |

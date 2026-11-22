@@ -41,11 +41,20 @@ jobs:
       - name: Repo Privacy Audit
         run: python tools/release_audit.py --repo-scan
 
+      - name: Mobile Tools Compile Check
+        run: python -m py_compile tools/mobile/windows_pe.py tools/mobile/android_data.py tools/mobile/env_check.py tools/mobile/export_preset_template.py tools/mobile/ios_inject_data.py tools/mobile/test_mobile_tools.py tools/verify_hd_manifest.py tools/upscale_assets.py tools/release_audit.py
+
+      - name: Mobile Tools CLI Smoke
+        run: python tools/mobile/windows_pe.py --help
+
       - name: Mobile Packaging Tools Unit Tests
-        run: |
-          python -m py_compile tools/mobile/windows_pe.py tools/mobile/android_data.py tools/mobile/env_check.py tools/mobile/export_preset_template.py tools/mobile/ios_inject_data.py tools/mobile/test_mobile_tools.py
-          python tools/mobile/windows_pe.py --help
-          python tools/mobile/test_mobile_tools.py
+        run: python tools/mobile/test_mobile_tools.py
+
+      - name: Install HD Tool Dependencies
+        run: python -m pip install --disable-pip-version-check pillow numpy
+
+      - name: HD Pipeline Tools Unit Tests
+        run: python tools/test_hd_tools.py
 
       - name: Release Script Syntax Check
         shell: bash
@@ -84,3 +93,6 @@ jobs:
 
       - name: Offline Unit Tests
         run: cargo test --workspace --lib --no-fail-fast
+
+      - name: Tileset Offline Integration Tests
+        run: cargo test -p wolf-format --test tileset

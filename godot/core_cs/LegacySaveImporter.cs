@@ -583,7 +583,7 @@ public sealed class LegacySaveImporter
                 if (i + len > bytes.Length) len = bytes.Length - i;
                 for (int k = 1; k < len; k++)
                 {
-                    if (bytes[i + k] == 0 || bytes[i + k] == 1)
+                    if ((bytes[i + k] & 0xC0) != 0x80)
                     {
                         len = k;
                         break;

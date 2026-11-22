@@ -5,6 +5,7 @@ extends Control
 ## Mobile Quick Drawer, and F2/F3 HUDs.
 
 signal backlog_closed
+signal drawer_closed
 signal title_confirmed
 signal title_cancelled
 signal fault_export_requested
@@ -527,7 +528,7 @@ func _build_fault_modal(has_save: bool) -> void:
 	restart_button.pressed.connect(func() -> void: fault_restart_requested.emit())
 	buttons.add_child(restart_button)
 	var close_button := Button.new()
-	close_button.text = "隐藏（Esc/F12 重开）"
+	close_button.text = "隐藏（Esc/F12/返回键 重开）"
 	close_button.pressed.connect(func() -> void:
 		_fault_root.visible = false
 		fault_modal_closed.emit()
@@ -1101,7 +1102,7 @@ func close_drawer() -> void:
 	if _drawer_root != null:
 		_drawer_root.visible = false
 	_layout_drawer()
-	backlog_closed.emit()
+	drawer_closed.emit()
 
 
 func toggle_drawer() -> void:
@@ -1506,6 +1507,7 @@ func _open_file_dialog(mode: String, filters: PackedStringArray, default_name: S
 		_file_dialog = FileDialog.new()
 		_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
 		_file_dialog.use_native_dialog = true
+		_file_dialog.theme = theme
 		_file_dialog.file_selected.connect(_on_transfer_file_selected)
 		add_child(_file_dialog)
 	_file_dialog_mode = mode

@@ -28,7 +28,7 @@ public sealed class Variables
     {
         if (index < 0 || index >= MaxSlots) return;
         while (index >= _strings.Count) _strings.Add("");
-        _strings[index] = value;
+        _strings[index] = value ?? "";
     }
 
     public int GetSys(int index) => index >= 0 && index < _sysNums.Count ? _sysNums[index] : 0;
@@ -70,7 +70,7 @@ public sealed class Variables
     {
         if (index < 0 || index >= MaxSlots) return;
         while (index >= _sysStrings.Count) _sysStrings.Add("");
-        _sysStrings[index] = value;
+        _sysStrings[index] = value ?? "";
     }
 }
 
@@ -110,7 +110,7 @@ public sealed class SelfVars
     {
         if (index >= 0 && index < TotalSlots)
         {
-            _strings[index] = value;
+            _strings[index] = value ?? "";
         }
     }
 

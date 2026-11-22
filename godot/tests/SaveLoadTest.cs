@@ -671,6 +671,31 @@ public partial class SaveLoadTest : Node
         refProbe.Instances[0] = new SavedInstance { Id = 1, EventId = 1, Kind = "ce", WaitKind = (int)WaitStateKind.Child, WaitChild = 1 };
         Check(SaveCodec.FromJson(SaveCodec.ToJson(refProbe)) == null,
             "self-referential WaitChild must be rejected");
+        refProbe.Instances[0] = new SavedInstance { Id = 1, EventId = 1, Kind = "ce", WaitKind = (int)WaitStateKind.Child, WaitChild = 0 };
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(refProbe)) == null,
+            "zero WaitChild must be rejected");
+        refProbe.Instances.Clear();
+        refProbe.Instances.Add(new SavedInstance { Id = 1, EventId = 1, Kind = "ce", WaitKind = (int)WaitStateKind.Child, WaitChild = 77 });
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(refProbe)) != null,
+            "missing WaitChild must load so GameSession.ClearMissingChildWaits can release legacy callers");
+        Check(SaveCodec.FromJson("{\"schema\":\"" + "\uD800" + "\"}") == null,
+            "a lone UTF-16 surrogate must fail validation instead of throwing");
+        Check(!GameSession.ValidateSaveJson("{\"schema\":\"lwsmf.save\",\"schema_version\":1,\"map_file\":\"" + "\uD800" + "\"}", out string surrogateErr)
+              && surrogateErr.Length > 0,
+            "ValidateSaveJson must reject lone UTF-16 surrogates without throwing");
+        Check(!GameSession.ValidateSaveJson(new string('\uD800', SaveCodec.MaxSaveBytes), out string bigSurrogateErr)
+              && bigSurrogateErr.Length > 0,
+            "ValidateSaveJson must reject oversized lone UTF-16 surrogates without throwing");
+        Check(!GameSession.ValidateSaveJson(new string(' ', SaveCodec.MaxSaveBytes) + "{}", out string oversizeErr)
+              && oversizeErr.Length > 0,
+            "ValidateSaveJson must reject payloads above MaxSaveBytes before parsing");
+        var strVars = new Variables();
+        strVars.SetStr(1, null!);
+        strVars.SetSysStr(1, null!);
+        Check(strVars.GetStr(1) == "" && strVars.GetSysStr(1) == "", "SetStr/SetSysStr must coerce null to empty");
+        var selfBank = new SelfVars();
+        selfBank.SetStr(605, null!);
+        Check(selfBank.GetStr(605) == "", "SelfVars.SetStr must coerce null to empty");
 
         var cycleProbe = new SaveState { MapId = 1, MapFile = "Map001.mps" };
         cycleProbe.Instances.Add(new SavedInstance { Id = 1, ParentId = 2, EventId = 1, Kind = "ce" });

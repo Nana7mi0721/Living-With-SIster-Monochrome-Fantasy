@@ -2,6 +2,7 @@
 """Unit tests for LWSMF mobile packaging helpers (tools/mobile/*)."""
 from __future__ import annotations
 
+import argparse
 import json
 import stat
 import struct
@@ -79,7 +80,7 @@ def _build_synthetic_ipa(ipa_path: Path, extra_member: str | None = None) -> Non
             zf.writestr(extra_member, b"bad")
 
 
-def _build_synthetic_pe32_plus(trailing_pck: bytes = b"") -> bytes:
+def _build_synthetic_pe32_plus(trailing_pck: bytes = b"", lang_ids: tuple[int, ...] = (0x0409,)) -> bytes:
     """Build a minimal valid PE32+ executable with RT_VERSION (0x0409) + trailing bytes."""
     ffi = bytearray(52)
     struct.pack_into("<IIIIII", ffi, 0, windows_pe.VS_FFI_SIGNATURE, 0x00010000, 0x00000001, 0x00000000, 0x00000001, 0x00000000)
@@ -121,12 +122,12 @@ def _build_synthetic_pe32_plus(trailing_pck: bytes = b"") -> bytes:
     vs_blob = windows_pe.serialize_version_tree(vs_root)
 
     # Resource layout inside .rsrc (RVA 0x2000):
-    # lvl1 dir (24B) + lvl2 dir (24B) + lvl3 dir (24B) + data_entry (16B) + vs_blob
+    # lvl1 dir (24B) + lvl2 dir (24B) + lvl3 dir (16B + 8B per language) + data_entry (16B) + vs_blob
     lvl1_off = 0
     lvl2_off = 24
     lvl3_off = 48
-    data_entry_off = 72
-    vs_off = 88
+    data_entry_off = lvl3_off + 16 + 8 * len(lang_ids)
+    vs_off = data_entry_off + 16
     rsrc_rva = 0x2000
     rsrc_buf = bytearray(vs_off + len(vs_blob))
 
@@ -136,8 +137,9 @@ def _build_synthetic_pe32_plus(trailing_pck: bytes = b"") -> bytes:
     struct.pack_into("<IIHHHH", rsrc_buf, lvl2_off, 0, 0, 0, 0, 0, 1)
     struct.pack_into("<II", rsrc_buf, lvl2_off + 16, 1, 0x80000000 | lvl3_off)
 
-    struct.pack_into("<IIHHHH", rsrc_buf, lvl3_off, 0, 0, 0, 0, 0, 1)
-    struct.pack_into("<II", rsrc_buf, lvl3_off + 16, 0x0409, data_entry_off)
+    struct.pack_into("<IIHHHH", rsrc_buf, lvl3_off, 0, 0, 0, 0, 0, len(lang_ids))
+    for index, lang in enumerate(lang_ids):
+        struct.pack_into("<II", rsrc_buf, lvl3_off + 16 + index * 8, lang, data_entry_off)
 
     struct.pack_into("<IIII", rsrc_buf, data_entry_off, rsrc_rva + vs_off, len(vs_blob), 0, 0)
     rsrc_buf[vs_off : vs_off + len(vs_blob)] = vs_blob
@@ -401,6 +403,35 @@ class MobileToolsTest(unittest.TestCase):
             real_exe.write_bytes(pe_bytes)
             with mock.patch.object(Path, "is_symlink", return_value=True):
                 self.assertEqual(windows_pe.main([str(real_exe)]), 1)
+
+    def test_windows_pe_parse_lang_id_decimal_and_hex(self) -> None:
+        self.assertEqual(windows_pe.parse_lang_id("2052"), 0x0804)
+        self.assertEqual(windows_pe.parse_lang_id("0x0804"), 0x0804)
+        self.assertEqual(windows_pe.parse_lang_id("1033"), 0x0409)
+        self.assertEqual(windows_pe.parse_lang_id("0804"), 804)
+        with self.assertRaises(argparse.ArgumentTypeError):
+            windows_pe.parse_lang_id("0x10000")
+        with self.assertRaises(argparse.ArgumentTypeError):
+            windows_pe.parse_lang_id("abcd")
+
+    def test_windows_pe_rejects_resource_past_end_of_file(self) -> None:
+        pe_bytes = _build_synthetic_pe32_plus()
+        cut = pe_bytes[:-4]
+        pe = windows_pe.parse_pe(cut)
+        with self.assertRaises(windows_pe.PEFormatError):
+            windows_pe.find_version_resources(cut, pe)
+
+    def test_windows_pe_rejects_duplicate_language_entries(self) -> None:
+        same = _build_synthetic_pe32_plus(lang_ids=(0x0409, 0x0409))
+        with self.assertRaises(windows_pe.PEFormatError):
+            windows_pe.find_version_resources(same, windows_pe.parse_pe(same))
+
+        both = _build_synthetic_pe32_plus(lang_ids=(0x0409, 0x0804))
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = Path(tmp) / "Lwsmf.exe"
+            exe.write_bytes(both)
+            self.assertEqual(windows_pe.main([str(exe)]), 1)
+            self.assertEqual(exe.read_bytes(), both)
 
 
 if __name__ == "__main__":

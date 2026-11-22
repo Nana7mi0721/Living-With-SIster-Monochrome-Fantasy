@@ -542,35 +542,55 @@ func _draw_face_on(target: CanvasItem) -> void:
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.75, 0.78, 0.85))
 
 
+## Compute cursor destination rect, frame count, and source region in texture pixels.
+static func cursor_layout(tex_size: Vector2, art_scale: float, bubble: Rect2, cursor_time: float) -> Dictionary:
+	var scale := maxf(art_scale, 1.0)
+	var cw := tex_size.x / scale
+	var ch := tex_size.y / scale
+	var lw := maxi(1, int(roundf(cw)))
+	var lh := maxi(1, int(roundf(ch)))
+	var frame_count := 1
+	var fh := ch
+	if ch > cw * 1.5 and lh % 6 == 0 and lh % lw != 0:
+		frame_count = 6
+		fh = floorf(ch / 6.0)
+	elif ch > cw * 1.5 and lh % lw == 0:
+		frame_count = maxi(1, lh / lw)
+		fh = cw
+	elif ch > 15.0 * 1.5 and lh % 15 == 0:
+		frame_count = maxi(1, lh / 15)
+		fh = 15.0
+	var y_offset := 2.0
+	var bob := sin(cursor_time * 4.5) * 1.5 if frame_count == 1 else 0.0
+	var dst_pos := Vector2(bubble.position.x + (bubble.size.x - cw) * 0.5, bubble.end.y - fh + y_offset + bob)
+	var frame := int(cursor_time * 8.0) % frame_count if frame_count > 1 else 0
+	var src_fh := tex_size.y / float(frame_count)
+	return {
+		"dst_rect": Rect2(dst_pos, Vector2(cw, fh)),
+		"src_rect": Rect2(0.0, float(frame) * src_fh, tex_size.x, src_fh),
+		"frame_count": frame_count,
+	}
+
+
 func _draw_cursor(bubble: Rect2) -> void:
 	var cursor: Texture2D = null
+	var cursor_path := ""
 	if assets != null:
 		cursor = assets.texture(CURSOR_TEXTURE)
-		if cursor == null:
-			cursor = assets.texture(CURSOR_FALLBACK_TEXTURE)
-	if cursor != null:
-		var cw := float(cursor.get_width())
-		var ch := float(cursor.get_height())
-		var frame_count := 1
-		var fh := ch
-		if ch > cw * 1.5 and int(ch) % 6 == 0 and int(ch) % int(cw) != 0:
-			frame_count = 6
-			fh = floorf(ch / 6.0)
-		elif ch > cw * 1.5 and int(ch) % int(cw) == 0:
-			frame_count = maxi(1, int(ch / cw))
-			fh = cw
-		elif ch > 15.0 * 1.5 and int(ch) % 15 == 0:
-			frame_count = maxi(1, int(ch / 15.0))
-			fh = 15.0
-		var y_offset := 2.0
-		var bob := sin(_cursor_time * 4.5) * 1.5 if frame_count == 1 else 0.0
-		var dst_pos := Vector2(bubble.position.x + (bubble.size.x - cw) * 0.5, bubble.end.y - fh + y_offset + bob)
-		if frame_count > 1:
-			var frame := int(_cursor_time * 8.0) % frame_count
-			var src := Rect2(0.0, float(frame) * fh, cw, fh)
-			draw_texture_rect_region(cursor, Rect2(dst_pos, Vector2(cw, fh)), src)
+		if cursor != null:
+			cursor_path = CURSOR_TEXTURE
 		else:
-			draw_texture(cursor, dst_pos)
+			cursor = assets.texture(CURSOR_FALLBACK_TEXTURE)
+			if cursor != null:
+				cursor_path = CURSOR_FALLBACK_TEXTURE
+	if cursor != null:
+		var art_scale := assets.hd_scale(cursor_path) if assets != null and not cursor_path.is_empty() else 1.0
+		var layout := cursor_layout(cursor.get_size(), art_scale, bubble, _cursor_time)
+		var dst_rect: Rect2 = layout["dst_rect"]
+		if int(layout["frame_count"]) > 1:
+			draw_texture_rect_region(cursor, dst_rect, layout["src_rect"])
+		else:
+			draw_texture_rect(cursor, dst_rect, false)
 	else:
 		var pos := Vector2(bubble.position.x + bubble.size.x * 0.5 - 6.0, bubble.end.y - 14.0)
 		draw_colored_polygon(PackedVector2Array([

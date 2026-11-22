@@ -64,6 +64,8 @@ var hd_pak = null
 var _hd_entries: Dictionary = {}
 var _hd_basenames: Dictionary = {}
 var _hd_basename_rank: Dictionary = {}
+var _hd_failed: Dictionary = {}             # HD pack path -> true when it failed to decode
+var _hd_verified: Dictionary = {}           # HD pack path -> true once it decoded
 var _cache: Dictionary = {}                 # normalized key -> Resource
 var _sizes: Dictionary = {}                 # normalized key -> bytes
 var _lru: Array[String] = []                # oldest first
@@ -83,6 +85,14 @@ static func platform_budget_bytes(
 	return DEFAULT_BUDGET_BYTES
 
 
+static func default_hd_enabled(
+		is_android: bool = OS.has_feature("android"),
+		is_ios: bool = OS.has_feature("ios"),
+		is_mobile: bool = OS.has_feature("mobile")
+	) -> bool:
+	return not (is_android or is_ios or is_mobile)
+
+
 func _init(p_root: String = "") -> void:
 	_explicit_root = p_root != ""
 	root_dir = p_root if _explicit_root else default_root()
@@ -90,8 +100,7 @@ func _init(p_root: String = "") -> void:
 	var is_ios := OS.has_feature("ios")
 	var is_mobile := OS.has_feature("mobile")
 	budget_bytes = platform_budget_bytes(is_android, is_ios, is_mobile)
-	if is_android or is_ios or is_mobile:
-		hd_enabled = false
+	hd_enabled = default_hd_enabled(is_android, is_ios, is_mobile)
 	_index()
 	_open_media_pack()
 	_open_hd_pack()
@@ -409,6 +418,8 @@ func _open_hd_pack() -> void:
 	_hd_entries.clear()
 	_hd_basenames.clear()
 	_hd_basename_rank.clear()
+	_hd_failed.clear()
+	_hd_verified.clear()
 	if not hd_enabled:
 		return
 	var candidates: Array[String] = []
@@ -433,25 +444,34 @@ func _open_hd_pack() -> void:
 			push_warning("AssetDB: HD pack %s has an unreadable manifest" % candidate)
 			reader.Close()
 			continue
-		var entries: Dictionary = parsed.get("entries", {})
-		for raw_key in entries.keys():
-			var item = entries[raw_key]
-			if typeof(item) != TYPE_DICTIONARY:
-				continue
-			var path := str(item.get("path", ""))
-			var scale := float(item.get("scale", 1.0))
-			if path.is_empty() or scale <= 1.0:
-				continue
-			var key := _norm_key(str(raw_key))
-			_hd_entries[key] = {"path": path, "scale": scale}
-			var bare := key.get_file().get_basename()
-			var rank := _dir_rank(key)
-			if not _hd_basenames.has(bare) or rank < int(_hd_basename_rank.get(bare, 1 << 30)):
-				_hd_basenames[bare] = key
-				_hd_basename_rank[bare] = rank
+		var entries_value = parsed.get("entries", {})
+		if typeof(entries_value) != TYPE_DICTIONARY:
+			push_warning("AssetDB: HD pack %s manifest has no entries table" % candidate)
+			reader.Close()
+			continue
+		var entries: Dictionary = entries_value
+		_index_hd_entries(entries)
 		hd_pak = reader
 		hd_pak_path = candidate
 		return
+
+
+func _index_hd_entries(entries: Dictionary) -> void:
+	for raw_key in entries.keys():
+		var item = entries[raw_key]
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var path := str(item.get("path", ""))
+		var scale := float(item.get("scale", 1.0))
+		if path.is_empty() or scale <= 1.0:
+			continue
+		var key := _norm_key(str(raw_key))
+		_hd_entries[key] = {"path": path, "scale": scale}
+		var bare := key.get_file().get_basename()
+		var rank := _dir_rank(key)
+		if not _hd_basenames.has(bare) or rank < int(_hd_basename_rank.get(bare, 1 << 30)):
+			_hd_basenames[bare] = key
+			_hd_basename_rank[bare] = rank
 
 
 func hd_available() -> bool:
@@ -470,31 +490,71 @@ func hd_entry_count() -> int:
 	return _hd_entries.size()
 
 
+## True when a 1x file or pack entry exists for this exact logical path (extension variants
+## included); HD basename fallbacks must not override it with art from another folder.
+func _has_exact_1x(key: String) -> bool:
+	if _files.has(key) or _media_files.has(key):
+		return true
+	var base := key.get_basename()
+	for ext in TEXTURE_EXTENSIONS:
+		if _files.has(base + ext) or _media_files.has(base + ext):
+			return true
+	return false
+
+
 ## Resolves a logical path to its HD entry, mirroring resolve()'s alias and
-## basename fallbacks. Empty when the path has no 2x art.
+## basename fallbacks. Empty when the path has no usable 2x art.
 func _hd_entry(logical: String) -> Dictionary:
 	var key := _norm_key(logical)
 	if key.is_empty() or key.begins_with("save/"):
 		return {}
+	var entry := _hd_entry_unchecked(key)
+	if entry.is_empty() or _hd_failed.has(str(entry.get("path", ""))):
+		return {}
+	return entry
+
+
+func _hd_entry_unchecked(key: String) -> Dictionary:
 	var direct: Dictionary = _hd_entries.get(key, {})
 	if not direct.is_empty():
 		return direct
+	var base := key.get_basename()
+	for ext in TEXTURE_EXTENSIONS:
+		var variant: Dictionary = _hd_entries.get(base + ext, {})
+		if not variant.is_empty():
+			return variant
+	if _has_exact_1x(key):
+		return {}
 	if key.begins_with("picture/word_effect"):
-		var alias: Dictionary = _hd_entries.get("hword/" + key.get_file(), {})
+		var alias_key := "hword/" + key.get_file()
+		var alias: Dictionary = _hd_entries.get(alias_key, {})
 		if not alias.is_empty():
 			return alias
+		var alias_base := alias_key.get_basename()
+		for ext in TEXTURE_EXTENSIONS:
+			var alias_variant: Dictionary = _hd_entries.get(alias_base + ext, {})
+			if not alias_variant.is_empty():
+				return alias_variant
+		if _has_exact_1x(alias_key):
+			return {}
 	var bare := key.get_file().get_basename()
 	if _hd_basenames.has(bare):
 		return _hd_entries.get(_hd_basenames[bare], {})
 	return {}
 
 
-## Logical->texture scale factor for the layout code: 2.0 when this path has
-## 2x art, 1.0 otherwise.
+## Logical->texture scale factor for the layout code: the HD ratio when this path decodes
+## from 2x art, 1.0 otherwise. A not-yet-decoded HD entry is decoded once here so a corrupt
+## HD file reports the 1x fallback's scale.
 func hd_scale(logical: String) -> float:
 	var entry := _hd_entry(logical)
 	if entry.is_empty():
 		return 1.0
+	if not _hd_verified.has(str(entry.get("path", ""))):
+		texture(logical)
+		entry = _hd_entry(logical)
+		if entry.is_empty():
+			return 1.0
 	return float(entry.get("scale", 1.0))
 
 
@@ -504,12 +564,18 @@ func hd_path(logical: String) -> String:
 
 
 func _image_from_hd(path: String) -> Image:
-	if hd_pak == null:
+	if path.is_empty() or hd_pak == null:
 		return null
 	var bytes = hd_pak.Read(path)
-	if bytes == null:
-		return null
-	return _image_from_bytes(bytes, path.get_extension())
+	var image: Image = null
+	if bytes != null:
+		image = _image_from_bytes(bytes, path.get_extension())
+	if image == null:
+		_hd_verified.erase(path)
+		_hd_failed[path] = true
+	else:
+		_hd_verified[path] = true
+	return image
 
 
 func _bytes_from_media(path: String) -> PackedByteArray:

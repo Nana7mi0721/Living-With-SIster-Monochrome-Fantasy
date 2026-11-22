@@ -280,9 +280,10 @@ public static class SaveCodec
 
     public static SaveState? FromJson(string json)
     {
-        if (string.IsNullOrEmpty(json) || StrictUtf8.GetByteCount(json) > MaxSaveBytes) return null;
+        if (string.IsNullOrEmpty(json)) return null;
         try
         {
+            if (StrictUtf8.GetByteCount(json) > MaxSaveBytes) return null;
             var state = JsonSerializer.Deserialize<SaveState>(json, Options);
             if (state == null) return null;
             if (state.Schema != SaveState.SchemaName) return null;
@@ -297,6 +298,10 @@ public static class SaveCodec
             return null;
         }
         catch (NotSupportedException)
+        {
+            return null;
+        }
+        catch (EncoderFallbackException)
         {
             return null;
         }

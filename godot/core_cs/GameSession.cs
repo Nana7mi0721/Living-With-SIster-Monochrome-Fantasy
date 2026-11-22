@@ -143,6 +143,9 @@ public sealed class GameSession
     public int LeaderY => _leaderY;
     public int Facing => _facing;
     public int Frames { get; private set; }
+
+    /// <summary>Non-fatal data loss reported by the last successful slot import; empty when nothing was dropped.</summary>
+    public string LastImportNotice { get; private set; } = "";
     public bool HasChoices => _hasChoices;
     public bool ChoiceAllowsCancel { get; private set; } = true;
     public bool MessageOpen => _messageOpen;
@@ -226,7 +229,7 @@ public sealed class GameSession
         _vm.ResetSessionState();
         _vm.ResetDiagnostics();
         _vm.Vm.CommonSelf.Clear();
-        _battleWiring.Reset();
+        ResetTransientSessionState();
         _map = null;
         _mapRuntime = null;
         _vm.Map = null;
@@ -234,16 +237,6 @@ public sealed class GameSession
         _leaderX = 0;
         _leaderY = 0;
         _facing = 2;
-        _messageOpen = false;
-        _hasChoices = false;
-        ChoiceAllowsCancel = true;
-        _actionPressed = false;
-        _pendingLoad = false;
-        _pendingGameLoad = null;
-        _pendingSystemLoads.Clear();
-        _teleports.Clear();
-        _view.HideMessage();
-        _view.HideChoices();
         _view.ClearPictures();
         _vm.Vm.CreateInstance(title);
         _started = true;
@@ -1017,19 +1010,7 @@ public sealed class GameSession
     private bool ApplyLoadedState(SaveState state)
     {
         _vm.StopAll();
-        _vm.Vm.ResetInputPermissions();
-        _vm.ResetDialogueState();
-        _battleWiring.Reset();
-        _messageOpen = false;
-        _hasChoices = false;
-        ChoiceAllowsCancel = true;
-        _actionPressed = false;
-        _pendingLoad = false;
-        _pendingGameLoad = null;
-        _pendingSystemLoads.Clear();
-        _teleports.Clear();
-        _view.HideMessage();
-        _view.HideChoices();
+        ResetTransientSessionState();
         _view.ClearPictures();
         _vm.Map = null;
         _mapRuntime = null;
@@ -1095,6 +1076,11 @@ public sealed class GameSession
         }
         try
         {
+            if (new System.Text.UTF8Encoding(false, true).GetByteCount(json) > SaveCodec.MaxSaveBytes)
+            {
+                error = $"save JSON exceeds {SaveCodec.MaxSaveBytes} bytes";
+                return false;
+            }
             using JsonDocument doc = JsonDocument.Parse(json);
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
             {
@@ -1115,7 +1101,7 @@ public sealed class GameSession
                 return false;
             }
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or ArgumentException or System.Text.EncoderFallbackException)
         {
             error = "malformed save JSON: " + ex.Message;
             return false;
@@ -1135,6 +1121,7 @@ public sealed class GameSession
     /// </summary>
     public bool ImportRetailSaveToSlot(string savPath, int slot, out string error)
     {
+        LastImportNotice = "";
         if (slot < 1 || slot > 99)
         {
             error = $"save slot {slot} out of range (must be 1..99)";
@@ -1246,6 +1233,11 @@ public sealed class GameSession
         }
 
         error = "";
+        if (data.DatabaseCells.Count > 0)
+        {
+            LastImportNotice = $"{data.DatabaseCells.Count} retail database cells were not carried into the slot "
+                + "(the save format does not persist the op250 overlay)";
+        }
         return true;
     }
 
@@ -1309,15 +1301,10 @@ public sealed class GameSession
         LegacySaveImporter.RecoveredData data = slot.Recovered;
         _vm.StopAll();
         _vm.ResetSessionState();
-        _battleWiring.Reset();
+        ResetTransientSessionState();
         _vm.Map = null;
         _mapRuntime = null;
         _map = null;
-        _messageOpen = false;
-        _hasChoices = false;
-        _actionPressed = false;
-        _pendingLoad = false;
-        _teleports.Clear();
 
         Frames = (int)data.PlayTime.Frames;
         _leaderX = 0;
@@ -1363,10 +1350,10 @@ public sealed class GameSession
         return true;
     }
 
-    private void StartNewGameNow()
+    /// <summary>Drop queued loads/teleports, dialogue flags and front-end popups shared by every session restart.</summary>
+    private void ResetTransientSessionState()
     {
-        Phase = "newgame";
-        _vm.StopAll();
+        _vm.Vm.ResetInputPermissions();
         _vm.ResetDialogueState();
         _battleWiring.Reset();
         _messageOpen = false;
@@ -1379,11 +1366,25 @@ public sealed class GameSession
         _teleports.Clear();
         _view.HideMessage();
         _view.HideChoices();
+    }
+
+    private void StartNewGameNow()
+    {
+        Phase = "newgame";
+        _vm.StopAll();
+        // TitleMap initializes system paths and volume variables before teleporting to map 3;
+        // preserve Vm.Vars across ResetSessionState while clearing op250 DB overlays.
+        List<int> savedNums = _vm.Vm.Vars.SnapshotNums();
+        List<string> savedStrings = _vm.Vm.Vars.SnapshotStrings();
+        List<int> savedSysNums = _vm.Vm.Vars.SnapshotSysNums();
+        List<string> savedSysStrings = _vm.Vm.Vars.SnapshotSysStrings();
+        _vm.ResetSessionState();
+        _vm.Vm.Vars.Restore(savedNums, savedStrings, savedSysNums, savedSysStrings);
+        ResetTransientSessionState();
         // AutoEvents is session-scoped; StopAll does not clear its edge latch. Re-arming
         // here would replay event 38 and shift instance ids. A fresh engine boot
         // constructs a fresh scheduler instead.
         _vm.ResetDiagnostics();
-        _vm.Vm.ResetInputPermissions();
         _vm.Vm.CommonSelf.Clear();
         _vm.Map = null;
         _mapRuntime = null;
@@ -1485,7 +1486,7 @@ public sealed class GameSession
 
     private bool InferLegacyParallel(SavedInstance saved, Program program, IReadOnlyDictionary<int, SavedInstance> byId)
     {
-        if (program.RunCondition == 2) return true;
+        if (program.RunCondition == 2 || Array.IndexOf(AutoEvents.GatedCallOnly, program.Id) >= 0) return true;
         var seen = new HashSet<int> { saved.Id };
         int? parentId = saved.ParentId;
         while (parentId is int pid && seen.Add(pid) && byId.TryGetValue(pid, out SavedInstance? parent))
@@ -1500,7 +1501,11 @@ public sealed class GameSession
             else
             {
                 Program? parentProg = _vm.Vm.GetProgram(parent.EventId);
-                if (parentProg is { RunCondition: 2 }) return true;
+                if (parentProg is { RunCondition: 2 }
+                    || (parentProg != null && Array.IndexOf(AutoEvents.GatedCallOnly, parentProg.Id) >= 0))
+                {
+                    return true;
+                }
             }
             parentId = parent.ParentId;
         }

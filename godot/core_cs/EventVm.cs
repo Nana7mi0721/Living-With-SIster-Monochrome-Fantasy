@@ -1446,6 +1446,7 @@ public sealed class EventVm
                 }
                 case 174:
                     ReturnToTitleRequested = true;
+                    ResetTransitionState();
                     _freshInstanceIds.Clear();
                     _enteredInstanceIds.Clear();
                     _autoKeysDelivered.Clear();
@@ -1455,6 +1456,7 @@ public sealed class EventVm
                 case 175:
                     EndGameRequested = true;
                     Host.EndGame();
+                    ResetTransitionState();
                     _freshInstanceIds.Clear();
                     _enteredInstanceIds.Clear();
                     _autoKeysDelivered.Clear();
@@ -1698,6 +1700,7 @@ public sealed class EventVm
             {
                 _freshInstanceIds.Remove(other.Id);
                 _enteredInstanceIds.Remove(other.Id);
+                _autoKeysDelivered.Remove(other.Id);
             }
         }
         Instances.RemoveAll(other => doomed.Contains(other.Id));
@@ -1713,15 +1716,20 @@ public sealed class EventVm
     {
         EndGameRequested = false;
         ReturnToTitleRequested = false;
-        _transitionKind = 0;
-        _transitionFlags = 0;
-        _transitionPrepared = false;
-        TransitionPhase = 0;
+        ResetTransitionState();
         _runCursor = 0;
         _freshInstanceIds.Clear();
         _enteredInstanceIds.Clear();
         _autoKeysDelivered.Clear();
         Instances.Clear();
+    }
+
+    private void ResetTransitionState()
+    {
+        _transitionKind = 0;
+        _transitionFlags = 0;
+        _transitionPrepared = false;
+        TransitionPhase = 0;
     }
 
     /// <summary>Shared 498/176 logic: count down or jump back to the matching loop head.</summary>
@@ -1780,6 +1788,7 @@ public sealed class EventVm
     }
 
     public int EnteredInstanceCount => _enteredInstanceIds.Count;
+    internal int AutoKeysDeliveredCount => _autoKeysDelivered.Count;
     public const int PerInstanceFrameBudget = 50_000;
 
     public void RunInstances(ref int budget)

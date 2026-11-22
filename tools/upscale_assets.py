@@ -44,9 +44,9 @@ MAX_SOURCE_PIXELS = 4 * 1024 * 1024  # 2x area <= 16 MP => <= 64 MB RGBA8
 ENGINE_MIN_SIDE = 64
 WEBP_METHOD = 4          # method 6 costs ~5x the time for ~0.3% smaller files
 
-DEFAULT_ENGINE_DIR = Path(
-    r"D:\Program\Waifu2x-Extension-GUI\waifu2x-extension-gui\realcugan-ncnn-vulkan"
-)
+ENGINE_ENV = "LWsmf_REALCUGAN"
+DEFAULT_ENGINE_EXE = "realcugan-ncnn-vulkan_W2xEX.exe"
+OUTPUT_SUFFIXES = (".png", ".webp")
 
 # Directory -> denoise level. -1 keeps source lines, 0 is conservative, 1..3
 # trade detail for noise removal (the JPG backgrounds carry compression noise).
@@ -55,7 +55,6 @@ UI_DIRS = {
     "battleeffect", "cutin", "fog_background",
 }
 PICTURE_DIRS = {"picture", "enemygraphic"}
-ART_DIRS = {"cg", "hscene", "1.4.0", "dlc_data"}
 SKIP_DIRS = {"mapchip"}
 
 
@@ -65,8 +64,7 @@ def denoise_for(rel: Path) -> int:
         return -1
     if top in UI_DIRS:
         return 0
-    # JPG backgrounds used to run at n=1, but that erases 1px linework (visible
-    # smear on thin outlines); conservative denoise keeps compression noise low
+    # n=1 erases 1px linework on JPG backgrounds; n=0 keeps compression noise low
     # without flattening the art.
     return 0
 
@@ -94,6 +92,32 @@ def guard_reason(size: tuple[int, int]) -> str:
     return ""
 
 
+def resolve_engine_dir(cli_value: str, exe_name: str = DEFAULT_ENGINE_EXE) -> str:
+    """Pick the engine directory: CLI value, then environment, then ``PATH``; empty when unknown."""
+    if cli_value:
+        return cli_value
+    from_env = os.environ.get(ENGINE_ENV, "")
+    if from_env:
+        return from_env
+    found = shutil.which(exe_name)
+    return str(Path(found).resolve().parent) if found else ""
+
+
+def write_text_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def remove_stale_siblings(out_dir: Path, stem: str, keep: Path) -> None:
+    """Delete same-stem outputs in the other lossless format so a re-run never leaves orphans."""
+    for suffix in OUTPUT_SUFFIXES:
+        sibling = out_dir / f"{stem}{suffix}"
+        if sibling != keep:
+            sibling.unlink(missing_ok=True)
+
+
 def encode_best(image: Image.Image, out_dir: Path, stem: str) -> tuple[Path, int]:
     """Write a WebP-lossless candidate, plus PNG for small art where it may win."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -110,9 +134,7 @@ def encode_best(image: Image.Image, out_dir: Path, stem: str) -> tuple[Path, int
         candidates.append((png_path, png_path.stat().st_size))
 
     best = min(candidates, key=lambda pair: pair[1])
-    for candidate, _ in candidates:
-        if candidate != best[0]:
-            candidate.unlink(missing_ok=True)
+    remove_stale_siblings(out_dir, stem, best[0])
     return best
 
 
@@ -190,6 +212,7 @@ def record_encoded(
     if dest.exists():
         dest.unlink()
     shutil.move(str(produced), str(dest))
+    remove_stale_siblings(dest.parent, rel.stem, dest)
     size_bytes = dest.stat().st_size
     entries[rel.as_posix().lower()] = {
         "path": dest.relative_to(out_root).as_posix(),
@@ -293,8 +316,8 @@ def main() -> int:
     parser.add_argument("--root", default="work/retail_dat")
     parser.add_argument("--manifest", default="work/media_manifest.txt")
     parser.add_argument("--out", default="work/hd")
-    parser.add_argument("--engine-dir", default=os.environ.get("LWsmf_REALCUGAN", str(DEFAULT_ENGINE_DIR)))
-    parser.add_argument("--engine-exe", default="realcugan-ncnn-vulkan_W2xEX.exe")
+    parser.add_argument("--engine-dir", default="", help=f"Real-CUGAN directory (default: env {ENGINE_ENV}, then PATH)")
+    parser.add_argument("--engine-exe", default=DEFAULT_ENGINE_EXE)
     parser.add_argument("--models", default="models-pro")
     parser.add_argument("--limit", type=int, default=0, help="only the first N per group (pilot)")
     parser.add_argument("--dirs", default="", help="comma separated top-level dirs to include")
@@ -307,7 +330,11 @@ def main() -> int:
 
     root = Path(args.root)
     out_root = Path(args.out)
-    engine_dir = Path(args.engine_dir)
+    engine_dir_text = resolve_engine_dir(args.engine_dir, args.engine_exe)
+    if not engine_dir_text:
+        print(f"engine directory not set: pass --engine-dir, set {ENGINE_ENV}, or put {args.engine_exe} on PATH", file=sys.stderr)
+        return 2
+    engine_dir = Path(engine_dir_text)
     engine = engine_dir / args.engine_exe
     model_dir = engine_dir / args.models
     if not engine.exists():
@@ -385,7 +412,7 @@ def main() -> int:
 
     print(f"live images selected: {len(jobs)} engine + {len(cpu_jobs)} cpu | skipped by guards: {len(skipped)} | missing: {len(missing)}")
     if missing:
-        Path("work/out/hd_missing.txt").write_text("\n".join(missing), encoding="utf-8")
+        write_text_atomic(Path("work/out/hd_missing.txt"), "\n".join(missing))
     if args.dry_run:
         for rel, key in jobs[:20]:
             print(f"  {key}  {rel}")
@@ -419,6 +446,7 @@ def main() -> int:
     if cpu_jobs:
         print(f"[cpu] lanczos2x on {len(cpu_jobs)} thin/small asset(s)")
 
+    out_root.parent.mkdir(parents=True, exist_ok=True)
     stage_root = Path(tempfile.mkdtemp(prefix="hd_stage_", dir=str(out_root.parent)))
     try:
         groups: dict[str, list[Path]] = {}
@@ -447,8 +475,8 @@ def main() -> int:
                     with Image.open(source) as original:
                         mode = "RGBA" if "A" in original.getbands() else "RGB"
                         pixels = np.array(original.convert(mode), dtype=np.uint8)
-                        # 255-white pixels make this fp16 engine emit NaN/rainbow rows; 249 is
-                        # already too high for some RGBA CGs, 244 is the empirically safe cap.
+                        # 255-white pixels make this fp16 engine emit NaN/rainbow rows; the default
+                        # cap is 249 and LWsmf_HD_WHITE_CAP=244 is the safer value for RGBA CGs.
                         white_cap = int(os.environ.get("LWsmf_HD_WHITE_CAP", "249"))
                         pixels[..., :3] = np.minimum(pixels[..., :3], white_cap)
                         Image.fromarray(pixels, mode).save(target, format="PNG")
@@ -533,10 +561,8 @@ def main() -> int:
     for item in skipped:
         payload["entries"].pop(str(item["path"]).lower(), None)
     out_root.mkdir(parents=True, exist_ok=True)
-    manifest_file.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
-    Path("work/out/hd_skipped.json").write_text(
-        json.dumps(skipped, ensure_ascii=False, indent=1), encoding="utf-8"
-    )
+    write_text_atomic(manifest_file, json.dumps(payload, ensure_ascii=False, indent=1))
+    write_text_atomic(Path("work/out/hd_skipped.json"), json.dumps(skipped, ensure_ascii=False, indent=1))
     total = sum(int(entry.get("bytes", 0)) for entry in entries.values())
     print(f"HD_MANIFEST_OK entries={len(entries)} total={total / (1 << 20):.1f} MiB elapsed={time.time() - started:.0f}s")
     return 0
