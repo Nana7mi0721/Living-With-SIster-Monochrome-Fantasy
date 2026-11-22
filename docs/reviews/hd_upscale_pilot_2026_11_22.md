@@ -60,24 +60,32 @@
 
 ## 6. 全量产出
 
-<!-- MEASURED -->
+- 白名单图像 2,506 张，实际入选 2,421 张（跳过 85 张护栏项，缺失 0）：引擎 2,168 张，CPU Lanczos 253 张。
+- `work/hd`：2,421 个文件、**1,397.4 MiB**；`hd_manifest.json` 2,421 条，`verify_hd_manifest.py` 复检 `missing=0 mismatch=0 degraded=0 uncovered=0`（`opaque_alpha_dropped=4` 属已知恒 alpha 源）。
+- `media_hd.pak`：**1,464,087,236 B（约 1.36 GiB）**，2,421 entries，SHA-256 `e7093c71df9838c522af0b16256bc15c18e66bb6bcc9635b4e4a53508e1d3a62`。
+- 引擎分布：`realcugan/models-pro/n0` 1,816 张、`n-1` 352 张；最终回退 Lanczos 259 张（253 张 min 边 <64 的 CPU 项 + 6 张引擎不稳项）。
+- 全量耗时 3,010 s（约 50 分钟），编码速率约 38 张/分钟。
 
 ## 7. 踩坑与修复（均已复现）
 
 1. **GUI 不可作管线**：`settings.ini` 默认有损 Q96、压平目录、同名覆盖，且无 CLI。改用目录内 ncnn CLI。
 2. **min 边 <64 崩溃**：Real-CUGAN 对 18×18、606×35 输入报 `vkWaitForFences failed -4` / `0xC0000005`。管线对该类改走 Lanczos。
 3. **`-f webp` 坏图**：输出尺寸与 alpha 正常，但像素呈彩虹噪声。60 张抽样 25 张 MAE>40；同图改用 PNG 输出后 MAE 0.39。管线禁用引擎 WebP 直出。
-4. **纯白 NaN**：`tips_00.png` 等含大片 255 白的图层，即使 PNG 输出仍整图噪声；把 RGB 上限钳到 249 后连续 5 次输出 MAE 5.2，稳定。254/253/252 仍会复现，249 是实测安全阈值。
+4. **纯白 NaN**：`tips_00.png` 等含大片 255 白的图层，即使 PNG 输出仍整图噪声；把 RGB 上限钳到 249 后连续 5 次输出 MAE 5.2，稳定。254/253/252 仍会复现。后续全量又发现 249 并非普适阈值：部分 RGBA CG（如 `DLC_data/dlc_imouto10_01.png`）在 249 下仍输出彩虹噪声，降到 245 即恢复（MAE 2.7），最终对 13 张复检项改用 244/238 局部重跑，避免全库压暗高光。
 5. **批处理线程竞争**：`-j 2:2:2` 批量运行时部分图会偶发同类噪声；改 `-j 1:1:1` 并保留 MAE 兜底。
-6. **Alpha 丢弃误判**：4 张源图 alpha 恒 255，引擎输出无 alpha 属正常；校验器按源 alpha 极值区分，不记为降级。
+6. **长批次静默劣化**：同一引擎进程连续处理超过约 126 张后，输出开始整图彩虹噪声（尺寸/alpha 均正常，MAE 100+）；管线改为 **每 48 张重启引擎**，并提供 `--retry-fallback` 对已落盘坏项逐张重跑。
+7. **Alpha 丢弃误判**：4 张源图 alpha 恒 255，引擎输出无 alpha 属正常；校验器按源 alpha 极值区分，不记为降级。
 
 ## 8. 验收
 
-<!-- GATES -->
+- `dotnet build godot/Lwsmf.csproj -c Release`：0 warning / 0 error。
+- 38 项 Godot headless 门禁（带最终 `media_hd.pak`）：`GODOT_GATE_OK elapsed=92s`，含 `HD_PACK_TEST_OK`、`PICTURE_STATE_TEST_OK checks=123`。
+- 渲染门禁：OpenGL3、2048×1152 窗口、120 帧无 ERROR；`PERFORMANCE_FRAME_OK fps=143.7`。
+- 视觉回归：1×（1024×576）与 2×（2048×1152 + HD 包）各 6 个场景，`VISUAL_CONTACT_SHEET_OK count=6`，`unresolved=0`；2× 截图内容铺满 2048×1152，文字与九宫格边框为原生 2× 渲染，无拉伸糊边。对比图：`work/out/visual_1x|visual_2x/visual_contact_sheet.png`、`work/out/compare_03_retail_save01_bedroom.png`。
 
 ## 9. 边界与未做
 
-- 253 张小图（含 18×18 九宫格、30×120 字效）走 CPU Lanczos，未做 SR；这是引擎最小边限制下的取舍。
+- 253 张小图（含 18×18 九宫格、30×120 字效）走 CPU Lanczos，未做 SR；另有 6 张引擎不稳项（`CharaChip/cursor.png` 与 5 张 1240×310 的 command_cutin/eyecatch）也回退 Lanczos，合计 259 张，占 10.7%。
 - 85 张被护栏跳过（含 `MapChip/` 54 张、超大图层），运行时按 1× 回退。
 - 未做 PlayOverlays 图形菜单开关，当前开关为 `user://display_settings.cfg` 的 `display/hd_textures` 与 `LWsmf_HD_PAK`。
 - HD 素材与对比图不入库；仓库只保留脚本、清单与文档。
