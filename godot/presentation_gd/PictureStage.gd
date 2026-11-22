@@ -712,7 +712,15 @@ func _hit_rect(number: int) -> Rect2:
 		position -= (next_size - size) * 0.5
 		size = next_size
 	position += _PictureEffects.effect_offset(state)
-	return Rect2(position, size)
+	var rect := Rect2(position, size)
+	# Widen save/load page arrows symmetrically around their center for comfortable touch/pointer hits.
+	if (number == 12004 or number == 12005) and (rect.size.x > 0.0 or rect.size.y > 0.0):
+		var target_w := maxf(rect.size.x, 44.0)
+		var target_h := maxf(rect.size.y, 64.0)
+		var delta := Vector2(target_w - rect.size.x, target_h - rect.size.y)
+		rect.position -= delta * 0.5
+		rect.size = Vector2(target_w, target_h)
+	return rect
 
 
 ## Queue/track mode: maintain slot state and hit boxes without instantiating Control nodes.

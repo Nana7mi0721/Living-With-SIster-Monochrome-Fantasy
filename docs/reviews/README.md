@@ -8,6 +8,7 @@
 
 | 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
 | :--- | :---: | :--- | :--- |
+| [sister_ux_multiplatform_adaptation_2026_11_22.md](sister_ux_multiplatform_adaptation_2026_11_22.md) | 2026-11-22 | **姊妹作交互优化与多平台适配落地报告** | 落地移动端零拷贝与分级缓存、iOS 路径/退出合规、触控手势与 7 级返回、存单确认/跨端 `.zip`/`.sav` 互导与 PE 中文本地化，双模式门禁全绿（见 `D-83`） |
 | [full_static_audit_59268ac_remediation_2026_11_22.md](full_static_audit_59268ac_remediation_2026_11_22.md) | 2026-11-22 | **`59268ac` 全量静态审查 67 项缺陷修复闭环报告** | 4 P0 / 24 P1 / 26 P2 / 13 P3 收口，无头 38 项与 OpenGL3 双门禁全绿（见 `D-82`） |
 | [full_static_audit_59268ac_2026_11_22.md](full_static_audit_59268ac_2026_11_22.md) | 2026-11-22 | **Commit `59268ac` 全仓库静态代码审查报告** | 识别 4 P0 / 24 P1 / 26 P2 / 13 P3 缺陷与 D-01～D-08 残余缺口 |
 | [consolidated_audit_report_2026_11_21.md](consolidated_audit_report_2026_11_21.md) | 2026-11-21 | **`c61d762` 统一核验、深度摸排与 CI 诊断** | 核验 `c61d762` 落地情况，定位并收口 1 项 P1 串态 + 7 项 P2 缺陷以及 Rust `fmt`/CI 问题（详见 `D-71`） |

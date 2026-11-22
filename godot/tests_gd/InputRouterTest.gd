@@ -263,8 +263,163 @@ func _ready() -> void:
 	if _router.pointer_pressed or _router.action_entry_suppressed():
 		failures.append("reconcile_pointer_buttons must clear stuck pointer_pressed and suppression when physical button is up")
 
+	# 18. Wheel notch accumulates within one frame and clamps to [-12, 12].
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+	_router.handle_event(_mouse(MOUSE_BUTTON_WHEEL_UP))
+	_router.handle_event(_mouse(MOUSE_BUTTON_WHEEL_UP))
+	_router.handle_event(_mouse(MOUSE_BUTTON_WHEEL_UP))
+	if _router.wheel_notch() != 3:
+		failures.append("3 wheel-up events in one frame should accumulate to +3 (got %d)" % _router.wheel_notch())
+	for _i in range(20):
+		_router.handle_event(_mouse(MOUSE_BUTTON_WHEEL_UP))
+	if _router.wheel_notch() != 12:
+		failures.append("wheel-up accumulation must clamp at 12 (got %d)" % _router.wheel_notch())
+	_router.clear_frame_latches()
+	for _i in range(20):
+		_router.handle_event(_mouse(MOUSE_BUTTON_WHEEL_DOWN))
+	if _router.wheel_notch() != -12:
+		failures.append("wheel-down accumulation must clamp at -12 (got %d)" % _router.wheel_notch())
+	_router.clear_frame_latches()
+
+	# 19. Touch mode transitions and single-finger tap (< 24px vs >= 24px).
+	var mode_events: Array[bool] = []
+	_router.touch_mode_changed.connect(func(active: bool) -> void: mode_events.append(active))
+	var swipe_events: Array[bool] = []
+	_router.touch_sidebar_swipe.connect(func(open: bool) -> void: swipe_events.append(open))
+
+	var tap_actions_before := _action
+	_router.handle_event(_touch(0, Vector2(300, 200), true))
+	if not _router.touch_mode or mode_events != [true]:
+		failures.append("screen touch must activate touch_mode and emit touch_mode_changed(true)")
+	if not _router.is_pointer_input() or _router.last_input_source != "touch":
+		failures.append("screen touch must set last_input_source=touch and is_pointer_input()=true")
+	_router.handle_event(_drag(0, Vector2(310, 205)))
+	_router.handle_event(_touch(0, Vector2(310, 205), false))
+	if _action != tap_actions_before + 1 or not _router.click_latched():
+		failures.append("single-finger tap (< 24px) must emit action_pressed and latch click")
+	if (_router.held_mask() & InputRouter.MASK_OK) == 0:
+		failures.append("single-finger tap must set MASK_OK for one frame")
+	_router.clear_frame_latches()
+	if (_router.held_mask() & InputRouter.MASK_OK) != 0:
+		failures.append("single-finger tap MASK_OK must clear on clear_frame_latches()")
+
+	# Drag >= 24px must NOT fire a tap on release.
+	tap_actions_before = _action
+	_router.handle_event(_touch(0, Vector2(300, 200), true))
+	_router.handle_event(_drag(0, Vector2(330, 200)))
+	_router.handle_event(_touch(0, Vector2(330, 200), false))
+	if _action != tap_actions_before or _router.click_latched():
+		failures.append("touch drag >= 24px must not fire tap action_pressed")
+
+	# 20. Two-finger tap (< 36px) emits cancel; >= 36px does not.
+	var two_cancel_before := _cancel
+	_router.handle_event(_touch(0, Vector2(200, 200), true))
+	_router.handle_event(_touch(1, Vector2(260, 220), true))
+	_router.handle_event(_drag(0, Vector2(210, 205)))
+	_router.handle_event(_touch(0, Vector2(210, 205), false))
+	if _cancel != two_cancel_before:
+		failures.append("two-finger cancel must wait until last finger lifts")
+	_router.handle_event(_touch(1, Vector2(262, 222), false))
+	if _cancel != two_cancel_before + 1 or (_router.held_mask() & InputRouter.MASK_CANCEL) == 0:
+		failures.append("two-finger tap (< 36px) must emit cancel_pressed and latch MASK_CANCEL")
+	_router.clear_frame_latches()
+
+	two_cancel_before = _cancel
+	_router.handle_event(_touch(0, Vector2(200, 200), true))
+	_router.handle_event(_touch(1, Vector2(260, 220), true))
+	_router.handle_event(_drag(0, Vector2(250, 200)))
+	_router.handle_event(_touch(0, Vector2(250, 200), false))
+	_router.handle_event(_touch(1, Vector2(260, 220), false))
+	if _cancel != two_cancel_before:
+		failures.append("two-finger drag >= 36px must not emit cancel_pressed")
+
+	# 21. Left-edge open swipe and sidebar close swipe.
+	_router.sidebar_open_hint = false
+	_router.handle_event(_touch(0, Vector2(30, 250), true))
+	_router.handle_event(_drag(0, Vector2(100, 255)))
+	_router.handle_event(_touch(0, Vector2(100, 255), false))
+	if swipe_events != [true]:
+		failures.append("left-edge swipe (x<=60, dx>=56) must emit touch_sidebar_swipe(true) (got %s)" % str(swipe_events))
+	# Starting outside edge (> 60) must not emit open swipe.
+	_router.handle_event(_touch(0, Vector2(120, 250), true))
+	_router.handle_event(_drag(0, Vector2(220, 250)))
+	_router.handle_event(_touch(0, Vector2(220, 250), false))
+	if swipe_events != [true]:
+		failures.append("non-edge swipe must not emit touch_sidebar_swipe(true)")
+
+	_router.sidebar_open_hint = true
+	_router.handle_event(_touch(0, Vector2(200, 250), true))
+	_router.handle_event(_drag(0, Vector2(130, 252)))
+	_router.handle_event(_touch(0, Vector2(130, 252), false))
+	if swipe_events != [true, false]:
+		failures.append("leftward swipe with sidebar_open_hint must emit touch_sidebar_swipe(false) (got %s)" % str(swipe_events))
+	_router.sidebar_open_hint = false
+
+	# 22. Vertical drag scroll when touch_scroll_enabled = true.
+	_router.touch_scroll_enabled = true
+	_wheel.clear()
+	_router.clear_frame_latches()
+	_router.handle_event(_touch(0, Vector2(500, 300), true))
+	_router.handle_event(_drag(0, Vector2(500, 240))) # dy = -60 -> wheel down (+1), notch -1
+	_router.handle_event(_drag(0, Vector2(500, 190))) # dy = -50 -> total rem -62 -> another +1
+	_router.handle_event(_touch(0, Vector2(500, 190), false))
+	if _wheel != [1, 1] or _router.wheel_notch() != -2 or (_router.held_mask() & InputRouter.MASK_DOWN) == 0:
+		failures.append("upward vertical touch scroll must emit wheel down (+1) and accumulate notch -2 (wheel=%s notch=%d)" % [str(_wheel), _router.wheel_notch()])
+	_router.clear_frame_latches()
+	_wheel.clear()
+	_router.handle_event(_touch(0, Vector2(500, 200), true))
+	_router.handle_event(_drag(0, Vector2(500, 260))) # dy = +60 -> wheel up (-1), notch +1
+	_router.handle_event(_touch(0, Vector2(500, 260), false))
+	if _wheel != [-1] or _router.wheel_notch() != 1 or (_router.held_mask() & InputRouter.MASK_UP) == 0:
+		failures.append("downward vertical touch scroll must emit wheel up (-1) and notch +1 (wheel=%s notch=%d)" % [str(_wheel), _router.wheel_notch()])
+	_router.touch_scroll_enabled = false
+	_router.clear_frame_latches()
+
+	# 23. clear_touch_state() drops active fingers so release does not fire tap;
+	#     desktop mouse/key switches touch_mode back to false.
+	tap_actions_before = _action
+	_router.handle_event(_touch(0, Vector2(400, 300), true))
+	_router.clear_touch_state()
+	_router.handle_event(_touch(0, Vector2(400, 300), false))
+	if _action != tap_actions_before:
+		failures.append("clear_touch_state() must cancel pending tap on release")
+	_router.handle_event(_key(KEY_SPACE))
+	if _router.touch_mode or _router.is_pointer_input() or mode_events != [true, false]:
+		failures.append("keyboard event must clear touch_mode and emit touch_mode_changed(false)")
+
+	# 24. PictureStage save/load page arrows (12004/12005) expand hitboxes to >= 44x64 around center.
+	var stage := PictureStage.new(null)
+	add_child(stage)
+	stage.draw_picture(12004, 0, "", "<", [0, 20, 24, 1, 255, 100, 200, 100, 0], 1, 2)
+	stage.draw_picture(12005, 0, "", ">", [0, 20, 24, 1, 255, 924, 200, 100, 0], 1, 2)
+	var rect_prev := stage.picture_rect(12004)
+	var rect_next := stage.picture_rect(12005)
+	if rect_prev.size.x < 44.0 or rect_prev.size.y < 64.0 or not rect_prev.get_center().is_equal_approx(Vector2(100, 200)):
+		failures.append("arrow 12004 hitbox must expand to >= 44x64 keeping center (got %s)" % str(rect_prev))
+	if rect_next.size.x < 44.0 or rect_next.size.y < 64.0 or not rect_next.get_center().is_equal_approx(Vector2(924, 200)):
+		failures.append("arrow 12005 hitbox must expand to >= 44x64 keeping center (got %s)" % str(rect_next))
+	if stage.picture_state(12004, 8, Vector2(80, 170)) != 1 or stage.picture_state(12005, 8, Vector2(944, 230)) != 1:
+		failures.append("expanded arrow hitboxes must register hits in picture_state(..., 8, pointer)")
+	stage.queue_free()
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
+
+
+static func _touch(index: int, pos: Vector2, pressed: bool) -> InputEventScreenTouch:
+	var event := InputEventScreenTouch.new()
+	event.index = index
+	event.position = pos
+	event.pressed = pressed
+	return event
+
+
+static func _drag(index: int, pos: Vector2) -> InputEventScreenDrag:
+	var event := InputEventScreenDrag.new()
+	event.index = index
+	event.position = pos
+	return event
 
 
 static func _key(code: Key) -> InputEventKey:

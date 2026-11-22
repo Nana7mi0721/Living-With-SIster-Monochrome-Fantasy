@@ -1,7 +1,8 @@
 class_name PlayOverlays
 extends Control
 ## Front-end overlays extracted from GameRoot: Toast, Fault Modal, F4 Backlog,
-## F12 Return-to-Title Confirm, F2 read-only stats/milestone HUD, and F3 debug HUD.
+## F12 Return-to-Title Confirm, Save Overwrite Confirm, Quit Confirm, Save Transfer,
+## Mobile Quick Drawer, and F2/F3 HUDs.
 
 signal backlog_closed
 signal title_confirmed
@@ -10,13 +11,26 @@ signal fault_export_requested
 signal fault_recover_requested
 signal fault_restart_requested
 signal fault_modal_closed
+signal save_overwrite_confirmed(slot: int, pointer_pos: Vector2, is_pointer: bool)
+signal save_overwrite_cancelled
+signal quit_confirmed
+signal quit_cancelled
+signal save_transfer_closed
+signal save_page_return_title_requested
+signal save_page_transfer_requested
+signal drawer_action_requested(action: String)
 
 const BACKLOG_LIMIT := 200
 const BACKLOG_LINE_STEP := 24
 const MILESTONE_VARS := [40, 42, 44, 53, 503, 531, 550]
+const SAVE_ARCHIVE_MAX_BYTES := 256 * 1024 * 1024
+const SAVE_ARCHIVE_MAX_ENTRIES := 256
+const SAVE_ARCHIVE_MAX_ENTRY_BYTES := 32 * 1024 * 1024
+const URI_COPY_CHUNK_BYTES := 1024 * 1024
 
 var _toast_label: Label
 var _toast_until := 0
+var _safe_insets := {"left": 0.0, "top": 0.0, "right": 0.0, "bottom": 0.0}
 
 var _backlog: Array[String] = []
 var _backlog_root: Control
@@ -28,6 +42,48 @@ var _backlog_open := false
 var _title_confirm_root: Control
 var _title_confirm_open := false
 var _title_cancel_button: Button
+
+var _save_confirm_root: Control
+var _save_confirm_label: Label
+var _save_confirm_cancel: Button
+var _save_confirm_open := false
+var _save_confirm_slot := 0
+var _save_confirm_pos := Vector2.ZERO
+var _save_confirm_is_pointer := false
+
+var _quit_confirm_root: Control
+var _quit_confirm_cancel: Button
+var _quit_confirm_open := false
+
+var _save_bar_root: PanelContainer
+var _save_bar_button: Button
+var _save_bar_in_title := false
+
+var _transfer_root: Control
+var _transfer_status: Label
+var _transfer_list: Label
+var _transfer_slot_spin: SpinBox
+var _transfer_confirm_btn: Button
+var _transfer_cancel_import_btn: Button
+var _transfer_open := false
+var _transfer_save_dir := ""
+var _transfer_session: Object = null
+var _pending_import_zip := ""
+var _pending_import_is_temp := false
+var _pending_sav_path := ""
+var _file_dialog: FileDialog
+var _file_dialog_mode := ""
+
+var _drawer_root: Control
+var _drawer_panel: PanelContainer
+var _drawer_tab: Button
+var _drawer_perf_btn: Button
+var _drawer_scale_btn: Button
+var _drawer_title_btn: Button
+var _drawer_quicksave_btn: Button
+var _drawer_quickload_btn: Button
+var _drawer_open := false
+var _touch_ui_enabled := false
 
 var _fault_root: Control
 var _fault_reason: Label
@@ -339,7 +395,7 @@ func confirm_title_confirm() -> bool:
 
 
 func is_modal_open() -> bool:
-	return _backlog_open or _title_confirm_open
+	return _backlog_open or _title_confirm_open or _save_confirm_open or _quit_confirm_open or _transfer_open or _drawer_open
 
 
 func close_non_fault_modals() -> void:
@@ -349,6 +405,54 @@ func close_non_fault_modals() -> void:
 	_title_confirm_open = false
 	if _title_confirm_root != null:
 		_title_confirm_root.visible = false
+	_save_confirm_open = false
+	if _save_confirm_root != null:
+		_save_confirm_root.visible = false
+	_quit_confirm_open = false
+	if _quit_confirm_root != null:
+		_quit_confirm_root.visible = false
+	_transfer_open = false
+	_clear_pending_import()
+	if _transfer_root != null:
+		_transfer_root.visible = false
+	_drawer_open = false
+	if _drawer_root != null:
+		_drawer_root.visible = false
+
+
+func close_topmost_modal() -> bool:
+	if _save_confirm_open:
+		cancel_save_overwrite()
+		return true
+	if _quit_confirm_open:
+		cancel_quit()
+		return true
+	if _transfer_open:
+		close_save_transfer()
+		return true
+	if _title_confirm_open:
+		cancel_title_confirm()
+		return true
+	if _backlog_open:
+		close_backlog()
+		return true
+	if _drawer_open:
+		close_drawer()
+		return true
+	return false
+
+
+func apply_safe_area(insets: Dictionary) -> void:
+	_safe_insets = {
+		"left": clampf(float(insets.get("left", 0.0)), 0.0, 96.0),
+		"top": clampf(float(insets.get("top", 0.0)), 0.0, 64.0),
+		"right": clampf(float(insets.get("right", 0.0)), 0.0, 96.0),
+		"bottom": clampf(float(insets.get("bottom", 0.0)), 0.0, 64.0),
+	}
+	if _toast_label != null:
+		_toast_label.position.y = 64.0 + _safe_insets["top"] * 0.5
+	_layout_save_page_bar()
+	_layout_drawer()
 
 
 # ---- D-13 Fault Modal ----------------------------------------------------
@@ -604,3 +708,916 @@ func refresh_debug(fps: float, frame_count: int, phase_name: String, active_inst
 	if not diag_line.is_empty():
 		lines.append(diag_line)
 	_debug_label.text = "\n".join(lines)
+
+
+# ---- Save Overwrite & Quit Modals ----------------------------------------
+
+func _build_save_confirm() -> void:
+	if _save_confirm_root != null:
+		return
+	_save_confirm_root = Control.new()
+	_save_confirm_root.name = "SaveOverwriteConfirm"
+	_save_confirm_root.z_index = 135
+	_save_confirm_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_save_confirm_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_save_confirm_root.visible = false
+	add_child(_save_confirm_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.72)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_save_confirm_root.add_child(dim)
+
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -240.0
+	panel.offset_right = 240.0
+	panel.offset_top = -90.0
+	panel.offset_bottom = 90.0
+	_save_confirm_root.add_child(panel)
+
+	var margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 16)
+	panel.add_child(margin)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 12)
+	margin.add_child(column)
+
+	var title := Label.new()
+	title.text = "覆盖存档？"
+	title.add_theme_font_size_override("font_size", 20)
+	column.add_child(title)
+
+	_save_confirm_label = Label.new()
+	_save_confirm_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_save_confirm_label.custom_minimum_size = Vector2(0, 48)
+	column.add_child(_save_confirm_label)
+
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	buttons.alignment = BoxContainer.ALIGNMENT_END
+	column.add_child(buttons)
+
+	_save_confirm_cancel = Button.new()
+	_save_confirm_cancel.text = "取消"
+	_save_confirm_cancel.pressed.connect(cancel_save_overwrite)
+	buttons.add_child(_save_confirm_cancel)
+
+	var ok_btn := Button.new()
+	ok_btn.text = "确定覆盖"
+	ok_btn.pressed.connect(confirm_save_overwrite)
+	buttons.add_child(ok_btn)
+
+
+func save_confirm_open() -> bool:
+	return _save_confirm_open
+
+
+func open_save_confirm(slot: int, pointer_pos: Vector2 = Vector2.ZERO, is_pointer: bool = false) -> void:
+	_build_save_confirm()
+	_save_confirm_slot = maxi(1, slot)
+	_save_confirm_pos = pointer_pos
+	_save_confirm_is_pointer = is_pointer
+	if _save_confirm_label != null:
+		_save_confirm_label.text = "存档槽 %02d 已有数据，确定要覆盖吗？" % _save_confirm_slot
+	if _save_confirm_root != null:
+		_save_confirm_root.visible = true
+	_save_confirm_open = true
+	if _save_confirm_cancel != null and is_inside_tree():
+		_save_confirm_cancel.grab_focus()
+
+
+func cancel_save_overwrite() -> void:
+	if not _save_confirm_open:
+		return
+	_save_confirm_open = false
+	if _save_confirm_root != null:
+		_save_confirm_root.visible = false
+	save_overwrite_cancelled.emit()
+
+
+func confirm_save_overwrite() -> bool:
+	if not _save_confirm_open:
+		return false
+	_save_confirm_open = false
+	if _save_confirm_root != null:
+		_save_confirm_root.visible = false
+	save_overwrite_confirmed.emit(_save_confirm_slot, _save_confirm_pos, _save_confirm_is_pointer)
+	return true
+
+
+func _build_quit_confirm() -> void:
+	if _quit_confirm_root != null:
+		return
+	_quit_confirm_root = Control.new()
+	_quit_confirm_root.name = "QuitConfirm"
+	_quit_confirm_root.z_index = 135
+	_quit_confirm_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_quit_confirm_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_quit_confirm_root.visible = false
+	add_child(_quit_confirm_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.72)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_quit_confirm_root.add_child(dim)
+
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -220.0
+	panel.offset_right = 220.0
+	panel.offset_top = -84.0
+	panel.offset_bottom = 84.0
+	_quit_confirm_root.add_child(panel)
+
+	var margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 16)
+	panel.add_child(margin)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 12)
+	margin.add_child(column)
+
+	var title := Label.new()
+	title.text = "退出游戏？"
+	title.add_theme_font_size_override("font_size", 20)
+	column.add_child(title)
+
+	var question := Label.new()
+	question.text = "确定要退出游戏吗？"
+	question.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(question)
+
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	buttons.alignment = BoxContainer.ALIGNMENT_END
+	column.add_child(buttons)
+
+	_quit_confirm_cancel = Button.new()
+	_quit_confirm_cancel.text = "取消"
+	_quit_confirm_cancel.pressed.connect(cancel_quit)
+	buttons.add_child(_quit_confirm_cancel)
+
+	var ok_btn := Button.new()
+	ok_btn.text = "退出"
+	ok_btn.pressed.connect(confirm_quit)
+	buttons.add_child(ok_btn)
+
+
+func quit_confirm_open() -> bool:
+	return _quit_confirm_open
+
+
+func open_quit_confirm() -> void:
+	_build_quit_confirm()
+	if _quit_confirm_root != null:
+		_quit_confirm_root.visible = true
+	_quit_confirm_open = true
+	if _quit_confirm_cancel != null and is_inside_tree():
+		_quit_confirm_cancel.grab_focus()
+
+
+func cancel_quit() -> void:
+	if not _quit_confirm_open:
+		return
+	_quit_confirm_open = false
+	if _quit_confirm_root != null:
+		_quit_confirm_root.visible = false
+	quit_cancelled.emit()
+
+
+func confirm_quit() -> bool:
+	if not _quit_confirm_open:
+		return false
+	_quit_confirm_open = false
+	if _quit_confirm_root != null:
+		_quit_confirm_root.visible = false
+	quit_confirmed.emit()
+	return true
+
+
+# ---- Save-Page Extension Bar ---------------------------------------------
+
+func _build_save_page_bar() -> void:
+	if _save_bar_root != null:
+		return
+	_save_bar_root = PanelContainer.new()
+	_save_bar_root.name = "SavePageBar"
+	_save_bar_root.z_index = 96
+	_save_bar_root.visible = false
+	add_child(_save_bar_root)
+
+	_save_bar_button = Button.new()
+	_save_bar_button.custom_minimum_size = Vector2(156, 40)
+	_save_bar_button.pressed.connect(func() -> void:
+		if _save_bar_in_title:
+			save_page_transfer_requested.emit()
+		else:
+			save_page_return_title_requested.emit()
+	)
+	_save_bar_root.add_child(_save_bar_button)
+	_layout_save_page_bar()
+
+
+func _layout_save_page_bar() -> void:
+	if _save_bar_root == null:
+		return
+	var right_inset := float(_safe_insets.get("right", 0.0))
+	var bottom_inset := float(_safe_insets.get("bottom", 0.0))
+	var bar_w := 168.0
+	var bar_h := 48.0
+	_save_bar_root.position = Vector2(1008.0 - right_inset - bar_w, 560.0 - bottom_inset - bar_h)
+	_save_bar_root.size = Vector2(bar_w, bar_h)
+
+
+func update_save_page_bar(visible_flag: bool, in_title: bool) -> void:
+	if not visible_flag and _save_bar_root == null:
+		return
+	_build_save_page_bar()
+	_save_bar_in_title = in_title
+	if _save_bar_button != null:
+		_save_bar_button.text = "导入 / 导出存档" if in_title else "回到标题"
+	if _save_bar_root != null:
+		_save_bar_root.visible = visible_flag
+
+
+func save_page_bar_rect() -> Rect2:
+	if _save_bar_root == null or not _save_bar_root.visible:
+		return Rect2()
+	return Rect2(_save_bar_root.position, _save_bar_root.size)
+
+
+# ---- Mobile Quick Drawer -------------------------------------------------
+
+func _build_drawer() -> void:
+	if _drawer_root != null:
+		return
+	_drawer_tab = Button.new()
+	_drawer_tab.name = "DrawerTab"
+	_drawer_tab.text = "菜单"
+	_drawer_tab.z_index = 96
+	_drawer_tab.custom_minimum_size = Vector2(64, 34)
+	_drawer_tab.visible = _touch_ui_enabled
+	_drawer_tab.pressed.connect(toggle_drawer)
+	add_child(_drawer_tab)
+
+	_drawer_root = Control.new()
+	_drawer_root.name = "MobileQuickDrawer"
+	_drawer_root.z_index = 125
+	_drawer_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_drawer_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_drawer_root.visible = false
+	add_child(_drawer_root)
+
+	var scrim := Button.new()
+	scrim.flat = true
+	scrim.text = ""
+	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scrim.pressed.connect(close_drawer)
+	_drawer_root.add_child(scrim)
+
+	_drawer_panel = PanelContainer.new()
+	_drawer_root.add_child(_drawer_panel)
+
+	var margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 12)
+	_drawer_panel.add_child(margin)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	margin.add_child(col)
+
+	var header := Label.new()
+	header.text = "快捷菜单"
+	header.add_theme_font_size_override("font_size", 18)
+	col.add_child(header)
+
+	var backlog_btn := Button.new()
+	backlog_btn.text = "消息回顾"
+	backlog_btn.pressed.connect(func() -> void: _emit_drawer_action("backlog"))
+	col.add_child(backlog_btn)
+
+	_drawer_quicksave_btn = Button.new()
+	_drawer_quicksave_btn.text = "快速存档"
+	_drawer_quicksave_btn.pressed.connect(func() -> void: _emit_drawer_action("quick_save"))
+	col.add_child(_drawer_quicksave_btn)
+
+	_drawer_quickload_btn = Button.new()
+	_drawer_quickload_btn.text = "快速读档"
+	_drawer_quickload_btn.pressed.connect(func() -> void: _emit_drawer_action("quick_load"))
+	col.add_child(_drawer_quickload_btn)
+
+	var transfer_btn := Button.new()
+	transfer_btn.text = "存档导入 / 导出"
+	transfer_btn.pressed.connect(func() -> void: _emit_drawer_action("save_transfer"))
+	col.add_child(transfer_btn)
+
+	_drawer_perf_btn = Button.new()
+	_drawer_perf_btn.text = "帧率档位: 60 fps"
+	_drawer_perf_btn.pressed.connect(func() -> void: _emit_drawer_action("perf_tier"))
+	col.add_child(_drawer_perf_btn)
+
+	_drawer_scale_btn = Button.new()
+	_drawer_scale_btn.text = "缩放模式"
+	_drawer_scale_btn.pressed.connect(func() -> void: _emit_drawer_action("scale_mode"))
+	col.add_child(_drawer_scale_btn)
+
+	_drawer_title_btn = Button.new()
+	_drawer_title_btn.text = "返回标题"
+	_drawer_title_btn.pressed.connect(func() -> void: _emit_drawer_action("return_title"))
+	col.add_child(_drawer_title_btn)
+
+	var close_btn := Button.new()
+	close_btn.text = "收起菜单"
+	close_btn.pressed.connect(close_drawer)
+	col.add_child(close_btn)
+
+	_layout_drawer()
+
+
+func _layout_drawer() -> void:
+	var left_inset := float(_safe_insets.get("left", 0.0))
+	var top_inset := float(_safe_insets.get("top", 0.0))
+	var bottom_inset := float(_safe_insets.get("bottom", 0.0))
+	if _drawer_tab != null:
+		_drawer_tab.position = Vector2(8.0 + left_inset, 52.0 + top_inset)
+		_drawer_tab.visible = _touch_ui_enabled and not _drawer_open and not is_modal_open()
+	if _drawer_panel != null:
+		_drawer_panel.position = Vector2(12.0 + left_inset, 12.0 + top_inset)
+		_drawer_panel.size = Vector2(236.0, 552.0 - top_inset - bottom_inset)
+
+
+func _emit_drawer_action(action: String) -> void:
+	if action != "perf_tier" and action != "scale_mode":
+		close_drawer()
+	drawer_action_requested.emit(action)
+
+
+func set_touch_ui_enabled(enabled: bool) -> void:
+	_touch_ui_enabled = enabled
+	if enabled and _drawer_root == null:
+		_build_drawer()
+	_layout_drawer()
+
+
+func update_drawer_state(in_title: bool, can_quick: bool, perf_label: String, scale_label: String) -> void:
+	if _drawer_root == null:
+		return
+	if _drawer_quicksave_btn != null:
+		_drawer_quicksave_btn.disabled = in_title or not can_quick
+	if _drawer_quickload_btn != null:
+		_drawer_quickload_btn.disabled = not can_quick
+	if _drawer_title_btn != null:
+		_drawer_title_btn.disabled = in_title
+	if _drawer_perf_btn != null:
+		_drawer_perf_btn.text = "帧率档位: %s" % perf_label
+	if _drawer_scale_btn != null:
+		_drawer_scale_btn.text = "缩放模式: %s" % scale_label
+	_layout_drawer()
+
+
+func drawer_open() -> bool:
+	return _drawer_open
+
+
+func open_drawer() -> void:
+	_build_drawer()
+	if _drawer_root != null:
+		_drawer_root.visible = true
+	_drawer_open = true
+	_layout_drawer()
+
+
+func close_drawer() -> void:
+	if not _drawer_open:
+		return
+	_drawer_open = false
+	if _drawer_root != null:
+		_drawer_root.visible = false
+	_layout_drawer()
+	backlog_closed.emit()
+
+
+func toggle_drawer() -> void:
+	if _drawer_open:
+		close_drawer()
+	else:
+		open_drawer()
+
+
+# ---- Cross-Platform Save Transfer (.zip / .sav) --------------------------
+
+static func is_valid_save_archive_entry(entry_name: String) -> bool:
+	var norm := entry_name.replace("\\", "/").strip_edges()
+	if norm.is_empty() or norm.begins_with("/") or norm.ends_with("/"):
+		return false
+	if norm.contains("\u0000") or norm.contains(":"):
+		return false
+	var parts := norm.split("/", false)
+	if parts.is_empty():
+		return false
+	for part in parts:
+		if part.is_empty() or part == "." or part == "..":
+			return false
+	var file_name := parts[-1].to_lower()
+	if file_name == "quicksave.json" or file_name == "system.json":
+		return true
+	if file_name.begins_with("save_") and file_name.ends_with(".json") and file_name.length() == 12:
+		var digits := file_name.substr(5, 2)
+		return digits.is_valid_int()
+	if file_name.begins_with("save") and (file_name.ends_with(".jpg") or file_name.ends_with(".jpeg")):
+		return true
+	return false
+
+
+static func _save_transfer_files(save_dir: String) -> PackedStringArray:
+	var result := PackedStringArray()
+	var dir := DirAccess.open(save_dir)
+	if dir == null:
+		return result
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		if not dir.current_is_dir() and is_valid_save_archive_entry(entry):
+			result.append(entry)
+		entry = dir.get_next()
+	dir.list_dir_end()
+	result.sort()
+	return result
+
+
+static func _write_file_atomic(target_path: String, bytes: PackedByteArray) -> bool:
+	var dir_err := DirAccess.make_dir_recursive_absolute(target_path.get_base_dir())
+	if dir_err != OK:
+		return false
+	var tmp_path := target_path + ".tmp"
+	if FileAccess.file_exists(tmp_path):
+		DirAccess.remove_absolute(tmp_path)
+	var f := FileAccess.open(tmp_path, FileAccess.WRITE)
+	if f == null:
+		return false
+	var ok := f.store_buffer(bytes) and f.get_error() == OK
+	f.close()
+	if not ok:
+		DirAccess.remove_absolute(tmp_path)
+		return false
+	if FileAccess.file_exists(target_path):
+		DirAccess.remove_absolute(target_path)
+	if DirAccess.rename_absolute(tmp_path, target_path) != OK:
+		DirAccess.remove_absolute(tmp_path)
+		return false
+	return true
+
+
+static func stage_uri_to_temp_file(src_path: String, temp_dir: String) -> String:
+	if src_path.is_empty():
+		return ""
+	var src := FileAccess.open(src_path, FileAccess.READ)
+	if src == null:
+		return ""
+	var total := src.get_length()
+	if total <= 0 or total > SAVE_ARCHIVE_MAX_BYTES:
+		src.close()
+		return ""
+	if DirAccess.make_dir_recursive_absolute(temp_dir) != OK:
+		src.close()
+		return ""
+	var ext := src_path.get_extension().to_lower()
+	if ext != "zip" and ext != "sav":
+		ext = "bin"
+	var dst_path := temp_dir.path_join("transfer_%d.%s" % [Time.get_ticks_usec(), ext])
+	var dst := FileAccess.open(dst_path, FileAccess.WRITE)
+	if dst == null:
+		src.close()
+		return ""
+	var remaining := total
+	while remaining > 0:
+		var take := mini(remaining, URI_COPY_CHUNK_BYTES)
+		var buf := src.get_buffer(take)
+		if buf.is_empty():
+			dst.close()
+			src.close()
+			DirAccess.remove_absolute(dst_path)
+			return ""
+		if not dst.store_buffer(buf) or dst.get_error() != OK:
+			dst.close()
+			src.close()
+			DirAccess.remove_absolute(dst_path)
+			return ""
+		remaining -= buf.size()
+	dst.close()
+	src.close()
+	return dst_path
+
+
+static func export_saves_zip(save_dir: String, dest_zip: String) -> Dictionary:
+	var files := _save_transfer_files(save_dir)
+	if files.is_empty():
+		return {"ok": false, "error": "当前存档目录没有可导出的存档文件", "count": 0, "path": ""}
+	if DirAccess.make_dir_recursive_absolute(dest_zip.get_base_dir()) != OK:
+		return {"ok": false, "error": "无法创建导出目录", "count": 0, "path": ""}
+	var tmp_zip := dest_zip + ".tmp"
+	if FileAccess.file_exists(tmp_zip):
+		DirAccess.remove_absolute(tmp_zip)
+	var packer := ZIPPacker.new()
+	if packer.open(tmp_zip) != OK:
+		return {"ok": false, "error": "无法创建压缩包文件", "count": 0, "path": ""}
+	var count := 0
+	for name in files:
+		var f := FileAccess.open(save_dir.path_join(name), FileAccess.READ)
+		if f == null:
+			continue
+		var data := f.get_buffer(f.get_length())
+		f.close()
+		if packer.start_file(name) == OK:
+			packer.write_file(data)
+			packer.close_file()
+			count += 1
+	packer.close()
+	if count == 0:
+		DirAccess.remove_absolute(tmp_zip)
+		return {"ok": false, "error": "未能读取任何存档内容", "count": 0, "path": ""}
+	if FileAccess.file_exists(dest_zip):
+		DirAccess.remove_absolute(dest_zip)
+	if DirAccess.rename_absolute(tmp_zip, dest_zip) != OK:
+		DirAccess.remove_absolute(tmp_zip)
+		return {"ok": false, "error": "无法写入目标导出路径", "count": 0, "path": ""}
+	return {"ok": true, "error": "", "count": count, "path": dest_zip}
+
+
+static func inspect_save_zip(zip_path: String, save_dir: String = "", session_ctrl: Object = null) -> Dictionary:
+	var f := FileAccess.open(zip_path, FileAccess.READ)
+	if f == null:
+		return {"ok": false, "error": "无法打开压缩包"}
+	var file_bytes := f.get_length()
+	if file_bytes < 4 or file_bytes > SAVE_ARCHIVE_MAX_BYTES:
+		f.close()
+		return {"ok": false, "error": "压缩包体积超出允许范围（上限 256 MiB）"}
+	var magic := f.get_buffer(4)
+	f.close()
+	if magic.size() < 4 or magic[0] != 0x50 or magic[1] != 0x4B:
+		return {"ok": false, "error": "无效的 ZIP 压缩包签名"}
+
+	var reader := ZIPReader.new()
+	if reader.open(zip_path) != OK:
+		return {"ok": false, "error": "无法解析 ZIP 压缩包"}
+	var entries := reader.get_files()
+	if entries.is_empty():
+		reader.close()
+		return {"ok": false, "error": "压缩包为空"}
+	if entries.size() > SAVE_ARCHIVE_MAX_ENTRIES:
+		reader.close()
+		return {"ok": false, "error": "压缩包内文件数量超过上限（256 项）"}
+
+	var valid_names := PackedStringArray()
+	var conflicts := PackedStringArray()
+	var total_uncompressed := 0
+	for entry_name in entries:
+		if entry_name.ends_with("/"):
+			continue
+		if not is_valid_save_archive_entry(entry_name):
+			reader.close()
+			return {"ok": false, "error": "压缩包包含不支持或非法的路径：%s" % entry_name}
+		var data := reader.read_file(entry_name)
+		if data.size() > SAVE_ARCHIVE_MAX_ENTRY_BYTES:
+			reader.close()
+			return {"ok": false, "error": "单个文件超过 32 MiB 上限：%s" % entry_name}
+		total_uncompressed += data.size()
+		if total_uncompressed > SAVE_ARCHIVE_MAX_BYTES:
+			reader.close()
+			return {"ok": false, "error": "解压总大小超过 256 MiB 上限"}
+		var leaf := entry_name.replace("\\", "/").get_file()
+		if leaf.to_lower().ends_with(".json"):
+			var json_text := data.get_string_from_utf8()
+			if session_ctrl != null and session_ctrl.has_method("ValidateSaveJson"):
+				var err := str(session_ctrl.call("ValidateSaveJson", json_text))
+				if not err.is_empty():
+					reader.close()
+					return {"ok": false, "error": "%s 校验失败：%s" % [leaf, err]}
+			elif not (JSON.parse_string(json_text) is Dictionary):
+				reader.close()
+				return {"ok": false, "error": "%s 不是有效 JSON" % leaf}
+		valid_names.append(leaf)
+		if not save_dir.is_empty() and FileAccess.file_exists(save_dir.path_join(leaf)):
+			conflicts.append(leaf)
+	reader.close()
+	if valid_names.is_empty():
+		return {"ok": false, "error": "压缩包内未找到有效存档文件"}
+	return {"ok": true, "error": "", "files": valid_names, "conflicts": conflicts}
+
+
+static func apply_save_zip(zip_path: String, save_dir: String, backup_dir: String, session_ctrl: Object = null) -> Dictionary:
+	var check := inspect_save_zip(zip_path, save_dir, session_ctrl)
+	if not bool(check.get("ok", false)):
+		return check
+	var backup_path := ""
+	if not _save_transfer_files(save_dir).is_empty() and not backup_dir.is_empty():
+		var bak_target := backup_dir.path_join("pre_import_backup_%d.zip" % int(Time.get_unix_time_from_system()))
+		var bak_res := export_saves_zip(save_dir, bak_target)
+		if bool(bak_res.get("ok", false)):
+			backup_path = str(bak_res.get("path", ""))
+
+	var reader := ZIPReader.new()
+	if reader.open(zip_path) != OK:
+		return {"ok": false, "error": "无法重开 ZIP 压缩包"}
+	var imported := 0
+	for entry_name in reader.get_files():
+		if entry_name.ends_with("/") or not is_valid_save_archive_entry(entry_name):
+			continue
+		var data := reader.read_file(entry_name)
+		var leaf := entry_name.replace("\\", "/").get_file()
+		if not _write_file_atomic(save_dir.path_join(leaf), data):
+			reader.close()
+			return {"ok": false, "error": "写入存档文件失败：%s" % leaf, "imported": imported, "backup_path": backup_path}
+		imported += 1
+	reader.close()
+	return {"ok": true, "error": "", "imported": imported, "backup_path": backup_path}
+
+
+func _build_save_transfer() -> void:
+	if _transfer_root != null:
+		return
+	_transfer_root = Control.new()
+	_transfer_root.name = "SaveTransferModal"
+	_transfer_root.z_index = 132
+	_transfer_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_transfer_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_transfer_root.visible = false
+	add_child(_transfer_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.74)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_transfer_root.add_child(dim)
+
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -330.0
+	panel.offset_right = 330.0
+	panel.offset_top = -205.0
+	panel.offset_bottom = 205.0
+	_transfer_root.add_child(panel)
+
+	var margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 16)
+	panel.add_child(margin)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 10)
+	margin.add_child(col)
+
+	var title := Label.new()
+	title.text = "跨端存档导入 / 导出"
+	title.add_theme_font_size_override("font_size", 20)
+	col.add_child(title)
+
+	_transfer_list = Label.new()
+	_transfer_list.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_transfer_list.custom_minimum_size = Vector2(0, 120)
+	col.add_child(_transfer_list)
+
+	var slot_row := HBoxContainer.new()
+	slot_row.add_theme_constant_override("separation", 8)
+	col.add_child(slot_row)
+	var slot_lbl := Label.new()
+	slot_lbl.text = "原版 .sav 导入目标槽位："
+	slot_row.add_child(slot_lbl)
+	_transfer_slot_spin = SpinBox.new()
+	_transfer_slot_spin.min_value = 1
+	_transfer_slot_spin.max_value = 16
+	_transfer_slot_spin.step = 1
+	_transfer_slot_spin.value = 1
+	slot_row.add_child(_transfer_slot_spin)
+
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 8)
+	col.add_child(actions)
+
+	var exp_btn := Button.new()
+	exp_btn.text = "导出存档包 (.zip)"
+	exp_btn.pressed.connect(_on_transfer_export_pressed)
+	actions.add_child(exp_btn)
+
+	var imp_zip_btn := Button.new()
+	imp_zip_btn.text = "导入存档包 (.zip)"
+	imp_zip_btn.pressed.connect(_on_transfer_import_zip_pressed)
+	actions.add_child(imp_zip_btn)
+
+	var imp_sav_btn := Button.new()
+	imp_sav_btn.text = "导入原版 .sav"
+	imp_sav_btn.pressed.connect(_on_transfer_import_sav_pressed)
+	actions.add_child(imp_sav_btn)
+
+	_transfer_status = Label.new()
+	_transfer_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_transfer_status.custom_minimum_size = Vector2(0, 56)
+	col.add_child(_transfer_status)
+
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 8)
+	footer.alignment = BoxContainer.ALIGNMENT_END
+	col.add_child(footer)
+
+	_transfer_cancel_import_btn = Button.new()
+	_transfer_cancel_import_btn.text = "放弃待导入文件"
+	_transfer_cancel_import_btn.visible = false
+	_transfer_cancel_import_btn.pressed.connect(_cancel_pending_import)
+	footer.add_child(_transfer_cancel_import_btn)
+
+	_transfer_confirm_btn = Button.new()
+	_transfer_confirm_btn.text = "确认写入覆盖"
+	_transfer_confirm_btn.visible = false
+	_transfer_confirm_btn.pressed.connect(_commit_pending_import)
+	footer.add_child(_transfer_confirm_btn)
+
+	var close_btn := Button.new()
+	close_btn.text = "关闭（Esc）"
+	close_btn.pressed.connect(close_save_transfer)
+	footer.add_child(close_btn)
+
+
+func save_transfer_open() -> bool:
+	return _transfer_open
+
+
+func open_save_transfer(save_dir: String, session_ctrl: Object = null) -> void:
+	_build_save_transfer()
+	_transfer_save_dir = save_dir
+	_transfer_session = session_ctrl
+	_clear_pending_import()
+	_refresh_transfer_listing()
+	if _transfer_status != null:
+		_transfer_status.text = "可导出当前所有 JSON/缩略图为 ZIP，或从 ZIP / 原版 SaveDataXX.sav 导入。"
+	if _transfer_root != null:
+		_transfer_root.visible = true
+	_transfer_open = true
+
+
+func close_save_transfer() -> void:
+	if not _transfer_open:
+		return
+	_transfer_open = false
+	_clear_pending_import()
+	if _transfer_root != null:
+		_transfer_root.visible = false
+	save_transfer_closed.emit()
+
+
+func _refresh_transfer_listing() -> void:
+	if _transfer_list == null:
+		return
+	var files := _save_transfer_files(_transfer_save_dir)
+	var file_line := "、".join(files) if not files.is_empty() else "（空）"
+	_transfer_list.text = "存档目录：%s\n现有文件 (%d)：%s" % [_transfer_save_dir, files.size(), file_line]
+
+
+func _clear_pending_import() -> void:
+	if _pending_import_is_temp and not _pending_import_zip.is_empty() and FileAccess.file_exists(_pending_import_zip):
+		DirAccess.remove_absolute(_pending_import_zip)
+	if not _pending_sav_path.is_empty() and _pending_sav_path.begins_with(ProjectSettings.globalize_path("user://cache")) and FileAccess.file_exists(_pending_sav_path):
+		DirAccess.remove_absolute(_pending_sav_path)
+	_pending_import_zip = ""
+	_pending_import_is_temp = false
+	_pending_sav_path = ""
+	if _transfer_confirm_btn != null:
+		_transfer_confirm_btn.visible = false
+	if _transfer_cancel_import_btn != null:
+		_transfer_cancel_import_btn.visible = false
+
+
+func _cancel_pending_import() -> void:
+	_clear_pending_import()
+	if _transfer_status != null:
+		_transfer_status.text = "已取消待写入的导入操作。"
+
+
+func _open_file_dialog(mode: String, filters: PackedStringArray, default_name: String = "") -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	if _file_dialog == null:
+		_file_dialog = FileDialog.new()
+		_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
+		_file_dialog.use_native_dialog = true
+		_file_dialog.file_selected.connect(_on_transfer_file_selected)
+		add_child(_file_dialog)
+	_file_dialog_mode = mode
+	_file_dialog.filters = filters
+	if mode == "export_zip":
+		_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+		_file_dialog.current_file = default_name
+	else:
+		_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		_file_dialog.current_file = ""
+	_file_dialog.popup_centered_ratio(0.75)
+
+
+func _on_transfer_export_pressed() -> void:
+	if OS.has_feature("mobile"):
+		var exports_dir := ProjectSettings.globalize_path("user://exports")
+		var stamp := Time.get_datetime_string_from_system().replace(":", "").replace("-", "").replace("T", "_")
+		var dest := exports_dir.path_join("lwsmf_saves_%s.zip" % stamp)
+		var res := export_saves_zip(_transfer_save_dir, dest)
+		if _transfer_status != null:
+			_transfer_status.text = "已导出 %d 个文件至：%s" % [int(res["count"]), str(res["path"])] if bool(res["ok"]) else str(res["error"])
+		return
+	var stamp_name := "lwsmf_saves_%d.zip" % int(Time.get_unix_time_from_system())
+	_open_file_dialog("export_zip", PackedStringArray(["*.zip ; ZIP Archive"]), stamp_name)
+
+
+func _on_transfer_import_zip_pressed() -> void:
+	_open_file_dialog("import_zip", PackedStringArray(["*.zip ; ZIP Archive"]))
+
+
+func _on_transfer_import_sav_pressed() -> void:
+	_open_file_dialog("import_sav", PackedStringArray(["*.sav ; WOLF Retail Save"]))
+
+
+func _on_transfer_file_selected(path: String) -> void:
+	if path.is_empty():
+		return
+	if _file_dialog_mode == "export_zip":
+		var res := export_saves_zip(_transfer_save_dir, path)
+		if _transfer_status != null:
+			_transfer_status.text = "导出成功（%d 个文件）：%s" % [int(res["count"]), str(res["path"])] if bool(res["ok"]) else str(res["error"])
+		return
+
+	_clear_pending_import()
+	var resolved_path := path
+	var is_temp := false
+	if path.begins_with("content://") or path.begins_with("res://") or path.begins_with("user://"):
+		var cache_dir := ProjectSettings.globalize_path("user://cache/transfer")
+		resolved_path = stage_uri_to_temp_file(path, cache_dir)
+		if resolved_path.is_empty():
+			if _transfer_status != null:
+				_transfer_status.text = "读取所选文件失败或文件超过大小限制。"
+			return
+		is_temp = true
+
+	if _file_dialog_mode == "import_zip":
+		var check := inspect_save_zip(resolved_path, _transfer_save_dir, _transfer_session)
+		if not bool(check.get("ok", false)):
+			if is_temp and FileAccess.file_exists(resolved_path):
+				DirAccess.remove_absolute(resolved_path)
+			if _transfer_status != null:
+				_transfer_status.text = str(check.get("error", "校验失败"))
+			return
+		_pending_import_zip = resolved_path
+		_pending_import_is_temp = is_temp
+		var files: PackedStringArray = check.get("files", PackedStringArray())
+		var conflicts: PackedStringArray = check.get("conflicts", PackedStringArray())
+		if _transfer_status != null:
+			_transfer_status.text = "校验通过，将导入 %d 个文件（将覆盖：%s）。导入前会自动创建备份。" % [
+				files.size(),
+				"、".join(conflicts) if not conflicts.is_empty() else "无",
+			]
+		if _transfer_confirm_btn != null:
+			_transfer_confirm_btn.visible = true
+		if _transfer_cancel_import_btn != null:
+			_transfer_cancel_import_btn.visible = true
+		return
+
+	if _file_dialog_mode == "import_sav":
+		_pending_sav_path = resolved_path
+		var target_slot := int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1
+		var target_name := "save_%02d.json" % maxi(1, target_slot)
+		var exists := FileAccess.file_exists(_transfer_save_dir.path_join(target_name))
+		if _transfer_status != null:
+			_transfer_status.text = "已选择原版存档 %s -> %s%s" % [
+				path.get_file(),
+				target_name,
+				"（将覆盖现有槽位！）" if exists else "",
+			]
+		if _transfer_confirm_btn != null:
+			_transfer_confirm_btn.visible = true
+		if _transfer_cancel_import_btn != null:
+			_transfer_cancel_import_btn.visible = true
+
+
+func _commit_pending_import() -> void:
+	if not _pending_import_zip.is_empty():
+		var backup_dir := ProjectSettings.globalize_path("user://cache/backup")
+		var res := apply_save_zip(_pending_import_zip, _transfer_save_dir, backup_dir, _transfer_session)
+		_clear_pending_import()
+		_refresh_transfer_listing()
+		if _transfer_status != null:
+			_transfer_status.text = "导入完成，共写入 %d 个文件。" % int(res.get("imported", 0)) if bool(res.get("ok", false)) else str(res.get("error", "导入失败"))
+		return
+	if not _pending_sav_path.is_empty():
+		var slot := int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1
+		var ok := false
+		var err := "无法调用导入接口"
+		if _transfer_session != null and _transfer_session.has_method("ImportRetailSaveToSlot"):
+			ok = bool(_transfer_session.call("ImportRetailSaveToSlot", _pending_sav_path, slot))
+			err = str(_transfer_session.get("LastError"))
+		_clear_pending_import()
+		_refresh_transfer_listing()
+		if _transfer_status != null:
+			_transfer_status.text = "已将原版存档导入至 save_%02d.json。" % slot if ok else ("原版存档导入失败：" + err)

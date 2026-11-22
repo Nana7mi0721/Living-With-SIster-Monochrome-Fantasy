@@ -2,6 +2,7 @@ extends Node
 ## W2 Day 3 acceptance: the asset cache is bounded by its byte budget and loads .wav.
 
 const TEMP_DIR := "user://assetdb_test"
+const AppPaths := preload("res://presentation_gd/AppPaths.gd")
 const MediaPakReader := preload("res://presentation/MediaPakReader.cs")
 
 
@@ -61,6 +62,22 @@ func _ready() -> void:
 		if reader.Has("no/such.png"):
 			failures.append("media pack should miss an absent path")
 
+	# 1c-virt. MediaPakReader also supports Godot res:// virtual paths directly (used for APK zero-copy reads).
+	var res_reader = MediaPakReader.new()
+	if not res_reader.Open("res://tests/fixtures/media_pack_tiny.pak"):
+		failures.append("res:// media pack should open: %s" % res_reader.LastError)
+	else:
+		if res_reader.Count != 3:
+			failures.append("res:// tiny media pack should hold 3 entries (got %d)" % res_reader.Count)
+		var res_bytes = res_reader.Read("SystemFile/WindowBase.png")
+		if res_bytes == null or res_bytes.size() != 85 or res_bytes.slice(0, 8).hex_encode() != "89504e470d0a1a0a":
+			failures.append("res:// media pack PNG bytes should match the stub image")
+		if res_reader.Read("SystemFile/WindowBase").size() != 85:
+			failures.append("res:// media pack should probe a missing extension")
+		if res_reader.Has("no/such.png"):
+			failures.append("res:// media pack should miss an absent path")
+		res_reader.Close()
+
 	# 1d. AssetDB resolves and decodes through the pack when LWsmf_MEDIA_PAK points at it.
 	OS.set_environment("LWsmf_MEDIA_PAK", pack_path)
 	var packed := AssetDB.new(base)
@@ -76,9 +93,31 @@ func _ready() -> void:
 	if not (packed.audio("SE/test.wav") is AudioStreamWAV):
 		failures.append("AssetDB should decode audio from the pack")
 
-	# 2. 512 MB covers the 2x art pack; D-09's 384 MB assumed 1x textures (D-81).
+	# 2. Platform cache budgets & package root resolution.
 	if AssetDB.DEFAULT_BUDGET_BYTES != 512 * 1024 * 1024:
 		failures.append("default budget should be 512 MB")
+	if AssetDB.ANDROID_BUDGET_BYTES != 128 * 1024 * 1024:
+		failures.append("Android budget should be 128 MB")
+	if AssetDB.IOS_BUDGET_BYTES != 64 * 1024 * 1024:
+		failures.append("iOS budget should be 64 MB")
+	if AssetDB.MOBILE_BUDGET_BYTES != AssetDB.ANDROID_BUDGET_BYTES:
+		failures.append("MOBILE_BUDGET_BYTES alias must match ANDROID_BUDGET_BYTES")
+	if AssetDB.platform_budget_bytes(false, false, false) != AssetDB.DEFAULT_BUDGET_BYTES:
+		failures.append("desktop platform budget should return DEFAULT_BUDGET_BYTES")
+	if AssetDB.platform_budget_bytes(true, false, true) != AssetDB.ANDROID_BUDGET_BYTES:
+		failures.append("Android platform budget should return ANDROID_BUDGET_BYTES")
+	if AssetDB.platform_budget_bytes(false, false, true) != AssetDB.ANDROID_BUDGET_BYTES:
+		failures.append("generic mobile platform budget should return ANDROID_BUDGET_BYTES")
+	if AssetDB.platform_budget_bytes(false, true, true) != AssetDB.IOS_BUDGET_BYTES:
+		failures.append("iOS platform budget should return IOS_BUDGET_BYTES")
+	if AssetDB.platform_budget_bytes(false, true, false) != AssetDB.IOS_BUDGET_BYTES:
+		failures.append("iOS platform budget without mobile flag should still return IOS_BUDGET_BYTES")
+	if AppPaths.resolve_package_root(false, true, true, "/var/Payload/Lwsmf.app", "/user/mobile") != "/var/Payload/Lwsmf.app":
+		failures.append("iOS exported template package_root must point inside Payload/<App>.app/")
+	if AppPaths.resolve_package_root(false, false, true, "/opt/lwsmf/bin", "/user/mobile") != "/opt/lwsmf":
+		failures.append("desktop exported package_root must stay at parent of executable dir")
+	if AppPaths.resolve_package_root(true, false, true, "res://", "/user/mobile") != "/user/mobile":
+		failures.append("Android package_root must use user://mobile_data")
 
 	# 3. A tiny budget evicts least-recently-used entries and stays under the cap.
 	# The probe tree lives under user://, so the cache must be rooted there.

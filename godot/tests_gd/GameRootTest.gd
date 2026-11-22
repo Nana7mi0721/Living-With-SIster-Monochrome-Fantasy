@@ -806,6 +806,8 @@ func _ready() -> void:
 			failures.append("diagnostic snapshot missing %s section" % section)
 	item_root.queue_free()
 
+	_test_ux_and_multiplatform(script, failures)
+
 	if failures.is_empty():
 		print("GAME_ROOT_TEST_OK")
 		get_tree().quit(0)
@@ -822,3 +824,166 @@ func _item_rows_visible(root) -> bool:
 			if root.stage.picture_rect(int(slot)).size.x > 0.0 and int(state.get("opacity", 0)) > 0:
 				return true
 	return false
+
+
+func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
+	# 1. Hotkeys parser: overrides valid entries and ignores malformed lines cleanly.
+	var hotkeys: Dictionary = script.parse_hotkeys_text("backlog=F7\nperf_tier = F1\nbad_line\nquick_save=NotAKey\nunknown=F4\n")
+	if int(hotkeys.get("backlog", KEY_NONE)) != KEY_F7 or int(hotkeys.get("perf_tier", KEY_NONE)) != KEY_F1:
+		failures.append("parse_hotkeys_text must apply valid hotkey overrides")
+	if int(hotkeys.get("quick_save", KEY_NONE)) != KEY_F5:
+		failures.append("parse_hotkeys_text must keep default when key string is invalid")
+
+	var root = script.new()
+	add_child(root)
+
+	# 2. Performance tier cycling: 60 -> 30 -> 15 -> 60.
+	if root.target_fps() != 60 or root.cycle_performance_tier() != 30 or root.cycle_performance_tier() != 15 or root.cycle_performance_tier() != 60:
+		failures.append("cycle_performance_tier must cycle 60 -> 30 -> 15 -> 60")
+
+	# 3. iOS compliance hides Quit option (slot 5 / choice index 2) and blocks endgame quit.
+	root.set_ios_override(1)
+	root.stage.draw_picture(3, 0, "Picture/menu1_b.png", "", [0, 1, 1, 1, 255, 10, 400, 100], 0, 0)
+	root.stage.draw_picture(4, 0, "Picture/menu2_b.png", "", [0, 1, 1, 1, 255, 10, 450, 100], 0, 0)
+	root.stage.draw_picture(5, 0, "Picture/menu3_b.png", "", [0, 1, 1, 1, 255, 10, 500, 100], 0, 0)
+	root.phase = "title"
+	root._on_choices(["开始", "读取", "退出"], 2)
+	if root.choice.override_rects.size() != 2 or root.choice.selected > 1:
+		failures.append("iOS title menu must hide Quit option and clamp override_rects to 2")
+	var slot5_state: Dictionary = root.stage._states.get(5, {})
+	if not bool(slot5_state.get("hidden", false)):
+		failures.append("iOS title menu must hide picture slot 5")
+	root.choice.close()
+	root.set_ios_override(0)
+
+	# 4. 7-level back-key routing and pause/focus-in lifecycle.
+	var prev_phase: String = root.phase
+	root.phase = "bootstrap"
+	if root.handle_back_request() != "bootstrap_ignored":
+		failures.append("back request during bootstrap must be ignored")
+	root.phase = "title"
+	if root.handle_back_request() != "title_quit_confirm" or not root.overlays.quit_confirm_open():
+		failures.append("back request on top-level title must open QuitConfirm")
+	if root.handle_back_request() != "modal_closed" or root.overlays.quit_confirm_open():
+		failures.append("back request with modal open must close QuitConfirm")
+	root.phase = "bedroom"
+	root.choice.open(PackedStringArray(["A", "B"]), Vector2(-1, -1), true, 0)
+	if root.handle_back_request() != "submenu_cancel":
+		failures.append("back request with open choice submenu must inject submenu_cancel")
+	root.choice.close()
+	root._transition_frames = 5
+	if root.can_open_quick_ui():
+		failures.append("can_open_quick_ui must block quick UI during active transitions")
+	root._transition_frames = 0
+	root.router.touch_sidebar_swipe.emit(true)
+	if not root.overlays.drawer_open():
+		failures.append("touch_sidebar_swipe(true) must open mobile quick drawer")
+	if root.handle_back_request() != "drawer_closed" or root.overlays.drawer_open():
+		failures.append("back request with drawer open must close drawer")
+	if root.handle_back_request() != "in_game_title_confirm" or not root.title_confirm_open():
+		failures.append("in-game back request must open return-to-title confirmation")
+	root.cancel_return_to_title()
+	root.phase = prev_phase
+
+	root._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+	if not root.modal_release_guard():
+		failures.append("FOCUS_IN must arm _modal_release_guard to block click-through")
+	root._notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	if root.modal_release_guard():
+		failures.append("APPLICATION_PAUSED must clear held latches cleanly")
+
+	# 5. Save overwrite confirm modal + _modal_release_guard on cancel.
+	root.overlays.open_save_confirm(2, Vector2(120, 200), true)
+	if not root.overlays.save_confirm_open():
+		failures.append("open_save_confirm must open save overwrite confirm modal")
+	root.overlays.cancel_save_overwrite()
+	if root.overlays.save_confirm_open() or not root.modal_release_guard():
+		failures.append("cancelling save overwrite must arm _modal_release_guard")
+	root._modal_release_guard = false
+
+	# 6. Cross-platform SaveTransfer ZIP validation, traversal guard, backup, and URI staging.
+	var transfer_dir := ProjectSettings.globalize_path("user://ux_transfer_test")
+	_remove_test_tree(transfer_dir)
+	var save_dir := transfer_dir.path_join("saves")
+	var backup_dir := transfer_dir.path_join("backups")
+	DirAccess.make_dir_recursive_absolute(save_dir)
+	DirAccess.make_dir_recursive_absolute(backup_dir)
+	if PlayOverlays.is_valid_save_archive_entry("../evil.json") or PlayOverlays.is_valid_save_archive_entry("malware.exe"):
+		failures.append("is_valid_save_archive_entry must reject path traversal and unsupported filenames")
+	if not PlayOverlays.is_valid_save_archive_entry("save_01.json") or not PlayOverlays.is_valid_save_archive_entry("System.json"):
+		failures.append("is_valid_save_archive_entry must accept valid save_NN.json and System.json")
+
+	var export_src_dir := transfer_dir.path_join("export_src")
+	DirAccess.make_dir_recursive_absolute(export_src_dir)
+	var sample_save := FileAccess.open(export_src_dir.path_join("save_01.json"), FileAccess.WRITE)
+	if sample_save != null:
+		sample_save.store_string("{\"schema\":\"lwsmf.save\",\"schema_version\":1,\"vars\":[0,1]}")
+		sample_save.close()
+	var exported_zip := transfer_dir.path_join("export.zip")
+	var exp_res: Dictionary = PlayOverlays.export_saves_zip(export_src_dir, exported_zip)
+	if not bool(exp_res.get("ok", false)) or not FileAccess.file_exists(exported_zip):
+		failures.append("export_saves_zip must create a valid archive: %s" % str(exp_res))
+	else:
+		var insp: Dictionary = PlayOverlays.inspect_save_zip(exported_zip, save_dir, root.session)
+		if not bool(insp.get("ok", false)):
+			failures.append("inspect_save_zip must accept valid exported saves: %s" % str(insp))
+		var staged_zip := PlayOverlays.stage_uri_to_temp_file(exported_zip, transfer_dir.path_join("cache"))
+		if staged_zip.is_empty() or not FileAccess.file_exists(staged_zip):
+			failures.append("stage_uri_to_temp_file must copy valid archive")
+		else:
+			DirAccess.remove_absolute(staged_zip)
+		var apply_res: Dictionary = PlayOverlays.apply_save_zip(exported_zip, save_dir, backup_dir, root.session)
+		if not bool(apply_res.get("ok", false)) or int(apply_res.get("imported", 0)) < 1:
+			failures.append("apply_save_zip must import validated save entries")
+
+	# Reject non-ZIP magic and traversal entry ZIP.
+	var bad_magic := transfer_dir.path_join("not_a_zip.zip")
+	var bm := FileAccess.open(bad_magic, FileAccess.WRITE)
+	if bm != null:
+		bm.store_buffer("NOTZIP!!".to_utf8_buffer())
+		bm.close()
+	if bool(PlayOverlays.inspect_save_zip(bad_magic, save_dir, root.session).get("ok", false)):
+		failures.append("inspect_save_zip must reject bad ZIP magic")
+
+	var bad_zip := transfer_dir.path_join("bad_entry.zip")
+	var zp := ZIPPacker.new()
+	if zp.open(bad_zip) == OK:
+		zp.start_file("../escape.json")
+		zp.write_file("{}".to_utf8_buffer())
+		zp.close_file()
+		zp.close()
+	if bool(PlayOverlays.inspect_save_zip(bad_zip, save_dir, root.session).get("ok", false)):
+		failures.append("inspect_save_zip must reject path traversal entry")
+
+	# Reject save JSON without lwsmf.save schema.
+	var invalid_json_zip := transfer_dir.path_join("bad_json.zip")
+	var zp2 := ZIPPacker.new()
+	if zp2.open(invalid_json_zip) == OK:
+		zp2.start_file("save_02.json")
+		zp2.write_file("{\"schema\":\"wrong\"}".to_utf8_buffer())
+		zp2.close_file()
+		zp2.close()
+	if bool(PlayOverlays.inspect_save_zip(invalid_json_zip, save_dir, root.session).get("ok", false)):
+		failures.append("inspect_save_zip must reject malformed save JSON")
+
+	_remove_test_tree(transfer_dir)
+	root.queue_free()
+
+
+static func _remove_test_tree(path: String) -> void:
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.include_hidden = true
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		if entry != "." and entry != "..":
+			var child := path.path_join(entry)
+			if dir.current_is_dir():
+				_remove_test_tree(child)
+			else:
+				DirAccess.remove_absolute(child)
+		entry = dir.get_next()
+	dir.list_dir_end()
+	DirAccess.remove_absolute(path)

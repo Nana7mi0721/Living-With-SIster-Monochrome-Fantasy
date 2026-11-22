@@ -19,6 +19,17 @@ const FONT_NAMES: Array[String] = [
 	"Source Han Sans SC",
 	"PingFang SC",
 	"YouYuan",
+	"Segoe UI Symbol",
+	"sans-serif",
+]
+
+# Simplified Chinese font priority avoids Android FontConfig mixing Japanese glyphs when Lolita.ttf is absent.
+const ANDROID_FONT_NAMES: Array[String] = [
+	"Noto Sans CJK SC",
+	"Noto Sans SC",
+	"Source Han Sans SC",
+	"Droid Sans Fallback",
+	"MiSans",
 	"sans-serif",
 ]
 
@@ -142,6 +153,8 @@ static func _find_retail_font_bytes_in_pak() -> Dictionary:
 		exe_dir.path_join("media.pak"),
 		exe_dir.path_join("work/all/media.pak"),
 	])
+	if OS.has_feature("android"):
+		pak_candidates.append("res://mobile_data/work/all/media.pak.blob.cfb")
 	for pak_path in pak_candidates:
 		if pak_path.is_empty() or not FileAccess.file_exists(pak_path):
 			continue
@@ -158,8 +171,12 @@ static func _find_retail_font_bytes_in_pak() -> Dictionary:
 	return {}
 
 
+static func _system_font_names() -> Array[String]:
+	return ANDROID_FONT_NAMES if OS.has_feature("android") else FONT_NAMES
+
+
 static func _find_system_bold_face() -> Font:
-	for font_name in FONT_NAMES:
+	for font_name in _system_font_names():
 		if font_name == "sans-serif":
 			continue
 		var path := OS.get_system_font_path(font_name, 700)
@@ -181,7 +198,7 @@ static func _make_system_font(bold: bool) -> Font:
 		if bold_face != null:
 			return bold_face
 	var sys := SystemFont.new()
-	sys.font_names = PackedStringArray(FONT_NAMES)
+	sys.font_names = PackedStringArray(_system_font_names())
 	if bold:
 		sys.font_weight = 700
 	sys.allow_system_fallback = true

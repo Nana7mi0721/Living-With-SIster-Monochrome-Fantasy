@@ -47,9 +47,99 @@ public partial class MediaPakReader : RefCounted
         public uint Crc;
     }
 
+    private interface IPakReaderStream : IDisposable
+    {
+        long Length { get; }
+        long Position { set; }
+        void ReadExactly(Span<byte> destination);
+    }
+
+    private sealed class FileStreamAdapter : IPakReaderStream
+    {
+        private readonly FileStream _stream;
+
+        public FileStreamAdapter(string path)
+        {
+            _stream = new FileStream(path, FileMode.Open, System.IO.FileAccess.Read, FileShare.Read);
+        }
+
+        public long Length => _stream.Length;
+
+        public long Position
+        {
+            set => _stream.Position = value;
+        }
+
+        public void ReadExactly(Span<byte> destination) => _stream.ReadExactly(destination);
+
+        public void Dispose() => _stream.Dispose();
+    }
+
+    private sealed class GodotFileAccessStream : IPakReaderStream
+    {
+        private Godot.FileAccess? _file;
+        private readonly long _length;
+
+        public GodotFileAccessStream(string path)
+        {
+            Godot.FileAccess? file = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+            if (file == null)
+            {
+                Error err = Godot.FileAccess.GetOpenError();
+                throw new IOException($"Cannot open '{path}' via Godot.FileAccess: {err}");
+            }
+            _file = file;
+            ulong rawLength = file.GetLength();
+            if (rawLength > long.MaxValue)
+            {
+                _file.Close();
+                _file.Dispose();
+                _file = null;
+                throw new IOException($"File '{path}' exceeds maximum supported length");
+            }
+            _length = (long)rawLength;
+        }
+
+        public long Length => _length;
+
+        public long Position
+        {
+            set
+            {
+                if (_file == null)
+                    throw new IOException("Media pack stream is disposed");
+                if (value < 0)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                _file.Seek((ulong)value);
+            }
+        }
+
+        public void ReadExactly(Span<byte> destination)
+        {
+            if (_file == null)
+                throw new IOException("Media pack stream is disposed");
+            if (destination.IsEmpty)
+                return;
+            byte[] chunk = _file.GetBuffer(destination.Length);
+            if (chunk.Length != destination.Length)
+            {
+                throw new EndOfStreamException(
+                    $"Unexpected EOF reading media pack: expected {destination.Length} bytes, got {chunk.Length}");
+            }
+            chunk.AsSpan().CopyTo(destination);
+        }
+
+        public void Dispose()
+        {
+            _file?.Close();
+            _file?.Dispose();
+            _file = null;
+        }
+    }
+
     private readonly object _gate = new();
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
-    private FileStream? _file;
+    private IPakReaderStream? _file;
     private string _packPath = "";
     private string _lastError = "";
 
@@ -99,11 +189,11 @@ public partial class MediaPakReader : RefCounted
                 return false;
             }
 
-            FileStream? stream = null;
+            IPakReaderStream? stream = null;
             bool opened = false;
             try
             {
-                stream = new FileStream(path, FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read);
+                stream = OpenStream(path);
                 long fileLength = stream.Length;
                 if (fileLength < HeaderSize)
                 {
@@ -196,6 +286,13 @@ public partial class MediaPakReader : RefCounted
             CloseLocked();
         }
     }
+
+    private static bool IsVirtualGodotPath(string path) =>
+        path.StartsWith("res://", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("user://", StringComparison.OrdinalIgnoreCase);
+
+    private static IPakReaderStream OpenStream(string path) =>
+        IsVirtualGodotPath(path) ? new GodotFileAccessStream(path) : new FileStreamAdapter(path);
 
     private void CloseLocked()
     {

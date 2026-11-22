@@ -13,7 +13,23 @@ const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
 const _PlayOverlays := preload("res://presentation_gd/PlayOverlays.gd")
 
 const SCALE_MODES: Array[String] = ["Integer", "Fit-Nearest", "Fit-Linear"]
+const PERF_FPS_LEVELS: Array[int] = [60, 30, 15]
+const PERF_FPS_LABELS: Array[String] = ["高 (60 fps)", "中 (30 fps)", "低 (15 fps)"]
 const DISPLAY_SETTINGS_PATH := "user://display_settings.cfg"
+const HOTKEYS_SETTINGS_PATH := "user://hotkeys.cfg"
+const DEFAULT_HOTKEYS: Dictionary = {
+	"stats": KEY_F2,
+	"debug": KEY_F3,
+	"backlog": KEY_F4,
+	"quick_save": KEY_F5,
+	"diag_snapshot": KEY_F6,
+	"save_transfer": KEY_F7,
+	"scale_mode": KEY_F8,
+	"quick_load": KEY_F9,
+	"perf_tier": KEY_F10,
+	"fullscreen": KEY_F11,
+	"return_to_title": KEY_F12,
+}
 
 var PROF := {}
 var _profile_enabled := OS.get_environment("LWsmf_PROFILE") == "1"
@@ -43,6 +59,12 @@ var _fullscreen := false
 var _windowed_position := Vector2i.ZERO
 var _windowed_size := Vector2i.ZERO
 var _scale_mode_idx := 2  # Default Fit-Linear
+var _perf_tier := 0
+var _show_title_fps := false
+var _title_fps_timer := 0.0
+var _hotkeys: Dictionary = DEFAULT_HOTKEYS.duplicate()
+var _ios_override: int = -1
+var _pending_save_overwrite_confirmed := false
 var _last_restart_ok := false
 
 # Row CE43 last painted; Sys20 mirrors it so a cursor move repaints the title menu.
@@ -129,6 +151,8 @@ func _start_game() -> void:
 	router.wheel_pressed.connect(_on_wheel)
 	router.move_pressed.connect(_on_move)
 	router.hover_changed.connect(_on_hover)
+	router.touch_sidebar_swipe.connect(_on_touch_sidebar_swipe)
+	router.touch_mode_changed.connect(_on_touch_mode_changed)
 
 	choice.chosen.connect(_on_choice_chosen)
 	message.confirm_requested.connect(_on_message_confirm)
@@ -153,7 +177,9 @@ func _start_game() -> void:
 	session.Setup(vm, self)
 	assets.set_save_dir(session.SaveDirectory)
 	_build_overlays()
+	_load_hotkeys()
 	_load_display_settings()
+	_apply_safe_area()
 	if not _is_headless():
 		var win := get_window()
 		if win != null and not win.size_changed.is_connected(_on_window_size_changed):
@@ -192,6 +218,14 @@ func _build_overlays() -> void:
 	overlays.backlog_closed.connect(func() -> void: _arm_modal_release_guard())
 	overlays.title_cancelled.connect(func() -> void: _arm_modal_release_guard())
 	overlays.title_confirmed.connect(_on_title_confirmed)
+	overlays.save_overwrite_confirmed.connect(_on_save_overwrite_confirmed)
+	overlays.save_overwrite_cancelled.connect(func() -> void: _arm_modal_release_guard())
+	overlays.quit_confirmed.connect(_on_quit_confirmed)
+	overlays.quit_cancelled.connect(func() -> void: _arm_modal_release_guard())
+	overlays.save_transfer_closed.connect(func() -> void: _arm_modal_release_guard())
+	overlays.save_page_return_title_requested.connect(request_return_to_title)
+	overlays.save_page_transfer_requested.connect(open_save_transfer)
+	overlays.drawer_action_requested.connect(_on_drawer_action)
 	overlays.fault_export_requested.connect(export_diagnostics)
 	overlays.fault_recover_requested.connect(recover_to_last_save)
 	overlays.fault_restart_requested.connect(restart_after_fault)
@@ -225,6 +259,7 @@ func _process(delta: float) -> void:
 		advance_frame()
 		guard += 1
 	_sync_title_menu()
+	_sync_mobile_and_overlay_state(delta)
 	if overlays != null:
 		if overlays.stats_open():
 			overlays.refresh_stats(vm)
@@ -263,6 +298,8 @@ func _consume_picture_queue(queued: String) -> bool:
 		var args: Array = raw_args if raw_args is Array else []
 		var number := int(entry.get("number", 0))
 		var action := int(entry.get("action", 0))
+		if is_ios_platform() and phase == "title" and number == 5 and (action == 0 or action == 1):
+			action = 3
 		var file := str(entry.get("file", ""))
 		var text := str(entry.get("text", ""))
 		var anchor := int(entry.get("anchor", 0))
@@ -370,6 +407,7 @@ func advance_frame() -> void:
 		return
 	router.clear_frame_latches()
 	_action_input_pending = false
+	_pending_save_overwrite_confirmed = false
 
 
 ## Opcode 123 polls through this bound method so the Callable stays alive across the session.
@@ -405,14 +443,14 @@ func start_event(event_id: int) -> bool:
 func _on_action() -> void:
 	if faulted or _modal_release_guard or _modal_window_open():
 		return
-	var mouse := router.last_input_source == "mouse"
+	var pointer := router.is_pointer_input()
 	var action_denied := (int(session.BasicAllDeny) & 1) != 0
 	if choice.is_open:
 		if action_denied:
 			return
-		if mouse and choice.hover_at(router.hover_position) < 0:
+		if pointer and choice.hover_at(router.hover_position) < 0:
 			return
-		if mouse:
+		if pointer:
 			_arm_modal_release_guard()
 		_action_input_pending = true
 		choice.confirm()
@@ -420,7 +458,7 @@ func _on_action() -> void:
 	if message.is_open():
 		var was_finished := message.finished
 		message.confirm()
-		if mouse:
+		if pointer:
 			if was_finished:
 				_arm_modal_release_guard()
 			else:
@@ -433,6 +471,8 @@ func _on_action() -> void:
 		return
 	if action_denied:
 		return
+	if _maybe_handle_save_ui_action(pointer):
+		return
 	_action_input_pending = true
 	session.PressActionKey()
 
@@ -440,19 +480,17 @@ func _on_action() -> void:
 func _on_cancel() -> void:
 	if faulted:
 		return
-	if backlog_open():
-		close_backlog()
-		return
-	if title_confirm_open():
-		cancel_return_to_title()
+	if overlays != null and overlays.is_modal_open():
+		if overlays.close_topmost_modal():
+			_arm_modal_release_guard()
 		return
 	if _modal_release_guard:
 		return
 	if (int(session.BasicAllDeny) & 2) != 0:
 		return
-	var mouse := router != null and router.last_input_source == "mouse"
+	var pointer := router != null and router.is_pointer_input()
 	if choice.is_open:
-		if mouse:
+		if pointer:
 			_arm_modal_release_guard()
 		choice.cancel()
 		return
@@ -600,6 +638,9 @@ func _on_choices(options: Array, selected: int = 0) -> void:
 		packed.append(str(option))
 	if packed.is_empty():
 		return
+	if session.Phase == "title" and is_ios_platform() and packed.size() >= 3:
+		packed = packed.slice(0, 2)
+		selected = clampi(selected, 0, packed.size() - 1)
 	_choice_hover_lock_pos = Vector2(-1, -1)
 	choice.open(packed, _choice_position(), session.ChoiceAllowsCancel, selected)
 	if session.Phase == "title":
@@ -774,12 +815,17 @@ func _choice_position() -> Vector2:
 
 ## CE43 paints the three rows as pictures 3/4/5 while parking the native choice box off-screen.
 func _attach_title_menu() -> void:
+	var slots := [3, 4] if is_ios_platform() else [3, 4, 5]
+	if is_ios_platform() and stage != null:
+		stage.draw_picture(5, 3, "", "", [], 0, -1)
 	var rects: Array = []
-	for slot in [3, 4, 5]:
+	for slot in slots:
 		var rect := stage.picture_rect(slot)
 		if rect.size.x > 0.0 and rect.size.y > 0.0:
 			rects.append(rect)
 	choice.set_override_rects(rects)
+	if is_ios_platform():
+		choice.selected = clampi(choice.selected, 0, 1)
 	_title_menu_cursor = -1
 	session.SetTitleMenuVisible(true)
 	_sync_title_menu()
@@ -789,13 +835,18 @@ func _attach_title_menu() -> void:
 func _sync_title_menu() -> void:
 	if phase != "title" or not choice.is_open:
 		return
+	var slots := [3, 4] if is_ios_platform() else [3, 4, 5]
+	if is_ios_platform() and stage != null:
+		stage.draw_picture(5, 3, "", "", [], 0, -1)
 	var rects: Array = []
-	for slot in [3, 4, 5]:
+	for slot in slots:
 		var rect := stage.picture_rect(slot)
 		if rect.size.x > 0.0 and rect.size.y > 0.0:
 			rects.append(rect)
-	if rects.size() == 3 and rects != choice.override_rects:
+	if rects.size() == slots.size() and rects != choice.override_rects:
 		choice.set_override_rects(rects)
+	if is_ios_platform() and choice.selected > 1:
+		choice.selected = clampi(choice.selected, 0, 1)
 	if choice.selected == _title_menu_cursor:
 		return
 	_title_menu_cursor = choice.selected
@@ -805,13 +856,29 @@ func _sync_title_menu() -> void:
 
 # ---- lifecycle and game-flow host callbacks ------------------------------
 
-## Drop held latches and buffered input on focus loss since release events may be missed.
+## Drop held latches and buffered input on focus loss/pause, and route Android back key.
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_save_display_settings()
 		return
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		handle_back_request()
+		return
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_save_display_settings()
+		_clear_held_input()
+		return
+	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
+		if router != null:
+			router.reconcile_pointer_buttons(true)
+		_arm_modal_release_guard()
+		return
 	if what != NOTIFICATION_APPLICATION_FOCUS_OUT and what != NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		return
+	_clear_held_input()
+
+
+func _clear_held_input() -> void:
 	_modal_release_guard = false
 	_action_input_pending = false
 	if vm != null:
@@ -832,6 +899,9 @@ func _on_return_to_title() -> void:
 
 ## Opcode 175 quits the application.
 func _on_end_game() -> void:
+	if is_ios_platform():
+		status("endgame suppressed on iOS")
+		return
 	status("endgame")
 	_save_display_settings()
 	get_tree().quit()
@@ -961,45 +1031,57 @@ func _on_message_text() -> String:
 	return message.full_text
 
 
-## Hotkeys: F2 stats/milestones, F3 debug, F4 backlog, F5 quick save, F8 scaling,
-## F9 quick load, F11 fullscreen, F12 return-to-title confirm.
+## Hotkeys: F2 stats/milestones, F3 debug, F4 backlog, F5 quick save, F6 diagnostic snapshot,
+## F7 save import/export, F8 scaling (Shift+F8 title FPS), F9 quick load, F10 perf tier,
+## F11 fullscreen, F12 return-to-title confirm. Overridable via --hotkeys=<file> or user://hotkeys.cfg.
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey):
 		return
 	var key := event as InputEventKey
 	if not key.pressed or key.echo:
 		return
-	if key.keycode == KEY_F11:
+	if key.keycode == int(_hotkeys.get("fullscreen", KEY_F11)):
 		toggle_fullscreen()
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == KEY_F8:
-		cycle_scaling_mode()
+	if key.keycode == int(_hotkeys.get("scale_mode", KEY_F8)):
+		if key.shift_pressed:
+			toggle_titlebar_fps()
+		else:
+			cycle_scaling_mode()
+		get_viewport().set_input_as_handled()
+		return
+	if key.keycode == int(_hotkeys.get("perf_tier", KEY_F10)):
+		cycle_performance_tier()
 		get_viewport().set_input_as_handled()
 		return
 	if faulted:
-		if (key.keycode == KEY_ESCAPE or key.keycode == KEY_F12) and overlays != null and not overlays.fault_modal_visible():
+		if (key.keycode == KEY_ESCAPE or key.keycode == int(_hotkeys.get("return_to_title", KEY_F12))) and overlays != null and not overlays.fault_modal_visible():
 			overlays.show_fault_modal(_failure_reason(), session != null and session.HasSave)
 			get_viewport().set_input_as_handled()
 		return
 	if phase == "setup" or phase == "bootstrap":
 		return
-	if key.keycode == KEY_F2:
+	if key.keycode == int(_hotkeys.get("stats", KEY_F2)):
 		if overlays != null:
 			overlays.toggle_stats(vm)
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == KEY_F3:
+	if key.keycode == int(_hotkeys.get("debug", KEY_F3)):
 		if overlays != null:
 			overlays.toggle_debug()
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == KEY_F6:
+	if key.keycode == KEY_W and overlays != null and overlays.debug_open():
+		cycle_performance_tier()
+		get_viewport().set_input_as_handled()
+		return
+	if key.keycode == int(_hotkeys.get("diag_snapshot", KEY_F6)):
 		dump_diagnostic_snapshot(true)
 		_show_toast("已导出诊断快照 user://diagnostic_snapshot.txt")
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == KEY_F4:
+	if key.keycode == int(_hotkeys.get("backlog", KEY_F4)):
 		if title_confirm_open():
 			get_viewport().set_input_as_handled()
 			return
@@ -1009,7 +1091,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			open_backlog()
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == KEY_F12:
+	if key.keycode == int(_hotkeys.get("return_to_title", KEY_F12)):
 		if backlog_open():
 			get_viewport().set_input_as_handled()
 			return
@@ -1017,39 +1099,22 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if key.keycode == KEY_ESCAPE and _modal_window_open():
-		if backlog_open():
-			close_backlog()
-		else:
-			cancel_return_to_title()
+		if overlays != null and overlays.close_topmost_modal():
+			_arm_modal_release_guard()
 		get_viewport().set_input_as_handled()
 		return
 	if _modal_window_open():
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == KEY_F5:
-		if session.SaveQuick():
-			status("saved %s (quick)" % session.QuickSavePath())
-			_show_toast("已保存")
-		else:
-			status("save refused (not in a saveable state)")
-			_show_toast("当前不可保存")
+	if key.keycode == int(_hotkeys.get("save_transfer", KEY_F7)):
+		open_save_transfer()
 		get_viewport().set_input_as_handled()
-	elif key.keycode == KEY_F9:
-		var loaded := session.LoadQuick()
-		frames = session.Frames
-		if vm.Faulted:
-			status("load faulted")
-			_show_toast("读档失败")
-			report_fault(vm.FaultReason)
-		elif loaded:
-			if overlays != null:
-				overlays.close_non_fault_modals()
-				overlays.clear_backlog()
-			status("loaded %s (quick)" % session.QuickSavePath())
-			_show_toast("已读档")
-		else:
-			status("load failed")
-			_show_toast("读档失败")
+		return
+	if key.keycode == int(_hotkeys.get("quick_save", KEY_F5)):
+		_trigger_quick_save()
+		get_viewport().set_input_as_handled()
+	elif key.keycode == int(_hotkeys.get("quick_load", KEY_F9)):
+		_trigger_quick_load()
 		get_viewport().set_input_as_handled()
 
 
@@ -1164,6 +1229,7 @@ static func integer_scale_fits(window_size: Vector2i, base_size: Vector2i) -> bo
 
 func _on_window_size_changed() -> void:
 	_apply_scaling_mode()
+	_apply_safe_area()
 
 
 func _save_display_settings() -> void:
@@ -1175,6 +1241,8 @@ func _save_display_settings() -> void:
 		win_size = DisplayServer.window_get_size()
 	cfg.set_value("display", "scale_mode", _scale_mode_idx)
 	cfg.set_value("display", "fullscreen", _fullscreen)
+	cfg.set_value("display", "perf_tier", _perf_tier)
+	cfg.set_value("display", "show_title_fps", _show_title_fps)
 	if win_size.x > 0 and win_size.y > 0:
 		cfg.set_value("display", "window_width", win_size.x)
 		cfg.set_value("display", "window_height", win_size.y)
@@ -1187,9 +1255,13 @@ func _load_display_settings() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(DISPLAY_SETTINGS_PATH) != OK:
 		_apply_scaling_mode()
+		_apply_performance_tier()
 		return
 	_scale_mode_idx = clampi(int(cfg.get_value("display", "scale_mode", _scale_mode_idx)), 0, SCALE_MODES.size() - 1)
+	_perf_tier = clampi(int(cfg.get_value("display", "perf_tier", 0)), 0, PERF_FPS_LEVELS.size() - 1)
+	_show_title_fps = bool(cfg.get_value("display", "show_title_fps", false))
 	_apply_scaling_mode()
+	_apply_performance_tier()
 	if assets != null:
 		assets.set_hd_enabled(bool(cfg.get_value("display", "hd_textures", true)))
 	var w := int(cfg.get_value("display", "window_width", 0))
@@ -1536,3 +1608,309 @@ func recover_to_last_save() -> bool:
 	_arm_modal_release_guard()
 	status("fault recovery: loaded last save")
 	return true
+
+
+# ---- multiplatform UX, touch drawer, save guard, perf tiers & hotkeys ----
+
+func is_ios_platform() -> bool:
+	if _ios_override >= 0:
+		return _ios_override == 1
+	return OS.has_feature("ios")
+
+
+func set_ios_override(value: int) -> void:
+	_ios_override = value
+
+
+func performance_tier() -> int:
+	return _perf_tier
+
+
+func target_fps() -> int:
+	return PERF_FPS_LEVELS[_perf_tier]
+
+
+func _apply_performance_tier() -> void:
+	if _is_headless():
+		Engine.max_fps = 0
+		return
+	Engine.max_fps = PERF_FPS_LEVELS[_perf_tier]
+
+
+func cycle_performance_tier() -> int:
+	_perf_tier = (_perf_tier + 1) % PERF_FPS_LEVELS.size()
+	_apply_performance_tier()
+	_save_display_settings()
+	var label := PERF_FPS_LABELS[_perf_tier]
+	_show_toast("性能档位: %s" % label)
+	status("perf_tier=%s" % label)
+	return PERF_FPS_LEVELS[_perf_tier]
+
+
+func toggle_titlebar_fps() -> bool:
+	_show_title_fps = not _show_title_fps
+	_title_fps_timer = 0.0
+	_save_display_settings()
+	if not _is_headless():
+		DisplayServer.window_set_title(
+			"LWSMF Remake | Screen:%d VM:%d | %s" % [int(Engine.get_frames_per_second()), target_fps(), PERF_FPS_LABELS[_perf_tier]]
+			if _show_title_fps else "LWSMF Remake"
+		)
+	_show_toast("标题栏帧率显示: %s" % ("开" if _show_title_fps else "关"))
+	return _show_title_fps
+
+
+static func parse_hotkeys_text(raw: String, base: Dictionary = DEFAULT_HOTKEYS) -> Dictionary:
+	var result := base.duplicate()
+	for line in raw.split("\n", false):
+		var trimmed := line.strip_edges()
+		if trimmed.is_empty() or trimmed.begins_with("#") or trimmed.begins_with("["):
+			continue
+		var eq := trimmed.find("=")
+		if eq <= 0:
+			continue
+		var action := trimmed.left(eq).strip_edges().to_lower()
+		var key_str := trimmed.substr(eq + 1).strip_edges().trim_prefix("\"").trim_suffix("\"")
+		if not result.has(action) or key_str.is_empty():
+			continue
+		var code := OS.find_keycode_from_string(key_str)
+		if code != KEY_NONE:
+			result[action] = code
+	return result
+
+
+func _load_hotkeys() -> void:
+	_hotkeys = DEFAULT_HOTKEYS.duplicate()
+	var path := ""
+	for args in [OS.get_cmdline_user_args(), OS.get_cmdline_args()]:
+		for i in args.size():
+			var arg := String(args[i])
+			if arg.begins_with("--hotkeys="):
+				path = arg.substr(10)
+			elif arg == "--hotkeys" and i + 1 < args.size():
+				path = String(args[i + 1])
+	if path.is_empty() and FileAccess.file_exists(HOTKEYS_SETTINGS_PATH):
+		path = HOTKEYS_SETTINGS_PATH
+	if path.is_empty() or not FileAccess.file_exists(path):
+		return
+	var text := FileAccess.get_file_as_string(path)
+	if not text.is_empty():
+		_hotkeys = parse_hotkeys_text(text, DEFAULT_HOTKEYS)
+
+
+func _apply_safe_area() -> void:
+	if overlays == null:
+		return
+	if _is_headless():
+		overlays.apply_safe_area({})
+		return
+	var win_size := DisplayServer.window_get_size()
+	var safe := DisplayServer.get_display_safe_area()
+	if win_size.x <= 0 or win_size.y <= 0 or safe.size.x <= 0 or safe.size.y <= 0:
+		overlays.apply_safe_area({})
+		return
+	var sx := 1024.0 / float(win_size.x)
+	var sy := 576.0 / float(win_size.y)
+	overlays.apply_safe_area({
+		"left": maxf(0.0, float(safe.position.x) * sx),
+		"top": maxf(0.0, float(safe.position.y) * sy),
+		"right": maxf(0.0, float(win_size.x - safe.end.x) * sx),
+		"bottom": maxf(0.0, float(win_size.y - safe.end.y) * sy),
+	})
+
+
+func _sync_mobile_and_overlay_state(delta: float) -> void:
+	var save_ui := _save_load_ui_active()
+	if router != null:
+		router.touch_scroll_enabled = (choice != null and choice.is_open) or save_ui or backlog_open()
+		router.sidebar_open_hint = overlays != null and overlays.drawer_open()
+	if overlays != null:
+		overlays.update_save_page_bar(save_ui and not _modal_window_open(), phase == "title")
+		overlays.update_drawer_state(phase == "title", can_open_quick_ui(), PERF_FPS_LABELS[_perf_tier], scaling_mode_name())
+	if _show_title_fps and not _is_headless():
+		_title_fps_timer += delta
+		if _title_fps_timer >= 0.5:
+			_title_fps_timer = 0.0
+			DisplayServer.window_set_title(
+				"LWSMF Remake | Screen:%d VM:%d | %s" % [int(Engine.get_frames_per_second()), target_fps(), PERF_FPS_LABELS[_perf_tier]]
+			)
+
+
+func _on_touch_sidebar_swipe(open: bool) -> void:
+	if overlays == null or faulted:
+		return
+	if open:
+		if can_open_quick_ui() and not _modal_window_open():
+			overlays.open_drawer()
+	else:
+		if overlays.drawer_open():
+			overlays.close_drawer()
+			_arm_modal_release_guard()
+
+
+func _on_touch_mode_changed(active: bool) -> void:
+	if overlays != null:
+		overlays.set_touch_ui_enabled(active)
+
+
+func _on_drawer_action(action: String) -> void:
+	match action:
+		"backlog":
+			open_backlog()
+		"quick_save":
+			if can_open_quick_ui():
+				_trigger_quick_save()
+		"quick_load":
+			if can_open_quick_ui():
+				_trigger_quick_load()
+		"save_transfer":
+			open_save_transfer()
+		"perf_tier":
+			cycle_performance_tier()
+		"scale_mode":
+			cycle_scaling_mode()
+		"return_title":
+			request_return_to_title()
+
+
+func can_open_quick_ui() -> bool:
+	if faulted or phase in ["boot", "setup", "bootstrap", "failed"]:
+		return false
+	if _transition_frames > 0 or _transition_freeze_active:
+		return false
+	return true
+
+
+func open_save_transfer() -> void:
+	if overlays == null or session == null or faulted or phase in ["setup", "bootstrap", "failed"]:
+		return
+	overlays.open_save_transfer(session.SaveDirectory, session)
+
+
+func _trigger_quick_save() -> void:
+	if phase == "title":
+		_show_toast("标题界面不可快速存档")
+		return
+	if session.SaveQuick():
+		status("saved %s (quick)" % session.QuickSavePath())
+		_show_toast("已保存")
+	else:
+		status("save refused (not in a saveable state)")
+		_show_toast("当前不可保存")
+
+
+func _trigger_quick_load() -> void:
+	var loaded := session.LoadQuick()
+	frames = session.Frames
+	if vm.Faulted:
+		status("load faulted")
+		_show_toast("读档失败")
+		report_fault(vm.FaultReason)
+	elif loaded:
+		if overlays != null:
+			overlays.close_non_fault_modals()
+			overlays.clear_backlog()
+		status("loaded %s (quick)" % session.QuickSavePath())
+		_show_toast("已读档")
+	else:
+		status("load failed")
+		_show_toast("读档失败")
+
+
+func _save_load_ui_active() -> bool:
+	if session == null or stage == null:
+		return false
+	return session.HasEvent(131) and _system_ui_visible()
+
+
+func _save_load_hit_slot(pointer: Vector2) -> int:
+	if stage == null:
+		return -1
+	var slots := [12050, 12070, 12090, 12110]
+	for idx in slots.size():
+		var rect := stage.picture_rect(slots[idx])
+		if rect.size.x > 0.0 and rect.size.y > 0.0 and rect.has_point(pointer):
+			return idx
+	return -1
+
+
+func _save_load_hit_interactive(pointer: Vector2) -> bool:
+	if _save_load_hit_slot(pointer) >= 0:
+		return true
+	if stage != null:
+		for arrow_slot in [12004, 12005]:
+			var r := stage.picture_rect(arrow_slot)
+			if r.size.x > 0.0 and r.size.y > 0.0 and r.has_point(pointer):
+				return true
+	if overlays != null and overlays.save_page_bar_rect().has_point(pointer):
+		return true
+	return false
+
+
+func _maybe_handle_save_ui_action(is_pointer: bool) -> bool:
+	if not _save_load_ui_active() or _pending_save_overwrite_confirmed:
+		return false
+	if is_pointer:
+		if overlays != null and overlays.save_page_bar_rect().has_point(router.hover_position):
+			return true
+		if not _save_load_hit_interactive(router.hover_position):
+			router.trigger_cancel_pulse(router.last_input_source)
+			return true
+	if session.GetSaveSlotMode() != 0:
+		return false
+	var row := _save_load_hit_slot(router.hover_position) if is_pointer else session.GetEventSelf(131, 10)
+	if row < 0 or row > 3:
+		return false
+	var page := maxi(0, session.GetEventSelf(131, 11))
+	var slot := page * 4 + row + 1
+	var slot_path: String = session.SaveDirectory.path_join("save_%02d.json" % slot)
+	if not FileAccess.file_exists(slot_path):
+		return false
+	if router != null:
+		router.clear_pointer_latches()
+		router.clear_click_latch()
+	if overlays != null:
+		overlays.open_save_confirm(slot, router.hover_position, is_pointer)
+	return true
+
+
+func _on_save_overwrite_confirmed(_slot: int, pointer_pos: Vector2, is_pointer: bool) -> void:
+	_pending_save_overwrite_confirmed = true
+	_modal_release_guard = false
+	if router != null:
+		if is_pointer:
+			router.hover_position = pointer_pos
+			router.mouse_seen = true
+		router.trigger_action_pulse("mouse" if is_pointer else "keyboard")
+
+
+func _on_quit_confirmed() -> void:
+	if is_ios_platform():
+		return
+	_save_display_settings()
+	get_tree().quit()
+
+
+## 7-level priority router for Android/system back requests.
+func handle_back_request() -> String:
+	if phase == "failed" or (faulted and overlays != null and overlays.fault_modal_visible()):
+		if not is_ios_platform() and not _is_headless():
+			get_tree().quit()
+		return "fault_quit"
+	if phase == "bootstrap":
+		return "bootstrap_ignored"
+	if overlays != null and overlays.is_modal_open():
+		var was_drawer := overlays.drawer_open()
+		if overlays.close_topmost_modal():
+			_arm_modal_release_guard()
+		return "drawer_closed" if was_drawer else "modal_closed"
+	if _save_load_ui_active() or (choice != null and choice.is_open and phase != "title"):
+		if router != null:
+			router.trigger_cancel_pulse("touch")
+		return "submenu_cancel"
+	if phase == "title":
+		if not is_ios_platform() and overlays != null:
+			overlays.open_quit_confirm()
+		return "title_quit_confirm"
+	request_return_to_title()
+	return "in_game_title_confirm"

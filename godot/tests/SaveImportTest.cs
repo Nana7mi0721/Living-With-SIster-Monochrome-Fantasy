@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Godot;
 using Lwsmf.Core;
+using Lwsmf.Presentation;
 
 namespace Lwsmf.Tests;
 
@@ -50,6 +51,12 @@ public partial class SaveImportTest : Node
         if (!TryValidation(saveDir))
         {
             GetTree().Quit(5);
+            return;
+        }
+
+        if (!TrySaveTransferApis(rootDir, saveDir))
+        {
+            GetTree().Quit(6);
             return;
         }
 
@@ -405,6 +412,140 @@ public partial class SaveImportTest : Node
         }
 
         GD.Print("SAVE_IMPORT_VALIDATION_OK checksum=strict start=strict utf8=warn-once picture-utf8=warn-once");
+        return true;
+    }
+
+    private bool TrySaveTransferApis(string rootDir, string saveDir)
+    {
+        var validState = new SaveState { MapId = 1005, MapFile = "SampleMapA.mps" };
+        string validJson = SaveCodec.ToJson(validState);
+        if (!GameSession.ValidateSaveJson(validJson, out string validErr) || validErr.Length != 0)
+        {
+            GD.PrintErr($"SAVE_TRANSFER_FAILED: valid JSON rejected: {validErr}");
+            return false;
+        }
+
+        foreach (string bad in new[] { "", "{bad", "{}", "{\"schema\":\"lwsmf.other\",\"schema_version\":1}" })
+        {
+            if (GameSession.ValidateSaveJson(bad, out string badErr) || string.IsNullOrEmpty(badErr))
+            {
+                GD.PrintErr($"SAVE_TRANSFER_FAILED: malformed JSON accepted: {bad}");
+                return false;
+            }
+        }
+
+        string sampleSav = Path.Combine(saveDir, "SaveData01.sav");
+        string dataPath = Path.GetFullPath(Path.Combine(rootDir, "..", "game_data", "programs.json"));
+        string transferDir = Path.Combine(Path.GetTempPath(), $"lwsmf_transfer_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(transferDir);
+
+        var controllerUi = new Godot.Control();
+        AddChild(controllerUi);
+        var controllerVm = new VmController { Name = "TransferCtrlVm" };
+        AddChild(controllerVm);
+        controllerVm.LoadPrograms(dataPath);
+        var controller = new GameSessionController();
+        AddChild(controller);
+
+        try
+        {
+            string slot1Path = Path.Combine(transferDir, "save_01.json");
+            var harness = new SessionHarness(this, dataPath, slot1Path);
+            if (!harness.RunToBedroom(4000))
+            {
+                GD.PrintErr($"SAVE_TRANSFER_FAILED: could not reach bedroom ({harness.Session.Phase})");
+                return false;
+            }
+
+            harness.Vm.Vm.Vars.Set(500, 12345);
+            int beforeFrames = harness.Session.Frames;
+            string beforePhase = harness.Session.Phase;
+            int beforeMapId = harness.Session.MapData?.Id ?? -1;
+
+            if (!harness.Session.ImportRetailSaveToSlot(sampleSav, 2, out string importErr) || importErr.Length != 0)
+            {
+                GD.PrintErr($"SAVE_TRANSFER_FAILED: ImportRetailSaveToSlot failed: {importErr}");
+                return false;
+            }
+
+            if (harness.Session.Phase != beforePhase
+                || harness.Session.Frames != beforeFrames
+                || (harness.Session.MapData?.Id ?? -1) != beforeMapId
+                || harness.Vm.Vm.Vars.Get(500) != 12345)
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: ImportRetailSaveToSlot mutated active live session");
+                return false;
+            }
+
+            string slot2Path = Path.Combine(transferDir, "save_02.json");
+            if (!File.Exists(slot2Path))
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: save_02.json was not written");
+                return false;
+            }
+
+            SaveState? imported = SaveCodec.Read(slot2Path);
+            if (imported == null || imported.Vars.Count != WolfIds.VarPollMax || imported.PlayFrames <= 0
+                || imported.MapId != 1005 || imported.CommonSelf.Count == 0
+                || !imported.MapEvents.Exists(e => e.Id == 0 && !e.Runs))
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: imported save_02.json missing expected state");
+                return false;
+            }
+
+            if (harness.Session.ImportRetailSaveToSlot(sampleSav, 0, out string badSlotErr) || string.IsNullOrEmpty(badSlotErr))
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: slot 0 should be rejected");
+                return false;
+            }
+            if (harness.Session.ImportRetailSaveToSlot(sampleSav, 100, out string highSlotErr) || string.IsNullOrEmpty(highSlotErr))
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: slot 100 should be rejected");
+                return false;
+            }
+
+            controller.Setup(controllerVm, controllerUi, slot1Path);
+            if (controller.ValidateSaveJson(validJson) != "")
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: controller.ValidateSaveJson rejected valid JSON");
+                return false;
+            }
+            if (string.IsNullOrEmpty(controller.ValidateSaveJson("{bad")))
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: controller.ValidateSaveJson accepted malformed JSON");
+                return false;
+            }
+            if (!controller.ImportRetailSaveToSlot(sampleSav, 3) || controller.LastError.Length != 0)
+            {
+                GD.PrintErr($"SAVE_TRANSFER_FAILED: controller.ImportRetailSaveToSlot failed: {controller.LastError}");
+                return false;
+            }
+            if (!File.Exists(Path.Combine(transferDir, "save_03.json")))
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: save_03.json was not written by controller");
+                return false;
+            }
+            if (controller.ImportRetailSaveToSlot(Path.Combine(transferDir, "missing.sav"), 4) || string.IsNullOrEmpty(controller.LastError))
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: missing .sav should fail and populate LastError");
+                return false;
+            }
+
+            if (!harness.Session.LoadGameFrom(slot2Path) || harness.Session.Phase != "bedroom")
+            {
+                GD.PrintErr("SAVE_TRANSFER_FAILED: imported save_02.json failed to load into live session");
+                return false;
+            }
+        }
+        finally
+        {
+            controller.QueueFree();
+            controllerVm.QueueFree();
+            controllerUi.QueueFree();
+            try { Directory.Delete(transferDir, true); } catch (IOException) { }
+        }
+
+        GD.Print("SAVE_TRANSFER_API_OK");
         return true;
     }
 }

@@ -6,7 +6,9 @@ Adapts the proven APK packaging pattern to LWSMF's data contract:
   are staged with `.blob` suffixes so Godot packs them cleanly as raw payloads.
 - Database schemas (`work/all/BasicData/*.project`) are staged with `.blob`.
 - `work/all/media.pak` is staged with `.blob.cfb` (so Android AssetManager keeps
-  it STORED/uncompressed rather than deflating 400+ MB on APK build).
+  it STORED/uncompressed rather than deflating 400+ MB on APK build) and marked
+  `"direct_res": true` in `mobile_data_manifest.json` for zero-copy `res://`
+  reading without unpacking into `user://`.
 - `mobile_data_manifest.json` records payload_digest & staging_version.
 """
 from __future__ import annotations
@@ -128,8 +130,12 @@ def cmd_plan(args: argparse.Namespace) -> int:
     total_raw = sum(p.stat().st_size for _, p, _ in items)
     print(f"ANDROID_DATA_PLAN entries={len(items)} source_bytes={total_raw} slim_pak={args.media_pak is not None}")
     for logical, src, compact in items:
-        suffix = MEDIA_BLOB_SUFFIX if logical.endswith("media.pak") else BLOB_SUFFIX
-        print(f"  {logical}{suffix:10s} <- {src.name} ({src.stat().st_size / 1024 / 1024:.2f} MB, compact_json={compact})")
+        direct_res = logical.endswith("media.pak")
+        suffix = MEDIA_BLOB_SUFFIX if direct_res else BLOB_SUFFIX
+        print(
+            f"  {logical}{suffix:10s} <- {src.name} "
+            f"({src.stat().st_size / 1024 / 1024:.2f} MB, compact_json={compact}, direct_res={direct_res})"
+        )
     return 0
 
 
@@ -147,7 +153,8 @@ def cmd_stage(args: argparse.Namespace) -> int:
     for logical, src, compact in items:
         if FORBIDDEN_SAVE_RE.match(PurePosixPath(logical).name):
             fail(f"refusing player save file in mobile stage: {logical}")
-        suffix = MEDIA_BLOB_SUFFIX if logical.endswith("media.pak") else BLOB_SUFFIX
+        direct_res = logical.endswith("media.pak")
+        suffix = MEDIA_BLOB_SUFFIX if direct_res else BLOB_SUFFIX
         rel_out = logical + suffix
         dst = safe_dest / rel_out
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -156,7 +163,14 @@ def cmd_stage(args: argparse.Namespace) -> int:
             dst.write_bytes(raw)
         else:
             shutil.copy2(src, dst)
-        staged_files.append({"logical": logical, "staged": rel_out, "bytes": dst.stat().st_size})
+        staged_files.append(
+            {
+                "logical": logical,
+                "staged": rel_out,
+                "bytes": dst.stat().st_size,
+                "direct_res": direct_res,
+            }
+        )
 
     manifest_obj = {
         "schema": "lwsmf.mobile_data",

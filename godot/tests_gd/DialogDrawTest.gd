@@ -352,8 +352,11 @@ func _ready() -> void:
 	if not is_equal_approx(centered_choice.position.x, 512.0 - centered_choice.size.x * 0.5) \
 			or not is_equal_approx(centered_choice.position.y, 288.0 - centered_choice.size.y * 0.5):
 		failures.append("the -1 sentinel must center the choice window (got %s)" % str(centered_choice))
-	if not is_equal_approx(ChoiceWindow.FONT_SIZE, 20.0) or not is_equal_approx(ChoiceWindow.MIN_WIDTH, 120.0):
-		failures.append("choice typography must be 20px with a 120px minimum width")
+	if not is_equal_approx(ChoiceWindow.FONT_SIZE, 20.0) or not is_equal_approx(ChoiceWindow.MIN_WIDTH, 240.0):
+		failures.append("choice typography must be 20px with a 240px minimum width")
+	choice.open(PackedStringArray(["是", "否"]), Vector2(260, 220), true, 0)
+	if choice.window_size().x < 240.0:
+		failures.append("short yes/no choice window width must be at least 240px (got %.1f)" % choice.window_size().x)
 	if ChoiceWindow.SELECTED_COLOR != Color.WHITE:
 		failures.append("selected choice text must be pure white")
 	var full_width := choice.label_width("Adventure")

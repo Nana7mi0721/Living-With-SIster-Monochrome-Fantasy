@@ -8,14 +8,18 @@ const MEDIA_PREFIX := "media://"
 ##
 ## Resolves WOLF logical paths ("Picture/face01.png") against the unpacked tree or media
 ## pack without loading them eagerly, and caches decoded textures/audio in an LRU bounded
-## by a byte budget (default 384 MB).
+## by a byte budget (default 512 MB).
 ##
 ## Textures are accounted at RGBA8 size (w*h*4) because that is what the GPU holds after
 ## ImageTexture.create_from_image; audio is accounted by source byte length. Eviction drops
 ## only this cache's reference so textures attached to live nodes stay alive.
 
 const DEFAULT_BUDGET_BYTES := 512 * 1024 * 1024
-const MOBILE_BUDGET_BYTES := 192 * 1024 * 1024
+const ANDROID_BUDGET_BYTES := 128 * 1024 * 1024
+# 64 MB keeps texture memory well under Jetsam limits on 3 GB RAM iOS devices.
+const IOS_BUDGET_BYTES := 64 * 1024 * 1024
+const MOBILE_BUDGET_BYTES := ANDROID_BUDGET_BYTES
+const ANDROID_MEDIA_PAK_RES := "res://mobile_data/work/all/media.pak.blob.cfb"
 const TEXTURE_EXTENSIONS: Array[String] = [".png", ".jpg", ".jpeg", ".bmp", ".webp"]
 ## Bare-basename fallback order. Both the unpacked tree and the pack can store art under
 ## multiple folders (SystemGraphic/TitleGraphic.png vs SystemFile, hword/ vs picture/), so
@@ -64,20 +68,36 @@ var _cache: Dictionary = {}                 # normalized key -> Resource
 var _sizes: Dictionary = {}                 # normalized key -> bytes
 var _lru: Array[String] = []                # oldest first
 var _logged_misses: Dictionary = {}
+var _explicit_root := false
+
+
+static func platform_budget_bytes(
+		is_android: bool = OS.has_feature("android"),
+		is_ios: bool = OS.has_feature("ios"),
+		is_mobile: bool = OS.has_feature("mobile")
+	) -> int:
+	if is_ios:
+		return IOS_BUDGET_BYTES
+	if is_android or is_mobile:
+		return ANDROID_BUDGET_BYTES
+	return DEFAULT_BUDGET_BYTES
 
 
 func _init(p_root: String = "") -> void:
-	var explicit_root := p_root != ""
-	root_dir = p_root if explicit_root else default_root()
-	if OS.has_feature("mobile"):
-		budget_bytes = MOBILE_BUDGET_BYTES
+	_explicit_root = p_root != ""
+	root_dir = p_root if _explicit_root else default_root()
+	var is_android := OS.has_feature("android")
+	var is_ios := OS.has_feature("ios")
+	var is_mobile := OS.has_feature("mobile")
+	budget_bytes = platform_budget_bytes(is_android, is_ios, is_mobile)
+	if is_android or is_ios or is_mobile:
 		hd_enabled = false
 	_index()
 	_open_media_pack()
 	_open_hd_pack()
 	# Only the implicit default root falls back to the committed stub tree; an explicit root
 	# (tests, custom installs) keeps reporting its real contents so misses stay visible.
-	if not explicit_root and _files.is_empty() and media_pak == null:
+	if not _explicit_root and _files.is_empty() and media_pak == null:
 		root_dir = fallback_root()
 		using_fallback = true
 		_index()
@@ -352,6 +372,8 @@ func _open_media_pack() -> void:
 	if not override.is_empty():
 		candidates.append(override)
 	candidates.append(root_dir.path_join("media.pak"))
+	if not _explicit_root and not using_fallback and AppPaths.is_android():
+		candidates.append(ANDROID_MEDIA_PAK_RES)
 	for candidate in candidates:
 		if not FileAccess.file_exists(candidate):
 			continue

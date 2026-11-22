@@ -143,6 +143,9 @@ to_win_path() {
   fi
 }
 
+echo "== localizing Lwsmf.exe Windows version resource (0x0804) =="
+"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/windows_pe.py")" "$(to_win_path "$STAGE/game/Lwsmf.exe")"
+
 echo "== staging compact game_data =="
 mkdir -p "$STAGE/game_data"
 SRC_GD_WIN="$(to_win_path "$ROOT/game_data")"

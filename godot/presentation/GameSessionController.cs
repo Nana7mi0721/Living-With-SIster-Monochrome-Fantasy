@@ -35,6 +35,7 @@ public partial class GameSessionController : Node
     public int MapId => _session?.MapData?.Id ?? -1;
     public int GetEventSelf(int eventId, int slot) => _vm?.GetEventSelf(eventId, slot) ?? -1;
     public int[] GetEventSelfAll(int eventId, int slot) => _vm?.GetEventSelfAll(eventId, slot) ?? Array.Empty<int>();
+    public int GetSaveSlotMode() => GetEventSelf(131, 0);
     public string SavePath => _session?.SavePath ?? "";
     public string SaveDirectory => Path.GetDirectoryName(_session?.SavePath ?? "") ?? "";
     public bool MessageOpen => _session?.MessageOpen ?? false;
@@ -140,6 +141,23 @@ public partial class GameSessionController : Node
     public string LoadedFrom => _session?.LoadedFromName ?? "none";
     public bool LoadRetailSave(string path, int slotIndex = 0) =>
         _session?.LoadRetailSave(path, slotIndex) ?? false;
+
+    /// <summary>Validate save JSON and return an empty string on success or an error message.</summary>
+    public string ValidateSaveJson(string json) =>
+        GameSession.ValidateSaveJson(json, out string error) ? "" : error;
+
+    /// <summary>Import a retail .sav file into save_NN.json without altering the live session.</summary>
+    public bool ImportRetailSaveToSlot(string savPath, int targetSlot)
+    {
+        if (_session == null)
+        {
+            LastError = "session not initialized";
+            return false;
+        }
+        bool ok = _session.ImportRetailSaveToSlot(savPath, targetSlot, out string error);
+        LastError = ok ? "" : error;
+        return ok;
+    }
     public void MoveLeader(int dx, int dy, int facing) => _session?.MoveLeader(dx, dy, facing);
     public void PressActionKey() => _session?.PressActionKey();
     public void PickChoice(int index) => _session?.PickChoice(index);

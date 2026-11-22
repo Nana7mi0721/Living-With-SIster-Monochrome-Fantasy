@@ -191,6 +191,81 @@ func _test_mobile_bootstrap(failures: Array[String]) -> void:
 		failures.append("retry after restoring manifest must complete staging")
 	retry_boot.queue_free()
 
+	# direct_res=true skips materializing media.pak into target_root while is_staged() passes,
+	# and upgrade pruning removes obsolete staged files while preserving Save/ directories.
+	var direct_root := test_root.path_join("direct_res")
+	var direct_src := direct_root.path_join("src")
+	var direct_dst := direct_root.path_join("dst")
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(direct_src.path_join("game_data")))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(direct_src.path_join("work/all")))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(direct_dst.path_join("game_data")))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(direct_dst.path_join("work/all/Save")))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(direct_dst.path_join("work/all/save")))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(direct_dst.path_join("work/all/obsolete_dir")))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(direct_dst.path_join("Save")))
+
+	_write_bytes(direct_src.path_join("game_data/programs.json.blob"), programs)
+	_write_bytes(direct_src.path_join("work/all/media.pak.blob.cfb"), media)
+	# Seed stale artifacts from an older build alongside player save files.
+	_write_bytes(direct_dst.path_join("work/all/media.pak"), media)
+	_write_bytes(direct_dst.path_join("game_data/obsolete.json"), "{}".to_utf8_buffer())
+	_write_bytes(direct_dst.path_join("work/all/obsolete_dir/old.bin"), PackedByteArray([1, 2, 3]))
+	_write_bytes(direct_dst.path_join("work/all/Save/SaveData01.sav"), PackedByteArray([4, 5, 6]))
+	_write_bytes(direct_dst.path_join("work/all/save/quicksave.json"), "{\"slot\":0}".to_utf8_buffer())
+	_write_bytes(direct_dst.path_join("Save/SaveData02.sav"), PackedByteArray([7, 8, 9]))
+
+	var direct_manifest := {
+		"schema": "lwsmf.mobile_data",
+		"schema_version": 1,
+		"version": "test",
+		"staging_version": "direct+v2",
+		"files": [
+			{
+				"logical": "game_data/programs.json",
+				"staged": "game_data/programs.json.blob",
+				"bytes": programs.size(),
+				"direct_res": false,
+			},
+			{
+				"logical": "work/all/media.pak",
+				"staged": "work/all/media.pak.blob.cfb",
+				"bytes": media.size(),
+				"direct_res": true,
+			},
+		],
+	}
+	_write_bytes(bootstrap_script.source_manifest_path(direct_src), JSON.stringify(direct_manifest).to_utf8_buffer())
+
+	var direct_boot = bootstrap_script.new()
+	direct_boot.source_root = direct_src
+	direct_boot.target_root = direct_dst
+	direct_boot.show_ui = false
+	add_child(direct_boot)
+	var direct_ok: bool = await direct_boot.completed
+	if not direct_ok:
+		failures.append("direct_res bootstrap must complete")
+	else:
+		if not FileAccess.file_exists(direct_dst.path_join("game_data/programs.json")):
+			failures.append("direct_res bootstrap must still materialize non-direct files")
+		if FileAccess.file_exists(direct_dst.path_join("work/all/media.pak")):
+			failures.append("direct_res=true must skip copying media.pak and prune stale copy")
+		if FileAccess.file_exists(direct_dst.path_join("game_data/obsolete.json")):
+			failures.append("upgrade pruning must remove obsolete game_data files")
+		if FileAccess.file_exists(direct_dst.path_join("work/all/obsolete_dir/old.bin")):
+			failures.append("upgrade pruning must remove obsolete work/all subdirectories")
+		if not FileAccess.file_exists(direct_dst.path_join("work/all/Save/SaveData01.sav")):
+			failures.append("upgrade pruning must preserve work/all/Save/")
+		if not FileAccess.file_exists(direct_dst.path_join("work/all/save/quicksave.json")):
+			failures.append("upgrade pruning must preserve work/all/save/")
+		if not FileAccess.file_exists(direct_dst.path_join("Save/SaveData02.sav")):
+			failures.append("upgrade pruning must preserve root Save/")
+		if not bootstrap_script.is_staged(direct_src, direct_dst):
+			failures.append("is_staged must return true when direct_res source exists and copied files match")
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(direct_src.path_join("work/all/media.pak.blob.cfb")))
+		if bootstrap_script.is_staged(direct_src, direct_dst):
+			failures.append("is_staged must return false when direct_res source blob is missing")
+	direct_boot.queue_free()
+
 	_remove_tree(ProjectSettings.globalize_path(test_root))
 	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(test_root)):
 		failures.append("_remove_tree must delete hidden files like .staging_version")

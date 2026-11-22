@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 
 namespace Lwsmf.Core;
 
@@ -1084,6 +1085,202 @@ public sealed class GameSession
             : ProgramLoader.LoadMap(_dataPath, "", mapId) != null;
     }
 
+    /// <summary>Validate remake save JSON against the SaveCodec schema and semantic constraints.</summary>
+    public static bool ValidateSaveJson(string json, out string error)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            error = "save JSON is empty";
+            return false;
+        }
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                error = "save JSON root must be an object";
+                return false;
+            }
+            if (!doc.RootElement.TryGetProperty("schema", out JsonElement schemaProp)
+                || schemaProp.ValueKind != JsonValueKind.String
+                || schemaProp.GetString() != SaveState.SchemaName)
+            {
+                error = $"missing or invalid save schema (expected {SaveState.SchemaName})";
+                return false;
+            }
+            if (!doc.RootElement.TryGetProperty("schema_version", out JsonElement verProp)
+                || verProp.ValueKind != JsonValueKind.Number)
+            {
+                error = "missing or invalid save schema_version";
+                return false;
+            }
+        }
+        catch (JsonException ex)
+        {
+            error = "malformed save JSON: " + ex.Message;
+            return false;
+        }
+        if (SaveCodec.FromJson(json) == null)
+        {
+            error = "save JSON failed schema or semantic validation";
+            return false;
+        }
+        error = "";
+        return true;
+    }
+
+    /// <summary>
+    /// Import a retail <c>.sav</c> file into a remake slot file (<c>save_NN.json</c>) without
+    /// mutating the active live session.
+    /// </summary>
+    public bool ImportRetailSaveToSlot(string savPath, int slot, out string error)
+    {
+        if (slot < 1 || slot > 99)
+        {
+            error = $"save slot {slot} out of range (must be 1..99)";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(savPath) || !File.Exists(savPath))
+        {
+            error = $"retail save file not found: {savPath}";
+            return false;
+        }
+
+        LegacySaveImporter.SlotResult imported;
+        try
+        {
+            imported = LegacySaveImporter.ImportFile(savPath, Math.Max(0, slot - 1), rejectBadChecksum: true);
+        }
+        catch (Exception ex)
+        {
+            error = "retail import failed: " + ex.Message;
+            return false;
+        }
+
+        if (!imported.ChecksumOk)
+        {
+            error = "retail import failed: checksum mismatch";
+            return false;
+        }
+
+        LegacySaveImporter.RecoveredData data = imported.Recovered;
+        var numbers = new List<int>(Enumerable.Repeat(0, WolfIds.VarPollMax));
+        foreach (KeyValuePair<string, int> pair in data.Variables)
+        {
+            if (int.TryParse(pair.Key, out int index) && index >= 0 && index < numbers.Count)
+            {
+                numbers[index] = pair.Value;
+            }
+        }
+
+        var sysVars = new List<int>();
+        if (data.ChoiceAnchor is { Length: >= 2 })
+        {
+            int needed = Math.Max(WolfIds.SysChoiceAnchorX, WolfIds.SysChoiceAnchorY) + 1;
+            while (sysVars.Count < needed) sysVars.Add(0);
+            sysVars[WolfIds.SysChoiceAnchorX] = data.ChoiceAnchor[0];
+            sysVars[WolfIds.SysChoiceAnchorY] = data.ChoiceAnchor[1];
+        }
+
+        string mapPath = _vm.MapPath(1);
+        MapDefinition? map1 = mapPath.Length > 0
+            ? ProgramLoader.LoadMap(_dataPath, mapPath, null)
+            : ProgramLoader.LoadMap(_dataPath, "SampleMapA.mps", 1005);
+
+        var state = new SaveState
+        {
+            SavedAt = DateTime.UtcNow.ToString("o"),
+            PlayFrames = data.PlayTime.Frames,
+            MapId = map1?.Id ?? 1005,
+            MapFile = map1?.File ?? "SampleMapA.mps",
+            LeaderX = 0,
+            LeaderY = 0,
+            Facing = 2,
+            Vars = numbers,
+            SysVars = sysVars,
+        };
+
+        foreach (KeyValuePair<int, SelfVars> bank in BuildCommonSelfFromRetail(data))
+        {
+            state.CommonSelf.Add(SavedSelf(bank.Key, bank.Value));
+        }
+
+        // Prevent new-game setup event 0 from resetting the imported state on load.
+        state.MapEvents.Add(new SavedMapEvent
+        {
+            Id = 0,
+            Active = null,
+            InstanceId = null,
+            Runs = false,
+            Starts = 1,
+            StartsOnPage = 1,
+        });
+
+        var picByNum = new Dictionary<int, SavedPicture>();
+        foreach (SavedPicture pic in data.PictureStates)
+        {
+            if (!IsSaveUiPicture(pic.Number))
+            {
+                picByNum[pic.Number] = pic;
+            }
+        }
+        state.Pictures.AddRange(picByNum.Values.Take(SaveCodec.MaxPictures));
+
+        if (!ValidateSaveJson(SaveCodec.ToJson(state), out string validationError))
+        {
+            error = "converted save failed validation: " + validationError;
+            return false;
+        }
+
+        string dir = Path.GetDirectoryName(_savePath) ?? ".";
+        int normalizedSlot = slot <= 1 ? 1 : slot;
+        string targetPath = Path.Combine(dir, $"save_{normalizedSlot:00}.json");
+        try
+        {
+            SaveCodec.Write(targetPath, state);
+        }
+        catch (Exception ex)
+        {
+            error = "save write failed: " + ex.Message;
+            return false;
+        }
+
+        error = "";
+        return true;
+    }
+
+    private static Dictionary<int, SelfVars> BuildCommonSelfFromRetail(LegacySaveImporter.RecoveredData data)
+    {
+        var result = new Dictionary<int, SelfVars>();
+        foreach (KeyValuePair<int, int[]> pair in data.CommonSelfNumbers)
+        {
+            var bank = new SelfVars();
+            bool any = false;
+            for (int i = 0; i < pair.Value.Length; i++)
+            {
+                if (pair.Value[i] == 0) continue;
+                bank.Set(600 + i, pair.Value[i]);
+                any = true;
+            }
+            if (any) result[pair.Key] = bank;
+        }
+        foreach (KeyValuePair<int, string[]> pair in data.CommonSelfStrings)
+        {
+            SelfVars? bank = result.GetValueOrDefault(pair.Key);
+            for (int i = 0; i < pair.Value.Length; i++)
+            {
+                if (string.IsNullOrEmpty(pair.Value[i])) continue;
+                if (bank == null)
+                {
+                    bank = new SelfVars();
+                    result[pair.Key] = bank;
+                }
+                bank.SetStr(605 + i, pair.Value[i]);
+            }
+        }
+        return result;
+    }
+
     /// <summary>
     /// Load a retail <c>.sav</c> into a live bedroom session. The save's 800 normal variables,
     /// common-event self banks (Part3), picture layer (Part5) and 250 DB overlay cells are
@@ -1143,29 +1340,9 @@ public sealed class GameSession
         }
 
         _vm.Vm.CommonSelf.Clear();
-        foreach (KeyValuePair<int, int[]> pair in data.CommonSelfNumbers)
+        foreach (KeyValuePair<int, SelfVars> bank in BuildCommonSelfFromRetail(data))
         {
-            var bank = new SelfVars();
-            bool any = false;
-            for (int i = 0; i < pair.Value.Length; i++)
-            {
-                if (pair.Value[i] == 0) continue;
-                bank.Set(600 + i, pair.Value[i]);
-                any = true;
-            }
-            if (any) _vm.Vm.CommonSelf[pair.Key] = bank;
-        }
-        foreach (KeyValuePair<int, string[]> pair in data.CommonSelfStrings)
-        {
-            if (!_vm.Vm.CommonSelf.TryGetValue(pair.Key, out SelfVars? bank))
-            {
-                bank = new SelfVars();
-                _vm.Vm.CommonSelf[pair.Key] = bank;
-            }
-            for (int i = 0; i < pair.Value.Length; i++)
-            {
-                if (!string.IsNullOrEmpty(pair.Value[i])) bank.SetStr(605 + i, pair.Value[i]);
-            }
+            _vm.Vm.CommonSelf[bank.Key] = bank.Value;
         }
 
         _vm.ApplySavedCells(data.DatabaseCells);

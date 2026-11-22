@@ -11,6 +11,7 @@ namespace Lwsmf.Presentation;
 public static class AppPaths
 {
     public static bool IsAndroid => OS.HasFeature("android");
+    public static bool IsIos => OS.HasFeature("ios");
 
     public static string GodotResourceRoot() => IsAndroid ? "res://" : ResourceRoot();
 
@@ -29,6 +30,9 @@ public static class AppPaths
     {
         if (IsAndroid)
             return ProjectSettings.GlobalizePath("user://mobile_data");
+        // iOS bundles inject game_data/ and work/all/ directly inside Payload/<App>.app/.
+        if (IsIos && OS.HasFeature("template"))
+            return ResourceRoot();
         return Path.GetFullPath(Path.Combine(ResourceRoot(), ".."));
     }
 

@@ -42,7 +42,14 @@ jobs:
         run: python tools/release_audit.py --repo-scan
 
       - name: Mobile Packaging Tools Unit Tests
-        run: python tools/mobile/test_mobile_tools.py
+        run: |
+          python -m py_compile tools/mobile/windows_pe.py tools/mobile/android_data.py tools/mobile/env_check.py tools/mobile/export_preset_template.py tools/mobile/ios_inject_data.py tools/mobile/test_mobile_tools.py
+          python tools/mobile/windows_pe.py --help
+          python tools/mobile/test_mobile_tools.py
+
+      - name: Release Script Syntax Check
+        shell: bash
+        run: bash -n tools/package_release.sh
 
   rust-check:
     name: Rust Workspace Check & Oracle Test
