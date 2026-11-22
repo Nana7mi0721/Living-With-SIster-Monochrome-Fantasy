@@ -123,4 +123,27 @@ public static class KeyCodes
             | ((options & 0x40) != 0 ? 0x04u : 0u);
         return (bits & (directions | actions)) != 0;
     }
+
+    /// <summary>Host bit mask accepted by an opcode-123 query when device nibble is 0.</summary>
+    public static uint AcceptedHostMask(uint query)
+    {
+        if (((query >> 8) & 0x0F) != 0) return AllKeys;
+        uint options = query & 0xFF;
+        uint dirs = (options & 0x0F) switch
+        {
+            1 or 2 => Directions,
+            3 => Up,
+            4 => Down,
+            5 => Left,
+            6 => Right,
+            7 => Up | Down,
+            8 => Left | Right,
+            _ => 0
+        };
+        uint actions = ((options & 0x10) != 0 ? Ok : 0u)
+            | ((options & 0x20) != 0 ? Cancel : 0u)
+            | ((options & 0x40) != 0 ? Sub : 0u);
+        uint accepted = dirs | actions;
+        return accepted != 0 ? accepted : AllKeys;
+    }
 }

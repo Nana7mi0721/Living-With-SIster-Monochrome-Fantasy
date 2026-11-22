@@ -96,10 +96,20 @@ func _ready() -> void:
 	var backdrop := stage.draw_picture(-2, 0, "SystemFile/Missing.png", "", [])
 	var scene := stage.draw_picture(4, 0, "SystemFile/Missing.png", "", [])
 	var hud := stage.draw_picture(12100, 0, "SystemFile/Missing.png", "", [])
+	var tutorial_sd := stage.draw_picture(10003, 0, "SystemFile/Missing.png", "", [])
+	var top_bar := stage.draw_picture(6000, 0, "SystemFile/Missing.png", "", [])
 	var overlay := stage.screen_tint_overlay()
 	stage.set_screen_tint((200 << 16) | (150 << 8) | 1, 0)
 	if backdrop == null or scene == null or hud == null:
 		failures.append("tint slots drew no node")
+	if tutorial_sd == null or top_bar == null:
+		failures.append("tutorial SD and top bar slots drew no node")
+	else:
+		var band10 := stage.layer(PictureStage.LAYER_SCENE_PICTURE)
+		if tutorial_sd.z_index != PictureStage.SCREEN_TINT_UI_PICTURE_Z or top_bar.z_index != PictureStage.SCREEN_TINT_UI_PICTURE_Z:
+			failures.append("top bar (6000) and tutorial SD (10003) must share above-tint UI z_index")
+		if band10.get_children().find(tutorial_sd) <= band10.get_children().find(top_bar):
+			failures.append("tutorial SD slot 10003 must paint after top bar slot 6000")
 	if overlay == null:
 		failures.append("screen tint overlay missing")
 	else:

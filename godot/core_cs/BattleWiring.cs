@@ -191,6 +191,14 @@ public sealed class BattleWiring
     /// Returns the event id it started, or null.
     /// </summary>
     public int? Tick(EventVm vm, Func<DbOp, DbValue?> database)
+        => Tick(vm, database, allowAutoCommands: true);
+
+    /// <summary>
+    /// One engine tick; when <paramref name="allowAutoCommands"/> is false (live manual play),
+    /// player commands come from Map1005 Ev8 instead of synthetic CE242 injection, while CE241
+    /// turn-start handoffs still run on phase 2 and battle coroutines stop when 2000340 clears.
+    /// </summary>
+    public int? Tick(EventVm vm, Func<DbOp, DbValue?> database, bool allowAutoCommands)
     {
         if (!_sawDispatch)
         {
@@ -212,6 +220,10 @@ public sealed class BattleWiring
             _harvestedRows.Clear();
             _menuQueue.Clear();
             _cursor = 0;
+            if (!allowAutoCommands)
+            {
+                StopBattleInstances(vm);
+            }
         }
 
         bool auto = _autoArm && RealBattleRunning(vm);
@@ -223,9 +235,11 @@ public sealed class BattleWiring
         if (!drive) return null;
 
         bool roundLoop = _manualRoundLoop ?? auto;
+        bool autoCommands = allowAutoCommands || _manualEnable == true;
 
         if (!roundLoop)
         {
+            if (!autoCommands) return null;
             if (!rising) return null;
             if (vm.Vars.Get(VarCommandPhase) != 0 || vm.Vars.Get(VarBattleDecided) != 0) return null;
             return StartCommand(vm, NextCommand());
@@ -239,7 +253,7 @@ public sealed class BattleWiring
         bool c242 = HasInstance(vm, EventCommandPhase);
         bool c243 = HasInstance(vm, EventEnemyAction);
 
-        if (rising && phase == 0 && !c242 && !c241 && !c243)
+        if (autoCommands && rising && phase == 0 && !c242 && !c241 && !c243)
         {
             return StartCommand(vm, NextCommand());
         }
@@ -251,12 +265,25 @@ public sealed class BattleWiring
             return EventTurnStart;
         }
 
-        if (phase == 0 && !c241 && !c242 && !c243 && StartedRounds > 0)
+        if (autoCommands && phase == 0 && !c241 && !c242 && !c243 && StartedRounds > 0)
         {
             return StartCommand(vm, NextCommand());
         }
 
         return null;
+    }
+
+    public static void StopBattleInstances(EventVm vm)
+    {
+        var ids = new List<int>();
+        foreach (var inst in vm.Instances)
+        {
+            if (inst.EventId is WolfIds.BattleGauge or EventTurnStart or EventCommandPhase or EventEnemyAction)
+            {
+                ids.Add(inst.Id);
+            }
+        }
+        foreach (int id in ids) vm.StopInstance(id);
     }
 
     private int? StartCommand(EventVm vm, int command)

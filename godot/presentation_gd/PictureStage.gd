@@ -233,7 +233,7 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 			if move_anchor == 0 and not prev_slot_cmd.is_empty():
 				move_anchor = int(prev_slot_cmd.get("anchor", 0))
 			var moved := _merged_move(slot, file, text, args, move_anchor, kind, flags)
-			_begin_move(slot, str(moved["file"]), str(moved["text"]), args, int(moved["anchor"]), int(moved["kind"]), animate, flags)
+			_begin_move(slot, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
 			var cmd_args := _resolved_move_args(slot, moved["args"])
 			_store_cmd(slot, 0, str(moved["file"]), str(moved["text"]), cmd_args, int(moved["anchor"]), int(moved["kind"]), animate, moved["flags"])
 			if first_node == null:
@@ -253,7 +253,7 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 			_base_sizes[number] = existing.get_meta("base_size", existing.size)
 			_states[number] = prev_state
 			_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
-			_store_cmd(number, 0, file, text, args, anchor, kind, animate, flags)
+			_store_cmd(number, 0, file, text, _resolved_move_args(number, args), anchor, kind, animate, flags)
 			return existing
 
 	_free_picture(number)
@@ -272,7 +272,7 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 	if redraws and not prev_state.is_empty():
 		_states[number] = prev_state
 	_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
-	_store_cmd(number, 0, file, text, args, anchor, kind, animate, flags)
+	_store_cmd(number, 0, file, text, _resolved_move_args(number, args), anchor, kind, animate, flags)
 	return node
 
 
@@ -706,7 +706,9 @@ func _hit_rect(number: int) -> Rect2:
 	var breath: Variant = state.get("breath", null)
 	if breath != null:
 		var growth := _PictureEffects.breath_growth(breath)
-		size *= Vector2(1.0 + growth.x / 100.0, 1.0 + growth.y / 100.0)
+		var next_size := size * Vector2(1.0 + growth.x / 100.0, 1.0 + growth.y / 100.0)
+		position -= (next_size - size) * 0.5
+		size = next_size
 	position += _PictureEffects.effect_offset(state)
 	return Rect2(position, size)
 
@@ -727,7 +729,7 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 			if move_anchor == 0:
 				move_anchor = int(_cmds[slot].get("anchor", 0))
 			var moved := _merged_move(slot, file, text, args, move_anchor, kind, flags)
-			_begin_move(slot, str(moved["file"]), str(moved["text"]), args, int(moved["anchor"]), int(moved["kind"]), animate, flags)
+			_begin_move(slot, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
 			var cmd_args := _resolved_move_args(slot, moved["args"])
 			_store_cmd(slot, 0, str(moved["file"]), str(moved["text"]), cmd_args, int(moved["anchor"]), int(moved["kind"]), animate, moved["flags"])
 			if not _base_sizes.has(slot):
@@ -753,7 +755,7 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 	# Store the new command only after _begin_draw compares against the previous slot state.
 	_base_sizes[number] = base
 	_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
-	_store_cmd(number, 0, file, text, args, anchor, kind, animate, flags)
+	_store_cmd(number, 0, file, text, _resolved_move_args(number, args), anchor, kind, animate, flags)
 
 
 func _build_picture(number: int, file: String, text: String, args: Array, anchor: int, kind: int) -> Control:
@@ -981,10 +983,17 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 	var base: Vector2 = _base_sizes.get(number, Vector2.ZERO)
 	var raster_window := (kind == 3 or kind == 4) and not file.strip_edges().begins_with("<")
 	var state := _new_state(args, anchor, base, flags, raster_window)
-	if bool(flags.get("relative", false)) and not prev.is_empty():
-		_apply_relative_pose(state["target"], prev.get("current", {}), args)
-		state["current"]["x"] = int(state["target"]["x"])
-		state["current"]["y"] = int(state["target"]["y"])
+	if not prev.is_empty():
+		var prev_cur: Dictionary = prev.get("current", {})
+		for entry in [[4, "opacity"], [5, "x"], [6, "y"], [7, "scale"], [16, "scale_y"]]:
+			var index: int = entry[0]
+			var key: String = entry[1]
+			if (index < args.size() and int(args[index]) == UNCHANGED) or (index == 16 and args.size() > 7 and int(args[7]) == UNCHANGED):
+				state["target"][key] = prev_cur.get(key, state["target"][key])
+		if bool(flags.get("relative", false)):
+			_apply_relative_pose(state["target"], prev_cur, args)
+		_apply_scale_mode(state["target"], args, flags)
+		state["current"] = state["target"].duplicate(true)
 	if bool(flags.get("keep_shift", false)) and not prev.is_empty():
 		state["shift"] = (prev.get("shift", [0, 0]) as Array).duplicate()
 	var redraws := not prev.is_empty() and not prev_cmd.is_empty() \
@@ -1039,6 +1048,8 @@ func _begin_move(number: int, _file: String, _text: String, args: Array, anchor:
 	if bool(flags.get("relative", false)):
 		_apply_relative_pose(target, state.get("current", {}), args)
 	_apply_scale_mode(target, args, flags)
+	if args.size() > 3 and int(args[3]) > 0 and int(args[3]) != UNCHANGED:
+		state["pattern_index"] = int(args[3])
 	state["target"] = target
 	var fade := clampi(_arg(args, 0, 0), 0, FADE_MAX)
 	var fade_from := int(state["current"].get("opacity", 255))
@@ -1253,7 +1264,9 @@ func _render_picture(number: int) -> void:
 	var breath: Variant = state.get("breath", null)
 	if breath != null:
 		var growth := _PictureEffects.breath_growth(breath)
-		size *= Vector2(1.0 + growth.x / 100.0, 1.0 + growth.y / 100.0)
+		var next_size := size * Vector2(1.0 + growth.x / 100.0, 1.0 + growth.y / 100.0)
+		position -= (next_size - size) * 0.5
+		size = next_size
 	position += _PictureEffects.effect_offset(state)
 	node.size = size
 	node.position = position
@@ -1268,9 +1281,7 @@ func _render_picture(number: int) -> void:
 
 
 static func _is_screen_tint_ui(number: int) -> bool:
-	if number >= SYSTEM_UI_SLOT_MIN:
-		return true
-	return number >= HUD_TOP_SLOT_MIN and number <= HUD_TOP_SLOT_MAX
+	return number >= HUD_TOP_SLOT_MIN
 
 
 func _apply_pattern_cell(node: Control, state: Dictionary) -> void:

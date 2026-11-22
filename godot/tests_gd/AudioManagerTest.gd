@@ -124,6 +124,18 @@ func _ready() -> void:
 	mixer._apply_loop(se_ogg, false, 0)
 	_expect(not se_ogg.loop, "_apply_loop(..., false, 0) must clear Ogg Vorbis loop flag")
 
+	# 9. Zero tempo normalizes to 100 in track state/snapshot, and Sys[100..102] master volumes adjust live players.
+	_expect(mixer.play(AudioManager.CHANNEL_BGM, "Sound/stub.wav", 100, 0, 0, 0), "tempo=0 bgm play")
+	var snap_zero_tempo := mixer.snapshot()
+	_expect(snap_zero_tempo.size() == 1 and int(snap_zero_tempo[0].get("tempo", 0)) == 100,
+		"snapshot must normalize tempo <= 0 to 100 so SaveCodec never rejects it")
+	mixer.set_master_volumes(1, 40, 120)
+	_expect(mixer.player_for(AudioManager.CHANNEL_BGM).volume_db <= -60.0,
+		"master volume <= 1 must mute live BGM immediately")
+	mixer.set_master_volumes(100, 100, 100)
+	_expect(is_equal_approx(mixer.player_for(AudioManager.CHANNEL_BGM).volume_db, 0.0),
+		"restoring master volume 100 must restore live BGM volume immediately")
+
 	mixer.reset()
 	if failures == 0:
 		print("AUDIO_MANAGER_TEST_OK checks=%d" % checks)

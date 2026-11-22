@@ -55,6 +55,7 @@ public static class VmTest
         TestPerInstanceBudgetPreventsStarvation();
         TestParallelEnteredInstanceDoesNotLeak();
         TestSoundChannelLayoutMatchesPresentation();
+        TestOpcode123BlockingKeyWaitAndDebounce();
         TestMaxCallDepth();
         DatabaseTest.Run();
         AutoEventsTest.Run();
@@ -855,7 +856,11 @@ public static class VmTest
         if (EventVm.ResolveCallTarget(600_101, 100) != 101)
             throw new Exception("600101 from caller 100 must resolve to 101");
         if (EventVm.ResolveCallTarget(600_094, 270) != 94)
-            throw new Exception("600094 from caller 270 must resolve to 264");
+            throw new Exception("600094 from caller 270 (absolute mode) must resolve to 94");
+        if (EventVm.ResolveCallTarget(600_094, 270, relative600: true) != 264)
+            throw new Exception("600094 from caller 270 (relative mode) must resolve to 264");
+        if (EventVm.ResolveCallTarget(600_104, 264, relative600: true) != 268)
+            throw new Exception("600104 from caller 264 (relative mode) must resolve to 268");
         if (EventVm.ResolveCallTarget(-7, 1) != null)
             throw new Exception("negative targets must be rejected");
     }
@@ -1518,5 +1523,41 @@ public static class VmTest
         {
             throw new Exception("opcode 140 soundType 0/1/2 must map to Bgm/Bgs/Se");
         }
+    }
+
+    private static void TestOpcode123BlockingKeyWaitAndDebounce()
+    {
+        Console.WriteLine("  Testing Opcode 123 (0x80 blocking key wait + release debounce)...");
+        var host = new KeyHost { Held = KeyCodes.Ok };
+        var vm = new EventVm { Host = host, BlockOnKeyWait = true };
+        var slots = new List<Slot>
+        {
+            Slot.Command(123, [2_000_060, 145]), // 0x80 wait | 0x10 Ok | 0x01 Dir
+            Slot.Command(121, [2_000_061, 99, 0, 0x0000]),
+            Slot.Command(172)
+        };
+        vm.RegisterProgram(Program.FromSlots(117, "Blocking123", slots));
+        var inst = vm.CreateInstance(117)!;
+
+        vm.StepFrame();
+        if (inst.Wait.Kind != WaitStateKind.KeyInput || !inst.Wait.KeyRequireRelease || vm.Vars.Get(61) != 0)
+            throw new Exception("blocking 123 entered with key held must require release before advancing");
+
+        // Still held: must stay blocked.
+        vm.StepFrame();
+        if (inst.Wait.Kind != WaitStateKind.KeyInput || vm.Vars.Get(61) != 0)
+            throw new Exception("blocking 123 must stay blocked while opening key remains held");
+
+        // Release on next frame: arms without completing until a fresh press arrives.
+        host.Held = 0;
+        vm.StepFrame();
+        if (inst.Wait.Kind != WaitStateKind.KeyInput || inst.Wait.KeyRequireRelease || vm.Vars.Get(61) != 0)
+            throw new Exception("releasing held key should clear requireRelease and await a fresh press");
+
+        // Fresh press unlocks and writes keycode.
+        host.Held = KeyCodes.Ok;
+        vm.StepFrame();
+        if (vm.Vars.Get(60) != KeyCodes.CodeOk || vm.Vars.Get(61) != 99)
+            throw new Exception($"fresh press should resume blocking 123: v60={vm.Vars.Get(60)} v61={vm.Vars.Get(61)}");
     }
 }

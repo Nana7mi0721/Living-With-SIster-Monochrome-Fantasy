@@ -957,7 +957,9 @@ public partial class VmController : Node, IHost, IVmSession
     public int KeyCodeForPoll(uint mask, uint held, uint autoKeys, int wheelNotch)
     {
         if (mask == 771 && wheelNotch != 0) return wheelNotch;
-        return KeyCodes.Code((held | autoKeys) & KeyCodes.AllKeys);
+        uint accepted = KeyCodes.AcceptedHostMask(mask);
+        uint filtered = (held & accepted) | (KeyCodes.FromWolfBits(autoKeys) & accepted);
+        return KeyCodes.Code(filtered & KeyCodes.AllKeys);
     }
 
     // Opcode 123 hands the poll mask plus the bits opcode 125 auto-pressed to the host, and

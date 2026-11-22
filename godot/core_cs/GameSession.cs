@@ -115,8 +115,22 @@ public sealed class GameSession
         _view = view;
         _dataPath = dataPath;
         _savePath = savePath;
+        _actionPressed = false;
         // 220/221/222 must reach the session that owns the slot files.
         _vm.SaveLoadHandler = HandleSaveLoad;
+        _vm.Vm.BlockOnKeyWait = true;
+        _vm.Vm.RelativeCommonCalls = true;
+    }
+
+    private void ErasePictureSpan(int first, int last)
+    {
+        _vm.Vm.Host.Picture(new PictureCmd
+        {
+            Number = first,
+            Action = PictureAction.Erase,
+            HasSpan = true,
+            Args = new[] { 0, 0, 0, last }
+        });
     }
 
     public string DataPath => _dataPath;
@@ -160,7 +174,17 @@ public sealed class GameSession
     /// <summary>Direction/action bits currently denied by opcode 126.</summary>
     public uint MovementDeny => _vm.MovementDeny;
     public uint BasicAllDeny => _vm.BasicAllDeny;
-    public bool ScriptedInput { get; set; }
+    private bool _scriptedInput;
+    public bool ScriptedInput
+    {
+        get => _scriptedInput;
+        set
+        {
+            _scriptedInput = value;
+            _vm.Vm.BlockOnKeyWait = !value;
+            _vm.Vm.RelativeCommonCalls = !value;
+        }
+    }
     public bool AutoPickChoice { get; set; } = true;
     public bool HasSave => _savePath.Length > 0 && SaveCodec.Exists(_savePath);
     /// <summary>File that supplied the last successful <see cref="LoadGame"/> call.</summary>
@@ -271,11 +295,22 @@ public sealed class GameSession
         _vm.ActionKeyRequested = _actionPressed && !_messageOpen && !_hasChoices
             && (BasicAllDeny & KeyCodes.Ok) == 0;
         _actionPressed = false;
+        _vm.Vm.BlockOnKeyWait = !ScriptedInput;
+        _vm.Vm.RelativeCommonCalls = !ScriptedInput;
         // Rust Game::frame syncs conditional common events before the VM step, so a
         // newly-triggered event starts executing in this same frame.
-        EnsureAutoEvents().Sync(_vm.Vm);
-        _battleWiring.Tick(_vm.Vm, op => _vm.Database(op));
+        var autoEvents = EnsureAutoEvents();
+        autoEvents.LoopVisualPainters = !ScriptedInput;
+        autoEvents.Sync(_vm.Vm);
+        _battleWiring.Tick(_vm.Vm, op => _vm.Database(op), allowAutoCommands: ScriptedInput);
+        bool battleBeforeStep = _vm.Vm.Vars.Get(WolfIds.VarBattleActive) != 0;
         _vm.StepFrame();
+        if (!ScriptedInput && battleBeforeStep && _vm.Vm.Vars.Get(WolfIds.VarBattleActive) == 0)
+        {
+            BattleWiring.StopBattleInstances(_vm.Vm);
+            ErasePictureSpan(2799, 4010);
+            ErasePictureSpan(5000, 5020);
+        }
         if (!_vm.Vm.ReturnToTitleRequested && !_vm.Vm.EndGameRequested)
         {
             ApplyPending();
@@ -557,6 +592,8 @@ public sealed class GameSession
                 WaitFrames = childDropped ? 0 : inst.Wait.Frames,
                 WaitBlock = childDropped ? 0 : inst.Wait.Block,
                 WaitChild = childDropped ? 0 : inst.Wait.ChildId,
+                WaitKeyTarget = childDropped || inst.Wait.Kind != WaitStateKind.KeyInput ? 0 : inst.Wait.KeyTarget,
+                WaitKeyMask = childDropped || inst.Wait.Kind != WaitStateKind.KeyInput ? 0u : inst.Wait.KeyMask,
                 Self = SavedSelf(inst.EventId, inst.Self)
             };
             foreach (LoopCtx loop in inst.Loops)
@@ -1203,6 +1240,18 @@ public sealed class GameSession
             inst.Wait.Frames = saved.WaitFrames;
             inst.Wait.Block = saved.WaitBlock;
             inst.Wait.ChildId = saved.WaitChild;
+            if (inst.Wait.Kind == WaitStateKind.KeyInput)
+            {
+                if (saved.WaitKeyMask != 0)
+                {
+                    inst.Wait.WaitForKeyInput(saved.WaitKeyTarget, saved.WaitKeyMask, requireRelease: false);
+                }
+                else
+                {
+                    inst.Wait.Clear();
+                    if (inst.Pc > 0) inst.Pc--;
+                }
+            }
             inst.Self.Restore(saved.Self);
             foreach (SavedLoop loop in saved.Loops)
             {

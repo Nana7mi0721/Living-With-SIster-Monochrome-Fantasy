@@ -269,5 +269,43 @@ public partial class MapRuntimeTest : Node
         Check(autorunRuntime.StartPending(vm) == 1, "returning to page 0 should start its autorun again");
         Check(autorunRuntime.Events[0].Active == 0 && autorunRuntime.Events[0].Starts == 3,
             "page 0 should own a second autorun start after switching back");
+
+        // An in-flight autorun coroutine (!IsParallel) whose own condition clears mid-WAIT
+        // (e.g. SampleMapA Ev24 clearing var[60]=0 inside its loop before calling CE329)
+        // must finish to completion instead of being killed on want == null.
+        var condAutoMap = new MapDefinition { Id = 11, File = "CondAutorun.mps", Name = "condauto", Width = 8, Height = 8 };
+        var condAutoDef = new MapEventDef { Id = 1, Name = "ev24", X = 1, Y = 1, PageCount = 1 };
+        condAutoDef.Pages.Add(new MapEventPage
+        {
+            Page = 0,
+            Trigger = MapTrigger.Autorun,
+            Program = Program.FromSlots(3, "ev24", new List<Slot>
+            {
+                Slot.Command(121, [2_000_060, 0, 0, 0x0000]),
+                Slot.Command(180, [2]),
+                Slot.Command(121, [2_000_061, 42, 0, 0x0000]),
+                Slot.Command(172)
+            }),
+            Conditions = new[]
+            {
+                new PageCondition { Enabled = true, Operator = 2, Variable = Magic.VarBase + 60, Value = 4 },
+                new PageCondition(),
+                new PageCondition(),
+                new PageCondition()
+            }
+        });
+        condAutoMap.Events.Add(condAutoDef);
+        var condRuntime = new MapRuntime(condAutoMap);
+        vm.Vars.Set(60, 4);
+        vm.Vars.Set(61, 0);
+        Check(condRuntime.StartPending(vm) == 1, "conditional autorun must start when var60 == 4");
+        vm.StepFrame();
+        Check(condRuntime.SelectPage(condRuntime.Events[0], vm) == null, "var60 cleared mid-WAIT -> want == null");
+        condRuntime.StartPending(vm);
+        Check(condRuntime.Events[0].InstanceId is int condInstId && vm.FindInstance(condInstId) != null,
+            "in-flight autorun must survive StartPending when its condition clears mid-WAIT");
+        vm.StepFrame();
+        vm.StepFrame();
+        Check(vm.Vars.Get(61) == 42, "in-flight autorun must finish trailing instructions after WAIT");
     }
 }

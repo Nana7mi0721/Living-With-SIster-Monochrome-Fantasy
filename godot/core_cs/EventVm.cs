@@ -33,6 +33,10 @@ public sealed class EventVm
     /// <summary>Latest unimplemented-opcode error, also the save-blocking fault reason.</summary>
     public string? FaultReason { get; private set; }
     public bool Faulted => FaultReason != null;
+    /// <summary>When true, opcode 123 with bit 0x80 suspends the coroutine until an accepted key is pressed.</summary>
+    public bool BlockOnKeyWait { get; set; }
+    /// <summary>When true, 600xxx common-event call targets resolve relative to the caller (raw - 600100).</summary>
+    public bool RelativeCommonCalls { get; set; }
     /// <summary>Transition sub-phase reported alongside TransitionRequested (0=store, 1=freeze, 2=fadeout).</summary>
     public int TransitionPhase { get; private set; }
     /// <summary>Auto-input mask requested by opcode 125, in WOLF editor key layout.</summary>
@@ -269,13 +273,19 @@ public sealed class EventVm
         return false;
     }
 
-    /// <summary>Common-event call addresses: 500000+/600100+ offsets, including relative calls.</summary>
-    public static int? ResolveCallTarget(int raw, int callerEventId)
+    /// <summary>Common-event call addresses: 500000+ absolute, 600100+ caller-relative in live mode.</summary>
+    public static int? ResolveCallTarget(int raw, int callerEventId, bool relative600 = false)
     {
-        // exec.rs 210/211: both ranges carry an absolute event id, not a
-        // caller-relative offset (raw - 600_000, not raw - 600_100).
         if (raw >= 500_000 && raw < 600_000) return raw - 500_000;
-        if (raw >= 600_000 && raw < 700_000) return raw - 600_000;
+        if (raw >= 600_000 && raw < 700_000)
+        {
+            if (relative600)
+            {
+                int resolved = callerEventId + (raw - 600_100);
+                return resolved >= 0 ? resolved : null;
+            }
+            return raw - 600_000;
+        }
         return raw >= 0 ? raw : null;
     }
 
@@ -861,10 +871,17 @@ public sealed class EventVm
                     // The mask is a composite UI selector, not a set of allowed keys;
                     // 126 is applied to the key code the host answers with.
                     uint mask = slot.Params.Length > 1 ? (uint)slot.Params[1] : 0;
+                    bool blocking = BlockOnKeyWait && (mask & 0x80) != 0;
                     bool autoAvailable = AutoKeys != 0 && !_autoKeysDelivered.Contains(inst.Id);
                     bool autoConsumed = autoAvailable && KeyCodes.AcceptsWolfBits(mask, AutoKeys);
                     uint effectiveAuto = autoAvailable ? AutoKeys : 0;
                     int key = FilterKeyCode(Host.KeyCodeAuto(mask, effectiveAuto));
+                    if (blocking)
+                    {
+                        inst.Wait.WaitForKeyInput(target, mask, requireRelease: key != 0);
+                        inst.Pc++;
+                        return Signal.Blocked;
+                    }
                     if (autoConsumed) _autoKeysDelivered.Add(inst.Id);
                     StoreNum(inst, target, key);
                     inst.Pc++;
@@ -1141,7 +1158,7 @@ public sealed class EventVm
                     {
                         rawTarget = EvalNum(rawTarget, inst);
                     }
-                    int? targetEvent = ResolveCallTarget(rawTarget, inst.EventId);
+                    int? targetEvent = ResolveCallTarget(rawTarget, inst.EventId, RelativeCommonCalls);
                     if (targetEvent == null)
                     {
                         // exec.rs 210: only the two call-address ranges are valid targets.
@@ -1268,13 +1285,8 @@ public sealed class EventVm
                     {
                         rawReserve = EvalNum(rawReserve, inst);
                     }
-                    // exec.rs 211: the two call ranges are absolute ids; anything
-                    // else is used as-is after clamping to 0 (no rejection).
-                    int reserveTarget = rawReserve >= 500_000 && rawReserve < 600_000
-                        ? rawReserve - 500_000
-                        : rawReserve >= 600_000 && rawReserve < 700_000
-                            ? rawReserve - 600_000
-                            : Math.Max(0, rawReserve);
+                    int reserveTarget = ResolveCallTarget(rawReserve, inst.EventId, RelativeCommonCalls)
+                        ?? Math.Max(0, rawReserve);
                     var (reserveArgs, reserveStrings, _) = DecodeCallArguments(slot, inst);
                     Host.Reserve(reserveTarget, reserveArgs, reserveStrings);
                     inst.Pc++;
@@ -1575,6 +1587,23 @@ public sealed class EventVm
                 if (Host.MessageDismissed())
                 {
                     Host.CloseMessage();
+                    inst.Wait.Clear();
+                }
+            }
+            else if (inst.Wait.Kind == WaitStateKind.KeyInput)
+            {
+                bool autoAvailable = AutoKeys != 0 && !_autoKeysDelivered.Contains(inst.Id);
+                bool autoConsumed = autoAvailable && KeyCodes.AcceptsWolfBits(inst.Wait.KeyMask, AutoKeys);
+                uint effectiveAuto = autoAvailable ? AutoKeys : 0;
+                int key = FilterKeyCode(Host.KeyCodeAuto(inst.Wait.KeyMask, effectiveAuto));
+                if (inst.Wait.KeyRequireRelease)
+                {
+                    if (key == 0) inst.Wait.KeyRequireRelease = false;
+                }
+                else if (key != 0)
+                {
+                    if (autoConsumed) _autoKeysDelivered.Add(inst.Id);
+                    StoreNum(inst, inst.Wait.KeyTarget, key);
                     inst.Wait.Clear();
                 }
             }

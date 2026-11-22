@@ -323,6 +323,7 @@ func advance_frame() -> void:
 	stage.tick_screen_tint()
 	_sync_screen_tint()
 	_tick_transition()
+	_sync_master_audio_volumes()
 	frames = session.Frames
 	phase = session.Phase
 	if vm.Faulted:
@@ -501,6 +502,7 @@ func _picture_state(number: int, field: int, pointer: Vector2) -> Variant:
 
 ## Channel 0 = BGM, 1 = BGS, 2 = SE.
 func _on_sound(channel: int, action: int, file: String, volume: int, frames: int) -> void:
+	_sync_master_audio_volumes()
 	if action == 1:
 		audio.stop(channel, frames)
 		return
@@ -1226,6 +1228,24 @@ func _sync_live_clock_if_windowed() -> void:
 		return
 	var dt := Time.get_datetime_dict_from_system()
 	vm.SetSys(_WolfConst.SYS_WALL_SECOND, int(dt.get("second", 0)))
+
+
+func _sync_master_audio_volumes() -> void:
+	if audio == null or vm == null:
+		return
+	var bgm := vm.GetSys(100)
+	var bgs := vm.GetSys(101)
+	var se := vm.GetSys(102)
+	var v357 := vm.GetVar(357)
+	if bgm == 0 and bgs == 0 and se == 0 and v357 == 0:
+		audio.set_master_volumes(100, 100, 100)
+		return
+	var fallback := v357 if v357 > 0 else 100
+	audio.set_master_volumes(
+		bgm if bgm > 0 else fallback,
+		bgs if bgs > 0 else fallback,
+		se if se > 0 else fallback
+	)
 
 
 func modal_release_guard() -> bool:

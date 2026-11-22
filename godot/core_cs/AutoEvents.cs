@@ -12,6 +12,7 @@ public sealed class AutoEvent
     public int Variable { get; init; }
     public int Value { get; init; }
     public bool ResumeOnLoad { get; init; }
+    public bool IsParallel { get; init; }
 }
 
 public readonly struct AutoSyncReport
@@ -56,6 +57,8 @@ public sealed class AutoEvents
     }
 
     public bool Enabled { get; set; } = true;
+    /// <summary>When true, all parallel (run_condition == 2) common events except sentinel CE38 loop while their condition holds.</summary>
+    public bool LoopVisualPainters { get; set; }
     public int EventCount => _events.Count;
     public IReadOnlyList<AutoEvent> Events => _events;
 
@@ -74,7 +77,8 @@ public sealed class AutoEvents
                 Operator = p.ConditionOperator,
                 Variable = p.ConditionVariable,
                 Value = p.ConditionValue,
-                ResumeOnLoad = Array.IndexOf(ResumeOnLoad, p.Id) >= 0
+                ResumeOnLoad = Array.IndexOf(ResumeOnLoad, p.Id) >= 0,
+                IsParallel = p.RunCondition == 2
             });
         }
         events.Sort((a, b) => a.Id.CompareTo(b.Id));
@@ -103,10 +107,16 @@ public sealed class AutoEvents
             // command events 242/243). Treat it as alive so we never double-start it.
             bool alive = IsEventLive(vm, ev.Id);
             bool before = _latched.TryGetValue(ev.Id, out bool latched) && latched;
-            // Rust auto_events.rs:252 — the scheduler is edge-triggered. Only the
-            // 216/217 HUD painters are replayed while their condition holds, because
-            // their rendered text must replace the SavePart5 snapshot after a load.
-            bool shouldStart = ev.ResumeOnLoad && now ? !alive : now && !before;
+            bool shouldStart;
+            if (LoopVisualPainters)
+            {
+                bool replay = ev.ResumeOnLoad || (ev.IsParallel && ev.Id != 38);
+                shouldStart = !alive && (replay ? now : (now && !before));
+            }
+            else
+            {
+                shouldStart = ev.ResumeOnLoad && now ? !alive : now && !before;
+            }
             if (shouldStart)
             {
                 var inst = vm.CreateInstance(ev.Id);

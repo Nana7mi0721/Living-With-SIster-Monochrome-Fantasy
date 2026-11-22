@@ -579,6 +579,34 @@ public partial class SaveLoadTest : Node
         Check(!vm.IsWaitingForChoice() && !view.HasChoices,
             "killing a choice-waiting coroutine must clear IsWaitingForChoice and close choices");
 
+        // Audio tracks saved with tempo <= 0 normalize cleanly to 100 instead of failing validation,
+        // and WaitStateKind.KeyInput round-trips across save/load.
+        SaveState? audioAndKeyState = session.BuildSaveState();
+        Check(audioAndKeyState != null, "save state must build for tempo/keywait probe");
+        if (audioAndKeyState != null)
+        {
+            audioAndKeyState.Audio.Add(new SavedAudio { Channel = 0, File = "BGM/sparrows.mp3", Volume = 80, Loop = true, Tempo = 0 });
+            audioAndKeyState.Instances.Add(new SavedInstance
+            {
+                Id = 9200,
+                EventId = 90013,
+                Kind = "ce",
+                Pc = 1,
+                WaitKind = (int)WaitStateKind.KeyInput,
+                WaitKeyTarget = 2_000_055,
+                WaitKeyMask = 177
+            });
+            string zeroTempoPath = Path.Combine(saveDir, "save_zero_tempo.json");
+            SaveCodec.Write(zeroTempoPath, audioAndKeyState);
+            Check(session.LoadGameFrom(zeroTempoPath), "slot with tempo=0 BGM and KeyInput wait must load cleanly");
+            SaveState? normalized = SaveCodec.Read(zeroTempoPath);
+            Check(normalized != null && normalized.Audio.Count == 1 && normalized.Audio[0].Tempo == 100,
+                "SaveCodec must normalize tempo <= 0 to 100");
+            Instance? keyWaiter = vm.Vm.FindInstance(9200);
+            Check(keyWaiter != null && keyWaiter.Wait.Kind == WaitStateKind.KeyInput && keyWaiter.Wait.KeyMask == 177,
+                "KeyInput wait state must round-trip across save/load");
+        }
+
         try { Directory.Delete(saveDir, true); }
         catch (IOException) { }
 

@@ -240,6 +240,17 @@ func _ready() -> void:
 		failures.append("next click after a fast click must not be swallowed")
 	_router.clear_pointer_latches()
 
+	# 16. Cancel-only mask 160 ignores MASK_OK while accepting MASK_CANCEL;
+	#     mask 145 (OK + dirs) accepts MASK_OK and ignores MASK_CANCEL.
+	if bridge.KeyCodeForPoll(160, InputRouter.MASK_OK, 0, 0) != 0:
+		failures.append("cancel-only mask 160 must ignore MASK_OK")
+	if bridge.KeyCodeForPoll(160, InputRouter.MASK_CANCEL, 0, 0) != 11:
+		failures.append("cancel-only mask 160 must accept MASK_CANCEL")
+	if bridge.KeyCodeForPoll(145, InputRouter.MASK_CANCEL, 0, 0) != 0:
+		failures.append("mask 145 must ignore MASK_CANCEL")
+	if bridge.KeyCodeForPoll(145, InputRouter.MASK_OK, 0, 0) != 10:
+		failures.append("mask 145 must accept MASK_OK")
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

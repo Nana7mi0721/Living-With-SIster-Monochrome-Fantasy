@@ -349,6 +349,32 @@ func _ready() -> void:
 	var dump_text: String = stage.dump_pictures(false)
 	check(dump_text.contains("12104 | save/SaveData99.jpg") and dump_text.contains("1362 |") and dump_text.contains("100,100,100 | 20,20,20"),
 		"dump_pictures formats active slots cleanly with real tone and color_corr")
+
+	# Redrawing with UNCHANGED (-1000000) preserves negative horizontal scale, and Move updates pattern_index.
+	stage.draw_picture(406, 0, "Picture/stand_yui_eye.png", "", [0, 3, 1, 1, 255, 260, 300, -100, 0, 0, 0, 0, 0, 100, 100, 100, 100], 1, 0, [], {"scale_mode": 3})
+	stage.draw_picture(406, 0, "Picture/stand_yui_eye.png", "", [0, 3, 1, 1, 255, 0, 0, PictureStage.UNCHANGED, 0], 1, 0, [], {"relative": true, "keep_shift": true})
+	var flip_state: Dictionary = stage._states.get(406, {})
+	check(int(flip_state.get("current", {}).get("scale", 0)) == -100,
+		"redraw with UNCHANGED scale must preserve -100 horizontal flip")
+	stage.draw_picture(406, 1, "", "", [0, 0, 0, 2, 255, 0, 0, PictureStage.UNCHANGED, 0], 1, 0, [], {"relative": true})
+	var moved_blink_state: Dictionary = stage._states.get(406, {})
+	check(int(moved_blink_state.get("pattern_index", 0)) == 2 and int(moved_blink_state.get("current", {}).get("scale", 0)) == -100,
+		"move blink must update pattern_index while preserving -100 horizontal flip")
+
+	# Breath uses symmetric sine ramp and keeps the sprite center stationary regardless of anchor.
+	var breath_mid := PictureEffects.breath_growth({"amp": [20, 20], "period": 10, "rest": 4, "elapsed": 5})
+	var breath_end := PictureEffects.breath_growth({"amp": [20, 20], "period": 10, "rest": 4, "elapsed": 9})
+	check(is_equal_approx(breath_mid.x, 20.0) and breath_end.x < 7.5 and breath_end.x > 0.0,
+		"breath curve must peak smoothly at mid-period and taper back down before rest")
+	stage.draw_picture(339, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 100, 200, 100, 0], 0, 0)
+	var rest_rect := stage.picture_rect(339)
+	stage.effect(7, 10, [0, 10, 339, 339, 50, 50, 0])
+	for _b in 5:
+		stage.tick()
+	var peak_rect := stage.picture_rect(339)
+	check(peak_rect.size.x > rest_rect.size.x + 1.0 and peak_rect.get_center().distance_to(rest_rect.get_center()) < 0.1,
+		"breath expansion must keep sprite center stationary")
+
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await _check_multiply_alpha_fade()

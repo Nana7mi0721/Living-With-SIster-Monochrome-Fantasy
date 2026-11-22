@@ -258,5 +258,5 @@ static func breath_growth(breath: Variant) -> Vector2:
 	if phase >= period:
 		return Vector2.ZERO
 	var amp: Array = b.get("amp", [0, 0])
-	var t := float(phase) / float(period)
-	return Vector2(round(float(amp[0]) * t), round(float(amp[1]) * t))
+	var t := sin(PI * float(phase) / float(period))
+	return Vector2(float(amp[0]) * t, float(amp[1]) * t)

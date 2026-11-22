@@ -94,7 +94,32 @@ public static class AutoEventsTest
         Check(afterPrime.Started == 0, $"already-live primed events must not start twice, started={afterPrime.Started}");
         Check(!primed.IsRunning(primedVm, 242), "prime must leave the edge-triggered battle command event to BattleWiring");
 
+        // LoopVisualPainters keeps parallel painters (e.g. CE335 H-scene sprites) updating
+        // continuously in live play while excluding sentinel CE38 and keeping gated CE242 singular.
+        var loopVm = new EventVm();
+        AddLoopProg(loopVm, 38, 2, 2_000_003, 1);
+        AddLoopProg(loopVm, 335, 2, 2_000_062, 1);
+        var autoLoop = AutoEvents.FromPrograms(loopVm.Programs.Values);
+        autoLoop.LoopVisualPainters = true;
+        loopVm.Vars.Set(3, 1);
+        loopVm.Vars.Set(62, 1);
+        autoLoop.Sync(loopVm);
+        loopVm.StepFrame();
+        var secondPass = autoLoop.Sync(loopVm);
+        Check(secondPass.Started == 1 && autoLoop.IsRunning(loopVm, 335) && !autoLoop.IsRunning(loopVm, 38),
+            $"LoopVisualPainters must replay CE335 without re-looping CE38, started={secondPass.Started}");
+
         Console.WriteLine($"AUTO_EVENTS_TEST_OK count={auto.EventCount} start={opened.Started} resume={replayed.Started} gated={gated.Started}");
+    }
+
+    private static void AddLoopProg(EventVm vm, int id, int run, int variable, int value)
+    {
+        var p = Program.FromSlots(id, $"loop-{id}", new List<Slot> { Slot.Command(104) });
+        p.RunCondition = run;
+        p.ConditionOperator = 2;
+        p.ConditionVariable = variable;
+        p.ConditionValue = value;
+        vm.RegisterProgram(p);
     }
 
     private static void Check(bool condition, string message)

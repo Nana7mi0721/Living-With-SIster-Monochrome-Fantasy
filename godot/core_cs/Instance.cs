@@ -9,7 +9,8 @@ public enum WaitStateKind
     Frames,
     Message,
     Choice,
-    Child
+    Child,
+    KeyInput
 }
 
 public sealed class WaitState
@@ -18,6 +19,9 @@ public sealed class WaitState
     public uint Frames { get; set; }
     public int Block { get; set; }
     public int ChildId { get; set; }
+    public int KeyTarget { get; set; }
+    public uint KeyMask { get; set; }
+    public bool KeyRequireRelease { get; set; }
 
     public void Clear()
     {
@@ -25,6 +29,9 @@ public sealed class WaitState
         Frames = 0;
         Block = 0;
         ChildId = 0;
+        KeyTarget = 0;
+        KeyMask = 0;
+        KeyRequireRelease = false;
     }
 
     public void WaitForFrames(uint frames)
@@ -48,6 +55,14 @@ public sealed class WaitState
     public void WaitForMessage()
     {
         Kind = WaitStateKind.Message;
+    }
+
+    public void WaitForKeyInput(int target, uint mask, bool requireRelease)
+    {
+        Kind = WaitStateKind.KeyInput;
+        KeyTarget = target;
+        KeyMask = mask;
+        KeyRequireRelease = requireRelease;
     }
 }
 

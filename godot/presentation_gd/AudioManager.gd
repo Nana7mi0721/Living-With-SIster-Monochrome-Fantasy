@@ -24,6 +24,7 @@ var _se_start_tokens: Array[int] = []
 var _se_pending: Array[bool] = []
 var _active_se_voice := 0
 var _next_se_voice := 0
+var _master_volumes: Array[int] = [100, 100, 100]
 
 
 func _init(assets: AssetDB) -> void:
@@ -60,6 +61,7 @@ func play(channel: int, file: String, volume: int, loop_point: int = 0, tempo: i
 
 
 func _play_long(channel: int, file: String, volume: int, loop_point: int, tempo: int, frames: int) -> bool:
+	var norm_tempo := _normalized_tempo(tempo)
 	var track: Dictionary = _tracks[channel]
 	var player := _players[channel]
 	var same_track := not track.is_empty() \
@@ -67,12 +69,12 @@ func _play_long(channel: int, file: String, volume: int, loop_point: int, tempo:
 		and int(track.get("loop_point", 0)) == loop_point \
 		and player.stream != null
 	if same_track:
-		player.pitch_scale = _tempo_scale(tempo)
+		player.pitch_scale = _tempo_scale(norm_tempo)
 		_apply_long_volume(channel, volume, frames)
 		if not player.playing:
 			player.play()
 		track["volume"] = volume
-		track["tempo"] = tempo
+		track["tempo"] = norm_tempo
 		return true
 
 	var cached := _assets.audio(file)
@@ -88,20 +90,21 @@ func _play_long(channel: int, file: String, volume: int, loop_point: int, tempo:
 		stream = cached
 	_apply_loop(stream, true, loop_point)
 	player.stream = stream
-	player.pitch_scale = _tempo_scale(tempo)
+	player.pitch_scale = _tempo_scale(norm_tempo)
 
 	var fade := maxf(float(frames) / 60.0, 0.0)
 	var use_fade := fade > 0.0 and is_inside_tree()
 	_kill_tween(channel)
 	player.stop()
+	var target_db := _channel_volume_db(channel, volume)
 	if use_fade:
 		player.volume_db = SILENT_DB
 	else:
-		player.volume_db = volume_db(volume)
+		player.volume_db = target_db
 	player.play()
 	if use_fade:
 		var tween := create_tween()
-		tween.tween_property(player, "volume_db", volume_db(volume), fade)
+		tween.tween_property(player, "volume_db", target_db, fade)
 		_tweens[channel] = tween
 
 	_tracks[channel] = {
@@ -109,12 +112,13 @@ func _play_long(channel: int, file: String, volume: int, loop_point: int, tempo:
 		"volume": volume,
 		"loop": true,
 		"loop_point": loop_point,
-		"tempo": tempo,
+		"tempo": norm_tempo,
 	}
 	return true
 
 
 func _play_se(file: String, volume: int, tempo: int, frames: int) -> bool:
+	var norm_tempo := _normalized_tempo(tempo)
 	var cached := _assets.audio(file)
 	if cached == null:
 		push_warning("AudioManager: missing audio %s" % file)
@@ -130,8 +134,8 @@ func _play_se(file: String, volume: int, tempo: int, frames: int) -> bool:
 	var player := _se_players[voice]
 	_invalidate_se_voice(voice)
 	player.stream = stream
-	player.pitch_scale = _tempo_scale(tempo)
-	player.volume_db = volume_db(volume)
+	player.pitch_scale = _tempo_scale(norm_tempo)
+	player.volume_db = _channel_volume_db(CHANNEL_SE, volume)
 	_active_se_voice = voice
 	var token := _se_start_tokens[voice]
 	var delay := maxf(float(frames) / 60.0, 0.0)
@@ -146,7 +150,7 @@ func _play_se(file: String, volume: int, tempo: int, frames: int) -> bool:
 		"volume": volume,
 		"loop": false,
 		"loop_point": 0,
-		"tempo": tempo,
+		"tempo": norm_tempo,
 	}
 	return true
 
@@ -202,7 +206,7 @@ func snapshot() -> Array[Dictionary]:
 			"volume": track["volume"],
 			"loop": track["loop"],
 			"loop_point": track["loop_point"],
-			"tempo": track["tempo"],
+			"tempo": _normalized_tempo(int(track.get("tempo", 100))),
 			"position_ms": position_ms,
 		})
 	return result
@@ -269,6 +273,48 @@ static func volume_db(volume: int) -> float:
 	return maxf(-60.0, linear_to_db(float(clamped) / 100.0))
 
 
+func set_master_volumes(bgm: int, bgs: int, se: int) -> void:
+	var next: Array[int] = [bgm, bgs, se]
+	if _master_volumes == next:
+		return
+	_master_volumes = next
+	for channel in [CHANNEL_BGM, CHANNEL_BGS]:
+		var track: Dictionary = _tracks[channel]
+		if track.is_empty():
+			continue
+		var tween: Tween = _tweens[channel]
+		if tween != null and tween.is_valid():
+			tween.kill()
+			_tweens[channel] = null
+		var player := _players[channel]
+		if player.playing:
+			player.volume_db = _channel_volume_db(channel, int(track.get("volume", 100)))
+	if not _tracks[CHANNEL_SE].is_empty():
+		var se_vol := int(_tracks[CHANNEL_SE].get("volume", 100))
+		var se_db := _channel_volume_db(CHANNEL_SE, se_vol)
+		for player in _se_players:
+			if player.playing:
+				player.volume_db = se_db
+
+
+func master_volumes() -> Array[int]:
+	return _master_volumes.duplicate()
+
+
+func _channel_volume_db(channel: int, volume: int) -> float:
+	var clamped := 100 if volume < 0 else clampi(volume, 0, 100)
+	var master := int(_master_volumes[channel]) if channel >= 0 and channel < _master_volumes.size() else 100
+	# CE223 encodes mute level 0 as Sys[100..102] == 1 alongside 20..120 steps.
+	if clamped == 0 or master <= 1:
+		return -60.0
+	var linear := (float(clamped) / 100.0) * clampf(float(master) / 100.0, 0.0, 1.2)
+	return maxf(-60.0, linear_to_db(linear))
+
+
+static func _normalized_tempo(tempo: int) -> int:
+	return 100 if tempo <= 0 else clampi(tempo, 25, 400)
+
+
 static func _tempo_scale(tempo: int) -> float:
 	if tempo <= 0:
 		return 1.0
@@ -296,7 +342,7 @@ func _apply_loop(stream: AudioStream, looping: bool, loop_point: int) -> void:
 
 func _apply_long_volume(channel: int, volume: int, frames: int) -> void:
 	var player := _players[channel]
-	var target_db := volume_db(volume)
+	var target_db := _channel_volume_db(channel, volume)
 	_kill_tween(channel)
 	var fade := maxf(float(frames) / 60.0, 0.0)
 	if fade > 0.0 and player.playing and is_inside_tree() \

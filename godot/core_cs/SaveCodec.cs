@@ -136,6 +136,8 @@ public sealed class SavedInstance
     [JsonPropertyName("wait_frames")] public uint WaitFrames { get; set; }
     [JsonPropertyName("wait_block")] public int WaitBlock { get; set; }
     [JsonPropertyName("wait_child")] public int WaitChild { get; set; }
+    [JsonPropertyName("wait_key_target")] public int WaitKeyTarget { get; set; }
+    [JsonPropertyName("wait_key_mask")] public uint WaitKeyMask { get; set; }
     [JsonPropertyName("loops")] public List<SavedLoop> Loops { get; set; } = new();
     [JsonPropertyName("self")] public EventSelfVars Self { get; set; } = new();
 }
@@ -302,7 +304,11 @@ public static class SaveCodec
         state.Instances ??= new List<SavedInstance>();
         state.Pictures ??= new List<SavedPicture>();
         state.Audio ??= new List<SavedAudio>();
-        foreach (var audio in state.Audio) audio.File ??= "";
+        foreach (var audio in state.Audio)
+        {
+            audio.File ??= "";
+            if (audio.Tempo <= 0) audio.Tempo = 100;
+        }
         foreach (var pic in state.Pictures)
         {
             pic.File ??= "";
@@ -436,7 +442,7 @@ public static class SaveCodec
     {
         if (inst.Id <= 0 || inst.EventId < 0) return false;
         if (inst.Pc < 0 || inst.Pc > MaxPc) return false;
-        if (inst.WaitKind is < 0 or > 4) return false;
+        if (inst.WaitKind is < 0 or > 5) return false;
         if (inst.WaitBlock < 0 || inst.WaitBlock > MaxPc) return false;
         if (inst.WaitChild < 0) return false;
         if (inst.Page < -1) return false;

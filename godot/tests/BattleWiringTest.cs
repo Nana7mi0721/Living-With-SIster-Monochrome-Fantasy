@@ -50,7 +50,37 @@ public static class BattleWiringTest
         Check(trace.MaxCe242Pc >= 200, "CE242 did not execute its command body");
         Check(!trace.Ce239AliveAtEnd, $"CE239 still alive after settlement pc={trace.End239Pc} v340={trace.End340} v350={trace.End350} v343={trace.End343}");
         TestSecondBattleReharvestAndReset();
+        TestManualModeNoAutoCommandAndEndCleanup();
         GD.Print($"BATTLE_WIRING_TEST_OK rounds={trace.Rounds} result={trace.Result} ce242_pc={trace.MaxCe242Pc}");
+    }
+
+    private static void TestManualModeNoAutoCommandAndEndCleanup()
+    {
+        var vm = new EventVm();
+        vm.RegisterProgram(Program.FromSlots(WolfIds.BattleDispatch, "Dispatch", [Slot.Command(180, [10])]));
+        vm.RegisterProgram(Program.FromSlots(WolfIds.BattleCommandPhase, "Cmd", [Slot.Command(180, [10])]));
+        vm.RegisterProgram(Program.FromSlots(WolfIds.BattleTurnStart, "Turn", [Slot.Command(180, [10])]));
+        vm.RegisterProgram(Program.FromSlots(WolfIds.BattleGauge, "Gauge", [Slot.Command(180, [10])]));
+        var wiring = new BattleWiring();
+        vm.CreateInstance(WolfIds.BattleDispatch);
+
+        vm.Vars.Set(WolfIds.VarBattleActive, 1);
+        vm.Vars.Set(WolfIds.VarBattleCommandPhase, 0);
+        int? started = wiring.Tick(vm, _ => null, allowAutoCommands: false);
+        Check(started == null && wiring.StartedRounds == 0,
+            "manual live play must not auto-start CE242 on battle rising edge");
+
+        vm.Vars.Set(WolfIds.VarBattleCommandPhase, 2);
+        int? turnStarted = wiring.Tick(vm, _ => null, allowAutoCommands: false);
+        Check(turnStarted == WolfIds.BattleTurnStart,
+            "manual live play must still advance CE241 on command phase 2");
+
+        vm.CreateInstance(WolfIds.BattleGauge);
+        vm.CreateInstance(WolfIds.BattleCommandPhase);
+        vm.Vars.Set(WolfIds.VarBattleActive, 0);
+        wiring.Tick(vm, _ => null, allowAutoCommands: false);
+        Check(!Array.Exists(vm.Instances.ToArray(), i => i.EventId is WolfIds.BattleGauge or WolfIds.BattleTurnStart or WolfIds.BattleCommandPhase),
+            "battle exit must stop lingering CE240/241/242 instances");
     }
 
     private static void TestSecondBattleReharvestAndReset()
