@@ -110,13 +110,13 @@ bash tools/package_release.sh --hd
 
 | 指标 | 实测值 | 说明 |
 | :--- | ---: | :--- |
-| 活体图像 | 2,506 张（2,168 引擎 + 253 CPU + 85 护栏跳过） | 白名单 `work/media_manifest.txt` |
+| 活体图像 | 2,506 张（实际 SR 2,147 + Lanczos 274 + 85 护栏跳过） | 白名单 `work/media_manifest.txt` |
 | 产出条目 | 2,421 | `hd_manifest.json`，缺失 0 / 尺寸不符 0 / 未覆盖 0 |
 | 2× 像素总量 | 约 3.93 Gpx | 源 1.11 Gpx，最大 9216×576、1536×7488 等按护栏保持 1× |
-| `work/hd` 体积 | **1,397.4 MiB** | 2,421 个文件，Real-CUGAN 出 PNG，Pillow 无损 WebP |
-| `media_hd.pak` | **1,464,087,236 B（1,396.3 MiB / 1.36 GiB）** | 2,421 条，SHA-256 `e7093c71df9838c522af0b16256bc15c18e66bb6bcc9635b4e4a53508e1d3a62` |
-| 全量耗时 | 3,010 s（约 50 分钟） | RTX 5060 Laptop，含推理与 WebP 编码 |
-| 引擎回退 | 259 张（253 CPU + 6 引擎不稳） | 其余 2,162 张为 Real-CUGAN 2×；坏图一律 MAE 兜底 |
+| `work/hd` 体积 | **1,273.9 MiB** | 2,421 个文件，灰度去色后无损 WebP 明显缩小 |
+| `media_hd.pak` | **本轮未生成** | 按要求先交付 loose `work/hd`，确认素材后再打包 |
+| 全量耗时 | 3,010 s（约 50 分钟） | RTX 5060 Laptop，含推理与 WebP 编码；灰度修复另约 8 分钟 |
+| 引擎回退 | 274 张（253 CPU + 21 色噪/涂抹/不稳） | 其余 2,153 张为 Real-CUGAN 2× |
 | 校验标记 | `HD_MANIFEST_VERIFY_OK entries=2421 missing=0 mismatch=0 degraded=0 uncovered=0 opaque_alpha_dropped=4` | 4 张源 alpha 恒为 255，丢通道无视觉影响 |
 
 运行侧：`project.godot` 默认窗口 2048×1152、`stretch/mode=canvas_items`；桌面自动探测 `<root>/media_hd.pak`，移动端（`mobile` feature）默认关闭并回退 1×；缓存预算桌面 512 MB / 移动 192 MB。开关写入 `user://display_settings.cfg` 的 `display/hd_textures`，也可用 `LWsmf_HD_PAK` 指定包路径。

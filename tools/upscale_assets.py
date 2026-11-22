@@ -233,6 +233,34 @@ def content_mae(source: Image.Image, upscaled: Image.Image) -> float:
     return sum(stat.mean) / 3.0
 
 
+def is_gray_source(source: Image.Image) -> bool:
+    """True when opaque pixels carry no chroma (LWSMF art is overwhelmingly neutral)."""
+    sample = source.convert("RGBA").resize((128, 128), Image.Resampling.BOX)
+    arr = np.asarray(sample, dtype=np.int16)
+    mask = arr[..., 3] > 64
+    if mask.sum() < 10:
+        return True
+    spread = np.abs(arr[..., :3].max(2) - arr[..., :3].min(2))[mask]
+    return float(spread.mean()) < 1.0
+
+
+def visible_chroma(source: Image.Image, upscaled: Image.Image) -> float:
+    """Average channel spread under opaque source pixels; catches rainbow speckles."""
+    sample = source.convert("RGBA").resize((128, 128), Image.Resampling.BOX)
+    arr = np.asarray(sample, dtype=np.int16)
+    mask = arr[..., 3] > 64
+    out = np.asarray(upscaled.convert("RGBA").resize((128, 128), Image.Resampling.BOX), dtype=np.int16)
+    spread = np.abs(out[..., :3].max(2) - out[..., :3].min(2))[mask]
+    return float(spread.mean()) if spread.size else 0.0
+
+
+def desaturate(image: Image.Image) -> Image.Image:
+    """Keep 2x detail but drop colour noise on a neutral source, preserving alpha."""
+    src = image.convert("RGBA")
+    luma = src.convert("L")
+    return Image.merge("RGBA", (luma, luma, luma, src.getchannel("A")))
+
+
 def run_engine(engine: Path, model_dir: Path, in_dir: Path, out_dir: Path, denoise: int) -> bool:
     if not any(in_dir.iterdir()):
         return True
@@ -319,8 +347,13 @@ def main() -> int:
         try:
             with Image.open(source) as probe:
                 size = probe.size
+                mode = probe.mode
         except Exception as error:  # noqa: BLE001 - report and continue
             skipped.append({"path": logical, "reason": f"unreadable: {error}"})
+            continue
+        # Real-CUGAN is unreliable on L/LA masks and SD sprites; Lanczos keeps them clean.
+        if mode in {"L", "LA"}:
+            cpu_jobs.append(rel)
             continue
         reason = guard_reason(size)
         if reason:
@@ -441,6 +474,7 @@ def main() -> int:
                         src_size = original.size
                         src_alpha = "A" in original.getbands()
                         src_opaque = src_alpha and original.convert("RGBA").getchannel("A").getextrema() == (255, 255)
+                        src_gray = is_gray_source(original)
                         adopted = None
                         if produced.exists() and produced.suffix.lower() == ".webp":
                             adopted = record_encoded(
@@ -460,6 +494,12 @@ def main() -> int:
                                             mae_value = content_mae(original, candidate)
                                             if mae_value <= 25.0:
                                                 image = candidate
+                                                if src_gray:
+                                                    chroma = visible_chroma(original, candidate)
+                                                    if chroma > 15.0:
+                                                        image = None
+                                                    else:
+                                                        image = desaturate(candidate)
                                 except Exception:  # noqa: BLE001 - a broken engine output is a fallback
                                     image = None
                             fallback = image is None

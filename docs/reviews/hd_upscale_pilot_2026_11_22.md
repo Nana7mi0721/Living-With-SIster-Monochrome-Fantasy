@@ -60,11 +60,11 @@
 
 ## 6. 全量产出
 
-- 白名单图像 2,506 张，实际入选 2,421 张（跳过 85 张护栏项，缺失 0）：引擎 2,168 张，CPU Lanczos 253 张。
-- `work/hd`：2,421 个文件、**1,397.4 MiB**；`hd_manifest.json` 2,421 条，`verify_hd_manifest.py` 复检 `missing=0 mismatch=0 degraded=0 uncovered=0`（`opaque_alpha_dropped=4` 属已知恒 alpha 源）。
-- `media_hd.pak`：**1,464,087,236 B（约 1.36 GiB）**，2,421 entries，SHA-256 `e7093c71df9838c522af0b16256bc15c18e66bb6bcc9635b4e4a53508e1d3a62`。
-- 引擎分布：`realcugan/models-pro/n0` 1,816 张、`n-1` 352 张；最终回退 Lanczos 259 张（253 张 min 边 <64 的 CPU 项 + 6 张引擎不稳项）。
-- 全量耗时 3,010 s（约 50 分钟），编码速率约 38 张/分钟。
+- 白名单图像 2,506 张，实际入选 2,421 张（跳过 85 张护栏项，缺失 0）：实际 SR 2,147 张，Lanczos 274 张。
+- `work/hd`：2,421 个文件、**1,273.9 MiB**；`hd_manifest.json` 2,421 条，`verify_hd_manifest.py` 复检 `missing=0 mismatch=0 degraded=0 uncovered=0`（`opaque_alpha_dropped=4` 属已知恒 alpha 源）。
+- **本轮按用户要求未生成 `media_hd.pak`**，交付为 loose `work/hd`；后续确认素材后再打包。
+- 引擎标签：`realcugan/models-pro/n0` 1,801 张、`n-1` 352 张；其中 6 条标 fallback。Lanczos 274 张 = 253 张 min 边 <64 + 15 张色噪/涂抹重跑 + 6 张引擎不稳项。
+- 全量耗时 3,010 s（约 50 分钟），编码速率约 38 张/分钟；灰度去色修复另耗约 8 分钟。
 
 ## 7. 踩坑与修复（均已复现）
 
@@ -75,17 +75,18 @@
 5. **批处理线程竞争**：`-j 2:2:2` 批量运行时部分图会偶发同类噪声；改 `-j 1:1:1` 并保留 MAE 兜底。
 6. **长批次静默劣化**：同一引擎进程连续处理超过约 126 张后，输出开始整图彩虹噪声（尺寸/alpha 均正常，MAE 100+）；管线改为 **每 48 张重启引擎**，并提供 `--retry-fallback` 对已落盘坏项逐张重跑。
 7. **Alpha 丢弃误判**：4 张源图 alpha 恒 255，引擎输出无 alpha 属正常；校验器按源 alpha 极值区分，不记为降级。
+8. **灰度源色噪**：Real-CUGAN 对灰度源仍会注入轻微 RGB 通道差；合成后 MAE 可低至 18–24，能骗过 25 阈值，但透明叠加后可见彩虹斑点：`DLC_data/dlc_enemy_045–047` 最重。已对 2,304 张灰度源做去色审计，886 张强制转灰度（保留 alpha 与 2× 细节），其中 15 张色噪 >15 或明显涂抹的改走 Lanczos；管线新增 L/LA 源直接走 CPU、灰度输出强制中性两道护栏。
+9. **SD 漫画被过度平滑**：`1.4.0/SD_kiso2.png` 的 CUGAN n0/n-1 均把细线抹糊，Lanczos 反而更锐；该图单独改走 Lanczos，并在验收中确认。
 
 ## 8. 验收
 
-- `dotnet build godot/Lwsmf.csproj -c Release`：0 warning / 0 error。
-- 38 项 Godot headless 门禁（带最终 `media_hd.pak`）：`GODOT_GATE_OK elapsed=92s`，含 `HD_PACK_TEST_OK`、`PICTURE_STATE_TEST_OK checks=123`。
-- 渲染门禁：OpenGL3、2048×1152 窗口、120 帧无 ERROR；`PERFORMANCE_FRAME_OK fps=143.7`。
-- 视觉回归：1×（1024×576）与 2×（2048×1152 + HD 包）各 6 个场景，`VISUAL_CONTACT_SHEET_OK count=6`，`unresolved=0`；2× 截图内容铺满 2048×1152，文字与九宫格边框为原生 2× 渲染，无拉伸糊边。对比图：`work/out/visual_1x|visual_2x/visual_contact_sheet.png`、`work/out/compare_03_retail_save01_bedroom.png`。
+- **色偏修复前**曾用上一版 `media_hd.pak` 跑过：38 项 headless `GODOT_GATE_OK elapsed=92s`、OpenGL3 2048×1152 渲染门禁、1×/2× 视觉回归 6 场景通过。
+- 本次修复了灰度色噪与 `SD_kiso2` 涂抹，但按用户要求**未重新打包**，因此最终 loose 素材尚未重跑 pak 门禁与视觉回归；恢复打包后需以最终 `media_hd.pak` 重跑一遍再发布。
+- 已做的终检：`HD_MANIFEST_VERIFY_OK entries=2421 missing=0 mismatch=0 degraded=0 uncovered=0 opaque_alpha_dropped=4`；对 2,304 张灰度源重新审计，可见色度 >2 的条目从 666 降到 0（最后一处 2.8 已单独去色）。
 
 ## 9. 边界与未做
 
-- 253 张小图（含 18×18 九宫格、30×120 字效）走 CPU Lanczos，未做 SR；另有 6 张引擎不稳项（`CharaChip/cursor.png` 与 5 张 1240×310 的 command_cutin/eyecatch）也回退 Lanczos，合计 259 张，占 10.7%。
+- 253 张小图（含 18×18 九宫格、30×120 字效）走 CPU Lanczos，未做 SR；另有 15 张色噪/涂抹重跑与 6 张引擎不稳项（`CharaChip/cursor.png` 与 5 张 1240×310 的 command_cutin/eyecatch）也回退 Lanczos，合计 274 张，占 11.3%。
 - 85 张被护栏跳过（含 `MapChip/` 54 张、超大图层），运行时按 1× 回退。
 - 未做 PlayOverlays 图形菜单开关，当前开关为 `user://display_settings.cfg` 的 `display/hd_textures` 与 `LWsmf_HD_PAK`。
 - HD 素材与对比图不入库；仓库只保留脚本、清单与文档。
