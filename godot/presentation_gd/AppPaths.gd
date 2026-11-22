@@ -4,13 +4,24 @@ extends RefCounted
 ## res:// is a real project directory in the editor, but a virtual PCK prefix in
 ## exported builds; package data lives beside the executable there.
 
+const MOBILE_DATA_ROOT := "user://mobile_data"
+
+
+static func is_android() -> bool:
+	return OS.has_feature("android")
+
+
 static func resource_root() -> String:
+	if is_android():
+		return "res://"
 	if OS.has_feature("template"):
 		return OS.get_executable_path().get_base_dir()
 	return ProjectSettings.globalize_path("res://")
 
 
 static func package_root() -> String:
+	if is_android():
+		return ProjectSettings.globalize_path(MOBILE_DATA_ROOT)
 	return resource_root().path_join("..").simplify_path()
 
 

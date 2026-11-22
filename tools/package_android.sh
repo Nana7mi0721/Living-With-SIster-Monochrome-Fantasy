@@ -51,7 +51,9 @@ need_arg() {
 
 to_win_path() {
   if command -v cygpath >/dev/null 2>&1; then
-    cygpath -w "$1"
+    cygpath -m "$1"
+  elif [[ "$1" =~ ^/([a-zA-Z])/(.*)$ ]]; then
+    printf '%s:/%s' "${BASH_REMATCH[1]^^}" "${BASH_REMATCH[2]}"
   else
     printf '%s' "$1"
   fi
@@ -132,7 +134,7 @@ fi
 "$PYTHON_BIN" "$ROOT/tools/mobile/env_check.py" --target android --strict --setup-debug-keystore
 
 [ -n "$GODOT_BIN" ] && [ -x "$GODOT_BIN" ] || { echo "ERROR: Godot 4.7.2 Mono console binary not found" >&2; exit 2; }
-[ -n "$DOTNET_BIN" ] && [ -x "$DOTNET_BIN" ] || { echo "ERROR: dotnet 8 binary not found" >&2; exit 2; }
+[ -n "$DOTNET_BIN" ] && [ -x "$DOTNET_BIN" ] || { echo "ERROR: .NET 9 SDK binary not found (set DOTNET_BIN)" >&2; exit 2; }
 export DOTNET="${DOTNET:-$DOTNET_BIN}"
 export DOTNET_ROOT="${DOTNET_ROOT:-$(dirname "$DOTNET_BIN")}"
 export PATH="$(dirname "$DOTNET_BIN"):$PATH"

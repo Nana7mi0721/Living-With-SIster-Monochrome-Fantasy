@@ -100,6 +100,8 @@ def dotnet_workloads(dotnet_bin: str | None) -> tuple[set[str], str]:
             [dotnet_bin, "workload", "list"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
             env=env,
             check=False,
@@ -115,6 +117,63 @@ def dotnet_workloads(dotnet_bin: str | None) -> tuple[set[str], str]:
     return found, ""
 
 
+def dotnet_sdk_versions(dotnet_bin: str | None) -> tuple[list[str], str]:
+    if not dotnet_bin:
+        return [], "dotnet not found"
+    env = os.environ.copy()
+    env.setdefault("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
+    env.setdefault("DOTNET_NOLOGO", "1")
+    if "DOTNET_ROOT" not in env:
+        env["DOTNET_ROOT"] = str(Path(dotnet_bin).resolve().parent)
+    try:
+        proc = subprocess.run(
+            [dotnet_bin, "--list-sdks"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            env=env,
+            check=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return [], str(exc)
+    versions: list[str] = []
+    for line in (proc.stdout or "").splitlines():
+        token = line.strip().split(" ", 1)[0]
+        if re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", token):
+            versions.append(token)
+    return versions, ""
+
+
+def godot_editor_settings_files() -> list[Path]:
+    roots: list[Path] = []
+    appdata = os.environ.get("APPDATA", "").strip()
+    if appdata:
+        roots.append(Path(appdata) / "Godot")
+    roots.append(Path.home() / "AppData/Roaming/Godot")
+    files: dict[Path, None] = {}
+    for root in roots:
+        if root.is_dir():
+            for path in root.glob("editor_settings-*.tres"):
+                files[path.resolve()] = None
+    return sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)
+
+
+def godot_editor_setting(key: str) -> str | None:
+    prefix = key + " = "
+    for path in godot_editor_settings_files():
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith(prefix):
+                return stripped[len(prefix):].strip().strip('"')
+    return None
+
+
 def find_android_sdk() -> str | None:
     for var in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
         val = os.environ.get(var, "").strip()
@@ -128,6 +187,9 @@ def find_android_sdk() -> str | None:
     for cand in candidates:
         if cand.is_dir():
             return str(cand)
+    configured = godot_editor_setting("export/android/android_sdk_path")
+    if configured and Path(configured).is_dir():
+        return configured
     return None
 
 
@@ -136,6 +198,12 @@ def find_jdk_tool(name: str) -> str | None:
     if java_home:
         for ext in ("", ".exe"):
             cand = Path(java_home) / "bin" / (name + ext)
+            if cand.is_file():
+                return str(cand)
+    configured = godot_editor_setting("export/android/java_sdk_path")
+    if configured:
+        for ext in ("", ".exe"):
+            cand = Path(configured) / "bin" / (name + ext)
             if cand.is_file():
                 return str(cand)
     return shutil.which(name)
@@ -265,18 +333,30 @@ def check_environment(
     else:
         add("MISSING", "templates_dir", "4.7.2.stable.mono export templates not found", blocker=True)
 
-    # 3. .NET 8 SDK & workloads
+    # 3. .NET SDK & workloads
     dotnet_bin = find_dotnet_bin()
     if dotnet_bin:
         add("OK", "dotnet", dotnet_bin)
+        sdk_versions, serr = dotnet_sdk_versions(dotnet_bin)
+        if sdk_versions:
+            add("OK", "dotnet_sdks", ", ".join(sdk_versions))
+        else:
+            add("WARN", "dotnet_sdks", f"query failed: {serr or 'no SDK found'}")
         workloads, werr = dotnet_workloads(dotnet_bin)
         if werr:
             add("WARN", "dotnet_workloads", f"query failed: {werr}")
         if target in ("all", "android"):
-            if "android" in workloads:
-                add("OK", "workload:android", "installed")
+            if sdk_versions:
+                major = max(int(version.split(".", 1)[0]) for version in sdk_versions)
+                add("OK" if major >= 9 else "MISSING",
+                    "dotnet_sdk:android",
+                    "9.0+ required by the Godot 4.7.2 Mono Android template",
+                    blocker=major < 9)
             else:
-                add("MISSING", "workload:android", "missing (run: dotnet workload install android)", blocker=True)
+                add("MISSING", "dotnet_sdk:android", "unable to query installed SDK versions", blocker=True)
+            add("OK" if "android" in workloads else "INFO",
+                "workload:android",
+                "installed" if "android" in workloads else "not required; Mono runtime packs restore via NuGet")
         if target in ("all", "ios"):
             if "ios" in workloads:
                 add("OK", "workload:ios", "installed")
@@ -287,7 +367,7 @@ def check_environment(
                     "not installed locally (macOS/CI installs via: dotnet workload install ios)",
                     blocker=(target == "ios" and host_os == "Darwin"))
     else:
-        add("MISSING", "dotnet", "dotnet 8 SDK not found (set DOTNET_BIN/DOTNET_ROOT)", blocker=True)
+        add("MISSING", "dotnet", "dotnet SDK not found (set DOTNET_BIN/DOTNET_ROOT)", blocker=True)
 
     # 4. Android SDK / JDK
     if target in ("all", "android"):

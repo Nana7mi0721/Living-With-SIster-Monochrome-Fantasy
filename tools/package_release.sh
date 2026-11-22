@@ -129,7 +129,9 @@ find "$STAGE/game" -type f -name '*.pdb' -delete
 
 to_win_path() {
   if command -v cygpath >/dev/null 2>&1; then
-    cygpath -w "$1"
+    cygpath -m "$1"
+  elif [[ "$1" =~ ^/([a-zA-Z])/(.*)$ ]]; then
+    printf '%s:/%s' "${BASH_REMATCH[1]^^}" "${BASH_REMATCH[2]}"
   else
     printf '%s' "$1"
   fi

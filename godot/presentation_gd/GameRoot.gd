@@ -7,6 +7,7 @@ extends Control
 const STEP := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 8
 const SetupWizardScript := preload("res://presentation_gd/SetupWizard.gd")
+const MobileDataBootstrapScript := preload("res://presentation_gd/MobileDataBootstrap.gd")
 const AppPaths := preload("res://presentation_gd/AppPaths.gd")
 const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
 const _PlayOverlays := preload("res://presentation_gd/PlayOverlays.gd")
@@ -68,6 +69,17 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	# GameRoot spans the full 1024x576 viewport; IGNORE lets mouse events reach InputRouter.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if MobileDataBootstrapScript.needs_bootstrap():
+		phase = "bootstrap"
+		var bootstrap = MobileDataBootstrapScript.new()
+		bootstrap.name = "MobileDataBootstrap"
+		bootstrap.completed.connect(_on_mobile_data_bootstrap_completed)
+		add_child(bootstrap)
+		return
+	_start_game()
+
+
+func _start_game() -> void:
 	if not SetupWizardScript.data_ready():
 		phase = "setup"
 		var wizard = SetupWizardScript.new()
@@ -186,12 +198,17 @@ func _on_setup_completed() -> void:
 	get_tree().call_deferred("reload_current_scene")
 
 
+func _on_mobile_data_bootstrap_completed(ok: bool) -> void:
+	if ok:
+		get_tree().call_deferred("reload_current_scene")
+
+
 func _process(delta: float) -> void:
 	if overlays != null:
 		overlays.tick_toast()
 	if message != null:
 		message.paused = _modal_window_open()
-	if phase == "failed" or phase == "setup" or faulted:
+	if phase == "failed" or phase == "setup" or phase == "bootstrap" or faulted:
 		if phase == "failed" and overlays != null:
 			report_fault(_failure_reason())
 		return
@@ -277,7 +294,7 @@ func _grab_viewport_image() -> Image:
 
 
 func advance_frame() -> void:
-	if phase == "failed" or phase == "setup" or faulted:
+	if phase == "failed" or phase == "setup" or phase == "bootstrap" or faulted:
 		if phase == "failed" and overlays != null:
 			report_fault(_failure_reason())
 		return
@@ -775,7 +792,7 @@ func _notification(what: int) -> void:
 
 ## Opcode 174 returns directly to the title screen without confirmation.
 func _on_return_to_title() -> void:
-	if phase == "title" or phase == "setup" or phase == "failed":
+	if phase == "title" or phase == "setup" or phase == "bootstrap" or phase == "failed":
 		return
 	restart_title()
 
@@ -923,7 +940,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		cycle_scaling_mode()
 		get_viewport().set_input_as_handled()
 		return
-	if faulted or phase == "setup":
+	if faulted or phase == "setup" or phase == "bootstrap":
 		return
 	if key.keycode == KEY_F2:
 		if overlays != null:
@@ -1160,7 +1177,7 @@ func title_confirm_open() -> bool:
 
 
 func request_return_to_title() -> void:
-	if faulted or phase == "title" or phase == "setup" or phase == "failed" or title_confirm_open() or backlog_open():
+	if faulted or phase == "title" or phase == "setup" or phase == "bootstrap" or phase == "failed" or title_confirm_open() or backlog_open():
 		return
 	overlays.open_title_confirm()
 	status("return-to-title confirm opened")
@@ -1351,7 +1368,7 @@ func _failure_reason() -> String:
 
 
 func can_save() -> bool:
-	return not faulted and phase != "failed" and phase != "setup"
+	return not faulted and phase != "failed" and phase != "setup" and phase != "bootstrap"
 
 
 func fault_modal_visible() -> bool:

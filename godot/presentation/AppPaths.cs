@@ -10,8 +10,12 @@ namespace Lwsmf.Presentation;
 /// </summary>
 public static class AppPaths
 {
+    public static bool IsAndroid => OS.HasFeature("android");
+
     public static string ResourceRoot()
     {
+        if (IsAndroid)
+            return "res://";
         if (OS.HasFeature("template"))
         {
             return Path.GetDirectoryName(OS.GetExecutablePath()) ?? "";
@@ -21,6 +25,8 @@ public static class AppPaths
 
     public static string PackageRoot()
     {
+        if (IsAndroid)
+            return ProjectSettings.GlobalizePath("user://mobile_data");
         return Path.GetFullPath(Path.Combine(ResourceRoot(), ".."));
     }
 
