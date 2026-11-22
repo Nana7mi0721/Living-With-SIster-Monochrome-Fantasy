@@ -16,7 +16,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+try:
+    from PIL import Image, ImageDraw
+except ImportError:
+    Image = None  # type: ignore[assignment]
+    ImageDraw = None  # type: ignore[assignment]
 
 GD_SCRIPT = """extends SceneTree
 
@@ -44,12 +48,22 @@ func _run() -> void:
 \tvar root_dir := OS.get_environment("LWsmf_REPO_ROOT")
 \tvar retail_dir := OS.get_environment("LWsmf_RETAIL_SAVE_DIR")
 \tvar vp := SubViewport.new()
-\tvp.size = Vector2i(1024, 576)
+\tvar vp_spec := OS.get_environment("LWsmf_VISUAL_VIEWPORT")
+\tif vp_spec != "":
+\t\tvar parts := vp_spec.split("x")
+\t\tvp.size = Vector2i(int(parts[0]), int(parts[1]))
+\telse:
+\t\tvp.size = Vector2i(1024, 576)
 \tvp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 \troot.add_child(vp)
 
 \tvar game = load("res://presentation_gd/GameRoot.gd").new()
 \tvp.add_child(game)
+
+\tif game.phase in ["setup", "failed", "faulted", "bootstrap"] or game.faulted or game.assets == null:
+\t\tpush_error("VISUAL_REGRESSION_ABORT phase=%s faulted=%s" % [str(game.phase), str(game.faulted)])
+\t\tquit(1)
+\t\treturn
 
 \tfor _i in range(1500):
 \t\tgame._process(game.STEP)
@@ -61,7 +75,9 @@ func _run() -> void:
 
 \tawait process_frame
 \tawait process_frame
-\t_capture(vp, out_dir, "01_title_menu.png")
+\tif not _capture(vp, out_dir, "01_title_menu.png"):
+\t\tquit(1)
+\t\treturn
 
 \t# Scenario 2: Live Nameplate + Message + Choice on Title
 \tgame._on_message_options_changed(0, 0, 0, "妹妹", "")
@@ -73,7 +89,9 @@ func _run() -> void:
 \t\tgame.message.waiting_for_confirm = true
 \tawait process_frame
 \tawait process_frame
-\t_capture(vp, out_dir, "02_dialog_nameplate.png")
+\tif not _capture(vp, out_dir, "02_dialog_nameplate.png"):
+\t\tquit(1)
+\t\treturn
 \tgame._reset_presentation_transient_state()
 
 \t# Scenario 3: Retail SaveData01.sav Evening Bedroom (HUD + Sprite + Icons)
@@ -87,7 +105,9 @@ func _run() -> void:
 \t\t\t\tgame._process(game.STEP)
 \t\tawait process_frame
 \t\tawait process_frame
-\t\t_capture(vp, out_dir, "03_retail_save01_bedroom.png")
+\t\tif not _capture(vp, out_dir, "03_retail_save01_bedroom.png"):
+\t\t\tquit(1)
+\t\t\treturn
 
 \t\t# Scenario 4: Save/Load Screen (CE94 + SaveData01 thumbnail / clean empty cards)
 \t\tgame.vm.StartEventAt(94, 0)
@@ -98,7 +118,9 @@ func _run() -> void:
 \t\t\t\tbreak
 \t\tawait process_frame
 \t\tawait process_frame
-\t\t_capture(vp, out_dir, "04_save_load_ce94.png")
+\t\tif not _capture(vp, out_dir, "04_save_load_ce94.png"):
+\t\t\tquit(1)
+\t\t\treturn
 
 \t# Scenario 5: Retail SaveData08.sav Late-Game State
 \tvar sav8 := _find_sav(root_dir, retail_dir, "SaveData08.sav")
@@ -107,7 +129,9 @@ func _run() -> void:
 \t\t_step_settled(game, 40)
 \t\tawait process_frame
 \t\tawait process_frame
-\t\t_capture(vp, out_dir, "05_retail_save08_late.png")
+\t\tif not _capture(vp, out_dir, "05_retail_save08_late.png"):
+\t\t\tquit(1)
+\t\t\treturn
 
 \t# Scenario 6: Retail DLC-Stage Save (var 558 > 0) when retail save directory is available
 \tif retail_dir != "" and DirAccess.dir_exists_absolute(retail_dir):
@@ -126,20 +150,28 @@ func _run() -> void:
 \t\t\t\tawait process_frame
 \t\t\t\tawait process_frame
 \t\t\t\tprint("DLC_SAVE_LOADED file=%s day=%d clear=%d dlc=%d" % [sname, int(game.vm.GetVar(3)), int(game.vm.GetVar(492)), dlc_val])
-\t\t\t\t_capture(vp, out_dir, "06_retail_dlc_stage.png")
+\t\t\t\tif not _capture(vp, out_dir, "06_retail_dlc_stage.png"):
+\t\t\t\t\tquit(1)
+\t\t\t\t\treturn
 \t\t\t\tbreak
 
 \tprint("ASSETS_CHECK misses=%d faulted=%s miss_paths=%s" % [game.assets.misses, str(game.faulted), str(game.assets.miss_paths)])
-\tif game.faulted:
+\tif game.faulted or game.phase in ["setup", "failed", "faulted", "bootstrap"] or game.assets.misses > 0:
 \t\tquit(1)
 \t\treturn
 \tprint("VISUAL_REGRESSION_CAPTURE_OK")
 \tquit(0)
 
-func _capture(vp: SubViewport, out_dir: String, name: String) -> void:
+func _capture(vp: SubViewport, out_dir: String, name: String) -> bool:
 \tvar img := vp.get_texture().get_image()
-\tif img != null:
-\t\timg.save_png(out_dir.path_join(name))
+\tif img == null:
+\t\tpush_error("CAPTURE_NULL " + name)
+\t\treturn false
+\tvar err := img.save_png(out_dir.path_join(name))
+\tif err != OK:
+\t\tpush_error("CAPTURE_SAVE_FAILED %s err=%d" % [name, err])
+\t\treturn false
+\treturn true
 """
 
 
@@ -211,6 +243,8 @@ def find_godot(repo_root: Path) -> str:
 
 
 def build_contact_sheet(images: list[tuple[str, Path]], dest: Path) -> None:
+    if Image is None or ImageDraw is None:
+        raise RuntimeError("Pillow (PIL) is required; install with: pip install pillow")
     thumb_w, thumb_h = 512, 288
     pad = 16
     cols = 2
@@ -221,7 +255,8 @@ def build_contact_sheet(images: list[tuple[str, Path]], dest: Path) -> None:
         r, c = divmod(idx, cols)
         x = pad + c * (thumb_w + pad)
         y = pad + r * (thumb_h + 28 + pad)
-        im = Image.open(path).convert("RGB").resize((thumb_w, thumb_h), Image.Resampling.LANCZOS)
+        with Image.open(path) as opened:
+            im = opened.convert("RGB").resize((thumb_w, thumb_h), Image.Resampling.LANCZOS)
         sheet.paste(im, (x, y))
         draw.text((x + 4, y + thumb_h + 4), label, fill=(235, 235, 240))
     sheet.save(dest)
@@ -231,11 +266,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Capture OpenGL3 retail-save screenshots into a contact sheet")
     parser.add_argument("--out-dir", default="work/out/visual", help="output directory for screenshots and contact sheet")
     parser.add_argument("--retail-save-dir", default="", help="explicit retail Save/ directory (optional; auto-discovers Steam)")
+    parser.add_argument("--viewport", default="1024x576", help="capture viewport, e.g. 2048x1152 for the HD layer")
+    parser.add_argument("--hd-pak", default="", help="optional media_hd.pak to exercise the 2x asset layer")
     args = parser.parse_args(argv)
+
+    if Image is None or ImageDraw is None:
+        print("ERROR: Pillow (PIL) is required for visual_regression.py. Install via: pip install pillow", file=sys.stderr)
+        return 2
 
     repo_root = Path(__file__).resolve().parent.parent
     out_dir = (repo_root / args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    for stale in out_dir.glob("*.png"):
+        stale.unlink()
     godot = find_godot(repo_root)
     retail_save_dir = find_retail_save_dir(repo_root, args.retail_save_dir)
 
@@ -250,16 +293,27 @@ def main(argv: list[str] | None = None) -> int:
         env["LWsmf_REPO_ROOT"] = str(repo_root)
         env["LWsmf_SAVE_DIR"] = str(save_dir)
         env["LWsmf_QUIET_HUD"] = "1"
+        env["LWsmf_VISUAL_VIEWPORT"] = args.viewport
+        if args.hd_pak:
+            env["LWsmf_HD_PAK"] = str((repo_root / args.hd_pak).resolve() if not Path(args.hd_pak).is_absolute() else Path(args.hd_pak))
         if retail_save_dir is not None:
             env["LWsmf_RETAIL_SAVE_DIR"] = str(retail_save_dir)
-        proc = subprocess.run(
-            [godot, "--path", str(repo_root / "godot"), "--rendering-driver", "opengl3", "-s", str(script_path)],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=90,
-            check=False,
-        )
+        try:
+            proc = subprocess.run(
+                [godot, "--path", str(repo_root / "godot"), "--rendering-driver", "opengl3", "-s", str(script_path)],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=90,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            print(f"ERROR: Godot visual regression timed out after {exc.timeout}s", file=sys.stderr)
+            if exc.stdout:
+                print(exc.stdout)
+            if exc.stderr:
+                print(exc.stderr, file=sys.stderr)
+            return 1
         if proc.returncode != 0 or "VISUAL_REGRESSION_CAPTURE_OK" not in proc.stdout:
             print(proc.stdout)
             print(proc.stderr, file=sys.stderr)

@@ -92,10 +92,39 @@ bash tools/package_release.sh --slim
   - `Lwsmf-win64-slim/work/all/media.pak` SHA-256：`e3669a9e1e587e822c022c8d63345031eff539d687753f77a4ca578e31f2dbd1`
 - **Slim 载荷实测**：通过宿主 Godot 读取 `dist/Lwsmf-win64-slim/work/all/media.pak`（3,802 条）与紧凑 JSON，`BattleEffect/kaenbeam.png`、`BattleEffect/pipo-btleffect162.png`、`Picture/title01.jpg`、`Picture/item_list_base.png`、`SystemGraphic/TitleGraphic.jpg`、`SystemFile/WindowBase.png`、`cg/bg_01_home_a.jpg`、`SystemFile/[SE]Cursor.ogg` 与 `programs.json`（550 公共事件）+ `database.json` 全部零错误解码（`SLIM_PAYLOAD_SMOKE_OK misses=0`）。注：在自动化沙盒终端内直接拉起新建 `.exe` 会触发 Low-IL ACL 限制（`0xC0000142`），独立桌面会话双击解压包正常运行不受此限。
 
+### 5.1 可选 2× HD 包（`media_hd.pak`，2026-11-22）
+
+```bash
+# 1) 生成 2× 素材（Real-CUGAN CLI 出 PNG，Pillow 转无损 WebP；输出 work/hd，不入库）
+python tools/upscale_assets.py --root work/retail_dat --manifest work/media_manifest.txt --out work/hd
+
+# 2) 校验尺寸/alpha/覆盖率（缺文件、尺寸不符或未覆盖都会返回非 0）
+python tools/verify_hd_manifest.py
+
+# 3) 打成独立包（不替换 1× 的 media.pak）
+python tools/pack_media.py --hd-root work/hd --out work/all/media_hd.pak
+
+# 4) 带 HD 层打包发布（输出 dist/Lwsmf-win64-hd）
+bash tools/package_release.sh --hd
+```
+
+| 指标 | 实测值 | 说明 |
+| :--- | ---: | :--- |
+| 活体图像 | 2,506 张（2,168 引擎 + 253 CPU + 85 护栏跳过） | 白名单 `work/media_manifest.txt` |
+| 产出条目 | 2,421 | `hd_manifest.json`，缺失 0 / 尺寸不符 0 / 未覆盖 0 |
+| 2× 像素总量 | 约 4.84 Gpx | 源 1.11 Gpx，最大 9216×576、1536×7488 等按护栏保持 1× |
+| `work/hd` 体积 | 以重跑结果为准 | Real-CUGAN 出 PNG，Pillow 无损 WebP 编码 |
+| `media_hd.pak` | 1,261,134,804 B（约 1,202.6 MiB / 1.17 GiB） | 2,421 条，`PACK_MEDIA_OK` |
+| 推理耗时 | 604 s | RTX 5060 Laptop，三组 denoise 批量 |
+| 校验标记 | `HD_MANIFEST_VERIFY_OK entries=2421 missing=0 mismatch=0 degraded=0 uncovered=0 opaque_alpha_dropped=4` | 4 张源 alpha 恒为 255，丢通道无视觉影响 |
+
+运行侧：`project.godot` 默认窗口 2048×1152、`stretch/mode=canvas_items`；桌面自动探测 `<root>/media_hd.pak`，移动端（`mobile` feature）默认关闭并回退 1×；缓存预算桌面 512 MB / 移动 192 MB。开关写入 `user://display_settings.cfg` 的 `display/hd_textures`，也可用 `LWsmf_HD_PAK` 指定包路径。
+
 ## 6. 发布审计与移动端配套
 
 ```bash
 python tools/release_audit.py --dist dist/Lwsmf-win64-slim
+python tools/release_audit.py --hd-root work/hd
 python tools/release_audit.py --repo-scan
 bash tools/check_mobile_env.sh --target all
 ```

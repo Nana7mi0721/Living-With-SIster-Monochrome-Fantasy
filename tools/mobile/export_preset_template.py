@@ -55,7 +55,8 @@ def patch_option(path: Path, preset_name: str, key: str, value: str) -> None:
     if opt_start < 0:
         fail(f"missing [{options_header}] section in {path}")
 
-    replacement = f'{key}="{value}"\n'
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    replacement = f'{key}="{escaped}"\n'
     for idx in range(opt_start + 1, opt_end):
         if lines[idx].lstrip().startswith(f"{key}="):
             lines[idx] = replacement

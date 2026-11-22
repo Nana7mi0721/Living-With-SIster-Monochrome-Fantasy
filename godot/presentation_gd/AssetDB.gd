@@ -14,7 +14,8 @@ const MEDIA_PREFIX := "media://"
 ## ImageTexture.create_from_image; audio is accounted by source byte length. Eviction drops
 ## only this cache's reference so textures attached to live nodes stay alive.
 
-const DEFAULT_BUDGET_BYTES := 384 * 1024 * 1024
+const DEFAULT_BUDGET_BYTES := 512 * 1024 * 1024
+const MOBILE_BUDGET_BYTES := 192 * 1024 * 1024
 const TEXTURE_EXTENSIONS: Array[String] = [".png", ".jpg", ".jpeg", ".bmp", ".webp"]
 ## Bare-basename fallback order. Both the unpacked tree and the pack can store art under
 ## multiple folders (SystemGraphic/TitleGraphic.png vs SystemFile, hword/ vs picture/), so
@@ -33,6 +34,7 @@ var save_dir := ""
 ## True when the retail install was missing and the committed stub tree took over.
 var using_fallback := false
 var budget_bytes: int = DEFAULT_BUDGET_BYTES
+var hd_enabled := true
 var used_bytes: int = 0
 var hits: int = 0
 var misses: int = 0
@@ -51,6 +53,13 @@ var _media_tex_basenames: Dictionary = {}
 var _media_tex_basename_rank: Dictionary = {}
 var _media_audio_basenames: Dictionary = {}
 var _media_audio_basename_rank: Dictionary = {}
+## Optional 2x art pack. Entries are logical-path -> {path, scale}; a miss falls
+## back to the 1x pack, so a partial HD build is always safe to ship.
+var hd_pak_path := ""
+var hd_pak = null
+var _hd_entries: Dictionary = {}
+var _hd_basenames: Dictionary = {}
+var _hd_basename_rank: Dictionary = {}
 var _cache: Dictionary = {}                 # normalized key -> Resource
 var _sizes: Dictionary = {}                 # normalized key -> bytes
 var _lru: Array[String] = []                # oldest first
@@ -60,8 +69,12 @@ var _logged_misses: Dictionary = {}
 func _init(p_root: String = "") -> void:
 	var explicit_root := p_root != ""
 	root_dir = p_root if explicit_root else default_root()
+	if OS.has_feature("mobile"):
+		budget_bytes = MOBILE_BUDGET_BYTES
+		hd_enabled = false
 	_index()
 	_open_media_pack()
+	_open_hd_pack()
 	# Only the implicit default root falls back to the committed stub tree; an explicit root
 	# (tests, custom installs) keeps reporting its real contents so misses stay visible.
 	if not explicit_root and _files.is_empty() and media_pak == null:
@@ -69,6 +82,7 @@ func _init(p_root: String = "") -> void:
 		using_fallback = true
 		_index()
 		_open_media_pack()
+		_open_hd_pack()
 
 
 static func default_root() -> String:
@@ -86,6 +100,14 @@ static func _norm_key(logical: String) -> String:
 	while key.begins_with("./") or key.begins_with("../"):
 		key = key.substr(2) if key.begins_with("./") else key.substr(3)
 	return key.lstrip("/")
+
+
+static func _tex_cache_key(logical: String) -> String:
+	return "tex:" + _norm_key(logical)
+
+
+static func _audio_cache_key(logical: String) -> String:
+	return "aud:" + _norm_key(logical)
 
 
 func set_save_dir(path: String) -> void:
@@ -230,12 +252,17 @@ func resolve(logical: String, media_kind: String = "any") -> String:
 
 
 func texture(logical: String) -> Texture2D:
-	var key := _norm_key(logical)
+	var key := _tex_cache_key(logical)
 	if _cache.has(key) and _cache[key] is Texture2D:
 		hits += 1
 		_touch(key)
 		return _cache[key]
 	misses += 1
+	var hd_image := _image_from_hd(hd_path(logical))
+	if hd_image != null:
+		var hd_tex := ImageTexture.create_from_image(hd_image)
+		_store(key, hd_tex, hd_image.get_width() * hd_image.get_height() * 4)
+		return hd_tex
 	var path := resolve(logical, "texture")
 	if path.is_empty():
 		_record_miss(logical)
@@ -246,6 +273,7 @@ func texture(logical: String) -> Texture2D:
 	else:
 		image = _image_from_file(path)
 	if image == null:
+		_record_miss(logical)
 		return null
 	var tex := ImageTexture.create_from_image(image)
 	_store(key, tex, image.get_width() * image.get_height() * 4)
@@ -253,7 +281,7 @@ func texture(logical: String) -> Texture2D:
 
 
 func audio(logical: String) -> AudioStream:
-	var key := _norm_key(logical)
+	var key := _audio_cache_key(logical)
 	if _cache.has(key) and _cache[key] is AudioStream:
 		hits += 1
 		_touch(key)
@@ -268,6 +296,7 @@ func audio(logical: String) -> AudioStream:
 	if path.begins_with(MEDIA_PREFIX):
 		var bytes := _bytes_from_media(path)
 		if bytes.is_empty():
+			_record_miss(logical)
 			return null
 		stream = _audio_from_bytes(bytes, path.get_extension())
 		size = bytes.size()
@@ -292,6 +321,7 @@ func audio(logical: String) -> AudioStream:
 				"wav":
 					stream = AudioStreamWAV.load_from_file(path)
 	if stream == null:
+		_record_miss(logical)
 		return null
 	_store(key, stream, size)
 	return stream
@@ -308,6 +338,8 @@ func media_pak_count() -> int:
 ## Opens <root>/media.pak, or the path in LWsmf_MEDIA_PAK when set.
 ## An absent or malformed pack leaves the loose tree in charge.
 func _open_media_pack() -> void:
+	if media_pak != null:
+		media_pak.Close()
 	media_pak = null
 	media_pak_path = ""
 	_media_files.clear()
@@ -343,6 +375,119 @@ func _open_media_pack() -> void:
 						_media_audio_basename_rank[bare] = rank
 			return
 		push_warning("AssetDB: cannot open media pack %s: %s" % [candidate, reader.LastError])
+
+
+## Opens <root>/media_hd.pak (or LWsmf_HD_PAK). The pack is optional: an absent,
+## malformed, or manifest-less pack leaves every lookup on the 1x path.
+func _open_hd_pack() -> void:
+	if hd_pak != null:
+		hd_pak.Close()
+	hd_pak = null
+	hd_pak_path = ""
+	_hd_entries.clear()
+	_hd_basenames.clear()
+	_hd_basename_rank.clear()
+	if not hd_enabled:
+		return
+	var candidates: Array[String] = []
+	var override := OS.get_environment("LWsmf_HD_PAK")
+	if not override.is_empty():
+		candidates.append(override)
+	candidates.append(root_dir.path_join("media_hd.pak"))
+	for candidate in candidates:
+		if not FileAccess.file_exists(candidate):
+			continue
+		var reader = MediaPakReader.new()
+		if not reader.Open(candidate):
+			push_warning("AssetDB: cannot open HD pack %s: %s" % [candidate, reader.LastError])
+			continue
+		var manifest_bytes = reader.Read("hd_manifest.json")
+		if manifest_bytes == null:
+			push_warning("AssetDB: HD pack %s has no hd_manifest.json" % candidate)
+			reader.Close()
+			continue
+		var parsed = JSON.parse_string(manifest_bytes.get_string_from_utf8())
+		if typeof(parsed) != TYPE_DICTIONARY:
+			push_warning("AssetDB: HD pack %s has an unreadable manifest" % candidate)
+			reader.Close()
+			continue
+		var entries: Dictionary = parsed.get("entries", {})
+		for raw_key in entries.keys():
+			var item = entries[raw_key]
+			if typeof(item) != TYPE_DICTIONARY:
+				continue
+			var path := str(item.get("path", ""))
+			var scale := float(item.get("scale", 1.0))
+			if path.is_empty() or scale <= 1.0:
+				continue
+			var key := _norm_key(str(raw_key))
+			_hd_entries[key] = {"path": path, "scale": scale}
+			var bare := key.get_file().get_basename()
+			var rank := _dir_rank(key)
+			if not _hd_basenames.has(bare) or rank < int(_hd_basename_rank.get(bare, 1 << 30)):
+				_hd_basenames[bare] = key
+				_hd_basename_rank[bare] = rank
+		hd_pak = reader
+		hd_pak_path = candidate
+		return
+
+
+func hd_available() -> bool:
+	return hd_pak != null
+
+
+func set_hd_enabled(enabled: bool) -> void:
+	if enabled == hd_enabled:
+		return
+	hd_enabled = enabled
+	_open_hd_pack()
+	clear()
+
+
+func hd_entry_count() -> int:
+	return _hd_entries.size()
+
+
+## Resolves a logical path to its HD entry, mirroring resolve()'s alias and
+## basename fallbacks. Empty when the path has no 2x art.
+func _hd_entry(logical: String) -> Dictionary:
+	var key := _norm_key(logical)
+	if key.is_empty() or key.begins_with("save/"):
+		return {}
+	var direct: Dictionary = _hd_entries.get(key, {})
+	if not direct.is_empty():
+		return direct
+	if key.begins_with("picture/word_effect"):
+		var alias: Dictionary = _hd_entries.get("hword/" + key.get_file(), {})
+		if not alias.is_empty():
+			return alias
+	var bare := key.get_file().get_basename()
+	if _hd_basenames.has(bare):
+		return _hd_entries.get(_hd_basenames[bare], {})
+	return {}
+
+
+## Logical->texture scale factor for the layout code: 2.0 when this path has
+## 2x art, 1.0 otherwise.
+func hd_scale(logical: String) -> float:
+	var entry := _hd_entry(logical)
+	if entry.is_empty():
+		return 1.0
+	return float(entry.get("scale", 1.0))
+
+
+func hd_path(logical: String) -> String:
+	var entry := _hd_entry(logical)
+	return str(entry.get("path", "")) if not entry.is_empty() else ""
+
+
+func _image_from_hd(path: String) -> Image:
+	if hd_pak == null:
+		return null
+	var bytes = hd_pak.Read(path)
+	if bytes == null:
+		return null
+	return _image_from_bytes(bytes, path.get_extension())
 
 
 func _bytes_from_media(path: String) -> PackedByteArray:
@@ -432,19 +577,27 @@ static func _audio_from_bytes(bytes: PackedByteArray, fallback_ext: String) -> A
 	return null
 
 
-func has_cached(logical: String) -> bool:
-	return _cache.has(_norm_key(logical))
+func has_cached(logical: String, media_kind: String = "any") -> bool:
+	if media_kind == "texture":
+		return _cache.has(_tex_cache_key(logical))
+	if media_kind == "audio":
+		return _cache.has(_audio_cache_key(logical))
+	return _cache.has(_tex_cache_key(logical)) or _cache.has(_audio_cache_key(logical))
 
 
-## Drop one logical path after a screenshot is rewritten or deleted.
-func invalidate(logical: String) -> void:
-	var key := _norm_key(logical)
+func _erase_cache_key(key: String) -> void:
 	if _sizes.has(key):
 		used_bytes -= int(_sizes[key])
 	_sizes.erase(key)
 	_cache.erase(key)
 	_lru.erase(key)
-	_logged_misses.erase(key)
+
+
+## Drop one logical path after a screenshot is rewritten or deleted.
+func invalidate(logical: String) -> void:
+	_erase_cache_key(_tex_cache_key(logical))
+	_erase_cache_key(_audio_cache_key(logical))
+	_logged_misses.erase(_norm_key(logical))
 
 
 func clear() -> void:
@@ -452,6 +605,7 @@ func clear() -> void:
 	_sizes.clear()
 	_lru.clear()
 	_logged_misses.clear()
+	miss_paths.clear()
 	used_bytes = 0
 
 

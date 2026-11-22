@@ -99,14 +99,10 @@ public sealed class WolfRng
     {
         _draws++;
         uint draw = NextEventDraw();
-        int low = Math.Min(min, max);
-        unchecked
-        {
-            int diff = max - min;
-            uint uDiff = (uint)Math.Abs((long)diff);
-            uint modulus = uDiff + 1;
-            int offset = modulus == 0 ? (int)(draw % 0x80000000u) : (int)(draw % modulus);
-            return low + offset;
-        }
+        long lo = Math.Min((long)min, (long)max);
+        long hi = Math.Max((long)min, (long)max);
+        ulong span = (ulong)(hi - lo) + 1UL;
+        ulong offset = (ulong)draw % span;
+        return unchecked((int)(lo + (long)offset));
     }
 }

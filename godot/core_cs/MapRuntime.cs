@@ -172,11 +172,19 @@ public sealed class MapRuntime
         int halfH = baseHalfH + page.CollisionHeight * ExtensionUnitPx;
         int centerX = state.Def.X * TilePx + TilePx / 2;
         int centerY = state.Def.Y * TilePx + TilePx / 2;
-        int minX = (centerX - halfW) / TilePx;
-        int maxX = (centerX + halfW - 1) / TilePx;
-        int minY = (centerY - halfH) / TilePx;
-        int maxY = (centerY + halfH - 1) / TilePx;
+        int minX = FloorDiv(centerX - halfW, TilePx);
+        int maxX = FloorDiv(centerX + halfW - 1, TilePx);
+        int minY = FloorDiv(centerY - halfH, TilePx);
+        int maxY = FloorDiv(centerY + halfH - 1, TilePx);
         return (minX, minY, maxX, maxY);
+    }
+
+    private static int FloorDiv(int numerator, int divisor)
+    {
+        int q = numerator / divisor;
+        int r = numerator % divisor;
+        if (r != 0 && (r < 0) != (divisor < 0)) q--;
+        return q;
     }
 
     /// <summary>

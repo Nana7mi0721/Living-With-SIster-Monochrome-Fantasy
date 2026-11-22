@@ -67,3 +67,7 @@ __pycache__/
 Thumbs.db
 [Dd]esktop.ini
 .DS_Store
+
+# 2x art pack (generated locally from retail art; never committed)
+/work/hd/
+/work/out/hd_*/

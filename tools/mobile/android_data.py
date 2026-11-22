@@ -186,10 +186,8 @@ def cmd_verify_apk(args: argparse.Namespace) -> int:
         required = [
             f"assets/mobile_data/{MANIFEST_FILENAME}",
             f"assets/mobile_data/work/all/media.pak{MEDIA_BLOB_SUFFIX}",
-            f"assets/mobile_data/game_data/programs.json{BLOB_SUFFIX}",
-            f"assets/mobile_data/game_data/database.json{BLOB_SUFFIX}",
-            f"assets/mobile_data/game_data/map_tiles.json{BLOB_SUFFIX}",
-            f"assets/mobile_data/work/all/BasicData/DataBase.project{BLOB_SUFFIX}",
+            *(f"assets/mobile_data/game_data/{name}{BLOB_SUFFIX}" for name in GAME_DATA_FILES),
+            *(f"assets/mobile_data/work/all/BasicData/{name}{BLOB_SUFFIX}" for name in PROJECT_FILES),
         ]
         for req in required:
             if req not in infos or infos[req].file_size <= 0:
@@ -198,6 +196,15 @@ def cmd_verify_apk(args: argparse.Namespace) -> int:
         pak_entry = f"assets/mobile_data/work/all/media.pak{MEDIA_BLOB_SUFFIX}"
         if pak_entry in infos and infos[pak_entry].compress_type != zipfile.ZIP_STORED:
             errors.append(f"{pak_entry} must use ZIP_STORED (got {infos[pak_entry].compress_type})")
+
+        has_lwsmf_dll = any(
+            name.startswith("assets/.godot/mono/publish/")
+            and name.endswith("/Lwsmf.dll")
+            and infos[name].file_size > 0
+            for name in infos
+        )
+        if not has_lwsmf_dll:
+            errors.append("APK missing non-empty assets/.godot/mono/publish/*/Lwsmf.dll")
 
         has_arm64_lib = any(name.startswith("lib/arm64-v8a/") and name.endswith(".so") for name in infos)
         if not has_arm64_lib:

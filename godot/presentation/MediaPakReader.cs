@@ -24,6 +24,8 @@ public partial class MediaPakReader : RefCounted
     private const int IndexFixed = 22;
     private const ulong DataAlignment = 16;
     private const int StreamBlockSize = 64;
+    private const ulong MaxIndexBytes = 64UL * 1024 * 1024;
+    private const ulong MaxEntryBytes = 256UL * 1024 * 1024;
     private const ulong Golden = 0x9E3779B97F4A7C15UL;
 
     private static readonly byte[] Magic = "WOLFMPK1"u8.ToArray();
@@ -48,113 +50,141 @@ public partial class MediaPakReader : RefCounted
     private readonly object _gate = new();
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
     private FileStream? _file;
+    private string _packPath = "";
+    private string _lastError = "";
 
     /// <summary>True after a successful <see cref="Open"/>.</summary>
-    public bool IsOpen => _file != null;
+    public bool IsOpen
+    {
+        get { lock (_gate) return _file != null; }
+    }
 
     /// <summary>Number of indexed files.</summary>
-    public int Count => _entries.Count;
+    public int Count
+    {
+        get { lock (_gate) return _entries.Count; }
+    }
 
     /// <summary>Absolute path of the pack, or empty when not open.</summary>
-    public string PackPath { get; private set; } = "";
+    public string PackPath
+    {
+        get { lock (_gate) return _packPath; }
+    }
 
     /// <summary>Last human-readable failure, cleared by a successful read.</summary>
-    public string LastError { get; private set; } = "";
+    public string LastError
+    {
+        get { lock (_gate) return _lastError; }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Close();
+        }
+        base.Dispose(disposing);
+    }
 
     /// <summary>Opens a pack and loads only its header and index.</summary>
     public bool Open(string path)
     {
-        Close();
-        LastError = "";
-        if (string.IsNullOrWhiteSpace(path))
+        lock (_gate)
         {
-            LastError = "media pack path is empty";
-            return false;
-        }
-
-        FileStream? stream = null;
-        try
-        {
-            stream = new FileStream(path, FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read);
-            long fileLength = stream.Length;
-            if (fileLength < HeaderSize)
+            CloseLocked();
+            _lastError = "";
+            if (string.IsNullOrWhiteSpace(path))
             {
-                LastError = $"media pack is {fileLength} bytes, shorter than the {HeaderSize}-byte header";
-                stream.Dispose();
+                _lastError = "media pack path is empty";
                 return false;
             }
 
-            byte[] header = new byte[HeaderSize];
-            stream.ReadExactly(header);
-            if (!header.AsSpan(0, 8).SequenceEqual(Magic))
+            FileStream? stream = null;
+            bool opened = false;
+            try
             {
-                LastError = "media pack has bad magic";
-                stream.Dispose();
-                return false;
-            }
-            ushort version = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(8, 2));
-            if (version != 1)
-            {
-                LastError = $"unsupported media pack version {version}";
-                stream.Dispose();
-                return false;
-            }
-            ushort flags = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(10, 2));
-            if (flags != 0)
-            {
-                LastError = $"unsupported media pack header flags 0x{flags:X4}";
-                stream.Dispose();
-                return false;
-            }
+                stream = new FileStream(path, FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read);
+                long fileLength = stream.Length;
+                if (fileLength < HeaderSize)
+                {
+                    _lastError = $"media pack is {fileLength} bytes, shorter than the {HeaderSize}-byte header";
+                    return false;
+                }
 
-            uint count = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(12, 4));
-            ulong indexOffset = BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(16, 8));
-            ulong indexSize = BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(24, 8));
-            if (indexOffset < HeaderSize || (indexOffset & (DataAlignment - 1)) != 0)
-            {
-                LastError = $"media pack index offset {indexOffset} is invalid";
-                stream.Dispose();
-                return false;
-            }
-            if (indexOffset > (ulong)fileLength || indexSize > (ulong)fileLength - indexOffset)
-            {
-                LastError = "media pack index range is outside the file";
-                stream.Dispose();
-                return false;
-            }
-            if (indexOffset + indexSize != (ulong)fileLength)
-            {
-                LastError = "media pack index does not end at end of file";
-                stream.Dispose();
-                return false;
-            }
-            if (indexSize > int.MaxValue || count > indexSize / IndexFixed)
-            {
-                LastError = "media pack index is too large or internally inconsistent";
-                stream.Dispose();
-                return false;
-            }
+                byte[] header = new byte[HeaderSize];
+                stream.ReadExactly(header);
+                if (!header.AsSpan(0, 8).SequenceEqual(Magic))
+                {
+                    _lastError = "media pack has bad magic";
+                    return false;
+                }
+                ushort version = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(8, 2));
+                if (version != 1)
+                {
+                    _lastError = $"unsupported media pack version {version}";
+                    return false;
+                }
+                ushort flags = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(10, 2));
+                if (flags != 0)
+                {
+                    _lastError = $"unsupported media pack header flags 0x{flags:X4}";
+                    return false;
+                }
 
-            byte[] index = new byte[(int)indexSize];
-            stream.Position = (long)indexOffset;
-            stream.ReadExactly(index);
-            XorBytes(index, indexOffset);
-            if (!ParseIndex(index, count, indexOffset, out string parseError))
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(12, 4));
+                ulong indexOffset = BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(16, 8));
+                ulong indexSize = BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(24, 8));
+                if (indexOffset < HeaderSize || (indexOffset & (DataAlignment - 1)) != 0)
+                {
+                    _lastError = $"media pack index offset {indexOffset} is invalid";
+                    return false;
+                }
+                if (indexOffset > (ulong)fileLength || indexSize > (ulong)fileLength - indexOffset)
+                {
+                    _lastError = "media pack index range is outside the file";
+                    return false;
+                }
+                if (indexOffset + indexSize != (ulong)fileLength)
+                {
+                    _lastError = "media pack index does not end at end of file";
+                    return false;
+                }
+                if (indexSize > MaxIndexBytes || count > indexSize / IndexFixed)
+                {
+                    _lastError = "media pack index is too large or internally inconsistent";
+                    return false;
+                }
+
+                byte[] index = new byte[(int)indexSize];
+                stream.Position = (long)indexOffset;
+                stream.ReadExactly(index);
+                XorBytes(index, indexOffset);
+                if (!ParseIndex(index, count, indexOffset, out string parseError))
+                {
+                    _lastError = parseError;
+                    return false;
+                }
+
+                _file = stream;
+                _packPath = path;
+                opened = true;
+                return true;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
             {
-                LastError = parseError;
-                stream.Dispose();
+                _lastError = error.Message;
                 return false;
             }
-
-            _file = stream;
-            PackPath = path;
-            return true;
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            LastError = error.Message;
-            stream?.Dispose();
-            return false;
+            finally
+            {
+                if (!opened)
+                {
+                    _entries.Clear();
+                    _packPath = "";
+                    _file = null;
+                    stream?.Dispose();
+                }
+            }
         }
     }
 
@@ -163,30 +193,41 @@ public partial class MediaPakReader : RefCounted
     {
         lock (_gate)
         {
-            _file?.Dispose();
-            _file = null;
+            CloseLocked();
         }
+    }
+
+    private void CloseLocked()
+    {
+        _file?.Dispose();
+        _file = null;
         _entries.Clear();
-        PackPath = "";
+        _packPath = "";
     }
 
     /// <summary>Canonical paths in index order.</summary>
     public string[] Paths()
     {
-        string[] paths = new string[_entries.Count];
-        int index = 0;
-        foreach (Entry entry in _entries.Values)
+        lock (_gate)
         {
-            paths[index++] = entry.Path;
+            string[] paths = new string[_entries.Count];
+            int index = 0;
+            foreach (Entry entry in _entries.Values)
+            {
+                paths[index++] = entry.Path;
+            }
+            Array.Sort(paths, StringComparer.Ordinal);
+            return paths;
         }
-        Array.Sort(paths, StringComparer.Ordinal);
-        return paths;
     }
 
     /// <summary>True when the pack contains the name (case-insensitive).</summary>
     public bool Has(string name)
     {
-        return TryFind(name, out _);
+        lock (_gate)
+        {
+            return TryFind(name, out _);
+        }
     }
 
     /// <summary>
@@ -195,29 +236,24 @@ public partial class MediaPakReader : RefCounted
     /// </summary>
     public byte[]? Read(string name)
     {
-        if (_file == null)
-        {
-            LastError = "media pack is not open";
-            return null;
-        }
-        if (!TryFind(name, out Entry? entry) || entry == null)
-        {
-            LastError = "";
-            return null;
-        }
-        if (entry.Size > int.MaxValue)
-        {
-            LastError = $"{entry.Path} is too large for a managed byte array";
-            return null;
-        }
-
         lock (_gate)
         {
             if (_file == null)
             {
-                LastError = "media pack was closed";
+                _lastError = "media pack is not open";
                 return null;
             }
+            if (!TryFind(name, out Entry? entry) || entry == null)
+            {
+                _lastError = "";
+                return null;
+            }
+            if (entry.Size > MaxEntryBytes || entry.Size > (ulong)_file.Length)
+            {
+                _lastError = $"{entry.Path} exceeds maximum readable entry size";
+                return null;
+            }
+
             try
             {
                 byte[] bytes = new byte[(int)entry.Size];
@@ -227,15 +263,15 @@ public partial class MediaPakReader : RefCounted
                 uint actual = Crc32(bytes);
                 if (actual != entry.Crc)
                 {
-                    LastError = $"media pack CRC mismatch for {entry.Path}: expected {entry.Crc:X8}, got {actual:X8}";
+                    _lastError = $"media pack CRC mismatch for {entry.Path}: expected {entry.Crc:X8}, got {actual:X8}";
                     return null;
                 }
-                LastError = "";
+                _lastError = "";
                 return bytes;
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                LastError = error.Message;
+                _lastError = error.Message;
                 return null;
             }
         }
@@ -280,9 +316,9 @@ public partial class MediaPakReader : RefCounted
                 error = $"media pack entry {path} has an invalid offset";
                 return false;
             }
-            if (size > indexOffset || offset > indexOffset - size)
+            if (size > MaxEntryBytes || size > indexOffset || offset > indexOffset - size)
             {
-                error = $"media pack entry {path} extends past the index";
+                error = $"media pack entry {path} has invalid size or extends past the index";
                 return false;
             }
             _entries[path] = new Entry { Path = path, Offset = offset, Size = size, Crc = crc };

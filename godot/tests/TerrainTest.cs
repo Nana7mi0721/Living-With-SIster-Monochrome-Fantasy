@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using Godot;
 using Lwsmf.Core;
+using Lwsmf.Presentation;
 
 namespace Lwsmf.Tests;
 
@@ -104,6 +105,20 @@ public partial class TerrainTest : Node
                 Check(runtime.CanEnter(1, 1), "open tile still enterable");
             }
         }
+
+        // TerrainBridge regressions: null map / missing tiles guard and unified empty-terrain passability.
+        var bridge = new TerrainBridge();
+        AddChild(bridge);
+        Check(!bridge.LoadForMap(999_999, programs) && !bridge.Valid && bridge.Width == 0 && bridge.Height == 0,
+            "TerrainBridge.LoadForMap with unknown map must return false without throwing");
+        Check(bridge.Mask(0, 0) == 0 && !bridge.IsBlocked(0, 0, 0),
+            "TerrainBridge empty terrain must report Mask==0 and IsBlocked==false");
+        Check(!bridge.LoadForMap(1000, "") && !bridge.Valid,
+            "TerrainBridge.LoadForMap with missing tiles path must return false cleanly");
+        Check(bridge.LoadForMap(1000, programs) && bridge.Valid && bridge.Width > 0 && bridge.Height > 0,
+            "TerrainBridge.LoadForMap loads Dungeon");
+        Check(bridge.Mask(32, 3) == 0b1111 && bridge.IsBlocked(34, 3, 0) && !bridge.IsBlocked(34, 3, 3),
+            "TerrainBridge Mask and IsBlocked match Dungeon terrain");
 
         int failures = _failures;
         if (failures == 0)

@@ -119,6 +119,7 @@ public sealed class MapTileData
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or FormatException or InvalidOperationException)
         {
+            Console.Error.WriteLine($"[MapTileData] failed to load {path}: {ex.Message}");
             return null;
         }
     }
@@ -140,11 +141,20 @@ public sealed class MapTileData
     {
         MapTileEntry? entry = Find(map.Id);
         if (entry == null || entry.Layers.Count == 0) return null;
-        if (entry.TilesetId < 0 || entry.TilesetId >= Tilesets.Count) return null;
+        MapTileset? tileset = null;
+        foreach (MapTileset candidate in Tilesets)
+        {
+            if (candidate.Index == entry.TilesetId)
+            {
+                tileset = candidate;
+                break;
+            }
+        }
+        if (tileset == null) return null;
         int width = map.Width > 0 ? map.Width : entry.Width;
         int height = map.Height > 0 ? map.Height : entry.Height;
         if (width <= 0 || height <= 0) return null;
-        return Terrain.FromLayers(width, height, entry.Layers, Tilesets[entry.TilesetId].Passability);
+        return Terrain.FromLayers(width, height, entry.Layers, tileset.Passability);
     }
 
     public static int CachedArtifactCount => Cache.Count;

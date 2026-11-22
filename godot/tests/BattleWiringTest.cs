@@ -110,6 +110,10 @@ public static class BattleWiringTest
         wiring.Reset();
         Check(wiring.MenuSelections.Count == 0 && wiring.MenuQueueLength == 0 && wiring.StartedRounds == 0 && !wiring.SawDispatch,
             "BattleWiring.Reset() must clear all battle state");
+        wiring.SetRoundLoop(true);
+        Check(wiring.ManualRoundLoop == true, "SetRoundLoop(true) must update ManualRoundLoop");
+        wiring.SetRoundLoop(false);
+        Check(wiring.ManualRoundLoop == false, "SetRoundLoop(false) must update ManualRoundLoop");
     }
 
     private static Trace RunLine()

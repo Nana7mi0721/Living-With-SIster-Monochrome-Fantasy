@@ -97,6 +97,8 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 系统性代码审查（Code Review）、跨仓库审计与缺陷追踪记录：
 
 - [reviews/README.md](reviews/README.md) — 代码审查台账总览索引
+- [reviews/full_static_audit_59268ac_remediation_2026_11_22.md](reviews/full_static_audit_59268ac_remediation_2026_11_22.md) — **现行·闭环**：`59268ac` 全量静态审查 67 项缺陷修复与双模式门禁验证（见 D-82）
+- [reviews/full_static_audit_59268ac_2026_11_22.md](reviews/full_static_audit_59268ac_2026_11_22.md) — **现行·台账**：Commit `59268ac` 全仓库静态代码审查（4 P0 / 24 P1 / 26 P2 / 13 P3）
 - [reviews/pipeline_completion_and_next_processes_2026_11_22.md](reviews/pipeline_completion_and_next_processes_2026_11_22.md) — **现行·闭环**：8 条管线验收总评、`RES-01..03` 缺陷收口与 5 大防回归工程流程落地（见 D-74）
 - [reviews/pipeline_overhaul_work_order_2026_11_22.md](reviews/pipeline_overhaul_work_order_2026_11_22.md) — **现行·施工单**：8 条底层管线分阶段排雷施工单（见 D-73）
 - [reviews/live_play_root_cause_diagnosis_2026_11_22.md](reviews/live_play_root_cause_diagnosis_2026_11_22.md) — **现行·闭环**：实机体验 7 项核心缺陷根因定位、修复与 OpenGL3 实测验证（见 D-72 / D-73）

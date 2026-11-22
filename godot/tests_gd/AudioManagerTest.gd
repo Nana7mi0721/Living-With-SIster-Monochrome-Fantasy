@@ -136,6 +136,30 @@ func _ready() -> void:
 	_expect(is_equal_approx(mixer.player_for(AudioManager.CHANNEL_BGM).volume_db, 0.0),
 		"restoring master volume 100 must restore live BGM volume immediately")
 
+	# 10. Missing SE must not kill active SE voices; per-voice SE volumes and fade-in tweens survive master changes.
+	mixer.reset()
+	_expect(mixer.play(AudioManager.CHANNEL_SE, "Sound/stub.wav", 100, 0, 100, 0), "first SE voice plays")
+	var se_v1 := mixer.player_for(AudioManager.CHANNEL_SE)
+	_expect(mixer.play(AudioManager.CHANNEL_SE, "Sound/stub.wav", 40, 0, 100, 6), "second delayed SE voice queued at lower volume")
+	var se_v2 := mixer.player_for(AudioManager.CHANNEL_SE)
+	_expect(not mixer.play(AudioManager.CHANNEL_SE, "Sound/definitely_missing_se.wav", 100, 0, 100, 0),
+		"missing SE returns false")
+	_expect(mixer._se_pending[mixer._se_players.find(se_v2)],
+		"missing SE must not cancel active/pending SE voices")
+	mixer.set_master_volumes(100, 100, 50)
+	_expect(is_equal_approx(se_v2.volume_db, mixer._channel_volume_db(AudioManager.CHANNEL_SE, 40)),
+		"pending SE voice updates relative to its own base volume on master change")
+	_expect(is_equal_approx(se_v1.volume_db, mixer._channel_volume_db(AudioManager.CHANNEL_SE, 100)) or not se_v1.playing,
+		"first SE voice keeps its own base volume independent of second SE")
+	_expect(mixer.play(AudioManager.CHANNEL_BGM, "Sound/stub.wav", 100, 0, 100, 60), "fade-in BGM starts")
+	var bgm_tween_player := mixer.player_for(AudioManager.CHANNEL_BGM)
+	var db_before_master := bgm_tween_player.volume_db
+	mixer.set_master_volumes(50, 100, 100)
+	_expect(mixer._tweens[AudioManager.CHANNEL_BGM] != null and mixer._tweens[AudioManager.CHANNEL_BGM].is_valid(),
+		"set_master_volumes must smoothly retarget active fade-in tween instead of killing it")
+	_expect(is_equal_approx(bgm_tween_player.volume_db, db_before_master),
+		"retargeting fade-in must not pop player volume immediately to full target")
+
 	mixer.reset()
 	if failures == 0:
 		print("AUDIO_MANAGER_TEST_OK checks=%d" % checks)

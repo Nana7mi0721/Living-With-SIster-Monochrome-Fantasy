@@ -17,11 +17,18 @@ public partial class TerrainBridge : Godot.Node
 
     public bool LoadForMap(int mapId, string programsPath)
     {
+        if (string.IsNullOrWhiteSpace(programsPath))
+        {
+            _terrain = null;
+            _width = 0;
+            _height = 0;
+            return false;
+        }
         MapDefinition? map = ProgramLoader.LoadMap(programsPath, "", mapId);
         MapTileData? tiles = MapTileData.LoadAlongside(programsPath);
-        _terrain = tiles?.BuildTerrain(map!);
-        _width = map?.Width ?? 0;
-        _height = map?.Height ?? 0;
+        _terrain = (map != null && tiles != null) ? tiles.BuildTerrain(map) : null;
+        _width = _terrain?.Width ?? 0;
+        _height = _terrain?.Height ?? 0;
         return _terrain != null;
     }
 
@@ -30,9 +37,7 @@ public partial class TerrainBridge : Godot.Node
     public bool Valid => _terrain != null;
 
     public int Mask(int x, int y) =>
-        _terrain == null || x < 0 || y < 0 || x >= _width || y >= _height
-            ? 0b1111
-            : _terrain.BlockedMask(x, y);
+        _terrain == null ? 0 : _terrain.BlockedMask(x, y);
 
     public bool IsBlocked(int x, int y, int step) =>
         _terrain != null && _terrain.IsBlocked(x, y, step);

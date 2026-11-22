@@ -278,6 +278,7 @@ def main(argv: list[str] | None = None) -> int:
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--root", type=Path, help="Loose asset root directory")
     src.add_argument("--from-pak", type=Path, help="Existing WOLFMPK1 pack to repack")
+    src.add_argument("--hd-root", type=Path, help="2x art root (hd_manifest.json + images) for a standalone HD pack")
     parser.add_argument("--out", type=Path, required=True, help="Output media.pak path")
     parser.add_argument("--slim", action="store_true", help="Lossless/near-lossless WebP image slimming & skip MapChip")
     parser.add_argument("--keep-mapchip", action="store_true", help="Retain MapChip/ entries under --slim")
@@ -285,7 +286,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--jobs", type=int, default=max(1, min(8, os.cpu_count() or 4)), help="Worker threads for --slim")
     args = parser.parse_args(argv)
 
-    if args.from_pak:
+    if args.hd_root and args.slim:
+        print("PACK_MEDIA_ERROR --slim cannot be combined with --hd-root", file=sys.stderr)
+        return 2
+
+    if args.hd_root:
+        manifest = args.hd_root / "hd_manifest.json"
+        if not manifest.is_file():
+            print(f"PACK_MEDIA_ERROR missing {manifest}", file=sys.stderr)
+            return 2
+        items: list[tuple[str, bytes]] = [("hd_manifest.json", manifest.read_bytes())]
+        for rel, path in collect_loose_entries(args.hd_root):
+            if rel != "hd_manifest.json":
+                items.append((rel, path.read_bytes()))
+        raw_items = items
+    elif args.from_pak:
         raw_items = read_pak_entries(args.from_pak)
     else:
         raw_items = [(rel, path.read_bytes()) for rel, path in collect_loose_entries(args.root)]

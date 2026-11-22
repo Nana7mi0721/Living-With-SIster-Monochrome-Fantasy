@@ -28,16 +28,104 @@ fn data_root() -> PathBuf {
     }
 }
 
-fn load() -> Option<Vec<u8>> {
-    std::fs::read(data_root().join("BasicData").join("TileSetData.dat")).ok()
+fn load_required() -> Vec<u8> {
+    let path = data_root().join("BasicData").join("TileSetData.dat");
+    std::fs::read(&path).unwrap_or_else(|err| {
+        panic!(
+            "retail TileSetData.dat missing at {} ({err}); set WOLF_DATA_ROOT to run ignored integration tests",
+            path.display()
+        )
+    })
+}
+
+fn push_t_str(buf: &mut Vec<u8>, raw: &[u8]) {
+    let len = (raw.len() + 1) as u32;
+    buf.extend_from_slice(&len.to_le_bytes());
+    buf.extend_from_slice(raw);
+    buf.push(0);
+}
+
+fn build_synthetic_v210(autotile0: &[u8], tags: &[u8], passability: &[u32]) -> Vec<u8> {
+    let mut buf = Vec::new();
+    buf.extend_from_slice(&TileSetData::MAGIC);
+    buf.push(0x00);
+    buf.extend_from_slice(&TileSetData::MAGIC_TYPE);
+    buf.push(TileSetData::VERSION_210);
+    buf.extend_from_slice(&1u32.to_le_bytes());
+
+    push_t_str(&mut buf, b"TestSet");
+    push_t_str(&mut buf, b"MapChip/base.png");
+    push_t_str(&mut buf, autotile0);
+    for _ in 1..31 {
+        push_t_str(&mut buf, b"");
+    }
+
+    buf.push(TileSetData::SEPARATOR);
+    buf.extend_from_slice(&(tags.len() as u32).to_le_bytes());
+    buf.extend_from_slice(tags);
+
+    buf.push(TileSetData::SEPARATOR);
+    buf.extend_from_slice(&(passability.len() as u32).to_le_bytes());
+    for &word in passability {
+        buf.extend_from_slice(&word.to_le_bytes());
+    }
+
+    buf.push(TileSetData::FOOTER);
+    buf
 }
 
 #[test]
+fn parse_synthetic_v210_tileset_preserves_raw_bytes_and_flags() {
+    let invalid_utf8 = b"MapChip/\xFFbad.png";
+    // bit 0 counter, bit 2 quarter, bit 4+7 directional/quarter flags, bits 8..9 = 2
+    let words = [0x0000_0295u32, 0x0000_0112u32];
+    let raw = build_synthetic_v210(invalid_utf8, &[0, 7], &words);
+
+    let parsed = TileSetData::parse(&raw).expect("synthetic TileSetData parses");
+    assert_eq!(parsed.version, TileSetData::VERSION_210);
+    assert_eq!(parsed.footer, TileSetData::FOOTER);
+    assert_eq!(parsed.tilesets.len(), 1);
+    assert!(parsed.get(1).is_none());
+
+    let ts = parsed.get(0).expect("tileset 0 present");
+    assert_eq!(ts.name, "TestSet");
+    assert_eq!(ts.base_image, "MapChip/base.png");
+    assert_eq!(ts.autotiles.len(), 31);
+    assert_eq!(ts.raw_autotile_bytes[0], invalid_utf8);
+    assert!(ts.autotiles[0].contains('\u{FFFD}'));
+    assert_eq!(ts.tags, vec![0, 7]);
+    assert_eq!(ts.passability.len(), 2);
+
+    let p0 = ts.passability[0];
+    assert!(p0.counter_enabled);
+    assert!(p0.quarter_tile);
+    assert!(p0.top_left_passable);
+    assert!(p0.bottom_right_passable);
+    assert_eq!(p0.na, 2);
+    assert_eq!(TilePassability::decode(words[0]), p0);
+
+    let p1 = ts.passability[1];
+    assert!(p1.square);
+    assert!(!p1.quarter_tile);
+    assert!(p1.upwards_not_passable);
+    assert_eq!(p1.na, 1);
+}
+
+#[test]
+fn parse_rejects_invalid_magic_and_footer() {
+    let mut bad_magic = build_synthetic_v210(b"", &[0], &[0]);
+    bad_magic[0] ^= 0xFF;
+    assert!(TileSetData::parse(&bad_magic).is_err());
+
+    let mut bad_footer = build_synthetic_v210(b"", &[0], &[0]);
+    *bad_footer.last_mut().expect("non-empty buffer") = 0x00;
+    assert!(TileSetData::parse(&bad_footer).is_err());
+}
+
+#[test]
+#[ignore = "requires retail TileSetData.dat under WOLF_DATA_ROOT or work/full"]
 fn tileset_data_matches_the_spec_table() {
-    let Some(data) = load() else {
-        eprintln!("skipping: no data under {}", data_root().display());
-        return;
-    };
+    let data = load_required();
     let parsed = TileSetData::parse(&data).expect("TileSetData.dat parses");
 
     assert_eq!(parsed.version, 210, "container version");
@@ -108,11 +196,9 @@ fn tileset_data_matches_the_spec_table() {
 }
 
 #[test]
+#[ignore = "requires retail TileSetData.dat under WOLF_DATA_ROOT or work/full"]
 fn passability_words_keep_their_undocumented_bits() {
-    let Some(data) = load() else {
-        eprintln!("skipping: no data under {}", data_root().display());
-        return;
-    };
+    let data = load_required();
     let parsed = TileSetData::parse(&data).expect("TileSetData.dat parses");
 
     // The spec says bits 8..13 and the upper half must be zero; only the upper
@@ -149,11 +235,9 @@ fn passability_words_keep_their_undocumented_bits() {
 }
 
 #[test]
+#[ignore = "requires retail TileSetData.dat under WOLF_DATA_ROOT or work/full"]
 fn corrupt_autotile_names_are_kept_as_raw_bytes() {
-    let Some(data) = load() else {
-        eprintln!("skipping: no data under {}", data_root().display());
-        return;
-    };
+    let data = load_required();
     let parsed = TileSetData::parse(&data).expect("TileSetData.dat parses");
 
     // Tileset 5 ships 9 autotile names that are not valid UTF-8 (double-encoded
@@ -187,11 +271,9 @@ fn corrupt_autotile_names_are_kept_as_raw_bytes() {
 }
 
 #[test]
+#[ignore = "requires retail TileSetData.dat under WOLF_DATA_ROOT or work/full"]
 fn tags_match_the_measured_distribution() {
-    let Some(data) = load() else {
-        eprintln!("skipping: no data under {}", data_root().display());
-        return;
-    };
+    let data = load_required();
     let parsed = TileSetData::parse(&data).expect("TileSetData.dat parses");
 
     // Tilesets 0-2 use no tags at all; tileset 3 tags 201 tiles with 0 and one

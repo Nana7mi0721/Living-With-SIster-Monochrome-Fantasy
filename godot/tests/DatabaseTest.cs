@@ -92,6 +92,32 @@ public static class DatabaseTest
         Check(extension is { IsString: true } && extension.Str.Length == 0,
             $"extension row text expected empty, got {Describe(extension)}");
 
+        // Division/modulo edge cases: /0 and %0 preserve current; int.MinValue / -1 and % -1 do not throw.
+        store.Execute(WriteOp(DbContainer.CData, 0, 0, 5, 0, 42));
+        store.Execute(WriteOp(DbContainer.CData, 0, 0, 5, 4, 0));
+        var divZero = store.Read(ReadOp(DbContainer.CData, 0, 0, 5, Magic.VarBase));
+        Check(divZero is { IsString: false } && divZero.Num == 42,
+            $"DB division by zero must preserve current 42, got {Describe(divZero)}");
+        store.Execute(WriteOp(DbContainer.CData, 0, 0, 5, 5, 0));
+        var modZero = store.Read(ReadOp(DbContainer.CData, 0, 0, 5, Magic.VarBase));
+        Check(modZero is { IsString: false } && modZero.Num == 42,
+            $"DB modulo by zero must preserve current 42, got {Describe(modZero)}");
+        store.Execute(WriteOp(DbContainer.CData, 0, 0, 5, 0, int.MinValue));
+        store.Execute(WriteOp(DbContainer.CData, 0, 0, 5, 4, -1));
+        var divMin = store.Read(ReadOp(DbContainer.CData, 0, 0, 5, Magic.VarBase));
+        Check(divMin is { IsString: false } && divMin.Num == int.MinValue,
+            $"DB int.MinValue / -1 must wrap cleanly, got {Describe(divMin)}");
+        store.Execute(WriteOp(DbContainer.CData, 0, 0, 5, 0, int.MinValue));
+        store.Execute(WriteOp(DbContainer.CData, 0, 0, 5, 5, -1));
+        var modMin = store.Read(ReadOp(DbContainer.CData, 0, 0, 5, Magic.VarBase));
+        Check(modMin is { IsString: false } && modMin.Num == 0,
+            $"DB int.MinValue % -1 must return 0, got {Describe(modMin)}");
+
+        // ClearRow with negative row must be rejected without writing negative-row keys.
+        store.Execute(WriteOp(DbContainer.CData, 0, -3, -2, 0, 0));
+        var negCleared = store.Read(ReadOp(DbContainer.CData, 0, -3, 0, Magic.VarBase));
+        Check(negCleared == null, $"negative row ClearRow must not write overlay, got {Describe(negCleared)}");
+
         var vm = new Lwsmf.Presentation.VmController();
         try
         {

@@ -76,9 +76,9 @@ func _ready() -> void:
 	if not (packed.audio("SE/test.wav") is AudioStreamWAV):
 		failures.append("AssetDB should decode audio from the pack")
 
-	# 2. The 384 MB default matches DECISIONS D-09.
-	if AssetDB.DEFAULT_BUDGET_BYTES != 384 * 1024 * 1024:
-		failures.append("default budget should be 384 MB")
+	# 2. 512 MB covers the 2x art pack; D-09's 384 MB assumed 1x textures (D-81).
+	if AssetDB.DEFAULT_BUDGET_BYTES != 512 * 1024 * 1024:
+		failures.append("default budget should be 512 MB")
 
 	# 3. A tiny budget evicts least-recently-used entries and stays under the cap.
 	# The probe tree lives under user://, so the cache must be rooted there.
@@ -135,7 +135,7 @@ func _ready() -> void:
 	if t_slash == null or t_backslash != t_slash:
 		failures.append("normalized cache keys must hit across slashes and case")
 	var bytes_before_overwrite := harden_db.used_bytes
-	harden_db._store("picture/shared.png", t_slash, 64)
+	harden_db._store("tex:picture/shared.png", t_slash, 64)
 	if harden_db.used_bytes != 64:
 		failures.append("_store overwrite must subtract prior entry bytes (got %d want 64)" % harden_db.used_bytes)
 	if bytes_before_overwrite <= 0:
@@ -156,6 +156,26 @@ func _ready() -> void:
 		failures.append("../save/ relative thumbnail path must resolve against save_dir")
 	if harden_db.texture("../save/save1.jpg") == null:
 		failures.append("../save/ relative thumbnail texture must decode")
+	# Texture and audio caches use disjoint prefixes so the same logical basename never collides.
+	var shared_tex := harden_db.texture("shared")
+	var shared_aud := harden_db.audio("shared")
+	if shared_tex == null or shared_aud == null:
+		failures.append("shared basename must load both texture and audio without cache key collision")
+	if harden_db.texture("shared") != shared_tex or harden_db.audio("shared") != shared_aud:
+		failures.append("texture and audio caches must stay independent for identical logical keys")
+	# Corrupt files record into miss_paths on decode failure, and clear() empties miss_paths.
+	var bad_png := FileAccess.open(harden_dir.path_join("Picture/corrupt.png"), FileAccess.WRITE)
+	if bad_png != null:
+		bad_png.store_buffer(PackedByteArray([1, 2, 3, 4]))
+		bad_png.close()
+	var corrupt_db := AssetDB.new(harden_dir)
+	if corrupt_db.texture("Picture/corrupt.png") != null:
+		failures.append("corrupt png must fail decoding")
+	if not corrupt_db.miss_paths.has("picture/corrupt.png"):
+		failures.append("decode failure must record into miss_paths")
+	corrupt_db.clear()
+	if not corrupt_db.miss_paths.is_empty():
+		failures.append("clear() must also clear miss_paths")
 
 	if failures.is_empty():
 		print("ASSETDB_TEST_OK")

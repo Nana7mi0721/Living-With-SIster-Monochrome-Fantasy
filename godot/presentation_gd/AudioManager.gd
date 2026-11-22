@@ -22,6 +22,8 @@ var _tweens: Array[Tween] = []
 var _se_tweens: Array[Tween] = []
 var _se_start_tokens: Array[int] = []
 var _se_pending: Array[bool] = []
+var _se_volumes: Array[int] = []
+var _fade_end_msec: Array[int] = [0, 0]
 var _active_se_voice := 0
 var _next_se_voice := 0
 var _master_volumes: Array[int] = [100, 100, 100]
@@ -43,6 +45,7 @@ func _init(assets: AssetDB) -> void:
 		_se_tweens.append(null)
 		_se_start_tokens.append(0)
 		_se_pending.append(false)
+		_se_volumes.append(100)
 	for channel in CHANNEL_COUNT:
 		_tracks.append({})
 		_tweens.append(null)
@@ -103,6 +106,8 @@ func _play_long(channel: int, file: String, volume: int, loop_point: int, tempo:
 		player.volume_db = target_db
 	player.play()
 	if use_fade:
+		var end_msec := Time.get_ticks_msec() + int(round(fade * 1000.0))
+		_fade_end_msec[channel] = end_msec
 		var tween := create_tween()
 		tween.tween_property(player, "volume_db", target_db, fade)
 		_tweens[channel] = tween
@@ -122,7 +127,6 @@ func _play_se(file: String, volume: int, tempo: int, frames: int) -> bool:
 	var cached := _assets.audio(file)
 	if cached == null:
 		push_warning("AudioManager: missing audio %s" % file)
-		stop(CHANNEL_SE, 0)
 		return false
 	# Duplicate cached resource and force non-looping so embedded loop markers or shared
 	# BGM/BGS cache entries never cause a one-shot sound effect to repeat indefinitely.
@@ -135,6 +139,7 @@ func _play_se(file: String, volume: int, tempo: int, frames: int) -> bool:
 	_invalidate_se_voice(voice)
 	player.stream = stream
 	player.pitch_scale = _tempo_scale(norm_tempo)
+	_se_volumes[voice] = volume
 	player.volume_db = _channel_volume_db(CHANNEL_SE, volume)
 	_active_se_voice = voice
 	var token := _se_start_tokens[voice]
@@ -282,19 +287,31 @@ func set_master_volumes(bgm: int, bgs: int, se: int) -> void:
 		var track: Dictionary = _tracks[channel]
 		if track.is_empty():
 			continue
+		var player := _players[channel]
+		if not player.playing:
+			continue
+		var target_db := _channel_volume_db(channel, int(track.get("volume", 100)))
 		var tween: Tween = _tweens[channel]
 		if tween != null and tween.is_valid():
-			tween.kill()
-			_tweens[channel] = null
-		var player := _players[channel]
-		if player.playing:
-			player.volume_db = _channel_volume_db(channel, int(track.get("volume", 100)))
-	if not _tracks[CHANNEL_SE].is_empty():
-		var se_vol := int(_tracks[CHANNEL_SE].get("volume", 100))
-		var se_db := _channel_volume_db(CHANNEL_SE, se_vol)
-		for player in _se_players:
-			if player.playing:
-				player.volume_db = se_db
+			var end_msec := _fade_end_msec[channel]
+			var remaining := maxf(float(end_msec - Time.get_ticks_msec()) / 1000.0, 0.0)
+			_kill_tween(channel)
+			if remaining > 0.01 and is_inside_tree():
+				_fade_end_msec[channel] = end_msec
+				var next_tween := create_tween()
+				next_tween.tween_property(player, "volume_db", target_db, remaining)
+				_tweens[channel] = next_tween
+			else:
+				player.volume_db = target_db
+		else:
+			player.volume_db = target_db
+	for voice in _se_players.size():
+		var se_tween: Tween = _se_tweens[voice]
+		if se_tween != null and se_tween.is_valid():
+			continue
+		var player := _se_players[voice]
+		if player.playing or _se_pending[voice]:
+			player.volume_db = _channel_volume_db(CHANNEL_SE, _se_volumes[voice])
 
 
 func master_volumes() -> Array[int]:
@@ -347,6 +364,7 @@ func _apply_long_volume(channel: int, volume: int, frames: int) -> void:
 	var fade := maxf(float(frames) / 60.0, 0.0)
 	if fade > 0.0 and player.playing and is_inside_tree() \
 			and not is_equal_approx(player.volume_db, target_db):
+		_fade_end_msec[channel] = Time.get_ticks_msec() + int(round(fade * 1000.0))
 		var tween := create_tween()
 		tween.tween_property(player, "volume_db", target_db, fade)
 		_tweens[channel] = tween
@@ -421,3 +439,5 @@ func _kill_tween(channel: int) -> void:
 	if tween != null and tween.is_valid():
 		tween.kill()
 	_tweens[channel] = null
+	if channel >= 0 and channel < _fade_end_msec.size():
+		_fade_end_msec[channel] = 0

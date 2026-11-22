@@ -222,15 +222,28 @@ public sealed class GameSession
 
         _titleProgram = title;
         _vm.StopAll();
-        _vm.ResetDialogueState();
+        _vm.ResetSessionState();
+        _vm.ResetDiagnostics();
+        _vm.Vm.CommonSelf.Clear();
         _battleWiring.Reset();
+        _map = null;
+        _mapRuntime = null;
+        _vm.Map = null;
+        Frames = 0;
+        _leaderX = 0;
+        _leaderY = 0;
+        _facing = 2;
         _messageOpen = false;
         _hasChoices = false;
         ChoiceAllowsCancel = true;
         _actionPressed = false;
         _pendingLoad = false;
+        _pendingGameLoad = null;
+        _pendingSystemLoads.Clear();
         _teleports.Clear();
-        _vm.Vm.ResetInputPermissions();
+        _view.HideMessage();
+        _view.HideChoices();
+        _view.ClearPictures();
         _vm.Vm.CreateInstance(title);
         _started = true;
         Phase = "title";
@@ -588,6 +601,7 @@ public sealed class GameSession
                 ReturnTo = inst.ReturnTo,
                 Kind = owner != null ? "map" : "ce",
                 Page = owner?.Active ?? -1,
+                IsParallel = inst.IsParallel,
                 WaitKind = childDropped ? (int)WaitStateKind.None : (int)inst.Wait.Kind,
                 WaitFrames = childDropped ? 0 : inst.Wait.Frames,
                 WaitBlock = childDropped ? 0 : inst.Wait.Block,
@@ -782,7 +796,7 @@ public sealed class GameSession
         string dir = Path.GetDirectoryName(_savePath) ?? ".";
         if (file.IsPath)
         {
-            string name = Path.GetFileName(file.Path);
+            string name = Path.GetFileName(file.Path.Replace('\\', '/'));
             if (name.Length == 0) name = "System.sav";
             string targetName = Path.ChangeExtension(name, ".json");
             string candidate = Path.Combine(dir, targetName);
@@ -841,7 +855,17 @@ public sealed class GameSession
             case 222:
             {
                 SaveState state = SaveCodec.Read(path) ?? new SaveState();
-                if (WriteSaveAddress(state, op)) SaveCodec.Write(path, state);
+                if (WriteSaveAddress(state, op))
+                {
+                    try
+                    {
+                        SaveCodec.Write(path, state);
+                    }
+                    catch (Exception ex)
+                    {
+                        _view.SetStatus("save write failed: " + ex.Message);
+                    }
+                }
                 return null;
             }
         }
@@ -913,6 +937,7 @@ public sealed class GameSession
             if (index == 29) return (int)(state.PlayFrames / 60);
             if (index <= 12) return index < state.SysVars.Count ? state.SysVars[index] : 0;
         }
+        // SaveState does not persist CData overlays; CData probes read the live database.
         if (address is >= 1_100_000_000 and < 1_200_000_000)
         {
             int offset = address - 1_100_000_000;
@@ -997,6 +1022,11 @@ public sealed class GameSession
         _messageOpen = false;
         _hasChoices = false;
         ChoiceAllowsCancel = true;
+        _actionPressed = false;
+        _pendingLoad = false;
+        _pendingGameLoad = null;
+        _pendingSystemLoads.Clear();
+        _teleports.Clear();
         _view.HideMessage();
         _view.HideChoices();
         _view.ClearPictures();
@@ -1165,6 +1195,11 @@ public sealed class GameSession
         _messageOpen = false;
         _hasChoices = false;
         ChoiceAllowsCancel = true;
+        _actionPressed = false;
+        _pendingLoad = false;
+        _pendingGameLoad = null;
+        _pendingSystemLoads.Clear();
+        _teleports.Clear();
         _view.HideMessage();
         _view.HideChoices();
         // AutoEvents is session-scoped; StopAll does not clear its edge latch. Re-arming
@@ -1174,6 +1209,8 @@ public sealed class GameSession
         _vm.Vm.ResetInputPermissions();
         _vm.Vm.CommonSelf.Clear();
         _vm.Map = null;
+        _mapRuntime = null;
+        _map = null;
         _view.ClearPictures();
         Program? newGame = ProgramLoader.LoadMapEvent(_dataPath, "Map003.mps", 1);
         if (newGame == null)
@@ -1199,6 +1236,7 @@ public sealed class GameSession
         {
             if (HasSaveUiAncestor(saved, savedById)) continue;
             bool isParallel = false;
+            bool retainAfterFinish = false;
             Program? program = null;
             if (saved.Kind == "map" && saved.Page >= 0)
             {
@@ -1206,12 +1244,17 @@ public sealed class GameSession
                 if (def != null && saved.Page < def.Pages.Count)
                 {
                     program = def.Pages[saved.Page].Program;
-                    isParallel = def.Pages[saved.Page].Trigger == MapTrigger.Parallel;
+                    isParallel = saved.IsParallel ?? (def.Pages[saved.Page].Trigger == MapTrigger.Parallel);
+                    retainAfterFinish = true;
                 }
             }
             else
             {
                 program = _vm.Vm.GetProgram(saved.EventId);
+                if (program != null)
+                {
+                    isParallel = saved.IsParallel ?? InferLegacyParallel(saved, program, savedById);
+                }
             }
 
             if (program == null)
@@ -1234,7 +1277,8 @@ public sealed class GameSession
                 Program = program,
                 Pc = saved.Pc,
                 ReturnTo = saved.ReturnTo,
-                IsParallel = isParallel
+                IsParallel = isParallel,
+                RetainAfterFinish = retainAfterFinish
             };
             inst.Wait.Kind = (WaitStateKind)saved.WaitKind;
             inst.Wait.Frames = saved.WaitFrames;
@@ -1262,6 +1306,30 @@ public sealed class GameSession
         ClearMissingChildWaits();
     }
 
+    private bool InferLegacyParallel(SavedInstance saved, Program program, IReadOnlyDictionary<int, SavedInstance> byId)
+    {
+        if (program.RunCondition == 2) return true;
+        var seen = new HashSet<int> { saved.Id };
+        int? parentId = saved.ParentId;
+        while (parentId is int pid && seen.Add(pid) && byId.TryGetValue(pid, out SavedInstance? parent))
+        {
+            if (parent.IsParallel == true) return true;
+            if (parent.Kind == "map" && parent.Page >= 0)
+            {
+                MapEventDef? def = _map?.Events.FirstOrDefault(e => e.Id == parent.EventId);
+                if (def != null && parent.Page < def.Pages.Count && def.Pages[parent.Page].Trigger == MapTrigger.Parallel)
+                    return true;
+            }
+            else
+            {
+                Program? parentProg = _vm.Vm.GetProgram(parent.EventId);
+                if (parentProg is { RunCondition: 2 }) return true;
+            }
+            parentId = parent.ParentId;
+        }
+        return false;
+    }
+
     /// <summary>Save-UI children are intentionally omitted; release any caller left waiting on them.</summary>
     private void ClearMissingChildWaits()
     {
@@ -1277,9 +1345,11 @@ public sealed class GameSession
     private void EnterMap(int mapId, Dictionary<int, SelfVars>? selfVars = null, SaveState? restore = null,
         int? skipEventId = null)
     {
-        _vm.Vm.StopAll();
+        _vm.StopAll();
+        _vm.ResetDialogueState();
         _messageOpen = false;
         _hasChoices = false;
+        ChoiceAllowsCancel = true;
         _view.HideMessage();
         _view.HideChoices();
         _vm.Map = null;

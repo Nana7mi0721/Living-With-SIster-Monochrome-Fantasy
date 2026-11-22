@@ -134,6 +134,276 @@ public partial class SaveImportTest : Node
             return false;
         }
 
+        // Invalid UTF-8 lead byte must advance by 1 so following ASCII/control bytes survive.
+        string preservedAscii = LegacySaveImporter.DecodePictureText(
+            new byte[] { 0xFF, (byte)'A', 0 }, new List<string>(), "picture_step");
+        if (preservedAscii != "\uFFFDA")
+        {
+            GD.PrintErr($"SAVE_IMPORT_VALIDATION_FAILED: invalid UTF-8 lead byte swallowed trailing char: '{preservedAscii}'");
+            return false;
+        }
+
+        // ReadBytes integer-overflow guard: Position + count overflow must throw InvalidDataException.
+        var overflowReader = new LegacySaveImporter.SaveReader(new byte[16], 8);
+        bool readBytesThrew = false;
+        try { overflowReader.ReadBytes(int.MaxValue); }
+        catch (InvalidDataException) { readBytesThrew = true; }
+        if (!readBytesThrew)
+        {
+            GD.PrintErr("SAVE_IMPORT_VALIDATION_FAILED: ReadBytes accepted overflowing count");
+            return false;
+        }
+
+        // Crafted .sav guards: map cell overflow, VariableDatabase fc/zero-field loop, unsafe picName, oversized file.
+        byte[] BuildEncryptedSave(byte[] plainPayload)
+        {
+            byte[] buf = new byte[0x15 + plainPayload.Length];
+            buf[0] = 7; buf[3] = 11; buf[9] = 13;
+            buf[0x14] = 0x19;
+            Array.Copy(plainPayload, 0, buf, 0x15, plainPayload.Length);
+            byte sum = 0;
+            for (int i = 0x14; i < buf.Length; i++) sum = unchecked((byte)(sum + buf[i]));
+            buf[2] = sum;
+            byte[] seeds = [buf[0], buf[3], buf[9]];
+            int[] steps = [1, 2, 5];
+            for (int pass = 0; pass < 3; pass++)
+            {
+                uint st = seeds[pass];
+                for (int at = 0x14; at < buf.Length; at += steps[pass])
+                {
+                    st = unchecked(st * 214013u + 2531011u);
+                    buf[at] ^= (byte)(((st >> 16) & 0x7FFFu) >> 12);
+                }
+            }
+            return buf;
+        }
+
+        bool ExpectInvalidSav(byte[] plainPayload, string label)
+        {
+            string craftPath = Path.Combine(Path.GetTempPath(), $"lwsmf_craft_{Guid.NewGuid():N}.sav");
+            try
+            {
+                File.WriteAllBytes(craftPath, BuildEncryptedSave(plainPayload));
+                try
+                {
+                    _ = LegacySaveImporter.ImportFile(craftPath, 1);
+                    GD.PrintErr($"SAVE_IMPORT_VALIDATION_FAILED: {label} was not rejected");
+                    return false;
+                }
+                catch (InvalidDataException)
+                {
+                    return true;
+                }
+            }
+            finally
+            {
+                if (File.Exists(craftPath)) File.Delete(craftPath);
+            }
+        }
+
+        // Map dimension multiplication overflow: width=0xFFFFFFFF, height=0xFFFFFFFF, sentinel=0
+        using (var ms = new MemoryStream())
+        using (var bw = new BinaryWriter(ms))
+        {
+            bw.Write((ushort)0); // save_name len 0
+            bw.Write((ushort)1); // version
+            bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(uint.MaxValue); // mapWidth
+            bw.Write(uint.MaxValue); // mapHeight
+            bw.Write(0u); // sentinel != MaxValue
+            if (!ExpectInvalidSav(ms.ToArray(), "map dimension overflow")) return false;
+        }
+
+        // Oversized file guard (> SaveCodec.MaxSaveBytes)
+        string bigPath = Path.Combine(Path.GetTempPath(), $"lwsmf_big_{Guid.NewGuid():N}.sav");
+        try
+        {
+            using (var fs = new FileStream(bigPath, FileMode.Create, System.IO.FileAccess.Write))
+            {
+                fs.SetLength(SaveCodec.MaxSaveBytes + 1);
+            }
+            bool bigThrew = false;
+            try { _ = LegacySaveImporter.ImportFile(bigPath, 1); }
+            catch (InvalidDataException) { bigThrew = true; }
+            if (!bigThrew)
+            {
+                GD.PrintErr("SAVE_IMPORT_VALIDATION_FAILED: oversized save file was accepted");
+                return false;
+            }
+        }
+        finally
+        {
+            if (File.Exists(bigPath)) File.Delete(bigPath);
+        }
+
+        // VariableDatabase fc >= 0x80000000 and cfg.Length==0 with typeRowCount=0xFFFFFFFF:
+        // build a minimal valid prefix up to VariableDatabase by splicing SavePart7 of a decrypted retail save?
+        // Instead craft a minimal save stream with 0-count sections up to VariableDatabase.
+        byte[] BuildSaveUpToVarDb(int unk, uint? fc, uint typeRowCount)
+        {
+            using var ms = new MemoryStream();
+            using var bw = new BinaryWriter(ms);
+            bw.Write((ushort)0); bw.Write((ushort)1); // save_name + version
+            bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(0u); bw.Write(0u); bw.Write(uint.MaxValue); // map sentinel
+            bw.Write(0u); // chip_image
+            for (int i = 0; i < 31; i++) bw.Write(0u);
+            bw.Write(0u); // vars2Count
+            bw.Write(0u); // objectCount
+            for (int i = 0; i < 11; i++) bw.Write(0u);
+            bw.Write(0u); // vars3Count
+            // SavePart2
+            bw.Write((byte)0); bw.Write((byte)0);
+            for (int i = 0; i < 19; i++) bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+            bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 9; i++) bw.Write(0u);
+            bw.Write((byte)0); bw.Write((ushort)0);
+            bw.Write(0u); bw.Write(0u);
+            for (int i = 0; i < 4; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((byte)0); bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            // block 100
+            bw.Write(0u); bw.Write(0u); bw.Write((byte)0);
+            bw.Write(0u); bw.Write(0u);
+            for (int i = 0; i < 11; i++) bw.Write(0u);
+            bw.Write((ushort)0);
+            bw.Write((ushort)0); bw.Write((ushort)0);
+            bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((ushort)0); for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((ushort)0); for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((ushort)0); bw.Write((ushort)0); bw.Write((byte)0);
+            bw.Write((byte)0);
+            for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 9; i++) bw.Write(0u);
+            for (int i = 0; i < 4; i++) bw.Write(0u);
+            bw.Write((byte)0); bw.Write((byte)0);
+            for (int i = 0; i < 32; i++) bw.Write(0u);
+            bw.Write(0u); // readmemdata(4)
+            bw.Write(0u); // mds2Count
+            // SavePart3
+            bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            // SavePart4 (SkipObject)
+            bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write((byte)0); bw.Write(0u);
+            bw.Write((ushort)0);
+            for (int i = 0; i < 4; i++) bw.Write((ushort)0);
+            bw.Write((byte)0); bw.Write((byte)0);
+            for (int s = 0; s < 2; s++) { for (int i = 0; i < 6; i++) bw.Write((byte)0); bw.Write(0u); }
+            for (int i = 0; i < 6; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 3; i++) bw.Write((byte)0);
+            bw.Write(0u);
+            bw.Write((byte)0); bw.Write((byte)0);
+            for (int i = 0; i < 8; i++) bw.Write(0u);
+            bw.Write((ushort)0);
+            bw.Write(0u); bw.Write((byte)0); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(0u); // p4Count
+            bw.Write((byte)0); bw.Write((byte)0);
+            bw.Write(0u); bw.Write(0u);
+            // SavePart5
+            bw.Write((ushort)0);
+            // VariableDatabase
+            bw.Write((byte)0);
+            bw.Write(1u); // typeCount=1
+            bw.Write(unk);
+            if (fc.HasValue) bw.Write(fc.Value);
+            bw.Write(typeRowCount);
+            return ms.ToArray();
+        }
+
+        if (!ExpectInvalidSav(BuildSaveUpToVarDb(-1, 0x8000_0001u, 1u), "VariableDatabase fc > int.MaxValue")) return false;
+        if (!ExpectInvalidSav(BuildSaveUpToVarDb(-1, 10_000u, 1u), "VariableDatabase fc > remaining")) return false;
+        if (!ExpectInvalidSav(BuildSaveUpToVarDb(0, null, uint.MaxValue), "VariableDatabase zero-field infinite row loop")) return false;
+
+        // Unsafe picName path traversal in SavePart5 (isText=0, picName="../evil.png")
+        byte[] BuildSaveWithUnsafePicName(string picName)
+        {
+            using var ms = new MemoryStream();
+            using var bw = new BinaryWriter(ms);
+            bw.Write((ushort)0); bw.Write((ushort)1);
+            bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(0u); bw.Write(0u); bw.Write(uint.MaxValue);
+            bw.Write(0u);
+            for (int i = 0; i < 31; i++) bw.Write(0u);
+            bw.Write(0u); bw.Write(0u);
+            for (int i = 0; i < 11; i++) bw.Write(0u);
+            bw.Write(0u);
+            bw.Write((byte)0); bw.Write((byte)0);
+            for (int i = 0; i < 19; i++) bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+            bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 9; i++) bw.Write(0u);
+            bw.Write((byte)0); bw.Write((ushort)0);
+            bw.Write(0u); bw.Write(0u);
+            for (int i = 0; i < 4; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((byte)0); bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(0u); bw.Write(0u); bw.Write((byte)0);
+            bw.Write(0u); bw.Write(0u);
+            for (int i = 0; i < 11; i++) bw.Write(0u);
+            bw.Write((ushort)0); bw.Write((ushort)0); bw.Write((ushort)0);
+            bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((ushort)0); for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((ushort)0); for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((ushort)0); bw.Write((ushort)0); bw.Write((byte)0);
+            bw.Write((byte)0);
+            for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 9; i++) bw.Write(0u);
+            for (int i = 0; i < 4; i++) bw.Write(0u);
+            bw.Write((byte)0); bw.Write((byte)0);
+            for (int i = 0; i < 32; i++) bw.Write(0u);
+            bw.Write(0u); bw.Write(0u);
+            bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write((byte)0); bw.Write(0u);
+            bw.Write((ushort)0);
+            for (int i = 0; i < 4; i++) bw.Write((ushort)0);
+            bw.Write((byte)0); bw.Write((byte)0);
+            for (int s = 0; s < 2; s++) { for (int i = 0; i < 6; i++) bw.Write((byte)0); bw.Write(0u); }
+            for (int i = 0; i < 6; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 3; i++) bw.Write((byte)0);
+            bw.Write(0u); bw.Write((byte)0); bw.Write((byte)0);
+            for (int i = 0; i < 8; i++) bw.Write(0u);
+            bw.Write((ushort)0);
+            bw.Write(0u); bw.Write((byte)0); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(0u); bw.Write((byte)0); bw.Write((byte)0); bw.Write(0u); bw.Write(0u);
+            // SavePart5: 1 picture entry
+            bw.Write((ushort)1);
+            bw.Write(1u); // picId
+            bw.Write((byte)0); bw.Write((byte)0);
+            bw.Write((ushort)0); // anchor
+            bw.Write((byte)0); // isText = 0
+            bw.Write((byte)0); // isWin = 0
+            byte[] nameBytes = System.Text.Encoding.UTF8.GetBytes(picName);
+            bw.Write((ushort)nameBytes.Length);
+            bw.Write(nameBytes);
+            return ms.ToArray();
+        }
+        if (!ExpectInvalidSav(BuildSaveWithUnsafePicName("../evil.png"), "unsafe picName ..")) return false;
+        if (!ExpectInvalidSav(BuildSaveWithUnsafePicName("/etc/passwd"), "unsafe rooted picName")) return false;
+
+        // ImportAll per-slot resilience & atomic report write
+        string batchDir = Path.Combine(Path.GetTempPath(), $"lwsmf_import_batch_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(batchDir);
+        try
+        {
+            File.Copy(sample, Path.Combine(batchDir, "SaveData01.sav"));
+            File.WriteAllBytes(Path.Combine(batchDir, "SaveData02.sav"), new byte[] { 1, 2, 3 });
+            string batchReport = Path.Combine(batchDir, "report.json");
+            var batch = LegacySaveImporter.ImportAll(batchDir, batchReport);
+            if (batch.Slots.Count != 1 || batch.Errors.Count != 1 || !File.Exists(batchReport) || File.Exists(batchReport + ".tmp"))
+            {
+                GD.PrintErr($"SAVE_IMPORT_VALIDATION_FAILED: batch isolation slots={batch.Slots.Count} errors={batch.Errors.Count}");
+                return false;
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(batchDir, true); } catch (IOException) { }
+        }
+
         GD.Print("SAVE_IMPORT_VALIDATION_OK checksum=strict start=strict utf8=warn-once picture-utf8=warn-once");
         return true;
     }

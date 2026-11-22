@@ -20,6 +20,10 @@ func _ready() -> void:
 		add_child(root)
 		if root.phase != "title":
 			failures.append("GameRoot should boot into the title event (got %s)" % root.phase)
+		if not root.integer_scale_fits(Vector2i(2048, 1152), Vector2i(1024, 576)):
+			failures.append("integer scaling must accept an exact 2x window")
+		if root.integer_scale_fits(Vector2i(1920, 1080), Vector2i(1024, 576)):
+			failures.append("integer scaling must refuse a 1.875x window")
 		if root.session == null or not root.session.Valid:
 			failures.append("GameRoot must own a GameSessionController")
 		if not root.vm.StrictMode:
@@ -36,6 +40,39 @@ func _ready() -> void:
 			failures.append("a malformed picture batch must report failure")
 		if not root._consume_picture_queue("[]"):
 			failures.append("an empty picture batch must report success")
+		if not root._consume_picture_queue("[123, {}]"):
+			failures.append("malformed picture entries must be skipped safely without crashing")
+		root.stage.clear_pictures()
+		var scene_probe_img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+		root.stage.draw_picture(12000, 0, "", "sys", [0, 1, 1, 1, 255, 0, 0, 100], 0, 2)
+		root._clean_scene_image = scene_probe_img
+		root._consume_picture_queue("[{\"number\":12000,\"action\":2,\"file\":\"\",\"text\":\"\",\"args\":[0],\"anchor\":0,\"kind\":2}]")
+		if root._clean_scene_image != null:
+			failures.append("_clean_scene_image must clear once system UI closes")
+		# Transition timing runs exact _transition_frames ticks and clears dangling freeze overlays.
+		root._transition_frames = 3
+		root._transition_elapsed = 0
+		root._transition_mode = 1
+		root._transition_rect.visible = true
+		root._tick_transition()
+		root._tick_transition()
+		if root._transition_frames != 3:
+			failures.append("3-frame transition must stay active after 2 ticks")
+		root._tick_transition()
+		if root._transition_frames != 0 or root._transition_rect.visible:
+			failures.append("3-frame transition must finish on tick 3 without 1-frame off-by-one")
+		root._transition_freeze_active = true
+		root._transition_freeze_rect.visible = true
+		root._on_session_map(1005, 62, 35)
+		if root._transition_freeze_active or root._transition_freeze_rect.visible:
+			failures.append("map change must clear dangling op161 freeze overlay")
+		root.vm.StopAll()
+		root._transition_freeze_active = true
+		root._transition_freeze_rect.visible = true
+		root._tick_transition()
+		if root._transition_freeze_active or root._transition_freeze_rect.visible:
+			failures.append("idle VM must clear dangling op161 freeze overlay")
+		root.stage.clear_pictures()
 		for signal_name in SIGNALS:
 			if root.vm.get_signal_connection_list(signal_name).is_empty():
 				failures.append("VmBridge signal %s is not connected" % signal_name)
@@ -70,6 +107,17 @@ func _ready() -> void:
 		root.report_fault("no save probe")
 		if root.fault_recover_available():
 			failures.append("fault recovery must be unavailable without a save")
+		if root.overlays.theme == null or root.overlays.theme.default_font == null:
+			failures.append("PlayOverlays must bind UiSkin.font() theme")
+		root.overlays.hide_fault_modal()
+		if root.fault_modal_visible():
+			failures.append("hide_fault_modal should hide the fault modal for inspection")
+		var reopen_esc := InputEventKey.new()
+		reopen_esc.keycode = KEY_ESCAPE
+		reopen_esc.pressed = true
+		root._unhandled_input(reopen_esc)
+		if not root.fault_modal_visible():
+			failures.append("ESC while faulted must reopen a hidden FaultModal")
 		if not root.restart_after_fault():
 			failures.append("restart_after_fault should clear the no-save probe")
 

@@ -22,10 +22,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET 8 SDK and iOS workload
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
 
@@ -57,9 +57,11 @@ jobs:
           test -f "$TEMPLATE_DIR/ios.zip"
 
       - name: Build engine-only unsigned IPA
+        env:
+          PACKAGE_VERSION: ${{ github.event.inputs.version }}
         run: |
           bash tools/package_ios.sh \
-            --version "${{ github.event.inputs.version }}" \
+            --version "$PACKAGE_VERSION" \
             --unsigned \
             --force
 

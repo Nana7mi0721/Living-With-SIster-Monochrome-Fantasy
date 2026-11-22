@@ -80,6 +80,21 @@ done
 
 [ -n "$PYTHON_BIN" ] || { echo "ERROR: python not found" >&2; exit 2; }
 
+if [ -z "$FONT_OPT" ]; then
+  if [ -n "${LWSMF_FONT_PATH:-}" ] && [ -f "$LWSMF_FONT_PATH" ]; then
+    FONT_OPT="$LWSMF_FONT_PATH"
+  else
+    for dir in "$ROOT/work/all" "$ROOT/work/all/Data"; do
+      for name in "Lolita.ttf" "LOLITA.TTF" "lolita.ttf"; do
+        if [ -f "$dir/$name" ]; then
+          FONT_OPT="$dir/$name"
+          break 2
+        fi
+      done
+    done
+  fi
+fi
+
 if [ -z "$OUT_DIR" ]; then
   if [ "$SLIM" = true ]; then
     OUT_DIR="$ROOT/dist/android-slim/$VERSION"
@@ -113,7 +128,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "== Android preflight check =="
-"$PYTHON_BIN" "$ROOT/tools/mobile/env_check.py" --target android
+"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/env_check.py")" --target android
 
 GD_WIN="$(to_win_path "$ROOT/game_data")"
 WA_WIN="$(to_win_path "$ROOT/work/all")"
@@ -125,13 +140,13 @@ if [ "$DRY_RUN" = true ]; then
     echo "NOTE: --slim --dry-run estimates from existing media.pak; pack_media.py --slim runs on full build."
   fi
   [ -n "$FONT_OPT" ] && PLAN_ARGS+=(--font "$(to_win_path "$FONT_OPT")")
-  "$PYTHON_BIN" "$ROOT/tools/mobile/android_data.py" "${PLAN_ARGS[@]}"
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/android_data.py")" "${PLAN_ARGS[@]}"
   echo "ANDROID_PACKAGE_DRY_RUN_OK out=$APK_OUT"
   exit 0
 fi
 
 # Strict full-build validation
-"$PYTHON_BIN" "$ROOT/tools/mobile/env_check.py" --target android --strict --setup-debug-keystore
+"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/env_check.py")" --target android --strict --setup-debug-keystore
 
 [ -n "$GODOT_BIN" ] && [ -x "$GODOT_BIN" ] || { echo "ERROR: Godot 4.7.2 Mono console binary not found" >&2; exit 2; }
 [ -n "$DOTNET_BIN" ] && [ -x "$DOTNET_BIN" ] || { echo "ERROR: .NET 9 SDK binary not found (set DOTNET_BIN)" >&2; exit 2; }
@@ -148,7 +163,7 @@ PAK_ARG=()
 if [ "$SLIM" = true ]; then
   echo "== building slim media.pak for Android =="
   mkdir -p "$(dirname "$SLIM_PAK")"
-  "$PYTHON_BIN" "$ROOT/tools/pack_media.py" --from-pak "$WA_WIN/media.pak" --out "$(to_win_path "$SLIM_PAK")" --slim
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" --from-pak "$WA_WIN/media.pak" --out "$(to_win_path "$SLIM_PAK")" --slim
   PAK_ARG=(--media-pak "$(to_win_path "$SLIM_PAK")")
 fi
 
@@ -156,7 +171,7 @@ echo "== staging godot/mobile_data =="
 STAGE_ARGS=(stage --version "$VERSION" --game-data "$GD_WIN" --work-all "$WA_WIN" --dest "$(to_win_path "$STAGE_DIR")")
 [ "${#PAK_ARG[@]}" -gt 0 ] && STAGE_ARGS+=("${PAK_ARG[@]}")
 [ -n "$FONT_OPT" ] && STAGE_ARGS+=(--font "$(to_win_path "$FONT_OPT")")
-"$PYTHON_BIN" "$ROOT/tools/mobile/android_data.py" "${STAGE_ARGS[@]}"
+"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/android_data.py")" "${STAGE_ARGS[@]}"
 
 mkdir -p "$ROOT/work/out" "$OUT_DIR"
 cp -f "$PRESET_FILE" "$PRESET_BAK"
@@ -170,7 +185,7 @@ else
   PATCH_SETS+=(--set "keystore/release=$(to_win_path "$KEYSTORE_OPT")" --set "keystore/release_user=$KS_USER_OPT" --set "keystore/release_password=$KS_PASS_OPT")
 fi
 if [ "${#PATCH_SETS[@]}" -gt 0 ]; then
-  "$PYTHON_BIN" "$ROOT/tools/mobile/export_preset_template.py" --preset-file "$(to_win_path "$PRESET_FILE")" --preset "Android" "${PATCH_SETS[@]}"
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/export_preset_template.py")" --preset-file "$(to_win_path "$PRESET_FILE")" --preset "Android" "${PATCH_SETS[@]}"
 fi
 
 if [ ! -f "$SLN" ]; then
@@ -180,13 +195,17 @@ if [ ! -f "$SLN" ]; then
 fi
 
 echo "== exporting Android APK ($BUILD_MODE) =="
-"$DOTNET_BIN" build "$ROOT/godot/Lwsmf.csproj" -c Release -v:minimal
+DOTNET_CFG="ExportDebug"
 EXPORT_FLAG="--export-debug"
-[ "$BUILD_MODE" = "release" ] && EXPORT_FLAG="--export-release"
-"$GODOT_BIN" --headless --path "$ROOT/godot" "$EXPORT_FLAG" "Android" "$(to_win_path "$APK_OUT")"
+if [ "$BUILD_MODE" = "release" ]; then
+  DOTNET_CFG="ExportRelease"
+  EXPORT_FLAG="--export-release"
+fi
+"$DOTNET_BIN" build "$(to_win_path "$ROOT/godot/Lwsmf.csproj")" -c "$DOTNET_CFG" -p:GodotTargetPlatform=android -v:minimal
+"$GODOT_BIN" --headless --path "$(to_win_path "$ROOT/godot")" "$EXPORT_FLAG" "Android" "$(to_win_path "$APK_OUT")"
 
 echo "== verifying exported APK =="
-"$PYTHON_BIN" "$ROOT/tools/mobile/android_data.py" verify-apk "$(to_win_path "$APK_OUT")"
+"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/android_data.py")" verify-apk "$(to_win_path "$APK_OUT")"
 
 "$PYTHON_BIN" - "$(to_win_path "$APK_OUT")" <<'PY'
 import hashlib, sys

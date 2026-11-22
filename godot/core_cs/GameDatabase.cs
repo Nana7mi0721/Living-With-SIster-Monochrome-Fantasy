@@ -331,8 +331,8 @@ public sealed class GameDatabase
         1 => unchecked(current + operand),
         2 => unchecked(current - operand),
         3 => unchecked(current * operand),
-        4 when operand != 0 => current / operand,
-        5 when operand != 0 => current % operand,
+        4 => operand == 0 ? current : (current == int.MinValue && operand == -1 ? int.MinValue : current / operand),
+        5 => operand == 0 ? current : (current == int.MinValue && operand == -1 ? 0 : current % operand),
         6 => Math.Max(current, operand),
         7 => Math.Min(current, operand),
         _ => operand
@@ -356,6 +356,7 @@ public sealed class GameDatabase
 
     private bool ClearRow(DbContainer container, int dbType, int row)
     {
+        if (row < 0) return false;
         if (!_tables.TryGetValue(container, out var tables)) return false;
         if (dbType < 0 || dbType >= tables.Count) return false;
         var table = tables[dbType];

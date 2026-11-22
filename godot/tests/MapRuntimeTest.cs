@@ -103,6 +103,11 @@ public partial class MapRuntimeTest : Node
         var wideBox = MapRuntime.ContactBox(touchRuntime.Events[1], widePage);
         Check(wideBox == (4, 3, 6, 5), $"collision 1/1 should extend one tile each way, got {wideBox}");
 
+        var negDef = new MapEventDef { Id = 9, Name = "neg", X = -1, Y = -1, PageCount = 1 };
+        var negState = new MapEventState { Def = negDef };
+        var negBox = MapRuntime.ContactBox(negState, new MapEventPage());
+        Check(negBox == (-1, -1, -1, -1), $"negative-coord contact box must floor-divide to (-1,-1,-1,-1), got {negBox}");
+
         Check(touchRuntime.ContactTriggers(3, 4, 4, 4).Count == 0, "touch fires only inside the box");
         Check(touchRuntime.ContactTriggers(3, 4, 5, 4).Count == 1, "entering the box fires player touch");
         Check(touchRuntime.ContactTriggers(5, 4, 5, 4).Count == 0, "already inside must not fire again");

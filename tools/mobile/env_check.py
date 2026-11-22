@@ -108,6 +108,9 @@ def dotnet_workloads(dotnet_bin: str | None) -> tuple[set[str], str]:
         )
     except Exception as exc:  # noqa: BLE001
         return set(), str(exc)
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip()
+        return set(), err or f"dotnet workload list exited with {proc.returncode}"
     out = proc.stdout + "\n" + proc.stderr
     found: set[str] = set()
     for line in out.splitlines():
@@ -138,6 +141,9 @@ def dotnet_sdk_versions(dotnet_bin: str | None) -> tuple[list[str], str]:
         )
     except Exception as exc:  # noqa: BLE001
         return [], str(exc)
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip()
+        return [], err or f"dotnet --list-sdks exited with {proc.returncode}"
     versions: list[str] = []
     for line in (proc.stdout or "").splitlines():
         token = line.strip().split(" ", 1)[0]
@@ -147,11 +153,18 @@ def dotnet_sdk_versions(dotnet_bin: str | None) -> tuple[list[str], str]:
 
 
 def godot_editor_settings_files() -> list[Path]:
+    system = platform.system()
     roots: list[Path] = []
-    appdata = os.environ.get("APPDATA", "").strip()
-    if appdata:
-        roots.append(Path(appdata) / "Godot")
-    roots.append(Path.home() / "AppData/Roaming/Godot")
+    if system == "Windows":
+        appdata = os.environ.get("APPDATA", "").strip()
+        if appdata:
+            roots.append(Path(appdata) / "Godot")
+        roots.append(Path.home() / "AppData/Roaming/Godot")
+    elif system == "Darwin":
+        roots.append(Path.home() / "Library/Application Support/Godot")
+    else:
+        xdg_config = os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
+        roots.append(Path(xdg_config) / "godot")
     files: dict[Path, None] = {}
     for root in roots:
         if root.is_dir():
@@ -174,22 +187,34 @@ def godot_editor_setting(key: str) -> str | None:
     return None
 
 
+def is_valid_android_sdk(sdk_dir: Path) -> bool:
+    if not sdk_dir.is_dir():
+        return False
+    if not (sdk_dir / "platform-tools").is_dir():
+        return False
+    build_tools = sdk_dir / "build-tools"
+    if not build_tools.is_dir():
+        return False
+    return any(p.is_dir() for p in build_tools.iterdir())
+
+
 def find_android_sdk() -> str | None:
+    candidates: list[Path] = []
     for var in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
         val = os.environ.get(var, "").strip()
-        if val and Path(val).is_dir():
-            return val
-    candidates = [
+        if val:
+            candidates.append(Path(val))
+    candidates.extend([
         Path.home() / "AppData/Local/Android/Sdk",
         Path.home() / "Library/Android/sdk",
         Path.home() / "Android/Sdk",
-    ]
-    for cand in candidates:
-        if cand.is_dir():
-            return str(cand)
+    ])
     configured = godot_editor_setting("export/android/android_sdk_path")
-    if configured and Path(configured).is_dir():
-        return configured
+    if configured:
+        candidates.append(Path(configured))
+    for cand in candidates:
+        if is_valid_android_sdk(cand):
+            return str(cand)
     return None
 
 
@@ -312,12 +337,17 @@ def check_environment(
 
     # 2. Godot & templates
     godot_bin = find_godot_bin()
-    add("OK" if godot_bin else "WARN", "godot", godot_bin or "not on PATH (set GODOT_BIN=...)")
+    add("OK" if godot_bin else "MISSING", "godot", godot_bin or "not on PATH (set GODOT_BIN=...)", blocker=not godot_bin)
 
     tpl_dir = godot_templates_dir()
     if tpl_dir:
         is_mono = "mono" in tpl_dir.name
-        add("OK" if is_mono else "WARN", "templates_dir", str(tpl_dir))
+        add(
+            "OK" if is_mono else "MISSING",
+            "templates_dir",
+            str(tpl_dir) if is_mono else f"{tpl_dir} (non-Mono template; 4.7.2.stable.mono required)",
+            blocker=not is_mono,
+        )
         if target in ("all", "android"):
             missing_a = [f for f in REQUIRED_MONO_TEMPLATES["android"] if not (tpl_dir / f).is_file()]
             if not missing_a:

@@ -116,6 +116,9 @@ static func _launch_command(root: String, launcher: String) -> String:
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	var ui_theme := Theme.new()
+	ui_theme.default_font = UiSkin.font()
+	theme = ui_theme
 	_build_ui()
 	_refresh_data_status()
 
@@ -167,6 +170,7 @@ func _build_ui() -> void:
 	path_row.add_child(_root_edit)
 	_browse = FileDialog.new()
 	_browse.visible = false
+	_browse.theme = theme
 	_browse.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 	_browse.access = FileDialog.ACCESS_FILESYSTEM
 	_browse.title = "选择原版 Data 目录（包含 BasicData/MapData）"
@@ -206,6 +210,9 @@ func _build_ui() -> void:
 	_detail.bbcode_enabled = true
 	_detail.fit_content = true
 	_detail.custom_minimum_size = Vector2(0, 150)
+	_detail.add_theme_font_override("normal_font", UiSkin.font())
+	_detail.add_theme_font_override("bold_font", UiSkin.bold_font())
+	_detail.add_theme_font_override("mono_font", UiSkin.font())
 	column.add_child(_detail)
 
 
@@ -235,8 +242,28 @@ static func _build_windows_batch(base: String, command: String, log_file: String
 		"  exit /b 1",
 		")",
 		"%s > \"%s\" 2>&1" % [safe_cmd, safe_log],
-		"echo %ERRORLEVEL% > \"%s\"" % safe_status,
+		"echo %%ERRORLEVEL%% > \"%s\"" % safe_status,
 	]) + "\r\n"
+
+
+static func _build_posix_args(base: String, root: String, out_dir: String, reports_dir: String, log_file: String, status_file: String) -> PackedStringArray:
+	var script := (
+		'{ cd "$1" && { '
+		+ 'py=python; command -v python3 >/dev/null 2>&1 && py=python3; '
+		+ '"$py" -m converter all --root "$2" --out "$3" --reports "$4"; '
+		+ '}; } > "$5" 2>&1; printf "%s\\n" "$?" > "$6"'
+	)
+	return PackedStringArray([
+		"-lc",
+		script,
+		"lwsmf-convert",
+		base,
+		root,
+		out_dir,
+		reports_dir,
+		log_file,
+		status_file,
+	])
 
 
 func start_conversion() -> bool:
@@ -271,9 +298,14 @@ func start_conversion() -> bool:
 		script_handle.close()
 		args = PackedStringArray(["/d", "/c", _script_file])
 	else:
-		args = PackedStringArray(["-lc",
-			"cd \"%s\" && (%s) > \"%s\" 2>&1; echo $? > \"%s\"" % [
-				base, command, _log_file, _status_file]])
+		args = _build_posix_args(
+			base,
+			root,
+			data_dir(),
+			package_root().path_join("reports"),
+			_log_file,
+			_status_file
+		)
 	_pid = OS.create_process(shell, args)
 	if _pid <= 0:
 		_status.text = "无法启动转换进程。请按手动命令运行。"

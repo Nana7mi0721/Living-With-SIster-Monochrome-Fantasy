@@ -83,6 +83,7 @@ func open(p_options: PackedStringArray, p_position: Vector2, p_allow_cancel: boo
 func close() -> void:
 	is_open = false
 	options = PackedStringArray()
+	override_rects = []
 	_hover = -1
 	queue_redraw()
 

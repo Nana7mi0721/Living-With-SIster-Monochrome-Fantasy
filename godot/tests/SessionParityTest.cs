@@ -29,6 +29,11 @@ public partial class SessionParityTest : Node
         SaveState? state = SaveCodec.FromJson(json);
         if (state == null) return "";
         state.SavedAt = "";
+        // Frozen fixture predates per-instance is_parallel; clear it for field parity comparison.
+        foreach (SavedInstance inst in state.Instances)
+        {
+            if (inst != null) inst.IsParallel = null;
+        }
         return SaveCodec.ToJson(state);
     }
 

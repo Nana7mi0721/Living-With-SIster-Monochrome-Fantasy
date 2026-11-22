@@ -131,6 +131,7 @@ func _init(p_assets: AssetDB = null) -> void:
 	_bubble_rect_node.material = _bubble_material
 	_bubble_rect_node.visible = false
 	add_child(_bubble_rect_node)
+	resized.connect(_sync_backing_nodes)
 
 
 ## Open the window with one opcode-101 message. Text is tokenized once, then the reveal
@@ -506,7 +507,6 @@ func _sync_backing_nodes() -> void:
 func _draw() -> void:
 	if not visible_window:
 		return
-	_sync_backing_nodes()
 	var rect := bubble_rect()
 	var font := UiSkin.bold_font()
 	var limit := mini(int(revealed), _chars.size())

@@ -45,8 +45,8 @@ public static class SaveMigrator
         state.Pictures ??= new List<SavedPicture>();
         state.Audio ??= new List<SavedAudio>();
 
-        state.Pictures.RemoveAll(p => p == null || IsTransientUiPicture(p.Number));
-        state.Audio.RemoveAll(a => a == null || a.Channel == 2); // CHANNEL_SE is transient.
+        state.Pictures.RemoveAll(p => p != null && IsTransientUiPicture(p.Number));
+        state.Audio.RemoveAll(a => a != null && a.Channel == 2); // CHANNEL_SE is transient.
         return state;
     }
 }

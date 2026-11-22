@@ -91,7 +91,9 @@ func apply_effect(state: Dictionary, kind: int, duration: int, args: Array) -> v
 			if duration <= 0 or (v[0] == 0 and v[1] == 0 and v[2] == 0):
 				state["effects"] = []
 				if bool(state.get("zero_tone_hidden", false)):
-					state["hidden"] = true
+					var corr: Array = state.get("color_corr", [0, 0, 0])
+					if int(corr[0]) <= 0 and int(corr[1]) <= 0 and int(corr[2]) <= 0:
+						state["hidden"] = true
 			else:
 				if bool(state.get("zero_tone_hidden", false)):
 					state["hidden"] = false
@@ -169,13 +171,19 @@ func apply_effect(state: Dictionary, kind: int, duration: int, args: Array) -> v
 ## Advance one frame of 290 effects (flash/blink, shake, zoom, breath, pattern).
 func tick_effects(state: Dictionary) -> void:
 	var kept: Array = []
+	var expired_flash := false
 	for effect in state.get("effects", []):
 		var fx: Dictionary = effect
 		fx["age"] = int(fx.get("age", 0)) + 1
 		if int(fx.get("kind", 0)) != 5 and int(fx["age"]) >= int(fx.get("duration", 1)):
+			expired_flash = true
 			continue
 		kept.append(fx)
 	state["effects"] = kept
+	if expired_flash and kept.is_empty() and bool(state.get("zero_tone_hidden", false)):
+		var corr: Array = state.get("color_corr", [0, 0, 0])
+		if int(corr[0]) <= 0 and int(corr[1]) <= 0 and int(corr[2]) <= 0:
+			state["hidden"] = true
 	var shake: Variant = state.get("shake", null)
 	if shake != null:
 		var sh: Dictionary = shake

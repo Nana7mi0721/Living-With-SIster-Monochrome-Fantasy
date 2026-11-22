@@ -244,8 +244,10 @@ static func _build_font(bold: bool) -> Font:
 		var needs_write := true
 		if FileAccess.file_exists(cache_path):
 			var existing := FileAccess.open(cache_path, FileAccess.READ)
-			if existing != null and existing.get_length() == pak_bytes.size():
-				needs_write = false
+			if existing != null:
+				if existing.get_length() == pak_bytes.size():
+					needs_write = false
+				existing.close()
 		if needs_write:
 			var cf := FileAccess.open(cache_path, FileAccess.WRITE)
 			if cf != null:
@@ -294,18 +296,34 @@ static func nine_patch(ci: CanvasItem, texture: Texture2D, rect: Rect2, corner: 
 		ci.draw_rect(rect, Color(0.12, 0.14, 0.15, 0.87))
 		ci.draw_rect(rect, Color(0.95, 0.95, 0.95, 0.55), false, 1.0)
 		return
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return
 	var tex_size := texture.get_size()
-	var c := float(corner)
-	var inner := Vector2(tex_size.x - c * 2.0, tex_size.y - c * 2.0)
-	ci.draw_texture_rect_region(texture, Rect2(rect.position, Vector2(c, c)), Rect2(0, 0, c, c))
-	ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(rect.size.x - c, 0), Vector2(c, c)), Rect2(tex_size.x - c, 0, c, c))
-	ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(0, rect.size.y - c), Vector2(c, c)), Rect2(0, tex_size.y - c, c, c))
-	ci.draw_texture_rect_region(texture, Rect2(rect.position + rect.size - Vector2(c, c), Vector2(c, c)), Rect2(tex_size.x - c, tex_size.y - c, c, c))
-	ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(c, 0), Vector2(rect.size.x - c * 2.0, c)), Rect2(c, 0, inner.x, c))
-	ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(c, rect.size.y - c), Vector2(rect.size.x - c * 2.0, c)), Rect2(c, tex_size.y - c, inner.x, c))
-	ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(0, c), Vector2(c, rect.size.y - c * 2.0)), Rect2(0, c, c, inner.y))
-	ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(rect.size.x - c, c), Vector2(c, rect.size.y - c * 2.0)), Rect2(tex_size.x - c, c, c, inner.y))
-	ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(c, c), rect.size - Vector2(c * 2.0, c * 2.0)), Rect2(c, c, inner.x, inner.y))
+	if tex_size.x <= 0.0 or tex_size.y <= 0.0:
+		return
+	# The 18x18 design keeps a 3px corner in layout; 2x art must sample 6px there
+	# while still drawing it at 3 design pixels, or the frame becomes 2x too thick.
+	var dst := clampf(float(maxi(0, corner)), 0.0, minf(rect.size.x, rect.size.y) * 0.5)
+	var src := dst
+	if tex_size.x >= 27.0:
+		src = dst * (tex_size.x / 18.0)
+	src = clampf(src, 0.0, minf(tex_size.x, tex_size.y) * 0.5)
+	var inner := Vector2(maxf(0.0, tex_size.x - src * 2.0), maxf(0.0, tex_size.y - src * 2.0))
+	var mid_w := maxf(0.0, rect.size.x - dst * 2.0)
+	var mid_h := maxf(0.0, rect.size.y - dst * 2.0)
+	if dst > 0.0 and src > 0.0:
+		ci.draw_texture_rect_region(texture, Rect2(rect.position, Vector2(dst, dst)), Rect2(0, 0, src, src))
+		ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(rect.size.x - dst, 0), Vector2(dst, dst)), Rect2(tex_size.x - src, 0, src, src))
+		ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(0, rect.size.y - dst), Vector2(dst, dst)), Rect2(0, tex_size.y - src, src, src))
+		ci.draw_texture_rect_region(texture, Rect2(rect.position + rect.size - Vector2(dst, dst), Vector2(dst, dst)), Rect2(tex_size.x - src, tex_size.y - src, src, src))
+	if mid_w > 0.0 and dst > 0.0 and inner.x > 0.0 and src > 0.0:
+		ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(dst, 0), Vector2(mid_w, dst)), Rect2(src, 0, inner.x, src))
+		ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(dst, rect.size.y - dst), Vector2(mid_w, dst)), Rect2(src, tex_size.y - src, inner.x, src))
+	if mid_h > 0.0 and dst > 0.0 and inner.y > 0.0 and src > 0.0:
+		ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(0, dst), Vector2(dst, mid_h)), Rect2(0, src, src, inner.y))
+		ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(rect.size.x - dst, dst), Vector2(dst, mid_h)), Rect2(tex_size.x - src, src, src, inner.y))
+	if mid_w > 0.0 and mid_h > 0.0 and inner.x > 0.0 and inner.y > 0.0:
+		ci.draw_texture_rect_region(texture, Rect2(rect.position + Vector2(dst, dst), Vector2(mid_w, mid_h)), Rect2(src, src, inner.x, inner.y))
 
 
 ## WOLF packs two shorts into one int when a value exceeds 100,000 (opcode 150 x/y args).

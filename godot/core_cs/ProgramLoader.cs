@@ -27,10 +27,14 @@ public static class ProgramLoader
         var info = new FileInfo(key);
         if (!info.Exists) return null;
 
-        if (Documents.TryGetValue(key, out var cached) &&
-            cached.Length == info.Length && cached.WriteTimeUtc == info.LastWriteTimeUtc)
+        if (Documents.TryGetValue(key, out var cached))
         {
-            return cached.Document;
+            if (cached.Length == info.Length && cached.WriteTimeUtc == info.LastWriteTimeUtc)
+            {
+                return cached.Document;
+            }
+            cached.Document.Dispose();
+            Documents.Remove(key);
         }
 
         JsonDocument document;
@@ -306,6 +310,7 @@ public static class ProgramLoader
                 }
 
                 int pageIndex = elem.TryGetProperty("page", out var ep) ? ep.GetInt32() : 0;
+                if (pageIndex < 0) continue;
                 while (def.Pages.Count <= pageIndex) def.Pages.Add(new MapEventPage());
 
                 var page = new MapEventPage

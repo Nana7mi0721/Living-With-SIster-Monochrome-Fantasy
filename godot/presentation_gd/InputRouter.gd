@@ -159,6 +159,7 @@ static func _is_direction(keycode: int) -> bool:
 
 ## Bit mask of keys/buttons held right now, for opcode 123 (KeyCodes layout).
 func held_mask(allow_mouse: bool = true) -> int:
+	_reconcile_pointer_buttons()
 	var mask := scripted_key_mask if scripted_key_mask >= 0 else _physical_mask()
 	mask |= _wheel_bits
 	if allow_mouse:
@@ -204,14 +205,17 @@ func wheel_notch() -> int:
 
 ## Button state for one frame: true when physically held or clicked within this tick.
 func left_frame_pressed() -> bool:
+	_reconcile_pointer_buttons()
 	return not _action_entry_suppressed and (pointer_pressed or _click_latch)
 
 
 func right_frame_pressed() -> bool:
+	_reconcile_pointer_buttons()
 	return right_pressed or _right_click_latch
 
 
 func middle_frame_pressed() -> bool:
+	_reconcile_pointer_buttons()
 	return middle_pressed or _middle_click_latch
 
 
@@ -235,7 +239,27 @@ func action_entry_suppressed() -> bool:
 	return _action_entry_suppressed
 
 
+func _reconcile_pointer_buttons(force_physical_check: bool = false) -> void:
+	if not force_physical_check and (DisplayServer.get_name() == "headless" or OS.has_feature("headless") or scripted_key_mask >= 0):
+		return
+	if pointer_pressed and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		pointer_pressed = false
+	if right_pressed and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+		right_pressed = false
+	if middle_pressed and not Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
+		middle_pressed = false
+
+
+func reconcile_pointer_buttons(force_physical_check: bool = false) -> void:
+	_reconcile_pointer_buttons(force_physical_check)
+	if _action_entry_suppressed and not _click_latch and not pointer_pressed:
+		var key_held := (scripted_key_mask & MASK_OK) != 0 if scripted_key_mask >= 0 else _any_pressed(ACTION_KEYS)
+		if not key_held:
+			_action_entry_suppressed = false
+
+
 func action_input_held() -> bool:
+	_reconcile_pointer_buttons()
 	if pointer_pressed or _click_latch:
 		return true
 	if scripted_key_mask >= 0:

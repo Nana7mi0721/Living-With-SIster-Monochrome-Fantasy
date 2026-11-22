@@ -52,7 +52,7 @@ LWsmf_RENDER=1 bash tools/godot_check.sh   # 带窗口的截图/渲染分支
 "$GODOT" --headless --path godot res://tests/RouteTraceTest.tscn     # ROUTE_TRACE_TEST_OK steps=149247 map=1005
 "$GODOT" --headless --path godot res://tests/Smoke.tscn             # SMOKE_OK + AUTO_EVENTS_TEST_OK + DATABASE_TEST_OK + BATTLE_COMMAND_TEST_OK + BATTLE_WIRING_TEST_OK + BATTLE_TARGET_TEST_OK + BATTLE_SKILL_TARGET_TEST_OK + BATTLE_MENU_BRIDGE_TEST_OK + H_EVENT_GATE_TEST_OK(data_only=1) + unknown-soundType dedupe
 "$GODOT" --headless --path godot res://tests_gd/GameRootTest.tscn    # GAME_ROOT_TEST_OK
-"$GODOT" --headless --path godot res://tests_gd/PictureStateTest.tscn # PICTURE_STATE_TEST_OK checks=37
+"$GODOT" --headless --path godot res://tests_gd/PictureStateTest.tscn # PICTURE_STATE_TEST_OK checks=123
 "$GODOT" --headless --path godot res://tests_gd/DayMenuTest.tscn      # DAY_MENU_TEST_OK checks=13
 "$GODOT" --headless --path godot res://tests_gd/WeekendMenuTest.tscn  # WEEKEND_MENU_TEST_OK checks=9
 "$GODOT" --headless --path godot res://tests_gd/ColdStartDayTest.tscn  # COLD_START_DAY_TEST_OK day=2 hour=8 minute=30
@@ -60,6 +60,14 @@ LWsmf_RENDER=1 bash tools/godot_check.sh   # 带窗口的截图/渲染分支
 ```
 
 可视化核对可跑 `res://tests_gd/GameRootTest.tscn`（带 `LWsmf_RENDER=1` 时输出截图到 `reports/`）。
+
+## 高清素材层（可选 2×）
+
+- `project.godot` 的逻辑分辨率仍为 1024×576，渲染模式为 `canvas_items`，默认窗口 2048×1152；字体与矢量图元在设备分辨率绘制。
+- `AssetDB` 启动时自动探测 `<root>/media_hd.pak`，也可用 `LWsmf_HD_PAK` 指定；命中条目走 2× 贴图，缺失/移动端/关闭开关时回退 1× 的 `media.pak`。
+- `hd_scale(logical)` 只用于把贴图像素换回逻辑绘制尺寸（`PictureStage`）与九宫格取样（`UiSkin`），不改任何布局数据。
+- 生成与校验：`python tools/upscale_assets.py --out work/hd` → `python tools/verify_hd_manifest.py` → `python tools/pack_media.py --hd-root work/hd --out work/all/media_hd.pak`；发布用 `bash tools/package_release.sh --hd`。
+- 素材不进版本库：`/work/hd/` 与 `/work/out/hd_*/` 已在 `.gitignore` 排除。
 
 ## 当前缺口
 

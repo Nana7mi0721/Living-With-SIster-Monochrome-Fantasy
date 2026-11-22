@@ -48,6 +48,7 @@ var _leader_cell := Vector2i.ZERO
 # full-screen picture art. Keep the nodes (tests and 124 hover) but draw nothing unless
 # the diagnostic switch is on.
 var _debug_visuals := OS.get_environment("LWsmf_SHOW_MAP_DEBUG") == "1"
+static var _shared_tileset: TileSet = null
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(SCREEN_SIZE)
@@ -166,6 +167,12 @@ func solid_count() -> int:
 			total += 1
 	return total
 
+static func _get_tileset() -> TileSet:
+	if _shared_tileset == null:
+		_shared_tileset = _make_tileset()
+	return _shared_tileset
+
+
 static func _make_tileset() -> TileSet:
 	var image := Image.create(PALETTE.size() * TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
 	for i in PALETTE.size():
@@ -196,7 +203,7 @@ func _build_tiles() -> void:
 	_origin = Vector2i(
 		maxi(0, (SCREEN_SIZE.x - map_width * TILE_SIZE) / 2),
 		maxi(0, (SCREEN_SIZE.y - map_height * TILE_SIZE) / 2))
-	var tileset := _make_tileset()
+	var tileset := _get_tileset()
 	for layer_index in LAYER_COUNT:
 		var node := TileMapLayer.new()
 		node.name = "Layer%d" % layer_index

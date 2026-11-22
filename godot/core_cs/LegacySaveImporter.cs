@@ -70,8 +70,8 @@ public sealed class LegacySaveImporter
 
         public byte[] ReadBytes(int count)
         {
-            if (count < 0 || Position + count > Buffer.Length)
-                throw new EndOfStreamException($"ReadBytes({count}) past EOF at {Position}");
+            if (count < 0 || count > Buffer.Length - Position)
+                throw new InvalidDataException($"ReadBytes({count}) out of bounds at {Position} (remaining {Buffer.Length - Position})");
             byte[] dest = new byte[count];
             Array.Copy(Buffer, Position, dest, 0, count);
             Position += count;
@@ -178,6 +178,7 @@ public sealed class LegacySaveImporter
         [JsonPropertyName("schema")] public string Schema { get; set; } = "wolf.save_import";
         [JsonPropertyName("schema_version")] public int SchemaVersion { get; set; } = 1;
         [JsonPropertyName("slots")] public List<SlotResult> Slots { get; set; } = [];
+        [JsonPropertyName("errors")] public List<string> Errors { get; set; } = [];
     }
 
     public static byte[] Decrypt(byte[] encrypted)
@@ -207,7 +208,16 @@ public sealed class LegacySaveImporter
 
     public static SlotResult ImportFile(string path, int slotIndex, bool rejectBadChecksum = false)
     {
+        var info = new FileInfo(path);
+        if (info.Exists && info.Length > SaveCodec.MaxSaveBytes)
+        {
+            throw new InvalidDataException($"Save file too large: {info.Length} bytes (max {SaveCodec.MaxSaveBytes})");
+        }
         byte[] raw = File.ReadAllBytes(path);
+        if (raw.Length > SaveCodec.MaxSaveBytes)
+        {
+            throw new InvalidDataException($"Save file too large: {raw.Length} bytes (max {SaveCodec.MaxSaveBytes})");
+        }
         byte[] dec = Decrypt(raw);
 
         if (dec[CryptStart] != StartByte)
@@ -240,8 +250,18 @@ public sealed class LegacySaveImporter
         if (sentinel != uint.MaxValue)
         {
             r.Position -= 4;
-            long cells = (long)mapWidth * mapHeight * 3;
-            for (long i = 0; i < cells; i++) r.ReadU32();
+            ulong cells;
+            try
+            {
+                cells = checked((ulong)mapWidth * (ulong)mapHeight * 3UL);
+            }
+            catch (OverflowException ex)
+            {
+                throw new InvalidDataException("Map dimensions overflow cell count", ex);
+            }
+            if (cells > (ulong)r.Remaining / 4UL)
+                throw new InvalidDataException($"Map cell count {cells} exceeds remaining {r.Remaining} bytes");
+            for (ulong i = 0; i < cells; i++) r.ReadU32();
         }
         string chipImage = r.ReadMemDataString(4, "chip_image");
         for (int i = 0; i < 31; i++) r.ReadMemData(4);
@@ -381,6 +401,10 @@ public sealed class LegacySaveImporter
                 byte isText = r.ReadU8();
                 byte isWin = r.ReadU8();
                 string picName = r.ReadMemDataString(2, "picture_name", out byte[] picBytes);
+                if (isText != 1 && !IsSafeAssetPath(picName))
+                {
+                    throw new InvalidDataException($"Unsafe picture asset path: '{picName}'");
+                }
                 var vars7_18 = new int[12];
                 for (int k = 0; k < 12; k++) vars7_18[k] = r.ReadI32();
                 for (int k = 0; k < 6; k++) r.ReadU32();
@@ -436,9 +460,11 @@ public sealed class LegacySaveImporter
         // VariableDatabase
         r.ReadU8();
         uint typeCount = r.ReadU32();
+        if ((ulong)typeCount * 8UL > (ulong)r.Remaining)
+            throw new InvalidDataException($"VariableDatabase type count {typeCount} exceeds remaining {r.Remaining} bytes");
         var dbOverrides = new List<int>();
         var dbCells = new List<DatabaseCell>();
-        for (int t = 0; t < typeCount; t++)
+        for (uint t = 0; t < typeCount; t++)
         {
             int unk = r.ReadI32();
             int cnt = unk;
@@ -446,22 +472,35 @@ public sealed class LegacySaveImporter
             {
                 if (unk <= -2) r.ReadI32();
                 uint fc = r.ReadU32();
+                if (fc > int.MaxValue)
+                    throw new InvalidDataException($"VariableDatabase field count {fc} exceeds int.MaxValue");
                 cnt = (int)fc;
             }
+            if (cnt > 0 && ((long)cnt * 4 > r.Remaining || cnt > 1_000_000))
+                throw new InvalidDataException($"VariableDatabase field count {cnt} exceeds bounds (remaining {r.Remaining})");
             uint[] cfg = new uint[cnt > 0 ? cnt : 0];
             for (int k = 0; k < cfg.Length; k++) cfg[k] = r.ReadU32();
 
             uint typeRowCount = r.ReadU32();
+            if (cfg.Length == 0)
+            {
+                if (typeRowCount > 100_000)
+                    throw new InvalidDataException($"VariableDatabase type {t} has {typeRowCount} rows with zero fields");
+                if (typeRowCount > 0) dbOverrides.Add((int)t);
+                continue;
+            }
+            if ((ulong)typeRowCount > (ulong)r.Remaining / ((ulong)cfg.Length * 4UL))
+                throw new InvalidDataException($"VariableDatabase type {t} row count {typeRowCount} exceeds remaining {r.Remaining} bytes");
             if (typeRowCount > 0)
             {
-                dbOverrides.Add(t);
+                dbOverrides.Add((int)t);
             }
-            for (int row = 0; row < typeRowCount; row++)
+            for (uint row = 0; row < typeRowCount; row++)
             {
                 for (int k = 0; k < cfg.Length; k++)
                 {
                     if (cfg[k] < 2000)
-                        dbCells.Add(new DatabaseCell { Type = t, Row = row, Column = k, Value = r.ReadI32() });
+                        dbCells.Add(new DatabaseCell { Type = (int)t, Row = (int)row, Column = k, Value = r.ReadI32() });
                 }
                 foreach (uint def in cfg)
                 {
@@ -535,13 +574,25 @@ public sealed class LegacySaveImporter
     {
         var sb = new StringBuilder();
         int i = 0;
+        bool warned = false;
         while (i < bytes.Length && bytes[i] != 0)
         {
             if (bytes[i] != 1)
             {
                 int len = CharLen(bytes[i]);
                 if (i + len > bytes.Length) len = bytes.Length - i;
-                AppendDecodedText(sb, bytes, i, len, warnings, field);
+                for (int k = 1; k < len; k++)
+                {
+                    if (bytes[i + k] == 0 || bytes[i + k] == 1)
+                    {
+                        len = k;
+                        break;
+                    }
+                }
+                if (AppendDecodedText(sb, bytes, i, len, !warned ? warnings : null, field))
+                {
+                    warned = true;
+                }
                 i += len;
                 continue;
             }
@@ -582,27 +633,42 @@ public sealed class LegacySaveImporter
         return sb.ToString();
     }
 
-    private static void AppendDecodedText(StringBuilder sb, byte[] bytes, int offset, int length,
+    private static bool AppendDecodedText(StringBuilder sb, byte[] bytes, int offset, int length,
         List<string>? warnings, string field)
     {
         try
         {
             sb.Append(StrictUtf8.GetString(bytes, offset, length));
+            return false;
         }
         catch (DecoderFallbackException)
         {
             warnings?.Add($"{field} at 0x{offset:X4}: invalid UTF-8, replacement applied");
             sb.Append(Encoding.UTF8.GetString(bytes, offset, length));
+            return true;
         }
     }
 
     private static int CharLen(byte first) => first switch
     {
         <= 0x7f => 1,
-        >= 0xc0 and <= 0xdf => 2,
+        >= 0xc2 and <= 0xdf => 2,
         >= 0xe0 and <= 0xef => 3,
-        _ => 4
+        >= 0xf0 and <= 0xf4 => 4,
+        _ => 1
     };
+
+    private static bool IsSafeAssetPath(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return true;
+        if (Path.IsPathRooted(path) || path[0] == '/' || path[0] == '\\') return false;
+        if (path.Contains(':')) return false;
+        foreach (string segment in path.Split('/', '\\'))
+        {
+            if (segment == "..") return false;
+        }
+        return true;
+    }
 
     private static void SkipObject(SaveReader r)
     {
@@ -646,10 +712,17 @@ public sealed class LegacySaveImporter
         {
             string fileName = $"SaveData{slot:D2}.sav";
             string filePath = Path.Combine(saveDir, fileName);
-            if (File.Exists(filePath))
+            if (!File.Exists(filePath)) continue;
+            try
             {
                 var slotResult = ImportFile(filePath, slot, rejectBadChecksum);
                 report.Slots.Add(slotResult);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or IOException or UnauthorizedAccessException)
+            {
+                string message = $"slot {slot:D2} ({fileName}): {ex.Message}";
+                Console.Error.WriteLine($"[LegacySaveImporter] {message}");
+                report.Errors.Add(message);
             }
         }
 
@@ -663,17 +736,41 @@ public sealed class LegacySaveImporter
                 WriteIndented = true
             };
             string json = JsonSerializer.Serialize(report, options);
-            File.WriteAllText(reportPath, json, Encoding.UTF8);
+            WriteTextAtomic(reportPath, json);
 
             var warnings = new List<string>();
             foreach (var slot in report.Slots) warnings.AddRange(slot.EncodingWarnings);
             if (warnings.Count > 0)
             {
                 string warningPath = Path.Combine(dir ?? ".", "encoding_warnings.json");
-                File.WriteAllText(warningPath, JsonSerializer.Serialize(warnings, options), Encoding.UTF8);
+                WriteTextAtomic(warningPath, JsonSerializer.Serialize(warnings, options));
             }
         }
 
         return report;
+    }
+
+    private static void WriteTextAtomic(string path, string content)
+    {
+        string temp = path + ".tmp";
+        try
+        {
+            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(stream, Encoding.UTF8))
+            {
+                writer.Write(content);
+                writer.Flush();
+                stream.Flush(true);
+            }
+            File.Move(temp, path, overwrite: true);
+        }
+        catch
+        {
+            if (File.Exists(temp))
+            {
+                try { File.Delete(temp); } catch { }
+            }
+            throw;
+        }
     }
 }

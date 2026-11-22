@@ -113,7 +113,7 @@ public sealed class EventVm
         uint bits = KeyCodes.BitsForCode(code);
         if (bits == 0) return code;
         if ((bits & BasicAllDeny) != 0) return 0;
-        if (DeviceDeny && (bits & AutoKeys) == 0) return 0;
+        if (DeviceDeny && (bits & KeyCodes.FromWolfBits(AutoKeys)) == 0) return 0;
         return code;
     }
     private int _nextInstanceId = 1;
@@ -128,6 +128,7 @@ public sealed class EventVm
     private int _transitionKind;
     private int _transitionFlags;
     private bool _transitionPrepared;
+    private int _runCursor;
 
     /// <summary>True between 161 PrepareTransition and 162 ExecuteTransition.</summary>
     public bool TransitionPrepared => _transitionPrepared;
@@ -244,7 +245,7 @@ public sealed class EventVm
         }
         for (int k = 0; k < strings.Length; k++)
         {
-            inst.Self.SetStr(Magic.SelfArgBase + 5 + k, strings[k]);
+            inst.Self.SetStr(Magic.SelfArgBase + 5 + k, strings[k] ?? "");
         }
         return inst;
     }
@@ -306,7 +307,8 @@ public sealed class EventVm
     {
         int status = slot.Params.Length > 1 ? slot.Params[1] : 0;
         int numCount = status & 0x0F;
-        int strCount = (status >> 4) & 0x0F;
+        int rawStrCount = (status >> 4) & 0x0F;
+        int strCount = Math.Min(rawStrCount, 4);
         bool hasRet = ((status >> 24) & 1) != 0;
 
         var args = new int[numCount];
@@ -316,17 +318,17 @@ public sealed class EventVm
         }
 
         var strings = new string[strCount];
-        for (int k = 0; k < strCount && k < 4; k++)
+        for (int k = 0; k < strCount; k++)
         {
             bool literal = ((status >> (12 + k)) & 1) != 0;
             int wordIndex = 2 + numCount + k;
             int word = wordIndex < slot.Params.Length ? slot.Params[wordIndex] : 0;
-            strings[k] = literal || word == 0
+            strings[k] = (literal || word == 0
                 ? (1 + k < slot.Strings.Length ? slot.Strings[1 + k] : "")
-                : EvalStr(word, inst);
+                : EvalStr(word, inst)) ?? "";
         }
 
-        int retIndex = 2 + numCount + strCount;
+        int retIndex = 2 + numCount + rawStrCount;
         int? returnTo = hasRet && retIndex < slot.Params.Length ? slot.Params[retIndex] : null;
         return (args, strings, returnTo);
     }
@@ -392,6 +394,7 @@ public sealed class EventVm
 
     public void StoreStr(Instance inst, int raw, string value)
     {
+        value ??= "";
         var magic = Magic.Decode(raw);
         switch (magic.Kind)
         {
@@ -417,7 +420,7 @@ public sealed class EventVm
                 0x1 => a - b,
                 0x2 => a * b,
                 0x3 => b == 0 || (a == int.MinValue && b == -1) ? (b == 0 ? a : int.MinValue) : a / b,
-                0x4 => b == 0 ? a : a % b,
+                0x4 => b == 0 ? a : (a == int.MinValue && b == -1 ? 0 : a % b),
                 0x5 => a & b,
                 0x6 => a >> (b & 31),
                 0x7 => a | b,
@@ -439,7 +442,7 @@ public sealed class EventVm
                 0x200 => current - value,
                 0x300 => current * value,
                 0x400 => value == 0 || (current == int.MinValue && value == -1) ? (value == 0 ? current : int.MinValue) : current / value,
-                0x500 => value == 0 ? current : current % value,
+                0x500 => value == 0 ? current : (current == int.MinValue && value == -1 ? 0 : current % value),
                 // exec.rs compound(): 0x600/0x700 are unary transforms that leave the
                 // target's current value alone, never lower/upper bounds of the operand.
                 0x600 => current,
@@ -472,6 +475,7 @@ public sealed class EventVm
     /// <summary>121 SetVariable: low flag bits control literal/pointer addressing (0x04 literal a, 0x08 literal b, 0x10 indirect target, 0x20 indirect a).</summary>
     public void ExecuteSetVariable(int[] args, Instance inst)
     {
+        if (args.Length < 4) return;
         uint bits = (uint)args[3];
         int target = (bits & 0x10) != 0 ? EvalNum(args[0], inst) : args[0];
         int a = (bits & 0x04) != 0
@@ -522,6 +526,11 @@ public sealed class EventVm
             {
                 case ControlKind.Block:
                 {
+                    if ((uint)ctrl.BlockIndex >= (uint)prog.Blocks.Count)
+                    {
+                        inst.Pc++;
+                        break;
+                    }
                     var block = prog.Blocks[ctrl.BlockIndex];
                     switch (block.Kind)
                     {
@@ -583,6 +592,7 @@ public sealed class EventVm
                             int? matched = null;
                             for (int i = 0; i < count; i++)
                             {
+                                if (3 + 3 * i >= slot.Params.Length) break;
                                 int varArg = slot.Params[1 + 3 * i];
                                 int valArg = slot.Params[2 + 3 * i];
                                 int opArg = slot.Params[3 + 3 * i];
@@ -636,6 +646,11 @@ public sealed class EventVm
                 case ControlKind.Case:
                 {
                     // Reached case marker via sequential execution -> escape to end of block!
+                    if ((uint)ctrl.BlockIndex >= (uint)prog.Blocks.Count)
+                    {
+                        inst.Pc++;
+                        continue;
+                    }
                     var block = prog.Blocks[ctrl.BlockIndex];
                     inst.Pc = block.EndTarget(prog.Len);
                     continue;
@@ -657,6 +672,17 @@ public sealed class EventVm
                     else
                     {
                         inst.Pc = prog.Len;
+                    }
+                    while (inst.Loops.Count > 0)
+                    {
+                        int loopBlockIdx = inst.Loops[^1].Block;
+                        if ((uint)loopBlockIdx < (uint)prog.Blocks.Count)
+                        {
+                            var loopBlock = prog.Blocks[loopBlockIdx];
+                            if (inst.Pc > loopBlock.Head && inst.Pc < loopBlock.EndTarget(prog.Len))
+                                break;
+                        }
+                        inst.Loops.RemoveAt(inst.Loops.Count - 1);
                     }
                     continue;
                 }
@@ -876,7 +902,7 @@ public sealed class EventVm
                     bool autoConsumed = autoAvailable && KeyCodes.AcceptsWolfBits(mask, AutoKeys);
                     uint effectiveAuto = autoAvailable ? AutoKeys : 0;
                     int key = FilterKeyCode(Host.KeyCodeAuto(mask, effectiveAuto));
-                    if (blocking)
+                    if (blocking && !(autoConsumed && key != 0))
                     {
                         inst.Wait.WaitForKeyInput(target, mask, requireRelease: key != 0);
                         inst.Pc++;
@@ -1131,7 +1157,9 @@ public sealed class EventVm
                     {
                         var top = inst.Loops[^1];
                         inst.Loops.RemoveAt(inst.Loops.Count - 1);
-                        inst.Pc = prog.Blocks[top.Block].EndTarget(prog.Len);
+                        inst.Pc = (uint)top.Block < (uint)prog.Blocks.Count
+                            ? prog.Blocks[top.Block].EndTarget(prog.Len)
+                            : prog.Len;
                     }
                     else
                     {
@@ -1153,7 +1181,7 @@ public sealed class EventVm
                 }
                 case 210:
                 {
-                    int rawTarget = slot.Params[0];
+                    int rawTarget = slot.Params.Length > 0 ? slot.Params[0] : 0;
                     if (Magic.Decode(rawTarget).IsStorage)
                     {
                         rawTarget = EvalNum(rawTarget, inst);
@@ -1170,31 +1198,32 @@ public sealed class EventVm
 
                     int paramStatus = slot.Params.Length > 1 ? slot.Params[1] : 0;
                     int numCount = paramStatus & 0x0F;
-                    int strCount = (paramStatus >> 4) & 0x0F;
+                    int rawStrCount = (paramStatus >> 4) & 0x0F;
+                    int strCount = Math.Min(rawStrCount, 4);
                     bool hasRet = ((paramStatus >> 24) & 1) != 0;
 
                     int[] childArgs = new int[numCount];
                     for (int i = 0; i < numCount; i++)
                     {
-                        childArgs[i] = EvalNum(slot.Params[2 + i], inst);
+                        childArgs[i] = 2 + i < slot.Params.Length ? EvalNum(slot.Params[2 + i], inst) : 0;
                     }
 
                     // String operands live after the numeric ones; bit 12+k marks a literal
                     // (top-level strings[1+k]) instead of a magic address into a string bank.
                     string[] childStrings = new string[strCount];
-                    for (int k = 0; k < strCount && k < 4; k++)
+                    for (int k = 0; k < strCount; k++)
                     {
                         bool literal = ((paramStatus >> (12 + k)) & 1) != 0;
                         int wordIdx = 2 + numCount + k;
                         int word = wordIdx < slot.Params.Length ? slot.Params[wordIdx] : 0;
-                        childStrings[k] = literal || word == 0
+                        childStrings[k] = (literal || word == 0
                             ? (1 + k < slot.Strings.Length ? slot.Strings[1 + k] : "")
-                            : EvalStr(word, inst);
+                            : EvalStr(word, inst)) ?? "";
                     }
 
                     // Numeric args, then string args, then the optional return slot:
                     // 2 + total_count, not 2 + number_count.
-                    int retIdx = 2 + numCount + strCount;
+                    int retIdx = 2 + numCount + rawStrCount;
                     int? returnTo = hasRet && retIdx < slot.Params.Length ? slot.Params[retIdx] : null;
 
                     if (CallDepth(inst) >= MaxCallDepth)
@@ -1221,7 +1250,7 @@ public sealed class EventVm
                     }
                     for (int k = 0; k < childStrings.Length; k++)
                     {
-                        child.Self.SetStr(Magic.SelfArgBase + 5 + k, childStrings[k]);
+                        child.Self.SetStr(Magic.SelfArgBase + 5 + k, childStrings[k] ?? "");
                     }
 
                     inst.Wait.WaitForChild(child.Id);
@@ -1417,11 +1446,19 @@ public sealed class EventVm
                 }
                 case 174:
                     ReturnToTitleRequested = true;
+                    _freshInstanceIds.Clear();
+                    _enteredInstanceIds.Clear();
+                    _autoKeysDelivered.Clear();
+                    _runCursor = 0;
                     Instances.Clear();
                     return Signal.ReturnToTitle;
                 case 175:
                     EndGameRequested = true;
                     Host.EndGame();
+                    _freshInstanceIds.Clear();
+                    _enteredInstanceIds.Clear();
+                    _autoKeysDelivered.Clear();
+                    _runCursor = 0;
                     Instances.Clear();
                     return Signal.EndGame;
                 case 201:
@@ -1475,7 +1512,7 @@ public sealed class EventVm
                     }
                     for (int k = 0; k < callStrings.Length; k++)
                     {
-                        child.Self.SetStr(Magic.SelfArgBase + 5 + k, callStrings[k]);
+                        child.Self.SetStr(Magic.SelfArgBase + 5 + k, callStrings[k] ?? "");
                     }
                     inst.Wait.WaitForChild(child.Id);
                     inst.Pc++;
@@ -1568,6 +1605,12 @@ public sealed class EventVm
                 var reply = Host.ChoiceMade();
                 if (reply != null)
                 {
+                    if ((uint)inst.Wait.Block >= (uint)inst.Program.Blocks.Count)
+                    {
+                        inst.Pc = inst.Program.Len;
+                        inst.Wait.Clear();
+                        continue;
+                    }
                     var block = inst.Program.Blocks[inst.Wait.Block];
                     int target;
                     if (reply.IsCancel)
@@ -1596,7 +1639,7 @@ public sealed class EventVm
                 bool autoConsumed = autoAvailable && KeyCodes.AcceptsWolfBits(inst.Wait.KeyMask, AutoKeys);
                 uint effectiveAuto = autoAvailable ? AutoKeys : 0;
                 int key = FilterKeyCode(Host.KeyCodeAuto(inst.Wait.KeyMask, effectiveAuto));
-                if (inst.Wait.KeyRequireRelease)
+                if (inst.Wait.KeyRequireRelease && !(autoConsumed && key != 0))
                 {
                     if (key == 0) inst.Wait.KeyRequireRelease = false;
                 }
@@ -1670,8 +1713,14 @@ public sealed class EventVm
     {
         EndGameRequested = false;
         ReturnToTitleRequested = false;
+        _transitionKind = 0;
+        _transitionFlags = 0;
+        _transitionPrepared = false;
+        TransitionPhase = 0;
+        _runCursor = 0;
         _freshInstanceIds.Clear();
         _enteredInstanceIds.Clear();
+        _autoKeysDelivered.Clear();
         Instances.Clear();
     }
 
@@ -1689,6 +1738,12 @@ public sealed class EventVm
         }
         if (loopPos < 0)
         {
+            inst.Pc++;
+            return;
+        }
+        if ((uint)blockIdx >= (uint)prog.Blocks.Count)
+        {
+            inst.Loops.RemoveRange(loopPos, inst.Loops.Count - loopPos);
             inst.Pc++;
             return;
         }
@@ -1729,26 +1784,62 @@ public sealed class EventVm
 
     public void RunInstances(ref int budget)
     {
-        for (int i = 0; i < Instances.Count; i++)
+        if (Instances.Count == 0)
         {
-            if (budget <= 0 || ReturnToTitleRequested || EndGameRequested) break;
-            var inst = Instances[i];
+            _runCursor = 0;
+            return;
+        }
+        int start = _runCursor % Instances.Count;
+        bool stopped = false;
+
+        bool StepAt(int index, ref int totalBudget)
+        {
+            if (ReturnToTitleRequested || EndGameRequested)
+            {
+                _runCursor = 0;
+                stopped = true;
+                return false;
+            }
+            if (totalBudget <= 0)
+            {
+                _runCursor = index;
+                stopped = true;
+                return false;
+            }
+            var inst = Instances[index];
             if (inst.IsRunnable)
             {
                 if (!inst.IsParallel && _enteredInstanceIds.Add(inst.Id))
                 {
                     Host.EventEntered(inst.EventId, !inst.ParentId.HasValue);
                 }
-                int instBudget = Math.Min(budget, PerInstanceFrameBudget);
+                int instBudget = Math.Min(totalBudget, PerInstanceFrameBudget);
                 int rem = instBudget;
                 StepInstance(inst, ref rem);
                 int consumed = instBudget - rem;
-                budget -= consumed;
+                totalBudget -= consumed;
                 if (rem <= 0 && consumed >= PerInstanceFrameBudget && inst.IsRunnable)
                 {
                     Host.Log($"Event {inst.EventId} (pc={inst.Pc}) hit per-instance frame budget ({PerInstanceFrameBudget})");
                 }
             }
+            return true;
+        }
+
+        for (int i = start; i < Instances.Count; i++)
+        {
+            if (!StepAt(i, ref budget)) break;
+        }
+        if (!stopped)
+        {
+            for (int i = 0; i < start && i < Instances.Count; i++)
+            {
+                if (!StepAt(i, ref budget)) break;
+            }
+        }
+        if (!stopped)
+        {
+            _runCursor = 0;
         }
     }
 

@@ -19,6 +19,7 @@ public partial class GameSessionController : Node
     private VmController? _vm;
     private Godot.Control? _ui;
     private string _savePath = "";
+    private bool _faultReported;
 
     public bool Valid => _session != null;
     public string LastError { get; private set; } = "";
@@ -60,6 +61,8 @@ public partial class GameSessionController : Node
     {
         _vm = vm;
         _ui = ui;
+        LastError = "";
+        _faultReported = false;
         _savePath = savePath.Length > 0 ? savePath : DefaultSavePath();
         _session = new GameSession(vm, new CallableView(ui), DefaultDataPath(), _savePath);
         vm.SaveDirectory = Path.GetDirectoryName(_session.SavePath) ?? "";
@@ -73,6 +76,8 @@ public partial class GameSessionController : Node
     public bool Rebuild()
     {
         if (_vm == null || _ui == null) return false;
+        LastError = "";
+        _faultReported = false;
         _vm.ResetSessionState();
         Setup(_vm, _ui, _savePath);
         return true;
@@ -106,16 +111,20 @@ public partial class GameSessionController : Node
             WriteCrashLog(LastError);
             _session.Fail("unhandled exception: " + ex.Message);
         }
-        if (_session.Phase == "failed")
+        if (_session.Phase == "failed" && !_faultReported)
         {
+            _faultReported = true;
             string reason = LastError.Length > 0 ? LastError : "session entered failed phase";
-            try
+            if (_ui != null && GodotObject.IsInstanceValid(_ui))
             {
-                _ui?.Call("report_fault", reason);
-            }
-            catch (Exception ex)
-            {
-                GD.PushError($"[GameSessionController] failed to show fault modal: {ex.Message}");
+                try
+                {
+                    _ui.Call("report_fault", reason);
+                }
+                catch (Exception ex)
+                {
+                    GD.PushError($"[GameSessionController] failed to show fault modal: {ex.Message}");
+                }
             }
         }
     }
@@ -178,8 +187,11 @@ public partial class GameSessionController : Node
         return ProjectSettings.GlobalizePath("user://save_01.json");
     }
 
-    public string QuickSavePath() =>
-        Path.Combine(Path.GetDirectoryName(DefaultSavePath()) ?? ".", "quicksave.json");
+    public string QuickSavePath()
+    {
+        string basePath = _savePath.Length > 0 ? _savePath : DefaultSavePath();
+        return Path.Combine(Path.GetDirectoryName(basePath) ?? ".", "quicksave.json");
+    }
 
     /// <summary>View bridge: every core callback becomes one named call on the GDScript root.</summary>
     private sealed class CallableView : IGameSessionView
@@ -189,81 +201,146 @@ public partial class GameSessionController : Node
 
         public CallableView(Godot.Control host) => _host = host;
 
-        public void SetStatus(string line) => _host.Call("_on_session_status", line);
+        private bool HostAlive => GodotObject.IsInstanceValid(_host);
 
-        public void SetMapHud(int x, int y, string text) =>
-            _host.Call("_on_session_hud", x, y, text);
+        private static bool TryGetInt(Godot.Collections.Dictionary dict, string key, out int value)
+        {
+            if (dict.TryGetValue(key, out Variant raw) && raw.VariantType != Variant.Type.Nil)
+            {
+                value = raw.AsInt32();
+                return true;
+            }
+            value = 0;
+            return false;
+        }
 
-        public void ShowMap(MapDefinition map, MapRuntime runtime, int leaderX, int leaderY) =>
-            _host.Call("_on_session_map", map.Id, leaderX, leaderY);
+        private static int GetInt(Godot.Collections.Dictionary dict, string key, int fallback) =>
+            TryGetInt(dict, key, out int value) ? value : fallback;
 
-        public void ShowMessage(string text, int face) => _host.Call("_on_message", text, face);
+        private static string GetString(Godot.Collections.Dictionary dict, string key, string fallback) =>
+            dict.TryGetValue(key, out Variant raw) && raw.VariantType != Variant.Type.Nil
+                ? raw.AsString()
+                : fallback;
 
-        public void HideMessage() => _host.Call("_on_message_closed");
+        private static bool GetBool(Godot.Collections.Dictionary dict, string key, bool fallback) =>
+            dict.TryGetValue(key, out Variant raw) && raw.VariantType != Variant.Type.Nil
+                ? raw.AsBool()
+                : fallback;
 
-        public void ShowChoices(string[] options, int selected) =>
-            _host.Call("_on_choices", options, selected);
+        public void SetStatus(string line)
+        {
+            if (HostAlive) _host.Call("_on_session_status", line);
+        }
 
-        public void HideChoices() => _host.Call("_on_choices_closed");
+        public void SetMapHud(int x, int y, string text)
+        {
+            if (HostAlive) _host.Call("_on_session_hud", x, y, text);
+        }
 
-        public void OnLoadCompleted() => _host.Call("_on_load_completed");
+        public void ShowMap(MapDefinition map, MapRuntime runtime, int leaderX, int leaderY)
+        {
+            if (HostAlive) _host.Call("_on_session_map", map.Id, leaderX, leaderY);
+        }
 
-        public void ClearPictures() => _host.Call("_on_clear_pictures");
+        public void ShowMessage(string text, int face)
+        {
+            if (HostAlive) _host.Call("_on_message", text, face);
+        }
 
-        public void RestorePictures(IReadOnlyList<SavedPicture> pictures) =>
-            _host.Call("_on_restore_pictures", JsonSerializer.Serialize(pictures, _json));
+        public void HideMessage()
+        {
+            if (HostAlive) _host.Call("_on_message_closed");
+        }
+
+        public void ShowChoices(string[] options, int selected)
+        {
+            if (HostAlive) _host.Call("_on_choices", options, selected);
+        }
+
+        public void HideChoices()
+        {
+            if (HostAlive) _host.Call("_on_choices_closed");
+        }
+
+        public void OnLoadCompleted()
+        {
+            if (HostAlive) _host.Call("_on_load_completed");
+        }
+
+        public void ClearPictures()
+        {
+            if (HostAlive) _host.Call("_on_clear_pictures");
+        }
+
+        public void RestorePictures(IReadOnlyList<SavedPicture> pictures)
+        {
+            if (HostAlive) _host.Call("_on_restore_pictures", JsonSerializer.Serialize(pictures, _json));
+        }
 
         public IReadOnlyList<SavedPicture> SnapshotPictures()
         {
             var result = new List<SavedPicture>();
-            var array = _host.Call("_on_snapshot_pictures").AsGodotArray();
-            foreach (var item in array)
+            if (!HostAlive) return result;
+            Variant raw = _host.Call("_on_snapshot_pictures");
+            if (raw.VariantType != Variant.Type.Array) return result;
+            foreach (var item in raw.AsGodotArray())
             {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
                 var entry = item.AsGodotDictionary();
+                if (!TryGetInt(entry, "number", out int number)) continue;
                 var saved = new SavedPicture
                 {
-                    Number = entry["number"].AsInt32(),
-                    Kind = entry["kind"].AsInt32(),
-                    Action = entry["action"].AsInt32(),
-                    File = entry["file"].AsString(),
-                    Text = entry["text"].AsString(),
-                    Anchor = entry["anchor"].AsInt32(),
+                    Number = number,
+                    Kind = GetInt(entry, "kind", 0),
+                    Action = GetInt(entry, "action", 0),
+                    File = GetString(entry, "file", ""),
+                    Text = GetString(entry, "text", ""),
+                    Anchor = GetInt(entry, "anchor", 0),
                 };
-                foreach (var arg in entry["args"].AsGodotArray())
+                if (entry.TryGetValue("args", out Variant argsVar) && argsVar.VariantType == Variant.Type.Array)
                 {
-                    saved.Args.Add(arg.AsInt32());
+                    foreach (var arg in argsVar.AsGodotArray())
+                    {
+                        saved.Args.Add(arg.AsInt32());
+                    }
                 }
                 result.Add(saved);
             }
             return result;
         }
 
-        public void RestoreAudio(IReadOnlyList<SavedAudio> audio) =>
-            _host.Call("_on_restore_audio", JsonSerializer.Serialize(audio, _json));
+        public void RestoreAudio(IReadOnlyList<SavedAudio> audio)
+        {
+            if (HostAlive) _host.Call("_on_restore_audio", JsonSerializer.Serialize(audio, _json));
+        }
 
         public IReadOnlyList<SavedAudio> SnapshotAudio()
         {
             var result = new List<SavedAudio>();
-            var array = _host.Call("_on_snapshot_audio").AsGodotArray();
-            foreach (var item in array)
+            if (!HostAlive) return result;
+            Variant raw = _host.Call("_on_snapshot_audio");
+            if (raw.VariantType != Variant.Type.Array) return result;
+            foreach (var item in raw.AsGodotArray())
             {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
                 var entry = item.AsGodotDictionary();
+                if (!TryGetInt(entry, "channel", out int channel)) continue;
                 result.Add(new SavedAudio
                 {
-                    Channel = entry["channel"].AsInt32(),
-                    File = entry["file"].AsString(),
-                    Volume = entry["volume"].AsInt32(),
-                    Loop = entry["loop"].AsBool(),
-                    LoopPoint = entry["loop_point"].AsInt32(),
-                    Tempo = entry["tempo"].AsInt32(),
-                    PositionMs = entry["position_ms"].AsInt32(),
+                    Channel = channel,
+                    File = GetString(entry, "file", ""),
+                    Volume = GetInt(entry, "volume", 100),
+                    Loop = GetBool(entry, "loop", false),
+                    LoopPoint = GetInt(entry, "loop_point", 0),
+                    Tempo = GetInt(entry, "tempo", 100),
+                    PositionMs = GetInt(entry, "position_ms", 0),
                 });
             }
             return result;
         }
 
-        public bool HasMessage => _host.Call("_on_has_message").AsBool();
+        public bool HasMessage => HostAlive && _host.Call("_on_has_message").AsBool();
 
-        public string MessageText => _host.Call("_on_message_text").AsString();
+        public string MessageText => HostAlive ? _host.Call("_on_message_text").AsString() : "";
     }
 }

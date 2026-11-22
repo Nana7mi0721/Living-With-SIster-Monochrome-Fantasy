@@ -12,10 +12,12 @@ public static class AppPaths
 {
     public static bool IsAndroid => OS.HasFeature("android");
 
+    public static string GodotResourceRoot() => IsAndroid ? "res://" : ResourceRoot();
+
     public static string ResourceRoot()
     {
         if (IsAndroid)
-            return "res://";
+            return PackageRoot();
         if (OS.HasFeature("template"))
         {
             return Path.GetDirectoryName(OS.GetExecutablePath()) ?? "";

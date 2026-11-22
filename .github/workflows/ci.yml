@@ -26,13 +26,23 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore godot/Lwsmf.csproj
 
-      - name: Build C# Core Assembly
+      - name: Build C# Core Assembly (Debug)
+        run: dotnet build godot/Lwsmf.csproj -c Debug --no-restore
+
+      - name: Build C# Core Assembly (Release)
         run: dotnet build godot/Lwsmf.csproj -c Release --no-restore
 
-      - name: Lint Decisions & Repo Privacy
-        run: |
-          python tools/lint_decisions.py
-          python tools/release_audit.py --repo-scan
+      - name: Build C# Core Assembly (ExportRelease)
+        run: dotnet build godot/Lwsmf.csproj -c ExportRelease --no-restore
+
+      - name: Lint Decisions & Docs Links
+        run: python tools/lint_decisions.py
+
+      - name: Repo Privacy Audit
+        run: python tools/release_audit.py --repo-scan
+
+      - name: Mobile Packaging Tools Unit Tests
+        run: python tools/mobile/test_mobile_tools.py
 
   rust-check:
     name: Rust Workspace Check & Oracle Test

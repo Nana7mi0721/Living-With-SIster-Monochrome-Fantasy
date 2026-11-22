@@ -12,7 +12,7 @@ import json
 import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 try:
     from pack_media import read_pak_entries, read_pak_index
@@ -56,6 +56,11 @@ PRIVACY_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 PROBE_EXTENSIONS = ("", ".png", ".jpg", ".bmp", ".jpeg", ".webp", ".ogg", ".mp3", ".wav")
 MEDIA_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".ogg", ".mp3", ".wav", ".ico", ".ttf", ".otf"}
+WOLF_CTRL_RE = re.compile(
+    r"\\(?:cself|self|cdb|udb|sdb|sys|font|space|sp|ax|ay|mx|my|at|[vscfmi-])\[",
+    re.I,
+)
+LEADING_REL_RE = re.compile(r"^(?:\.\./|\./)+")
 
 
 def _nonempty_file(path: Path) -> bool:
@@ -79,7 +84,11 @@ def _scan_text_privacy(path: Path, rel_label: str, errors: list[str]) -> None:
                 errors.append(f"privacy/path leak ({label}) at {rel_label}:{lineno}")
 
 
-def audit(dist: Path) -> tuple[list[str], dict[str, int]]:
+def audit(
+    dist: Path,
+    strict: bool = False,
+    missing_out: list[str] | None = None,
+) -> tuple[list[str], dict[str, int]]:
     errors: list[str] = []
     stats = {"files": 0, "bytes": 0, "pak_entries": 0, "assets": 0}
 
@@ -174,6 +183,13 @@ def audit(dist: Path) -> tuple[list[str], dict[str, int]]:
         total_refs, miss = audit_program_assets(prog_path, pak_paths)
         stats["program_asset_total"] = total_refs
         stats["program_asset_missing"] = len(miss)
+        if missing_out is not None:
+            missing_out.extend(miss)
+        if strict and miss:
+            errors.append(
+                f"program assets missing in media.pak ({len(miss)}/{total_refs}): "
+                + ", ".join(miss[:10])
+            )
 
     return errors, stats
 
@@ -181,7 +197,7 @@ def audit(dist: Path) -> tuple[list[str], dict[str, int]]:
 def audit_program_assets(programs_json: Path, pak_paths: set[str]) -> tuple[int, list[str]]:
     """Cross-check static picture/audio asset references in programs.json against media.pak."""
     data = json.loads(programs_json.read_text(encoding="utf-8"))
-    basenames = {Path(p).name for p in pak_paths}
+    basenames = {PurePosixPath(p).name for p in pak_paths}
     refs: set[str] = set()
 
     def walk(node: object) -> None:
@@ -191,12 +207,18 @@ def audit_program_assets(programs_json: Path, pak_paths: set[str]) -> tuple[int,
                     if not isinstance(raw, str):
                         continue
                     norm = raw.strip().replace("\\", "/")
-                    low = norm.lower()
-                    if not norm or low.startswith("<") or "\\" in raw or "%" in norm or "/" not in norm:
+                    low = LEADING_REL_RE.sub("", norm.lower())
+                    if (
+                        not norm
+                        or low.startswith("<")
+                        or WOLF_CTRL_RE.search(raw)
+                        or "%" in norm
+                        or "/" not in norm
+                    ):
                         continue
                     if low.startswith("save/"):
                         continue
-                    if Path(low).suffix in MEDIA_EXTS:
+                    if PurePosixPath(low).suffix in MEDIA_EXTS:
                         refs.add(norm)
             for v in node.values():
                 walk(v)
@@ -207,15 +229,15 @@ def audit_program_assets(programs_json: Path, pak_paths: set[str]) -> tuple[int,
     walk(data)
     missing: list[str] = []
     for ref in sorted(refs):
-        low = ref.lower().lstrip("./")
-        if low.startswith("../"):
-            low = low[3:]
+        low = LEADING_REL_RE.sub("", ref.lower())
+        if low.startswith("save/"):
+            continue
         if low in pak_paths:
             continue
-        stem = str(Path(low).with_suffix(""))
+        stem = PurePosixPath(low).with_suffix("").as_posix()
         if any((stem + ext) in pak_paths for ext in PROBE_EXTENSIONS if ext):
             continue
-        if Path(low).name in basenames:
+        if PurePosixPath(low).name in basenames:
             continue
         missing.append(ref)
     return len(refs), missing
@@ -270,7 +292,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-scan", action="store_true", help="scan tracked production/tool/core-doc files for leaks")
     parser.add_argument("--asset-audit", action="store_true", help="cross-check game_data/programs.json against work/all/media.pak")
     parser.add_argument("--strict", action="store_true", help="fail non-zero if --asset-audit finds any unreferenced/stub misses")
+    parser.add_argument("--hd-root", default="", help="verify a 2x art root (hd_manifest.json) against work/retail_dat")
     args = parser.parse_args(argv)
+
+    if args.hd_root:
+        import subprocess
+        import sys
+        tool = Path(__file__).resolve().parent / "verify_hd_manifest.py"
+        rc = subprocess.call([sys.executable, str(tool), "--hd", args.hd_root])
+        if rc != 0:
+            print("HD_AUDIT_FAIL")
+            return 1
+        print("HD_AUDIT_OK")
+        return 0
 
     if args.asset_audit:
         repo_root = Path(__file__).resolve().parent.parent
@@ -301,7 +335,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     dist = Path(args.dist).resolve()
-    errors, stats = audit(dist)
+    missing_prog_assets: list[str] = []
+    errors, stats = audit(dist, strict=args.strict, missing_out=missing_prog_assets)
+    if missing_prog_assets:
+        print(
+            f"PROGRAM_ASSET_MISSING count={len(missing_prog_assets)} "
+            f"total={stats.get('program_asset_total', 0)}"
+        )
+        for ref in missing_prog_assets[:20]:
+            print(f"- {ref}")
     if errors:
         print("RELEASE_AUDIT_FAIL")
         for error in errors:
@@ -311,7 +353,8 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "RELEASE_AUDIT_OK "
         f"files={stats['files']} bytes={stats['bytes']} "
-        f"pak_entries={stats['pak_entries']} assets={stats['assets']}"
+        f"pak_entries={stats['pak_entries']} assets={stats['assets']} "
+        f"program_asset_missing={stats.get('program_asset_missing', 0)}"
     )
     return 0
 

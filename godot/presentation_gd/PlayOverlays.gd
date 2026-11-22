@@ -49,6 +49,9 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	z_index = 95
+	var ui_theme := Theme.new()
+	ui_theme.default_font = UiSkin.font()
+	theme = ui_theme
 	_build_toast()
 	_build_title_confirm()
 
@@ -420,7 +423,7 @@ func _build_fault_modal(has_save: bool) -> void:
 	restart_button.pressed.connect(func() -> void: fault_restart_requested.emit())
 	buttons.add_child(restart_button)
 	var close_button := Button.new()
-	close_button.text = "关闭"
+	close_button.text = "隐藏（Esc/F12 重开）"
 	close_button.pressed.connect(func() -> void:
 		_fault_root.visible = false
 		fault_modal_closed.emit()

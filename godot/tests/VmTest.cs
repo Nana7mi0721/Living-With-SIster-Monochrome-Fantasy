@@ -57,6 +57,11 @@ public static class VmTest
         TestSoundChannelLayoutMatchesPresentation();
         TestOpcode123BlockingKeyWaitAndDebounce();
         TestMaxCallDepth();
+        TestOpcode213LabelJumpPopsLoops();
+        TestRoundRobinBudgetPreventsTotalStarvation();
+        TestStopAllAnd174Cleanup();
+        TestMalformedSlotBoundsAndCallStrings();
+        TestGameSessionRestoreAndReset();
         DatabaseTest.Run();
         AutoEventsTest.Run();
         BattleCommandTest.Run();
@@ -112,6 +117,22 @@ public static class VmTest
         uint firstDraw = rngCeil.NextEventDraw();
         if (firstDraw > 2_000_000_000)
             throw new Exception($"Ceiling rejection failed, draw was {firstDraw}");
+
+        // Wide range must not overflow 32-bit signed difference.
+        var rngWide = WolfRng.FromEventSeed(1);
+        bool sawWide = false;
+        for (int i = 0; i < 16; i++)
+        {
+            int v = rngWide.Range(-2_000_000_000, 2_000_000_000);
+            if (v < -2_000_000_000 || v > 2_000_000_000)
+                throw new Exception($"Wide Range out of bounds: {v}");
+            if (Math.Abs((long)v) > 300_000_000L) sawWide = true;
+        }
+        if (!sawWide)
+            throw new Exception("Wide Range stayed collapsed inside signed 32-bit overflow window");
+        int full = rngWide.Range(int.MinValue, int.MaxValue);
+        if (full < int.MinValue || full > int.MaxValue)
+            throw new Exception($"Full int range failed: {full}");
     }
 
     private static void TestMagic()
@@ -585,13 +606,19 @@ public static class VmTest
 
     private static void TestMinValueNegativeOneDivision()
     {
-        Console.WriteLine("  Testing int.MinValue / -1 safety...");
+        Console.WriteLine("  Testing int.MinValue / -1 and % -1 safety...");
         int binary = EventVm.BinaryOp(0x3, int.MinValue, -1);
         if (binary != int.MinValue)
             throw new Exception($"BinaryOp min/-1 should wrap, got {binary}");
         int compound = EventVm.Compound(0x400, int.MinValue, -1);
         if (compound != int.MinValue)
             throw new Exception($"Compound min/-1 should wrap, got {compound}");
+        int binMod = EventVm.BinaryOp(0x4, int.MinValue, -1);
+        if (binMod != 0)
+            throw new Exception($"BinaryOp min%-1 should return 0, got {binMod}");
+        int compMod = EventVm.Compound(0x500, int.MinValue, -1);
+        if (compMod != 0)
+            throw new Exception($"Compound min%-1 should return 0, got {compMod}");
         if (EventVm.BinaryOp(0x3, 42, 7) != 6 || EventVm.Compound(0x400, 42, 7) != 6)
             throw new Exception("normal division regressed");
     }
@@ -928,6 +955,24 @@ public static class VmTest
             throw new Exception($"123 mask must reach the host verbatim, got {host.LastKeyMask:X}");
         if (vm.Faulted)
             throw new Exception("125/126/123 must be handled opcodes");
+
+        // DeviceDeny must allow WOLF-layout direction auto-key (0x10 = Down) while still blocking physical Up.
+        var devSlots = new List<Slot>
+        {
+            Slot.Command(126, [0x10000101]), // device deny
+            Slot.Command(125, [0x10]),       // WOLF Down (16)
+            Slot.Command(123, [2_000_010, 240]),
+            Slot.Command(172)
+        };
+        var devHost = new KeyHost { Held = KeyCodes.Up };
+        var devVm = new EventVm { Host = devHost };
+        devVm.RegisterProgram(Program.FromSlots(921, "DevAutoDir", devSlots));
+        devVm.CreateInstance(921);
+        devVm.StepFrame();
+        if (devVm.FilterKeyCode(KeyCodes.CodeUp) != 0)
+            throw new Exception("DeviceDeny must block physical Up even when WOLF Down (0x10 == 16) is active");
+        if (devVm.FilterKeyCode(KeyCodes.CodeDown) != KeyCodes.CodeDown)
+            throw new Exception("DeviceDeny must allow 125 WOLF Down auto-input");
     }
 
     private static void TestOpcode1000ProFeatureWait()
@@ -1559,5 +1604,279 @@ public static class VmTest
         vm.StepFrame();
         if (vm.Vars.Get(60) != KeyCodes.CodeOk || vm.Vars.Get(61) != 99)
             throw new Exception($"fresh press should resume blocking 123: v60={vm.Vars.Get(60)} v61={vm.Vars.Get(61)}");
+
+        // Blocking op123 receiving op125 auto-key must deliver directly without blocking/requiring release.
+        var autoHost = new KeyHost();
+        var autoVm = new EventVm { Host = autoHost, BlockOnKeyWait = true };
+        var autoSlots = new List<Slot>
+        {
+            Slot.Command(125, [0x01]),       // auto OK
+            Slot.Command(123, [2_000_062, 145]), // 0x80 blocking | 0x10 Ok | 0x01 Dir
+            Slot.Command(121, [2_000_063, 77, 0, 0x0000]),
+            Slot.Command(172)
+        };
+        autoVm.RegisterProgram(Program.FromSlots(118, "AutoBlocking123", autoSlots));
+        autoVm.CreateInstance(118);
+        autoVm.StepFrame();
+        if (autoVm.Vars.Get(62) != KeyCodes.CodeOk || autoVm.Vars.Get(63) != 77 || autoVm.Instances.Count != 0)
+            throw new Exception($"blocking 123 with 125 auto-key must deliver immediately: v62={autoVm.Vars.Get(62)} v63={autoVm.Vars.Get(63)} inst={autoVm.Instances.Count}");
+    }
+
+    private static void TestOpcode213LabelJumpPopsLoops()
+    {
+        Console.WriteLine("  Testing Opcode 213 label jump pops exited loop frames...");
+        var slots = new List<Slot>
+        {
+            Slot.Command(179, [3]),                       // pc 0: outer loop
+            Slot.Command(179, [3]),                       // pc 1: inner loop
+            Slot.Command(213, null, ["MID"]),             // pc 2: jump out of inner loop, still inside outer
+            Slot.Command(498),                            // pc 3: end inner
+            Slot.Command(212, null, ["MID"]),             // pc 4: label MID -> pc 5
+            Slot.Command(121, [2_000_000, 1, 0, 0x0100]), // pc 5: v0 += 1
+            Slot.Command(213, null, ["OUT"]),             // pc 6: jump out of outer loop
+            Slot.Command(498),                            // pc 7: end outer
+            Slot.Command(212, null, ["OUT"]),             // pc 8: label OUT -> pc 9
+            Slot.Command(171),                            // pc 9: break (must be no-op since loops were popped)
+            Slot.Command(121, [2_000_001, 55, 0, 0]),     // pc 10: v1 = 55
+            Slot.Command(172)                             // pc 11: finish
+        };
+        var vm = new EventVm();
+        vm.RegisterProgram(Program.FromSlots(119, "JumpPopLoop", slots));
+        var inst = vm.CreateInstance(119)!;
+        vm.StepFrame();
+        if (vm.Vars.Get(0) != 1 || vm.Vars.Get(1) != 55 || inst.Loops.Count != 0)
+            throw new Exception($"op213 must pop exited loops: v0={vm.Vars.Get(0)} v1={vm.Vars.Get(1)} loops={inst.Loops.Count}");
+    }
+
+    private static void TestRoundRobinBudgetPreventsTotalStarvation()
+    {
+        Console.WriteLine("  Testing round-robin scheduler prevents total 200_000 budget starvation...");
+        var spinSlots = new List<Slot>
+        {
+            Slot.Command(170),
+            Slot.Command(121, [2_000_001, 1, 0, 0]),
+            Slot.Command(498),
+        };
+        var tailSlots = new List<Slot>
+        {
+            Slot.Command(121, [2_000_050, 88, 0, 0]),
+            Slot.Command(172)
+        };
+        var vm = new EventVm();
+        vm.RegisterProgram(Program.FromSlots(120, "Spin", spinSlots));
+        vm.RegisterProgram(Program.FromSlots(121, "Worker", tailSlots));
+        for (int i = 0; i < 5; i++) vm.CreateInstance(120);
+        vm.CreateInstance(121);
+        vm.StepFrame(); // frame 1: first 4 spins consume 200_000 budget; worker waits
+        if (vm.Vars.Get(50) != 0)
+            throw new Exception("frame 1 expected 4 spins to exhaust 200_000 budget before index 5");
+        vm.StepFrame(); // frame 2: cursor resumes at index 4 -> runs spin[4] and worker[5]
+        if (vm.Vars.Get(50) != 88)
+            throw new Exception($"frame 2 round-robin must run trailing worker coroutine, got v50={vm.Vars.Get(50)}");
+    }
+
+    private static void TestStopAllAnd174Cleanup()
+    {
+        Console.WriteLine("  Testing StopAll transition reset and op174 entered-set cleanup...");
+        var prog = Program.FromSlots(122, "TransitionAnd174", new List<Slot>
+        {
+            Slot.Command(160, [1, 3]),
+            Slot.Command(161),
+            Slot.Command(174)
+        });
+        var vm = new EventVm();
+        vm.RegisterProgram(prog);
+        vm.CreateInstance(122);
+        vm.StepFrame();
+        if (vm.EnteredInstanceCount != 0 || vm.Instances.Count != 0)
+            throw new Exception($"op174 must clear entered instances and instances: entered={vm.EnteredInstanceCount} inst={vm.Instances.Count}");
+
+        var prep = Program.FromSlots(123, "PrepOnly", new List<Slot>
+        {
+            Slot.Command(160, [2, 5]),
+            Slot.Command(161),
+            Slot.Command(180, [10])
+        });
+        vm.RegisterProgram(prep);
+        vm.CreateInstance(123);
+        vm.StepFrame();
+        if (!vm.TransitionPrepared || vm.TransitionPhase != 1)
+            throw new Exception("precondition failed: TransitionPrepared should be true");
+        vm.StopAll();
+        if (vm.TransitionPrepared || vm.TransitionPhase != 0 || vm.EnteredInstanceCount != 0)
+            throw new Exception($"StopAll must reset transition state and entered ids: prep={vm.TransitionPrepared} phase={vm.TransitionPhase}");
+    }
+
+    private static void TestMalformedSlotBoundsAndCallStrings()
+    {
+        Console.WriteLine("  Testing malformed slot bounds and 210 strCount clamping...");
+        var callee = Program.FromSlots(124, "Callee", new List<Slot> { Slot.Command(180, [2]) });
+        var malformed = Program.FromSlots(125, "Malformed", new List<Slot>
+        {
+            Slot.Command(121, [2_000_000]), // short params (<4)
+            Slot.Command(111, [3, 2_000_000]), // count=3 with short params
+            Slot.Command(499),
+            Slot.Command(210, [500_124, (10 << 4)], ["", "s0", "s1", "s2", "s3"]),
+            Slot.Command(172)
+        });
+        var vm = new EventVm();
+        vm.RegisterProgram(callee);
+        vm.RegisterProgram(malformed);
+        vm.CreateInstance(125);
+        vm.StepFrame();
+        if (vm.Instances.Count < 1)
+            throw new Exception("210 should spawn callee without throwing on strCount=10");
+        var child = vm.Instances.Find(i => i.EventId == 124)!;
+        for (int k = 0; k < 4; k++)
+        {
+            if (child.Self.GetStr(Magic.SelfArgBase + 5 + k) == null)
+                throw new Exception("child self string slot must never be null");
+        }
+    }
+
+    private sealed class StubVmSession : IVmSession
+    {
+        public EventVm Vm { get; } = new();
+        public MapRuntime? Map { get; set; }
+        public int LeaderX { get; set; }
+        public int LeaderY { get; set; }
+        public int LeaderFacing { get; set; } = 2;
+        public uint MovementDeny => Vm.MovementDeny;
+        public uint BasicAllDeny => Vm.BasicAllDeny;
+        public string MapPath(int mapId) => "";
+        public bool ActionKeyRequested { get; set; }
+        public bool Faulted => Vm.Faulted;
+        public string FaultReason => Vm.FaultReason ?? "";
+        public int ResetSessionCalls { get; private set; }
+        public GameDatabase? Db { get; set; }
+        public void StepFrame() => Vm.StepFrame();
+        public void StartReservedEvent() { }
+        public void StopAll() => Vm.StopAll();
+        public void ResetDiagnostics() => Vm.ResetDiagnostics();
+        public void ResetSessionState()
+        {
+            ResetSessionCalls++;
+            Vm.Vars.Clear();
+            Vm.ResetInputPermissions();
+            Db?.ClearOverlays();
+        }
+        public void ReturnToTitle() { }
+        public bool IsWaitingForChoice() => false;
+        public bool IsWaitingForMessage() => false;
+        public string[] GetCurrentChoices() => Array.Empty<string>();
+        public void SelectChoice(int index) { }
+        public void CancelChoice() { }
+        public void DismissMessage() { }
+        public void RestoreDialogue(string? message, string[] choices, bool allowCancel = true) { }
+        public DbValue? Database(DbOp op) => Db?.Execute(op);
+        public void ApplySavedCells(IReadOnlyList<LegacySaveImporter.DatabaseCell> cells) { }
+        public Func<SaveOp, int?>? SaveLoadHandler { get; set; }
+    }
+
+    private sealed class StubSessionView : IGameSessionView
+    {
+        public void SetStatus(string text) { }
+        public void SetMapHud(int leaderX, int leaderY, string text) { }
+        public void ShowMap(MapDefinition map, MapRuntime runtime, int leaderX, int leaderY) { }
+        public void ShowMessage(string text, int face) { }
+        public void HideMessage() { }
+        public void ShowChoices(string[] options, int selected) { }
+        public void HideChoices() { }
+        public void ClearPictures() { }
+        public void RestorePictures(IReadOnlyList<SavedPicture> pictures) { }
+        public IReadOnlyList<SavedPicture> SnapshotPictures() => Array.Empty<SavedPicture>();
+        public void RestoreAudio(IReadOnlyList<SavedAudio> audio) { }
+        public IReadOnlyList<SavedAudio> SnapshotAudio() => Array.Empty<SavedAudio>();
+        public bool HasMessage => false;
+        public string MessageText => "";
+    }
+
+    private static void TestGameSessionRestoreAndReset()
+    {
+        Console.WriteLine("  Testing GameSession RestoreInstances (IsParallel/RetainAfterFinish) and StartTitle ResetSessionState...");
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"lwsmf_session_unit_{Guid.NewGuid():N}");
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string progJson = """
+            {
+              "common_events": [
+                { "id": 50, "title": "NormalCe", "slots": [{ "op": 180, "params": [10] }, { "op": 172 }] },
+                { "id": 51, "title": "ChildCe", "slots": [{ "op": 180, "params": [10] }, { "op": 172 }] },
+                { "id": 52, "title": "ParallelCe", "run_condition_op_var_val": [2, 2, 2000000, 1], "slots": [{ "op": 180, "params": [10] }, { "op": 172 }] }
+              ],
+              "maps": [
+                { "id": 1, "file": "TitleMap.mps", "name": "Title", "width": 5, "height": 5, "events": [
+                  { "id": 2, "page": 0, "trigger": 1, "stats": { "real_instructions": 1 }, "slots": [{ "op": 180, "params": [10] }] }
+                ]},
+                { "id": 10, "file": "SampleMapA.mps", "name": "Room", "width": 5, "height": 5, "events": [
+                  { "id": 4, "page": 0, "trigger": 2, "stats": { "real_instructions": 1 }, "slots": [{ "op": 180, "params": [10] }] }
+                ]}
+              ]
+            }
+            """;
+            string progPath = System.IO.Path.Combine(tmpDir, "programs.json");
+            System.IO.File.WriteAllText(progPath, progJson);
+            string savePath = System.IO.Path.Combine(tmpDir, "save_01.json");
+
+            var stubVm = new StubVmSession();
+            foreach (var p in ProgramLoader.LoadCommonEvents(progPath).Values) stubVm.Vm.RegisterProgram(p);
+            var session = new GameSession(stubVm, new StubSessionView(), progPath, savePath);
+
+            stubVm.Vm.Vars.Set(12, 99);
+            if (!session.StartTitle())
+                throw new Exception("StartTitle failed on synthetic programs.json");
+            if (stubVm.ResetSessionCalls != 1 || stubVm.Vm.Vars.Get(12) != 0)
+                throw new Exception($"StartTitle must call ResetSessionState and clear vars (calls={stubVm.ResetSessionCalls}, v12={stubVm.Vm.Vars.Get(12)})");
+
+            // Load a slot containing:
+            // - map instance (kind="map", page=0) -> RetainAfterFinish must be true
+            // - parallel CE with explicit is_parallel=true
+            // - legacy CE child (is_parallel=null) whose parent is a parallel map event -> inferred IsParallel=true
+            var state = new SaveState
+            {
+                MapId = 10,
+                MapFile = "SampleMapA.mps",
+                LeaderX = 1,
+                LeaderY = 1,
+                MapEvents =
+                {
+                    new SavedMapEvent { Id = 4, Active = 0, InstanceId = 10, Runs = true, Starts = 1, StartsOnPage = 1 }
+                },
+                Instances =
+                {
+                    new SavedInstance { Id = 10, EventId = 4, Kind = "map", Page = 0, Pc = 0, IsParallel = true },
+                    new SavedInstance { Id = 11, ParentId = 10, EventId = 51, Kind = "ce", Pc = 0, IsParallel = null },
+                    new SavedInstance { Id = 12, EventId = 50, Kind = "ce", Pc = 0, IsParallel = true },
+                    new SavedInstance { Id = 13, EventId = 50, Kind = "ce", Pc = 0, IsParallel = false }
+                }
+            };
+            SaveCodec.Write(savePath, state);
+            if (!session.LoadGame())
+                throw new Exception("GameSession.LoadGame failed on synthetic save");
+
+            var mapInst = stubVm.Vm.FindInstance(10);
+            var legacyChild = stubVm.Vm.FindInstance(11);
+            var explicitParallel = stubVm.Vm.FindInstance(12);
+            var explicitFg = stubVm.Vm.FindInstance(13);
+            if (mapInst == null || !mapInst.RetainAfterFinish || !mapInst.IsParallel)
+                throw new Exception($"restored map instance must have RetainAfterFinish=true and IsParallel=true");
+            if (legacyChild == null || !legacyChild.IsParallel)
+                throw new Exception("legacy saved CE child under parallel parent must infer IsParallel=true");
+            if (explicitParallel == null || !explicitParallel.IsParallel)
+                throw new Exception("saved IsParallel=true must round-trip on CE");
+            if (explicitFg == null || explicitFg.IsParallel)
+                throw new Exception("saved IsParallel=false must stay false on CE");
+
+            SaveState? rebuilt = session.BuildSaveState();
+            var rebuilt12 = rebuilt?.Instances.Find(i => i.Id == 12);
+            if (rebuilt12?.IsParallel != true)
+                throw new Exception("BuildSaveState must persist IsParallel");
+        }
+        finally
+        {
+            ProgramLoader.ClearCache();
+            try { System.IO.Directory.Delete(tmpDir, true); } catch (System.IO.IOException) { }
+        }
     }
 }

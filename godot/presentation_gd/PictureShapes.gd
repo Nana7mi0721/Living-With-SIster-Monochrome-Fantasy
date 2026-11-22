@@ -4,8 +4,10 @@ extends RefCounted
 
 const SYSGRAPHIC_MAX_SIDE := 4096
 const SYSGRAPHIC_MAX_PIXELS := 2097152
+const SYSGRAPHIC_CACHE_MAX := 128
 
 var _sysgraphic_cache: Dictionary = {}  # "KEY|w|h" -> Texture2D
+var _sysgraphic_lru: Array[String] = []
 
 
 ## Parse WOLF <SQUARE>, <LINE>, <CIRCLE>, <TRI-*>, <GRADX*>, and <GRADY*> tags.
@@ -65,6 +67,8 @@ func sysgraphic_texture(spec: Dictionary, w: int, h: int) -> Texture2D:
 	var cache_h := 1 if (shape == "SQUARE" or shape == "LINE" or shape == "GRADX") else h
 	var cache_key := "%s|%d|%d" % [spec_key, cache_w, cache_h]
 	if _sysgraphic_cache.has(cache_key):
+		_sysgraphic_lru.erase(cache_key)
+		_sysgraphic_lru.append(cache_key)
 		return _sysgraphic_cache[cache_key]
 
 	var buf := PackedByteArray()
@@ -130,6 +134,10 @@ func sysgraphic_texture(spec: Dictionary, w: int, h: int) -> Texture2D:
 	var image := Image.create_from_data(cache_w, cache_h, false, Image.FORMAT_RGBA8, buf)
 	var tex := ImageTexture.create_from_image(image)
 	_sysgraphic_cache[cache_key] = tex
+	_sysgraphic_lru.append(cache_key)
+	while _sysgraphic_lru.size() > SYSGRAPHIC_CACHE_MAX:
+		var oldest: String = _sysgraphic_lru.pop_front()
+		_sysgraphic_cache.erase(oldest)
 	return tex
 
 
@@ -157,6 +165,20 @@ func build_window_node(spec: Dictionary, texture: Texture2D, args: Array, assets
 	var win_tex := texture
 	if win_tex == null and assets != null:
 		win_tex = assets.texture(UiSkin.WINDOW_BASE)
+	var art_scale := 1.0
+	if win_tex != null and win_tex.get_width() >= 27:
+		art_scale = float(win_tex.get_width()) / 18.0
+	if art_scale > 1.01:
+		# A NinePatchRect would draw its patch margins in design pixels, so 2x art
+		# would double the frame thickness. Slice it with separate source/dest corners.
+		var art := Control.new()
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		art.use_parent_material = true
+		art.size = win_size
+		art.set_meta("window_size", win_size)
+		art.draw.connect(func() -> void: UiSkin.nine_patch(art, win_tex, Rect2(Vector2.ZERO, art.size)))
+		art.resized.connect(art.queue_redraw)
+		return art
 	var nine := NinePatchRect.new()
 	nine.texture = win_tex
 	nine.mouse_filter = Control.MOUSE_FILTER_IGNORE

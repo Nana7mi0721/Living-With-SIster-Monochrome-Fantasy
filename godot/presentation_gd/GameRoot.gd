@@ -138,7 +138,7 @@ func _start_game() -> void:
 	# Drain Picture() through TakePicturesJson to avoid cross-language Variant payload churn.
 	vm.QueuePictureSignals = true
 	vm.name = "Vm"
-	vm.SetKeyStateProvider(_key_state)
+	vm.SetKeyStateProvider(self, "_key_state")
 	vm.SetPictureStateProvider(self, "_picture_state")
 	add_child(vm)
 
@@ -154,6 +154,10 @@ func _start_game() -> void:
 	assets.set_save_dir(session.SaveDirectory)
 	_build_overlays()
 	_load_display_settings()
+	if not _is_headless():
+		var win := get_window()
+		if win != null and not win.size_changed.is_connected(_on_window_size_changed):
+			win.size_changed.connect(_on_window_size_changed)
 
 	vm.connect("SoundRequested", _on_sound)
 	vm.connect("MessageOptionsChanged", _on_message_options_changed)
@@ -191,7 +195,9 @@ func _build_overlays() -> void:
 	overlays.fault_export_requested.connect(export_diagnostics)
 	overlays.fault_recover_requested.connect(recover_to_last_save)
 	overlays.fault_restart_requested.connect(restart_after_fault)
-	overlays.fault_modal_closed.connect(func() -> void: _arm_modal_release_guard())
+	overlays.fault_modal_closed.connect(func() -> void:
+		_arm_modal_release_guard()
+		_show_toast("错误弹窗已隐藏，按 Esc 或 F12 重新打开"))
 
 
 func _on_setup_completed() -> void:
@@ -248,18 +254,32 @@ func _consume_picture_queue(queued: String) -> bool:
 	if _batch_opens_system_ui(batch) and not _system_ui_visible():
 		_clean_scene_image = _grab_viewport_image()
 	for p in batch:
-		var animate: Array = p.get("animate", [])
+		if not p is Dictionary:
+			continue
+		var entry: Dictionary = p
+		var raw_animate: Variant = entry.get("animate", [])
+		var animate: Array = raw_animate if raw_animate is Array else []
+		var raw_args: Variant = entry.get("args", [])
+		var args: Array = raw_args if raw_args is Array else []
+		var number := int(entry.get("number", 0))
+		var action := int(entry.get("action", 0))
+		var file := str(entry.get("file", ""))
+		var text := str(entry.get("text", ""))
+		var anchor := int(entry.get("anchor", 0))
+		var kind := int(entry.get("kind", -1))
 		var flags := {
-			"scale_mode": int(p.get("scale_mode", 0)),
-			"keep_shift": bool(p.get("keep_shift", false)),
-			"relative": bool(p.get("relative", false)),
-			"has_span": bool(p.get("has_span", false)),
-			"blend": int(p.get("blend", -1)),
+			"scale_mode": int(entry.get("scale_mode", 0)),
+			"keep_shift": bool(entry.get("keep_shift", false)),
+			"relative": bool(entry.get("relative", false)),
+			"has_span": bool(entry.get("has_span", false)),
+			"blend": int(entry.get("blend", -1)),
 		}
 		if vm.TrackPicturesOnly:
-			stage.track_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]), animate, flags)
+			stage.track_picture(number, action, file, text, args, anchor, kind, animate, flags)
 		else:
-			stage.draw_picture(int(p["number"]), int(p["action"]), str(p["file"]), str(p["text"]), p["args"], int(p["anchor"]), int(p["kind"]), animate, flags)
+			stage.draw_picture(number, action, file, text, args, anchor, kind, animate, flags)
+	if _clean_scene_image != null and not _system_ui_visible():
+		_clean_scene_image = null
 	return true
 
 
@@ -340,6 +360,8 @@ func advance_frame() -> void:
 	stage.tick_screen_tint()
 	_sync_screen_tint()
 	_tick_transition()
+	if _clean_scene_image != null and not _system_ui_visible():
+		_clean_scene_image = null
 	_sync_master_audio_volumes()
 	frames = session.Frames
 	phase = session.Phase
@@ -617,11 +639,8 @@ func _on_transition(kind: int, flags: int) -> void:
 	if phase_mode == 1:
 		# 161 PrepareTransition: freeze current scene so 162 can crossfade without dipping to black.
 		_clear_transition_overlays()
-		var vp := get_viewport()
-		var img: Image = null
-		if vp != null and vp.get_texture() != null:
-			img = vp.get_texture().get_image()
-		if img != null and img.get_width() > 0 and img.get_height() > 0:
+		var img := _grab_viewport_image()
+		if img != null and img.get_width() > 0 and img.get_height() > 0 and _transition_freeze_rect != null:
 			_transition_freeze_rect.texture = ImageTexture.create_from_image(img)
 			_transition_freeze_rect.modulate = Color.WHITE
 			_transition_freeze_rect.visible = true
@@ -636,39 +655,49 @@ func _on_transition(kind: int, flags: int) -> void:
 	_transition_elapsed = 0
 	if phase_mode == 2:
 		_transition_mode = 1
-		if _transition_freeze_active and _transition_freeze_rect.texture != null:
+		if _transition_freeze_active and _transition_freeze_rect != null and _transition_freeze_rect.texture != null:
 			_transition_freeze_rect.visible = true
 			_transition_freeze_rect.modulate.a = 1.0
-			_transition_rect.visible = false
-		else:
+			if _transition_rect != null:
+				_transition_rect.visible = false
+		elif _transition_rect != null:
 			_transition_rect.visible = true
 			_transition_rect.color.a = 1.0
 	else:
 		_transition_freeze_active = false
-		_transition_freeze_rect.visible = false
-		_transition_freeze_rect.texture = null
+		if _transition_freeze_rect != null:
+			_transition_freeze_rect.visible = false
+			_transition_freeze_rect.texture = null
 		_transition_mode = 0
-		_transition_rect.visible = true
-		_transition_rect.color.a = 0.0
+		if _transition_rect != null:
+			_transition_rect.visible = true
+			_transition_rect.color.a = 0.0
 	status("transition kind=%d flags=%d (fade %d frames)" % [kind, flags, _transition_frames])
 
 
 ## Mode 0: black triangle wave 0 -> 1 -> 0; Mode 1: crossfade/fadeout 1 -> 0.
 func _tick_transition() -> void:
 	if _transition_frames <= 0:
+		if _transition_freeze_active:
+			var idle := vm == null or not vm.IsRunning()
+			if not idle and vm.has_method("IsForegroundBusy") and not bool(vm.call("IsForegroundBusy")):
+				idle = true
+			if idle:
+				_clear_transition_overlays()
+		return
+	_transition_elapsed += 1
+	if _transition_elapsed >= _transition_frames:
+		_clear_transition_overlays()
 		return
 	var t := clampf(float(_transition_elapsed) / float(_transition_frames), 0.0, 1.0)
 	if _transition_mode == 1:
 		var alpha := 1.0 - t
-		if _transition_freeze_active:
+		if _transition_freeze_active and _transition_freeze_rect != null:
 			_transition_freeze_rect.modulate.a = alpha
-		else:
+		elif _transition_rect != null:
 			_transition_rect.color.a = alpha
-	else:
+	elif _transition_rect != null:
 		_transition_rect.color.a = 1.0 - absf(2.0 * t - 1.0)
-	_transition_elapsed += 1
-	if _transition_elapsed > _transition_frames:
-		_clear_transition_overlays()
 
 
 func _on_effect(kind: int, duration: int, args: Array) -> void:
@@ -700,6 +729,10 @@ func _on_pro_feature(kind: int, _milliseconds: int, path: String) -> void:
 				return
 			if image.get_width() != 1024 or image.get_height() != 576:
 				image.resize(1024, 576, Image.INTERPOLATE_BILINEAR)
+			var dir_error := DirAccess.make_dir_recursive_absolute(directory)
+			if dir_error != OK:
+				status("save thumbnail failed: %s" % error_string(dir_error))
+				return
 			var save_error := image.save_jpg(target, 0.90)
 			if save_error != OK:
 				status("save thumbnail failed: %s" % error_string(save_error))
@@ -813,7 +846,8 @@ func _on_color_change(color: int, frames: int) -> void:
 
 ## Opcode 151 is a stage-wide multiply overlay; the map must not apply it a second time.
 func _sync_screen_tint() -> void:
-	map_view.modulate = Color.WHITE
+	if map_view != null:
+		map_view.modulate = Color.WHITE
 
 
 # ---- session view callbacks ----------------------------------------------
@@ -838,6 +872,7 @@ func _on_session_hud(x: int, y: int, text: String) -> void:
 
 
 func _on_session_map(map_id: int, leader_x: int, leader_y: int) -> void:
+	_clear_transition_overlays()
 	_active_speaker = ""
 	_active_msg_pos_mode = _WolfConst.MSG_POS_BOTTOM
 	if message != null:
@@ -889,7 +924,9 @@ func _on_load_completed() -> void:
 func _on_clear_pictures() -> void:
 	if vm != null:
 		vm.TakePicturesJson()
-	stage.clear_pictures()
+	_clean_scene_image = null
+	if stage != null:
+		stage.clear_pictures()
 
 
 func _on_restore_pictures(json: String) -> void:
@@ -940,7 +977,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		cycle_scaling_mode()
 		get_viewport().set_input_as_handled()
 		return
-	if faulted or phase == "setup" or phase == "bootstrap":
+	if faulted:
+		if (key.keycode == KEY_ESCAPE or key.keycode == KEY_F12) and overlays != null and not overlays.fault_modal_visible():
+			overlays.show_fault_modal(_failure_reason(), session != null and session.HasSave)
+			get_viewport().set_input_as_handled()
+		return
+	if phase == "setup" or phase == "bootstrap":
 		return
 	if key.keycode == KEY_F2:
 		if overlays != null:
@@ -974,15 +1016,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		request_return_to_title()
 		get_viewport().set_input_as_handled()
 		return
-	if backlog_open():
-		if key.keycode == KEY_PAGEUP:
-			overlays.scroll_backlog_page(-1)
-			get_viewport().set_input_as_handled()
-			return
-		if key.keycode == KEY_PAGEDOWN:
-			overlays.scroll_backlog_page(1)
-			get_viewport().set_input_as_handled()
-			return
 	if key.keycode == KEY_ESCAPE and _modal_window_open():
 		if backlog_open():
 			close_backlog()
@@ -1098,16 +1131,39 @@ func _apply_scaling_mode() -> void:
 	var win := get_window()
 	if win == null:
 		return
+	var base: Vector2i = win.content_scale_size
+	if base.x <= 0 or base.y <= 0:
+		base = Vector2i(1024, 576)
+	var integer_fit := integer_scale_fits(win.size, base)
 	match _scale_mode_idx:
 		0:  # Integer
-			win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
-			win.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+			if integer_fit:
+				win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
+				win.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+			else:
+				# Below 2x the integer floor collapses to 1x and shrinks the picture into a
+				# corner of an oversized window; fitting beats pixel-perfect there.
+				win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
+				win.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR
 		1:  # Fit-Nearest
 			win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
 			win.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 		_:  # Fit-Linear
 			win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
 			win.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR
+
+
+## Integer stretch is only meaningful when both axes reach at least 2x; anything
+## under 2x would floor to a 1x picture surrounded by letterboxing.
+static func integer_scale_fits(window_size: Vector2i, base_size: Vector2i) -> bool:
+	if base_size.x <= 0 or base_size.y <= 0:
+		return false
+	var fit := minf(float(window_size.x) / float(base_size.x), float(window_size.y) / float(base_size.y))
+	return fit >= 2.0
+
+
+func _on_window_size_changed() -> void:
+	_apply_scaling_mode()
 
 
 func _save_display_settings() -> void:
@@ -1134,6 +1190,8 @@ func _load_display_settings() -> void:
 		return
 	_scale_mode_idx = clampi(int(cfg.get_value("display", "scale_mode", _scale_mode_idx)), 0, SCALE_MODES.size() - 1)
 	_apply_scaling_mode()
+	if assets != null:
+		assets.set_hd_enabled(bool(cfg.get_value("display", "hd_textures", true)))
 	var w := int(cfg.get_value("display", "window_width", 0))
 	var h := int(cfg.get_value("display", "window_height", 0))
 	var want_fs := bool(cfg.get_value("display", "fullscreen", false))
@@ -1350,10 +1408,12 @@ func report_fault(reason: String) -> void:
 	faulted = true
 	phase = "faulted"
 	_clear_transition_overlays()
-	choice.close()
-	message.close()
+	if choice != null:
+		choice.close()
+	if message != null:
+		message.close()
 	if overlays != null:
-		overlays.show_fault_modal(reason, session.HasSave)
+		overlays.show_fault_modal(reason, session != null and session.HasSave)
 	status("FAULT: %s" % reason)
 	push_error("GameRoot faulted: %s" % reason)
 
@@ -1391,11 +1451,11 @@ func export_diagnostics() -> String:
 	lines.append("time=%s" % Time.get_datetime_string_from_system())
 	lines.append("frames=%d" % frames)
 	lines.append("phase=%s" % phase)
-	lines.append("reason=%s" % vm.FaultReason)
-	lines.append("running=%s" % str(vm.IsRunning()))
-	lines.append("waiting_message=%s" % str(vm.IsWaitingForMessage()))
-	lines.append("waiting_choice=%s" % str(vm.IsWaitingForChoice()))
-	lines.append("leader=%d,%d facing=%d" % [vm.LeaderX, vm.LeaderY, vm.LeaderFacing])
+	lines.append("reason=%s" % (vm.FaultReason if vm != null else ""))
+	lines.append("running=%s" % str(vm.IsRunning() if vm != null else false))
+	lines.append("waiting_message=%s" % str(vm.IsWaitingForMessage() if vm != null else false))
+	lines.append("waiting_choice=%s" % str(vm.IsWaitingForChoice() if vm != null else false))
+	lines.append("leader=%d,%d facing=%d" % [vm.LeaderX if vm != null else 0, vm.LeaderY if vm != null else 0, vm.LeaderFacing if vm != null else 0])
 	return overlays.export_diagnostics(lines)
 
 

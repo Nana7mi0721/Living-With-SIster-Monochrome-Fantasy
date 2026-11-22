@@ -138,6 +138,9 @@ public partial class VmController : Node, IHost, IVmSession
     /// <summary>Opcode 250 store loaded from game_data/database.json.</summary>
     public GameDatabase? DatabaseStore { get; private set; }
 
+    /// <summary>Last human-readable load failure on this bridge.</summary>
+    public string LastError { get; private set; } = "";
+
     public override void _Ready()
     {
         Vm.Host = this;
@@ -145,35 +148,48 @@ public partial class VmController : Node, IHost, IVmSession
 
     public bool LoadPrograms(string? path = null)
     {
-        if (string.IsNullOrEmpty(path))
+        LastError = "";
+        try
         {
-            string rootDir = AppPaths.PackageRoot();
-            path = Path.GetFullPath(Path.Combine(rootDir, "game_data", "programs.json"));
-        }
+            if (string.IsNullOrEmpty(path))
+            {
+                string rootDir = AppPaths.PackageRoot();
+                path = Path.GetFullPath(Path.Combine(rootDir, "game_data", "programs.json"));
+            }
 
-        if (!File.Exists(path))
+            if (!File.Exists(path))
+            {
+                LastError = $"programs.json not found at: {path}";
+                GD.PrintErr($"[VmController] {LastError}");
+                return false;
+            }
+
+            var programs = ProgramLoader.LoadCommonEvents(path);
+            foreach (var prog in programs.Values)
+            {
+                Vm.RegisterProgram(prog);
+            }
+            GD.Print($"[VmController] Loaded {programs.Count} common event programs.");
+
+            string dataDir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".";
+            string projectRoot = AppPaths.PackageRoot();
+            string basicDir = Path.GetFullPath(Path.Combine(projectRoot, "work", "all", "BasicData"));
+            string databasePath = Path.Combine(dataDir, "database.json");
+            DatabaseStore = GameDatabase.Load(databasePath, basicDir);
+            if (DatabaseStore == null)
+                GD.PrintErr($"[VmController] database.json not found at: {databasePath}");
+            else
+                GD.Print($"[VmController] Loaded database from {DatabaseStore.SourcePath}.");
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException
+                                   or ArgumentException or NotSupportedException or FormatException or InvalidOperationException)
         {
-            GD.PrintErr($"[VmController] programs.json not found at: {path}");
+            LastError = ex.Message;
+            DatabaseStore = null;
+            GD.PrintErr($"[VmController] Failed to load programs from '{path}': {ex.Message}");
             return false;
         }
-
-        var programs = ProgramLoader.LoadCommonEvents(path);
-        foreach (var prog in programs.Values)
-        {
-            Vm.RegisterProgram(prog);
-        }
-        GD.Print($"[VmController] Loaded {programs.Count} common event programs.");
-
-        string dataDir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".";
-        string projectRoot = AppPaths.PackageRoot();
-        string basicDir = Path.GetFullPath(Path.Combine(projectRoot, "work", "all", "BasicData"));
-        string databasePath = Path.Combine(dataDir, "database.json");
-        DatabaseStore = GameDatabase.Load(databasePath, basicDir);
-        if (DatabaseStore == null)
-            GD.PrintErr($"[VmController] database.json not found at: {databasePath}");
-        else
-            GD.Print($"[VmController] Loaded database from {DatabaseStore.SourcePath}.");
-        return true;
     }
 
     public Instance? StartCommonEvent(int eventId)
@@ -353,19 +369,33 @@ public partial class VmController : Node, IHost, IVmSession
 
     public bool IsWaitingForChoice()
     {
-        if (!_isWaitingChoice) return false;
-        if (HasWaitingInstance(WaitStateKind.Choice)) return true;
-        _isWaitingChoice = false;
-        _pendingChoiceReply = null;
-        return false;
+        if (!HasWaitingInstance(WaitStateKind.Choice))
+        {
+            _isWaitingChoice = false;
+            _pendingChoiceReply = null;
+            _currentChoices = Array.Empty<string>();
+            if (!HasWaitingInstance(WaitStateKind.Message))
+            {
+                MessageKeptForChoice = false;
+            }
+            return false;
+        }
+        return _isWaitingChoice;
     }
 
     public bool IsWaitingForMessage()
     {
-        if (!_isWaitingMessage) return false;
-        if (HasWaitingInstance(WaitStateKind.Message)) return true;
-        _isWaitingMessage = false;
-        return false;
+        if (!HasWaitingInstance(WaitStateKind.Message))
+        {
+            _isWaitingMessage = false;
+            _messageDismissed = true;
+            if (!HasWaitingInstance(WaitStateKind.Choice))
+            {
+                MessageKeptForChoice = false;
+            }
+            return false;
+        }
+        return _isWaitingMessage;
     }
     public bool IsRunning() => Vm.Instances.Count > 0;
 
@@ -486,8 +516,10 @@ public partial class VmController : Node, IHost, IVmSession
     /// <summary>Test hook: stop emitting the signal while still tracking picture state.</summary>
     public bool EmitPictureSignals { get; set; } = true;
 
+    private const int PicJsonBuilderInitialCapacity = 4096;
+    private const int PicJsonBuilderMaxCapacity = 64 * 1024;
     private readonly System.Collections.Generic.List<PictureCmd> _pictureQueue = new();
-    private readonly System.Text.StringBuilder _picJsonSb = new(4096);
+    private readonly System.Text.StringBuilder _picJsonSb = new(PicJsonBuilderInitialCapacity);
     private readonly List<int> _pictureKeysToRemove = new();
 
     /// <summary>Queue picture commands as JSON for the presentation layer. Defaults on; set
@@ -546,7 +578,13 @@ public partial class VmController : Node, IHost, IVmSession
         }
         sb.Append(']');
         _pictureQueue.Clear();
-        return sb.ToString();
+        string json = sb.ToString();
+        sb.Clear();
+        if (sb.Capacity > PicJsonBuilderMaxCapacity)
+        {
+            sb.Capacity = PicJsonBuilderInitialCapacity;
+        }
+        return json;
     }
 
     private static void AppendJsonString(System.Text.StringBuilder sb, string? value)
@@ -595,7 +633,7 @@ public partial class VmController : Node, IHost, IVmSession
                         int hi = Math.Max(cmd.Number, endpoint.Value);
                         if ((long)hi - lo <= 256)
                         {
-                            for (int n = lo; n <= hi; n++) _pictures.Remove(n);
+                            for (long n = lo; n <= hi; n++) _pictures.Remove((int)n);
                         }
                         else
                         {
@@ -792,7 +830,8 @@ public partial class VmController : Node, IHost, IVmSession
     /// </summary>
     public int? EngineState(int field)
     {
-        if (field == 7 && _pointerPressFrame) _pointerPressSeen = true;
+        bool firstPressObservation = field == 7 && _pointerPressFrame && !_pointerPressSeen;
+        if (firstPressObservation) _pointerPressSeen = true;
         int? result = field switch
         {
             // game.rs 6898-6900: the static map id and BGM id are 0 and -1.
@@ -810,7 +849,7 @@ public partial class VmController : Node, IHost, IVmSession
             // store a fabricated 0; field 18 in particular falls through to EventVm.
             _ => null,
         };
-        if (field == 7 && _pointerPressFrame) EmitSignal(SignalName.PointerPressObserved);
+        if (firstPressObservation) EmitSignal(SignalName.PointerPressObserved);
         return result;
     }
 
@@ -904,6 +943,7 @@ public partial class VmController : Node, IHost, IVmSession
         _prevPointerY = -1f;
         _pointerDeltaX = 0f;
         _pointerDeltaY = 0f;
+        _wheelDelta = 0;
     }
 
     /// <summary>Turn the latched press into this frame's answer, once per 1/60 s step.</summary>
@@ -916,7 +956,7 @@ public partial class VmController : Node, IHost, IVmSession
             _pointerPressSeen = false;
             _pointerPressTtl = 2;
         }
-        else if (_pointerPressFrame && !_pointerPressSeen && _pointerPressTtl > 0)
+        else if (_pointerPressed && _pointerPressFrame && !_pointerPressSeen && _pointerPressTtl > 0)
         {
             _pointerPressTtl--;
         }
@@ -958,41 +998,44 @@ public partial class VmController : Node, IHost, IVmSession
     {
         if (mask == 771 && wheelNotch != 0) return wheelNotch;
         uint accepted = KeyCodes.AcceptedHostMask(mask);
-        uint filtered = (held & accepted) | (KeyCodes.FromWolfBits(autoKeys) & accepted);
+        uint filtered = held & accepted;
+        // Device polls (((mask >> 8) & 0x0F) != 0, e.g. 771) reject scripted autoKeys;
+        // unmasked poll (mask == 0) accepts all keys.
+        bool acceptsAuto = ((mask >> 8) & 0x0F) == 0 && (mask == 0 || KeyCodes.AcceptsWolfBits(mask, autoKeys));
+        if (acceptsAuto)
+        {
+            filtered |= KeyCodes.FromWolfBits(autoKeys) & accepted;
+        }
         return KeyCodes.Code(filtered & KeyCodes.AllKeys);
     }
 
     // Opcode 123 hands the poll mask plus the bits opcode 125 auto-pressed to the host, and
-    // mask 771 asks for a signed wheel notch rather than a key code. GDScript cannot marshal
-    // Func, so the host side is a Callable taking both numbers.
-    private Callable _keyStateProvider;
-    private bool _hasKeyStateProvider;
+    // mask 771 asks for a signed wheel notch rather than a key code. Stored as target+method
+    // (matching SetPictureStateProvider) so a freed node or lambda binding cannot dangle.
+    private GodotObject? _keyStateTarget;
+    private StringName _keyStateMethod = "";
 
-    public void SetKeyStateProvider(Callable provider)
+    public void SetKeyStateProvider(GodotObject target, StringName method)
     {
-        _keyStateProvider = provider;
-        _hasKeyStateProvider = true;
+        _keyStateTarget = target;
+        _keyStateMethod = method;
     }
 
     public int KeyCodeAuto(uint mask, uint autoKeys)
     {
-        if (_hasKeyStateProvider)
+        if (_keyStateTarget != null && GodotObject.IsInstanceValid(_keyStateTarget))
         {
-            return _keyStateProvider.Call((int)mask, (int)autoKeys).AsInt32();
+            return _keyStateTarget.Call(_keyStateMethod, (long)mask, (long)autoKeys).AsInt32();
         }
         return KeyCodeProvider?.Invoke(mask) ?? 0;
-    }
-
-    // GDScript cannot marshal Func<uint,int>; wrap the Callable here instead.
-    public void SetKeyCodeProvider(Callable provider)
-    {
-        KeyCodeProvider = mask => provider.Call(mask).AsInt32();
     }
 
     /// End every running script; GDScript cannot reach the EventVm property (Vm).
     public void StopAll()
     {
         Vm.StopAll();
+        ResetDialogueState();
+        _pictures.Clear();
         _pictureQueue.Clear();
         _reservedEvents.Clear();
     }
@@ -1050,22 +1093,52 @@ public partial class VmController : Node, IHost, IVmSession
     public bool FileExists(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
-        string norm = path.Replace('\\', '/').Trim();
-        while (norm.StartsWith("./", StringComparison.Ordinal) || norm.StartsWith("../", StringComparison.Ordinal))
+        string raw = path.Replace('\\', '/').Trim();
+        if (raw.IndexOf('\0') >= 0 || raw.StartsWith('/') || raw.Contains(':')) return false;
+        if (Path.IsPathRooted(raw)) return false;
+
+        string[] parts = raw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var segments = new List<string>(parts.Length);
+        foreach (string part in parts)
         {
-            norm = norm.StartsWith("./", StringComparison.Ordinal) ? norm.Substring(2) : norm.Substring(3);
+            if (part == ".") continue;
+            if (part == "..") return false;
+            segments.Add(part);
         }
-        norm = norm.TrimStart('/');
-        if (norm.StartsWith("save/", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(SaveDirectory))
+        if (segments.Count == 0) return false;
+
+        string relPath = Path.Combine(segments.ToArray());
+        if (segments[0].Equals("save", StringComparison.OrdinalIgnoreCase)
+            && segments.Count > 1
+            && !string.IsNullOrEmpty(SaveDirectory))
         {
-            string fileName = Path.GetFileName(norm);
-            if (!string.IsNullOrEmpty(fileName))
-            {
-                if (File.Exists(Path.Combine(SaveDirectory, fileName))) return true;
-                if (File.Exists(Path.Combine(SaveDirectory, "Save", fileName))) return true;
-            }
+            string saveSubRel = Path.Combine(segments.GetRange(1, segments.Count - 1).ToArray());
+            if (ExistsWithinRoot(SaveDirectory, saveSubRel)) return true;
+            if (ExistsWithinRoot(SaveDirectory, relPath)) return true;
         }
+
+        string pkgRoot = AppPaths.PackageRoot();
+        if (!string.IsNullOrEmpty(pkgRoot) && ExistsWithinRoot(pkgRoot, relPath)) return true;
         return false;
+    }
+
+    private static bool ExistsWithinRoot(string rootDir, string relPath)
+    {
+        try
+        {
+            string fullRoot = Path.GetFullPath(rootDir);
+            string fullTarget = Path.GetFullPath(Path.Combine(fullRoot, relPath));
+            string rootWithSep = fullRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+            StringComparison cmp = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            return fullTarget.StartsWith(rootWithSep, cmp) && File.Exists(fullTarget);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 
     public void EventEntered(int eventId, bool isRoot) => EmitSignal(SignalName.ForegroundEventEntered, eventId, isRoot);

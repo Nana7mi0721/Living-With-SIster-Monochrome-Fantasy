@@ -36,13 +36,10 @@ var _status: Label
 var _retry: Button
 
 
-static func needs_bootstrap() -> bool:
-	if not OS.has_feature("android"):
+static func needs_bootstrap(is_android: bool = OS.has_feature("android"), src_root: String = SOURCE_ROOT, dst_root: String = TARGET_ROOT) -> bool:
+	if not is_android:
 		return false
-	var manifest_path := source_manifest_path()
-	if not FileAccess.file_exists(manifest_path):
-		return false
-	return not is_staged()
+	return not is_staged(src_root, dst_root)
 
 
 static func source_manifest_path(root := SOURCE_ROOT) -> String:
@@ -72,6 +69,9 @@ static func is_staged(src_root := SOURCE_ROOT, dst_root := TARGET_ROOT) -> bool:
 	for entry in entries:
 		if not entry is Dictionary:
 			return false
+		var expected_bytes := _entry_expected_bytes(entry)
+		if expected_bytes < 0:
+			return false
 		var logical := str(entry.get("logical", ""))
 		if not _safe_relative(logical):
 			return false
@@ -83,9 +83,19 @@ static func is_staged(src_root := SOURCE_ROOT, dst_root := TARGET_ROOT) -> bool:
 			return false
 		var actual := file.get_length()
 		file.close()
-		if actual != int(entry.get("bytes", actual)):
+		if actual != expected_bytes:
 			return false
 	return true
+
+
+static func _entry_expected_bytes(entry: Dictionary) -> int:
+	if not entry.has("bytes"):
+		return -1
+	var raw: Variant = entry["bytes"]
+	if typeof(raw) != TYPE_INT and typeof(raw) != TYPE_FLOAT:
+		return -1
+	var count := int(raw)
+	return count if count >= 0 else -1
 
 
 static func _read_manifest(root: String) -> Dictionary:
@@ -117,8 +127,32 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	z_index = 200
 	if show_ui:
+		_apply_bootstrap_theme()
 		_build_ui()
 	call_deferred("_begin")
+
+
+## Uses a system CJK fallback directly so UiSkin does not cache the fallback font
+## before media.pak (containing Lolita.ttf) has been extracted.
+func _apply_bootstrap_theme() -> void:
+	var sys := SystemFont.new()
+	sys.font_names = PackedStringArray([
+		"Noto Sans CJK SC",
+		"Noto Sans SC",
+		"Droid Sans Fallback",
+		"MiSans",
+		"PingFang SC",
+		"Microsoft YaHei UI",
+		"Microsoft YaHei",
+		"Source Han Sans SC",
+		"sans-serif",
+	])
+	sys.allow_system_fallback = true
+	sys.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+	sys.hinting = TextServer.HINTING_LIGHT
+	var ui_theme := Theme.new()
+	ui_theme.default_font = sys
+	theme = ui_theme
 
 
 func _build_ui() -> void:
@@ -184,7 +218,16 @@ func _begin() -> void:
 	_entry_index = 0
 	_copied_bytes = 0
 	_total_bytes = 0
+	_part_path = ""
+	_target_path = ""
+	_current_logical = ""
+	_remaining = 0
+	_source = null
+	_dest = null
 	_entries.clear()
+	if not FileAccess.file_exists(source_manifest_path(source_root)):
+		_fail("安装包内缺少游戏数据包清单（%s），请重新安装完整 APK。" % MANIFEST_NAME)
+		return
 	_manifest = _read_manifest(source_root)
 	if _manifest.is_empty():
 		_fail("安装包内缺少可读取的 %s。" % MANIFEST_NAME)
@@ -196,6 +239,9 @@ func _begin() -> void:
 	for entry in entries:
 		if not entry is Dictionary:
 			_fail("mobile_data 清单格式错误。")
+			return
+		if _entry_expected_bytes(entry) < 0:
+			_fail("mobile_data 清单缺少有效的文件大小。")
 			return
 		var logical := str(entry.get("logical", ""))
 		var staged := str(entry.get("staged", ""))
@@ -235,6 +281,7 @@ func _open_next() -> void:
 			ProjectSettings.globalize_path(_target_path.get_base_dir()))
 		if dir_error != OK:
 			_source.close()
+			_source = null
 			_fail("无法创建数据目录：%s" % _target_path.get_base_dir())
 			return
 		_part_path = _target_path + ".part"
@@ -244,6 +291,7 @@ func _open_next() -> void:
 		_dest = FileAccess.open(_part_path, FileAccess.WRITE)
 		if _dest == null:
 			_source.close()
+			_source = null
 			_fail("无法写入数据，可能是存储空间不足。")
 			return
 		_current_logical = logical
@@ -263,7 +311,7 @@ func _process(_delta: float) -> void:
 		if chunk.is_empty():
 			_fail("读取安装包资源失败：%s" % _current_logical)
 			return
-		if not _dest.store_buffer(chunk):
+		if not _dest.store_buffer(chunk) or _dest.get_error() != OK:
 			_fail("写入数据失败，可能是存储空间不足。")
 			return
 		_remaining -= chunk.size()
@@ -302,6 +350,13 @@ func _finish() -> void:
 		_fail("mobile_data 清单缺少 staging_version。")
 		return
 	for entry in _entries:
+		if not entry is Dictionary:
+			_fail("mobile_data 清单格式错误。")
+			return
+		var expected_bytes := _entry_expected_bytes(entry)
+		if expected_bytes < 0:
+			_fail("mobile_data 清单缺少有效的文件大小：%s" % str(entry.get("logical", "")))
+			return
 		var logical := str(entry.get("logical", ""))
 		var path := target_root.path_join(logical)
 		var file := FileAccess.open(path, FileAccess.READ)
@@ -310,28 +365,48 @@ func _finish() -> void:
 			return
 		var actual := file.get_length()
 		file.close()
-		if actual != int(entry.get("bytes", actual)):
+		if actual != expected_bytes:
 			_fail("解压后文件大小不符：%s" % logical)
 			return
 	var manifest_text := FileAccess.get_file_as_string(source_manifest_path(source_root))
-	var manifest_out := FileAccess.open(target_manifest_path(target_root), FileAccess.WRITE)
-	if manifest_out == null:
+	if manifest_text.is_empty() or not _write_text_atomic(target_manifest_path(target_root), manifest_text):
 		_fail("无法写入 mobile_data 清单。")
 		return
-	manifest_out.store_string(manifest_text)
-	manifest_out.close()
-	var marker := FileAccess.open(target_root.path_join(MARKER_NAME), FileAccess.WRITE)
-	if marker == null:
+	if not _write_text_atomic(target_root.path_join(MARKER_NAME), version + "\n"):
 		_fail("无法写入数据版本标记。")
 		return
-	marker.store_string(version + "\n")
-	marker.close()
 	_running = false
 	set_process(false)
 	_set_progress(_total_bytes)
 	if _status != null:
 		_status.text = "数据准备完成，正在进入游戏…"
 	completed.emit(true)
+
+
+static func _write_text_atomic(target_path: String, content: String) -> bool:
+	var dir_err := DirAccess.make_dir_recursive_absolute(
+		ProjectSettings.globalize_path(target_path.get_base_dir()))
+	if dir_err != OK:
+		return false
+	var part_path := target_path + ".part"
+	var part_abs := ProjectSettings.globalize_path(part_path)
+	var target_abs := ProjectSettings.globalize_path(target_path)
+	if FileAccess.file_exists(part_path):
+		DirAccess.remove_absolute(part_abs)
+	var file := FileAccess.open(part_path, FileAccess.WRITE)
+	if file == null:
+		return false
+	var wrote := file.store_string(content) and file.get_error() == OK
+	file.close()
+	if not wrote:
+		DirAccess.remove_absolute(part_abs)
+		return false
+	if FileAccess.file_exists(target_path):
+		DirAccess.remove_absolute(target_abs)
+	if DirAccess.rename_absolute(part_abs, target_abs) != OK:
+		DirAccess.remove_absolute(part_abs)
+		return false
+	return true
 
 
 func _fail(message: String) -> void:

@@ -35,7 +35,6 @@ public sealed class BattleWiring
     private bool? _manualEnable;
     private bool? _manualRoundLoop;
     private bool _autoArm = true;
-    private bool _roundLoop;
     private bool _prevBattleActive;
     private List<int> _schedule = [ActingPartySlot, 3];
     private int _cursor;
@@ -79,7 +78,6 @@ public sealed class BattleWiring
 
     public void SetRoundLoop(bool enabled)
     {
-        _roundLoop = enabled;
         _manualRoundLoop = enabled;
     }
 

@@ -28,8 +28,6 @@ const LAYER_CHOICE_TEXT := 41
 const LAYER_CURSOR := 50
 const SCREEN_TINT_UI_PICTURE_Z := 3
 const HUD_TOP_SLOT_MIN := 6000
-const HUD_TOP_SLOT_MAX := 6251
-const SYSTEM_UI_SLOT_MIN := 12000
 
 const BAND_ORDER: Array[int] = [
 	LAYER_MAP,
@@ -596,16 +594,20 @@ func _base_size_for(number: int, cmd: Dictionary = {}) -> Vector2:
 	if remembered != Vector2.ZERO:
 		return remembered
 	var file := str(cmd.get("file", ""))
-	if not file.is_empty() and assets != null and assets.texture(file) != null:
-		return _texture_cell_size(assets.texture(file), _arg(args, 1, 1), _arg(args, 2, 1))
+	if not file.is_empty() and assets != null:
+		var tex := assets.texture(file)
+		if tex != null:
+			return _texture_cell_size(tex, _arg(args, 1, 1), _arg(args, 2, 1), assets.hd_scale(file))
 	var text := str(cmd.get("text", ""))
 	if not text.is_empty():
 		return _measure_text(text)["size"]
 	return Vector2(420, 140)
 
 
-func _texture_cell_size(texture: Texture2D, columns: int, rows: int) -> Vector2:
-	return _texture_cell_size_from(texture.get_size(), columns, rows)
+## Cells are cut in texture pixels but drawn in design pixels; a 2x art pack
+## therefore has to divide the cell size by its scale factor.
+func _texture_cell_size(texture: Texture2D, columns: int, rows: int, scale: float = 1.0) -> Vector2:
+	return _texture_cell_size_from(texture.get_size(), columns, rows) / maxf(scale, 1.0)
 
 
 func _cell_region(full: Vector2, columns: int, rows: int, pattern_cell: int) -> Rect2:
@@ -698,7 +700,7 @@ func _hit_rect(number: int) -> Rect2:
 	var position := _anchored_position(anchor, x, y, size, scale_percent, scale_y_percent)
 	var zoom: Variant = state.get("zoom", null)
 	if zoom != null:
-		var k := _PictureEffects.zoom_percent(zoom) / 100.0
+		var k := maxf(0.0, _PictureEffects.zoom_percent(zoom) / 100.0)
 		var centre_raw: Array = zoom.get("centre", [0, 0])
 		var centre := Vector2(float(centre_raw[0]), float(centre_raw[1]))
 		position = centre + (position - centre) * k
@@ -706,7 +708,7 @@ func _hit_rect(number: int) -> Rect2:
 	var breath: Variant = state.get("breath", null)
 	if breath != null:
 		var growth := _PictureEffects.breath_growth(breath)
-		var next_size := size * Vector2(1.0 + growth.x / 100.0, 1.0 + growth.y / 100.0)
+		var next_size := size * Vector2(maxf(0.0, 1.0 + growth.x / 100.0), maxf(0.0, 1.0 + growth.y / 100.0))
 		position -= (next_size - size) * 0.5
 		size = next_size
 	position += _PictureEffects.effect_offset(state)
@@ -782,7 +784,8 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 	elif texture != null:
 		var columns := maxi(1, _arg(args, 1, 1))
 		var rows := maxi(1, _arg(args, 2, 1))
-		size = _texture_cell_size(texture, columns, rows)
+		var art_scale := assets.hd_scale(file) if assets != null else 1.0
+		size = _texture_cell_size(texture, columns, rows, art_scale)
 		var shown := texture
 		if columns > 1 or rows > 1:
 			var atlas := AtlasTexture.new()
@@ -985,10 +988,13 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 	var state := _new_state(args, anchor, base, flags, raster_window)
 	if not prev.is_empty():
 		var prev_cur: Dictionary = prev.get("current", {})
+		var independent_scale := int(flags.get("scale_mode", 0)) == 3
 		for entry in [[4, "opacity"], [5, "x"], [6, "y"], [7, "scale"], [16, "scale_y"]]:
 			var index: int = entry[0]
 			var key: String = entry[1]
-			if (index < args.size() and int(args[index]) == UNCHANGED) or (index == 16 and args.size() > 7 and int(args[7]) == UNCHANGED):
+			var is_unchanged := index < args.size() and int(args[index]) == UNCHANGED
+			var inherit_scale_y := index == 16 and not independent_scale and args.size() > 7 and int(args[7]) == UNCHANGED
+			if is_unchanged or inherit_scale_y:
 				state["target"][key] = prev_cur.get(key, state["target"][key])
 		if bool(flags.get("relative", false)):
 			_apply_relative_pose(state["target"], prev_cur, args)
@@ -1257,14 +1263,14 @@ func _render_picture(number: int) -> void:
 	var zoom: Variant = state.get("zoom", null)
 	if zoom != null:
 		var z: Dictionary = zoom
-		var k := _PictureEffects.zoom_percent(z) / 100.0
+		var k := maxf(0.0, _PictureEffects.zoom_percent(z) / 100.0)
 		var centre := Vector2(float(z.get("centre", [0, 0])[0]), float(z.get("centre", [0, 0])[1]))
 		position = centre + (position - centre) * k
 		size *= k
 	var breath: Variant = state.get("breath", null)
 	if breath != null:
 		var growth := _PictureEffects.breath_growth(breath)
-		var next_size := size * Vector2(1.0 + growth.x / 100.0, 1.0 + growth.y / 100.0)
+		var next_size := size * Vector2(maxf(0.0, 1.0 + growth.x / 100.0), maxf(0.0, 1.0 + growth.y / 100.0))
 		position -= (next_size - size) * 0.5
 		size = next_size
 	position += _PictureEffects.effect_offset(state)
@@ -1341,8 +1347,9 @@ func dump_pictures(write_file: bool = true) -> String:
 			var text_preview := str(cmd.get("text", "")).replace("\n", " ")
 			file_label = "<text:%s>" % (text_preview.left(24) + ("..." if text_preview.length() > 24 else ""))
 		var kind := int(cmd.get("kind", -1))
-		var anchor := int(st.get("anchor", cmd.get("anchor", 0)))
-		var blend := int(st.get("blend", 0))
+		var cur: Dictionary = st.get("current", {}) if st.get("current", null) is Dictionary else {}
+		var anchor := int(cur.get("anchor", cmd.get("anchor", 0)))
+		var blend := int(cur.get("blend", 0))
 		var tone_arr: Array = st.get("tone", [100, 100, 100]) if st.get("tone", null) is Array else [100, 100, 100]
 		var corr_arr: Array = st.get("color_corr", [0, 0, 0]) if st.get("color_corr", null) is Array else [0, 0, 0]
 		var tone_s := "%d,%d,%d" % [
@@ -1355,7 +1362,6 @@ func dump_pictures(write_file: bool = true) -> String:
 			int(corr_arr[1]) if corr_arr.size() > 1 else 0,
 			int(corr_arr[2]) if corr_arr.size() > 2 else 0,
 		]
-		var cur: Dictionary = st.get("current", {}) if st.get("current", null) is Dictionary else {}
 		var opacity := int(cur.get("opacity", st.get("opacity", 255)))
 		var rect := Rect2()
 		var node: Variant = _pictures.get(number, null)
@@ -1406,6 +1412,38 @@ func picture_snapshots() -> Array:
 			continue
 		var cmd: Dictionary = _cmds[number].duplicate(true)
 		cmd["number"] = number
+		if not st.is_empty():
+			var tone: Array = (st.get("tone", [100, 100, 100]) as Array).duplicate()
+			cmd["tone"] = tone
+			if not bool(st.get("zero_tone_hidden", false)):
+				var args: Array = cmd.get("args", [])
+				var has_tone_flag := (_arg(args, 10, 0) & _WolfConst.PIC_FLAG_TONE_MASK) != 0
+				if has_tone_flag or tone != [100, 100, 100]:
+					while args.size() <= 15:
+						args.append(100 if args.size() >= 13 else 0)
+					args[10] = int(args[10]) | _WolfConst.PIC_FLAG_TONE_MASK
+					args[13] = int(tone[0]) if tone.size() > 0 else 100
+					args[14] = int(tone[1]) if tone.size() > 1 else 100
+					args[15] = int(tone[2]) if tone.size() > 2 else 100
+					cmd["args"] = args
+			var fx_state := {}
+			var corr: Array = st.get("color_corr", [0, 0, 0])
+			if corr != [0, 0, 0]:
+				fx_state["color_corr"] = corr.duplicate()
+			var shift: Array = st.get("shift", [0, 0])
+			if shift != [0, 0]:
+				fx_state["shift"] = shift.duplicate()
+			for fx_key in ["shake", "zoom", "breath", "pattern"]:
+				if st.get(fx_key, null) is Dictionary:
+					fx_state[fx_key] = (st[fx_key] as Dictionary).duplicate(true)
+			var persistent_effects: Array = []
+			for eff in st.get("effects", []):
+				if eff is Dictionary and int(eff.get("kind", 0)) == 5:
+					persistent_effects.append((eff as Dictionary).duplicate(true))
+			if not persistent_effects.is_empty():
+				fx_state["effects"] = persistent_effects
+			if not fx_state.is_empty():
+				cmd["effects_290"] = fx_state
 		out.append(cmd)
 	return out
 
@@ -1417,7 +1455,40 @@ func restore_pictures(entries: Array) -> void:
 		if not entry is Dictionary:
 			continue
 		var cmd: Dictionary = entry
+		var number := int(cmd.get("number", 0))
+		var restored_args: Array = (cmd.get("args", []) as Array).duplicate()
+		if restored_args.size() > 0:
+			restored_args[0] = 0
 		var restored_flags: Dictionary = cmd.get("flags", {}) if cmd.get("flags", null) is Dictionary else {}
-		draw_picture(int(cmd.get("number", 0)), 0, str(cmd.get("file", "")),
-			str(cmd.get("text", "")), cmd.get("args", []), int(cmd.get("anchor", 0)), int(cmd.get("kind", -1)),
+		draw_picture(number, 0, str(cmd.get("file", "")),
+			str(cmd.get("text", "")), restored_args, int(cmd.get("anchor", 0)), int(cmd.get("kind", -1)),
 			cmd.get("animate", []), restored_flags)
+		if _states.has(number):
+			var st: Dictionary = _states[number]
+			var changed := false
+			var snap_tone = cmd.get("tone", null)
+			if snap_tone is Array and (snap_tone as Array).size() >= 3 and not bool(st.get("zero_tone_hidden", false)):
+				st["tone"] = [int(snap_tone[0]), int(snap_tone[1]), int(snap_tone[2])]
+				changed = true
+			var fx_state = cmd.get("effects_290", null)
+			if fx_state is Dictionary:
+				var fxd: Dictionary = fx_state
+				if fxd.get("color_corr", null) is Array:
+					st["color_corr"] = (fxd["color_corr"] as Array).duplicate()
+					if bool(st.get("zero_tone_hidden", false)):
+						var cc: Array = st["color_corr"]
+						st["hidden"] = (int(cc[0]) <= 0 and int(cc[1]) <= 0 and int(cc[2]) <= 0)
+					changed = true
+				if fxd.get("shift", null) is Array:
+					st["shift"] = (fxd["shift"] as Array).duplicate()
+					changed = true
+				for fx_key in ["shake", "zoom", "breath", "pattern"]:
+					if fxd.get(fx_key, null) is Dictionary:
+						st[fx_key] = (fxd[fx_key] as Dictionary).duplicate(true)
+						changed = true
+				if fxd.get("effects", null) is Array:
+					st["effects"] = (fxd["effects"] as Array).duplicate(true)
+					changed = true
+			if changed:
+				_states[number] = st
+				_render_picture(number)

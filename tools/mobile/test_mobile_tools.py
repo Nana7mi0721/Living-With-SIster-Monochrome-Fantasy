@@ -9,6 +9,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 MOBILE_DIR = Path(__file__).resolve().parent
 if str(MOBILE_DIR) not in sys.path:
@@ -37,14 +38,19 @@ def _make_fake_payload(root: Path) -> tuple[Path, Path]:
     return gd, wa
 
 
-def _build_valid_apk(apk_path: Path, staged_dir: Path) -> None:
+def _build_valid_apk(apk_path: Path, staged_dir: Path, skip_entry: str | None = None) -> None:
     with zipfile.ZipFile(apk_path, "w") as zf:
         for p in sorted(staged_dir.rglob("*")):
             if not p.is_file():
                 continue
             rel = p.relative_to(staged_dir).as_posix()
+            entry_name = f"assets/mobile_data/{rel}"
+            if entry_name == skip_entry:
+                continue
             ctype = zipfile.ZIP_STORED if rel.endswith(".blob.cfb") else zipfile.ZIP_DEFLATED
-            zf.writestr(f"assets/mobile_data/{rel}", p.read_bytes(), compress_type=ctype)
+            zf.writestr(entry_name, p.read_bytes(), compress_type=ctype)
+        if skip_entry != "assets/.godot/mono/publish/arm64/Lwsmf.dll":
+            zf.writestr("assets/.godot/mono/publish/arm64/Lwsmf.dll", b"MZ_STUB", compress_type=zipfile.ZIP_DEFLATED)
         zf.writestr("lib/arm64-v8a/libgodot_android.so", b"\x7fELF", compress_type=zipfile.ZIP_DEFLATED)
 
 
@@ -111,6 +117,20 @@ class MobileToolsTest(unittest.TestCase):
                 zf.writestr("assets/mobile_data/work/all/save/save_01.json", b"{}")
             self.assertEqual(android_data.main(["verify-apk", str(bad_apk)]), 1)
 
+            for required_entry in (
+                "assets/mobile_data/game_data/manifest.json.blob",
+                "assets/mobile_data/work/all/BasicData/CDataBase.project.blob",
+                "assets/mobile_data/work/all/BasicData/SysDatabase.project.blob",
+                "assets/.godot/mono/publish/arm64/Lwsmf.dll",
+            ):
+                missing_apk = t / "missing_entry.apk"
+                _build_valid_apk(missing_apk, dest, skip_entry=required_entry)
+                self.assertEqual(
+                    android_data.main(["verify-apk", str(missing_apk)]),
+                    1,
+                    f"expected verify-apk to fail when {required_entry} is missing",
+                )
+
     def test_android_safe_dest_rejects_outside(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             outside = Path(tmp) / "outside"
@@ -169,6 +189,50 @@ class MobileToolsTest(unittest.TestCase):
             export_preset_template.patch_option(cfg, "Android", "keystore/debug", "/tmp/debug.keystore")
             presets = env_check.parse_export_presets(cfg)
             self.assertEqual(presets["Android"]["keystore/debug"], "/tmp/debug.keystore")
+
+            export_preset_template.patch_option(cfg, "Android", "custom_template/debug", r'C:\Godot\tpl "mono".apk')
+            text = cfg.read_text(encoding="utf-8")
+            self.assertIn(r'custom_template/debug="C:\\Godot\\tpl \"mono\".apk"', text)
+
+    def test_env_check_blockers_and_sdk_subdirs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            incomplete_sdk = t / "sdk_incomplete"
+            (incomplete_sdk / "platform-tools").mkdir(parents=True)
+            self.assertFalse(env_check.is_valid_android_sdk(incomplete_sdk))
+
+            valid_sdk = t / "sdk_valid"
+            (valid_sdk / "platform-tools").mkdir(parents=True)
+            (valid_sdk / "build-tools" / "34.0.0").mkdir(parents=True)
+            self.assertTrue(env_check.is_valid_android_sdk(valid_sdk))
+
+            repo = t / "repo"
+            (repo / "godot").mkdir(parents=True)
+            (repo / "godot/export_presets.cfg").write_text(
+                '[preset.0]\nname="Windows Desktop"\nexclude_filter="mobile_data/*"\n'
+                '[preset.1]\nname="Android"\nplatform="Android"\narchitectures/arm64-v8a=true\n',
+                encoding="utf-8",
+            )
+            non_mono_tpl = t / "4.7.2.stable"
+            non_mono_tpl.mkdir()
+            with (
+                mock.patch.object(env_check, "find_godot_bin", return_value=None),
+                mock.patch.object(env_check, "godot_templates_dir", return_value=non_mono_tpl),
+                mock.patch.object(env_check, "find_dotnet_bin", return_value=None),
+                mock.patch.object(env_check, "find_jdk_tool", return_value=None),
+                mock.patch.object(env_check, "find_android_sdk", return_value=None),
+            ):
+                rows, blockers = env_check.check_environment(repo, target="android")
+                by_label = {label: status for status, label, _ in rows}
+                self.assertEqual(by_label["godot"], "MISSING")
+                self.assertEqual(by_label["templates_dir"], "MISSING")
+                self.assertGreaterEqual(blockers, 5)
+
+            fake_proc = mock.Mock(returncode=1, stdout="", stderr="boom stderr")
+            with mock.patch.object(env_check.subprocess, "run", return_value=fake_proc):
+                versions, err = env_check.dotnet_sdk_versions("dotnet")
+                self.assertEqual(versions, [])
+                self.assertIn("boom stderr", err)
 
 
 if __name__ == "__main__":

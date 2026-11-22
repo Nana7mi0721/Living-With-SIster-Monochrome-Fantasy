@@ -251,6 +251,18 @@ func _ready() -> void:
 	if bridge.KeyCodeForPoll(145, InputRouter.MASK_OK, 0, 0) != 10:
 		failures.append("mask 145 must accept MASK_OK")
 
+	# 17. Physical button reconciliation clears stuck pointer_pressed when mouse-up was swallowed by UI.
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+	_router.handle_event(_mouse(MOUSE_BUTTON_LEFT))
+	_router.suppress_action_until_release()
+	_router.clear_frame_latches()
+	if not _router.pointer_pressed or not _router.action_entry_suppressed():
+		failures.append("test setup must leave pointer_pressed and suppression latched")
+	_router.reconcile_pointer_buttons(true)
+	if _router.pointer_pressed or _router.action_entry_suppressed():
+		failures.append("reconcile_pointer_buttons must clear stuck pointer_pressed and suppression when physical button is up")
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

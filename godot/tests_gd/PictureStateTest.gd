@@ -305,18 +305,20 @@ func _ready() -> void:
 	if sheet != null:
 		stage.draw_picture(1360, 0, "SystemFile/WindowBase.png", "",
 			[0, 2, 1, 2, 255, 100, 100, 100, 0], 0, 0)
-		var cell_w: float = floor(sheet.get_size().x / 2.0)
-		check(absf(stage._base_sizes[1360].x - cell_w) < 0.01, "split sheet uses one cell width")
+		var tex_cell_w: float = floor(sheet.get_size().x / 2.0)
+		var art_scale: float = assets.hd_scale("SystemFile/WindowBase.png") if assets != null else 1.0
+		var cell_w: float = tex_cell_w / maxf(art_scale, 1.0)
+		check(absf(stage._base_sizes[1360].x - cell_w) < 0.01, "split sheet uses one logical cell width")
 		var sheet_holder: Control = stage._pictures.get(1360)
 		var rect: TextureRect = (sheet_holder.get_child(0) as TextureRect) if sheet_holder != null else null
-		check(rect != null and rect.texture is AtlasTexture and (rect.texture as AtlasTexture).region.position.x == cell_w,
-			"split sheet is cropped to the second cell")
+		check(rect != null and rect.texture is AtlasTexture and (rect.texture as AtlasTexture).region.position.x == tex_cell_w,
+			"split sheet is cropped to the second cell in texture pixels")
 		check(stage.effect(8, 2, [0, 2, 1360, 1360, 1, 2, 0]), "290 pattern accepts a split picture")
 		check(int(stage._states[1360]["pattern"]["cell"]) == 1, "pattern starts at its first cell")
 		stage.tick()
 		stage.tick()
 		check(int(stage._states[1360]["pattern"]["cell"]) == 2, "pattern advances one held cell")
-		check((rect.texture as AtlasTexture).region.position.x == cell_w, "pattern renders its second cell")
+		check((rect.texture as AtlasTexture).region.position.x == tex_cell_w, "pattern renders its second cell in texture pixels")
 
 	# Multiply blend keeps slot opacity so alpha fades work.
 	stage.draw_picture(1361, 0, "", "mul probe", [0, 1, 1, 1, 128, 100, 100, 100, 0], 0, 2, [], {"blend": 3})
@@ -374,6 +376,50 @@ func _ready() -> void:
 	var peak_rect := stage.picture_rect(339)
 	check(peak_rect.size.x > rest_rect.size.x + 1.0 and peak_rect.get_center().distance_to(rest_rect.get_center()) < 0.1,
 		"breath expansion must keep sprite center stationary")
+
+	# scale_mode 3 redraw with UNCHANGED scale_x must not clobber explicit scale_y.
+	stage.draw_picture(1381, 0, "", "scale_mode3", [0, 1, 1, 1, 255, 100, 100, 150, 0, 0, 0, 0, 0, 100, 100, 100, 80], 0, 2, [], {"scale_mode": 3})
+	stage.draw_picture(1381, 0, "", "scale_mode3", [0, 1, 1, 1, 255, 100, 100, PictureStage.UNCHANGED, 0, 0, 0, 0, 0, 100, 100, 100, 50], 0, 2, [], {"scale_mode": 3})
+	check(int(stage._states[1381]["current"]["scale"]) == 150 and int(stage._states[1381]["current"]["scale_y"]) == 50,
+		"scale_mode 3 redraw keeping scale_x UNCHANGED must apply explicit new scale_y")
+
+	# Snapshot & restore preserve Move-mutated tone and persistent 290 effects while skipping fade-in replay.
+	stage.draw_picture(1382, 0, "", "snap_fx", [30, 1, 1, 1, 255, 100, 100, 100, 0], 1, 2, [], {"blend": 3})
+	for _f in 30:
+		stage.tick()
+	stage.draw_picture(1382, 1, "", "", [0, 1, 1, 1, 255, 120, 120, 100, 0, 0, WolfConst.PIC_FLAG_TONE_MASK, 0, 0, 140, 90, 60], 1, 2)
+	stage.effect(2, 0, [0, 0, 1382, 1382, 15, -10, 0])
+	stage.effect(1, 0, [0, 0, 1382, 1382, 25, 0, 0])
+	var dump_fx := stage.dump_pictures(false)
+	check(dump_fx.contains("1382 | <text:snap_fx> | 2 | 1 | 3 | 140,90,60 | 25,0,0 |"),
+		"dump_pictures must read anchor and blend from current pose")
+	var snap_fx := stage.picture_snapshots()
+	stage.clear_pictures()
+	stage.restore_pictures(snap_fx)
+	var restored1382: Control = stage._pictures.get(1382, null)
+	check(restored1382 != null and restored1382.modulate.a > 0.99,
+		"restore_pictures must zero args[0] fade frames instead of replaying fade-in")
+	check(stage._states.get(1382, {}).get("tone", []) == [140, 90, 60],
+		"restore_pictures must preserve Move-mutated tone")
+	check(stage._states.get(1382, {}).get("shift", []) == [15, -10] and stage._states.get(1382, {}).get("color_corr", []) == [25, 0, 0],
+		"restore_pictures must preserve persistent 290 effects")
+
+	# Finite FLASH on zero_tone_hidden slot restores hidden=true on expiry, and negative Breath clamps size >= 0.
+	stage.draw_picture(1383, 0, "SystemFile/WindowBase.png", "",
+		[0, 120, 40, 0, 255, 100, 100, 100, 0, 0, WolfConst.PIC_FLAG_TONE_MASK, 0, 0, 0, 0, 0], 0, 3)
+	check(bool(stage._states[1383].get("hidden", false)), "zero_tone raster window starts hidden")
+	stage.effect(0, 3, [0, 3, 1383, 1383, 80, 80, 80])
+	check(not bool(stage._states[1383].get("hidden", true)), "FLASH reveals zero_tone_hidden slot")
+	for _t in 3:
+		stage.tick()
+	check(bool(stage._states[1383].get("hidden", false)), "expired FLASH must restore hidden=true on zero_tone_hidden slot")
+	stage.draw_picture(1384, 0, "SystemFile/WindowBase.png", "", [0, 100, 50, 0, 255, 100, 100, 100, 0], 0, 3)
+	stage.effect(7, 10, [0, 10, 1384, 1384, -200, -200, 0])
+	for _nb in 5:
+		stage.tick()
+	var neg_breath_rect := stage.picture_rect(1384)
+	check(neg_breath_rect.size.x >= 0.0 and neg_breath_rect.size.y >= 0.0,
+		"negative Breath amplitude must clamp Rect2 dimensions >= 0")
 
 	await get_tree().process_frame
 	await get_tree().process_frame

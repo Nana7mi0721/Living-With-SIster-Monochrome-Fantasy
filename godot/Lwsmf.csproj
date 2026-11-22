@@ -9,8 +9,8 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
 
-  <!-- Release export must not ship test-only C# types; Debug keeps them for the gate. -->
-  <ItemGroup Condition="'$(Configuration)' == 'ExportRelease'">
+  <!-- Release and ExportRelease must not ship test-only C# types; Debug keeps them for the gate. -->
+  <ItemGroup Condition="'$(Configuration)' == 'ExportRelease' Or '$(Configuration)' == 'Release'">
     <Compile Remove="tests/**/*.cs" />
   </ItemGroup>
 </Project>

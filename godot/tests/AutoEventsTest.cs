@@ -109,6 +109,20 @@ public static class AutoEventsTest
         Check(secondPass.Started == 1 && autoLoop.IsRunning(loopVm, 335) && !autoLoop.IsRunning(loopVm, 38),
             $"LoopVisualPainters must replay CE335 without re-looping CE38, started={secondPass.Started}");
 
+        // In live play (LoopVisualPainters == true), a non-ResumeOnLoad event already owned by
+        // another subsystem (such as BattleWiring owning CE242) must not be double-started.
+        var nonLoopVm = new EventVm();
+        AddLoopProg(nonLoopVm, 242, 0, 2_000_350, 1);
+        var autoNonLoop = AutoEvents.FromPrograms(nonLoopVm.Programs.Values);
+        autoNonLoop.LoopVisualPainters = true;
+        nonLoopVm.Vars.Set(350, 0);
+        autoNonLoop.Sync(nonLoopVm);
+        nonLoopVm.CreateInstance(242);
+        nonLoopVm.Vars.Set(350, 1);
+        var guardedStart = autoNonLoop.Sync(nonLoopVm);
+        Check(guardedStart.Started == 0 && nonLoopVm.Instances.Count == 1,
+            $"live play must not double-start live CE242, started={guardedStart.Started} count={nonLoopVm.Instances.Count}");
+
         Console.WriteLine($"AUTO_EVENTS_TEST_OK count={auto.EventCount} start={opened.Started} resume={replayed.Started} gated={gated.Started}");
     }
 

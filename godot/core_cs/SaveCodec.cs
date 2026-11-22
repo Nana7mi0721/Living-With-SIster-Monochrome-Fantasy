@@ -95,8 +95,14 @@ public sealed class EventSelfVars
     {
         if (Id < 0) return false;
         if (Nums is { Length: > SelfVars.TotalSlots }) return false;
-        if (Strings is { Length: > SelfVars.TotalSlots }) return false;
-        foreach (string value in Strings) if (value == null) return false;
+        if (Strings != null)
+        {
+            if (Strings.Length > SelfVars.TotalSlots) return false;
+            foreach (string? value in Strings)
+            {
+                if (value == null) return false;
+            }
+        }
         if (NumMap != null)
         {
             foreach (var pair in NumMap)
@@ -132,6 +138,7 @@ public sealed class SavedInstance
     [JsonPropertyName("return_to")] public int? ReturnTo { get; set; }
     [JsonPropertyName("kind")] public string Kind { get; set; } = "ce";
     [JsonPropertyName("page")] public int Page { get; set; } = -1;
+    [JsonPropertyName("is_parallel")] public bool? IsParallel { get; set; }
     [JsonPropertyName("wait_kind")] public int WaitKind { get; set; }
     [JsonPropertyName("wait_frames")] public uint WaitFrames { get; set; }
     [JsonPropertyName("wait_block")] public int WaitBlock { get; set; }
@@ -273,13 +280,16 @@ public static class SaveCodec
 
     public static SaveState? FromJson(string json)
     {
+        if (string.IsNullOrEmpty(json) || StrictUtf8.GetByteCount(json) > MaxSaveBytes) return null;
         try
         {
             var state = JsonSerializer.Deserialize<SaveState>(json, Options);
             if (state == null) return null;
             if (state.Schema != SaveState.SchemaName) return null;
-            if (state.SchemaVersion < 1 || state.SchemaVersion > SaveState.SchemaVersionNumber) return null;
+            if (state.SchemaVersion > SaveState.SchemaVersionNumber) return null;
             Normalize(state);
+            SaveMigrator.Normalize(state);
+            if (state.SchemaVersion < 1 || state.SchemaVersion > SaveState.SchemaVersionNumber) return null;
             return Validate(state) ? state : null;
         }
         catch (JsonException)
@@ -306,11 +316,13 @@ public static class SaveCodec
         state.Audio ??= new List<SavedAudio>();
         foreach (var audio in state.Audio)
         {
+            if (audio == null) continue;
             audio.File ??= "";
-            if (audio.Tempo <= 0) audio.Tempo = 100;
+            if (audio.Tempo == 0) audio.Tempo = 100;
         }
         foreach (var pic in state.Pictures)
         {
+            if (pic == null) continue;
             pic.File ??= "";
             pic.Text ??= "";
             pic.Args ??= new List<int>();
@@ -320,11 +332,16 @@ public static class SaveCodec
         if (state.Dialogue != null) state.Dialogue.Choices ??= new List<string>();
         foreach (var inst in state.Instances)
         {
+            if (inst == null) continue;
             inst.Loops ??= new List<SavedLoop>();
             inst.Self ??= new EventSelfVars();
             inst.Kind ??= "ce";
         }
-        foreach (var ev in state.MapEvents) ev.Self ??= new EventSelfVars();
+        foreach (var ev in state.MapEvents)
+        {
+            if (ev == null) continue;
+            ev.Self ??= new EventSelfVars();
+        }
     }
 
     /// <summary>
@@ -341,40 +358,56 @@ public static class SaveCodec
         if (state.MapFile.Length > 260 || state.SavedAt.Length > 64) return false;
         if (!IsSafeAssetPath(state.MapFile)) return false;
 
-        var ids = new HashSet<int>();
+        var byId = new Dictionary<int, SavedInstance>(state.Instances.Count);
         foreach (var inst in state.Instances)
         {
-            if (!ValidInstance(inst)) return false;
-            if (!ids.Add(inst.Id)) return false;
+            if (inst == null || !ValidInstance(inst)) return false;
+            if (!byId.TryAdd(inst.Id, inst)) return false;
         }
 
+        // Memoized parent-chain verification: 1 = on current path, 2 = verified acyclic.
+        var visitState = new Dictionary<int, int>(byId.Count);
+        var chain = new List<int>();
         foreach (var inst in state.Instances)
         {
-            int depth = 0;
-            var cursor = inst;
-            while (cursor.ParentId is int parentId)
+            if (visitState.TryGetValue(inst.Id, out int st) && st == 2) continue;
+            chain.Clear();
+            SavedInstance? cursor = inst;
+            while (cursor != null)
             {
-                if (parentId == inst.Id) return false;
-                if (++depth > MaxInstances) return false;
-                cursor = state.Instances.Find(x => x.Id == parentId);
-                if (cursor == null) return false;
+                if (visitState.TryGetValue(cursor.Id, out int curState))
+                {
+                    if (curState == 2) break;
+                    return false;
+                }
+                visitState[cursor.Id] = 1;
+                chain.Add(cursor.Id);
+                if (chain.Count > MaxInstances) return false;
+                if (cursor.ParentId is not int parentId) break;
+                if (!byId.TryGetValue(parentId, out cursor)) return false;
+            }
+            for (int i = 0; i < chain.Count; i++)
+            {
+                visitState[chain[i]] = 2;
             }
         }
 
         var eventIds = new HashSet<int>();
         foreach (var ev in state.MapEvents)
         {
+            if (ev == null) return false;
             if (ev.Id < 0 || !eventIds.Add(ev.Id)) return false;
             if (ev.Active is int active && active < -1) return false;
-            if (ev.InstanceId is int iid && iid <= 0) return false;
+            if (ev.InstanceId is int iid && (iid <= 0 || !byId.ContainsKey(iid))) return false;
             if (ev.Starts < 0 || ev.StartsOnPage < 0) return false;
-            if (!ev.Self.IsValid()) return false;
+            if (ev.Self == null || !ev.Self.IsValid()) return false;
         }
 
         if (state.Pictures.Count > MaxPictures) return false;
         var slots = new HashSet<int>();
         foreach (var pic in state.Pictures)
         {
+            if (pic == null) return false;
             if (!slots.Add(pic.Number)) return false;
             if (pic.Kind is < 0 or > 255) return false;
             if (pic.Action is < 0 or > 4) return false;
@@ -388,6 +421,7 @@ public static class SaveCodec
         var audioChannels = new HashSet<int>();
         foreach (var audio in state.Audio)
         {
+            if (audio == null) return false;
             if (audio.Channel is < 0 or > 2 || !audioChannels.Add(audio.Channel)) return false;
             if (audio.File.Length > 260 || !IsSafeAssetPath(audio.File)) return false;
             if (audio.Volume is < 0 or > 200) return false;
@@ -445,6 +479,8 @@ public static class SaveCodec
         if (inst.WaitKind is < 0 or > 5) return false;
         if (inst.WaitBlock < 0 || inst.WaitBlock > MaxPc) return false;
         if (inst.WaitChild < 0) return false;
+        if (inst.WaitKind == (int)WaitStateKind.Child && (inst.WaitChild <= 0 || inst.WaitChild == inst.Id)) return false;
+        if (inst.WaitKeyTarget < 0) return false;
         if (inst.Page < -1) return false;
         if (inst.Kind is not ("ce" or "map")) return false;
         if (inst.Loops.Count > 64) return false;
@@ -471,7 +507,7 @@ public static class SaveCodec
                 {
                     WriteRaw(path + ".bak", current);
                 }
-                catch (IOException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     // Backup is best effort; the atomic replace below still protects slot 01.
                 }
@@ -513,10 +549,10 @@ public static class SaveCodec
     public static SaveReadResult ReadWithSource(string path)
     {
         SaveState? main = ReadOne(path);
-        if (main != null) return new SaveReadResult(SaveMigrator.Normalize(main), SaveSlotSource.Main);
+        if (main != null) return new SaveReadResult(main, SaveSlotSource.Main);
         SaveState? backup = ReadOne(path + ".bak");
         return backup != null
-            ? new SaveReadResult(SaveMigrator.Normalize(backup), SaveSlotSource.Backup)
+            ? new SaveReadResult(backup, SaveSlotSource.Backup)
             : new SaveReadResult(null, SaveSlotSource.None);
     }
 
@@ -570,8 +606,9 @@ public static class SaveCodec
 
     public static byte[] ToBytes(SaveState state) => new UTF8Encoding(false).GetBytes(ToJson(state));
 
-    public static SaveState? FromBytes(byte[] bytes)
+    public static SaveState? FromBytes(byte[]? bytes)
     {
+        if (bytes == null || bytes.Length == 0 || bytes.Length > MaxSaveBytes) return null;
         try
         {
             return FromJson(StrictUtf8.GetString(bytes));

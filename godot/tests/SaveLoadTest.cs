@@ -45,7 +45,7 @@ public partial class SaveLoadTest : Node
         {
             Check(false, "core session setup failed: " + ex.Message);
             GD.PrintErr($"SAVE_LOAD_TEST_FAILED {_failures}/{_checks}");
-            GetTree().Quit();
+            GetTree().Quit(1);
             return;
         }
 
@@ -57,7 +57,7 @@ public partial class SaveLoadTest : Node
         if (session.Phase != "bedroom")
         {
             GD.PrintErr($"SAVE_LOAD_TEST_FAILED {_failures}/{_checks}");
-            GetTree().Quit();
+            GetTree().Quit(1);
             return;
         }
 
@@ -274,12 +274,17 @@ public partial class SaveLoadTest : Node
         long saveBytes = new FileInfo(savePath).Length;
         Check(saveBytes < 50 * 1024, $"save slot must stay under 50 KB (got {saveBytes} bytes)");
 
-        // Schema guard: a future version must be rejected rather than half-parsed.
+        // Schema guard: future versions are rejected; pre-versioned (< 1) slots migrate to current.
         string savedJson = File.ReadAllText(savePath);
         Check(SaveCodec.FromJson(savedJson.Replace("\"schema_version\": 1", "\"schema_version\": 99")) == null,
             "schema_version 99 must be rejected");
-        Check(SaveCodec.FromJson(savedJson.Replace("\"schema_version\": 1", "\"schema_version\": 0")) == null,
-            "schema_version 0 must be rejected");
+        SaveState? migratedV0 = SaveCodec.FromJson(savedJson.Replace("\"schema_version\": 1", "\"schema_version\": 0"));
+        Check(migratedV0 != null && migratedV0.SchemaVersion == SaveState.SchemaVersionNumber,
+            "schema_version 0 must migrate to current schema version");
+        SaveState? migratedNeg = SaveCodec.FromBytes(System.Text.Encoding.UTF8.GetBytes(
+            savedJson.Replace("\"schema_version\": 1", "\"schema_version\": -1")));
+        Check(migratedNeg != null && migratedNeg.SchemaVersion == SaveState.SchemaVersionNumber,
+            "schema_version < 1 via FromBytes must migrate to current schema version");
 
         // Corrupt main + good .bak: ReadWithSource must fall back, and the backup must
         // survive a rewrite attempt from the corrupt file.
@@ -601,11 +606,90 @@ public partial class SaveLoadTest : Node
             Check(session.LoadGameFrom(zeroTempoPath), "slot with tempo=0 BGM and KeyInput wait must load cleanly");
             SaveState? normalized = SaveCodec.Read(zeroTempoPath);
             Check(normalized != null && normalized.Audio.Count == 1 && normalized.Audio[0].Tempo == 100,
-                "SaveCodec must normalize tempo <= 0 to 100");
+                "SaveCodec must normalize tempo == 0 to 100");
             Instance? keyWaiter = vm.Vm.FindInstance(9200);
             Check(keyWaiter != null && keyWaiter.Wait.Kind == WaitStateKind.KeyInput && keyWaiter.Wait.KeyMask == 177,
                 "KeyInput wait state must round-trip across save/load");
         }
+
+        // SaveMigrator & SaveCodec boundaries: >256 transient UI pictures stripped before MaxPictures,
+        // negative screen-layer pic.Number preserved, null JSON elements/arrays safe, negative tempo
+        // rejected, O(N) instance cycle/chain validation, dangling references, and FromBytes size cap.
+        var uiOverflow = new SaveState { MapId = 1, MapFile = "Map001.mps", SchemaVersion = 0 };
+        for (int i = 0; i < 270; i++)
+        {
+            uiOverflow.Pictures.Add(new SavedPicture { Number = SaveMigrator.UiPictureFirst + i, Action = 0 });
+        }
+        uiOverflow.Pictures.Add(new SavedPicture { Number = -2, Action = 0, File = "Picture/bg.png" });
+        uiOverflow.Pictures.Add(new SavedPicture { Number = 5, Action = 0, File = "Picture/fg.png" });
+        SaveState? migratedOverflow = SaveCodec.FromJson(SaveCodec.ToJson(uiOverflow));
+        Check(migratedOverflow != null && migratedOverflow.SchemaVersion == SaveState.SchemaVersionNumber
+              && migratedOverflow.Pictures.Count == 2
+              && migratedOverflow.Pictures.Any(p => p.Number == -2)
+              && migratedOverflow.Pictures.Any(p => p.Number == 5),
+            "SaveMigrator must strip >256 transient UI pictures before MaxPictures check while keeping negative screen-layer numbers");
+
+        string nullStringsSelf = "{\"schema\":\"lwsmf.save\",\"schema_version\":1,\"self_vars\":[{\"id\":1,\"nums\":null,\"strings\":null}]}";
+        Check(SaveCodec.FromJson(nullStringsSelf) != null,
+            "EventSelfVars with null nums/strings arrays must load without throwing");
+        string nullStringElem = "{\"schema\":\"lwsmf.save\",\"schema_version\":1,\"self_vars\":[{\"id\":1,\"strings\":[\"ok\",null]}]}";
+        Check(SaveCodec.FromJson(nullStringElem) == null,
+            "EventSelfVars with null element inside strings must be rejected cleanly");
+
+        foreach (string field in new[] { "audio", "pictures", "instances", "map_events" })
+        {
+            string corruptNullElem = $"{{\"schema\":\"lwsmf.save\",\"schema_version\":1,\"{field}\":[null]}}";
+            Check(SaveCodec.FromJson(corruptNullElem) == null,
+                $"null element in {field} must be rejected without throwing");
+        }
+
+        // Corrupt main with null array element must fall back to .bak and never crash Write.
+        string nullElemPath = Path.Combine(saveDir, "save_null_elem.json");
+        SaveCodec.Write(nullElemPath, new SaveState { MapId = 1005, MapFile = "SampleMapA.mps" });
+        SaveCodec.Write(nullElemPath, new SaveState { MapId = 1005, MapFile = "SampleMapA.mps" });
+        File.WriteAllText(nullElemPath, "{\"schema\":\"lwsmf.save\",\"schema_version\":1,\"pictures\":[null]}");
+        SaveReadResult nullFallback = SaveCodec.ReadWithSource(nullElemPath);
+        Check(nullFallback.Ok && nullFallback.Source == SaveSlotSource.Backup,
+            "null element in main save must trigger .bak fallback without NRE");
+        SaveCodec.Write(nullElemPath, new SaveState { MapId = 1005, MapFile = "SampleMapA.mps" });
+        Check(SaveCodec.Read(nullElemPath) != null, "Write must succeed over a main slot containing null elements");
+
+        var negTempo = new SaveState { MapId = 1, MapFile = "Map001.mps" };
+        negTempo.Audio.Add(new SavedAudio { Channel = 0, File = "BGM/x.ogg", Tempo = -10 });
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(negTempo)) == null,
+            "negative audio tempo must be rejected rather than normalized to 100");
+
+        var refProbe = new SaveState { MapId = 1, MapFile = "Map001.mps" };
+        refProbe.Instances.Add(new SavedInstance { Id = 1, EventId = 1, Kind = "ce", Pc = 0 });
+        refProbe.MapEvents.Add(new SavedMapEvent { Id = 1, InstanceId = 999 });
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(refProbe)) == null,
+            "dangling MapEvent.InstanceId must be rejected");
+        refProbe.MapEvents.Clear();
+        refProbe.Instances[0] = new SavedInstance { Id = 1, EventId = 1, Kind = "ce", WaitKind = (int)WaitStateKind.KeyInput, WaitKeyTarget = -1 };
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(refProbe)) == null,
+            "negative WaitKeyTarget on KeyInput wait must be rejected");
+        refProbe.Instances[0] = new SavedInstance { Id = 1, EventId = 1, Kind = "ce", WaitKind = (int)WaitStateKind.Child, WaitChild = 1 };
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(refProbe)) == null,
+            "self-referential WaitChild must be rejected");
+
+        var cycleProbe = new SaveState { MapId = 1, MapFile = "Map001.mps" };
+        cycleProbe.Instances.Add(new SavedInstance { Id = 1, ParentId = 2, EventId = 1, Kind = "ce" });
+        cycleProbe.Instances.Add(new SavedInstance { Id = 2, ParentId = 1, EventId = 1, Kind = "ce" });
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(cycleProbe)) == null,
+            "2-node parent cycle must be rejected");
+
+        var chainProbe = new SaveState { MapId = 1, MapFile = "Map001.mps" };
+        for (int i = 1; i <= 2000; i++)
+        {
+            chainProbe.Instances.Add(new SavedInstance { Id = i, ParentId = i == 1 ? null : i - 1, EventId = 1, Kind = "ce" });
+        }
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(chainProbe)) != null,
+            "deep 2000-node acyclic instance chain must validate cleanly");
+
+        byte[] oversized = new byte[SaveCodec.MaxSaveBytes + 1];
+        Check(SaveCodec.FromBytes(oversized) == null, "FromBytes must reject payloads above MaxSaveBytes");
+        Check(SaveCodec.FromBytes(new byte[] { 0xFF, 0xFE }) == null, "FromBytes must reject invalid UTF-8");
+        Check(SaveCodec.FromBytes(Array.Empty<byte>()) == null, "FromBytes must reject empty byte arrays");
 
         try { Directory.Delete(saveDir, true); }
         catch (IOException) { }
@@ -619,6 +703,6 @@ public partial class SaveLoadTest : Node
         {
             GD.PrintErr($"SAVE_LOAD_TEST_FAILED {_failures}/{_checks}");
         }
-        GetTree().Quit();
+        GetTree().Quit(_failures == 0 ? 0 : 1);
     }
 }

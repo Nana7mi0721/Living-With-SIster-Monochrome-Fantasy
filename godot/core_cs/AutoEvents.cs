@@ -103,8 +103,6 @@ public sealed class AutoEvents
         foreach (var ev in _events)
         {
             bool now = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
-            // Another subsystem may own a live instance of the same event (battle
-            // command events 242/243). Treat it as alive so we never double-start it.
             bool alive = IsEventLive(vm, ev.Id);
             bool before = _latched.TryGetValue(ev.Id, out bool latched) && latched;
             bool shouldStart;
@@ -115,6 +113,7 @@ public sealed class AutoEvents
             }
             else
             {
+                // Match Rust auto_events.rs edge-triggered parity: only ResumeOnLoad checks !alive.
                 shouldStart = ev.ResumeOnLoad && now ? !alive : now && !before;
             }
             if (shouldStart)

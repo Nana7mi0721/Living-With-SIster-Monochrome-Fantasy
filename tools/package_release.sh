@@ -30,12 +30,14 @@ export DOTNET_NOLOGO=1
 
 DEMO=false
 SLIM=false
+HD=false
 for arg in "$@"; do
   case "$arg" in
     --demo) DEMO=true ;;
     --slim) SLIM=true ;;
+    --hd) HD=true ;;
     *)
-      echo "usage: tools/package_release.sh [--demo] [--slim]" >&2
+      echo "usage: tools/package_release.sh [--demo] [--slim] [--hd]" >&2
       exit 2
       ;;
   esac
@@ -46,6 +48,10 @@ ZIP_NAME="Lwsmf-win64.zip"
 if [ "$SLIM" = true ]; then
   PKG_NAME="Lwsmf-win64-slim"
   ZIP_NAME="Lwsmf-win64-slim.zip"
+fi
+if [ "$HD" = true ]; then
+  PKG_NAME="$PKG_NAME-hd"
+  ZIP_NAME="${PKG_NAME}.zip"
 fi
 
 OUT="$ROOT/dist/$PKG_NAME"
@@ -178,22 +184,21 @@ fi
 if [ -n "$FOUND_FONT" ]; then
   cp -a "$FOUND_FONT" "$STAGE/work/all/Lolita.ttf"
 else
-  HAS_PAK_FONT="$("$PYTHON_BIN" - "$ROOT/work/all/media.pak" <<'PY'
-import sys, struct
+  PAK_WIN="$(to_win_path "$ROOT/work/all/media.pak")"
+  TOOLS_WIN="$(to_win_path "$ROOT/tools")"
+  HAS_PAK_FONT="$("$PYTHON_BIN" - "$PAK_WIN" "$TOOLS_WIN" <<'PY'
+import sys
 from pathlib import Path
+
+sys.path.insert(0, sys.argv[2])
+from pack_media import read_pak_index
+
 p = Path(sys.argv[1])
 if not p.is_file():
-    print("0"); raise SystemExit(0)
-with p.open("rb") as f:
-    magic = f.read(8)
-    count, = struct.unpack("<I", f.read(4))
-    f.seek(4, 1)
-    names = []
-    for _ in range(count):
-        nlen, = struct.unpack("<H", f.read(2))
-        names.append(f.read(nlen).decode("utf-8", errors="replace").lower())
-        f.seek(16, 1)
-    print("1" if any(n.endswith("lolita.ttf") for n in names) else "0")
+    print("0")
+    raise SystemExit(0)
+names = read_pak_index(p)
+print("1" if any(n.endswith("lolita.ttf") for n in names) else "0")
 PY
 )"
   if [ "$HAS_PAK_FONT" != "1" ] && [ "${LWSMF_ALLOW_MISSING_FONT:-0}" != "1" ]; then
@@ -204,9 +209,23 @@ fi
 
 if [ "$SLIM" = true ]; then
   echo "== slimming media.pak =="
-  "$PYTHON_BIN" "$ROOT/tools/pack_media.py" --from-pak "$ROOT/work/all/media.pak" --out "$STAGE/work/all/media.pak" --slim
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" \
+    --from-pak "$(to_win_path "$ROOT/work/all/media.pak")" \
+    --out "$(to_win_path "$STAGE/work/all/media.pak")" \
+    --slim
 else
   cp -a "$ROOT/work/all/media.pak" "$STAGE/work/all/media.pak"
+fi
+
+if [ "$HD" = true ]; then
+  echo "== packing 2x media_hd.pak =="
+  if [ ! -f "$ROOT/work/hd/hd_manifest.json" ]; then
+    echo "ERROR: --hd needs work/hd/hd_manifest.json (run tools/upscale_assets.py first)." >&2
+    exit 3
+  fi
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" \
+    --hd-root "$(to_win_path "$ROOT/work/hd")" \
+    --out "$(to_win_path "$STAGE/work/all/media_hd.pak")"
 fi
 
 echo "== staging converter =="
@@ -253,7 +272,7 @@ F2 / F3                游玩统计浮层 / 运行时调试浮层
 EOF
 
 echo "== pre-swap release audit =="
-"$PYTHON_BIN" "$ROOT/tools/release_audit.py" --dist "$STAGE"
+"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/release_audit.py")" --dist "$(to_win_path "$STAGE")"
 
 echo "== swapping package into dist =="
 if [ -d "$OUT" ]; then
