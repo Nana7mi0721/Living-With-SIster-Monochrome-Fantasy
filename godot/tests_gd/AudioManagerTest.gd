@@ -114,6 +114,16 @@ func _ready() -> void:
 	_expect(AudioManager.volume_db(0) <= -60.0, "zero is silent")
 	_expect(AudioManager.volume_db(50) < 0.0 and AudioManager.volume_db(50) > -10.0, "half is attenuated")
 
+	# 8. SE forces non-looping even if embedded loop points exist or cached stream was looped.
+	_expect(mixer.play(AudioManager.CHANNEL_SE, "Sound/stub.wav", 100, 0, 100, 0), "se non-loop play")
+	var se_wav := mixer.player_for(AudioManager.CHANNEL_SE).stream as AudioStreamWAV
+	_expect(se_wav != null and se_wav.loop_mode == AudioStreamWAV.LOOP_DISABLED,
+		"SE voice must disable WAV loop_mode so one-shot effects never loop")
+	var se_ogg := AudioStreamOggVorbis.new()
+	se_ogg.loop = true
+	mixer._apply_loop(se_ogg, false, 0)
+	_expect(not se_ogg.loop, "_apply_loop(..., false, 0) must clear Ogg Vorbis loop flag")
+
 	mixer.reset()
 	if failures == 0:
 		print("AUDIO_MANAGER_TEST_OK checks=%d" % checks)

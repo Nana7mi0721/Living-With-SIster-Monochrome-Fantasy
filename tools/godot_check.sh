@@ -65,7 +65,9 @@ python "$IMO/oracle/scan_op150_negative_scale.py" \
 echo "[2/38] build core library"
 # Godot's headless --build-solutions can hang during shutdown after the C#
 # compilation itself reports success, so invoke the SDK build directly.
+# Build both Release (CI/headless) and Debug (GUI / editor play) so neither goes stale.
 "$DOTNET" build "$IMO/godot/Lwsmf.csproj" -c Release
+"$DOTNET" build "$IMO/godot/Lwsmf.csproj" -c Debug
 
 # The GDScript presentation layer (W2) resolves other scripts by class_name, so the global
 # class cache has to exist before any tests_gd scene runs in parallel.

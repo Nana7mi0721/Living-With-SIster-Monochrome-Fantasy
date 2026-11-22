@@ -115,11 +115,17 @@ func _play_long(channel: int, file: String, volume: int, loop_point: int, tempo:
 
 
 func _play_se(file: String, volume: int, tempo: int, frames: int) -> bool:
-	var stream := _assets.audio(file)
-	if stream == null:
+	var cached := _assets.audio(file)
+	if cached == null:
 		push_warning("AudioManager: missing audio %s" % file)
 		stop(CHANNEL_SE, 0)
 		return false
+	# Duplicate cached resource and force non-looping so embedded loop markers or shared
+	# BGM/BGS cache entries never cause a one-shot sound effect to repeat indefinitely.
+	var stream := cached.duplicate() as AudioStream
+	if stream == null:
+		stream = cached
+	_apply_loop(stream, false, 0)
 	var voice := _take_se_voice()
 	var player := _se_players[voice]
 	_invalidate_se_voice(voice)

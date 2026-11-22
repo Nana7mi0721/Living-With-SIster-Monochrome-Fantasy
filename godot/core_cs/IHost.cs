@@ -36,10 +36,10 @@ public sealed class PictureCmd
 
 public enum SoundChannel
 {
-    Bgm,
-    Se,
+    Bgm = 0,
     /// <summary>Background ambience: opcode 140 sound type 1 (`0x10`).</summary>
-    Bgs
+    Bgs = 1,
+    Se = 2
 }
 
 public enum SoundAction

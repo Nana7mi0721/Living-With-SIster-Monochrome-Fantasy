@@ -54,6 +54,7 @@ public static class VmTest
         TestEventEntryNotifications();
         TestPerInstanceBudgetPreventsStarvation();
         TestParallelEnteredInstanceDoesNotLeak();
+        TestSoundChannelLayoutMatchesPresentation();
         TestMaxCallDepth();
         DatabaseTest.Run();
         AutoEventsTest.Run();
@@ -1494,5 +1495,28 @@ public static class VmTest
             throw new Exception("parallel instance must not fire EventEntered");
         if (vm.EnteredInstanceCount != 0)
             throw new Exception($"_enteredInstanceIds leaked {vm.EnteredInstanceCount} retired ids");
+    }
+
+    private static void TestSoundChannelLayoutMatchesPresentation()
+    {
+        Console.WriteLine("  Testing SoundChannel numeric contract matches AudioManager (BGM=0, BGS=1, SE=2)...");
+        if ((int)SoundChannel.Bgm != 0 || (int)SoundChannel.Bgs != 1 || (int)SoundChannel.Se != 2)
+            throw new Exception($"SoundChannel values must match AudioManager (0/1/2), got {(int)SoundChannel.Bgm}/{(int)SoundChannel.Bgs}/{(int)SoundChannel.Se}");
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        var slots = new List<Slot>
+        {
+            Slot.Command(140, [0x0200_0000, 0, 0, 0, 100, 100], ["BGM/t.ogg"]),
+            Slot.Command(140, [0x0200_0010, 0, 0, 0, 75, 100], ["BGM/bgs.ogg"]),
+            Slot.Command(140, [0x0200_0020, 0, 0, 0, 90, 100], ["SE/s.mp3"]),
+        };
+        vm.RegisterProgram(Program.FromSlots(116, "SoundCh", slots));
+        vm.CreateInstance(116);
+        vm.StepFrame();
+        if (host.Sounds.Count != 3 || host.Sounds[0].Channel != SoundChannel.Bgm
+            || host.Sounds[1].Channel != SoundChannel.Bgs || host.Sounds[2].Channel != SoundChannel.Se)
+        {
+            throw new Exception("opcode 140 soundType 0/1/2 must map to Bgm/Bgs/Se");
+        }
     }
 }
