@@ -52,6 +52,10 @@ func _run() -> void:
 \tif vp_spec != "":
 \t\tvar parts := vp_spec.split("x")
 \t\tvp.size = Vector2i(int(parts[0]), int(parts[1]))
+\t\t# SubViewport ignores the project's canvas_items stretch; size_2d_override mirrors it so
+\t\t# a 2048x1152 capture renders 1024x576 logical content at 2x instead of leaving black bands.
+\t\tvp.size_2d_override = Vector2i(1024, 576)
+\t\tvp.size_2d_override_stretch = true
 \telse:
 \t\tvp.size = Vector2i(1024, 576)
 \tvp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -155,8 +159,8 @@ func _run() -> void:
 \t\t\t\t\treturn
 \t\t\t\tbreak
 
-\tprint("ASSETS_CHECK misses=%d faulted=%s miss_paths=%s" % [game.assets.misses, str(game.faulted), str(game.assets.miss_paths)])
-\tif game.faulted or game.phase in ["setup", "failed", "faulted", "bootstrap"] or game.assets.misses > 0:
+\tprint("ASSETS_CHECK cache_misses=%d unresolved=%d faulted=%s miss_paths=%s" % [game.assets.misses, game.assets.miss_paths.size(), str(game.faulted), str(game.assets.miss_paths)])
+\tif game.faulted or game.phase in ["setup", "failed", "faulted", "bootstrap"] or game.assets.miss_paths.size() > 0:
 \t\tquit(1)
 \t\treturn
 \tprint("VISUAL_REGRESSION_CAPTURE_OK")

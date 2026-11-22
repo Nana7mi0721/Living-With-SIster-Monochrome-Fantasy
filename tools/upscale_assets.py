@@ -271,6 +271,7 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=0, help="only the first N per group (pilot)")
     parser.add_argument("--dirs", default="", help="comma separated top-level dirs to include")
     parser.add_argument("--only-jpg", action="store_true", help="reprocess JPEG sources only, keeping other manifest entries")
+    parser.add_argument("--retry-fallback", action="store_true", help="re-run only engine entries that fell back to Lanczos")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--log", default="work/out/hd_build.jsonl")
@@ -340,6 +341,15 @@ def main() -> int:
                 limited.append((rel, key))
         jobs = limited
 
+    retry_set: set[str] = set()
+    if args.retry_fallback:
+        retry_set = {
+            key for key, entry in previous.items()
+            if entry.get("fallback") and str(entry.get("engine", "")).startswith("realcugan")
+        }
+        jobs = [(rel, key) for rel, key in jobs if rel.as_posix().lower() in retry_set]
+        print(f"retry fallback: {len(jobs)} engine image(s)")
+
     print(f"live images selected: {len(jobs)} engine + {len(cpu_jobs)} cpu | skipped by guards: {len(skipped)} | missing: {len(missing)}")
     if missing:
         Path("work/out/hd_missing.txt").write_text("\n".join(missing), encoding="utf-8")
@@ -356,6 +366,8 @@ def main() -> int:
 
     def already_current(rel: Path) -> bool:
         if args.force:
+            return False
+        if args.retry_fallback and rel.as_posix().lower() in retry_set:
             return False
         entry = previous.get(rel.as_posix().lower())
         if not entry:
@@ -380,81 +392,96 @@ def main() -> int:
         for rel, key in jobs:
             groups.setdefault(key, []).append(rel)
 
+        # The fp16 engine silently starts emitting rainbows after ~130 images in one
+        # invocation; cap each batch so a long group always gets fresh GPU state.
+        CHUNK = max(1, int(os.environ.get("LWsmf_HD_CHUNK", "48")))
         for key, rels in sorted(groups.items()):
             denoise = int(key[1:])
-            stage_in = stage_root / key / "in"
-            stage_out = stage_root / key / "out"
-            stage_in.mkdir(parents=True)
-            stage_out.mkdir(parents=True)
-            index_to_rel: dict[str, Path] = {}
-            staged = 0
-            for rel in rels:
-                source = root / rel
-                if already_current(rel):
+            for offset in range(0, len(rels), CHUNK):
+                chunk = rels[offset : offset + CHUNK]
+                stage_in = stage_root / f"{key}_{offset:05d}" / "in"
+                stage_out = stage_root / f"{key}_{offset:05d}" / "out"
+                stage_in.mkdir(parents=True)
+                stage_out.mkdir(parents=True)
+                index_to_rel: dict[str, Path] = {}
+                staged = 0
+                for rel in chunk:
+                    source = root / rel
+                    if already_current(rel):
+                        continue
+                    stem = f"f{staged:05d}"
+                    target = stage_in / (stem + ".png")
+                    with Image.open(source) as original:
+                        mode = "RGBA" if "A" in original.getbands() else "RGB"
+                        pixels = np.array(original.convert(mode), dtype=np.uint8)
+                        # 255-white pixels make this fp16 engine emit NaN/rainbow rows; 249 is
+                        # already too high for some RGBA CGs, 244 is the empirically safe cap.
+                        white_cap = int(os.environ.get("LWsmf_HD_WHITE_CAP", "249"))
+                        pixels[..., :3] = np.minimum(pixels[..., :3], white_cap)
+                        Image.fromarray(pixels, mode).save(target, format="PNG")
+                    index_to_rel[stem] = rel
+                    staged += 1
+                if staged == 0:
+                    print(f"[{key} +{offset}] nothing to do")
                     continue
-                stem = f"f{staged:05d}"
-                target = stage_in / (stem + ".png")
-                with Image.open(source) as original:
-                    mode = "RGBA" if "A" in original.getbands() else "RGB"
-                    pixels = np.array(original.convert(mode), dtype=np.uint8)
-                    # 255-white pixels make this fp16 engine emit NaN/rainbow rows.
-                    pixels[..., :3] = np.minimum(pixels[..., :3], 249)
-                    Image.fromarray(pixels, mode).save(target, format="PNG")
-                index_to_rel[stem] = rel
-                staged += 1
-            if staged == 0:
-                print(f"[{key}] nothing to do")
-                continue
 
-            print(f"[{key}] engine pass on {staged} image(s), denoise={denoise}")
-            t0 = time.time()
-            engine_ok = run_engine(engine, model_dir, stage_in, stage_out, denoise)
-            print(f"[{key}] engine done in {time.time() - t0:.1f}s ok={engine_ok}")
+                print(f"[{key} +{offset}] engine pass on {staged} image(s), denoise={denoise}")
+                t0 = time.time()
+                engine_ok = run_engine(engine, model_dir, stage_in, stage_out, denoise)
+                print(f"[{key} +{offset}] engine done in {time.time() - t0:.1f}s ok={engine_ok}")
 
-            for stem, rel in sorted(index_to_rel.items()):
-                produced = stage_out / f"{stem}.png"
-                if not produced.exists():
-                    produced = stage_out / f"{stem}.webp"
-                if not produced.exists():
-                    produced = stage_out / f"{stem}{rel.suffix.lower()}"
-                engine_tag = f"realcugan/{args.models}/n{denoise}"
-                with Image.open(root / rel) as original:
-                    src_size = original.size
-                    src_alpha = "A" in original.getbands()
-                    src_opaque = src_alpha and original.convert("RGBA").getchannel("A").getextrema() == (255, 255)
-                    adopted = None
-                    if produced.exists() and produced.suffix.lower() == ".webp":
-                        adopted = record_encoded(
-                            rel, produced, out_root, entries, log_file, engine_tag,
-                            src_size, src_alpha, src_opaque,
-                        )
-                    if adopted is None:
-                        expected = (original.width * SCALE, original.height * SCALE)
-                        image = None
-                        if produced.exists():
-                            try:
-                                with Image.open(produced) as raw:
-                                    raw.load()
-                                    candidate = repair_alpha(original, raw.copy())
-                                    if candidate.size == expected and content_mae(original, candidate) <= 25.0:
-                                        image = candidate
-                            except Exception:  # noqa: BLE001 - a broken engine output is a fallback
-                                image = None
-                        fallback = image is None
-                        if image is None:
-                            image = lanczos_upscale(original)
-                        if image.size != expected:
-                            image = image.resize(expected, Image.Resampling.LANCZOS)
-                        record_image(rel, image, out_root, entries, log_file, engine_tag, fallback, original.size)
-                done += 1
-                if done % 25 == 0:
-                    print(f"  encoded {done}/{len(jobs) + len(cpu_jobs)}")
-            for stale in stage_in.iterdir():
-                stale.unlink(missing_ok=True)
-            for stale in stage_out.iterdir():
-                stale.unlink(missing_ok=True)
+                for stem, rel in sorted(index_to_rel.items()):
+                    produced = stage_out / f"{stem}.png"
+                    if not produced.exists():
+                        produced = stage_out / f"{stem}.webp"
+                    if not produced.exists():
+                        produced = stage_out / f"{stem}{rel.suffix.lower()}"
+                    engine_tag = f"realcugan/{args.models}/n{denoise}"
+                    with Image.open(root / rel) as original:
+                        src_size = original.size
+                        src_alpha = "A" in original.getbands()
+                        src_opaque = src_alpha and original.convert("RGBA").getchannel("A").getextrema() == (255, 255)
+                        adopted = None
+                        if produced.exists() and produced.suffix.lower() == ".webp":
+                            adopted = record_encoded(
+                                rel, produced, out_root, entries, log_file, engine_tag,
+                                src_size, src_alpha, src_opaque,
+                            )
+                        if adopted is None:
+                            expected = (original.width * SCALE, original.height * SCALE)
+                            image = None
+                            mae_value = None
+                            if produced.exists():
+                                try:
+                                    with Image.open(produced) as raw:
+                                        raw.load()
+                                        candidate = repair_alpha(original, raw.copy())
+                                        if candidate.size == expected:
+                                            mae_value = content_mae(original, candidate)
+                                            if mae_value <= 25.0:
+                                                image = candidate
+                                except Exception:  # noqa: BLE001 - a broken engine output is a fallback
+                                    image = None
+                            fallback = image is None
+                            if fallback:
+                                print(f"  fallback {rel.as_posix()} mae={mae_value}")
+                            if image is None:
+                                image = lanczos_upscale(original)
+                            if image.size != expected:
+                                image = image.resize(expected, Image.Resampling.LANCZOS)
+                            record_image(rel, image, out_root, entries, log_file, engine_tag, fallback, original.size)
+                    done += 1
+                    if done % 25 == 0:
+                        print(f"  encoded {done}/{len(jobs) + len(cpu_jobs)}")
+                for stale in stage_in.iterdir():
+                    stale.unlink(missing_ok=True)
+                for stale in stage_out.iterdir():
+                    stale.unlink(missing_ok=True)
     finally:
-        shutil.rmtree(stage_root, ignore_errors=True)
+        if os.environ.get("LWsmf_HD_KEEP_STAGE"):
+            print(f"[stage] kept at {stage_root}", flush=True)
+        else:
+            shutil.rmtree(stage_root, ignore_errors=True)
 
     payload = {
         "version": 1,
