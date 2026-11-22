@@ -80,7 +80,7 @@ func handle_event(event: InputEvent) -> bool:
 					pointer_pressed = false
 					if _action_entry_suppressed:
 						_click_latch = false
-						_release_action_suppression_if_free()
+						release_action_suppression_if_free()
 				MOUSE_BUTTON_RIGHT:
 					right_pressed = false
 				MOUSE_BUTTON_MIDDLE:
@@ -123,7 +123,7 @@ func handle_event(event: InputEvent) -> bool:
 		key_event.emit(event.keycode, false)
 		if _action_entry_suppressed and event.keycode in ACTION_KEYS:
 			_click_latch = false
-			_release_action_suppression_if_free()
+			release_action_suppression_if_free()
 		return false
 
 	# OS repeat drives cursor stepping; decide/cancel keys ignore echo to prevent double-confirm.
@@ -243,7 +243,7 @@ func action_input_held() -> bool:
 	return _any_pressed(ACTION_KEYS)
 
 
-func _release_action_suppression_if_free() -> void:
+func release_action_suppression_if_free() -> void:
 	if not _action_entry_suppressed:
 		return
 	if action_input_held():
@@ -259,6 +259,7 @@ func clear_frame_latches() -> void:
 	_click_latch = false
 	_right_click_latch = false
 	_middle_click_latch = false
+	release_action_suppression_if_free()
 
 
 ## Clear entry-suppression guard (e.g. on focus loss when key/mouse release may be missed).

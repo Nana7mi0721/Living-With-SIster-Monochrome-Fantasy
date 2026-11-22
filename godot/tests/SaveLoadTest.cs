@@ -557,6 +557,28 @@ public partial class SaveLoadTest : Node
         Check(!view.SnapshotPictures().Any(p => p.Number is 15000 or 16000),
             "load must exclude transient menu/popup picture slots 15000 and 16000");
 
+        // Loading a save during an input-denied cutscene or with pending 211 reservations must
+        // wipe both opcode 126 permissions and queued reservations so the loaded save is interactive.
+        vm.Vm.ApplyInputPermission(0x0201);      // deny OK
+        vm.Vm.ApplyInputPermission(0x1000_0200); // device deny
+        vm.Reserve(4);
+        Check(vm.PendingReserveCount == 1, "test setup must queue one 211 reservation");
+        Check(session.LoadGameFrom(filteredPath), "reload with active deny/reserve must succeed");
+        Check(session.BasicAllDeny == 0 && !vm.Vm.DeviceDeny,
+            "load must reset opcode 126 input permissions from prior cutscene");
+        Check(vm.PendingReserveCount == 0, "load must clear queued 211 reservations from prior state");
+
+        // Killing a coroutine while waiting on choice/message must resync VmController wait flags
+        // and let GameSession close the stale UI overlay immediately.
+        Check(session.LoadGame(), "reload slot while choice wait is open");
+        Check(vm.IsWaitingForChoice() && view.HasChoices, "loaded slot must reopen choice UI");
+        Instance? killedWaiter = vm.Vm.FindInstance(liveId);
+        Check(killedWaiter != null, "choice waiter must exist before force-stop");
+        if (killedWaiter != null) vm.Vm.StopInstance(killedWaiter.Id);
+        session.AdvanceFrame();
+        Check(!vm.IsWaitingForChoice() && !view.HasChoices,
+            "killing a choice-waiting coroutine must clear IsWaitingForChoice and close choices");
+
         try { Directory.Delete(saveDir, true); }
         catch (IOException) { }
 

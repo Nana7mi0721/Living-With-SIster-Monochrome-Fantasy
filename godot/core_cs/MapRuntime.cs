@@ -341,6 +341,7 @@ public sealed class MapRuntime
             var inst = vm.CreateInstance(page.Program);
             if (inst == null) continue;
             inst.RetainAfterFinish = true;
+            inst.IsParallel = page.Trigger == MapTrigger.Parallel;
             inst.Self.CopyFrom(state.SelfVars);
             state.InstanceId = inst.Id;
             state.Starts++;
@@ -366,6 +367,7 @@ public sealed class MapRuntime
         var inst = vm.CreateInstance(page.Program);
         if (inst == null) return false;
         inst.RetainAfterFinish = true;
+        inst.IsParallel = page.Trigger == MapTrigger.Parallel;
         inst.Self.CopyFrom(state.SelfVars);
         state.InstanceId = inst.Id;
         state.Starts++;

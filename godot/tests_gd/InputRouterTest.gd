@@ -221,6 +221,25 @@ func _ready() -> void:
 	final_left_release.pressed = false
 	_router.handle_event(final_left_release)
 
+	# 15. Fast click (press + release before advance_frame / suppress_action_until_release)
+	# must release entry suppression cleanly on clear_frame_latches() without swallowing the next click.
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+	_router.handle_event(_mouse(MOUSE_BUTTON_LEFT))
+	var fast_release := _mouse(MOUSE_BUTTON_LEFT)
+	fast_release.pressed = false
+	_router.handle_event(fast_release)
+	_router.suppress_action_until_release()
+	if not _router.action_entry_suppressed():
+		failures.append("fast-click entry must arm suppression for the current frame")
+	_router.clear_frame_latches()
+	if _router.action_entry_suppressed():
+		failures.append("clear_frame_latches() must drop entry suppression once no button/key is held")
+	_router.handle_event(_mouse(MOUSE_BUTTON_LEFT))
+	if (_router.held_mask() & InputRouter.MASK_OK) == 0 or not _router.left_frame_pressed():
+		failures.append("next click after a fast click must not be swallowed")
+	_router.clear_pointer_latches()
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

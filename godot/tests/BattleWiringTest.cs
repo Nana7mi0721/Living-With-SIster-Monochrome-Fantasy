@@ -49,7 +49,37 @@ public static class BattleWiringTest
         Check(Math.Abs(trace.Result) == 1, "2000352 must settle to +/-1, got " + trace.Result);
         Check(trace.MaxCe242Pc >= 200, "CE242 did not execute its command body");
         Check(!trace.Ce239AliveAtEnd, $"CE239 still alive after settlement pc={trace.End239Pc} v340={trace.End340} v350={trace.End350} v343={trace.End343}");
+        TestSecondBattleReharvestAndReset();
         GD.Print($"BATTLE_WIRING_TEST_OK rounds={trace.Rounds} result={trace.Result} ce242_pc={trace.MaxCe242Pc}");
+    }
+
+    private static void TestSecondBattleReharvestAndReset()
+    {
+        var vm = new EventVm();
+        var store = GameDatabase.Load(Path.Combine(DataDirectory(), "database.json"))!;
+        var wiring = new BattleWiring();
+        Set(store, 18, 73, 0, 1);
+        wiring.Tick(vm, op => store.Execute(op)); // baseline _menuCursor=1
+
+        // Battle 1 registers row 1 -> cursor advances to 2
+        Set(store, BattleWiring.CmdListType, 1, 0, 1);
+        Set(store, BattleWiring.CmdListType, 1, 3, 26);
+        Set(store, 18, 73, 0, 2);
+        int added1 = wiring.HarvestMenuRegistrations(vm, op => store.Execute(op));
+        Check(added1 == 1 && wiring.MenuSelections.Count == 1, "battle 1 should harvest row 1");
+
+        // Battle 2 resets cursor back down to 1, then commits row 1 with skill 99
+        Set(store, 18, 73, 0, 1);
+        wiring.Tick(vm, op => store.Execute(op));
+        Set(store, BattleWiring.CmdListType, 1, 0, 1);
+        Set(store, BattleWiring.CmdListType, 1, 3, 99);
+        Set(store, 18, 73, 0, 2);
+        int added2 = wiring.HarvestMenuRegistrations(vm, op => store.Execute(op));
+        Check(added2 == 1 && wiring.MenuSelections[^1].Skill == 99, "battle 2 should re-harvest row 1 after cursor reset");
+
+        wiring.Reset();
+        Check(wiring.MenuSelections.Count == 0 && wiring.MenuQueueLength == 0 && wiring.StartedRounds == 0 && !wiring.SawDispatch,
+            "BattleWiring.Reset() must clear all battle state");
     }
 
     private static Trace RunLine()

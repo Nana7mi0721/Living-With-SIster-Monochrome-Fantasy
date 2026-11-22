@@ -583,14 +583,14 @@ func close_debug() -> void:
 		_debug_root.visible = false
 
 
-func refresh_debug(fps: float, frame_count: int, phase_name: String, active_instances: String, pic_count: int, hover_pos: Vector2, mouse_seen: bool, assets: AssetDB) -> void:
+func refresh_debug(fps: float, frame_count: int, phase_name: String, active_instances: String, pic_count: int, hover_pos: Vector2, mouse_seen: bool, assets: AssetDB, diag_line: String = "") -> void:
 	if not _debug_open or _debug_label == null:
 		return
 	var used_mb := float(assets.used_bytes) / (1024.0 * 1024.0) if assets != null else 0.0
 	var asset_misses := assets.misses if assets != null else 0
 	var ptr_text := "(%.0f, %.0f)" % [hover_pos.x, hover_pos.y] if mouse_seen else "(-1, -1)"
 	var inst_summary := active_instances if not active_instances.is_empty() else "none"
-	_debug_label.text = "\n".join([
+	var lines := PackedStringArray([
 		"F3 Debug",
 		"FPS=%.0f  Frame=%d  Phase=%s" % [fps, frame_count, phase_name],
 		"Pics=%d  Hover=%s" % [pic_count, ptr_text],
@@ -598,3 +598,6 @@ func refresh_debug(fps: float, frame_count: int, phase_name: String, active_inst
 		"Font=%s" % UiSkin.font_status(),
 		"Instances: %s" % inst_summary,
 	])
+	if not diag_line.is_empty():
+		lines.append(diag_line)
+	_debug_label.text = "\n".join(lines)

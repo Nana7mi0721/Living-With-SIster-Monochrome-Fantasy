@@ -193,6 +193,9 @@ public partial class MapRuntimeTest : Node
         Check(runtime.StartPending(vm) == 1, "parallel page should auto-start");
         Check(runtime.Events[0].Active == 1, "page 1 should be active");
         Check(runtime.ParallelCount == 1, "parallel page count should be 1");
+        var parallelInst = vm.FindInstance(runtime.Events[0].InstanceId ?? -1);
+        Check(parallelInst != null && parallelInst.IsParallel, "parallel map page must mark instance IsParallel = true");
+        Check(!vm.ForegroundBusy(), "parallel map page must never block ForegroundBusy()");
         Check(runtime.TriggerCandidates(true, false, 5, 5, 2).Count == 0, "parallel page has no action trigger");
 
         // Page switch while a page is waiting on a child call is refused.

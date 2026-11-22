@@ -1622,7 +1622,11 @@ public sealed class EventVm
         }
         foreach (var other in Instances)
         {
-            if (doomed.Contains(other.Id)) _freshInstanceIds.Remove(other.Id);
+            if (doomed.Contains(other.Id))
+            {
+                _freshInstanceIds.Remove(other.Id);
+                _enteredInstanceIds.Remove(other.Id);
+            }
         }
         Instances.RemoveAll(other => doomed.Contains(other.Id));
         for (int i = 0; i < Instances.Count; i++)
@@ -1691,6 +1695,9 @@ public sealed class EventVm
         }
     }
 
+    public int EnteredInstanceCount => _enteredInstanceIds.Count;
+    public const int PerInstanceFrameBudget = 50_000;
+
     public void RunInstances(ref int budget)
     {
         for (int i = 0; i < Instances.Count; i++)
@@ -1699,11 +1706,19 @@ public sealed class EventVm
             var inst = Instances[i];
             if (inst.IsRunnable)
             {
-                if (_enteredInstanceIds.Add(inst.Id) && !inst.IsParallel)
+                if (!inst.IsParallel && _enteredInstanceIds.Add(inst.Id))
                 {
                     Host.EventEntered(inst.EventId, !inst.ParentId.HasValue);
                 }
-                StepInstance(inst, ref budget);
+                int instBudget = Math.Min(budget, PerInstanceFrameBudget);
+                int rem = instBudget;
+                StepInstance(inst, ref rem);
+                int consumed = instBudget - rem;
+                budget -= consumed;
+                if (rem <= 0 && consumed >= PerInstanceFrameBudget && inst.IsRunnable)
+                {
+                    Host.Log($"Event {inst.EventId} (pc={inst.Pc}) hit per-instance frame budget ({PerInstanceFrameBudget})");
+                }
             }
         }
     }
@@ -1732,6 +1747,7 @@ public sealed class EventVm
                 // exec.rs reap_finished: capture the bank before dropping it.
                 PersistCommonSelf(inst);
                 _freshInstanceIds.Remove(inst.Id);
+                _enteredInstanceIds.Remove(inst.Id);
 
                 // Wake parent
                 if (inst.ParentId.HasValue)

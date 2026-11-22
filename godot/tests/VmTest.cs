@@ -52,6 +52,8 @@ public static class VmTest
         TestGetFileExistHostDelegate();
         TestOpcode1000ProFeatureWait();
         TestEventEntryNotifications();
+        TestPerInstanceBudgetPreventsStarvation();
+        TestParallelEnteredInstanceDoesNotLeak();
         TestMaxCallDepth();
         DatabaseTest.Run();
         AutoEventsTest.Run();
@@ -1445,5 +1447,52 @@ public static class VmTest
         vm.StepFrame();
         if (vm.Vars.GetStr(1) != "1" || vm.Vars.GetStr(2) != "0")
             throw new Exception($"GET_FILE_EXIST mismatch: s1='{vm.Vars.GetStr(1)}' s2='{vm.Vars.GetStr(2)}'");
+    }
+
+    private static void TestPerInstanceBudgetPreventsStarvation()
+    {
+        Console.WriteLine("  Testing per-instance frame budget prevents starvation...");
+        var spinSlots = new List<Slot>
+        {
+            Slot.Command(170), // unconditional loop
+            Slot.Command(121, [2_000_001, 1, 0, 0]),
+            Slot.Command(498),
+        };
+        var tailSlots = new List<Slot>
+        {
+            Slot.Command(121, [2_000_050, 77, 0, 0]),
+            Slot.Command(172)
+        };
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        vm.RegisterProgram(Program.FromSlots(112, "SpinLoop", spinSlots));
+        vm.RegisterProgram(Program.FromSlots(113, "TailWork", tailSlots));
+        vm.CreateInstance(112);
+        vm.CreateInstance(113);
+        vm.StepFrame();
+        if (vm.Vars.Get(50) != 77)
+            throw new Exception($"runaway loop starved trailing coroutine: var50={vm.Vars.Get(50)}");
+        if (!host.Logs.Exists(l => l.Contains("per-instance frame budget")))
+            throw new Exception("per-instance budget limit should log a diagnostic warning");
+    }
+
+    private static void TestParallelEnteredInstanceDoesNotLeak()
+    {
+        Console.WriteLine("  Testing _enteredInstanceIds stays bounded across parallel & finished events...");
+        var host = new RecordingHost();
+        var vm = new EventVm { Host = host };
+        vm.RegisterProgram(Program.FromSlots(114, "ParallelTick", new List<Slot> { Slot.Command(172) }));
+        vm.RegisterProgram(Program.FromSlots(115, "FgTick", new List<Slot> { Slot.Command(172) }));
+        for (int i = 0; i < 40; i++)
+        {
+            var p = vm.CreateInstance(114)!;
+            p.IsParallel = true;
+            vm.CreateInstance(115);
+            vm.StepFrame();
+        }
+        if (host.EnteredEvents.Contains(114))
+            throw new Exception("parallel instance must not fire EventEntered");
+        if (vm.EnteredInstanceCount != 0)
+            throw new Exception($"_enteredInstanceIds leaked {vm.EnteredInstanceCount} retired ids");
     }
 }

@@ -58,6 +58,21 @@ public sealed class BattleWiring
     public IReadOnlyList<MenuSelection> MenuSelections => _menuSelections;
     public int MenuQueueLength => _menuQueue.Count;
 
+    /// <summary>Reset all battle wiring state on session transitions (title, new game, load).</summary>
+    public void Reset()
+    {
+        _prevBattleActive = false;
+        _cursor = 0;
+        _menuCursor = -1;
+        _harvestedRows.Clear();
+        _menuQueue.Clear();
+        _menuSelections.Clear();
+        StartedRounds = 0;
+        TurnStarts = 0;
+        _sawDispatch = false;
+        _sawCaller = false;
+    }
+
     public void SetEnabled(bool enabled) => _manualEnable = enabled;
 
     public void SetAutoArm(bool enabled) => _autoArm = enabled;
@@ -122,6 +137,13 @@ public sealed class BattleWiring
             _menuCursor = cursor;
             return 0;
         }
+        if (cursor < _menuCursor)
+        {
+            // Next battle menu reset CData 18/73/0 back down; clear per-battle harvest state.
+            _menuCursor = cursor;
+            _harvestedRows.Clear();
+            _menuQueue.Clear();
+        }
         if (cursor <= _menuCursor) return 0;
 
         int added = 0;
@@ -178,9 +200,19 @@ public sealed class BattleWiring
         {
             _sawCaller = HasChildInstance(vm, EventBattleCaller);
         }
+        bool wasBattleActive = _prevBattleActive;
         bool battleActive = vm.Vars.Get(VarBattleActive) != 0;
-        bool rising = battleActive && !_prevBattleActive;
+        bool rising = battleActive && !wasBattleActive;
         _prevBattleActive = battleActive;
+        if (wasBattleActive && !battleActive)
+        {
+            // Keep cumulative telemetry (StartedRounds/TurnStarts/Saw*/MenuSelections) for callers,
+            // while clearing per-battle cursor/queue so the next battle harvests cleanly.
+            _menuCursor = -1;
+            _harvestedRows.Clear();
+            _menuQueue.Clear();
+            _cursor = 0;
+        }
 
         bool auto = _autoArm && RealBattleRunning(vm);
         bool drive = _manualEnable ?? auto;

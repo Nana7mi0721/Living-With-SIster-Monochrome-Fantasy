@@ -210,7 +210,14 @@ func _process(delta: float) -> void:
 			var seen := router.mouse_seen if router != null else false
 			var inst_str := session.DescribeInstances() if session != null else ""
 			var pic_cnt := stage.picture_count() if stage != null else 0
-			overlays.refresh_debug(Engine.get_frames_per_second(), frames, phase, inst_str, pic_cnt, ptr, seen, assets)
+			var diag_line := ""
+			if session != null and vm != null and router != null:
+				diag_line = "Deny=basic:%d/dev:%s  Guard=modal:%s/act:%s  v295=%d" % [
+					int(session.BasicAllDeny), str(vm.DeviceDeny),
+					str(_modal_release_guard), str(router.action_entry_suppressed()),
+					int(vm.GetVar(295)),
+				]
+			overlays.refresh_debug(Engine.get_frames_per_second(), frames, phase, inst_str, pic_cnt, ptr, seen, assets, diag_line)
 
 
 ## One deterministic frame; tests call this directly instead of waiting on the clock.
@@ -275,6 +282,8 @@ func advance_frame() -> void:
 			report_fault(_failure_reason())
 		return
 	_release_modal_guard_if_free()
+	if router != null:
+		router.release_action_suppression_if_free()
 	# Pause the deterministic clock while a modal overlay (backlog/title confirm) is open.
 	if _modal_window_open():
 		return

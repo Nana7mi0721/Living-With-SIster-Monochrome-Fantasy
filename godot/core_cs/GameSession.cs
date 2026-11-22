@@ -197,7 +197,9 @@ public sealed class GameSession
         }
 
         _titleProgram = title;
+        _vm.StopAll();
         _vm.ResetDialogueState();
+        _battleWiring.Reset();
         _messageOpen = false;
         _hasChoices = false;
         ChoiceAllowsCancel = true;
@@ -951,8 +953,10 @@ public sealed class GameSession
     /// <summary>Apply a slot that already passed the codec gates and the map-file check.</summary>
     private bool ApplyLoadedState(SaveState state)
     {
-        _vm.Vm.StopAll();
+        _vm.StopAll();
+        _vm.Vm.ResetInputPermissions();
         _vm.ResetDialogueState();
+        _battleWiring.Reset();
         _messageOpen = false;
         _hasChoices = false;
         ChoiceAllowsCancel = true;
@@ -1039,8 +1043,9 @@ public sealed class GameSession
         }
 
         LegacySaveImporter.RecoveredData data = slot.Recovered;
-        _vm.Vm.StopAll();
+        _vm.StopAll();
         _vm.ResetSessionState();
+        _battleWiring.Reset();
         _vm.Map = null;
         _mapRuntime = null;
         _map = null;
@@ -1117,8 +1122,9 @@ public sealed class GameSession
     private void StartNewGameNow()
     {
         Phase = "newgame";
-        _vm.Vm.StopAll();
+        _vm.StopAll();
         _vm.ResetDialogueState();
+        _battleWiring.Reset();
         _messageOpen = false;
         _hasChoices = false;
         ChoiceAllowsCancel = true;
@@ -1155,11 +1161,16 @@ public sealed class GameSession
         foreach (SavedInstance saved in state.Instances)
         {
             if (HasSaveUiAncestor(saved, savedById)) continue;
+            bool isParallel = false;
             Program? program = null;
             if (saved.Kind == "map" && saved.Page >= 0)
             {
                 MapEventDef? def = _map?.Events.FirstOrDefault(e => e.Id == saved.EventId);
-                if (def != null && saved.Page < def.Pages.Count) program = def.Pages[saved.Page].Program;
+                if (def != null && saved.Page < def.Pages.Count)
+                {
+                    program = def.Pages[saved.Page].Program;
+                    isParallel = def.Pages[saved.Page].Trigger == MapTrigger.Parallel;
+                }
             }
             else
             {
@@ -1185,7 +1196,8 @@ public sealed class GameSession
                 EventId = saved.EventId,
                 Program = program,
                 Pc = saved.Pc,
-                ReturnTo = saved.ReturnTo
+                ReturnTo = saved.ReturnTo,
+                IsParallel = isParallel
             };
             inst.Wait.Kind = (WaitStateKind)saved.WaitKind;
             inst.Wait.Frames = saved.WaitFrames;

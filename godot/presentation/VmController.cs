@@ -341,8 +341,32 @@ public partial class VmController : Node, IHost, IVmSession
     public string GetStrVar(int varId) => Vm.Vars.GetStr(varId);
     public void SetStrVar(int varId, string value) => Vm.Vars.SetStr(varId, value);
 
-    public bool IsWaitingForChoice() => _isWaitingChoice;
-    public bool IsWaitingForMessage() => _isWaitingMessage;
+    private bool HasWaitingInstance(WaitStateKind kind)
+    {
+        var instances = Vm.Instances;
+        for (int i = 0; i < instances.Count; i++)
+        {
+            if (instances[i].Wait.Kind == kind) return true;
+        }
+        return false;
+    }
+
+    public bool IsWaitingForChoice()
+    {
+        if (!_isWaitingChoice) return false;
+        if (HasWaitingInstance(WaitStateKind.Choice)) return true;
+        _isWaitingChoice = false;
+        _pendingChoiceReply = null;
+        return false;
+    }
+
+    public bool IsWaitingForMessage()
+    {
+        if (!_isWaitingMessage) return false;
+        if (HasWaitingInstance(WaitStateKind.Message)) return true;
+        _isWaitingMessage = false;
+        return false;
+    }
     public bool IsRunning() => Vm.Instances.Count > 0;
 
     /// <summary>Start the run-condition-2 helpers once, like Game::new_game (H scene fixtures).</summary>
@@ -968,6 +992,7 @@ public partial class VmController : Node, IHost, IVmSession
     {
         Vm.StopAll();
         _pictureQueue.Clear();
+        _reservedEvents.Clear();
     }
     public void ResetDiagnostics() => Vm.ResetDiagnostics();
 
