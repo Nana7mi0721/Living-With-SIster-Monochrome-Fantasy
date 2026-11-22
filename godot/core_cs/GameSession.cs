@@ -586,12 +586,8 @@ public sealed class GameSession
         return state;
     }
 
-    // Exclude transient screen-overlay UI slots (Save/Load/Shop/System 12000..12599,
-    // universal choice windows 15000..15999, and menu/item popups 16000..16999).
-    private static bool IsSaveUiPicture(int number) =>
-        (number >= SaveUiPictureFirst && number <= SaveUiPictureLast)
-        || (number >= 15000 && number <= 15999)
-        || (number >= 16000 && number <= 16999);
+    // Exclude transient screen-overlay UI slots via the single SaveMigrator predicate.
+    private static bool IsSaveUiPicture(int number) => SaveMigrator.IsTransientUiPicture(number);
 
     private static bool IsSaveUiEvent(int eventId) => eventId is 14 or 94 or 131;
 

@@ -61,6 +61,7 @@ var auto_advance := false
 var faulted := false
 var _accumulator := 0.0
 var _status_lines: Array[String] = []
+var _recent_logs: Array[String] = []
 
 
 func _ready() -> void:
@@ -336,6 +337,7 @@ func _on_event_entered(event_id: int, _is_root: bool) -> void:
 		return
 	if router.action_input_held():
 		router.suppress_action_until_release()
+		# Preserve single-frame EngineState(7) click edge during title boot except for Save/Item UIs.
 		if phase != "title" or event_id == 128 or event_id == 131:
 			if vm != null:
 				vm.SetPointerHeld(false)
@@ -923,9 +925,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if key.keycode == KEY_F6:
-		if stage != null:
-			stage.dump_pictures(true)
-			_show_toast("已导出图层槽位 user://picture_dump.txt")
+		dump_diagnostic_snapshot(true)
+		_show_toast("已导出诊断快照 user://diagnostic_snapshot.txt")
 		get_viewport().set_input_as_handled()
 		return
 	if key.keycode == KEY_F4:
@@ -1250,8 +1251,44 @@ func status(line: String, quiet: bool = false) -> void:
 	_status_lines.append(line)
 	while _status_lines.size() > 3:
 		_status_lines.pop_front()
+	_recent_logs.append(line)
+	while _recent_logs.size() > 30:
+		_recent_logs.pop_front()
 	if not quiet:
 		print("[GameRoot] ", line)
+
+
+## Export unified live diagnostics (font, misses, VM instances, input state, pictures, logs).
+func dump_diagnostic_snapshot(write_file: bool = true) -> String:
+	var inst_summary := session.DescribeInstances() if session != null else "none"
+	var miss_count := assets.misses if assets != null else 0
+	var miss_list := ", ".join(assets.miss_paths) if assets != null and not assets.miss_paths.is_empty() else "none"
+	var ptr_pos := str(router.hover_position) if router != null else "(0, 0)"
+	var ptr_pressed := str(router.pointer_pressed) if router != null else "false"
+	var right_pressed := str(router.right_pressed) if router != null else "false"
+	var suppressed := str(router.action_entry_suppressed()) if router != null else "false"
+	var click_latched := str(router.click_latched()) if router != null else "false"
+	var leader_text := "%d,%d facing=%d" % [vm.LeaderX, vm.LeaderY, vm.LeaderFacing] if vm != null else "0,0 facing=0"
+	var pic_dump := stage.dump_pictures(write_file) if stage != null else "stage=null"
+	var recent := "\n".join(_recent_logs) if not _recent_logs.is_empty() else "none"
+	var report := "\n".join([
+		"[Font] %s" % UiSkin.font_status(),
+		"[Assets] misses=%d paths=[%s]" % [miss_count, miss_list],
+		"[VM] phase=%s frames=%d modal=%s leader=%s instances=%s" % [
+			phase, frames, str(_modal_window_open()), leader_text, inst_summary
+		],
+		"[Input] hover=%s left=%s right=%s suppressed=%s click_latch=%s" % [
+			ptr_pos, ptr_pressed, right_pressed, suppressed, click_latched
+		],
+		"[PictureDump]\n%s" % pic_dump,
+		"[RecentLogs]\n%s" % recent,
+	])
+	if write_file:
+		var f := FileAccess.open("user://diagnostic_snapshot.txt", FileAccess.WRITE)
+		if f != null:
+			f.store_string(report + "\n")
+			f.close()
+	return report
 
 
 func status_lines() -> Array[String]:

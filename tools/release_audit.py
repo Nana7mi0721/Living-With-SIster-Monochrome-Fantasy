@@ -15,10 +15,10 @@ import sys
 from pathlib import Path
 
 try:
-    from pack_media import read_pak_entries
+    from pack_media import read_pak_entries, read_pak_index
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from pack_media import read_pak_entries
+    from pack_media import read_pak_entries, read_pak_index
 
 REQUIRED_FILES = [
     "game/Lwsmf.exe",
@@ -169,7 +169,56 @@ def audit(dist: Path) -> tuple[list[str], dict[str, int]]:
             stats["files"] += 1
             stats["bytes"] += path.stat().st_size
 
+    prog_path = dist / "game_data/programs.json"
+    if prog_path.is_file() and pak_paths:
+        total_refs, miss = audit_program_assets(prog_path, pak_paths)
+        stats["program_asset_total"] = total_refs
+        stats["program_asset_missing"] = len(miss)
+
     return errors, stats
+
+
+def audit_program_assets(programs_json: Path, pak_paths: set[str]) -> tuple[int, list[str]]:
+    """Cross-check static picture/audio asset references in programs.json against media.pak."""
+    data = json.loads(programs_json.read_text(encoding="utf-8"))
+    basenames = {Path(p).name for p in pak_paths}
+    refs: set[str] = set()
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            if node.get("op") in (140, 150):
+                for raw in node.get("strings") or []:
+                    if not isinstance(raw, str):
+                        continue
+                    norm = raw.strip().replace("\\", "/")
+                    low = norm.lower()
+                    if not norm or low.startswith("<") or "\\" in raw or "%" in norm or "/" not in norm:
+                        continue
+                    if low.startswith("save/"):
+                        continue
+                    if Path(low).suffix in MEDIA_EXTS:
+                        refs.add(norm)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for x in node:
+                walk(x)
+
+    walk(data)
+    missing: list[str] = []
+    for ref in sorted(refs):
+        low = ref.lower().lstrip("./")
+        if low.startswith("../"):
+            low = low[3:]
+        if low in pak_paths:
+            continue
+        stem = str(Path(low).with_suffix(""))
+        if any((stem + ext) in pak_paths for ext in PROBE_EXTENSIONS if ext):
+            continue
+        if Path(low).name in basenames:
+            continue
+        missing.append(ref)
+    return len(refs), missing
 
 
 def repo_scan(repo_root: Path) -> list[str]:
@@ -219,7 +268,26 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Audit LWSMF release staging or repo privacy hygiene")
     parser.add_argument("--dist", default="dist/Lwsmf-win64", help="release directory to audit")
     parser.add_argument("--repo-scan", action="store_true", help="scan tracked production/tool/core-doc files for leaks")
+    parser.add_argument("--asset-audit", action="store_true", help="cross-check game_data/programs.json against work/all/media.pak")
+    parser.add_argument("--strict", action="store_true", help="fail non-zero if --asset-audit finds any unreferenced/stub misses")
     args = parser.parse_args(argv)
+
+    if args.asset_audit:
+        repo_root = Path(__file__).resolve().parent.parent
+        pak_file = repo_root / "work/all/media.pak"
+        prog_file = repo_root / "game_data/programs.json"
+        if not pak_file.is_file() or not prog_file.is_file():
+            print("ASSET_AUDIT_SKIPPED missing work/all/media.pak or game_data/programs.json")
+            return 0
+        pak_paths = read_pak_index(pak_file)
+        total_refs, missing = audit_program_assets(prog_file, pak_paths)
+        print(
+            f"ASSET_AUDIT_REPORT total={total_refs} matched={total_refs - len(missing)} "
+            f"missing={len(missing)} pak_entries={len(pak_paths)}"
+        )
+        for ref in missing[:20]:
+            print(f"- {ref}")
+        return 1 if (args.strict and missing) else 0
 
     if args.repo_scan:
         repo_root = Path(__file__).resolve().parent.parent

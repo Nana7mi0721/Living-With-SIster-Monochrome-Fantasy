@@ -1319,7 +1319,7 @@ func picture_count() -> int:
 func dump_pictures(write_file: bool = true) -> String:
 	var numbers: Array = _cmds.keys()
 	numbers.sort()
-	var lines := PackedStringArray(["number | file | kind | anchor | blend | tone | opacity | rect"])
+	var lines := PackedStringArray(["number | file | kind | anchor | blend | tone | corr | opacity | rect"])
 	for number in numbers:
 		var cmd: Dictionary = _cmds[number]
 		var st: Dictionary = _states.get(number, {})
@@ -1332,11 +1332,18 @@ func dump_pictures(write_file: bool = true) -> String:
 		var kind := int(cmd.get("kind", -1))
 		var anchor := int(st.get("anchor", cmd.get("anchor", 0)))
 		var blend := int(st.get("blend", 0))
-		var corr: Dictionary = st.get("color_corr", {}) if st.get("color_corr", null) is Dictionary else {}
-		var tone_r := int(corr.get("r", 100))
-		var tone_g := int(corr.get("g", 100))
-		var tone_b := int(corr.get("b", 100))
-		var tone_s := "%d,%d,%d" % [tone_r, tone_g, tone_b]
+		var tone_arr: Array = st.get("tone", [100, 100, 100]) if st.get("tone", null) is Array else [100, 100, 100]
+		var corr_arr: Array = st.get("color_corr", [0, 0, 0]) if st.get("color_corr", null) is Array else [0, 0, 0]
+		var tone_s := "%d,%d,%d" % [
+			int(tone_arr[0]) if tone_arr.size() > 0 else 100,
+			int(tone_arr[1]) if tone_arr.size() > 1 else 100,
+			int(tone_arr[2]) if tone_arr.size() > 2 else 100,
+		]
+		var corr_s := "%d,%d,%d" % [
+			int(corr_arr[0]) if corr_arr.size() > 0 else 0,
+			int(corr_arr[1]) if corr_arr.size() > 1 else 0,
+			int(corr_arr[2]) if corr_arr.size() > 2 else 0,
+		]
 		var cur: Dictionary = st.get("current", {}) if st.get("current", null) is Dictionary else {}
 		var opacity := int(cur.get("opacity", st.get("opacity", 255)))
 		var rect := Rect2()
@@ -1344,8 +1351,8 @@ func dump_pictures(write_file: bool = true) -> String:
 		if node is Control and is_instance_valid(node):
 			var ctrl := node as Control
 			rect = Rect2(ctrl.position, ctrl.size)
-		lines.append("%d | %s | %d | %d | %d | %s | %d | %s" % [
-			int(number), file_label, kind, anchor, blend, tone_s, opacity, str(rect)
+		lines.append("%d | %s | %d | %d | %d | %s | %s | %d | %s" % [
+			int(number), file_label, kind, anchor, blend, tone_s, corr_s, opacity, str(rect)
 		])
 	var text := "\n".join(lines)
 	print("[PictureDump]\n%s" % text)

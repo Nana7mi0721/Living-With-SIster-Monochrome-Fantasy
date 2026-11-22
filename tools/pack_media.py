@@ -92,6 +92,28 @@ def xor_bytes(data: bytes | bytearray, offset: int) -> bytes:
     return val.to_bytes(n, "little")
 
 
+def read_pak_index(pak_path: Path) -> set[str]:
+    """Read only the lowercase logical path TOC from an existing WOLFMPK1 file."""
+    with pak_path.open("rb") as f:
+        header = f.read(HEADER_SIZE)
+        if len(header) < HEADER_SIZE or header[:8] != MAGIC:
+            raise ValueError(f"{pak_path} is not a valid WOLFMPK1 pack")
+        ver, flags, count, index_offset, index_size = struct.unpack("<HHIQQ", header[8:])
+        if ver != VERSION or flags != 0:
+            raise ValueError(f"unsupported header version={ver} flags={flags}")
+        f.seek(index_offset)
+        idx = xor_bytes(f.read(index_size), index_offset)
+        names: set[str] = set()
+        pos = 0
+        for _ in range(count):
+            plen, _off, _sz, _crc = struct.unpack_from("<HQQI", idx, pos)
+            pos += 22
+            rel = idx[pos : pos + plen].decode("utf-8").replace("\\", "/").lower()
+            pos += plen
+            names.add(rel)
+        return names
+
+
 def read_pak_entries(pak_path: Path) -> list[tuple[str, bytes]]:
     """Read and verify all decrypted entries from an existing WOLFMPK1 file."""
     with pak_path.open("rb") as f:

@@ -35,7 +35,7 @@ graph LR
 | 文档 | 状态 | 内容与定位 |
 | :--- | :---: | :--- |
 | [godot/README.md](godot/README.md) | **现行 · 先读** | **Godot 重制阶段唯一规范入口**：环境基线、当前完成状态与维护约定 |
-| [godot/DECISIONS.md](godot/DECISIONS.md) | **现行 · 权威** | **定稿架构决策（D-01..D-71）**：确定采用纯 C# 确定性事件内核 + GDScript 呈现层 |
+| [godot/DECISIONS.md](godot/DECISIONS.md) | **现行 · 权威** | **定稿架构决策（D-01..D-74）**：确定采用纯 C# 确定性事件内核 + GDScript 呈现层 |
 | [godot/PLAN.md](godot/PLAN.md) | **现行 · 权威** | Godot 阶段总体演进路线与 M0–M5 各阶段退出标准 |
 | [BASELINE.json](BASELINE.json) | **现行 · 权威** | 自动化测试与一致性校验基线（包含 Game.dat 字段、公共事件、地图事件统计） |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | **现行 · 权威** | 全局架构设计方案（数据转换管线、运行时状态机、渲染层级） |
@@ -97,7 +97,9 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 系统性代码审查（Code Review）、跨仓库审计与缺陷追踪记录：
 
 - [reviews/README.md](reviews/README.md) — 代码审查台账总览索引
-- [reviews/live_play_root_cause_diagnosis_2026_11_22.md](reviews/live_play_root_cause_diagnosis_2026_11_22.md) — **现行·闭环**：实机体验 7 项核心缺陷根因定位、修复与 OpenGL3 实测验证（见 D-69）
+- [reviews/pipeline_completion_and_next_processes_2026_11_22.md](reviews/pipeline_completion_and_next_processes_2026_11_22.md) — **现行·闭环**：8 条管线验收总评、`RES-01..03` 缺陷收口与 5 大防回归工程流程落地（见 D-74）
+- [reviews/pipeline_overhaul_work_order_2026_11_22.md](reviews/pipeline_overhaul_work_order_2026_11_22.md) — **现行·施工单**：8 条底层管线分阶段排雷施工单（见 D-73）
+- [reviews/live_play_root_cause_diagnosis_2026_11_22.md](reviews/live_play_root_cause_diagnosis_2026_11_22.md) — **现行·闭环**：实机体验 7 项核心缺陷根因定位、修复与 OpenGL3 实测验证（见 D-72 / D-73）
 - [reviews/consolidated_audit_report_2026_11_21.md](reviews/consolidated_audit_report_2026_11_21.md) — **现行·闭环**：`c61d762` 统一核验、P1/P2 深度摸排与 CI 故障根因诊断
 - [reviews/lwsmf_8fa1189_audit_remediation_2026_11_21.md](reviews/lwsmf_8fa1189_audit_remediation_2026_11_21.md) — **现行·闭环**：两份 `8fa1189` 游玩/UI 审计的逐项修复、语义结论与回归映射
 - [reviews/release_gate_verification_2026_11_21.md](reviews/release_gate_verification_2026_11_21.md) — **现行·验证**：基线 `8fa1189` 的 Release 构建与无头 38 项门禁实测证据

@@ -507,10 +507,10 @@ public static class SaveCodec
     public static SaveReadResult ReadWithSource(string path)
     {
         SaveState? main = ReadOne(path);
-        if (main != null) return new SaveReadResult(main, SaveSlotSource.Main);
+        if (main != null) return new SaveReadResult(SaveMigrator.Normalize(main), SaveSlotSource.Main);
         SaveState? backup = ReadOne(path + ".bak");
         return backup != null
-            ? new SaveReadResult(backup, SaveSlotSource.Backup)
+            ? new SaveReadResult(SaveMigrator.Normalize(backup), SaveSlotSource.Backup)
             : new SaveReadResult(null, SaveSlotSource.None);
     }
 

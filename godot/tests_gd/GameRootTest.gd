@@ -752,6 +752,10 @@ func _ready() -> void:
 	item_root._reset_presentation_transient_state()
 	if item_root.message.paused or item_root._active_msg_pos_mode != item_root._WolfConst.MSG_POS_BOTTOM or item_root.stage.screen_tint_multiplier() != Color.WHITE:
 		failures.append("transient reset must restore bottom message mode, clear tint, and clear modal pause")
+	var diag: String = item_root.dump_diagnostic_snapshot(false)
+	for section in ["[Font]", "[Assets]", "[VM]", "[Input]", "[PictureDump]", "[RecentLogs]"]:
+		if not diag.contains(section):
+			failures.append("diagnostic snapshot missing %s section" % section)
 	item_root.queue_free()
 
 	if failures.is_empty():

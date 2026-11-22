@@ -37,6 +37,7 @@ var used_bytes: int = 0
 var hits: int = 0
 var misses: int = 0
 var evictions: int = 0
+var miss_paths: Array[String] = []
 
 var _files: Dictionary = {}                 # lowercase relative path -> absolute path
 var _tex_basenames: Dictionary = {}         # lowercase basename -> absolute image path
@@ -237,6 +238,7 @@ func texture(logical: String) -> Texture2D:
 	misses += 1
 	var path := resolve(logical, "texture")
 	if path.is_empty():
+		_record_miss(logical)
 		return null
 	var image: Image = null
 	if path.begins_with(MEDIA_PREFIX):
@@ -259,6 +261,7 @@ func audio(logical: String) -> AudioStream:
 	misses += 1
 	var path := resolve(logical, "audio")
 	if path.is_empty():
+		_record_miss(logical)
 		return null
 	var stream: AudioStream = null
 	var size := 0
@@ -474,3 +477,10 @@ func _evict() -> void:
 		_sizes.erase(oldest)
 		_cache.erase(oldest)
 		evictions += 1
+
+
+func _record_miss(logical: String) -> void:
+	var norm := _norm_key(logical)
+	if norm.is_empty() or miss_paths.has(norm) or miss_paths.size() >= 64:
+		return
+	miss_paths.append(norm)

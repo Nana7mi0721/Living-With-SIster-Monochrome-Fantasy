@@ -138,12 +138,12 @@ func _on_event_entered(_event_id: int, is_root: bool) -> void:
 
 ---
 
-## 修复闭环记录（2026-11-22，见 `D-69`）
+## 修复闭环记录（2026-11-22，见 `D-72` / `D-73`）
 
 1. **问题 1（真字体 `Lolita.ttf`）**：`UiSkin.gd` 支持大小写无关目录扫描（`work/all`、`Data`、相对解包路径）及包内字体落盘 `user://cache/Lolita.ttf` 通过 `load_dynamic_font` 加载，启动打印 `[UiSkin] font=file:Lolita.ttf (cjk=true)`，并在 `PlayOverlays.gd` F3 调试窗新增 `Font=` 行；`tools/package_release.sh` 增加大小写无关查找及缺失报错保护。
 2. **问题 2（存档黑影 / 黑字 / 缩略图）**：实测定位 `save1/2/3` 左半黑影与巨型立绘系 `PictureStage.picture_state(slot, 2/3)` 返回百分比 `scale=0`（而非 WOLF 要求的像素宽高），致使 `CE94` 计算 `11500 / PicW` 时触发除零保护并放大 `save_SD_*.png` 115 倍至 `23000x23000` 遮盖存档卡片；修复 `picture_state` 字段 `2/3` 返回像素尺寸后立绘恢复正常。另接通 `IHost.FileExists` / `EventVm` `<<GET_FILE_EXIST>>` 与 `AssetDB._norm_key` 去除 `../` 前缀，右下 `12502` `saveX.jpg` 缩略图已正常显示。
 3. **问题 3（存档光标闪烁）**：`PictureStage._begin_draw` 同坐标重绘保留 `color_corr` 与 `effects`；`PictureEffects.tone_color` 对 `kind != 5` 一次性闪光使用 `mini(age, duration)` 钳位。
 4. **问题 4（读档中央灰框 `16000`）**：定位为 `CE101`（`X[移]メニュー時文章表示`）的 `16000..16002`（`512x384` 处 `120px` 高灰框）；在 `GameSession.IsSaveUiPicture` 补充过滤 `15000..15999` 与 `16000..16999` 瞬态窗口，且 `PictureStage.picture_snapshots()` 跳过 `erase_after` 淡出中槽位。
 5. **问题 5（道具列表闪退与偏移）**：`GameRoot._on_event_entered` 移除 `is_root` 与单帧 `_action_input_pending` 限制，任何非脚本前台事件入场若动作键/左键仍按下即触发 `suppress_action_until_release()` 与 `vm.SetPointerHeld(false)`；真字体回归后文字排版恢复。
-6. **问题 6（存读档点击吞键）**：移除 `GameRoot` 中 `PointerPressObserved` 提前清空 `_click_latch` 的回调，保留 `InputRouter.held_mask` 单帧 `_click_latch` 契约，避免 `124 EngineState(7)` 抢先杀掉 `123` 点击响应。
+6. **问题 6（存读档点击吞键）**：移除 `GameRoot` 中 `PointerPressObserved` 提前清空 `_click_latch` 的回调，同时在 `InputRouter.held_mask` 恢复 `pointer_pressed or _click_latch` 对持续按住左键的识别（由 `_action_entry_suppressed` 兜底防穿透），避免 `124 EngineState(7)` 抢先杀掉 `123` 点击响应。
 7. **问题 7（气泡 / 描边 / 人名牌）**：`MessageWindow.gd` 改用 2D Rounded-Box SDF 连续羽化 Shader；`UiSkin.TEXT_OUTLINE_SIZE` 增至 `2`；`Nameplate.gd` 升级为 `28px` 高双环胶囊（黑外框 + 亮灰 rim + 暗灰内环 + 中灰底 + 纯白无粗黑边文字），左肩微压气泡上缘。

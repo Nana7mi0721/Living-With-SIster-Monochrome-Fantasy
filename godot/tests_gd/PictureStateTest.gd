@@ -347,8 +347,8 @@ func _ready() -> void:
 	check(missing_save_holder != null and missing_save_holder.get_child_count() == 0,
 		"missing save/*.jpg thumbnail must not emit opaque placeholder rects")
 	var dump_text: String = stage.dump_pictures(false)
-	check(dump_text.contains("12104 | save/SaveData99.jpg") and dump_text.contains("1362 |"),
-		"dump_pictures formats active slots cleanly")
+	check(dump_text.contains("12104 | save/SaveData99.jpg") and dump_text.contains("1362 |") and dump_text.contains("100,100,100 | 20,20,20"),
+		"dump_pictures formats active slots cleanly with real tone and color_corr")
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await _check_multiply_alpha_fade()

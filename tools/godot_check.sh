@@ -54,6 +54,9 @@ fi
 echo "$out_validate"
 echo "$out_validate" | grep -q "DATABASE_SCHEMA_AUDIT_OK=True"
 
+echo "[preflight] decisions & docs link lint"
+python "$IMO/tools/lint_decisions.py"
+
 echo "[preflight] op150 negative-scale full scan"
 python "$IMO/oracle/scan_op150_negative_scale.py" \
   --programs "$IMO/game_data/programs.json" \

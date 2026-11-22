@@ -538,8 +538,21 @@ public partial class SaveLoadTest : Node
         SaveState? filteredState = session.BuildSaveState();
         filteredState?.Pictures.Add(new SavedPicture { Number = 15000, Kind = 4, File = "SystemFile/WindowBase.png", Args = [0, 1, 1, 1, 255, 512, 288, 100, 0] });
         filteredState?.Pictures.Add(new SavedPicture { Number = 16000, Kind = 4, File = "SystemFile/WindowBase.png", Args = [0, 1, 1, 1, 255, 512, 384, 100, 0] });
+        if (filteredState != null)
+        {
+            filteredState.PlayFrames = -5;
+            filteredState.Audio.Add(new SavedAudio { Channel = 2, File = "SE/cancel1.mp3", Volume = 80, Loop = false });
+            filteredState.Audio.Add(new SavedAudio { Channel = 0, File = "BGM/title.ogg", Volume = 70, Loop = true });
+        }
         string filteredPath = Path.Combine(saveDir, "save_filtered.json");
         if (filteredState != null) SaveCodec.Write(filteredPath, filteredState);
+        SaveReadResult migratedRead = SaveCodec.ReadWithSource(filteredPath);
+        Check(migratedRead.State != null && migratedRead.State.PlayFrames == 0,
+            "SaveMigrator must clamp negative play frames at ReadWithSource");
+        Check(migratedRead.State != null && !migratedRead.State.Pictures.Any(p => p.Number is 15000 or 16000),
+            "SaveMigrator must strip transient UI pictures at ReadWithSource");
+        Check(migratedRead.State != null && migratedRead.State.Audio.Count == 1 && migratedRead.State.Audio[0].Channel == 0,
+            "SaveMigrator must drop transient SE audio while keeping BGM/BGS");
         Check(session.LoadGameFrom(filteredPath), "filtered UI picture slot must load cleanly");
         Check(!view.SnapshotPictures().Any(p => p.Number is 15000 or 16000),
             "load must exclude transient menu/popup picture slots 15000 and 16000");

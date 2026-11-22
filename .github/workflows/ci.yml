@@ -29,6 +29,11 @@ jobs:
       - name: Build C# Core Assembly
         run: dotnet build godot/Lwsmf.csproj -c Release --no-restore
 
+      - name: Lint Decisions & Repo Privacy
+        run: |
+          python tools/lint_decisions.py
+          python tools/release_audit.py --repo-scan
+
   rust-check:
     name: Rust Workspace Check & Oracle Test
     runs-on: windows-latest
