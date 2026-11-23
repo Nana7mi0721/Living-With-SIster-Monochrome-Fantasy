@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import stat
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -21,6 +23,8 @@ import android_data  # noqa: E402
 import env_check  # noqa: E402
 import export_preset_template  # noqa: E402
 import ios_inject_data  # noqa: E402
+import postprocess_android_apk  # noqa: E402
+import strip_android_static_libs  # noqa: E402
 import windows_pe  # noqa: E402
 
 
@@ -224,6 +228,85 @@ class MobileToolsTest(unittest.TestCase):
             outside = Path(tmp) / "outside"
             with self.assertRaises(SystemExit):
                 android_data.ensure_safe_dest(outside, allow_temp=False)
+
+    def test_android_strip_static_libs_preserves_media_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            source = t / "source.apk"
+            output = t / "output.apk"
+            media_name = "assets/mobile_data/work/all/media.pak.blob.cfb"
+            with zipfile.ZipFile(source, "w") as zf:
+                zf.writestr("lib/arm64-v8a/libmonosgen-2.0.a", b"static", compress_type=zipfile.ZIP_STORED)
+                zf.writestr("lib/x86_64/libmonosgen-2.0.a", b"static", compress_type=zipfile.ZIP_STORED)
+                zf.writestr("lib/arm64-v8a/libmonosgen-2.0.so", b"\x7fELF", compress_type=zipfile.ZIP_DEFLATED)
+                zf.writestr(media_name, b"WOLFMPK1", compress_type=zipfile.ZIP_STORED)
+
+            self.assertEqual(strip_android_static_libs.main([str(source), str(output)]), 0)
+            with zipfile.ZipFile(output, "r") as zf:
+                names = zf.namelist()
+                self.assertNotIn("lib/arm64-v8a/libmonosgen-2.0.a", names)
+                self.assertNotIn("lib/x86_64/libmonosgen-2.0.a", names)
+                self.assertIn("lib/arm64-v8a/libmonosgen-2.0.so", names)
+                self.assertEqual(zf.getinfo(media_name).compress_type, zipfile.ZIP_STORED)
+
+    def test_android_postprocess_aligns_and_signs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            apk = t / "app.apk"
+            keystore = t / "debug.keystore"
+            keystore.write_bytes(b"keystore")
+            media_name = postprocess_android_apk.MEDIA_ENTRY
+            with zipfile.ZipFile(apk, "w") as zf:
+                zf.writestr("AndroidManifest.xml", b"manifest")
+                zf.writestr("classes.dex", b"dex")
+                zf.writestr("lib/arm64-v8a/libmonosgen-2.0.a", b"static", compress_type=zipfile.ZIP_STORED)
+                zf.writestr("lib/arm64-v8a/libmonosgen-2.0.so", b"\x7fELF", compress_type=zipfile.ZIP_STORED)
+                zf.writestr(media_name, b"WOLFMPK1", compress_type=zipfile.ZIP_STORED)
+
+            zipalign = t / "zipalign"
+            apksigner_jar = t / "apksigner.jar"
+            zipalign.write_bytes(b"")
+            apksigner_jar.write_bytes(b"")
+
+            def fake_run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+                if "sign" in command:
+                    shutil.copy2(command[-1], command[-2])
+                elif "-f" in command:
+                    shutil.copy2(command[-2], command[-1])
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with mock.patch.object(postprocess_android_apk.subprocess, "run", side_effect=fake_run):
+                rc = postprocess_android_apk.postprocess(
+                    apk=apk,
+                    keystore=keystore,
+                    ks_user="androiddebugkey",
+                    ks_pass="android",
+                    key_pass=None,
+                    java="java",
+                    zipalign=zipalign,
+                    apksigner_jar=apksigner_jar,
+                )
+            self.assertEqual(rc, 0)
+            with zipfile.ZipFile(apk, "r") as zf:
+                names = zf.namelist()
+                self.assertNotIn("lib/arm64-v8a/libmonosgen-2.0.a", names)
+                self.assertEqual(zf.getinfo(media_name).compress_type, zipfile.ZIP_STORED)
+            self.assertFalse(Path(str(apk) + ".idsig").exists())
+
+    def test_android_postprocess_finds_latest_build_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            build_tools = Path(tmp) / "build-tools"
+            for version in ("35.0.0", "36.1.0"):
+                root = build_tools / version
+                (root / "lib").mkdir(parents=True)
+                (root / postprocess_android_apk._tool_name("zipalign")).write_bytes(b"")
+                (root / "lib/apksigner.jar").write_bytes(b"")
+
+            zipalign, apksigner_jar = postprocess_android_apk.find_build_tools(
+                android_sdk=Path(tmp),
+            )
+            self.assertEqual(zipalign.parent.name, "36.1.0")
+            self.assertEqual(apksigner_jar.parent.parent.name, "36.1.0")
 
     def test_ios_inject_preserves_modes_and_replaces_data(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

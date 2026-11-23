@@ -128,7 +128,8 @@ def payload_digest(items: list[tuple[str, Path, bool]]) -> str:
 def cmd_plan(args: argparse.Namespace) -> int:
     items = collect_plan(args.game_data, args.work_all, args.media_pak, args.font)
     total_raw = sum(p.stat().st_size for _, p, _ in items)
-    print(f"ANDROID_DATA_PLAN entries={len(items)} source_bytes={total_raw} slim_pak={args.media_pak is not None}")
+    media_override = str(args.media_pak) if args.media_pak else "-"
+    print(f"ANDROID_DATA_PLAN entries={len(items)} source_bytes={total_raw} media_override={media_override}")
     for logical, src, compact in items:
         direct_res = logical.endswith("media.pak")
         suffix = MEDIA_BLOB_SUFFIX if direct_res else BLOB_SUFFIX
