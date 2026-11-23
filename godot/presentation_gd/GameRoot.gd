@@ -1840,7 +1840,8 @@ func _sync_mobile_and_overlay_state(delta: float) -> void:
 		router.sidebar_open_hint = overlays != null and overlays.drawer_open()
 	if overlays != null:
 		overlays.update_save_page_bar(save_ui and not _modal_window_open(), phase == "title")
-		overlays.update_drawer_state(phase == "title", can_open_quick_ui(), PERF_FPS_LABELS[_perf_tier], scaling_mode_name(), phase == "title" or save_ui)
+		var allow_drawer_tab: bool = save_ui or (phase == "title" and choice != null and choice.is_open)
+		overlays.update_drawer_state(phase == "title", can_open_quick_ui(), PERF_FPS_LABELS[_perf_tier], scaling_mode_name(), allow_drawer_tab)
 	if _show_title_fps and not _is_headless():
 		_title_fps_timer += delta
 		if _title_fps_timer >= 0.5:
@@ -1984,7 +1985,9 @@ func is_touch_blank_space(point: Vector2) -> bool:
 		return not _save_load_hit_interactive(point)
 	if session != null and (int(session.BasicAllDeny) & 2) != 0:
 		return false
-	if stage != null and stage.has_interactive_hit(point):
+	if stage == null or not stage.has_active_hit_polls():
+		return false
+	if stage.has_interactive_hit(point):
 		return false
 	return true
 

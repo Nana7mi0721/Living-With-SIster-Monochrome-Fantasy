@@ -1102,9 +1102,14 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root.stage.clear_pictures()
 	root.overlays.set_touch_ui_enabled(true)
 	root.phase = "title"
+	root.choice.open(PackedStringArray(["Start", "Continue"]), Vector2(260, 220), false, 0)
 	root._sync_mobile_and_overlay_state(0.0)
 	if not root.overlays._drawer_tab.visible or root.overlays._drawer_tab.position.y < 16.0 or root.overlays._drawer_tab.position.y > 50.0:
 		failures.append("touch drawer tab must be visible at y in 16..50 on title (vis=%s y=%s)" % [str(root.overlays._drawer_tab.visible), str(root.overlays._drawer_tab.position.y)])
+	root.choice.close()
+	root._sync_mobile_and_overlay_state(0.0)
+	if root.overlays._drawer_tab.visible:
+		failures.append("touch drawer tab must hide during title cutscene when choice is closed")
 	root.phase = "map"
 	root._sync_mobile_and_overlay_state(0.0)
 	if root.overlays._drawer_tab.visible:
@@ -1150,6 +1155,8 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root.vm.StopAll()
 	root.stage.clear_pictures()
 
+	if root.is_touch_blank_space(blank_pt):
+		failures.append("is_touch_blank_space must return false when no interactive op124 polls are active")
 	root.stage.draw_picture(1200, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 512, 230, 100, 0], 1, 0)
 	root.vm.SetPointer(512, 230)
 	root.vm.BeginFrameInput()

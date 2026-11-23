@@ -481,6 +481,21 @@ func _ready() -> void:
 	_tap_once(Vector2(100, 100))
 	if _cancel != dt_cancels_before:
 		failures.append("non-blank tap must reset pending blank double-tap state")
+	# Touch-emulated mouse events (DEVICE_ID_EMULATION = -1) must be ignored so touch does not double-fire.
+	_tap_once(Vector2(200, 200))
+	var emu_acts := _action
+	var emu_hovers := _router.hover_updates
+	var emu_motion := InputEventMouseMotion.new()
+	emu_motion.device = InputEvent.DEVICE_ID_EMULATION
+	emu_motion.position = Vector2(210, 210)
+	_router.handle_event(emu_motion)
+	var emu_mb := _mouse(MOUSE_BUTTON_LEFT)
+	emu_mb.device = InputEvent.DEVICE_ID_EMULATION
+	emu_mb.position = Vector2(210, 210)
+	_router.handle_event(emu_mb)
+	if not _router.touch_mode or _action != emu_acts or _router.hover_updates != emu_hovers:
+		failures.append("emulated mouse events from touch must be ignored by InputRouter")
+
 	_router.clear_frame_latches()
 	_router.clock_msec_override = -1
 	_router.blank_space_predicate = Callable()

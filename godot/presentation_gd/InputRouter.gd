@@ -77,7 +77,10 @@ var _last_blank_tap_pos := Vector2.ZERO
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	handle_event(event)
+	if handle_event(event) and is_inside_tree():
+		var vp := get_viewport()
+		if vp != null:
+			vp.set_input_as_handled()
 
 
 func is_pointer_input() -> bool:
@@ -142,6 +145,8 @@ func handle_event(event: InputEvent) -> bool:
 
 	if event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
+		if mm.device == InputEvent.DEVICE_ID_EMULATION:
+			return false
 		var clamped := mm.position.clamp(Vector2.ZERO, LOGICAL_RECT.size)
 		if mouse_seen and clamped.distance_squared_to(hover_position) < 1.0:
 			return false
@@ -156,6 +161,8 @@ func handle_event(event: InputEvent) -> bool:
 
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
+		if mb.device == InputEvent.DEVICE_ID_EMULATION:
+			return false
 		_set_touch_mode(false)
 		reset_double_tap_state()
 		var in_bounds := LOGICAL_RECT.has_point(mb.position) or (DisplayServer.get_name() == "headless" and mb.position.x > 4096.0 and mb.position.y > 4096.0)

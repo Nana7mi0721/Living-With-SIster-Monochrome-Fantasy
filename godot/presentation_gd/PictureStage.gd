@@ -653,6 +653,18 @@ func rotate_hit_polls() -> void:
 	_polled_hit_slots.clear()
 
 
+func has_active_hit_polls() -> bool:
+	for dict in [_polled_hit_slots, _last_polled_hit_slots]:
+		for slot_key in dict.keys():
+			var slot := int(slot_key)
+			if not _cmds.has(slot):
+				continue
+			var st: Dictionary = _states.get(slot, {})
+			if not bool(st.get("hidden", false)):
+				return true
+	return false
+
+
 func has_interactive_hit(point: Vector2) -> bool:
 	for dict in [_polled_hit_slots, _last_polled_hit_slots]:
 		for slot_key in dict.keys():

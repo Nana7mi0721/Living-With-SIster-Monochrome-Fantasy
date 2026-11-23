@@ -236,7 +236,7 @@ echo "== verifying exported APK =="
 
 echo "== trimming, aligning, and signing APK =="
 POSTPROCESS_ARGS=(
-  --apk "$(to_win_path "$APK_OUT")"
+  "$(to_win_path "$APK_OUT")"
   --keystore "$(to_win_path "$SIGN_KS")"
   --ks-user "$KS_USER_OPT"
   --ks-pass "$KS_PASS_OPT"
