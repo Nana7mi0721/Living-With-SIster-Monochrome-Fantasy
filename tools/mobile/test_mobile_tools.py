@@ -622,6 +622,110 @@ class MobileToolsTest(unittest.TestCase):
 
         self.assertEqual(release_audit.repo_scan(REPO_ROOT), [])
 
+    def test_custom_template_builder_and_profile(self) -> None:
+        import importlib.util
+        import zipfile
+
+        builder_path = REPO_ROOT / "tools/templates/build_custom_template.py"
+        spec = importlib.util.spec_from_file_location("build_custom_template", builder_path)
+        assert spec is not None and spec.loader is not None
+        builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(builder)
+
+        win_args = builder.build_scons_args("windows", 8)
+        self.assertIn("-j8", win_args)
+        self.assertIn("target=template_release", win_args)
+        self.assertIn("module_mono_enabled=yes", win_args)
+        self.assertIn("d3d12=no", win_args)
+        self.assertIn("sdl=no", win_args)
+
+        and_args = builder.build_scons_args("android", 4)
+        self.assertIn("platform=android", and_args)
+        self.assertIn("arch=arm64", and_args)
+        self.assertIn("lto=thin", and_args)
+        self.assertIn("generate_apk=yes", and_args)
+
+        ios_args = builder.build_scons_args("ios", 4)
+        self.assertIn("platform=ios", ios_args)
+        self.assertIn("arch=arm64", ios_args)
+        self.assertIn("metal=no", ios_args)
+
+        with self.assertRaises(ValueError):
+            builder.build_scons_args("linux", 2)
+
+        profile_ns: dict[str, object] = {}
+        profile_src = (REPO_ROOT / "tools/templates/custom_2d_mono.py").read_text(encoding="utf-8")
+        exec(compile(profile_src, "custom_2d_mono.py", "exec"), profile_ns)
+        self.assertEqual(profile_ns.get("target"), "template_release")
+        self.assertEqual(profile_ns.get("module_mono_enabled"), "yes")
+        self.assertEqual(profile_ns.get("vulkan"), "no")
+        self.assertEqual(profile_ns.get("accesskit"), "no")
+        for forbidden in ("disable_3d", "disable_physics_3d", "disable_navigation_3d"):
+            self.assertNotIn(forbidden, profile_ns)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            (bin_dir / "godot.windows.template_release.x86_64.console.exe").write_bytes(b"console")
+            win_bin = bin_dir / "godot.windows.template_release.x86_64.exe"
+            win_bin.write_bytes(b"win")
+            self.assertEqual(builder.find_built_binary(bin_dir, "windows"), win_bin)
+
+            and_bin = bin_dir / "android_release.apk"
+            and_bin.write_bytes(b"apk")
+            self.assertEqual(builder.find_built_binary(bin_dir, "android"), and_bin)
+
+            ios_bin = bin_dir / "libgodot.ios.template_release.arm64.a"
+            ios_bin.write_bytes(b"NEW_ARM64_ARCHIVE")
+            self.assertEqual(builder.find_built_binary(bin_dir, "ios"), ios_bin)
+
+            base_zip = root / "base_ios.zip"
+            with zipfile.ZipFile(base_zip, "w") as zf:
+                zf.writestr("ios_xcode/libgodot.ios.release.arm64.a", b"OLD_RELEASE")
+                zf.writestr("ios_xcode/libgodot.ios.debug.arm64.a", b"KEEP_DEBUG")
+                zf.writestr("ios_xcode/libgodot.ios.release.arm64-simulator.a", b"KEEP_SIM")
+                zf.writestr("ios_xcode/Info.plist", b"KEEP_PLIST")
+
+            out_zip = root / "out" / "ios.zip"
+            replaced = builder.inject_ios_static_lib(base_zip, ios_bin, out_zip)
+            self.assertEqual(replaced, 1)
+            with zipfile.ZipFile(out_zip, "r") as zf:
+                self.assertEqual(zf.read("ios_xcode/libgodot.ios.release.arm64.a"), b"NEW_ARM64_ARCHIVE")
+                self.assertEqual(zf.read("ios_xcode/libgodot.ios.debug.arm64.a"), b"KEEP_DEBUG")
+                self.assertEqual(zf.read("ios_xcode/libgodot.ios.release.arm64-simulator.a"), b"KEEP_SIM")
+                self.assertEqual(zf.read("ios_xcode/Info.plist"), b"KEEP_PLIST")
+
+            bad_zip = root / "bad_ios.zip"
+            with zipfile.ZipFile(bad_zip, "w") as zf:
+                zf.writestr("ios_xcode/Info.plist", b"ONLY_PLIST")
+            with self.assertRaises(RuntimeError):
+                builder.inject_ios_static_lib(bad_zip, ios_bin, root / "out" / "bad.zip")
+
+            self.assertEqual(
+                builder.main([
+                    "--platform", "windows",
+                    "--godot-src", str(root / "src"),
+                    "--out", str(root / "dist"),
+                    "--dry-run",
+                ]),
+                0,
+            )
+
+        wf_text = (REPO_ROOT / ".github/workflows/custom-templates.yml").read_text(encoding="utf-8")
+        for needle in (
+            "build-windows:",
+            "build-android:",
+            "build-ios:",
+            "tools/templates/build_custom_template.py",
+        ):
+            self.assertIn(needle, wf_text)
+
+        for script_rel in ("tools/package_release.sh", "tools/package_ios.sh"):
+            script_text = (REPO_ROOT / script_rel).read_text(encoding="utf-8")
+            self.assertIn("--template", script_text)
+            self.assertIn("custom_template/release", script_text)
+
 
 if __name__ == "__main__":
     unittest.main()

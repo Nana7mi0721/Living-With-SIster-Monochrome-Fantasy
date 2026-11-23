@@ -79,7 +79,7 @@ def compress_bytes(data: bytes, quality: int = 11) -> bytes:
         pass
     cli = shutil.which("brotli")
     if cli:
-        proc = subprocess.run([cli, f"-q{quality}", "-c"], input=data, capture_output=True, check=True)
+        proc = subprocess.run([cli, f"--quality={quality}", "-c"], input=data, capture_output=True, check=True)
         return proc.stdout
     return _run_dotnet_fsi("c", data, quality=quality)
 

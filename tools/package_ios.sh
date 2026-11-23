@@ -14,6 +14,7 @@ WORK_ALL_DIR=""
 SLIM=false
 BROTLI=false
 FONT_OPT=""
+TEMPLATE_OPT=""
 GODOT_BIN="${GODOT_BIN:-${GODOT:-$(command -v godot 2>/dev/null || command -v Godot 2>/dev/null || true)}}"
 DOTNET_BIN="${DOTNET_BIN:-${DOTNET:-$(command -v dotnet 2>/dev/null || true)}}"
 PYTHON_BIN="${PYTHON_BIN:-${PYTHON:-$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)}}"
@@ -32,6 +33,7 @@ Usage: tools/package_ios.sh [options]
   --slim             repack media.pak with WebP slimming when injecting data
   --brotli           compress large game_data JSONs as .json.br when injecting data
   --font FILE        optional Lolita.ttf to place at <app>/work/all/Lolita.ttf
+  --template FILE    optional custom iOS ios.zip export template
   --godot PATH       Godot 4.7.2 Mono executable
   --dotnet PATH      dotnet 8 executable
   --unsigned         build unsigned .app -> .ipa (default & required)
@@ -57,6 +59,7 @@ while [ "$#" -gt 0 ]; do
     --slim)      SLIM=true; shift ;;
     --brotli)    BROTLI=true; shift ;;
     --font)      need_arg "$@"; FONT_OPT="$2"; shift 2 ;;
+    --template)  need_arg "$@"; TEMPLATE_OPT="$2"; shift 2 ;;
     --godot)     need_arg "$@"; GODOT_BIN="$2"; shift 2 ;;
     --dotnet)    need_arg "$@"; DOTNET_BIN="$2"; shift 2 ;;
     --unsigned)  UNSIGNED=1; shift ;;
@@ -100,12 +103,27 @@ mkdir -p "$OUT_DIR"
 
 SLN="$ROOT/godot/Lwsmf.sln"
 SLN_CREATED=false
+PRESET_FILE="$ROOT/godot/export_presets.cfg"
+PRESET_BAK="$OUT_DIR/export_presets.ios.$$.cfg"
 cleanup() {
+  if [ -f "$PRESET_BAK" ]; then
+    cp -f "$PRESET_BAK" "$PRESET_FILE"
+    rm -f "$PRESET_BAK"
+  fi
   if [ "$SLN_CREATED" = true ]; then
     rm -f "$SLN"
   fi
 }
 trap cleanup EXIT
+
+if [ -n "$TEMPLATE_OPT" ]; then
+  [ -f "$TEMPLATE_OPT" ] || { echo "ERROR: custom iOS template not found: $TEMPLATE_OPT" >&2; exit 2; }
+  cp -f "$PRESET_FILE" "$PRESET_BAK"
+  "$PYTHON_BIN" "$ROOT/tools/mobile/export_preset_template.py" \
+    --preset-file "$PRESET_FILE" \
+    --preset "iOS" \
+    --set "custom_template/release=$(cd "$(dirname "$TEMPLATE_OPT")" && pwd)/$(basename "$TEMPLATE_OPT")"
+fi
 
 if [ ! -f "$SLN" ]; then
   "$DOTNET_BIN" new sln --name Lwsmf --output "$ROOT/godot" >/dev/null

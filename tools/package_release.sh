@@ -33,15 +33,24 @@ SLIM=false
 HD=false
 BROTLI=false
 INSTALLER=false
-for arg in "$@"; do
-  case "$arg" in
-    --demo) DEMO=true ;;
-    --slim) SLIM=true ;;
-    --hd) HD=true ;;
-    --brotli) BROTLI=true ;;
-    --installer) INSTALLER=true ;;
+TEMPLATE_OPT=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --demo) DEMO=true; shift ;;
+    --slim) SLIM=true; shift ;;
+    --hd) HD=true; shift ;;
+    --brotli) BROTLI=true; shift ;;
+    --installer) INSTALLER=true; shift ;;
+    --template)
+      if [ "$#" -lt 2 ]; then
+        echo "ERROR: --template requires a file path" >&2
+        exit 2
+      fi
+      TEMPLATE_OPT="$2"
+      shift 2
+      ;;
     *)
-      echo "usage: tools/package_release.sh [--demo] [--slim] [--hd] [--brotli] [--installer]" >&2
+      echo "usage: tools/package_release.sh [--demo] [--slim] [--hd] [--brotli] [--installer] [--template FILE]" >&2
       exit 2
       ;;
   esac
@@ -67,10 +76,16 @@ EXPORT_LOG="$LOG_DIR/package_release_export.log"
 BUILD_LOG="$LOG_DIR/package_release_build.log"
 SLN="$ROOT/godot/Lwsmf.sln"
 SLN_CREATED=false
+PRESET_FILE="$ROOT/godot/export_presets.cfg"
+PRESET_BAK="$LOG_DIR/export_presets.win.$$.cfg"
 
 cleanup() {
   if [ -n "${STAGE:-}" ] && [ -d "$STAGE" ]; then
     rm -rf "$STAGE"
+  fi
+  if [ -f "$PRESET_BAK" ]; then
+    cp -f "$PRESET_BAK" "$PRESET_FILE"
+    rm -f "$PRESET_BAK"
   fi
   if [ "$SLN_CREATED" = true ]; then
     rm -f "$SLN"
@@ -98,8 +113,31 @@ if [ ! -f "$SLN" ]; then
   SLN_CREATED=true
 fi
 
+to_win_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$1"
+  elif [[ "$1" =~ ^/([a-zA-Z])/(.*)$ ]]; then
+    printf '%s:/%s' "${BASH_REMATCH[1]^^}" "${BASH_REMATCH[2]}"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 echo "== dotnet build (-c Release) =="
 "$DOTNET_BIN" build "$ROOT/godot/Lwsmf.csproj" -c Release -v:minimal 2>&1 | tee "$BUILD_LOG"
+
+if [ -n "$TEMPLATE_OPT" ]; then
+  TEMPLATE_WIN="$(to_win_path "$TEMPLATE_OPT")"
+  if [ ! -f "$TEMPLATE_WIN" ] && [ ! -f "$TEMPLATE_OPT" ]; then
+    echo "ERROR: custom release template not found: $TEMPLATE_OPT" >&2
+    exit 2
+  fi
+  cp -f "$PRESET_FILE" "$PRESET_BAK"
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/export_preset_template.py")" \
+    --preset-file "$(to_win_path "$PRESET_FILE")" \
+    --preset "Windows Desktop" \
+    --set "custom_template/release=$TEMPLATE_WIN"
+fi
 
 echo "== Godot release export =="
 rm -rf "$EXPORT_DIR"
@@ -136,16 +174,6 @@ for extra in "$EXPORT_DIR"/*; do
   cp -a "$extra" "$STAGE/game/"
 done
 find "$STAGE/game" -type f -name '*.pdb' -delete
-
-to_win_path() {
-  if command -v cygpath >/dev/null 2>&1; then
-    cygpath -m "$1"
-  elif [[ "$1" =~ ^/([a-zA-Z])/(.*)$ ]]; then
-    printf '%s:/%s' "${BASH_REMATCH[1]^^}" "${BASH_REMATCH[2]}"
-  else
-    printf '%s' "$1"
-  fi
-}
 
 echo "== localizing Lwsmf.exe Windows version resource (0x0804) =="
 "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/windows_pe.py")" "$(to_win_path "$STAGE/game/Lwsmf.exe")"
