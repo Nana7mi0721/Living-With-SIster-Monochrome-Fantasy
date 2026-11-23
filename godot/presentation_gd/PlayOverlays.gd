@@ -91,6 +91,7 @@ var _drawer_quicksave_btn: Button
 var _drawer_quickload_btn: Button
 var _drawer_open := false
 var _touch_ui_enabled := false
+var _drawer_tab_allowed := false
 
 var _fault_root: Control
 var _fault_reason: Label
@@ -1188,8 +1189,8 @@ func _layout_drawer() -> void:
 	var top_inset := float(_safe_insets.get("top", 0.0))
 	var bottom_inset := float(_safe_insets.get("bottom", 0.0))
 	if _drawer_tab != null:
-		_drawer_tab.position = Vector2(8.0 + left_inset, 52.0 + top_inset)
-		_drawer_tab.visible = _touch_ui_enabled and not _drawer_open and not is_modal_open()
+		_drawer_tab.position = Vector2(12.0 + left_inset, 16.0 + top_inset)
+		_drawer_tab.visible = _touch_ui_enabled and _drawer_tab_allowed and not _drawer_open and not is_modal_open()
 	if _drawer_panel != null:
 		_drawer_panel.position = Vector2(12.0 + left_inset, 12.0 + top_inset)
 		_drawer_panel.size = Vector2(236.0, 552.0 - top_inset - bottom_inset)
@@ -1208,7 +1209,8 @@ func set_touch_ui_enabled(enabled: bool) -> void:
 	_layout_drawer()
 
 
-func update_drawer_state(in_title: bool, can_quick: bool, perf_label: String, scale_label: String) -> void:
+func update_drawer_state(in_title: bool, can_quick: bool, perf_label: String, scale_label: String, allow_tab: bool = false) -> void:
+	_drawer_tab_allowed = allow_tab
 	if _drawer_root == null:
 		return
 	if _drawer_quicksave_btn != null:

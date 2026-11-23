@@ -147,6 +147,7 @@ func _start_game() -> void:
 
 	router = InputRouter.new()
 	add_child(router)
+	router.blank_space_predicate = Callable(self, "is_touch_blank_space")
 	router.action_pressed.connect(_on_action)
 	router.cancel_pressed.connect(_on_cancel)
 	router.wheel_pressed.connect(_on_wheel)
@@ -405,6 +406,8 @@ func advance_frame() -> void:
 	vm.SetFrameWheel(router.wheel_notch())
 	_sync_live_clock_if_windowed()
 	vm.BeginFrameInput()
+	if stage != null:
+		stage.rotate_hit_polls()
 	if _profile_enabled:
 		var _p0 := Time.get_ticks_usec()
 		session.AdvanceFrame()
@@ -832,7 +835,7 @@ func _thumbnail_source_image() -> Image:
 	return image.duplicate() if image != null else null
 
 
-## Sys3/Sys4 hold the choice window corner.
+## Sys3/Sys4 hold the choice window center.
 func _choice_position() -> Vector2:
 	var x := -1
 	var y := -1
@@ -940,6 +943,7 @@ func _clear_held_input() -> void:
 		router.clear_pointer_latches()
 		router.clear_suppression()
 		router.clear_frame_latches()
+		router.reset_double_tap_state()
 	Input.flush_buffered_events()
 
 
@@ -1836,7 +1840,7 @@ func _sync_mobile_and_overlay_state(delta: float) -> void:
 		router.sidebar_open_hint = overlays != null and overlays.drawer_open()
 	if overlays != null:
 		overlays.update_save_page_bar(save_ui and not _modal_window_open(), phase == "title")
-		overlays.update_drawer_state(phase == "title", can_open_quick_ui(), PERF_FPS_LABELS[_perf_tier], scaling_mode_name())
+		overlays.update_drawer_state(phase == "title", can_open_quick_ui(), PERF_FPS_LABELS[_perf_tier], scaling_mode_name(), phase == "title" or save_ui)
 	if _show_title_fps and not _is_headless():
 		_title_fps_timer += delta
 		if _title_fps_timer >= 0.5:
@@ -1958,6 +1962,33 @@ func _save_load_hit_interactive(pointer: Vector2) -> bool:
 	return false
 
 
+func _choice_contains_point(point: Vector2) -> bool:
+	if choice == null or not choice.is_open:
+		return false
+	if not choice.override_rects.is_empty():
+		for rect in choice.override_rects:
+			if rect is Rect2 and rect.has_point(point):
+				return true
+		return false
+	return choice.window_rect().has_point(point)
+
+
+func is_touch_blank_space(point: Vector2) -> bool:
+	if faulted or _modal_window_open() or (overlays != null and overlays.drawer_open()):
+		return false
+	if choice != null and choice.is_open:
+		return choice.allow_cancel and not _choice_contains_point(point)
+	if message != null and message.is_open():
+		return false
+	if _save_load_ui_active():
+		return not _save_load_hit_interactive(point)
+	if session != null and (int(session.BasicAllDeny) & 2) != 0:
+		return false
+	if stage != null and stage.has_interactive_hit(point):
+		return false
+	return true
+
+
 func _maybe_handle_save_ui_action(is_pointer: bool) -> bool:
 	if not _save_load_ui_active():
 		return false
@@ -1991,7 +2022,7 @@ func _maybe_handle_save_ui_action(is_pointer: bool) -> bool:
 
 
 func _on_save_slot_save_requested(slot: int, _pointer_pos: Vector2, _is_pointer: bool) -> void:
-	var ok: bool = bool(session.SaveGameToSlot(slot))
+	var ok: bool = bool(session.SaveGameToSlot(slot, false))
 	frames = session.Frames
 	phase = session.Phase
 	_arm_modal_release_guard()

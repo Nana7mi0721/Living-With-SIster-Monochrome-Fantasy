@@ -748,7 +748,45 @@ public partial class SaveLoadTest : Node
                 "RefreshSaveUiForSlot must start CE94 to repaint the save UI");
             foreach (Instance ce94 in vm2.Vm.Instances.Where(i => i.EventId == 94).ToList())
                 vm2.Vm.StopInstance(ce94.Id);
+            Check(session2.SaveGameToSlot(6, false), "SaveGameToSlot(6, false) must succeed on the map");
+            Check(!vm2.Vm.Instances.Any(i => i.EventId == 94),
+                "SaveGameToSlot(6, false) must not start CE94 when refreshUi is false");
+            Check(session2.SaveGameToSlot(6, true), "SaveGameToSlot(6, true) must succeed on the map");
+            Check(vm2.Vm.Instances.Any(i => i.EventId == 94),
+                "SaveGameToSlot(6, true) must start CE94 when refreshUi is true");
+            foreach (Instance ce94 in vm2.Vm.Instances.Where(i => i.EventId == 94).ToList())
+                vm2.Vm.StopInstance(ce94.Id);
             vm2.Vm.StopInstance(ce131.Id);
+        }
+
+        string ioTempDir = Path.Combine(Path.GetTempPath(), "lwsmf-jsonio-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(ioTempDir);
+        try
+        {
+            string jsonFile = Path.Combine(ioTempDir, "artifact.json");
+            string brFile = jsonFile + ".br";
+            File.WriteAllText(jsonFile, "{}");
+            File.WriteAllBytes(brFile, new byte[] { 0x06 });
+            DateTime baseUtc = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+
+            File.SetLastWriteTimeUtc(brFile, baseUtc);
+            File.SetLastWriteTimeUtc(jsonFile, baseUtc.AddSeconds(10));
+            Check(JsonArtifactIo.ResolvePath(jsonFile) == Path.GetFullPath(jsonFile),
+                "JsonArtifactIo.ResolvePath must prefer newer plaintext .json over stale .json.br");
+
+            File.SetLastWriteTimeUtc(jsonFile, baseUtc);
+            File.SetLastWriteTimeUtc(brFile, baseUtc);
+            Check(JsonArtifactIo.ResolvePath(jsonFile) == Path.GetFullPath(brFile),
+                "JsonArtifactIo.ResolvePath must prefer .json.br when timestamps are equal");
+
+            File.SetLastWriteTimeUtc(brFile, baseUtc.AddSeconds(10));
+            Check(JsonArtifactIo.ResolvePath(jsonFile) == Path.GetFullPath(brFile),
+                "JsonArtifactIo.ResolvePath must prefer newer .json.br over older plaintext .json");
+        }
+        finally
+        {
+            try { Directory.Delete(ioTempDir, true); }
+            catch (IOException) { }
         }
 
         // Opcode 220 autosave (CE435, slot 1) succeeds on map and reports [AutoSave] status,

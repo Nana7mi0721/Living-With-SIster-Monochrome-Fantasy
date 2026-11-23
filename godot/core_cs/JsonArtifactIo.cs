@@ -18,8 +18,16 @@ internal static class JsonArtifactIo
         string brPath = full.EndsWith(".br", StringComparison.OrdinalIgnoreCase)
             ? full
             : full + ".br";
-        if (File.Exists(brPath)) return brPath;
-        if (File.Exists(full)) return full;
+        bool hasFull = File.Exists(full);
+        bool hasBr = File.Exists(brPath);
+        if (hasFull && hasBr && !string.Equals(full, brPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return File.GetLastWriteTimeUtc(full) > File.GetLastWriteTimeUtc(brPath)
+                ? full
+                : brPath;
+        }
+        if (hasBr) return brPath;
+        if (hasFull) return full;
         return null;
     }
 

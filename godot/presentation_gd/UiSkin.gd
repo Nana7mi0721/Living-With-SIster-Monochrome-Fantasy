@@ -33,6 +33,14 @@ const ANDROID_FONT_NAMES: Array[String] = [
 	"sans-serif",
 ]
 
+const IOS_FONT_NAMES: Array[String] = [
+	"PingFang SC",
+	"Hiragino Sans GB",
+	"Noto Sans CJK SC",
+	"Source Han Sans SC",
+	"sans-serif",
+]
+
 ## Actual bold faces are preferred; this embolden keeps regular-only CJK faces legible.
 const FALLBACK_EMBOLDEN := 0.32
 const RETAIL_EMBOLDEN := 0.22
@@ -154,6 +162,7 @@ static func _find_retail_font_bytes_in_pak() -> Dictionary:
 	var pkg_root := _AppPaths.package_root()
 	var res_root := _AppPaths.resource_root()
 	var exe_dir := OS.get_executable_path().get_base_dir()
+	var user_root := ProjectSettings.globalize_path("user://")
 	pak_candidates.append_array([
 		pkg_root.path_join("work/all/media.pak").simplify_path(),
 		pkg_root.path_join("media.pak").simplify_path(),
@@ -161,9 +170,13 @@ static func _find_retail_font_bytes_in_pak() -> Dictionary:
 		exe_dir.path_join("work/all/media.pak"),
 		res_root.path_join("work/all/media.pak").simplify_path(),
 		exe_dir.path_join("Data/media.pak"),
+		user_root.path_join("work/all/media.pak").simplify_path(),
+		user_root.path_join("media.pak").simplify_path(),
 	])
 	if OS.has_feature("android"):
 		pak_candidates.append("res://mobile_data/work/all/media.pak.blob.cfb")
+	if OS.has_feature("ios"):
+		pak_candidates.append(res_root.path_join("media.pak").simplify_path())
 	for pak_path in pak_candidates:
 		if pak_path.is_empty() or not FileAccess.file_exists(pak_path):
 			continue
@@ -181,7 +194,11 @@ static func _find_retail_font_bytes_in_pak() -> Dictionary:
 
 
 static func _system_font_names() -> Array[String]:
-	return ANDROID_FONT_NAMES if OS.has_feature("android") else FONT_NAMES
+	if OS.has_feature("ios"):
+		return IOS_FONT_NAMES
+	if OS.has_feature("android"):
+		return ANDROID_FONT_NAMES
+	return FONT_NAMES
 
 
 static func _find_system_bold_face() -> Font:

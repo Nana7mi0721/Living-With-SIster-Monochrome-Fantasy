@@ -1095,6 +1095,82 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root.overlays.close_save_transfer()
 	root._modal_release_guard = false
 	_remove_test_tree(transfer_dir)
+
+	# 7. Touch drawer tab visibility/position across title, map, and save UI.
+	root.vm.StopAll()
+	root.vm.ResetInputPermissions()
+	root.stage.clear_pictures()
+	root.overlays.set_touch_ui_enabled(true)
+	root.phase = "title"
+	root._sync_mobile_and_overlay_state(0.0)
+	if not root.overlays._drawer_tab.visible or root.overlays._drawer_tab.position.y < 16.0 or root.overlays._drawer_tab.position.y > 50.0:
+		failures.append("touch drawer tab must be visible at y in 16..50 on title (vis=%s y=%s)" % [str(root.overlays._drawer_tab.visible), str(root.overlays._drawer_tab.position.y)])
+	root.phase = "map"
+	root._sync_mobile_and_overlay_state(0.0)
+	if root.overlays._drawer_tab.visible:
+		failures.append("touch drawer tab must hide on normal map outside save UI")
+	root.vm.StartEvent(131)
+	root.stage.draw_picture(12050, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 512, 230, 100, 0], 1, 0)
+	root._sync_mobile_and_overlay_state(0.0)
+	if not root.overlays._drawer_tab.visible or root.overlays._drawer_tab.position.y < 16.0 or root.overlays._drawer_tab.position.y > 50.0:
+		failures.append("touch drawer tab must be visible at y in 16..50 in save UI (vis=%s y=%s)" % [str(root.overlays._drawer_tab.visible), str(root.overlays._drawer_tab.position.y)])
+	root.vm.StopAll()
+	root.stage.clear_pictures()
+	root.overlays.set_touch_ui_enabled(false)
+
+	# 8. Mobile blank-space predicate guards choices, messages, save UI, op124 hits, BasicAllDeny, and modals.
+	root.phase = "map"
+	root.vm.ResetInputPermissions()
+	if not root.router.blank_space_predicate.is_valid():
+		failures.append("GameRoot must bind router.blank_space_predicate")
+	var blank_pt := Vector2(10.0, 560.0)
+	root.choice.open(PackedStringArray(["Opt1", "Opt2"]), Vector2(260, 220), true, 0)
+	var choice_rect: Rect2 = root.choice.window_rect()
+	if root.is_touch_blank_space(choice_rect.get_center()):
+		failures.append("is_touch_blank_space must return false inside open choice window")
+	if not root.is_touch_blank_space(blank_pt):
+		failures.append("is_touch_blank_space must return true outside cancelable choice window")
+	root.choice.open(PackedStringArray(["Locked"]), Vector2(260, 220), false, 0)
+	if root.is_touch_blank_space(blank_pt):
+		failures.append("is_touch_blank_space must return false when choice.allow_cancel is false")
+	root.choice.close()
+
+	root.message.open("hello")
+	if root.is_touch_blank_space(blank_pt):
+		failures.append("is_touch_blank_space must return false while message window is open")
+	root.message.close()
+
+	root.vm.StartEvent(131)
+	root.stage.draw_picture(12050, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 512, 230, 100, 0], 1, 0)
+	var slot_rect: Rect2 = root.stage.picture_rect(12050)
+	if root.is_touch_blank_space(slot_rect.get_center()):
+		failures.append("is_touch_blank_space must return false inside save slot rect")
+	if not root.is_touch_blank_space(blank_pt):
+		failures.append("is_touch_blank_space must return true in blank save UI space")
+	root.vm.StopAll()
+	root.stage.clear_pictures()
+
+	root.stage.draw_picture(1200, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 512, 230, 100, 0], 1, 0)
+	root.vm.SetPointer(512, 230)
+	root.vm.BeginFrameInput()
+	var hit124: int = root.vm.PictureStateBridge(1200, 8)
+	if hit124 != 1:
+		failures.append("PictureStateBridge(1200, 8) test setup must register hover hit")
+	if root.is_touch_blank_space(Vector2(512, 230)):
+		failures.append("is_touch_blank_space must return false over op124 field==8 interactive picture slot")
+	if not root.is_touch_blank_space(blank_pt):
+		failures.append("is_touch_blank_space must return true in blank area when BasicAllDeny bit 2 is clear")
+	root.vm.ApplyInputPermission(0x202)
+	if root.is_touch_blank_space(blank_pt):
+		failures.append("is_touch_blank_space must return false when BasicAllDeny bit 2 is set")
+	root.vm.ApplyInputPermission(0x002)
+	root.overlays.open_backlog()
+	if root.is_touch_blank_space(blank_pt):
+		failures.append("is_touch_blank_space must return false while modal window is open")
+	root.overlays.close_backlog()
+	root.stage.clear_pictures()
+	root._modal_release_guard = false
+
 	root.queue_free()
 
 

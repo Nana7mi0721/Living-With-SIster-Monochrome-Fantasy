@@ -447,6 +447,75 @@ func _ready() -> void:
 	check(not stage.has_active_animations(), "completed fade must clear active animation state")
 	stage.clear_pictures()
 
+	# Hit-poll tracking (op124 field 8): survives 1 frame rotation, clears on 2nd rotation / hide / erase / clear_pictures.
+	stage.draw_picture(1400, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 300, 200, 100, 0], 1, 0)
+	check(not stage.has_interactive_hit(Vector2(300, 200)), "unpolled slot does not register interactive hit")
+	check(stage.picture_state(1400, 8, Vector2(0, 0)) == 0, "polling slot 1400 outside rect still records slot")
+	check(stage.has_interactive_hit(Vector2(300, 200)), "polled slot registers interactive hit inside _hit_rect")
+	check(not stage.has_interactive_hit(Vector2(0, 0)), "polled slot rejects point outside _hit_rect")
+	stage.rotate_hit_polls()
+	check(stage.has_interactive_hit(Vector2(300, 200)), "polled slot survives 1 frame rotation")
+	stage.rotate_hit_polls()
+	check(not stage.has_interactive_hit(Vector2(300, 200)), "polled slot expires after second rotation without re-poll")
+	stage.picture_state(1400, 8, Vector2(300, 200))
+	stage.draw_picture(1400, 3, "", "", [])
+	check(not stage.has_interactive_hit(Vector2(300, 200)), "hidden slot clears interactive hit")
+	stage.draw_picture(1401, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 400, 200, 100, 0], 1, 0)
+	stage.picture_state(1401, 8, Vector2(400, 200))
+	check(stage.has_interactive_hit(Vector2(400, 200)), "polled slot 1401 registers hit before erase")
+	stage.draw_picture(1401, 2, "", "", [])
+	check(not stage.has_interactive_hit(Vector2(400, 200)), "erased slot clears interactive hit")
+	stage.draw_picture(1402, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 450, 200, 100, 0], 1, 0)
+	stage.picture_state(1402, 8, Vector2(450, 200))
+	stage.clear_pictures()
+	check(not stage.has_interactive_hit(Vector2(450, 200)), "clear_pictures resets polled hit slots")
+
+	# _apply_picture_geometry / draw_picture initial build: scale_mode != 3 keeps uniform holder.size; scale_mode == 3 uses args[16].
+	var geom_args := [0, 1, 1, 1, 255, 100, 100, 200, 0, 0, 0, 0, 0, 100, 100, 100, 50]
+	var uni_holder: Control = stage.draw_picture(1410, 0, "SystemFile/WindowBase.png", "", geom_args, 0, 0)
+	var uni_base: Vector2 = stage._base_sizes.get(1410, Vector2.ZERO)
+	check(uni_holder != null and uni_holder.size.is_equal_approx(uni_base * 2.0),
+		"scale_mode != 3 initial draw_picture keeps holder.size uniform")
+	var nonuni_holder: Control = stage.draw_picture(1411, 0, "SystemFile/WindowBase.png", "", geom_args, 0, 0, [], {"scale_mode": 3})
+	check(nonuni_holder != null and nonuni_holder.size.is_equal_approx(Vector2(uni_base.x * 2.0, uni_base.y * 0.5)),
+		"scale_mode == 3 initial draw_picture keeps non-uniform args[16]")
+	var built_uni: Control = stage._build_picture(1412, "SystemFile/WindowBase.png", "", geom_args, 0, 0)
+	check(built_uni != null and built_uni.size.is_equal_approx(uni_base * 2.0),
+		"_build_picture scale_mode != 3 keeps holder.size uniform")
+	if built_uni != null:
+		built_uni.free()
+	var built_nonuni: Control = stage._build_picture(1413, "SystemFile/WindowBase.png", "", geom_args, 0, 0, {"scale_mode": 3})
+	check(built_nonuni != null and built_nonuni.size.is_equal_approx(Vector2(uni_base.x * 2.0, uni_base.y * 0.5)),
+		"_build_picture scale_mode == 3 keeps non-uniform args[16]")
+	if built_nonuni != null:
+		built_nonuni.free()
+	var unchanged_geom_args := [0, 1, 1, 1, 255, PictureStage.UNCHANGED, PictureStage.UNCHANGED, PictureStage.UNCHANGED, 0, 0, 0, 0, 0, 100, 100, 100, PictureStage.UNCHANGED]
+	var built_unchanged: Control = stage._build_picture(1414, "SystemFile/WindowBase.png", "", unchanged_geom_args, 0, 0)
+	check(built_unchanged != null and built_unchanged.size.is_equal_approx(uni_base),
+		"_build_picture treats UNCHANGED scale safely as 100%")
+	if built_unchanged != null:
+		built_unchanged.free()
+
+	# Extended dump_pictures(false) diagnostic columns.
+	stage.clear_pictures()
+	stage.draw_picture(1420, 0, "SystemFile/WindowBase.png", "", [0, 2, 1, 1, 255, 100, 100, 150, 0, 0, 0, 0, 0, 100, 100, 100, 75], 0, 0, [], {"scale_mode": 3})
+	stage.draw_picture(1421, 0, "Picture/does_not_exist_probe.png", "", [0, 1, 1, 1, 255, 100, 100, 100], 0, 0)
+	var ext_dump: String = stage.dump_pictures(false)
+	check(ext_dump.contains("resolved | tex_size | hd_scale | split | base_size | scale"),
+		"dump_pictures header includes extended diagnostic columns")
+	var expected_tex_size := "-"
+	if button_texture != null:
+		var bts := button_texture.get_size()
+		expected_tex_size = "%dx%d" % [int(round(bts.x)), int(round(bts.y))]
+	var expected_hd := "%.2f" % assets.hd_scale("SystemFile/WindowBase.png")
+	check(ext_dump.contains("1420 | SystemFile/WindowBase.png") and ext_dump.contains("| %s | %s | 2x1 |" % [expected_tex_size, expected_hd]) and ext_dump.contains("| 150,75"),
+		"dump_pictures row reports resolved tex_size, hd_scale, split, and scale")
+	check(ext_dump.contains("1421 | Picture/does_not_exist_probe.png") and ext_dump.contains("| MISSING | - | 1.00 | 1x1 |"),
+		"dump_pictures row reports MISSING for unresolved assets")
+	stage.clear_pictures()
+
+	_test_assetdb_dir_priority_and_tiebreak()
+
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await _check_multiply_alpha_fade()
@@ -502,3 +571,71 @@ func _render_viewport(viewport: SubViewport) -> void:
 func _viewport_pixel(viewport: SubViewport) -> Color:
 	var image := viewport.get_texture().get_image()
 	return image.get_pixel(4, 4)
+
+
+func _test_assetdb_dir_priority_and_tiebreak() -> void:
+	check(AssetDB.DIR_PRIORITY.slice(0, 4) == ["systemgraphic", "hword", "systemfile", "picture"],
+		"AssetDB.DIR_PRIORITY preserves core priority prefix")
+	for required_dir in ["dlc_data", "cg", "hscene", "cutin", "1.4.0", "kagura", "charachip", "ficon", "battleeffect", "enemygraphic", "mapchip"]:
+		check(AssetDB.DIR_PRIORITY.has(required_dir), "AssetDB.DIR_PRIORITY includes %s" % required_dir)
+
+	var tmp_root := ProjectSettings.globalize_path("user://assetdb_priority_probe")
+	_remove_dir_recursive(tmp_root)
+	var files_to_touch := [
+		"z_alpha/dup_tex.png",
+		"a_beta/dup_tex.png",
+		"z_snd/dup_aud.ogg",
+		"a_snd/dup_aud.ogg",
+		"mapchip/prio_art.png",
+		"hscene/prio_art.png",
+		"cg/prio_art.png",
+		"dlc_data/mid_art.png",
+		"picture/mid_art.png",
+		"cg/dlc_art.png",
+		"dlc_data/dlc_art.png",
+		"mapchip/hs_art.png",
+		"hscene/hs_art.png",
+	]
+	for rel in files_to_touch:
+		var abs_path := tmp_root.path_join(rel)
+		DirAccess.make_dir_recursive_absolute(abs_path.get_base_dir())
+		var f := FileAccess.open(abs_path, FileAccess.WRITE)
+		if f != null:
+			f.store_byte(0)
+			f.close()
+
+	var db := AssetDB.new(tmp_root)
+	check(db.resolve("dup_tex.png", "texture").replace("\\", "/").ends_with("/a_beta/dup_tex.png"),
+		"equal-rank texture basename tie-breaks deterministically to smaller lower_rel")
+	check(db.resolve("dup_aud.ogg", "audio").replace("\\", "/").ends_with("/a_snd/dup_aud.ogg"),
+		"equal-rank audio basename tie-breaks deterministically to smaller lower_rel")
+	check(db.resolve("prio_art.png", "texture").replace("\\", "/").ends_with("/cg/prio_art.png"),
+		"cg wins over hscene and mapchip in DIR_PRIORITY")
+	check(db.resolve("mid_art.png", "texture").replace("\\", "/").ends_with("/picture/mid_art.png"),
+		"picture wins over dlc_data in DIR_PRIORITY")
+	check(db.resolve("dlc_art.png", "texture").replace("\\", "/").ends_with("/dlc_data/dlc_art.png"),
+		"dlc_data wins over cg in DIR_PRIORITY")
+	check(db.resolve("hs_art.png", "texture").replace("\\", "/").ends_with("/hscene/hs_art.png"),
+		"hscene wins over mapchip in DIR_PRIORITY")
+
+	_remove_dir_recursive(tmp_root)
+
+
+func _remove_dir_recursive(path: String) -> void:
+	if path.is_empty() or not DirAccess.dir_exists_absolute(path):
+		return
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var item := dir.get_next()
+	while not item.is_empty():
+		if item != "." and item != "..":
+			var child := path.path_join(item)
+			if dir.current_is_dir():
+				_remove_dir_recursive(child)
+			else:
+				DirAccess.remove_absolute(child)
+		item = dir.get_next()
+	dir.list_dir_end()
+	DirAccess.remove_absolute(path)

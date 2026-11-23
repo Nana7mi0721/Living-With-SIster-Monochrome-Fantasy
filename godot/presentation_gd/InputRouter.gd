@@ -16,6 +16,8 @@ signal touch_mode_changed(active: bool)
 
 const LOGICAL_RECT := Rect2(Vector2.ZERO, Vector2(1024.0, 576.0))
 const TOUCH_TAP_MAX_DIST := 24.0
+const TOUCH_DOUBLE_TAP_MAX_MS := 320
+const TOUCH_DOUBLE_TAP_MAX_DIST := 48.0
 const TOUCH_TWO_FINGER_MAX_DIST := 36.0
 const TOUCH_EDGE_MAX_X := 60.0
 const TOUCH_SWIPE_MIN_DX := 56.0
@@ -52,6 +54,9 @@ var scripted_key_mask := -1
 var touch_mode := false
 var touch_scroll_enabled := false
 var sidebar_open_hint := false
+var mobile_double_tap_cancel_enabled := _default_mobile_double_tap_enabled()
+var blank_space_predicate: Callable = Callable()
+var clock_msec_override := -1
 ## One-frame press latches cleared by clear_frame_latches() after each VM step.
 var _wheel_bits := 0
 var _wheel_dir := 0
@@ -67,6 +72,8 @@ var _touch_gesture_consumed := false
 var _touch_swipe_locked := false
 var _touch_scroll_locked := false
 var _touch_scroll_accum := 0.0
+var _last_blank_tap_ms := -1
+var _last_blank_tap_pos := Vector2.ZERO
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -93,6 +100,19 @@ func trigger_cancel_pulse(source: String = "touch") -> void:
 
 func has_active_touches() -> bool:
 	return not _touches.is_empty()
+
+
+static func _default_mobile_double_tap_enabled() -> bool:
+	return OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+
+
+func _now_msec() -> int:
+	return clock_msec_override if clock_msec_override >= 0 else Time.get_ticks_msec()
+
+
+func reset_double_tap_state() -> void:
+	_last_blank_tap_ms = -1
+	_last_blank_tap_pos = Vector2.ZERO
 
 
 func clear_touch_state() -> void:
@@ -126,6 +146,7 @@ func handle_event(event: InputEvent) -> bool:
 		if mouse_seen and clamped.distance_squared_to(hover_position) < 1.0:
 			return false
 		_set_touch_mode(false)
+		reset_double_tap_state()
 		mouse_seen = true
 		hover_position = clamped
 		hover_updates += 1
@@ -136,6 +157,7 @@ func handle_event(event: InputEvent) -> bool:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		_set_touch_mode(false)
+		reset_double_tap_state()
 		var in_bounds := LOGICAL_RECT.has_point(mb.position) or (DisplayServer.get_name() == "headless" and mb.position.x > 4096.0 and mb.position.y > 4096.0)
 		var clamped := mb.position.clamp(Vector2.ZERO, LOGICAL_RECT.size)
 		if not mb.pressed:
@@ -194,6 +216,7 @@ func handle_event(event: InputEvent) -> bool:
 	# OS repeat drives cursor stepping; decide/cancel keys ignore echo to prevent double-confirm.
 	if event is InputEventKey and event.pressed and (not event.echo or _is_direction(event.keycode)):
 		_set_touch_mode(false)
+		reset_double_tap_state()
 		last_input_source = "keyboard"
 		key_event.emit(event.keycode, true)
 		if event.keycode in ACTION_KEYS:
@@ -239,6 +262,7 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 			_touch_scroll_accum = 0.0
 		else:
 			_touch_max_fingers = maxi(_touch_max_fingers, _touches.size())
+			reset_double_tap_state()
 		if _touches.size() == 1:
 			hover_position = clamped
 			mouse_seen = true
@@ -254,15 +278,35 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 	if _touches.is_empty():
 		if not _touch_gesture_consumed:
 			if _touch_max_fingers == 1 and _touch_peak_dist < TOUCH_TAP_MAX_DIST:
-				hover_position = clamped
-				mouse_seen = true
-				last_input_source = "touch"
-				_click_latch = true
-				action_pressed.emit()
+				if mobile_double_tap_cancel_enabled and blank_space_predicate.is_valid() and bool(blank_space_predicate.call(clamped)):
+					var now_ms: int = _now_msec()
+					if _last_blank_tap_ms >= 0 and (now_ms - _last_blank_tap_ms) <= TOUCH_DOUBLE_TAP_MAX_MS and clamped.distance_to(_last_blank_tap_pos) <= TOUCH_DOUBLE_TAP_MAX_DIST:
+						reset_double_tap_state()
+						hover_position = clamped
+						mouse_seen = true
+						trigger_cancel_pulse("touch")
+					else:
+						_last_blank_tap_ms = now_ms
+						_last_blank_tap_pos = clamped
+						hover_position = clamped
+						mouse_seen = true
+						last_input_source = "touch"
+				else:
+					reset_double_tap_state()
+					hover_position = clamped
+					mouse_seen = true
+					last_input_source = "touch"
+					_click_latch = true
+					action_pressed.emit()
 			elif _touch_max_fingers == 2 and _touch_peak_dist < TOUCH_TWO_FINGER_MAX_DIST:
+				reset_double_tap_state()
 				last_input_source = "touch"
 				_right_click_latch = true
 				cancel_pressed.emit()
+			else:
+				reset_double_tap_state()
+		else:
+			reset_double_tap_state()
 		clear_touch_state()
 	return true
 
@@ -281,6 +325,8 @@ func _handle_screen_drag(sd: InputEventScreenDrag) -> bool:
 	entry["prev_pos"] = clamped
 	entry["max_dist"] = max_dist
 	_touch_peak_dist = maxf(_touch_peak_dist, max_dist)
+	if _touches.size() > 1 or max_dist >= TOUCH_TAP_MAX_DIST:
+		reset_double_tap_state()
 
 	if _touches.size() == 1 and not _touch_swipe_locked:
 		if not _touch_gesture_consumed:
@@ -293,11 +339,13 @@ func _handle_screen_drag(sd: InputEventScreenDrag) -> bool:
 			if start_pos.x <= TOUCH_EDGE_MAX_X and dx >= TOUCH_SWIPE_MIN_DX and absf(dx) > absf(dy) * 1.25:
 				_touch_gesture_consumed = true
 				_touch_swipe_locked = true
+				reset_double_tap_state()
 				touch_sidebar_swipe.emit(true)
 				return true
 			if sidebar_open_hint and dx <= -TOUCH_SWIPE_MIN_DX and absf(dx) > absf(dy) * 1.25:
 				_touch_gesture_consumed = true
 				_touch_swipe_locked = true
+				reset_double_tap_state()
 				touch_sidebar_swipe.emit(false)
 				return true
 		if touch_scroll_enabled:
@@ -306,6 +354,7 @@ func _handle_screen_drag(sd: InputEventScreenDrag) -> bool:
 			if absf(_touch_scroll_accum) >= TOUCH_WHEEL_STEP_PX:
 				_touch_gesture_consumed = true
 				_touch_scroll_locked = true
+				reset_double_tap_state()
 				while _touch_scroll_accum <= -TOUCH_WHEEL_STEP_PX:
 					_touch_scroll_accum += TOUCH_WHEEL_STEP_PX
 					_wheel_bits |= MASK_DOWN
@@ -458,6 +507,7 @@ func clear_frame_latches() -> void:
 ## Clear entry-suppression guard (e.g. on focus loss when key/mouse release may be missed).
 func clear_suppression() -> void:
 	_action_entry_suppressed = false
+	reset_double_tap_state()
 
 
 ## Clear mouse button held state, touch gesture state, and click latches (keeps wheel state untouched).

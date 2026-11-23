@@ -181,6 +181,9 @@ func build_window_node(spec: Dictionary, texture: Texture2D, args: Array, assets
 		return art
 	var nine := NinePatchRect.new()
 	nine.texture = win_tex
+	nine.draw_center = true
+	nine.axis_stretch_horizontal = NinePatchRect.AXIS_STRETCH_MODE_STRETCH
+	nine.axis_stretch_vertical = NinePatchRect.AXIS_STRETCH_MODE_STRETCH
 	nine.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	nine.use_parent_material = true
 	var corner := UiSkin.WINDOW_CORNER

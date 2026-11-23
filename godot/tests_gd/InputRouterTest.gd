@@ -414,8 +414,86 @@ func _ready() -> void:
 		failures.append("held_mask(false) must strip MASK_OK and MASK_CANCEL while preserving MASK_UP (got %d)" % masked_off)
 	_router.scripted_key_mask = -1
 
+	# 26. Mobile blank-space double-tap cancels without emitting action; desktop default never double-tap cancels.
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+	if not OS.has_feature("mobile") and not OS.has_feature("android") and not OS.has_feature("ios"):
+		if _router.mobile_double_tap_cancel_enabled:
+			failures.append("desktop default mobile_double_tap_cancel_enabled must be false")
+	_router.blank_space_predicate = func(pos: Vector2) -> bool: return pos.x < 500.0
+	_router.clock_msec_override = 1000
+	var dt_actions_before: int = _action
+	var dt_cancels_before: int = _cancel
+	_router.mobile_double_tap_cancel_enabled = false
+	_tap_once(Vector2(100, 100))
+	_router.clock_msec_override = 1150
+	_tap_once(Vector2(110, 100))
+	if _action != dt_actions_before + 2 or _cancel != dt_cancels_before:
+		failures.append("disabled mobile_double_tap_cancel_enabled must emit actions and never double-tap cancel (actions=%d cancels=%d)" % [_action - dt_actions_before, _cancel - dt_cancels_before])
+	_router.clear_frame_latches()
+
+	_router.mobile_double_tap_cancel_enabled = true
+	_router.reset_double_tap_state()
+	dt_actions_before = _action
+	dt_cancels_before = _cancel
+	_router.clock_msec_override = 2000
+	_tap_once(Vector2(100, 100))
+	if _action != dt_actions_before or _cancel != dt_cancels_before or _router.click_latched() or (_router.held_mask() & (InputRouter.MASK_OK | InputRouter.MASK_CANCEL)) != 0:
+		failures.append("first mobile blank tap must not emit action/cancel or latch MASK_OK/MASK_CANCEL")
+	_router.clock_msec_override = 2250
+	_tap_once(Vector2(120, 110))
+	if _cancel != dt_cancels_before + 1 or _action != dt_actions_before or _router.click_latched() or (_router.held_mask() & InputRouter.MASK_CANCEL) == 0 or (_router.held_mask() & InputRouter.MASK_OK) != 0:
+		failures.append("second blank tap within 320ms and 48px must emit cancel and latch MASK_CANCEL without action")
+	_router.clear_frame_latches()
+
+	dt_actions_before = _action
+	dt_cancels_before = _cancel
+	_router.clock_msec_override = 3000
+	_tap_once(Vector2(100, 100))
+	_router.clock_msec_override = 3321
+	_tap_once(Vector2(105, 100))
+	if _cancel != dt_cancels_before or _action != dt_actions_before:
+		failures.append("blank tap after > 320ms must not trigger cancel or action")
+	_router.clear_frame_latches()
+
+	_router.reset_double_tap_state()
+	dt_actions_before = _action
+	dt_cancels_before = _cancel
+	_router.clock_msec_override = 4000
+	_tap_once(Vector2(100, 100))
+	_router.clock_msec_override = 4100
+	_tap_once(Vector2(150, 100))
+	if _cancel != dt_cancels_before or _action != dt_actions_before:
+		failures.append("blank tap > 48px away must not trigger cancel or action")
+	_router.clear_frame_latches()
+
+	_router.reset_double_tap_state()
+	dt_actions_before = _action
+	dt_cancels_before = _cancel
+	_router.clock_msec_override = 5000
+	_tap_once(Vector2(100, 100))
+	_router.clock_msec_override = 5100
+	_tap_once(Vector2(600, 100))
+	if _action != dt_actions_before + 1 or _cancel != dt_cancels_before or not _router.click_latched() or (_router.held_mask() & InputRouter.MASK_OK) == 0:
+		failures.append("non-blank single tap must emit action and latch MASK_OK")
+	_router.clear_frame_latches()
+	_router.clock_msec_override = 5150
+	_tap_once(Vector2(100, 100))
+	if _cancel != dt_cancels_before:
+		failures.append("non-blank tap must reset pending blank double-tap state")
+	_router.clear_frame_latches()
+	_router.clock_msec_override = -1
+	_router.blank_space_predicate = Callable()
+	_router.mobile_double_tap_cancel_enabled = false
+	_router.reset_double_tap_state()
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
+
+
+func _tap_once(pos: Vector2) -> void:
+	_router.handle_event(_touch(0, pos, true))
+	_router.handle_event(_touch(0, pos, false))
 
 
 static func _touch(index: int, pos: Vector2, pressed: bool) -> InputEventScreenTouch:

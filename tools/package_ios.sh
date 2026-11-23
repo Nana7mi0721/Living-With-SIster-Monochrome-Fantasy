@@ -126,7 +126,8 @@ if [ -n "$TEMPLATE_OPT" ]; then
 fi
 
 if [ ! -f "$SLN" ]; then
-  "$DOTNET_BIN" new sln --name Lwsmf --output "$ROOT/godot" >/dev/null
+  "$DOTNET_BIN" new sln --format sln --name Lwsmf --output "$ROOT/godot" >/dev/null 2>&1 \
+    || "$DOTNET_BIN" new sln --name Lwsmf --output "$ROOT/godot" >/dev/null
   "$DOTNET_BIN" sln "$SLN" add "$ROOT/godot/Lwsmf.csproj" >/dev/null
   SLN_CREATED=true
 fi

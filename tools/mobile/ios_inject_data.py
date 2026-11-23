@@ -13,6 +13,7 @@ import json
 import os
 import re
 import stat
+import struct
 import sys
 import zipfile
 from datetime import datetime
@@ -23,10 +24,12 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 import brotli_json  # noqa: E402
+import pack_media  # noqa: E402
 
 GAME_DATA_FILES = ("manifest.json", "programs.json", "database.json", "map_tiles.json")
 PROJECT_FILES = ("CDataBase.project", "DataBase.project", "SysDatabase.project")
 STORED_EXTENSIONS = {".ipa", ".zip", ".pak", ".br", ".ogg", ".mp3", ".wav", ".webp", ".png", ".jpg", ".jpeg"}
+FONT_PAK_NAMES = {"lolita.ttf", "data/lolita.ttf"}
 
 
 def fail(message: str) -> None:
@@ -101,6 +104,14 @@ def data_zipinfo(arcname: str, is_dir: bool, timestamp: float, mode: int) -> zip
     return info
 
 
+def pak_has_font(pak_path: Path) -> bool:
+    try:
+        names = pack_media.read_pak_index(pak_path)
+    except (OSError, ValueError, struct.error, IndexError):
+        return False
+    return any(n.lstrip("/") in FONT_PAK_NAMES for n in names)
+
+
 def collect_payload_files(
     app_prefix: str,
     game_data_dir: Path,
@@ -108,6 +119,7 @@ def collect_payload_files(
     media_pak_override: Path | None,
     font_path: Path | None,
     use_brotli: bool = False,
+    allow_missing_font: bool = False,
 ) -> tuple[dict[str, tuple[bytes, float, int]], set[str]]:
     gd = game_data_dir.resolve()
     wa = work_all_dir.resolve()
@@ -155,6 +167,11 @@ def collect_payload_files(
             fail(f"font file not found or empty: {font_path}")
         st = f.stat()
         files[f"{app_prefix}/work/all/Lolita.ttf"] = (f.read_bytes(), st.st_mtime, stat.S_IFREG | (st.st_mode & 0o777))
+    elif not allow_missing_font and not pak_has_font(pak_src):
+        fail(
+            "Lolita.ttf missing: pass --font /path/to/Lolita.ttf, include Lolita.ttf in media.pak, "
+            "or pass --allow-missing-font"
+        )
 
     return files, dirs
 
@@ -169,6 +186,7 @@ def inject(
     force: bool,
     dry_run: bool = False,
     use_brotli: bool = False,
+    allow_missing_font: bool = False,
 ) -> Path:
     source = ipa.resolve()
     if not source.is_file() or not zipfile.is_zipfile(source):
@@ -185,7 +203,13 @@ def inject(
         names = [safe_member_name(info.filename) for info in infos]
         app_prefix = app_prefix_from_names(names)
         payload_files, payload_dirs = collect_payload_files(
-            app_prefix, game_data_dir, work_all_dir, media_pak_override, font, use_brotli=use_brotli
+            app_prefix,
+            game_data_dir,
+            work_all_dir,
+            media_pak_override,
+            font,
+            use_brotli=use_brotli,
+            allow_missing_font=allow_missing_font,
         )
 
         if dry_run:
@@ -247,6 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--work-all", type=Path, default=Path("work/all"))
     parser.add_argument("--media-pak", type=Path, default=None)
     parser.add_argument("--font", type=Path, default=None)
+    parser.add_argument("--allow-missing-font", action="store_true", help="Allow IPA injection without Lolita.ttf")
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--brotli", action="store_true", help="Compress large game_data JSONs as .json.br")
     parser.add_argument("--force", action="store_true")
@@ -258,7 +283,18 @@ def main(argv: list[str] | None = None) -> int:
         stem = args.ipa.name[:-4] if args.ipa.name.lower().endswith(".ipa") else args.ipa.name
         out = args.ipa.with_name(f"{stem}-full.ipa")
 
-    inject(args.ipa, args.game_data, args.work_all, out, args.media_pak, args.font, args.force, args.dry_run, use_brotli=args.brotli)
+    inject(
+        args.ipa,
+        args.game_data,
+        args.work_all,
+        out,
+        args.media_pak,
+        args.font,
+        args.force,
+        args.dry_run,
+        use_brotli=args.brotli,
+        allow_missing_font=args.allow_missing_font,
+    )
     return 0
 
 

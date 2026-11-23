@@ -720,8 +720,8 @@ public sealed class GameSession
         return true;
     }
 
-    /// <summary>Save directly to a 1-based slot, sync System.json slot markers, and redraw CE131.</summary>
-    public bool SaveGameToSlot(int slot)
+    /// <summary>Save directly to a 1-based slot, sync System.json slot markers, and optionally redraw CE131.</summary>
+    public bool SaveGameToSlot(int slot, bool refreshUi = true)
     {
         int clamped = Math.Max(1, slot);
         string path = SlotSavePath(clamped);
@@ -743,7 +743,7 @@ public sealed class GameSession
             _view.SetStatus("system save failed: " + ex.Message);
         }
 
-        RefreshSaveUiForSlot(clamped);
+        if (refreshUi) RefreshSaveUiForSlot(clamped);
         return true;
     }
 

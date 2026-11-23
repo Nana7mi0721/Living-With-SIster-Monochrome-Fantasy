@@ -29,6 +29,17 @@ const DIR_PRIORITY: Array[String] = [
 	"hword",
 	"systemfile",
 	"picture",
+	"dlc_data",
+	"cg",
+	"hscene",
+	"cutin",
+	"1.4.0",
+	"kagura",
+	"charachip",
+	"ficon",
+	"battleeffect",
+	"enemygraphic",
+	"mapchip",
 ]
 const AUDIO_EXTENSIONS: Array[String] = [".ogg", ".mp3", ".wav"]
 
@@ -48,15 +59,19 @@ var miss_paths: Array[String] = []
 var _files: Dictionary = {}                 # lowercase relative path -> absolute path
 var _tex_basenames: Dictionary = {}         # lowercase basename -> absolute image path
 var _tex_basename_rank: Dictionary = {}     # lowercase basename -> DIR_PRIORITY rank
+var _tex_basename_key: Dictionary = {}      # lowercase basename -> winning lowercase relative path
 var _audio_basenames: Dictionary = {}       # lowercase basename -> absolute audio path
 var _audio_basename_rank: Dictionary = {}   # lowercase basename -> DIR_PRIORITY rank
+var _audio_basename_key: Dictionary = {}    # lowercase basename -> winning lowercase relative path
 var media_pak_path := ""
 var media_pak = null                        # MediaPakReader, or null when no pack is present
 var _media_files: Dictionary = {}           # lowercase relative path -> canonical pack path
 var _media_tex_basenames: Dictionary = {}
 var _media_tex_basename_rank: Dictionary = {}
+var _media_tex_basename_key: Dictionary = {}
 var _media_audio_basenames: Dictionary = {}
 var _media_audio_basename_rank: Dictionary = {}
+var _media_audio_basename_key: Dictionary = {}
 ## Optional 2x art pack. Entries are logical-path -> {path, scale}; a miss falls
 ## back to the 1x pack, so a partial HD build is always safe to ship.
 var hd_pak_path := ""
@@ -64,6 +79,7 @@ var hd_pak = null
 var _hd_entries: Dictionary = {}
 var _hd_basenames: Dictionary = {}
 var _hd_basename_rank: Dictionary = {}
+var _hd_basename_key: Dictionary = {}
 var _hd_failed: Dictionary = {}             # HD pack path -> true when it failed to decode
 var _hd_verified: Dictionary = {}           # HD pack path -> true once it decoded
 var _cache: Dictionary = {}                 # normalized key -> Resource
@@ -155,42 +171,67 @@ func _index() -> void:
 	_files.clear()
 	_tex_basenames.clear()
 	_tex_basename_rank.clear()
+	_tex_basename_key.clear()
 	_audio_basenames.clear()
 	_audio_basename_rank.clear()
+	_audio_basename_key.clear()
 	var dir := DirAccess.open(root_dir)
 	if dir == null:
 		return
 	_index_dir(dir, "")
 
 
+static func _record_basename(
+		basenames: Dictionary,
+		ranks: Dictionary,
+		keys: Dictionary,
+		base: String,
+		rank: int,
+		lower_rel: String,
+		value: String
+	) -> void:
+	if basenames.has(base):
+		var best_rank := int(ranks.get(base, 1 << 30))
+		if rank > best_rank:
+			return
+		if rank == best_rank and lower_rel >= str(keys.get(base, "")):
+			return
+	basenames[base] = value
+	ranks[base] = rank
+	keys[base] = lower_rel
+
+
 func _index_dir(dir: DirAccess, prefix: String) -> void:
+	var subdirs: Array[String] = []
+	var files: Array[String] = []
 	dir.list_dir_begin()
 	var entry := dir.get_next()
 	while entry != "":
-		if entry == "." or entry == "..":
-			entry = dir.get_next()
-			continue
-		var rel := entry if prefix == "" else prefix + "/" + entry
-		if dir.current_is_dir():
-			var sub := DirAccess.open(root_dir.path_join(rel))
-			if sub != null:
-				_index_dir(sub, rel)
-		else:
-			var abs_path := root_dir.path_join(rel)
-			var lower_rel := rel.to_lower()
-			_files[lower_rel] = abs_path
-			var base := entry.get_basename().to_lower()
-			var rank := _dir_rank(lower_rel)
-			if _has_ext(lower_rel, TEXTURE_EXTENSIONS):
-				if not _tex_basenames.has(base) or rank < int(_tex_basename_rank.get(base, 1 << 30)):
-					_tex_basenames[base] = abs_path
-					_tex_basename_rank[base] = rank
-			elif _has_ext(lower_rel, AUDIO_EXTENSIONS):
-				if not _audio_basenames.has(base) or rank < int(_audio_basename_rank.get(base, 1 << 30)):
-					_audio_basenames[base] = abs_path
-					_audio_basename_rank[base] = rank
+		if entry != "." and entry != "..":
+			if dir.current_is_dir():
+				subdirs.append(entry)
+			else:
+				files.append(entry)
 		entry = dir.get_next()
 	dir.list_dir_end()
+	files.sort()
+	subdirs.sort()
+	for file_name in files:
+		var rel := file_name if prefix == "" else prefix + "/" + file_name
+		var abs_path := root_dir.path_join(rel)
+		var lower_rel := rel.to_lower()
+		_files[lower_rel] = abs_path
+		var base := file_name.get_basename().to_lower()
+		var rank := _dir_rank(lower_rel)
+		if _has_ext(lower_rel, TEXTURE_EXTENSIONS):
+			_record_basename(_tex_basenames, _tex_basename_rank, _tex_basename_key, base, rank, lower_rel, abs_path)
+		elif _has_ext(lower_rel, AUDIO_EXTENSIONS):
+			_record_basename(_audio_basenames, _audio_basename_rank, _audio_basename_key, base, rank, lower_rel, abs_path)
+	for sub_name in subdirs:
+		var rel := sub_name if prefix == "" else prefix + "/" + sub_name
+		var sub := DirAccess.open(root_dir.path_join(rel))
+		if sub != null:
+			_index_dir(sub, rel)
 
 
 ## 0 is the most preferred directory; DIR_PRIORITY.size() means no preference.
@@ -374,8 +415,10 @@ func _open_media_pack() -> void:
 	_media_files.clear()
 	_media_tex_basenames.clear()
 	_media_tex_basename_rank.clear()
+	_media_tex_basename_key.clear()
 	_media_audio_basenames.clear()
 	_media_audio_basename_rank.clear()
+	_media_audio_basename_key.clear()
 	var candidates: Array[String] = []
 	var override := OS.get_environment("LWsmf_MEDIA_PAK")
 	if not override.is_empty():
@@ -390,20 +433,19 @@ func _open_media_pack() -> void:
 		if reader.Open(candidate):
 			media_pak = reader
 			media_pak_path = candidate
+			var pak_paths: Array[String] = []
 			for entry in reader.Paths():
-				var canonical := str(entry)
+				pak_paths.append(str(entry))
+			pak_paths.sort()
+			for canonical in pak_paths:
 				var key := _norm_key(canonical)
 				_media_files[key] = canonical
 				var bare := key.get_file().get_basename()
 				var rank := _dir_rank(key)
 				if _has_ext(key, TEXTURE_EXTENSIONS):
-					if not _media_tex_basenames.has(bare) or rank < int(_media_tex_basename_rank.get(bare, 1 << 30)):
-						_media_tex_basenames[bare] = canonical
-						_media_tex_basename_rank[bare] = rank
+					_record_basename(_media_tex_basenames, _media_tex_basename_rank, _media_tex_basename_key, bare, rank, key, canonical)
 				elif _has_ext(key, AUDIO_EXTENSIONS):
-					if not _media_audio_basenames.has(bare) or rank < int(_media_audio_basename_rank.get(bare, 1 << 30)):
-						_media_audio_basenames[bare] = canonical
-						_media_audio_basename_rank[bare] = rank
+					_record_basename(_media_audio_basenames, _media_audio_basename_rank, _media_audio_basename_key, bare, rank, key, canonical)
 			return
 		push_warning("AssetDB: cannot open media pack %s: %s" % [candidate, reader.LastError])
 
@@ -418,6 +460,7 @@ func _open_hd_pack() -> void:
 	_hd_entries.clear()
 	_hd_basenames.clear()
 	_hd_basename_rank.clear()
+	_hd_basename_key.clear()
 	_hd_failed.clear()
 	_hd_verified.clear()
 	if not hd_enabled:
@@ -457,7 +500,9 @@ func _open_hd_pack() -> void:
 
 
 func _index_hd_entries(entries: Dictionary) -> void:
-	for raw_key in entries.keys():
+	var raw_keys: Array = entries.keys()
+	raw_keys.sort()
+	for raw_key in raw_keys:
 		var item = entries[raw_key]
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
@@ -469,9 +514,7 @@ func _index_hd_entries(entries: Dictionary) -> void:
 		_hd_entries[key] = {"path": path, "scale": scale}
 		var bare := key.get_file().get_basename()
 		var rank := _dir_rank(key)
-		if not _hd_basenames.has(bare) or rank < int(_hd_basename_rank.get(bare, 1 << 30)):
-			_hd_basenames[bare] = key
-			_hd_basename_rank[bare] = rank
+		_record_basename(_hd_basenames, _hd_basename_rank, _hd_basename_key, bare, rank, key, key)
 
 
 func hd_available() -> bool:

@@ -35,7 +35,7 @@ graph LR
 | 文档 | 状态 | 内容与定位 |
 | :--- | :---: | :--- |
 | [godot/README.md](godot/README.md) | **现行 · 先读** | **Godot 重制阶段唯一规范入口**：环境基线、当前完成状态与维护约定 |
-| [godot/DECISIONS.md](godot/DECISIONS.md) | **现行 · 权威** | **定稿架构决策（D-01..D-84）**：确定采用纯 C# 确定性事件内核 + GDScript 呈现层 |
+| [godot/DECISIONS.md](godot/DECISIONS.md) | **现行 · 权威** | **定稿架构决策（D-01..D-86）**：确定采用纯 C# 确定性事件内核 + GDScript 呈现层 |
 | [godot/PLAN.md](godot/PLAN.md) | **现行 · 权威** | Godot 阶段总体演进路线与 M0–M5 各阶段退出标准 |
 | [BASELINE.json](BASELINE.json) | **现行 · 权威** | 自动化测试与一致性校验基线（包含 Game.dat 字段、公共事件、地图事件统计） |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | **现行 · 权威** | 全局架构设计方案（数据转换管线、运行时状态机、渲染层级） |
@@ -97,6 +97,8 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 系统性代码审查（Code Review）、跨仓库审计与缺陷追踪记录：
 
 - [reviews/README.md](reviews/README.md) — 代码审查台账总览索引
+- [reviews/review_030ee81f_remediation_2026_11_23.md](reviews/review_030ee81f_remediation_2026_11_23.md) — **现行·闭环**：`030ee81f` 审阅 UX-1~UX-5 与 REV-1~REV-6 修复闭环报告（见 D-86）
+- [reviews/review_030ee81f_and_ux_fix_plan_2026_11_23.md](reviews/review_030ee81f_and_ux_fix_plan_2026_11_23.md) — **现行·台账**：`030ee81f` 审阅缺陷与全端 / 移动端 UI·UX 修复方案
 - [reviews/save_ui_font_and_gauge_remediation_2026_11_23.md](reviews/save_ui_font_and_gauge_remediation_2026_11_23.md) — **现行·闭环**：S-01..S-08 存档 UI、模态输入、自动存档、HiDPI 字体与进度条对齐修复闭环报告（见 D-84）
 - [reviews/save_ui_font_and_gauge_diagnosis_2026_11_23.md](reviews/save_ui_font_and_gauge_diagnosis_2026_11_23.md) — **现行·台账**：Commit `78c4e49a` 存档界面异常、自动存档、字体清晰度与格子进度条错位根因排查
 - [reviews/acceptance_audit_89fc8f5_remediation_2026_11_23.md](reviews/acceptance_audit_89fc8f5_remediation_2026_11_23.md) — **现行·闭环**：`89fc8f5` 验收审查全部增量项收口、P1-6/P2-11 保留设计依据与双模式门禁验证

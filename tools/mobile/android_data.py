@@ -19,6 +19,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -30,10 +31,12 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 import brotli_json  # noqa: E402
+import pack_media  # noqa: E402
 
 MANIFEST_FILENAME = "mobile_data_manifest.json"
 BLOB_SUFFIX = ".blob"
 MEDIA_BLOB_SUFFIX = ".blob.cfb"
+FONT_PAK_NAMES = {"lolita.ttf", "data/lolita.ttf"}
 GAME_DATA_FILES = ("manifest.json", "programs.json", "database.json", "map_tiles.json")
 BROTLI_GAME_DATA_FILES = set(brotli_json.BROTLI_JSON_NAMES)
 PROJECT_FILES = ("CDataBase.project", "DataBase.project", "SysDatabase.project")
@@ -75,11 +78,47 @@ def ensure_safe_dest(dest: Path, allow_temp: bool = False) -> Path:
     raise AssertionError("unreachable")
 
 
+def pak_has_font(pak_path: Path) -> bool:
+    try:
+        names = pack_media.read_pak_index(pak_path)
+    except (OSError, ValueError, struct.error, IndexError):
+        return False
+    return any(n.lstrip("/") in FONT_PAK_NAMES for n in names)
+
+
+def apk_pak_has_font(zf: zipfile.ZipFile, entry: str) -> bool:
+    try:
+        with zf.open(entry, "r") as f:
+            header = f.read(pack_media.HEADER_SIZE)
+            if len(header) < pack_media.HEADER_SIZE or header[:8] != pack_media.MAGIC:
+                return False
+            ver, flags, count, index_offset, index_size = struct.unpack("<HHIQQ", header[8:])
+            if ver != pack_media.VERSION or flags != 0:
+                return False
+            f.seek(index_offset)
+            enc_idx = f.read(index_size)
+            if len(enc_idx) != index_size:
+                return False
+            idx = pack_media.xor_bytes(enc_idx, index_offset)
+            pos = 0
+            for _ in range(count):
+                plen, _off, _sz, _crc = struct.unpack_from("<HQQI", idx, pos)
+                pos += 22
+                rel = idx[pos : pos + plen].decode("utf-8", errors="replace").replace("\\", "/").lstrip("/").lower()
+                pos += plen
+                if rel in FONT_PAK_NAMES:
+                    return True
+            return False
+    except (OSError, ValueError, struct.error, IndexError, zipfile.BadZipFile):
+        return False
+
+
 def collect_plan(
     game_data_dir: Path,
     work_all_dir: Path,
     media_pak_override: Path | None = None,
     font_path: Path | None = None,
+    allow_missing_font: bool = False,
 ) -> list[tuple[str, Path, bool]]:
     """Return list of (logical_rel_posix, source_path, compact_json)."""
     items: list[tuple[str, Path, bool]] = []
@@ -108,6 +147,11 @@ def collect_plan(
         if not f.is_file() or f.stat().st_size <= 0:
             fail(f"font file missing or empty: {font_path}")
         items.append(("work/all/Lolita.ttf", f, False))
+    elif not allow_missing_font and not pak_has_font(pak_src):
+        fail(
+            "Lolita.ttf missing: pass --font /path/to/Lolita.ttf, include Lolita.ttf in media.pak, "
+            "or pass --allow-missing-font"
+        )
 
     return items
 
@@ -134,7 +178,13 @@ def payload_digest(items: list[tuple[str, Path, bool]], use_brotli: bool = False
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
-    items = collect_plan(args.game_data, args.work_all, args.media_pak, args.font)
+    items = collect_plan(
+        args.game_data,
+        args.work_all,
+        args.media_pak,
+        args.font,
+        allow_missing_font=args.allow_missing_font,
+    )
     total_raw = sum(p.stat().st_size for _, p, _ in items)
     media_override = str(args.media_pak) if args.media_pak else "-"
     print(f"ANDROID_DATA_PLAN entries={len(items)} source_bytes={total_raw} brotli={args.brotli} media_override={media_override}")
@@ -151,7 +201,13 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
 def cmd_stage(args: argparse.Namespace) -> int:
     safe_dest = ensure_safe_dest(args.dest, allow_temp=args.allow_temp)
-    items = collect_plan(args.game_data, args.work_all, args.media_pak, args.font)
+    items = collect_plan(
+        args.game_data,
+        args.work_all,
+        args.media_pak,
+        args.font,
+        allow_missing_font=args.allow_missing_font,
+    )
     digest = payload_digest(items, use_brotli=args.brotli)
     staging_version = f"{args.version.strip()}+{digest[:16]}"
 
@@ -230,6 +286,16 @@ def cmd_verify_apk(args: argparse.Namespace) -> int:
         if pak_entry in infos and infos[pak_entry].compress_type != zipfile.ZIP_STORED:
             errors.append(f"{pak_entry} must use ZIP_STORED (got {infos[pak_entry].compress_type})")
 
+        font_entry = f"assets/mobile_data/work/all/Lolita.ttf{BLOB_SUFFIX}"
+        has_font_blob = font_entry in infos and infos[font_entry].file_size > 0
+        has_pak_font = (
+            pak_entry in infos
+            and infos[pak_entry].file_size > 0
+            and apk_pak_has_font(zf, pak_entry)
+        )
+        if not getattr(args, "allow_missing_font", False) and not has_font_blob and not has_pak_font:
+            errors.append(f"missing Lolita.ttf: neither {font_entry} nor lolita.ttf inside {pak_entry}")
+
         has_lwsmf_dll = any(
             name.startswith("assets/.godot/mono/publish/")
             and name.endswith("/Lwsmf.dll")
@@ -274,6 +340,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--work-all", type=Path, default=REPO_ROOT / "work/all")
         p.add_argument("--media-pak", type=Path, default=None, help="Optional slim media.pak override")
         p.add_argument("--font", type=Path, default=None, help="Optional Lolita.ttf path")
+        p.add_argument("--allow-missing-font", action="store_true", help="Allow staging without Lolita.ttf")
         p.add_argument("--brotli", action="store_true", help="Compress large game_data JSONs as .json.br")
         if name == "stage":
             p.add_argument("--version", default="0.1.0")
@@ -282,6 +349,7 @@ def main(argv: list[str] | None = None) -> int:
 
     pv = sub.add_parser("verify-apk")
     pv.add_argument("apk", type=Path)
+    pv.add_argument("--allow-missing-font", action="store_true", help="Allow APK verification without Lolita.ttf")
 
     args = parser.parse_args(argv)
     if args.command == "plan":

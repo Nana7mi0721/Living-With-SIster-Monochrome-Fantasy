@@ -28,6 +28,7 @@ export PATH="$(dirname "$DOTNET_BIN"):$PATH"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_NOLOGO=1
 
+VERSION="0.1.0"
 DEMO=false
 SLIM=false
 HD=false
@@ -41,6 +42,14 @@ while [ "$#" -gt 0 ]; do
     --hd) HD=true; shift ;;
     --brotli) BROTLI=true; shift ;;
     --installer) INSTALLER=true; shift ;;
+    --version)
+      if [ "$#" -lt 2 ]; then
+        echo "ERROR: --version requires a value" >&2
+        exit 2
+      fi
+      VERSION="$2"
+      shift 2
+      ;;
     --template)
       if [ "$#" -lt 2 ]; then
         echo "ERROR: --template requires a file path" >&2
@@ -50,7 +59,7 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     *)
-      echo "usage: tools/package_release.sh [--demo] [--slim] [--hd] [--brotli] [--installer] [--template FILE]" >&2
+      echo "usage: tools/package_release.sh [--demo] [--slim] [--hd] [--brotli] [--installer] [--version VER] [--template FILE]" >&2
       exit 2
       ;;
   esac
@@ -108,7 +117,8 @@ mkdir -p "$LOG_DIR" "$ROOT/dist" "$STAGE/game"
 
 if [ ! -f "$SLN" ]; then
   echo "== creating temporary solution for Godot .NET export =="
-  "$DOTNET_BIN" new sln --name Lwsmf --output "$ROOT/godot" >/dev/null
+  "$DOTNET_BIN" new sln --format sln --name Lwsmf --output "$ROOT/godot" >/dev/null 2>&1 \
+    || "$DOTNET_BIN" new sln --name Lwsmf --output "$ROOT/godot" >/dev/null
   "$DOTNET_BIN" sln "$SLN" add "$ROOT/godot/Lwsmf.csproj" >/dev/null
   SLN_CREATED=true
 fi
@@ -373,23 +383,31 @@ if [ "$INSTALLER" = true ]; then
     echo "ERROR: ISCC.exe not found; install Inno Setup 6 or set ISCC_BIN=/path/to/ISCC.exe" >&2
     exit 2
   fi
+  ISCC_DIR="$(dirname "$ISCC_BIN")"
+  EXTRA_LANGUAGES=""
+  if [ -f "$ISCC_DIR/Languages/ChineseSimplified.isl" ] || [ -f "$ISCC_DIR/ChineseSimplified.isl" ]; then
+    EXTRA_LANGUAGES='Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"'
+  fi
   ISS_PATH="$LOG_DIR/lwsmf-${PKG_NAME}.iss"
   TMPL_WIN="$(to_win_path "$ROOT/tools/installer/lwsmf.iss.tmpl")"
   ISS_WIN="$(to_win_path "$ISS_PATH")"
   DIST_WIN="$(to_win_path "$ROOT/dist")"
   STAGE_WIN="$(to_win_path "$OUT")"
   SETUP_BASE="${PKG_NAME}-setup"
-  "$PYTHON_BIN" - "$TMPL_WIN" "$ISS_WIN" "LWSMF Remake" "0.1.0" "$STAGE_WIN" "$DIST_WIN" "$SETUP_BASE" <<'PY'
+  "$PYTHON_BIN" - "$TMPL_WIN" "$ISS_WIN" "LWSMF Remake" "$VERSION" "$STAGE_WIN" "$DIST_WIN" "$SETUP_BASE" "$EXTRA_LANGUAGES" <<'PY'
 import sys
 from pathlib import Path
 
 tmpl = Path(sys.argv[1]).read_text(encoding="utf-8")
+extra_langs = sys.argv[8]
 rendered = (
     tmpl.replace("@APP_NAME@", sys.argv[3])
     .replace("@APP_VERSION@", sys.argv[4])
     .replace("@STAGE_DIR@", sys.argv[5].replace("/", "\\"))
     .replace("@OUTPUT_DIR@", sys.argv[6].replace("/", "\\"))
     .replace("@OUTPUT_BASE_FILENAME@", sys.argv[7])
+    .replace("\n@EXTRA_LANGUAGES@\n", f"\n{extra_langs}\n" if extra_langs else "\n")
+    .replace("@EXTRA_LANGUAGES@", extra_langs)
 )
 Path(sys.argv[2]).write_text(rendered, encoding="utf-8")
 PY

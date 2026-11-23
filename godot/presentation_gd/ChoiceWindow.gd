@@ -2,7 +2,7 @@ class_name ChoiceWindow
 extends Control
 ## Opcode-102 choice window, drawn directly onto the canvas.
 ##
-## Position comes from Sys3/Sys4 and row pitch is fixed at LINE_HEIGHT. Hit testing runs
+## Center comes from Sys3/Sys4 and row pitch is fixed at LINE_HEIGHT. Hit testing runs
 ## directly against drawn row rectangles so no Button nodes steal focus from VM keys.
 
 signal chosen(index: int)
@@ -48,14 +48,15 @@ func window_rect() -> Rect2:
 	var win_size := window_size()
 	if _is_offscreen_parked():
 		return Rect2(position_hint, win_size)
-	var raw_pos := position_hint
-	if is_equal_approx(raw_pos.x, DEFAULT_POSITION_SENTINEL):
-		raw_pos.x = 512.0 - win_size.x * 0.5
-	if is_equal_approx(raw_pos.y, DEFAULT_POSITION_SENTINEL):
-		raw_pos.y = 288.0 - win_size.y * 0.5
+	var center := position_hint
+	if is_equal_approx(center.x, DEFAULT_POSITION_SENTINEL):
+		center.x = 512.0
+	if is_equal_approx(center.y, DEFAULT_POSITION_SENTINEL):
+		center.y = 288.0
+	var top_left := center - win_size * 0.5
 	var max_x := maxf(24.0, 1000.0 - win_size.x)
 	var max_y := maxf(48.0, 536.0 - win_size.y)
-	return Rect2(Vector2(clampf(raw_pos.x, 24.0, max_x), clampf(raw_pos.y, 48.0, max_y)), win_size)
+	return Rect2(Vector2(clampf(top_left.x, 24.0, max_x), clampf(top_left.y, 48.0, max_y)), win_size)
 
 
 func _visible_indices() -> Array[int]:

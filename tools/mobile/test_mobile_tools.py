@@ -24,17 +24,19 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 import android_data  # noqa: E402
+import audit_cross_platform_assets  # noqa: E402
 import brotli_json  # noqa: E402
 import env_check  # noqa: E402
 import export_preset_template  # noqa: E402
 import ios_inject_data  # noqa: E402
+import pack_media  # noqa: E402
 import postprocess_android_apk  # noqa: E402
 import release_audit  # noqa: E402
 import strip_android_static_libs  # noqa: E402
 import windows_pe  # noqa: E402
 
 
-def _make_fake_payload(root: Path) -> tuple[Path, Path]:
+def _make_fake_payload(root: Path, include_font: bool = True) -> tuple[Path, Path]:
     gd = root / "game_data"
     wa = root / "work/all"
     bd = wa / "BasicData"
@@ -47,7 +49,10 @@ def _make_fake_payload(root: Path) -> tuple[Path, Path]:
     (gd / "map_tiles.json").write_text('{\n  "maps": []\n}\n', encoding="utf-8")
     for proj in android_data.PROJECT_FILES:
         (bd / proj).write_text("<Project/>\n", encoding="utf-8")
-    (wa / "media.pak").write_bytes(b"WOLFMPK1" + b"\x00" * 64)
+    pak_entries = [("SystemFile/WindowBase.png", b"PNG_STUB")]
+    if include_font:
+        pak_entries.append(("Lolita.ttf", b"TTF_STUB"))
+    pack_media.write_pak(pak_entries, wa / "media.pak")
     return gd, wa
 
 
@@ -725,6 +730,259 @@ class MobileToolsTest(unittest.TestCase):
             script_text = (REPO_ROOT / script_rel).read_text(encoding="utf-8")
             self.assertIn("--template", script_text)
             self.assertIn("custom_template/release", script_text)
+            self.assertIn("--format sln", script_text)
+
+        rel_script = (REPO_ROOT / "tools/package_release.sh").read_text(encoding="utf-8")
+        iss_tmpl = (REPO_ROOT / "tools/installer/lwsmf.iss.tmpl").read_text(encoding="utf-8")
+        self.assertIn("--version", rel_script)
+        self.assertIn("ChineseSimplified.isl", rel_script)
+        self.assertIn("@EXTRA_LANGUAGES@", iss_tmpl)
+
+    def test_font_enforcement_android_and_ios(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            gd, wa = _make_fake_payload(t / "src", include_font=False)
+            dest = t / "staged"
+            ipa_in = t / "engine.ipa"
+            _build_synthetic_ipa(ipa_in)
+
+            with self.assertRaises(SystemExit):
+                android_data.main(["plan", "--game-data", str(gd), "--work-all", str(wa)])
+            with self.assertRaises(SystemExit):
+                android_data.main(
+                    ["stage", "--game-data", str(gd), "--work-all", str(wa), "--dest", str(dest), "--allow-temp"]
+                )
+            with self.assertRaises(SystemExit):
+                ios_inject_data.main(
+                    [str(ipa_in), "--game-data", str(gd), "--work-all", str(wa), "--out", str(t / "fail.ipa")]
+                )
+
+            # --allow-missing-font succeeds on stage/verify-apk/ios_inject_data, while strict verify-apk fails.
+            self.assertEqual(
+                android_data.main(
+                    [
+                        "stage",
+                        "--game-data",
+                        str(gd),
+                        "--work-all",
+                        str(wa),
+                        "--dest",
+                        str(dest),
+                        "--allow-temp",
+                        "--allow-missing-font",
+                    ]
+                ),
+                0,
+            )
+            apk = t / "nofont.apk"
+            _build_valid_apk(apk, dest)
+            self.assertEqual(android_data.main(["verify-apk", str(apk)]), 1)
+            self.assertEqual(android_data.main(["verify-apk", str(apk), "--allow-missing-font"]), 0)
+            self.assertEqual(
+                ios_inject_data.main(
+                    [
+                        str(ipa_in),
+                        "--game-data",
+                        str(gd),
+                        "--work-all",
+                        str(wa),
+                        "--out",
+                        str(t / "allow.ipa"),
+                        "--allow-missing-font",
+                    ]
+                ),
+                0,
+            )
+
+            # Passing --font satisfies Android stage + verify-apk without media.pak containing Lolita.ttf.
+            font = t / "Lolita.ttf"
+            font.write_bytes(b"TTF_FONT")
+            dest_font = t / "staged_font"
+            self.assertEqual(
+                android_data.main(
+                    [
+                        "stage",
+                        "--game-data",
+                        str(gd),
+                        "--work-all",
+                        str(wa),
+                        "--dest",
+                        str(dest_font),
+                        "--font",
+                        str(font),
+                        "--allow-temp",
+                    ]
+                ),
+                0,
+            )
+            self.assertTrue((dest_font / "work/all/Lolita.ttf.blob").is_file())
+            apk_font = t / "with_font.apk"
+            _build_valid_apk(apk_font, dest_font)
+            self.assertEqual(android_data.main(["verify-apk", str(apk_font)]), 0)
+
+            # Case-insensitive Data/LOLITA.TTF inside media.pak satisfies both Android and iOS.
+            pak_data_font = t / "data_font.pak"
+            pack_media.write_pak([("Data/LOLITA.TTF", b"TTF_PAK")], pak_data_font)
+            dest_pak = t / "staged_pak_font"
+            self.assertEqual(
+                android_data.main(
+                    [
+                        "stage",
+                        "--game-data",
+                        str(gd),
+                        "--work-all",
+                        str(wa),
+                        "--media-pak",
+                        str(pak_data_font),
+                        "--dest",
+                        str(dest_pak),
+                        "--allow-temp",
+                    ]
+                ),
+                0,
+            )
+            apk_pak = t / "pak_font.apk"
+            _build_valid_apk(apk_pak, dest_pak)
+            self.assertEqual(android_data.main(["verify-apk", str(apk_pak)]), 0)
+            self.assertEqual(
+                ios_inject_data.main(
+                    [
+                        str(ipa_in),
+                        "--game-data",
+                        str(gd),
+                        "--work-all",
+                        str(wa),
+                        "--media-pak",
+                        str(pak_data_font),
+                        "--out",
+                        str(t / "pak_font.ipa"),
+                    ]
+                ),
+                0,
+            )
+
+    def test_audit_cross_platform_assets(self) -> None:
+        import io as _io
+        from PIL import Image
+
+        def png_bytes(w: int, h: int) -> bytes:
+            buf = _io.BytesIO()
+            Image.new("RGBA", (w, h), (10, 20, 30, 255)).save(buf, format="PNG")
+            return buf.getvalue()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            gd = t / "game_data"
+            wa = t / "work/all"
+            (wa / "SystemFile").mkdir(parents=True)
+            (wa / "Picture").mkdir(parents=True)
+            gd.mkdir(parents=True)
+
+            charicon_bytes = png_bytes(16, 16)
+            face_bytes = png_bytes(32, 16)
+            (wa / "SystemFile/charicon.png").write_bytes(charicon_bytes)
+            (wa / "Picture/face01.png").write_bytes(face_bytes)
+            (wa / "Lolita.ttf").write_bytes(b"TTF")
+
+            (gd / "programs.json").write_text(
+                json.dumps({"common_events": [{"slots": [{"op": 140, "strings": ["Picture/face01.png"]}]}]}),
+                encoding="utf-8",
+            )
+            (gd / "database.json").write_text(
+                json.dumps({"cdata": {"types": [{"rows": [{"strings": ["SystemFile/charicon.png"]}]}]}}),
+                encoding="utf-8",
+            )
+
+            pak = wa / "media.pak"
+            pack_media.write_pak(
+                [
+                    ("SystemFile/charicon.png", charicon_bytes),
+                    ("Picture/face01.png", face_bytes),
+                    ("Lolita.ttf", b"TTF"),
+                ],
+                pak,
+            )
+
+            hd_pak = wa / "media_hd.pak"
+            hd_manifest = {"entries": {"picture/face01.png": {"path": "picture/face01.png", "scale": 2.0}}}
+            pack_media.write_pak(
+                [
+                    ("hd_manifest.json", json.dumps(hd_manifest).encode("utf-8")),
+                    ("picture/face01.png", png_bytes(64, 32)),
+                ],
+                hd_pak,
+            )
+
+            json_out = t / "report.json"
+            rc = audit_cross_platform_assets.main(
+                [
+                    "--game-data",
+                    str(gd),
+                    "--work-all",
+                    str(wa),
+                    "--media-pak",
+                    str(pak),
+                    "--hd-pak",
+                    str(hd_pak),
+                    "--json-out",
+                    str(json_out),
+                ]
+            )
+            self.assertEqual(rc, 0)
+            rep = json.loads(json_out.read_text(encoding="utf-8"))
+            self.assertTrue(rep["ok"])
+            self.assertEqual(rep["summary"]["hd_checked"], 1)
+            self.assertEqual(rep["summary"]["hd_mismatches"], 0)
+
+            # Corrupt HD aspect ratio (64x48 instead of 64x32) fails.
+            pack_media.write_pak(
+                [
+                    ("hd_manifest.json", json.dumps(hd_manifest).encode("utf-8")),
+                    ("picture/face01.png", png_bytes(64, 48)),
+                ],
+                hd_pak,
+            )
+            self.assertEqual(
+                audit_cross_platform_assets.main(
+                    ["--game-data", str(gd), "--work-all", str(wa), "--media-pak", str(pak), "--hd-pak", str(hd_pak)]
+                ),
+                1,
+            )
+
+            # Referenced existing loose SystemFile/charicon.png missing from media.pak fails even with --allow-missing-references.
+            pack_media.write_pak([("Picture/face01.png", face_bytes), ("Lolita.ttf", b"TTF")], pak)
+            self.assertEqual(
+                audit_cross_platform_assets.main(
+                    [
+                        "--game-data",
+                        str(gd),
+                        "--work-all",
+                        str(wa),
+                        "--media-pak",
+                        str(pak),
+                        "--allow-missing-references",
+                    ]
+                ),
+                1,
+            )
+
+            # Basename determinism mismatch (loose Picture/dup.png vs pak SystemGraphic/dup.png) fails.
+            (wa / "Picture/dup.png").write_bytes(charicon_bytes)
+            pack_media.write_pak(
+                [
+                    ("SystemFile/charicon.png", charicon_bytes),
+                    ("Picture/face01.png", face_bytes),
+                    ("SystemGraphic/dup.png", charicon_bytes),
+                    ("Lolita.ttf", b"TTF"),
+                ],
+                pak,
+            )
+            self.assertEqual(
+                audit_cross_platform_assets.main(
+                    ["--game-data", str(gd), "--work-all", str(wa), "--media-pak", str(pak)]
+                ),
+                1,
+            )
 
 
 if __name__ == "__main__":

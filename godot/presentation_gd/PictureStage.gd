@@ -174,6 +174,8 @@ var _pictures: Dictionary = {}     # number -> Control
 var _cmds: Dictionary = {}         # number -> draw command snapshot
 var _base_sizes: Dictionary = {}   # number -> unscaled hit-box source size
 var _states: Dictionary = {}       # number -> animation/effect state (fade, slide, 290)
+var _polled_hit_slots: Dictionary = {}
+var _last_polled_hit_slots: Dictionary = {}
 var _shapes := _PictureShapes.new()
 var _effects := _PictureEffects.new()
 
@@ -347,7 +349,7 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 			return existing
 
 	_free_picture(number)
-	var node := _build_picture(number, file, text, args, anchor, kind)
+	var node := _build_picture(number, file, text, args, anchor, kind, flags)
 	if node == null:
 		push_warning("draw_picture %d produced no node kind=%d action=%d" % [number, kind, action])
 		return null
@@ -614,6 +616,7 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 		var state: Dictionary = _states.get(number, {})
 		if bool(state.get("hidden", false)):
 			return 0
+		_polled_hit_slots[number] = true
 		return 1 if _hit_rect(number).has_point(pointer) else 0
 	if field == 9:
 		return 1 if exists else 0
@@ -643,6 +646,25 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 		10:
 			return 1 if kind == 2 or kind == 4 else -1
 	return null
+
+
+func rotate_hit_polls() -> void:
+	_last_polled_hit_slots = _polled_hit_slots.duplicate()
+	_polled_hit_slots.clear()
+
+
+func has_interactive_hit(point: Vector2) -> bool:
+	for dict in [_polled_hit_slots, _last_polled_hit_slots]:
+		for slot_key in dict.keys():
+			var slot := int(slot_key)
+			if not _cmds.has(slot):
+				continue
+			var st: Dictionary = _states.get(slot, {})
+			if bool(st.get("hidden", false)):
+				continue
+			if _hit_rect(slot).has_point(point):
+				return true
+	return false
 
 
 func _sort_band_by_number(band: Control) -> void:
@@ -860,7 +882,7 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 	_store_cmd(number, 0, file, text, _resolved_move_args(number, args), anchor, kind, animate, flags)
 
 
-func _build_picture(number: int, file: String, text: String, args: Array, anchor: int, kind: int) -> Control:
+func _build_picture(number: int, file: String, text: String, args: Array, anchor: int, kind: int, flags: Dictionary = {}) -> Control:
 	var holder := Control.new()
 	holder.name = "Pic%d" % number
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -947,16 +969,24 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 			push_warning("missing picture asset: %s (slot %d) left blank" % [file, number])
 
 	holder.set_meta("base_size", size)
-	_apply_picture_geometry(holder, number, file, args, anchor, size)
+	_apply_picture_geometry(holder, number, file, args, anchor, size, flags)
 	return holder
 
 
-func _apply_picture_geometry(holder: Control, _number: int, _file: String, args: Array, anchor: int, known_size: Vector2 = Vector2.ZERO) -> void:
-	var opacity: int = int(args[4]) if args.size() > 4 else 255
-	var x: int = UiSkin.unit(int(args[5])) if args.size() > 5 else 512
-	var y: int = UiSkin.unit(int(args[6])) if args.size() > 6 else 288
-	var scale_percent: int = UiSkin.unit(int(args[7])) if args.size() > 7 else 100
-	var scale_y_percent: int = int(args[16]) if args.size() > 16 else 100
+func _apply_picture_geometry(holder: Control, number: int, _file: String, args: Array, anchor: int, known_size: Vector2 = Vector2.ZERO, flags: Dictionary = {}) -> void:
+	var eff_flags: Dictionary = flags if not flags.is_empty() else (_cmds.get(number, {}).get("flags", {}) as Dictionary)
+	var raw_opacity := _arg(args, 4, 255)
+	var opacity := 255 if raw_opacity == UNCHANGED else raw_opacity
+	var raw_x := _arg(args, 5, 512)
+	var x := 512 if raw_x == UNCHANGED else UiSkin.unit(raw_x)
+	var raw_y := _arg(args, 6, 288)
+	var y := 288 if raw_y == UNCHANGED else UiSkin.unit(raw_y)
+	var raw_scale := _arg(args, 7, 100)
+	var scale_percent := 100 if raw_scale == UNCHANGED else UiSkin.unit(raw_scale)
+	var raw_scale_y := _arg(args, 16, 100)
+	var scale_y_percent := 100 if raw_scale_y == UNCHANGED else raw_scale_y
+	if int(eff_flags.get("scale_mode", 0)) != 3:
+		scale_y_percent = scale_percent
 	var base_size := known_size
 	if base_size == Vector2.ZERO:
 		base_size = holder.get_meta("base_size", holder.size)
@@ -1461,17 +1491,19 @@ func picture_count() -> int:
 func dump_pictures(write_file: bool = true) -> String:
 	var numbers: Array = _cmds.keys()
 	numbers.sort()
-	var lines := PackedStringArray(["number | file | kind | anchor | blend | tone | corr | opacity | rect"])
+	var lines := PackedStringArray(["number | file | kind | anchor | blend | tone | corr | opacity | rect | resolved | tex_size | hd_scale | split | base_size | scale"])
 	for number in numbers:
 		var cmd: Dictionary = _cmds[number]
 		var st: Dictionary = _states.get(number, {})
 		if bool(st.get("hidden", false)):
 			continue
-		var file_label := str(cmd.get("file", ""))
+		var raw_file := str(cmd.get("file", ""))
+		var file_label := raw_file
 		if file_label.is_empty():
 			var text_preview := str(cmd.get("text", "")).replace("\n", " ")
 			file_label = "<text:%s>" % (text_preview.left(24) + ("..." if text_preview.length() > 24 else ""))
 		var kind := int(cmd.get("kind", -1))
+		var args: Array = cmd.get("args", [])
 		var cur: Dictionary = st.get("current", {}) if st.get("current", null) is Dictionary else {}
 		var anchor := int(cur.get("anchor", cmd.get("anchor", 0)))
 		var blend := int(cur.get("blend", 0))
@@ -1493,8 +1525,35 @@ func dump_pictures(write_file: bool = true) -> String:
 		if node is Control and is_instance_valid(node):
 			var ctrl := node as Control
 			rect = Rect2(ctrl.position, ctrl.size)
-		lines.append("%d | %s | %d | %d | %d | %s | %s | %d | %s" % [
-			int(number), file_label, kind, anchor, blend, tone_s, corr_s, opacity, str(rect)
+		var resolved_str := "-"
+		var tex_size_str := "-"
+		var hd_scale_str := "1.00"
+		if not raw_file.is_empty() and not raw_file.strip_edges().begins_with("<"):
+			if assets == null:
+				resolved_str = "MISSING"
+			else:
+				var res_path := assets.resolve(raw_file, "texture")
+				if res_path.is_empty():
+					resolved_str = "MISSING"
+				else:
+					var root := assets.root_dir.replace("\\", "/").rstrip("/")
+					var norm_res := res_path.replace("\\", "/")
+					if not root.is_empty() and norm_res.begins_with(root + "/"):
+						resolved_str = norm_res.substr(root.length() + 1)
+					else:
+						resolved_str = res_path
+				var tex: Texture2D = assets.texture(raw_file)
+				if tex != null:
+					var ts := tex.get_size()
+					tex_size_str = "%dx%d" % [int(round(ts.x)), int(round(ts.y))]
+				hd_scale_str = "%.2f" % assets.hd_scale(raw_file)
+		var split_str := "%dx%d" % [maxi(1, _arg(args, 1, 1)), maxi(1, _arg(args, 2, 1))]
+		var base: Vector2 = _base_sizes.get(number, st.get("base_size", Vector2.ZERO))
+		var base_size_str := "%dx%d" % [int(round(base.x)), int(round(base.y))]
+		var scale_str := "%d,%d" % [int(cur.get("scale", 100)), int(cur.get("scale_y", 100))]
+		lines.append("%d | %s | %d | %d | %d | %s | %s | %d | %s | %s | %s | %s | %s | %s | %s" % [
+			int(number), file_label, kind, anchor, blend, tone_s, corr_s, opacity, str(rect),
+			resolved_str, tex_size_str, hd_scale_str, split_str, base_size_str, scale_str
 		])
 	var text := "\n".join(lines)
 	print("[PictureDump]\n%s" % text)
@@ -1518,6 +1577,8 @@ func clear_pictures() -> void:
 	_cmds.clear()
 	_base_sizes.clear()
 	_states.clear()
+	_polled_hit_slots.clear()
+	_last_polled_hit_slots.clear()
 
 
 func picture_text(number: int) -> String:

@@ -85,6 +85,7 @@ var _instant_index := -1
 var _pause_timer := 0.0
 var _char_timer := 0.0
 var _cursor_time := 0.0
+var _last_blink_phase: int = -1
 var _center_content_height := CENTER_LINE_HEIGHT
 var _boundary_events: Array = []
 var _event_cursor := 0
@@ -154,6 +155,7 @@ func open(text: String, p_face: int = 0) -> void:
 	revealed = 0.0
 	_pause_timer = 0.0
 	_char_timer = 0.0
+	_last_blink_phase = -1
 	_tokens = TextTokenizer.tokenize(text)
 	_layout()
 	_dispatch_boundary_events(0)
@@ -202,6 +204,7 @@ func confirm() -> void:
 		return
 	if waiting_for_continue:
 		waiting_for_continue = false
+		_last_blink_phase = -1
 		if int(revealed) >= _chars.size():
 			_finish_reveal()
 		queue_redraw()
@@ -218,11 +221,11 @@ func _process(delta: float) -> void:
 	if not visible_window or paused:
 		return
 	_cursor_time += delta
-	if finished:
-		queue_redraw()
-		return
-	if waiting_for_continue:
-		queue_redraw()
+	if finished or waiting_for_continue:
+		var blink_phase := int(floor(_cursor_time * 4.0))
+		if blink_phase != _last_blink_phase:
+			_last_blink_phase = blink_phase
+			queue_redraw()
 		return
 	if _pause_timer > 0.0:
 		_pause_timer = maxf(0.0, _pause_timer - delta)
@@ -276,6 +279,7 @@ func _finish_reveal() -> void:
 	waiting_for_confirm = true
 	waiting_for_continue = false
 	_pause_timer = 0.0
+	_last_blink_phase = -1
 	queue_redraw()
 	reveal_finished.emit()
 

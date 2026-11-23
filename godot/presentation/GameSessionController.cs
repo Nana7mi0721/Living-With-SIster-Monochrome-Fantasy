@@ -133,7 +133,7 @@ public partial class GameSessionController : Node
         }
     }
     public bool SaveGame() => _session?.SaveGame() ?? false;
-    public bool SaveGameToSlot(int slot) => _session?.SaveGameToSlot(slot) ?? false;
+    public bool SaveGameToSlot(int slot, bool refreshUi = true) => _session?.SaveGameToSlot(slot, refreshUi) ?? false;
     public void RefreshSaveUiForSlot(int slot) => _session?.RefreshSaveUiForSlot(slot);
     public bool LoadGame() => _session?.LoadGame() ?? false;
     public bool LoadGameFrom(string path) => _session?.LoadGameFrom(path) ?? false;
