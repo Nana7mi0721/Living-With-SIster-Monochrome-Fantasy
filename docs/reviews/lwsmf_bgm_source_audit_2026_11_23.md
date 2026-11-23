@@ -121,7 +121,7 @@ best offset = 0.016 s     peak_corr = 0.9874
 | :--- | :--- | :--- |
 | **完全一致**（sha256 相同） | 零售文件**就是**源站下载件本身，从未被重新编码 | `BGM/Veil_Nebula.mp3`、`BGM/White_Base.mp3`、`BGM/nonbiri.mp3` |
 | 同跨度不同编码 | 同一段录音，零售版被重新编码且**码率更高** | `BGM/Tenseness.ogg`（零售 417 kbps Vorbis vs 源站 320 kbps MP3） |
-| 截取+重编码 | 零售版是母版的**前缀**，且码率更低 | `BGM/yuuyake.mp3`、`BGM/train.mp3`、`BGM/p_egg_loop.ogg` |
+| 截取+重编码 | 零售版是母版的**前缀**，且码率更低 | `BGM/yuuyake.mp3`、`BGM/train.mp3`、`BGM/p_egg_loop.ogg`、`BGM/Killer_Roll.ogg` |
 
 三条推论：
 
@@ -179,34 +179,34 @@ best offset = 0.016 s     peak_corr = 0.9874
 
 | 媒体库文件 | 零售版 | 源站曲目 | 源站 ID | 源码率 | 比值 | 源时长 | 判定依据 |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: | :--- |
-| `BGM/Acoustic_High_Collar.ogg` | 381 kbps vorbis | — | — | — | — | —s | no candidate |
-| `BGM/Across_-Battle_Results-.ogg` | 450 kbps vorbis | — | — | — | — | —s | no candidate |
-| `BGM/Be_yourself.ogg` | 414 kbps vorbis | — | — | — | — | —s | unresolved |
-| `BGM/Clock-Second_Hand03-1(Loop-1).mp3` | 61 kbps mp3 | source is OtoLogic, not OpenTracks（OtoLogic） | — | — | — | —s | no candidate |
-| `BGM/Die_Letzte_Revolution.ogg` | 381 kbps vorbis | — | — | — | — | —s | no candidate |
-| `BGM/Migratory_Birds.ogg` | 449 kbps vorbis | — | — | — | — | —s | unresolved |
-| `BGM/RAIN_&_Co.ogg` | 460 kbps vorbis | —（ISAo.） | — | — | — | —s | no candidate |
-| `BGM/Sunshine!.ogg` | 465 kbps vorbis | — | — | — | — | —s | no candidate |
-| `BGM/The_End_of_Destruction.ogg` | 431 kbps vorbis | — | — | — | — | —s | no candidate |
-| `BGM/We_are_Going.ogg` | 448 kbps vorbis | — | — | — | — | —s | unresolved |
-| `BGM/autumncome.ogg` | 427 kbps vorbis | — | — | — | — | —s | no candidate |
-| `BGM/centennial_loop.ogg` | 153 kbps vorbis | —（shimoya） | — | — | — | —s | no candidate |
-| `BGM/madoromu2.ogg` | 409 kbps vorbis | —（まんぼう二等兵） | — | — | — | —s | no candidate |
-| `BGM/nc51105.ogg` | 194 kbps vorbis | — | — | — | — | —s | no candidate |
-| `BGM/nekomimi.mp3` | 320 kbps mp3 | — | — | — | — | —s | no candidate |
-| `BGM/nemesis_loop.ogg` | 162 kbps vorbis | — | — | — | — | —s | no candidate |
-| `BGM/oyasumi no kiss wo1.mp3` | 128 kbps mp3 | source is OtoLogic, not OpenTracks（OtoLogic） | — | — | — | —s | no candidate |
-| `BGM/se_akimusi2.ogg` | 151 kbps vorbis | — | — | — | — | —s | unresolved |
-| `BGM/soul_engage_loop.ogg` | 161 kbps vorbis | —（shimoya） | — | — | — | —s | no candidate |
-| `BGM/sparrows.mp3` | 162 kbps mp3 | source is Taira Komori (効果音ラボ), not OpenTracks（(c)Taira Komori） | — | — | — | —s | no candidate |
-| `BGM/straightcontrast.ogg` | 428 kbps vorbis | — | — | — | — | —s | no candidate |
-| `BGM/syuuenn.mp3` | 320 kbps mp3 | — | — | — | — | —s | no candidate |
-| `BGM/takibi.mp3` | 192 kbps mp3 | —（My Recording） | — | — | — | —s | no candidate |
-| `BGM/waste_loop.ogg` | 162 kbps vorbis | —（shimoya） | — | — | — | —s | no candidate |
-| `BGM/wave1.mp3` | 192 kbps mp3 | — | — | — | — | —s | unresolved |
-| `DLC_data/03 2NEONS.ogg` | 507 kbps vorbis | —（isao） | — | — | — | —s | no candidate |
-| `DLC_data/bgm09.mp3` | 320 kbps mp3 | —（Ryo Lion） | — | — | — | —s | no candidate |
-| `DLC_data/gulp_down_water1.mp3` | 167 kbps mp3 | —（(c)Taira Komori） | — | — | — | —s | no candidate |
+| `BGM/Acoustic_High_Collar.ogg` | 381 kbps vorbis | — | — | — | — | — | no candidate |
+| `BGM/Across_-Battle_Results-.ogg` | 450 kbps vorbis | — | — | — | — | — | no candidate |
+| `BGM/Be_yourself.ogg` | 414 kbps vorbis | — | — | — | — | — | unresolved |
+| `BGM/Clock-Second_Hand03-1(Loop-1).mp3` | 61 kbps mp3 | source is OtoLogic, not OpenTracks（OtoLogic） | — | — | — | — | no candidate |
+| `BGM/Die_Letzte_Revolution.ogg` | 381 kbps vorbis | — | — | — | — | — | no candidate |
+| `BGM/Migratory_Birds.ogg` | 449 kbps vorbis | — | — | — | — | — | unresolved |
+| `BGM/RAIN_&_Co.ogg` | 460 kbps vorbis | —（ISAo.） | — | — | — | — | no candidate |
+| `BGM/Sunshine!.ogg` | 465 kbps vorbis | — | — | — | — | — | no candidate |
+| `BGM/The_End_of_Destruction.ogg` | 431 kbps vorbis | — | — | — | — | — | no candidate |
+| `BGM/We_are_Going.ogg` | 448 kbps vorbis | — | — | — | — | — | unresolved |
+| `BGM/autumncome.ogg` | 427 kbps vorbis | — | — | — | — | — | no candidate |
+| `BGM/centennial_loop.ogg` | 153 kbps vorbis | —（shimoya） | — | — | — | — | no candidate |
+| `BGM/madoromu2.ogg` | 409 kbps vorbis | —（まんぼう二等兵） | — | — | — | — | no candidate |
+| `BGM/nc51105.ogg` | 194 kbps vorbis | — | — | — | — | — | no candidate |
+| `BGM/nekomimi.mp3` | 320 kbps mp3 | — | — | — | — | — | no candidate |
+| `BGM/nemesis_loop.ogg` | 162 kbps vorbis | — | — | — | — | — | no candidate |
+| `BGM/oyasumi no kiss wo1.mp3` | 128 kbps mp3 | source is OtoLogic, not OpenTracks（OtoLogic） | — | — | — | — | no candidate |
+| `BGM/se_akimusi2.ogg` | 151 kbps vorbis | — | — | — | — | — | unresolved |
+| `BGM/soul_engage_loop.ogg` | 161 kbps vorbis | —（shimoya） | — | — | — | — | no candidate |
+| `BGM/sparrows.mp3` | 162 kbps mp3 | source is Taira Komori (効果音ラボ), not OpenTracks（(c)Taira Komori） | — | — | — | — | no candidate |
+| `BGM/straightcontrast.ogg` | 428 kbps vorbis | — | — | — | — | — | no candidate |
+| `BGM/syuuenn.mp3` | 320 kbps mp3 | — | — | — | — | — | no candidate |
+| `BGM/takibi.mp3` | 192 kbps mp3 | —（My Recording） | — | — | — | — | no candidate |
+| `BGM/waste_loop.ogg` | 162 kbps vorbis | —（shimoya） | — | — | — | — | no candidate |
+| `BGM/wave1.mp3` | 192 kbps mp3 | — | — | — | — | — | unresolved |
+| `DLC_data/03 2NEONS.ogg` | 507 kbps vorbis | —（isao） | — | — | — | — | no candidate |
+| `DLC_data/bgm09.mp3` | 320 kbps mp3 | —（Ryo Lion） | — | — | — | — | no candidate |
+| `DLC_data/gulp_down_water1.mp3` | 167 kbps mp3 | —（(c)Taira Komori） | — | — | — | — | no candidate |
 
 ### 4.5 统计
 
