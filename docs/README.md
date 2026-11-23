@@ -97,6 +97,7 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 系统性代码审查（Code Review）、跨仓库审计与缺陷追踪记录：
 
 - [reviews/README.md](reviews/README.md) — 代码审查台账总览索引
+- [reviews/lwsmf_bgm_source_audit_2026_11_23.md](reviews/lwsmf_bgm_source_audit_2026_11_23.md) — **现行·专题**：已解包媒体库音源事实核查与替换可行性审查（源站上限低于零售版码率、仅 1 例确认可升级、原检索指南勘误）
 - [reviews/review_030ee81f_remediation_2026_11_23.md](reviews/review_030ee81f_remediation_2026_11_23.md) — **现行·闭环**：`030ee81f` 审阅 UX-1~UX-5 与 REV-1~REV-6 修复闭环报告（见 D-86）
 - [reviews/review_030ee81f_and_ux_fix_plan_2026_11_23.md](reviews/review_030ee81f_and_ux_fix_plan_2026_11_23.md) — **现行·台账**：`030ee81f` 审阅缺陷与全端 / 移动端 UI·UX 修复方案
 - [reviews/save_ui_font_and_gauge_remediation_2026_11_23.md](reviews/save_ui_font_and_gauge_remediation_2026_11_23.md) — **现行·闭环**：S-01..S-08 存档 UI、模态输入、自动存档、HiDPI 字体与进度条对齐修复闭环报告（见 D-84）

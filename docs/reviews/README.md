@@ -8,6 +8,7 @@
 
 | 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
 | :--- | :---: | :--- | :--- |
+| [lwsmf_bgm_source_audit_2026_11_23.md](lwsmf_bgm_source_audit_2026_11_23.md) | 2026-11-23 | **已解包媒体库 183 个音频文件的音源事实核查与替换可行性审查** | 源站上限 320 kbps MP3 低于零售版多数曲目的 380–465 kbps Vorbis，**盲目替换反而降级**；仅 `BGM/yuuyake.mp3` 一例经互相关确认可升级；原检索指南 12 处检索词与 5 处技术前提需勘误 |
 | [review_030ee81f_remediation_2026_11_23.md](review_030ee81f_remediation_2026_11_23.md) | 2026-11-23 | **`030ee81f` 审阅缺陷与全端 UX/资产一致性修复闭环报告** | 完成 UX-1~UX-5 与 REV-1~REV-6 闭环，锁定并修复 `SystemFile/charicon.png` 剪枝导致的存档 SD 变形，双模式门禁与工具链单测全绿（见 `D-86`） |
 | [review_030ee81f_and_ux_fix_plan_2026_11_23.md](review_030ee81f_and_ux_fix_plan_2026_11_23.md) | 2026-11-23 | **LWSMF Remake（`030ee81f`）审阅缺陷与全端 / 移动端 UI·UX 修复方案** | 汇总选项框居中、菜单按钮、双击空白取消、移动端 SD 变形排查、跨端资产一致性及 REV-1~REV-6 修复方案 |
 | [save_ui_font_and_gauge_remediation_2026_11_23.md](save_ui_font_and_gauge_remediation_2026_11_23.md) | 2026-11-23 | **存档界面 `CSelf600`、弹窗重构、自动存档、字体与进度条对齐修复报告** | 闭环修复 S-01..S-08 全部 8 项问题，新增 C#/GDScript 回归单测并通过双模式门禁（见 `D-84`） |
