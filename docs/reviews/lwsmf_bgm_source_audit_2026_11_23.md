@@ -115,19 +115,20 @@ best offset = 0.016 s     peak_corr = 0.9874
 
 ### 3.4 字节级同一性核验（最强证据）
 
-把已下载的母版与对应零售文件做 sha256 比对，得到三种关系：
+把已下载的 **22 个母版**与对应零售文件做 sha256 + 时长比对，得到四种关系：
 
-| 关系 | 含义 | 本次实测到的曲目 |
-| :--- | :--- | :--- |
-| **完全一致**（sha256 相同） | 零售文件**就是**源站下载件本身，从未被重新编码 | `BGM/Veil_Nebula.mp3`、`BGM/White_Base.mp3`、`BGM/nonbiri.mp3` |
-| 同跨度不同编码 | 同一段录音，零售版被重新编码且**码率更高** | `BGM/Tenseness.ogg`（零售 417 kbps Vorbis vs 源站 320 kbps MP3） |
-| 截取+重编码 | 零售版是母版的**前缀**，且码率更低 | `BGM/yuuyake.mp3`、`BGM/train.mp3`、`BGM/p_egg_loop.ogg`、`BGM/Killer_Roll.ogg` |
+| 关系 | 数量 | 含义 | 实测到的曲目 |
+| :--- | ---: | :--- | :--- |
+| **完全一致**（sha256 相同） | 3 | 零售文件**就是**源站下载件本身，从未被重新编码 | `Veil_Nebula.mp3`、`White_Base.mp3`、`nonbiri.mp3` |
+| 同跨度不同编码 | 3 | 同一段录音，零售版被重新编码且**码率更高** | `Tenseness.ogg`(417 vs 320 kbps)、`line.ogg`(416 vs 323)、`windletter.ogg`(366 vs 192) |
+| 截取+重编码 | 14 | 零售版是母版的**前缀**，且码率更高（母版更完整） | `yuuyake.mp3`、`train.mp3`、`p_egg_loop.ogg`、`Killer_Roll.ogg`、`ango.ogg`、`destiny.ogg`、`nagare.mp3`、`okiraku.ogg` 及 6 个 DLC 曲 |
+| 跨度不符 | 2 | 母版与零售文件时长差异 > 1 s | `morning.ogg`（73 vs 81 s）、`ango.ogg`（390 vs 391 s） |
 
 三条推论：
 
 1. **完全一致的三首即"码率天花板"**——零售文件与源站下载件逐字节相同，说明作者当年就是直接用的这个下载件，**该曲不存在更高码率版本，替换是纯粹的空操作**。
-2. **同跨度重编码的几首说明零售版更好**——作者把源站母版转成了更高码率的 Vorbis（417 kbps > 320 kbps），直接换回源站件就是降级。
-3. **只有"截取+重编码"且零售码率更低的那几首才可能获益**——本次实测仅 `BGM/yuuyake.mp3` 通过同一性阈值。
+2. **"截取+重编码"的 14 首说明零售版已经是作者加工后的更优产物**——作者把母版截成循环体并转成更高码率的 Vorbis（普遍 380–460 kbps），直接换回源站件就是**降级**。
+3. **只有"截取+重编码"且零售码率**低于**母版的少数几首才可能获益**——本次实测仅 `BGM/yuuyake.mp3`（128 kbps → 321 kbps）通过同一性阈值。
 
 > 该核验同时反向印证了整张映射表的正确性：三条 sha256 一致的曲目，其零售文件的 `TITLE`/`ARTIST` 与源站条目名一一吻合。
 
@@ -397,7 +398,7 @@ ffmpeg -y -v error -ss 0.000 -i 002305_Yuuyake.bin -t 197.901 \
 | `match_audio.py` | 8 kHz 能量包络归一化互相关，判定"是否同一段录音"并求对齐偏移 |
 | `prepare_upgrade.py` | 按零售跨度裁切母版、重编码、搬运循环标签 |
 | `make_report.py` | 由实测数据生成本报告的表格章节 |
-| `downloads/` | 已下载的母版（原始 MP3）与候选件 |
+| `downloads/` | 已下载的母版与候选件（22 个源站曲目 + 12 个候选件，共 34 个文件 / 163 MiB） |
 | `upgrade/` | 已验证的替换产物（如 `yuuyake.ogg`） |
 | `final_table.json` / `doc_claims.json` / `download_results.json` / `candidate_corr.json` | 实测数据台账 |
 
