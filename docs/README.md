@@ -6,7 +6,7 @@
 graph LR
     Root["docs/"] --> Core["核心指引与基线"]
     Root --> Plans["plans/ (顶层架构与路线)"]
-    Root --> Frontend["frontend/ & godot/ (前端与交互层)"]
+    Root --> Godot["godot/ (Godot 客户端与呈现层)"]
     Root --> Engine["engine/ (核心引擎与Opcode)"]
     Root --> Reviews["reviews/ (缺陷审查与台账)"]
     Root --> Milestones["milestones/ (M1-M13交付记录)"]
@@ -55,13 +55,13 @@ graph LR
 
 ---
 
-## 3. 前端交互与展示层架构（[frontend/](frontend/README.md) & [godot/](godot/README.md)）
+## 3. Godot 运行时与呈现层架构（[godot/](godot/README.md)）
 
-Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
+Godot 4.7.2 Mono 架构、视口呈现与运行时交互规范：
 
-- [frontend/README.md](frontend/README.md) — 前端展示层总览与快速指引
-- [godot/README.md](godot/README.md) — Godot 重制阶段权威入口
-- [godot/DECISIONS.md](godot/DECISIONS.md) — 拍板决策集合（技术栈选型、无 C++ GDExtension 依赖）
+- [godot/README.md](godot/README.md) — Godot 重制阶段权威入口与环境基线
+- [godot/DECISIONS.md](godot/DECISIONS.md) — 拍板决策集合（D-01..D-86：确定采用纯 C# 确定性事件内核 + GDScript 呈现层）
+- [godot/PLAN.md](godot/PLAN.md) — Godot 阶段总体演进路线与 M0–M5 各阶段退出标准
 - [godot/DATA_CONTRACT.md](godot/DATA_CONTRACT.md) — 离线转换数据契约（`programs.json`、`database.json`、`manifest.json`）
 - [godot/M0_HANDOFF.md](godot/M0_HANDOFF.md) — M0 验收交接：环境门限、数据对账与 Oracle 对拍机制
 - [godot/M1_HANDOFF.md](godot/M1_HANDOFF.md) — M1 验收交接：切片运行链、存读档续跑与视口管理
@@ -88,7 +88,7 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 - [engine/PARTY_DB.md](engine/PARTY_DB.md) — 角色属性、成长与队伍数据库规范
 - [engine/AUDIO.md](engine/AUDIO.md) — BGM/BGS/SE 三轨独立混音与生命周期管理
 - [engine/HSCENE.md](engine/HSCENE.md) — 特殊场景多层立绘差分叠加与状态流转契约
-- [engine/WOLF 按键输入命令语义核查.md](engine/WOLF%20按键输入命令语义核查.md) — 按键掩码与硬件输入映射核查
+- [engine/KEY_INPUT_SPEC.md](engine/KEY_INPUT_SPEC.md) — 按键掩码与硬件输入映射核查
 
 ---
 
@@ -97,13 +97,16 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 系统性代码审查（Code Review）、跨仓库审计与缺陷追踪记录：
 
 - [reviews/README.md](reviews/README.md) — 代码审查台账总览索引
-- [reviews/lwsmf_bgm_source_audit_2026_11_23.md](reviews/lwsmf_bgm_source_audit_2026_11_23.md) — **现行·专题**：已解包媒体库音源事实核查与替换可行性审查（源站上限低于零售版码率、仅 1 例确认可升级、原检索指南勘误）
+- [reviews/review_614c6cb_and_perf_size_plan_2026_11_23.md](reviews/review_614c6cb_and_perf_size_plan_2026_11_23.md) — **现行·规划**：Commit `614c6cb` 审阅与发包体积/性能优化规划（见 D-85）
+- [reviews/lwsmf_perf_and_multiplatform_size_guide.md](reviews/lwsmf_perf_and_multiplatform_size_guide.md) — **现行·指南**：全平台运行时性能与多端素材包体压缩指南
+- [reviews/lwsmf_bgm_source_audit_2026_11_23.md](reviews/lwsmf_bgm_source_audit_2026_11_23.md) — **现行·专题**：已解包媒体库音源事实核查与替换可行性审查（源站上限低于零售版码率、仅 1 例确认可升级）
 - [reviews/review_030ee81f_remediation_2026_11_23.md](reviews/review_030ee81f_remediation_2026_11_23.md) — **现行·闭环**：`030ee81f` 审阅 UX-1~UX-5 与 REV-1~REV-6 修复闭环报告（见 D-86）
 - [reviews/review_030ee81f_and_ux_fix_plan_2026_11_23.md](reviews/review_030ee81f_and_ux_fix_plan_2026_11_23.md) — **现行·台账**：`030ee81f` 审阅缺陷与全端 / 移动端 UI·UX 修复方案
 - [reviews/save_ui_font_and_gauge_remediation_2026_11_23.md](reviews/save_ui_font_and_gauge_remediation_2026_11_23.md) — **现行·闭环**：S-01..S-08 存档 UI、模态输入、自动存档、HiDPI 字体与进度条对齐修复闭环报告（见 D-84）
 - [reviews/save_ui_font_and_gauge_diagnosis_2026_11_23.md](reviews/save_ui_font_and_gauge_diagnosis_2026_11_23.md) — **现行·台账**：Commit `78c4e49a` 存档界面异常、自动存档、字体清晰度与格子进度条错位根因排查
 - [reviews/acceptance_audit_89fc8f5_remediation_2026_11_23.md](reviews/acceptance_audit_89fc8f5_remediation_2026_11_23.md) — **现行·闭环**：`89fc8f5` 验收审查全部增量项收口、P1-6/P2-11 保留设计依据与双模式门禁验证
 - [reviews/acceptance_audit_89fc8f5_2026_11_23.md](reviews/acceptance_audit_89fc8f5_2026_11_23.md) — **现行·台账**：Commit `89fc8f5` 整改验收与增量回归审查（6 P1 / 14 P2 / 12 P3）
+- [reviews/input_consumption_and_full_audit_3a89a8a.md](reviews/input_consumption_and_full_audit_3a89a8a.md) — **现行·闭环**：触控双击取消判定与全量审查闭环
 - [reviews/sister_ux_multiplatform_adaptation_2026_11_22.md](reviews/sister_ux_multiplatform_adaptation_2026_11_22.md) — **现行·闭环**：姊妹作 UX 优化、移动端零拷贝/触控/返回键与跨端存档互导落地报告（见 D-83）
 - [reviews/full_static_audit_59268ac_remediation_2026_11_22.md](reviews/full_static_audit_59268ac_remediation_2026_11_22.md) — **现行·闭环**：`59268ac` 全量静态审查 67 项缺陷修复与双模式门禁验证（见 D-82）
 - [reviews/full_static_audit_59268ac_2026_11_22.md](reviews/full_static_audit_59268ac_2026_11_22.md) — **现行·台账**：Commit `59268ac` 全仓库静态代码审查（4 P0 / 24 P1 / 26 P2 / 13 P3）
@@ -117,7 +120,7 @@ Godot 4.7.2 Mono 前端设计、视口呈现与运行时交互规范：
 - [reviews/deepseek_title_newgame_interaction_2026_11_20.md](reviews/deepseek_title_newgame_interaction_2026_11_20.md) — 标题菜单/新游戏入口/原版点击行为分项报告
 - [reviews/deepseek_title_graphics_fresh_state_2026_11_20.md](reviews/deepseek_title_graphics_fresh_state_2026_11_20.md) — 全新状态封面与 CE42/Map003 选图分项报告
 - [reviews/deepseek_font_fallback_chain_2026_11_20.md](reviews/deepseek_font_fallback_chain_2026_11_20.md) — DxLib 字体绑定与缺字回退分项报告
-- [reviews/bug_inspection_report_2026_11_20.md](reviews/bug_inspection_report_2026_11_20.md) — **历史·重点**：右键点击失效、素材缺失、文本解析内部代号泄露深度审查报告（空格结论已由 D-58/D-70 更正）
+- [reviews/bug_inspection_report_2026_11_20.md](reviews/bug_inspection_report_2026_11_20.md) — **历史·重点**：右键点击失效、素材缺失、文本解析内部代号泄露深度审查报告
 - [reviews/bug_fix_and_gate_opt_2026_11_20.md](reviews/bug_fix_and_gate_opt_2026_11_20.md) — **现行·记录**：输入/文本/VM 修复、Oracle 对齐与 38 项门禁并行加速总结
 - [reviews/m4_oracle_refresh_2026_11_21.md](reviews/m4_oracle_refresh_2026_11_21.md) — **现行·记录**：M4 Oracle 夹具刷新、刷新脚本修复与双模式门禁恢复
 - [reviews/m5_round12_review_2026_11_19.md](reviews/m5_round12_review_2026_11_19.md) — M5 发布前夕全景审查与收口验证

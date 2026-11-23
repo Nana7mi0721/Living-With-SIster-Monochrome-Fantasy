@@ -13,7 +13,7 @@
 - `godot/presentation_gd/`：Godot 4.7.2 GDScript 呈现层（视口管理、复合立绘层级、文本排版、音效混音）
 - `crates/`：Rust 验证原型与 Oracle 对拍基线（用于开发期行为精度对账）
 - `docs/`：全量技术契约、Opcode 规格、审查台账与研发记录
-- `tools/`：自动化测试、发布打包与逆向辅助脚本
+- `tools/`：自动化测试、发布打包、多端构建与逆向辅助工具（包含 `tools/cheat_engine/` 内存对照表）
 
 ---
 
@@ -65,4 +65,7 @@ cargo test -q --workspace
 4. **深入阅读**：
    - 协作指南请参阅 [AGENTS.md](AGENTS.md)。
    - 全局文档索引请参阅 [docs/README.md](docs/README.md)。
-   - 最新核心缺陷审查报告请参阅 [docs/reviews/bug_inspection_report_2026_11_20.md](docs/reviews/bug_inspection_report_2026_11_20.md)。
+   - 版权与无开源许可声明请参阅 [DISCLAIMER.md](DISCLAIMER.md)。
+5. **无开源许可与知识产权约束**：
+   - 本工程为同人重构与学术研究项目，**未授予开源许可协议**；
+   - 所有贡献与交流需严格遵守非商业学习研究原则与商业资产隔离要求。

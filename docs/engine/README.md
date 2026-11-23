@@ -33,4 +33,4 @@
 | [PARTY_DB.md](PARTY_DB.md) | 队伍数据 | 角色属性、成长曲线、队伍配置与装备数据库 |
 | [AUDIO.md](AUDIO.md) | 音频系统 | BGM、BGS 与 SE 三轨独立混音、淡入淡出与音量曲线 |
 | [HSCENE.md](HSCENE.md) | 特殊场景 | 差分立绘多层叠加、状态分支与场景流转契约 |
-| [WOLF 按键输入命令语义核查.md](WOLF%20按键输入命令语义核查.md) | 输入系统 | Opcode 123/124 按键掩码（Mask）与硬件输入对应关系实测核查 |
+| [KEY_INPUT_SPEC.md](KEY_INPUT_SPEC.md) | 输入系统 | Opcode 123/124 按键掩码（Mask）与硬件输入对应关系实测核查 |

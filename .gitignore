@@ -36,11 +36,15 @@ __pycache__/
 /_wolfref/
 /game_data/
 /ce.txt
-/*.CT
+*.CT
+!tools/cheat_engine/妹相随 全能修改表 v4.CT
 /docs/gpt调研/
+/docs/调研/
 /docs/攻略/
 /docs/攻略文档/
 /游戏示例图片/
+/游戏问题截图/
+/*.zip
 
 # Testing Logs & Execution Artifacts
 /reports/
