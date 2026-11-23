@@ -59,15 +59,14 @@ static func _contains_gauge_glyph(text: String) -> bool:
 	return false
 
 
-# Pair filled/empty geometric gauge glyphs onto an identical cell advance so stacked
-# background/foreground bars align with zero cumulative horizontal drift.
+# Square gauge glyphs (■/□) use exact px advance so 10-cell meters and multi-slot
+# overlays never drift across fonts; diamond/circle pairs match their wider glyph advance.
 static func _gauge_cell_step(draw_font: Font, glyph: String, px: int) -> float:
+	if glyph == "■" or glyph == "□":
+		return float(px)
 	var pair_a := glyph
 	var pair_b := glyph
 	match glyph:
-		"■", "□":
-			pair_a = "■"
-			pair_b = "□"
 		"◆", "◇":
 			pair_a = "◆"
 			pair_b = "◇"
@@ -111,6 +110,23 @@ class PictureTextLabel extends Label:
 			draw_string_outline(draw_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, 2, outline_color)
 		draw_string(draw_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, col)
 
+	func _paint_square_gauge(draw_font: Font, x_cursor: float, baseline_y: float, px: int, filled: bool, col: Color, has_outline: bool, outline_color: Color) -> void:
+		var cell := float(px)
+		var inset := maxf(1.0, floorf(cell * 0.12))
+		var side := maxf(2.0, cell - inset * 2.0)
+		var cell_top := baseline_y - draw_font.get_ascent(px)
+		var rect := Rect2(x_cursor + (cell - side) * 0.5, cell_top + (cell - side) * 0.5, side, side)
+		if filled:
+			if has_outline:
+				draw_rect(rect.grow(1.0), outline_color, true)
+			draw_rect(rect, col, true)
+		else:
+			var border := maxf(1.0, floorf(cell * 0.1))
+			var stroke_rect := rect.grow(-border * 0.5)
+			if has_outline:
+				draw_rect(stroke_rect, outline_color, false, border + 2.0)
+			draw_rect(stroke_rect, col, false, border)
+
 	func _draw() -> void:
 		if runs.is_empty():
 			return
@@ -141,9 +157,12 @@ class PictureTextLabel extends Label:
 						_paint_span(draw_font, Vector2(x_cursor, pos.y), span, px, col, has_outline, outline_color)
 						x_cursor += draw_font.get_string_size(span, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
 					var step := PictureStage._gauge_cell_step(draw_font, ch, px)
-					var glyph_w := draw_font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
-					var glyph_x := x_cursor + maxf(0.0, (step - glyph_w) * 0.5)
-					_paint_span(draw_font, Vector2(glyph_x, pos.y), ch, px, col, has_outline, outline_color)
+					if ch == "■" or ch == "□":
+						_paint_square_gauge(draw_font, x_cursor, pos.y, px, ch == "■", col, has_outline, outline_color)
+					else:
+						var glyph_w := draw_font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+						var glyph_x := x_cursor + maxf(0.0, (step - glyph_w) * 0.5)
+						_paint_span(draw_font, Vector2(glyph_x, pos.y), ch, px, col, has_outline, outline_color)
 					x_cursor += step
 					span_start = i + 1
 			if span_start < n:
@@ -311,7 +330,7 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 				first_node = _pictures[slot]
 		return first_node
 
-	var prev_state: Dictionary = _states.get(number, {}).duplicate(true)
+	var prev_state: Dictionary = _states.get(number, {}).duplicate()
 	var prev_cmd: Dictionary = _cmds.get(number, {})
 	# Only the exact same kind/file/text counts as a redraw; a new asset resets effects/pose.
 	var redraws := not prev_cmd.is_empty() \
@@ -391,7 +410,7 @@ func _merged_move(number: int, file: String, text: String, args: Array, anchor: 
 	var merged_kind := int(prev.get("kind", -1))
 	if merged_kind < 0:
 		merged_kind = kind if kind >= 0 else (2 if merged_file.is_empty() and not merged_text.is_empty() else 0)
-	var merged_flags: Dictionary = (prev.get("flags", {}) as Dictionary).duplicate(true)
+	var merged_flags: Dictionary = (prev.get("flags", {}) as Dictionary).duplicate()
 	for k in flags.keys():
 		if k == "relative":
 			continue
@@ -442,7 +461,7 @@ func _store_cmd(number: int, action: int, file: String, text: String, args: Arra
 		"args": args.duplicate(),
 		"anchor": anchor,
 		"animate": animate.duplicate(),
-		"flags": flags.duplicate(true),
+		"flags": flags.duplicate(),
 	}
 
 
@@ -820,7 +839,7 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 		return
 	if kind < 0:
 		kind = 2 if file.is_empty() and not text.is_empty() else 0
-	var prev_state: Dictionary = _states.get(number, {}).duplicate(true)
+	var prev_state: Dictionary = _states.get(number, {}).duplicate()
 	var base := Vector2.ZERO
 	var sys_track := _PictureShapes.parse_sysgraphic(file) if (kind == 3 or kind == 4) else {}
 	if kind == 3 or kind == 4:
@@ -1027,6 +1046,19 @@ func _tone_from_args(args: Array) -> Array:
 	return tone
 
 
+static func _clone_effects(raw: Variant) -> Array:
+	if not (raw is Array) or (raw as Array).is_empty():
+		return []
+	var out: Array = []
+	for eff in raw:
+		if eff is Dictionary:
+			var d: Dictionary = (eff as Dictionary).duplicate()
+			if d.get("target", null) is Array:
+				d["target"] = (d["target"] as Array).duplicate()
+			out.append(d)
+	return out
+
+
 func _new_state(args: Array, anchor: int, base: Vector2, flags: Dictionary = {}, raster_window: bool = false) -> Dictionary:
 	var pose := _pose_from_args(args, anchor, flags)
 	var tone := _tone_from_args(args)
@@ -1042,7 +1074,7 @@ func _new_state(args: Array, anchor: int, base: Vector2, flags: Dictionary = {},
 		"fade_from": 255,
 		"fade_start": 0,
 		"target": pose,
-		"current": pose.duplicate(true),
+		"current": pose.duplicate(),
 		"transition": null,
 		"tone_transition": null,
 		"erase_after": false,
@@ -1083,7 +1115,7 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 		if bool(flags.get("relative", false)):
 			_apply_relative_pose(state["target"], prev_cur, args)
 		_apply_scale_mode(state["target"], args, flags)
-		state["current"] = state["target"].duplicate(true)
+		state["current"] = state["target"].duplicate()
 	if bool(flags.get("keep_shift", false)) and not prev.is_empty():
 		state["shift"] = (prev.get("shift", [0, 0]) as Array).duplicate()
 	var redraws := not prev.is_empty() and not prev_cmd.is_empty() \
@@ -1103,26 +1135,26 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 	var same_position := _pose_position(prev.get("target", {})) == _pose_position(state["target"])
 	if same_position:
 		state["color_corr"] = prev.get("color_corr", [0, 0, 0]).duplicate()
-		state["effects"] = prev.get("effects", []).duplicate(true)
-		state["shake"] = null if prev.get("shake", null) == null else prev["shake"].duplicate(true)
-		state["zoom"] = null if prev.get("zoom", null) == null else prev["zoom"].duplicate(true)
-		state["breath"] = null if prev.get("breath", null) == null else prev["breath"].duplicate(true)
-		state["pattern"] = null if prev.get("pattern", null) == null else prev["pattern"].duplicate(true)
+		state["effects"] = _clone_effects(prev.get("effects", []))
+		state["shake"] = null if prev.get("shake", null) == null else prev["shake"].duplicate()
+		state["zoom"] = null if prev.get("zoom", null) == null else prev["zoom"].duplicate()
+		state["breath"] = null if prev.get("breath", null) == null else prev["breath"].duplicate()
+		state["pattern"] = null if prev.get("pattern", null) == null else prev["pattern"].duplicate()
 	state["fade"] = 0
 	var has_opacity := args.size() > 4 and int(args[4]) != UNCHANGED
 	if not has_opacity:
 		state["target"]["opacity"] = int(prev["current"].get("opacity", 255))
 	var duration := _animate_duration(animate)
 	if duration > 0 and not same_position:
-		state["current"] = prev["current"].duplicate(true)
+		state["current"] = prev["current"].duplicate()
 		state["transition"] = {
-			"from": prev["current"].duplicate(true),
-			"to": state["target"].duplicate(true),
+			"from": prev["current"].duplicate(),
+			"to": state["target"].duplicate(),
 			"duration": duration,
 			"age": 0,
 		}
 	else:
-		state["current"] = state["target"].duplicate(true)
+		state["current"] = state["target"].duplicate()
 	_states[number] = state
 	_render_picture(number)
 
@@ -1164,14 +1196,14 @@ func _begin_move(number: int, _file: String, _text: String, args: Array, anchor:
 			state["tone"] = target_tone
 	if duration > 0:
 		state["transition"] = {
-			"from": state["current"].duplicate(true),
-			"to": target.duplicate(true),
+			"from": state["current"].duplicate(),
+			"to": target.duplicate(),
 			"duration": duration,
 			"age": 0,
 		}
 	else:
 		state["transition"] = null
-		state["current"] = target.duplicate(true)
+		state["current"] = target.duplicate()
 		if fade > 0:
 			state["current"]["opacity"] = fade_from
 	_states[number] = state
@@ -1202,14 +1234,14 @@ func _start_erase_one(number: int, args: Array) -> void:
 	if state.is_empty():
 		var cmd: Dictionary = _cmds.get(number, {})
 		state = _new_state(cmd.get("args", []), int(cmd.get("anchor", 0)), _base_sizes.get(number, Vector2.ZERO))
-	var target: Dictionary = state["current"].duplicate(true)
+	var target: Dictionary = state["current"].duplicate()
 	target["opacity"] = 0
 	state["target"] = target
 	state["erase_after"] = true
 	state["fade"] = 0
 	state["transition"] = {
-		"from": state["current"].duplicate(true),
-		"to": target.duplicate(true),
+		"from": state["current"].duplicate(),
+		"to": target.duplicate(),
 		"duration": maxi(1, fade),
 		"age": 0,
 	}
@@ -1251,6 +1283,15 @@ func tick() -> void:
 			_advance_picture(number)
 
 
+func has_active_animations() -> bool:
+	if _tint_elapsed < _tint_duration:
+		return true
+	for state in _states.values():
+		if state is Dictionary and _state_animating(state):
+			return true
+	return false
+
+
 func _state_animating(state: Dictionary) -> bool:
 	if state.is_empty():
 		return false
@@ -1273,7 +1314,7 @@ func _advance_picture(number: int) -> void:
 		transition["age"] = int(transition["age"]) + 1
 		var duration := maxi(1, int(transition["duration"]))
 		if int(transition["age"]) >= duration:
-			state["current"] = transition["to"].duplicate(true)
+			state["current"] = transition["to"].duplicate()
 			state["transition"] = null
 			if bool(state.get("erase_after", false)):
 				_free_picture(number)

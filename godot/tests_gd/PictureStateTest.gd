@@ -421,15 +421,31 @@ func _ready() -> void:
 	check(neg_breath_rect.size.x >= 0.0 and neg_breath_rect.size.y >= 0.0,
 		"negative Breath amplitude must clamp Rect2 dimensions >= 0")
 
-	# Gauge glyphs (square/diamond/circle pairs) must measure identical per-cell widths.
+	# Gauge glyphs (square/diamond/circle pairs) must measure identical per-cell widths,
+	# and square cells (■/□) must step by exact float(px) regardless of font metrics.
 	var gauge_filled: Dictionary = stage._measure_text("\\f[20]■■■■■")
 	var gauge_empty: Dictionary = stage._measure_text("\\f[20]□□□□□")
 	check(is_equal_approx((gauge_filled["size"] as Vector2).x, (gauge_empty["size"] as Vector2).x),
 		"filled and empty square gauge runs must measure equal width")
+	check(is_equal_approx((gauge_filled["size"] as Vector2).x, 102.0) and is_equal_approx((gauge_empty["size"] as Vector2).x, 102.0),
+		"5-cell square gauge at px=20 must step by exact 20px per cell (total 100 + 2 padding)")
+	var gauge_small: Dictionary = stage._measure_text("\\f[12]■■■■■")
+	check(is_equal_approx((gauge_small["size"] as Vector2).x, 62.0),
+		"5-cell square gauge at px=12 must step by exact 12px per cell (total 60 + 2 padding)")
 	var circle_filled: Dictionary = stage._measure_text("\\f[20]●●●")
 	var circle_empty: Dictionary = stage._measure_text("\\f[20]○○○")
 	check(is_equal_approx((circle_filled["size"] as Vector2).x, (circle_empty["size"] as Vector2).x),
 		"filled and empty circle gauge runs must measure equal width")
+
+	stage.clear_pictures()
+	stage.reset_screen_tint()
+	check(not stage.has_active_animations(), "empty stage must report no active animations")
+	stage.draw_picture(1385, 0, "SystemFile/WindowBase.png", "", [3, 1, 1, 1, 255, 100, 100, 100], 0, 0)
+	check(stage.has_active_animations(), "fading picture must report active animation")
+	for _fade_tick in 3:
+		stage.tick()
+	check(not stage.has_active_animations(), "completed fade must clear active animation state")
+	stage.clear_pictures()
 
 	await get_tree().process_frame
 	await get_tree().process_frame

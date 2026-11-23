@@ -771,6 +771,13 @@ public sealed class GameSession
         ce131.Self.Set(Magic.SelfArgBase + 11, page);
         ce131.Self.Set(Magic.SelfArgBase + 12, clamped);
 
+        for (int i = _vm.Vm.Instances.Count - 1; i >= 0; i--)
+        {
+            if (_vm.Vm.Instances[i].EventId == 94)
+            {
+                _vm.Vm.StopInstance(_vm.Vm.Instances[i].Id);
+            }
+        }
         int mode = ce131.Self.Get(Magic.SelfArgBase + 0) != 0 ? 1 : 0;
         _vm.Vm.StartEventWithArgs(94, new[] { mode, row, page }, Array.Empty<string>(), parallel: true);
     }

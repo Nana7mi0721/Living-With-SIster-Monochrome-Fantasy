@@ -566,10 +566,13 @@ func hd_path(logical: String) -> String:
 func _image_from_hd(path: String) -> Image:
 	if path.is_empty() or hd_pak == null:
 		return null
-	var bytes = hd_pak.Read(path)
 	var image: Image = null
-	if bytes != null:
-		image = _image_from_bytes(bytes, path.get_extension())
+	if hd_pak.has_method("ReadImage"):
+		image = hd_pak.ReadImage(path)
+	else:
+		var bytes = hd_pak.Read(path)
+		if bytes != null:
+			image = _image_from_bytes(bytes, path.get_extension())
 	if image == null:
 		_hd_verified.erase(path)
 		_hd_failed[path] = true
@@ -648,6 +651,10 @@ static func _image_from_file(path: String) -> Image:
 
 
 func _image_from_media(path: String) -> Image:
+	if media_pak == null:
+		return null
+	if media_pak.has_method("ReadImage"):
+		return media_pak.ReadImage(path.substr(MEDIA_PREFIX.length()))
 	var bytes := _bytes_from_media(path)
 	return _image_from_bytes(bytes, path.get_extension())
 
@@ -686,6 +693,10 @@ func invalidate(logical: String) -> void:
 	_erase_cache_key(_tex_cache_key(logical))
 	_erase_cache_key(_audio_cache_key(logical))
 	_logged_misses.erase(_norm_key(logical))
+
+
+func invalidate_path(logical: String) -> void:
+	invalidate(logical)
 
 
 func clear() -> void:

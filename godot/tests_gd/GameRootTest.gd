@@ -945,11 +945,34 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 		failures.append("30px overlap past 240px letterbox bar at 1.875x must yield 16 design px, got %s" % str(insets_overlap))
 
 	root._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
-	if not root.modal_release_guard():
+	if not root.modal_release_guard() or not root._window_focused:
 		failures.append("FOCUS_IN must arm _modal_release_guard to block click-through")
+	root._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	if root._window_focused:
+		failures.append("FOCUS_OUT must mark _window_focused=false")
+	root._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+	if not root._window_focused:
+		failures.append("APPLICATION_RESUMED must restore _window_focused=true")
 	root._notification(Node.NOTIFICATION_APPLICATION_PAUSED)
-	if root.modal_release_guard():
+	if root.modal_release_guard() or root._window_focused:
 		failures.append("APPLICATION_PAUSED must clear held latches cleanly")
+
+	# R-P1-1: failed SaveGameToSlot must not overwrite existing slot thumbnail.
+	var fail_thumb_path: String = root.session.SaveDirectory.path_join("save98.jpg")
+	DirAccess.make_dir_recursive_absolute(root.session.SaveDirectory)
+	var sentinel_f := FileAccess.open(fail_thumb_path, FileAccess.WRITE)
+	if sentinel_f != null:
+		sentinel_f.store_buffer("SENTINEL_THUMB".to_utf8_buffer())
+		sentinel_f.close()
+	root.stage.draw_picture(12000, 0, "", "", [0, 0, 0, 0, 255, 0, 0, 100], 0, 0)
+	root._clean_scene_image = Image.create(32, 32, false, Image.FORMAT_RGB8)
+	root._on_save_slot_save_requested(98, Vector2.ZERO, false)
+	var sentinel_after := FileAccess.get_file_as_bytes(fail_thumb_path)
+	if sentinel_after.get_string_from_utf8() != "SENTINEL_THUMB":
+		failures.append("_on_save_slot_save_requested must not overwrite existing thumbnail when save fails")
+	DirAccess.remove_absolute(fail_thumb_path)
+	root.stage.clear_pictures()
+	root._clean_scene_image = null
 
 	# 5. Save/load confirm modal 4-quadrant matrix + RMB/Esc _input close + _modal_release_guard.
 	root.overlays.open_save_confirm(5, Vector2(120, 200), true, false, true)

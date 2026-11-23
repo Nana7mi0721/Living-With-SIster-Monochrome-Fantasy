@@ -59,6 +59,11 @@ func _ready() -> void:
 			failures.append("media pack PNG bytes should match the stub image")
 		if reader.Read("SystemFile/WindowBase").size() != 85:
 			failures.append("media pack should probe a missing extension")
+		var direct_img: Image = reader.ReadImage("SystemFile/WindowBase.png")
+		if direct_img == null or direct_img.is_empty():
+			failures.append("ReadImage should decode PNG directly from media pack")
+		if reader.ReadImage("no/such.png") != null:
+			failures.append("ReadImage should return null for absent entry")
 		if reader.Has("no/such.png"):
 			failures.append("media pack should miss an absent path")
 
@@ -195,6 +200,10 @@ func _ready() -> void:
 		failures.append("../save/ relative thumbnail path must resolve against save_dir")
 	if harden_db.texture("../save/save1.jpg") == null:
 		failures.append("../save/ relative thumbnail texture must decode")
+	var bytes_before_inv := harden_db.used_bytes
+	harden_db.invalidate_path("Save/save1.jpg")
+	if harden_db.has_cached("Save/save1.jpg", "texture") or harden_db.used_bytes >= bytes_before_inv:
+		failures.append("invalidate_path must evict Save/save1.jpg texture and subtract used_bytes")
 	# Texture and audio caches use disjoint prefixes so the same logical basename never collides.
 	var shared_tex := harden_db.texture("shared")
 	var shared_aud := harden_db.audio("shared")

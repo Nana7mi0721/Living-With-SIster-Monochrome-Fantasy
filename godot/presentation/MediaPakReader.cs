@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
@@ -124,9 +125,22 @@ public partial class MediaPakReader : RefCounted
 
         public void ReadExactly(Span<byte> destination)
         {
-            if (destination.IsEmpty)
-                return;
-            ReadBytes(destination.Length).AsSpan().CopyTo(destination);
+            if (_file == null)
+                throw new IOException("Media pack stream is disposed");
+            const int ChunkSize = 64 * 1024;
+            int offset = 0;
+            while (offset < destination.Length)
+            {
+                int take = Math.Min(ChunkSize, destination.Length - offset);
+                byte[] chunk = _file.GetBuffer(take);
+                if (chunk.Length != take)
+                {
+                    throw new EndOfStreamException(
+                        $"Unexpected EOF reading media pack: expected {take} bytes, got {chunk.Length}");
+                }
+                chunk.AsSpan().CopyTo(destination.Slice(offset, take));
+                offset += take;
+            }
         }
 
         public byte[] ReadBytes(int length)
@@ -261,12 +275,22 @@ public partial class MediaPakReader : RefCounted
                 }
 
                 stream.Position = (long)indexOffset;
-                byte[] index = stream.ReadBytes((int)indexSize);
-                XorBytes(index, indexOffset);
-                if (!ParseIndex(index, count, indexOffset, out string parseError))
+                int indexLength = (int)indexSize;
+                byte[] rentedIndex = ArrayPool<byte>.Shared.Rent(indexLength);
+                try
                 {
-                    _lastError = parseError;
-                    return false;
+                    Span<byte> index = rentedIndex.AsSpan(0, indexLength);
+                    stream.ReadExactly(index);
+                    XorBytes(index, indexOffset);
+                    if (!ParseIndex(index, count, indexOffset, out string parseError))
+                    {
+                        _lastError = parseError;
+                        return false;
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(rentedIndex);
                 }
 
                 _file = stream;
@@ -368,7 +392,9 @@ public partial class MediaPakReader : RefCounted
             try
             {
                 _file.Position = (long)entry.Offset;
-                byte[] bytes = _file.ReadBytes((int)entry.Size);
+                int size = (int)entry.Size;
+                byte[] bytes = new byte[size];
+                _file.ReadExactly(bytes);
                 XorBytes(bytes, entry.Offset);
                 uint actual = Crc32(bytes);
                 if (actual != entry.Crc)
@@ -387,7 +413,106 @@ public partial class MediaPakReader : RefCounted
         }
     }
 
-    private bool ParseIndex(byte[] index, uint count, ulong indexOffset, out string error)
+    /// <summary>
+    /// Decodes one packed image directly via a pooled byte buffer so large 2x textures do
+    /// not churn the .NET LOH or cross the GDScript boundary as PackedByteArray copies.
+    /// </summary>
+    public Image? ReadImage(string name)
+    {
+        lock (_gate)
+        {
+            if (_file == null)
+            {
+                _lastError = "media pack is not open";
+                return null;
+            }
+            if (!TryFind(name, out Entry? entry) || entry == null)
+            {
+                _lastError = "";
+                return null;
+            }
+            if (entry.Size > MaxEntryBytes || entry.Size > (ulong)_file.Length)
+            {
+                _lastError = $"{entry.Path} exceeds maximum readable entry size";
+                return null;
+            }
+            int size = (int)entry.Size;
+            if (size <= 0)
+            {
+                _lastError = $"media pack entry {entry.Path} is empty";
+                return null;
+            }
+
+            byte[] rented = ArrayPool<byte>.Shared.Rent(size);
+            try
+            {
+                _file.Position = (long)entry.Offset;
+                Span<byte> span = rented.AsSpan(0, size);
+                _file.ReadExactly(span);
+                XorBytes(span, entry.Offset);
+                uint actual = Crc32(span);
+                if (actual != entry.Crc)
+                {
+                    _lastError = $"media pack CRC mismatch for {entry.Path}: expected {entry.Crc:X8}, got {actual:X8}";
+                    return null;
+                }
+
+                string format = SniffImageFormat(span, Path.GetExtension(entry.Path));
+                var image = new Image();
+                Error err = format switch
+                {
+                    "png" => image.LoadPngFromBuffer(span),
+                    "jpg" or "jpeg" => image.LoadJpgFromBuffer(span),
+                    "webp" => image.LoadWebpFromBuffer(span),
+                    "bmp" => image.LoadBmpFromBuffer(span),
+                    "tga" => image.LoadTgaFromBuffer(span),
+                    _ => Error.FileUnrecognized
+                };
+                if (err != Error.Ok)
+                {
+                    image.Dispose();
+                    _lastError = $"failed to decode image {entry.Path} ({format}): {err}";
+                    return null;
+                }
+                _lastError = "";
+                return image;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                _lastError = error.Message;
+                return null;
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
+        }
+    }
+
+    private static string SniffImageFormat(ReadOnlySpan<byte> bytes, string fallbackExtension)
+    {
+        if (bytes.Length >= 12
+            && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46
+            && bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50)
+        {
+            return "webp";
+        }
+        if (bytes.Length >= 8 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+        {
+            return "png";
+        }
+        if (bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+        {
+            return "jpg";
+        }
+        if (bytes.Length >= 2 && bytes[0] == 0x42 && bytes[1] == 0x4D)
+        {
+            return "bmp";
+        }
+        return fallbackExtension.TrimStart('.').ToLowerInvariant();
+    }
+
+    private bool ParseIndex(ReadOnlySpan<byte> index, uint count, ulong indexOffset, out string error)
     {
         error = "";
         _entries.Clear();
@@ -399,17 +524,17 @@ public partial class MediaPakReader : RefCounted
                 error = $"media pack entry {number} is truncated";
                 return false;
             }
-            int pathLength = BinaryPrimitives.ReadUInt16LittleEndian(index.AsSpan(cursor, 2));
-            ulong offset = BinaryPrimitives.ReadUInt64LittleEndian(index.AsSpan(cursor + 2, 8));
-            ulong size = BinaryPrimitives.ReadUInt64LittleEndian(index.AsSpan(cursor + 10, 8));
-            uint crc = BinaryPrimitives.ReadUInt32LittleEndian(index.AsSpan(cursor + 18, 4));
+            int pathLength = BinaryPrimitives.ReadUInt16LittleEndian(index.Slice(cursor, 2));
+            ulong offset = BinaryPrimitives.ReadUInt64LittleEndian(index.Slice(cursor + 2, 8));
+            ulong size = BinaryPrimitives.ReadUInt64LittleEndian(index.Slice(cursor + 10, 8));
+            uint crc = BinaryPrimitives.ReadUInt32LittleEndian(index.Slice(cursor + 18, 4));
             cursor += IndexFixed;
             if (pathLength < 0 || cursor > index.Length - pathLength)
             {
                 error = $"media pack entry {number} has a truncated path";
                 return false;
             }
-            string path = Encoding.UTF8.GetString(index, cursor, pathLength);
+            string path = Encoding.UTF8.GetString(index.Slice(cursor, pathLength));
             cursor += pathLength;
             if (!IsValidPath(path))
             {
@@ -498,7 +623,7 @@ public partial class MediaPakReader : RefCounted
         return true;
     }
 
-    private static uint Crc32(byte[] data)
+    private static uint Crc32(ReadOnlySpan<byte> data)
     {
         uint crc = 0xFFFF_FFFF;
         foreach (byte value in data)
@@ -523,11 +648,11 @@ public partial class MediaPakReader : RefCounted
         return table;
     }
 
-    private static void XorBytes(byte[] bytes, ulong offset)
+    private static void XorBytes(Span<byte> bytes, ulong offset)
     {
         int done = 0;
         ulong currentBlock = ulong.MaxValue;
-        byte[]? stream = null;
+        Span<byte> stream = stackalloc byte[StreamBlockSize];
         while (done < bytes.Length)
         {
             ulong absolute = unchecked(offset + (ulong)done);
@@ -535,19 +660,19 @@ public partial class MediaPakReader : RefCounted
             int within = (int)(absolute % StreamBlockSize);
             if (block != currentBlock)
             {
-                stream = StreamBlock(block);
+                WriteStreamBlock(block, stream);
                 currentBlock = block;
             }
             int take = Math.Min(StreamBlockSize - within, bytes.Length - done);
             for (int index = 0; index < take; index++)
             {
-                bytes[done + index] ^= stream![within + index];
+                bytes[done + index] ^= stream[within + index];
             }
             done += take;
         }
     }
 
-    private static byte[] StreamBlock(ulong block)
+    private static void WriteStreamBlock(ulong block, Span<byte> output)
     {
         ulong state = unchecked(block * Golden);
         for (int offset = 0; offset < Seed.Length; offset += 8)
@@ -556,7 +681,6 @@ public partial class MediaPakReader : RefCounted
             state = unchecked((state + seedWord) * Golden);
             state ^= state >> 29;
         }
-        byte[] output = new byte[StreamBlockSize];
         for (int offset = 0; offset < StreamBlockSize; offset += 8)
         {
             state = unchecked(state + Golden);
@@ -564,8 +688,7 @@ public partial class MediaPakReader : RefCounted
             value = unchecked((value ^ (value >> 30)) * 0xBF58_476D_1CE4_E5B9UL);
             value = unchecked((value ^ (value >> 27)) * 0x94D0_49BB_1331_11EBUL);
             value ^= value >> 31;
-            BinaryPrimitives.WriteUInt64LittleEndian(output.AsSpan(offset, 8), value);
+            BinaryPrimitives.WriteUInt64LittleEndian(output.Slice(offset, 8), value);
         }
-        return output;
     }
 }

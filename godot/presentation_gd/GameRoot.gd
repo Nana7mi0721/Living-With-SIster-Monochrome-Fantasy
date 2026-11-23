@@ -60,6 +60,7 @@ var _windowed_position := Vector2i.ZERO
 var _windowed_size := Vector2i.ZERO
 var _scale_mode_idx := 2  # Default Fit-Linear
 var _perf_tier := 0
+var _window_focused := true
 var _show_title_fps := false
 var _title_fps_timer := 0.0
 var _hotkeys: Dictionary = DEFAULT_HOTKEYS.duplicate()
@@ -87,6 +88,7 @@ var _recent_logs: Array[String] = []
 
 
 func _ready() -> void:
+	PhysicsServer2D.set_active(false)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	# GameRoot spans the full 1024x576 viewport; IGNORE lets mouse events reach InputRouter.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -244,12 +246,37 @@ func _on_mobile_data_bootstrap_completed(ok: bool) -> void:
 		get_tree().call_deferred("reload_current_scene")
 
 
+func _exit_tree() -> void:
+	if not _is_headless():
+		OS.low_processor_usage_mode = false
+
+
+func _can_use_low_processor_mode() -> bool:
+	if _is_headless() or not _window_focused or faulted:
+		return false
+	if phase == "boot" or phase == "setup" or phase == "bootstrap" or phase == "failed":
+		return false
+	if auto_advance or _modal_window_open():
+		return false
+	if _transition_frames > 0 or _transition_freeze_active:
+		return false
+	if message == null or not message.is_open() or not message.finished:
+		return false
+	if choice != null and choice.is_open:
+		return false
+	if stage != null and stage.has_active_animations():
+		return false
+	return true
+
+
 func _process(delta: float) -> void:
 	if overlays != null:
 		overlays.tick_toast()
 	if message != null:
 		message.paused = _modal_window_open()
 	if phase == "failed" or phase == "setup" or phase == "bootstrap" or faulted:
+		if not _is_headless() and OS.low_processor_usage_mode:
+			OS.low_processor_usage_mode = false
 		if phase == "failed" and overlays != null:
 			report_fault(_failure_reason())
 		return
@@ -277,6 +304,10 @@ func _process(delta: float) -> void:
 					int(vm.GetVar(295)),
 				]
 			overlays.refresh_debug(Engine.get_frames_per_second(), frames, phase, inst_str, pic_cnt, ptr, seen, assets, diag_line)
+	if not _is_headless():
+		var want_low_proc := _can_use_low_processor_mode()
+		if OS.low_processor_usage_mode != want_low_proc:
+			OS.low_processor_usage_mode = want_low_proc
 
 
 ## One deterministic frame; tests call this directly instead of waiting on the clock.
@@ -778,8 +809,9 @@ func _on_pro_feature(kind: int, _milliseconds: int, path: String) -> void:
 			if save_error != OK:
 				status("save thumbnail failed: %s" % error_string(save_error))
 				return
-			assets.invalidate(logical)
-			assets.invalidate("save/" + file_name)
+			if assets != null:
+				assets.invalidate_path(logical)
+				assets.invalidate_path("save/" + file_name)
 			status("save thumbnail written: %s" % file_name)
 		3:
 			if FileAccess.file_exists(target):
@@ -787,8 +819,9 @@ func _on_pro_feature(kind: int, _milliseconds: int, path: String) -> void:
 				if delete_error != OK:
 					status("save thumbnail delete failed: %s" % error_string(delete_error))
 					return
-			assets.invalidate(logical)
-			assets.invalidate("save/" + file_name)
+			if assets != null:
+				assets.invalidate_path(logical)
+				assets.invalidate_path("save/" + file_name)
 			status("save thumbnail deleted: %s" % file_name)
 
 
@@ -865,17 +898,37 @@ func _notification(what: int) -> void:
 		handle_back_request()
 		return
 	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_window_focused = false
 		_save_display_settings()
 		_clear_held_input()
+		if not _is_headless():
+			OS.low_processor_usage_mode = false
+			Engine.max_fps = 5
+		return
+	if what == NOTIFICATION_APPLICATION_RESUMED:
+		_window_focused = true
+		_apply_performance_tier()
+		return
+	if what == NOTIFICATION_WM_SIZE_CHANGED:
+		if not _is_headless() and DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MINIMIZED:
+			_window_focused = false
+			OS.low_processor_usage_mode = false
+			Engine.max_fps = 5
 		return
 	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
+		_window_focused = true
 		if router != null:
 			router.reconcile_pointer_buttons(true)
 		_arm_modal_release_guard()
+		_apply_performance_tier()
 		return
 	if what != NOTIFICATION_APPLICATION_FOCUS_OUT and what != NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		return
+	_window_focused = false
 	_clear_held_input()
+	if not _is_headless():
+		OS.low_processor_usage_mode = false
+		Engine.max_fps = 5 if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MINIMIZED else 10
 
 
 func _clear_held_input() -> void:
@@ -1029,6 +1082,11 @@ func _on_has_message() -> bool:
 
 func _on_message_text() -> String:
 	return message.full_text
+
+
+func _input(_event: InputEvent) -> void:
+	if not _is_headless() and OS.low_processor_usage_mode:
+		OS.low_processor_usage_mode = false
 
 
 ## Hotkeys: F2 stats/milestones, F3 debug, F4 backlog, F5 quick save, F6 diagnostic snapshot,
@@ -1933,12 +1991,16 @@ func _maybe_handle_save_ui_action(is_pointer: bool) -> bool:
 
 
 func _on_save_slot_save_requested(slot: int, _pointer_pos: Vector2, _is_pointer: bool) -> void:
-	_on_pro_feature(0, 0, "Save/save%d.jpg" % slot)
 	var ok: bool = bool(session.SaveGameToSlot(slot))
 	frames = session.Frames
 	phase = session.Phase
 	_arm_modal_release_guard()
 	if ok:
+		var thumb_logical := "Save/save%d.jpg" % slot
+		_on_pro_feature(0, 0, thumb_logical)
+		if assets != null:
+			assets.invalidate_path(thumb_logical)
+		session.RefreshSaveUiForSlot(slot)
 		_show_toast("已保存至存档槽 %02d" % slot)
 	else:
 		_show_toast("保存失败")

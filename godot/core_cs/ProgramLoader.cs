@@ -8,58 +8,96 @@ namespace Lwsmf.Core;
 public static class ProgramLoader
 {
     // ---- shared artifact cache ------------------------------------------
-    // Keep one parsed programs.json document per path, keyed by size and mtime
-    // so a regenerated artifact invalidates itself without re-parsing several MB
-    // on each lookup. Callers must not dispose the document they get back.
+    // Parse programs.json once per path (keyed by size and mtime) into compact
+    // C# dictionaries and dispose the JsonDocument immediately so the ~50 MB
+    // parse tree does not stay resident.
 
-    private sealed class CachedDocument
+    private sealed class ParsedMap
+    {
+        public int Id;
+        public string File = "";
+        public MapDefinition Definition = null!;
+        public List<Program> Events = new();
+    }
+
+    private sealed class CachedPrograms
     {
         public long Length;
         public DateTime WriteTimeUtc;
-        public JsonDocument Document = null!;
+        public Dictionary<int, Program> CommonEvents = new();
+        public List<ParsedMap> Maps = new();
     }
 
-    private static readonly Dictionary<string, CachedDocument> Documents = new();
+    private static readonly Dictionary<string, CachedPrograms> Artifacts = new();
+    private static readonly object CacheLock = new();
 
-    private static JsonDocument? OpenDocument(string jsonPath)
+    private static CachedPrograms? LoadArtifact(string jsonPath)
     {
         string key = Path.GetFullPath(jsonPath);
         var info = new FileInfo(key);
         if (!info.Exists) return null;
 
-        if (Documents.TryGetValue(key, out var cached))
+        lock (CacheLock)
         {
-            if (cached.Length == info.Length && cached.WriteTimeUtc == info.LastWriteTimeUtc)
+            if (Artifacts.TryGetValue(key, out var cached))
             {
-                return cached.Document;
+                if (cached.Length == info.Length && cached.WriteTimeUtc == info.LastWriteTimeUtc)
+                {
+                    return cached;
+                }
+                Artifacts.Remove(key);
             }
-            cached.Document.Dispose();
-            Documents.Remove(key);
         }
 
-        JsonDocument document;
+        var commonEvents = new Dictionary<int, Program>();
+        var maps = new List<ParsedMap>();
         using (var stream = File.OpenRead(key))
+        using (var document = JsonDocument.Parse(stream))
         {
-            document = JsonDocument.Parse(stream);
+            var root = document.RootElement;
+            if (root.TryGetProperty("common_events", out var ceList) && ceList.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var elem in ceList.EnumerateArray())
+                {
+                    var localElem = elem;
+                    var prog = ParseProgram(ref localElem);
+                    commonEvents[prog.Id] = prog;
+                }
+            }
+            if (root.TryGetProperty("maps", out var mapList) && mapList.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var mapElem in mapList.EnumerateArray())
+                {
+                    maps.Add(ParseMapEntry(mapElem));
+                }
+            }
         }
 
-        Documents[key] = new CachedDocument
+        var parsed = new CachedPrograms
         {
             Length = info.Length,
             WriteTimeUtc = info.LastWriteTimeUtc,
-            Document = document
+            CommonEvents = commonEvents,
+            Maps = maps
         };
-        return document;
+
+        lock (CacheLock)
+        {
+            Artifacts[key] = parsed;
+        }
+        return parsed;
     }
 
     /// <summary>Number of parsed artifacts currently held (tests assert the cache is shared).</summary>
-    public static int CachedArtifactCount => Documents.Count;
+    public static int CachedArtifactCount
+    {
+        get { lock (CacheLock) return Artifacts.Count; }
+    }
 
     /// <summary>Forget parsed artifacts (tests that rewrite programs.json in place).</summary>
     public static void ClearCache()
     {
-        foreach (var cached in Documents.Values) cached.Document.Dispose();
-        Documents.Clear();
+        lock (CacheLock) Artifacts.Clear();
     }
 
     public static Slot ParseSlot(ref JsonElement elem)
@@ -198,6 +236,129 @@ public static class ProgramLoader
         return prog;
     }
 
+    private static ParsedMap ParseMapEntry(JsonElement mapElem)
+    {
+        var map = new MapDefinition
+        {
+            Id = mapElem.TryGetProperty("id", out var mid) ? mid.GetInt32() : 0,
+            File = mapElem.TryGetProperty("file", out var mfile) ? mfile.GetString() ?? "" : "",
+            Name = mapElem.TryGetProperty("name", out var mname) ? mname.GetString() ?? "" : "",
+            Width = mapElem.TryGetProperty("width", out var mw) ? mw.GetInt32() : 0,
+            Height = mapElem.TryGetProperty("height", out var mh) ? mh.GetInt32() : 0,
+            TilesetId = mapElem.TryGetProperty("tileset_id", out var mts) ? mts.GetInt32() : 0
+        };
+        var rawEvents = new List<Program>();
+
+        if (!mapElem.TryGetProperty("events", out var events) || events.ValueKind != JsonValueKind.Array)
+        {
+            return new ParsedMap { Id = map.Id, File = map.File, Definition = map, Events = rawEvents };
+        }
+
+        var byId = new Dictionary<int, MapEventDef>();
+        foreach (var elem in events.EnumerateArray())
+        {
+            var localElem = elem;
+            Program rawProgram = ParseProgram(ref localElem);
+            rawEvents.Add(rawProgram);
+
+            int eventId = elem.TryGetProperty("id", out var eid) ? eid.GetInt32() : 0;
+            if (!byId.TryGetValue(eventId, out var def))
+            {
+                def = new MapEventDef
+                {
+                    Id = eventId,
+                    Name = Join(elem, "title", "event_name"),
+                    X = elem.TryGetProperty("x", out var ex) ? ex.GetInt32() : 0,
+                    Y = elem.TryGetProperty("y", out var ey) ? ey.GetInt32() : 0,
+                    PageCount = elem.TryGetProperty("page_count", out var epc) ? epc.GetInt32() : 1,
+                    Graphic = elem.TryGetProperty("graphic", out var eg) ? eg.GetString() ?? "" : ""
+                };
+                byId[eventId] = def;
+                map.Events.Add(def);
+            }
+
+            int pageIndex = elem.TryGetProperty("page", out var ep) ? ep.GetInt32() : 0;
+            if (pageIndex < 0) continue;
+            while (def.Pages.Count <= pageIndex) def.Pages.Add(new MapEventPage());
+
+            var page = new MapEventPage
+            {
+                Page = pageIndex,
+                Trigger = MapTriggerExtensions.FromByte(
+                    elem.TryGetProperty("trigger", out var trig) ? trig.GetInt32() : 0),
+                Direction = elem.TryGetProperty("direction", out var dir) ? dir.GetInt32() : 2,
+                Graphic = elem.TryGetProperty("graphic", out var pg) ? pg.GetString() ?? "" : "",
+                BehaviorOptions = elem.TryGetProperty("features", out var feat) ? feat.GetInt32() : 0,
+                CollisionWidth = elem.TryGetProperty("collision_width", out var cw) ? cw.GetInt32() : 0,
+                CollisionHeight = elem.TryGetProperty("collision_height", out var chh) ? chh.GetInt32() : 0
+            };
+
+            int real = 0;
+            if (elem.TryGetProperty("stats", out var stats) && stats.ValueKind == JsonValueKind.Object &&
+                stats.TryGetProperty("real_instructions", out var ri))
+            {
+                real = ri.GetInt32();
+            }
+            page.RealInstructions = real;
+
+            if (elem.TryGetProperty("trigger_conditions", out var conditions) &&
+                conditions.ValueKind == JsonValueKind.Array)
+            {
+                int index = 0;
+                foreach (var c in conditions.EnumerateArray())
+                {
+                    if (index >= page.Conditions.Length) break;
+                    page.Conditions[index] = new PageCondition
+                    {
+                        Enabled = c.TryGetProperty("enabled", out var en) && en.ValueKind == JsonValueKind.True,
+                        Operator = c.TryGetProperty("operator_code", out var op) ? op.GetInt32() : 0,
+                        Variable = c.TryGetProperty("variable", out var v) ? ReadInt32(v) : 0,
+                        Value = c.TryGetProperty("value", out var val) ? ReadInt32(val) : 0
+                    };
+                    index++;
+                }
+            }
+
+            // An instruction-less page is not a runnable program (map_runtime.rs collect_except).
+            if (real > 0)
+            {
+                page.Program = rawProgram;
+            }
+
+            def.Pages[pageIndex] = page;
+        }
+
+        foreach (var def in map.Events)
+        {
+            while (def.Pages.Count < def.PageCount) def.Pages.Add(new MapEventPage());
+        }
+
+        return new ParsedMap { Id = map.Id, File = map.File, Definition = map, Events = rawEvents };
+    }
+
+    private static ParsedMap? FindMap(CachedPrograms artifact, string mapFile, int? mapId)
+    {
+        foreach (var entry in artifact.Maps)
+        {
+            bool matches = false;
+            if (mapId.HasValue)
+            {
+                matches = entry.Id == mapId.Value;
+            }
+
+            if (!matches && !string.IsNullOrEmpty(mapFile) && !string.IsNullOrEmpty(entry.File))
+            {
+                string want = mapFile.Replace('\\', '/');
+                string have = entry.File.Replace('\\', '/');
+                matches = have == want
+                          || have.EndsWith("/" + want, StringComparison.Ordinal)
+                          || Path.GetFileName(have) == Path.GetFileName(want);
+            }
+            if (matches) return entry;
+        }
+        return null;
+    }
+
     /// <summary>Parse every event page of one map out of the programs artifact.</summary>
     /// <remarks>
     /// Map programs are not registered in the common-event set: the original runs a map
@@ -206,43 +367,10 @@ public static class ProgramLoader
     /// </remarks>
     public static List<Program> LoadMapEvents(string jsonPath, string mapFile, int? mapId = null)
     {
-        var list = new List<Program>();
-        var doc = OpenDocument(jsonPath);
-        if (doc == null) return list;
-
-        if (!doc.RootElement.TryGetProperty("maps", out var maps) || maps.ValueKind != JsonValueKind.Array)
-            return list;
-
-        foreach (var mapElem in maps.EnumerateArray())
-        {
-            bool matches = false;
-            if (mapId.HasValue)
-            {
-                matches = mapElem.TryGetProperty("id", out var idProp) && idProp.GetInt32() == mapId.Value;
-            }
-
-            if (!matches && !string.IsNullOrEmpty(mapFile) &&
-                mapElem.TryGetProperty("file", out var fileProp) && fileProp.GetString() is string artFile)
-            {
-                string want = mapFile.Replace('\\', '/');
-                string have = artFile.Replace('\\', '/');
-                matches = have == want
-                          || have.EndsWith("/" + want, StringComparison.Ordinal)
-                          || Path.GetFileName(have) == Path.GetFileName(want);
-            }
-            if (!matches) continue;
-
-            if (!mapElem.TryGetProperty("events", out var events) || events.ValueKind != JsonValueKind.Array)
-                continue;
-            foreach (var elem in events.EnumerateArray())
-            {
-                var localElem = elem;
-                list.Add(ParseProgram(ref localElem));
-            }
-            break;
-        }
-
-        return list;
+        var artifact = LoadArtifact(jsonPath);
+        if (artifact == null) return new List<Program>();
+        var entry = FindMap(artifact, mapFile, mapId);
+        return entry != null ? new List<Program>(entry.Events) : new List<Program>();
     }
 
     /// <summary>
@@ -252,124 +380,9 @@ public static class ProgramLoader
     /// </summary>
     public static MapDefinition? LoadMap(string jsonPath, string mapFile, int? mapId = null)
     {
-        var doc = OpenDocument(jsonPath);
-        if (doc == null) return null;
-
-        if (!doc.RootElement.TryGetProperty("maps", out var maps) || maps.ValueKind != JsonValueKind.Array)
-            return null;
-
-        foreach (var mapElem in maps.EnumerateArray())
-        {
-            bool matches = false;
-            if (mapId.HasValue)
-            {
-                matches = mapElem.TryGetProperty("id", out var idProp) && idProp.GetInt32() == mapId.Value;
-            }
-
-            if (!matches && !string.IsNullOrEmpty(mapFile) &&
-                mapElem.TryGetProperty("file", out var fileProp) && fileProp.GetString() is string artFile)
-            {
-                string want = mapFile.Replace('\\', '/');
-                string have = artFile.Replace('\\', '/');
-                matches = have == want
-                          || have.EndsWith("/" + want, StringComparison.Ordinal)
-                          || Path.GetFileName(have) == Path.GetFileName(want);
-            }
-            if (!matches) continue;
-
-            var map = new MapDefinition
-            {
-                Id = mapElem.TryGetProperty("id", out var mid) ? mid.GetInt32() : 0,
-                File = mapElem.TryGetProperty("file", out var mfile) ? mfile.GetString() ?? "" : "",
-                Name = mapElem.TryGetProperty("name", out var mname) ? mname.GetString() ?? "" : "",
-                Width = mapElem.TryGetProperty("width", out var mw) ? mw.GetInt32() : 0,
-                Height = mapElem.TryGetProperty("height", out var mh) ? mh.GetInt32() : 0,
-                TilesetId = mapElem.TryGetProperty("tileset_id", out var mts) ? mts.GetInt32() : 0
-            };
-
-            if (!mapElem.TryGetProperty("events", out var events) || events.ValueKind != JsonValueKind.Array)
-                return map;
-
-            var byId = new Dictionary<int, MapEventDef>();
-            foreach (var elem in events.EnumerateArray())
-            {
-                int eventId = elem.TryGetProperty("id", out var eid) ? eid.GetInt32() : 0;
-                if (!byId.TryGetValue(eventId, out var def))
-                {
-                    def = new MapEventDef
-                    {
-                        Id = eventId,
-                        Name = Join(elem, "title", "event_name"),
-                        X = elem.TryGetProperty("x", out var ex) ? ex.GetInt32() : 0,
-                        Y = elem.TryGetProperty("y", out var ey) ? ey.GetInt32() : 0,
-                        PageCount = elem.TryGetProperty("page_count", out var epc) ? epc.GetInt32() : 1,
-                        Graphic = elem.TryGetProperty("graphic", out var eg) ? eg.GetString() ?? "" : ""
-                    };
-                    byId[eventId] = def;
-                    map.Events.Add(def);
-                }
-
-                int pageIndex = elem.TryGetProperty("page", out var ep) ? ep.GetInt32() : 0;
-                if (pageIndex < 0) continue;
-                while (def.Pages.Count <= pageIndex) def.Pages.Add(new MapEventPage());
-
-                var page = new MapEventPage
-                {
-                    Page = pageIndex,
-                    Trigger = MapTriggerExtensions.FromByte(
-                        elem.TryGetProperty("trigger", out var trig) ? trig.GetInt32() : 0),
-                    Direction = elem.TryGetProperty("direction", out var dir) ? dir.GetInt32() : 2,
-                    Graphic = elem.TryGetProperty("graphic", out var pg) ? pg.GetString() ?? "" : "",
-                    BehaviorOptions = elem.TryGetProperty("features", out var feat) ? feat.GetInt32() : 0,
-                    CollisionWidth = elem.TryGetProperty("collision_width", out var cw) ? cw.GetInt32() : 0,
-                    CollisionHeight = elem.TryGetProperty("collision_height", out var chh) ? chh.GetInt32() : 0
-                };
-
-                int real = 0;
-                if (elem.TryGetProperty("stats", out var stats) && stats.ValueKind == JsonValueKind.Object &&
-                    stats.TryGetProperty("real_instructions", out var ri))
-                {
-                    real = ri.GetInt32();
-                }
-                page.RealInstructions = real;
-
-                if (elem.TryGetProperty("trigger_conditions", out var conditions) &&
-                    conditions.ValueKind == JsonValueKind.Array)
-                {
-                    int index = 0;
-                    foreach (var c in conditions.EnumerateArray())
-                    {
-                        if (index >= page.Conditions.Length) break;
-                        page.Conditions[index] = new PageCondition
-                        {
-                            Enabled = c.TryGetProperty("enabled", out var en) && en.ValueKind == JsonValueKind.True,
-                            Operator = c.TryGetProperty("operator_code", out var op) ? op.GetInt32() : 0,
-                            Variable = c.TryGetProperty("variable", out var v) ? ReadInt32(v) : 0,
-                            Value = c.TryGetProperty("value", out var val) ? ReadInt32(val) : 0
-                        };
-                        index++;
-                    }
-                }
-
-                // An instruction-less page is not a runnable program (map_runtime.rs collect_except).
-                if (real > 0)
-                {
-                    var localElem = elem;
-                    page.Program = ParseProgram(ref localElem);
-                }
-
-                def.Pages[pageIndex] = page;
-            }
-
-            foreach (var def in map.Events)
-            {
-                while (def.Pages.Count < def.PageCount) def.Pages.Add(new MapEventPage());
-            }
-
-            return map;
-        }
-
-        return null;
+        var artifact = LoadArtifact(jsonPath);
+        if (artifact == null) return null;
+        return FindMap(artifact, mapFile, mapId)?.Definition;
     }
 
     private static string Join(JsonElement elem, string first, string second)
@@ -391,45 +404,16 @@ public static class ProgramLoader
 
     public static Dictionary<int, Program> LoadCommonEvents(string jsonPath)
     {
-        var dict = new Dictionary<int, Program>();
-        var doc = OpenDocument(jsonPath);
-        if (doc == null) return dict;
-
-        var root = doc.RootElement;
-
-        if (root.TryGetProperty("common_events", out var ceList) && ceList.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var elem in ceList.EnumerateArray())
-            {
-                var localElem = elem;
-                var prog = ParseProgram(ref localElem);
-                dict[prog.Id] = prog;
-            }
-        }
-
-        return dict;
+        var artifact = LoadArtifact(jsonPath);
+        return artifact != null
+            ? new Dictionary<int, Program>(artifact.CommonEvents)
+            : new Dictionary<int, Program>();
     }
 
     public static Program? LoadSingleCommonEvent(string jsonPath, int targetId)
     {
-        if (!File.Exists(jsonPath)) return null;
-
-        var doc = OpenDocument(jsonPath);
-        if (doc == null) return null;
-        var root = doc.RootElement;
-
-        if (root.TryGetProperty("common_events", out var ceList) && ceList.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var elem in ceList.EnumerateArray())
-            {
-                if (elem.TryGetProperty("id", out var idProp) && idProp.GetInt32() == targetId)
-                {
-                    var localElem = elem;
-                    return ParseProgram(ref localElem);
-                }
-            }
-        }
-
-        return null;
+        var artifact = LoadArtifact(jsonPath);
+        if (artifact == null) return null;
+        return artifact.CommonEvents.TryGetValue(targetId, out var prog) ? prog : null;
     }
 }

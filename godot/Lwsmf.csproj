@@ -2,8 +2,10 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <TargetFramework Condition="'$(GodotTargetPlatform)' == 'android'">net9.0</TargetFramework>
-    <InvariantGlobalization Condition="'$(GodotTargetPlatform)' == 'android'">true</InvariantGlobalization>
-    <SatelliteResourceLanguages Condition="'$(GodotTargetPlatform)' == 'android'">zh-Hans;en</SatelliteResourceLanguages>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <Nullable>enable</Nullable>
     <LangVersion>12</LangVersion>
