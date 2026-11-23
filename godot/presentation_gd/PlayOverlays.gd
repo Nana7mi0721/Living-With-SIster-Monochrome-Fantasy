@@ -340,46 +340,60 @@ func _build_title_confirm() -> void:
 
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -240.0
-	panel.offset_right = 240.0
-	panel.offset_top = -90.0
-	panel.offset_bottom = 90.0
+	panel.offset_left = -280.0
+	panel.offset_right = 280.0
+	panel.offset_top = -120.0
+	panel.offset_bottom = 120.0
+	panel.add_theme_stylebox_override("panel", _make_modal_card_style())
 	_title_confirm_root.add_child(panel)
 
 	var margin := MarginContainer.new()
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 16)
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_top", 24)
+	margin.add_theme_constant_override("margin_bottom", 24)
 	panel.add_child(margin)
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 12)
+	column.add_theme_constant_override("separation", 14)
 	margin.add_child(column)
 
 	var title := Label.new()
 	title.text = "返回标题？"
-	title.add_theme_font_size_override("font_size", 20)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", UiSkin.bold_font())
+	title.add_theme_font_size_override("font_size", 26)
+	title.add_theme_color_override("font_color", Color(0.96, 0.97, 0.99, 1.0))
 	column.add_child(title)
 
 	var question := Label.new()
 	question.text = "当前进度不会自动写入存档。确定放弃本次游戏并返回标题吗？"
+	question.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	question.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	question.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	question.custom_minimum_size = Vector2(0, 48)
+	question.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	question.add_theme_font_override("font", UiSkin.font())
+	question.add_theme_font_size_override("font_size", 18)
+	question.add_theme_color_override("font_color", Color(0.84, 0.86, 0.90, 1.0))
 	column.add_child(question)
 
 	var buttons := HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 8)
-	buttons.alignment = BoxContainer.ALIGNMENT_END
+	buttons.add_theme_constant_override("separation", 18)
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	column.add_child(buttons)
+
+	var boxes := _modal_button_boxes()
+	var confirm_button := Button.new()
+	confirm_button.text = "返回标题"
+	_style_modal_button(confirm_button, boxes)
+	confirm_button.pressed.connect(confirm_title_confirm)
+	buttons.add_child(confirm_button)
 
 	_title_cancel_button = Button.new()
 	_title_cancel_button.text = "取消"
+	_style_modal_button(_title_cancel_button, boxes)
 	_title_cancel_button.pressed.connect(cancel_title_confirm)
 	buttons.add_child(_title_cancel_button)
-
-	var confirm_button := Button.new()
-	confirm_button.text = "返回标题"
-	confirm_button.pressed.connect(confirm_title_confirm)
-	buttons.add_child(confirm_button)
 
 
 func title_confirm_open() -> bool:
@@ -736,7 +750,7 @@ func refresh_debug(fps: float, frame_count: int, phase_name: String, active_inst
 
 # ---- Save Overwrite & Quit Modals ----------------------------------------
 
-static func _make_save_confirm_style(bg: Color, border: Color, draw_bg: bool = true) -> StyleBoxFlat:
+static func _make_modal_style(bg: Color, border: Color, draw_bg: bool = true) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
 	sb.draw_center = draw_bg
 	sb.bg_color = bg
@@ -746,18 +760,34 @@ static func _make_save_confirm_style(bg: Color, border: Color, draw_bg: bool = t
 	return sb
 
 
-static func _style_save_confirm_button(btn: Button, normal_box: StyleBoxFlat, hover_box: StyleBoxFlat, pressed_box: StyleBoxFlat, focus_box: StyleBoxFlat) -> void:
-	btn.custom_minimum_size = Vector2(148, 44)
+static func _make_modal_card_style() -> StyleBoxFlat:
+	var card_style := _make_modal_style(Color(0.106, 0.114, 0.145, 0.96), Color(0.92, 0.94, 0.98, 0.90))
+	card_style.set_content_margin_all(0)
+	return card_style
+
+
+static func _modal_button_boxes() -> Dictionary:
+	return {
+		"normal": _make_modal_style(Color(0.145, 0.157, 0.200, 0.95), Color(0.45, 0.48, 0.56, 0.85)),
+		"hover": _make_modal_style(Color(0.22, 0.245, 0.31, 1.0), Color(0.96, 0.97, 1.0, 0.98)),
+		"pressed": _make_modal_style(Color(0.28, 0.31, 0.39, 1.0), Color(0.96, 0.97, 1.0, 0.98)),
+		# Keep focus center transparent so Button draws only the crisp highlight frame around its label.
+		"focus": _make_modal_style(Color(0.22, 0.245, 0.31, 0.0), Color(0.96, 0.97, 1.0, 0.98), false),
+	}
+
+
+static func _style_modal_button(btn: Button, boxes: Dictionary, min_size: Vector2 = Vector2(148, 44), font_size: int = 18) -> void:
+	btn.custom_minimum_size = min_size
 	btn.add_theme_font_override("font", UiSkin.font())
-	btn.add_theme_font_size_override("font_size", 18)
+	btn.add_theme_font_size_override("font_size", font_size)
 	btn.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98, 1.0))
 	btn.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0, 1.0))
 	btn.add_theme_color_override("font_focus_color", Color(1.0, 1.0, 1.0, 1.0))
 	btn.add_theme_color_override("font_pressed_color", Color(1.0, 1.0, 1.0, 1.0))
-	btn.add_theme_stylebox_override("normal", normal_box)
-	btn.add_theme_stylebox_override("hover", hover_box)
-	btn.add_theme_stylebox_override("pressed", pressed_box)
-	btn.add_theme_stylebox_override("focus", focus_box)
+	btn.add_theme_stylebox_override("normal", boxes["normal"])
+	btn.add_theme_stylebox_override("hover", boxes["hover"])
+	btn.add_theme_stylebox_override("pressed", boxes["pressed"])
+	btn.add_theme_stylebox_override("focus", boxes["focus"])
 
 
 func _build_save_confirm() -> void:
@@ -783,9 +813,7 @@ func _build_save_confirm() -> void:
 	panel.offset_right = 280.0
 	panel.offset_top = -120.0
 	panel.offset_bottom = 120.0
-	var card_style := _make_save_confirm_style(Color(0.106, 0.114, 0.145, 0.96), Color(0.92, 0.94, 0.98, 0.90))
-	card_style.set_content_margin_all(0)
-	panel.add_theme_stylebox_override("panel", card_style)
+	panel.add_theme_stylebox_override("panel", _make_modal_card_style())
 	_save_confirm_root.add_child(panel)
 
 	var margin := MarginContainer.new()
@@ -822,27 +850,23 @@ func _build_save_confirm() -> void:
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	column.add_child(buttons)
 
-	var normal_box := _make_save_confirm_style(Color(0.145, 0.157, 0.200, 0.95), Color(0.45, 0.48, 0.56, 0.85))
-	var hover_box := _make_save_confirm_style(Color(0.22, 0.245, 0.31, 1.0), Color(0.96, 0.97, 1.0, 0.98))
-	var pressed_box := _make_save_confirm_style(Color(0.28, 0.31, 0.39, 1.0), Color(0.96, 0.97, 1.0, 0.98))
-	# Keep focus center transparent so Button draws only the crisp highlight frame around its label.
-	var focus_box := _make_save_confirm_style(Color(0.22, 0.245, 0.31, 0.0), Color(0.96, 0.97, 1.0, 0.98), false)
+	var boxes := _modal_button_boxes()
 
 	_save_confirm_save_btn = Button.new()
 	_save_confirm_save_btn.text = "保存到此槽"
-	_style_save_confirm_button(_save_confirm_save_btn, normal_box, hover_box, pressed_box, focus_box)
+	_style_modal_button(_save_confirm_save_btn, boxes)
 	_save_confirm_save_btn.pressed.connect(confirm_save_overwrite)
 	buttons.add_child(_save_confirm_save_btn)
 
 	_save_confirm_load_btn = Button.new()
 	_save_confirm_load_btn.text = "读取此存档"
-	_style_save_confirm_button(_save_confirm_load_btn, normal_box, hover_box, pressed_box, focus_box)
+	_style_modal_button(_save_confirm_load_btn, boxes)
 	_save_confirm_load_btn.pressed.connect(confirm_save_load)
 	buttons.add_child(_save_confirm_load_btn)
 
 	_save_confirm_cancel = Button.new()
 	_save_confirm_cancel.text = "取消"
-	_style_save_confirm_button(_save_confirm_cancel, normal_box, hover_box, pressed_box, focus_box)
+	_style_modal_button(_save_confirm_cancel, boxes)
 	_save_confirm_cancel.pressed.connect(cancel_save_overwrite)
 	buttons.add_child(_save_confirm_cancel)
 
@@ -1024,10 +1048,12 @@ func _build_save_page_bar() -> void:
 	_save_bar_root.name = "SavePageBar"
 	_save_bar_root.z_index = 96
 	_save_bar_root.visible = false
+	var empty_panel := StyleBoxEmpty.new()
+	_save_bar_root.add_theme_stylebox_override("panel", empty_panel)
 	add_child(_save_bar_root)
 
 	_save_bar_button = Button.new()
-	_save_bar_button.custom_minimum_size = Vector2(156, 40)
+	_style_modal_button(_save_bar_button, _modal_button_boxes(), Vector2(216, 44), 17)
 	_save_bar_button.pressed.connect(func() -> void:
 		if _save_bar_in_title:
 			save_page_transfer_requested.emit()
@@ -1038,14 +1064,16 @@ func _build_save_page_bar() -> void:
 	_layout_save_page_bar()
 
 
+# Center the shortcut bar horizontally between CE94's autosave notice (y=100..300)
+# and the hover preview card (y=358..502), keeping clear of the right page arrow (x>=976).
 func _layout_save_page_bar() -> void:
 	if _save_bar_root == null:
 		return
 	var right_inset := float(_safe_insets.get("right", 0.0))
-	var bottom_inset := float(_safe_insets.get("bottom", 0.0))
-	var bar_w := 168.0
-	var bar_h := 48.0
-	_save_bar_root.position = Vector2(1008.0 - right_inset - bar_w, 560.0 - bottom_inset - bar_h)
+	var bar_w := 216.0
+	var bar_h := 44.0
+	var bar_x := minf(732.0, 1008.0 - right_inset - bar_w)
+	_save_bar_root.position = Vector2(bar_x, 307.0)
 	_save_bar_root.size = Vector2(bar_w, bar_h)
 
 
@@ -1466,94 +1494,135 @@ func _build_save_transfer() -> void:
 	add_child(_transfer_root)
 
 	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.0, 0.0, 0.74)
+	dim.color = Color(0.0, 0.0, 0.0, 0.72)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_transfer_root.add_child(dim)
 
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -330.0
-	panel.offset_right = 330.0
-	panel.offset_top = -205.0
-	panel.offset_bottom = 205.0
+	panel.offset_left = -340.0
+	panel.offset_right = 340.0
+	panel.offset_top = -220.0
+	panel.offset_bottom = 220.0
+	panel.add_theme_stylebox_override("panel", _make_modal_card_style())
 	_transfer_root.add_child(panel)
 
 	var margin := MarginContainer.new()
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 16)
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_top", 22)
+	margin.add_theme_constant_override("margin_bottom", 22)
 	panel.add_child(margin)
 
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 10)
+	col.add_theme_constant_override("separation", 12)
 	margin.add_child(col)
 
 	var title := Label.new()
 	title.text = "跨端存档导入 / 导出"
-	title.add_theme_font_size_override("font_size", 20)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", UiSkin.bold_font())
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color(0.96, 0.97, 0.99, 1.0))
 	col.add_child(title)
+
+	var list_card := PanelContainer.new()
+	var list_style := _make_modal_style(Color(0.075, 0.082, 0.106, 0.92), Color(0.32, 0.35, 0.42, 0.75))
+	list_style.set_content_margin_all(10)
+	list_card.add_theme_stylebox_override("panel", list_style)
+	col.add_child(list_card)
 
 	_transfer_list = Label.new()
 	_transfer_list.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_transfer_list.custom_minimum_size = Vector2(0, 120)
-	col.add_child(_transfer_list)
+	_transfer_list.custom_minimum_size = Vector2(0, 100)
+	_transfer_list.add_theme_font_override("font", UiSkin.font())
+	_transfer_list.add_theme_font_size_override("font_size", 15)
+	_transfer_list.add_theme_color_override("font_color", Color(0.84, 0.86, 0.90, 1.0))
+	list_card.add_child(_transfer_list)
+
+	var boxes := _modal_button_boxes()
 
 	var slot_row := HBoxContainer.new()
-	slot_row.add_theme_constant_override("separation", 8)
+	slot_row.add_theme_constant_override("separation", 12)
+	slot_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_child(slot_row)
 	var slot_lbl := Label.new()
 	slot_lbl.text = "原版 .sav 导入目标槽位："
+	slot_lbl.add_theme_font_override("font", UiSkin.font())
+	slot_lbl.add_theme_font_size_override("font_size", 16)
+	slot_lbl.add_theme_color_override("font_color", Color(0.90, 0.92, 0.96, 1.0))
 	slot_row.add_child(slot_lbl)
 	_transfer_slot_spin = SpinBox.new()
 	_transfer_slot_spin.min_value = 1
 	_transfer_slot_spin.max_value = 16
 	_transfer_slot_spin.step = 1
 	_transfer_slot_spin.value = 1
+	_transfer_slot_spin.custom_minimum_size = Vector2(108, 36)
+	var spin_edit := _transfer_slot_spin.get_line_edit()
+	if spin_edit != null:
+		spin_edit.add_theme_font_override("font", UiSkin.font())
+		spin_edit.add_theme_font_size_override("font_size", 16)
+		spin_edit.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98, 1.0))
+		spin_edit.add_theme_stylebox_override("normal", boxes["normal"])
+		spin_edit.add_theme_stylebox_override("focus", boxes["hover"])
 	slot_row.add_child(_transfer_slot_spin)
 
 	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", 8)
+	actions.add_theme_constant_override("separation", 14)
+	actions.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_child(actions)
 
 	var exp_btn := Button.new()
 	exp_btn.text = "导出存档包 (.zip)"
+	_style_modal_button(exp_btn, boxes, Vector2(188, 42), 16)
 	exp_btn.pressed.connect(_on_transfer_export_pressed)
 	actions.add_child(exp_btn)
 
 	var imp_zip_btn := Button.new()
 	imp_zip_btn.text = "导入存档包 (.zip)"
+	_style_modal_button(imp_zip_btn, boxes, Vector2(188, 42), 16)
 	imp_zip_btn.pressed.connect(_on_transfer_import_zip_pressed)
 	actions.add_child(imp_zip_btn)
 
 	var imp_sav_btn := Button.new()
 	imp_sav_btn.text = "导入原版 .sav"
+	_style_modal_button(imp_sav_btn, boxes, Vector2(188, 42), 16)
 	imp_sav_btn.pressed.connect(_on_transfer_import_sav_pressed)
 	actions.add_child(imp_sav_btn)
 
 	_transfer_status = Label.new()
+	_transfer_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_transfer_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_transfer_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_transfer_status.custom_minimum_size = Vector2(0, 56)
+	_transfer_status.custom_minimum_size = Vector2(0, 44)
+	_transfer_status.add_theme_font_override("font", UiSkin.font())
+	_transfer_status.add_theme_font_size_override("font_size", 15)
+	_transfer_status.add_theme_color_override("font_color", Color(0.84, 0.86, 0.90, 1.0))
 	col.add_child(_transfer_status)
 
 	var footer := HBoxContainer.new()
-	footer.add_theme_constant_override("separation", 8)
-	footer.alignment = BoxContainer.ALIGNMENT_END
+	footer.add_theme_constant_override("separation", 16)
+	footer.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_child(footer)
-
-	_transfer_cancel_import_btn = Button.new()
-	_transfer_cancel_import_btn.text = "放弃待导入文件"
-	_transfer_cancel_import_btn.visible = false
-	_transfer_cancel_import_btn.pressed.connect(_cancel_pending_import)
-	footer.add_child(_transfer_cancel_import_btn)
 
 	_transfer_confirm_btn = Button.new()
 	_transfer_confirm_btn.text = "确认写入覆盖"
+	_style_modal_button(_transfer_confirm_btn, boxes, Vector2(168, 42), 16)
 	_transfer_confirm_btn.visible = false
 	_transfer_confirm_btn.pressed.connect(_commit_pending_import)
 	footer.add_child(_transfer_confirm_btn)
 
+	_transfer_cancel_import_btn = Button.new()
+	_transfer_cancel_import_btn.text = "放弃待导入文件"
+	_style_modal_button(_transfer_cancel_import_btn, boxes, Vector2(168, 42), 16)
+	_transfer_cancel_import_btn.visible = false
+	_transfer_cancel_import_btn.pressed.connect(_cancel_pending_import)
+	footer.add_child(_transfer_cancel_import_btn)
+
 	var close_btn := Button.new()
 	close_btn.text = "关闭（Esc）"
+	_style_modal_button(close_btn, boxes, Vector2(148, 42), 16)
 	close_btn.pressed.connect(close_save_transfer)
 	footer.add_child(close_btn)
 

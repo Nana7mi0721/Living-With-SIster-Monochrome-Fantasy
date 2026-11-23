@@ -730,6 +730,9 @@ func _ready() -> void:
 			failures.append("CE131 load screen must expose cself[0]=1 via GetCommonEventSelf/GetSaveSlotMode (got %d/%d)" % [ce131_mode, ce131_slot_mode])
 		if ce131_row < 0 or ce131_page < 0:
 			failures.append("CE131 cursor/page cself[10/11] must be non-negative (got row=%d page=%d)" % [ce131_row, ce131_page])
+		var bar_rect: Rect2 = title_root.overlays.save_page_bar_rect()
+		if bar_rect.size.x <= 0.0 or bar_rect.position.y < 300.0 or bar_rect.end.y > 358.0 or bar_rect.end.x >= 976.0:
+			failures.append("SavePageBar must sit between notice box (y<=300) and preview (y>=358) clear of arrow 12005: %s" % str(bar_rect))
 		var before_f3 := str(title_root.stage._cmds.get(3, {}).get("file", ""))
 		var w_down := InputEventMouseButton.new()
 		w_down.button_index = MOUSE_BUTTON_WHEEL_DOWN
@@ -1054,6 +1057,20 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	if bool(PlayOverlays.inspect_save_zip(invalid_json_zip, save_dir, root.session).get("ok", false)):
 		failures.append("inspect_save_zip must reject malformed save JSON")
 
+	root.overlays.open_save_transfer(save_dir, root.session)
+	if not root.overlays.save_transfer_open():
+		failures.append("open_save_transfer must open SaveTransferModal")
+	var transfer_panel := root.overlays._transfer_root.get_child(1) as PanelContainer
+	var title_panel := root.overlays._title_confirm_root.get_child(1) as PanelContainer
+	if transfer_panel == null or title_panel == null:
+		failures.append("TitleConfirm and SaveTransfer modals must expose PanelContainer cards")
+	else:
+		var t_sb := transfer_panel.get_theme_stylebox("panel") as StyleBoxFlat
+		var c_sb := title_panel.get_theme_stylebox("panel") as StyleBoxFlat
+		if t_sb == null or c_sb == null or not t_sb.bg_color.is_equal_approx(Color(0.106, 0.114, 0.145, 0.96)) or not c_sb.bg_color.is_equal_approx(Color(0.106, 0.114, 0.145, 0.96)):
+			failures.append("TitleConfirm and SaveTransfer cards must share save confirm dark-slate style")
+	root.overlays.close_save_transfer()
+	root._modal_release_guard = false
 	_remove_test_tree(transfer_dir)
 	root.queue_free()
 
