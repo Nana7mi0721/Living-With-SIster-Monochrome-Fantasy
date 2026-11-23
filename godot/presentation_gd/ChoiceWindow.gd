@@ -40,13 +40,13 @@ func line_height() -> float:
 	return LINE_HEIGHT
 
 
-func _is_offscreen_parked() -> bool:
+func is_offscreen_parked() -> bool:
 	return position_hint.y >= 1000.0 or position_hint.y < -100.0 or position_hint.x >= 1200.0 or position_hint.x < -100.0
 
 
 func window_rect() -> Rect2:
 	var win_size := window_size()
-	if _is_offscreen_parked():
+	if is_offscreen_parked():
 		return Rect2(position_hint, win_size)
 	var center := position_hint
 	if is_equal_approx(center.x, DEFAULT_POSITION_SENTINEL):
@@ -227,7 +227,7 @@ func hovered_index() -> int:
 
 
 func _draw() -> void:
-	if not is_open or options.is_empty() or _is_offscreen_parked():
+	if not is_open or options.is_empty() or is_offscreen_parked():
 		return
 	if not override_rects.is_empty():
 		return

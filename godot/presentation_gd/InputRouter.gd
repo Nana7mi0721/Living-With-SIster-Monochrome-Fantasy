@@ -56,6 +56,8 @@ var touch_scroll_enabled := false
 var sidebar_open_hint := false
 var mobile_double_tap_cancel_enabled := _default_mobile_double_tap_enabled()
 var blank_space_predicate: Callable = Callable()
+var empirical_blank_verifier: Callable = Callable()
+var touch_action_tap_recorder: Callable = Callable()
 var clock_msec_override := -1
 ## One-frame press latches cleared by clear_frame_latches() after each VM step.
 var _wheel_bits := 0
@@ -74,6 +76,7 @@ var _touch_scroll_locked := false
 var _touch_scroll_accum := 0.0
 var _last_blank_tap_ms := -1
 var _last_blank_tap_pos := Vector2.ZERO
+var _last_blank_tap_empirical := false
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -116,6 +119,7 @@ func _now_msec() -> int:
 func reset_double_tap_state() -> void:
 	_last_blank_tap_ms = -1
 	_last_blank_tap_pos = Vector2.ZERO
+	_last_blank_tap_empirical = false
 
 
 func clear_touch_state() -> void:
@@ -285,9 +289,10 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 	if _touches.is_empty():
 		if not _touch_gesture_consumed:
 			if _touch_max_fingers == 1 and _touch_peak_dist < TOUCH_TAP_MAX_DIST:
-				if mobile_double_tap_cancel_enabled and blank_space_predicate.is_valid() and bool(blank_space_predicate.call(clamped)):
-					var now_ms: int = _now_msec()
-					if _last_blank_tap_ms >= 0 and (now_ms - _last_blank_tap_ms) <= TOUCH_DOUBLE_TAP_MAX_MS and clamped.distance_to(_last_blank_tap_pos) <= TOUCH_DOUBLE_TAP_MAX_DIST:
+				var now_ms: int = _now_msec()
+				var is_det_blank: bool = mobile_double_tap_cancel_enabled and blank_space_predicate.is_valid() and bool(blank_space_predicate.call(clamped))
+				if is_det_blank:
+					if _last_blank_tap_ms >= 0 and not _last_blank_tap_empirical and (now_ms - _last_blank_tap_ms) <= TOUCH_DOUBLE_TAP_MAX_MS and clamped.distance_to(_last_blank_tap_pos) <= TOUCH_DOUBLE_TAP_MAX_DIST:
 						reset_double_tap_state()
 						hover_position = clamped
 						mouse_seen = true
@@ -295,14 +300,27 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 					else:
 						_last_blank_tap_ms = now_ms
 						_last_blank_tap_pos = clamped
+						_last_blank_tap_empirical = false
 						hover_position = clamped
 						mouse_seen = true
 						last_input_source = "touch"
+				elif mobile_double_tap_cancel_enabled and _last_blank_tap_ms >= 0 and _last_blank_tap_empirical and (now_ms - _last_blank_tap_ms) <= TOUCH_DOUBLE_TAP_MAX_MS and clamped.distance_to(_last_blank_tap_pos) <= TOUCH_DOUBLE_TAP_MAX_DIST and empirical_blank_verifier.is_valid() and bool(empirical_blank_verifier.call(clamped)):
+					reset_double_tap_state()
+					hover_position = clamped
+					mouse_seen = true
+					trigger_cancel_pulse("touch")
 				else:
 					reset_double_tap_state()
 					hover_position = clamped
 					mouse_seen = true
 					last_input_source = "touch"
+					var arm_empirical := false
+					if mobile_double_tap_cancel_enabled and touch_action_tap_recorder.is_valid():
+						arm_empirical = bool(touch_action_tap_recorder.call(clamped))
+					if arm_empirical:
+						_last_blank_tap_ms = now_ms
+						_last_blank_tap_pos = clamped
+						_last_blank_tap_empirical = true
 					_click_latch = true
 					action_pressed.emit()
 			elif _touch_max_fingers == 2 and _touch_peak_dist < TOUCH_TWO_FINGER_MAX_DIST:

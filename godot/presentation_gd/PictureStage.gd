@@ -176,6 +176,8 @@ var _base_sizes: Dictionary = {}   # number -> unscaled hit-box source size
 var _states: Dictionary = {}       # number -> animation/effect state (fade, slide, 290)
 var _polled_hit_slots: Dictionary = {}
 var _last_polled_hit_slots: Dictionary = {}
+var _hit_match_this_frame := false
+var _last_frame_hit_match := false
 var _shapes := _PictureShapes.new()
 var _effects := _PictureEffects.new()
 
@@ -617,7 +619,10 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 		if bool(state.get("hidden", false)):
 			return 0
 		_polled_hit_slots[number] = true
-		return 1 if _hit_rect(number).has_point(pointer) else 0
+		if _hit_rect(number).has_point(pointer):
+			_hit_match_this_frame = true
+			return 1
+		return 0
 	if field == 9:
 		return 1 if exists else 0
 	if not exists:
@@ -651,6 +656,24 @@ func picture_state(number: int, field: int, pointer: Vector2 = Vector2.ZERO) -> 
 func rotate_hit_polls() -> void:
 	_last_polled_hit_slots = _polled_hit_slots.duplicate()
 	_polled_hit_slots.clear()
+	_last_frame_hit_match = _hit_match_this_frame
+	_hit_match_this_frame = false
+
+
+func had_hit_match() -> bool:
+	return _hit_match_this_frame or _last_frame_hit_match
+
+
+func visible_slot_signature() -> PackedInt32Array:
+	var slots: PackedInt32Array = []
+	var keys: Array = _cmds.keys()
+	keys.sort()
+	for number in keys:
+		var st: Dictionary = _states.get(number, {})
+		if bool(st.get("hidden", false)) or bool(st.get("erase_after", false)):
+			continue
+		slots.append(int(number))
+	return slots
 
 
 func has_active_hit_polls() -> bool:
@@ -1591,6 +1614,8 @@ func clear_pictures() -> void:
 	_states.clear()
 	_polled_hit_slots.clear()
 	_last_polled_hit_slots.clear()
+	_hit_match_this_frame = false
+	_last_frame_hit_match = false
 
 
 func picture_text(number: int) -> String:

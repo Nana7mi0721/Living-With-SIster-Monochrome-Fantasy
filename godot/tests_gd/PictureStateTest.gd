@@ -601,7 +601,7 @@ func _test_assetdb_dir_priority_and_tiebreak() -> void:
 		DirAccess.make_dir_recursive_absolute(abs_path.get_base_dir())
 		var f := FileAccess.open(abs_path, FileAccess.WRITE)
 		if f != null:
-			f.store_byte(0)
+			f.store_8(0)
 			f.close()
 
 	var db := AssetDB.new(tmp_root)

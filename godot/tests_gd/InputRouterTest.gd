@@ -481,6 +481,37 @@ func _ready() -> void:
 	_tap_once(Vector2(100, 100))
 	if _cancel != dt_cancels_before:
 		failures.append("non-blank tap must reset pending blank double-tap state")
+
+	# Empirical blank double-tap: first non-deterministic tap always triggers action;
+	# second tap cancels only when empirical_blank_verifier confirms first tap was a no-op.
+	_router.reset_double_tap_state()
+	_router.clear_frame_latches()
+	var emp_state := {"recorded": 0, "allow_cancel": false}
+	_router.touch_action_tap_recorder = func(_pos: Vector2) -> bool:
+		emp_state["recorded"] = int(emp_state["recorded"]) + 1
+		return true
+	_router.empirical_blank_verifier = func(_pos: Vector2) -> bool:
+		return bool(emp_state["allow_cancel"])
+	dt_actions_before = _action
+	dt_cancels_before = _cancel
+	_router.clock_msec_override = 6000
+	_tap_once(Vector2(620, 220))
+	if _action != dt_actions_before + 1 or _cancel != dt_cancels_before or int(emp_state["recorded"]) != 1:
+		failures.append("first non-deterministic tap must emit action and invoke recorder")
+	_router.clear_frame_latches()
+	_router.clock_msec_override = 6120
+	_tap_once(Vector2(625, 225))
+	if _action != dt_actions_before + 2 or _cancel != dt_cancels_before:
+		failures.append("second tap must emit action when empirical verifier rejects blank cancel")
+	_router.clear_frame_latches()
+	emp_state["allow_cancel"] = true
+	_router.clock_msec_override = 6220
+	_tap_once(Vector2(625, 225))
+	if _cancel != dt_cancels_before + 1 or _action != dt_actions_before + 2 or _router.click_latched() or (_router.held_mask() & InputRouter.MASK_CANCEL) == 0 or (_router.held_mask() & InputRouter.MASK_OK) != 0:
+		failures.append("second tap must emit cancel without action when empirical verifier confirms no-op")
+	_router.clear_frame_latches()
+	_router.touch_action_tap_recorder = Callable()
+	_router.empirical_blank_verifier = Callable()
 	# Touch-emulated mouse events (DEVICE_ID_EMULATION = -1) must be ignored so touch does not double-fire.
 	_tap_once(Vector2(200, 200))
 	var emu_acts := _action

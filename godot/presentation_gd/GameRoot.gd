@@ -77,6 +77,13 @@ var _active_speaker := ""
 var _active_msg_pos_mode: int = _WolfConst.MSG_POS_BOTTOM
 var _clean_scene_image: Image
 var _action_input_pending := false
+var _empirical_tap_active := false
+var _empirical_tap_dirty := false
+var _empirical_tap_frames := 0
+var _empirical_tap_phase := ""
+var _empirical_tap_map_id := -1
+var _empirical_tap_instances := ""
+var _empirical_tap_slots := PackedInt32Array()
 
 var phase := "boot"
 var frames := 0
@@ -148,6 +155,8 @@ func _start_game() -> void:
 	router = InputRouter.new()
 	add_child(router)
 	router.blank_space_predicate = Callable(self, "is_touch_blank_space")
+	router.touch_action_tap_recorder = Callable(self, "record_touch_action_tap")
+	router.empirical_blank_verifier = Callable(self, "is_empirical_blank_double_tap")
 	router.action_pressed.connect(_on_action)
 	router.cancel_pressed.connect(_on_cancel)
 	router.wheel_pressed.connect(_on_wheel)
@@ -437,6 +446,7 @@ func advance_frame() -> void:
 	_sync_master_audio_volumes()
 	frames = session.Frames
 	phase = session.Phase
+	_update_empirical_tap_after_frame()
 	if vm.Faulted:
 		report_fault(vm.FaultReason)
 		return
@@ -454,6 +464,7 @@ func _key_state(mask: int, auto_keys: int) -> int:
 
 ## Do not let the click/key that opened an event satisfy that event's own first poll.
 func _on_event_entered(event_id: int, _is_root: bool) -> void:
+	_mark_empirical_tap_dirty()
 	if router == null or (session != null and session.ScriptedInput):
 		return
 	if router.action_input_held():
@@ -613,6 +624,7 @@ func _picture_state(number: int, field: int, pointer: Vector2) -> Variant:
 
 ## Channel 0 = BGM, 1 = BGS, 2 = SE.
 func _on_sound(channel: int, action: int, file: String, volume: int, frames: int) -> void:
+	_mark_empirical_tap_dirty()
 	_sync_master_audio_volumes()
 	if action == 1:
 		audio.stop(channel, frames)
@@ -642,6 +654,7 @@ func _sync_active_nameplate() -> void:
 
 
 func _on_message(text: String, face: int) -> void:
+	_mark_empirical_tap_dirty()
 	message.open(text, face if face > 0 else 0)
 	if vm != null and vm.MessageKeptForChoice:
 		message.attach_choice_window()
@@ -655,6 +668,7 @@ func _on_message(text: String, face: int) -> void:
 
 
 func _on_message_closed() -> void:
+	_mark_empirical_tap_dirty()
 	message.close()
 	# Hide visually between consecutive sentences without clearing _active_speaker.
 	if nameplate != null:
@@ -667,6 +681,7 @@ func _on_message_confirm() -> void:
 
 
 func _on_choices(options: Array, selected: int = 0) -> void:
+	_mark_empirical_tap_dirty()
 	var packed := PackedStringArray()
 	for option in options:
 		packed.append(str(option))
@@ -683,6 +698,7 @@ func _on_choices(options: Array, selected: int = 0) -> void:
 
 
 func _on_choices_closed() -> void:
+	_mark_empirical_tap_dirty()
 	_choice_hover_lock_pos = Vector2(-1, -1)
 	choice.close()
 	if phase == "title":
@@ -690,6 +706,7 @@ func _on_choices_closed() -> void:
 
 
 func _on_teleport(target: int, map_id: int, x: int, y: int, options: int) -> void:
+	_mark_empirical_tap_dirty()
 	session.QueueTeleport(target, map_id, x, y, options)
 	status("teleport map=%d (%d,%d) target=%d" % [map_id, x, y, target])
 
@@ -709,6 +726,7 @@ func _clear_transition_overlays() -> void:
 
 
 func _on_transition(kind: int, flags: int) -> void:
+	_mark_empirical_tap_dirty()
 	_flush_pending_pictures()
 	var phase_mode: int = vm.TransitionPhase if vm != null else 0
 	if phase_mode == 1:
@@ -776,6 +794,7 @@ func _tick_transition() -> void:
 
 
 func _on_effect(kind: int, duration: int, args: Array) -> void:
+	_mark_empirical_tap_dirty()
 	_flush_pending_pictures()
 	if not stage.effect(kind, duration, args):
 		if OS.get_environment("LWsmf_TRACE_EFFECTS") == "1":
@@ -937,6 +956,7 @@ func _notification(what: int) -> void:
 func _clear_held_input() -> void:
 	_modal_release_guard = false
 	_action_input_pending = false
+	_clear_empirical_tap()
 	if vm != null:
 		vm.ResetPointer()
 	if router != null:
@@ -949,6 +969,7 @@ func _clear_held_input() -> void:
 
 ## Opcode 174 returns directly to the title screen without confirmation.
 func _on_return_to_title() -> void:
+	_mark_empirical_tap_dirty()
 	if phase == "title" or phase == "setup" or phase == "bootstrap" or phase == "failed":
 		return
 	restart_title()
@@ -956,6 +977,7 @@ func _on_return_to_title() -> void:
 
 ## Opcode 175 quits the application.
 func _on_end_game() -> void:
+	_mark_empirical_tap_dirty()
 	if is_ios_platform():
 		status("endgame suppressed on iOS")
 		return
@@ -966,6 +988,7 @@ func _on_end_game() -> void:
 
 ## Opcode 151 changes the screen tint (0x00BBGGRR COLORREF).
 func _on_color_change(color: int, frames: int) -> void:
+	_mark_empirical_tap_dirty()
 	_flush_pending_pictures()
 	stage.set_screen_tint(color, frames)
 	_sync_screen_tint()
@@ -1918,6 +1941,7 @@ func _trigger_quick_load() -> void:
 	var loaded := session.LoadQuick()
 	frames = session.Frames
 	phase = session.Phase
+	_clear_empirical_tap()
 	if vm.Faulted:
 		status("load faulted")
 		_show_toast("读档失败")
@@ -1974,20 +1998,108 @@ func _choice_contains_point(point: Vector2) -> bool:
 	return choice.window_rect().has_point(point)
 
 
+func _clear_empirical_tap() -> void:
+	_empirical_tap_active = false
+	_empirical_tap_dirty = false
+	_empirical_tap_frames = 0
+	_empirical_tap_phase = ""
+	_empirical_tap_map_id = -1
+	_empirical_tap_instances = ""
+	_empirical_tap_slots = PackedInt32Array()
+
+
+func _mark_empirical_tap_dirty() -> void:
+	if _empirical_tap_active:
+		_empirical_tap_dirty = true
+
+
+func _update_empirical_tap_after_frame() -> void:
+	if not _empirical_tap_active:
+		return
+	_empirical_tap_frames += 1
+	if _empirical_tap_dirty:
+		return
+	if stage != null and stage.had_hit_match():
+		_empirical_tap_dirty = true
+	elif phase != _empirical_tap_phase:
+		_empirical_tap_dirty = true
+	elif session != null and (session.MapId != _empirical_tap_map_id or session.DescribeInstances() != _empirical_tap_instances):
+		_empirical_tap_dirty = true
+	elif stage != null and stage.visible_slot_signature() != _empirical_tap_slots:
+		_empirical_tap_dirty = true
+	elif _modal_window_open() or (overlays != null and overlays.drawer_open()) or _save_load_ui_active():
+		_empirical_tap_dirty = true
+	elif message != null and message.is_open():
+		_empirical_tap_dirty = true
+	elif choice != null and choice.is_open and (not choice.is_offscreen_parked() or not choice.override_rects.is_empty()):
+		_empirical_tap_dirty = true
+
+
+func _empirical_screen_supports_blank_cancel() -> bool:
+	if faulted or _modal_release_guard or _modal_window_open() or (overlays != null and overlays.drawer_open()):
+		return false
+	if choice != null and choice.is_open:
+		if not choice.is_offscreen_parked() or not choice.override_rects.is_empty():
+			return false
+		if not choice.allow_cancel:
+			return false
+	if message != null and message.is_open():
+		return false
+	if _save_load_ui_active():
+		return false
+	if session != null and (int(session.BasicAllDeny) & 2) != 0:
+		return false
+	return true
+
+
+## Deterministic blank-space check: only open non-parked ChoiceWindow exteriors and blank Save UI areas.
 func is_touch_blank_space(point: Vector2) -> bool:
 	if faulted or _modal_window_open() or (overlays != null and overlays.drawer_open()):
 		return false
 	if choice != null and choice.is_open:
+		if choice.is_offscreen_parked() and choice.override_rects.is_empty():
+			return false
+		if session != null and (int(session.BasicAllDeny) & 2) != 0:
+			return false
 		return choice.allow_cancel and not _choice_contains_point(point)
-	if message != null and message.is_open():
-		return false
 	if _save_load_ui_active():
+		if session != null and (int(session.BasicAllDeny) & 2) != 0:
+			return false
 		return not _save_load_hit_interactive(point)
-	if session != null and (int(session.BasicAllDeny) & 2) != 0:
+	return false
+
+
+func record_touch_action_tap(point: Vector2) -> bool:
+	_clear_empirical_tap()
+	if not _empirical_screen_supports_blank_cancel():
 		return false
-	if stage == null or not stage.has_active_hit_polls():
+	if stage != null and stage.has_interactive_hit(point):
 		return false
-	if stage.has_interactive_hit(point):
+	_empirical_tap_active = true
+	_empirical_tap_dirty = false
+	_empirical_tap_frames = 0
+	_empirical_tap_phase = phase
+	_empirical_tap_map_id = session.MapId if session != null else -1
+	_empirical_tap_instances = session.DescribeInstances() if session != null else ""
+	_empirical_tap_slots = stage.visible_slot_signature() if stage != null else PackedInt32Array()
+	return true
+
+
+func is_empirical_blank_double_tap(point: Vector2) -> bool:
+	if not _empirical_tap_active or _empirical_tap_dirty or _empirical_tap_frames < 1:
+		return false
+	if not _empirical_screen_supports_blank_cancel():
+		return false
+	if stage != null and (stage.has_interactive_hit(point) or stage.had_hit_match()):
+		return false
+	if phase != _empirical_tap_phase:
+		return false
+	if session != null:
+		if session.MapId != _empirical_tap_map_id:
+			return false
+		if session.DescribeInstances() != _empirical_tap_instances:
+			return false
+	if stage != null and stage.visible_slot_signature() != _empirical_tap_slots:
 		return false
 	return true
 
@@ -1999,7 +2111,8 @@ func _maybe_handle_save_ui_action(is_pointer: bool) -> bool:
 		if overlays != null and overlays.save_page_bar_rect().has_point(router.hover_position):
 			return true
 		if not _save_load_hit_interactive(router.hover_position):
-			router.trigger_cancel_pulse(router.last_input_source)
+			if (int(session.BasicAllDeny) & 2) == 0:
+				router.trigger_cancel_pulse(router.last_input_source)
 			return true
 	var is_load_mode: bool = (phase == "title") or (int(session.GetSaveSlotMode()) != 0)
 	var per_page: int = int(session.GetCommonEventSelf(131, 27))
@@ -2045,6 +2158,7 @@ func _on_save_slot_load_requested(slot: int) -> void:
 	var loaded: bool = bool(session.LoadGameFrom(session.SlotSavePath(slot)))
 	frames = session.Frames
 	phase = session.Phase
+	_clear_empirical_tap()
 	if vm.Faulted:
 		_show_toast("读档失败")
 		report_fault(vm.FaultReason)

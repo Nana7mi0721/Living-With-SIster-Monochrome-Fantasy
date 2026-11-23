@@ -1098,7 +1098,7 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 
 	# 7. Touch drawer tab visibility/position across title, map, and save UI.
 	root.vm.StopAll()
-	root.vm.ResetInputPermissions()
+	root.vm.ApplyInputPermission(0x0ff)
 	root.stage.clear_pictures()
 	root.overlays.set_touch_ui_enabled(true)
 	root.phase = "title"
@@ -1125,7 +1125,7 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 
 	# 8. Mobile blank-space predicate guards choices, messages, save UI, op124 hits, BasicAllDeny, and modals.
 	root.phase = "map"
-	root.vm.ResetInputPermissions()
+	root.vm.ApplyInputPermission(0x0ff)
 	if not root.router.blank_space_predicate.is_valid():
 		failures.append("GameRoot must bind router.blank_space_predicate")
 	var blank_pt := Vector2(10.0, 560.0)
@@ -1135,9 +1135,16 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 		failures.append("is_touch_blank_space must return false inside open choice window")
 	if not root.is_touch_blank_space(blank_pt):
 		failures.append("is_touch_blank_space must return true outside cancelable choice window")
-	root.choice.open(PackedStringArray(["Locked"]), Vector2(260, 220), false, 0)
+	root.vm.ApplyInputPermission(0x202)
+	if root.is_touch_blank_space(blank_pt):
+		failures.append("is_touch_blank_space must return false outside choice when BasicAllDeny bit 2 is set")
+	root.vm.ApplyInputPermission(0x002)
+	root.choice.open(PackedStringArray(["Opt1", "Opt2"]), Vector2(260, 220), false, 0)
 	if root.is_touch_blank_space(blank_pt):
 		failures.append("is_touch_blank_space must return false when choice.allow_cancel is false")
+	root.choice.open(PackedStringArray(["Hidden1", "Hidden2"]), Vector2(-500, -500), true, 0)
+	if root.is_touch_blank_space(Vector2(512, 230)):
+		failures.append("is_touch_blank_space must return false for offscreen-parked choice without override_rects")
 	root.choice.close()
 
 	root.message.open("hello")
@@ -1155,22 +1162,99 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root.vm.StopAll()
 	root.stage.clear_pictures()
 
-	if root.is_touch_blank_space(blank_pt):
-		failures.append("is_touch_blank_space must return false when no interactive op124 polls are active")
-	root.stage.draw_picture(1200, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 512, 230, 100, 0], 1, 0)
+	# Picture menus with idle op124 polls elsewhere plus post-click or coordinate buttons:
+	# single tap must NEVER be swallowed, and rapid re-taps on responsive buttons must never cancel.
+	var tap_counts := {"actions": 0, "cancels": 0}
+	root.router.action_pressed.connect(func() -> void: tap_counts["actions"] = int(tap_counts["actions"]) + 1)
+	root.router.cancel_pressed.connect(func() -> void: tap_counts["cancels"] = int(tap_counts["cancels"]) + 1)
+	root.router.mobile_double_tap_cancel_enabled = true
+	root.router.reset_double_tap_state()
+	root.stage.draw_picture(1200, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 100, 100, 100, 0], 1, 0)
+	root.stage.draw_picture(1201, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 512, 230, 100, 0], 1, 0)
+	root.vm.SetPointer(100, 100)
+	root.vm.BeginFrameInput()
+	if root.vm.PictureStateBridge(1200, 8) != 1:
+		failures.append("idle poll setup on picture 1200 must register hit at (100,100)")
+	if root.is_touch_blank_space(Vector2(512, 230)) or root.is_touch_blank_space(blank_pt):
+		failures.append("is_touch_blank_space must return false for picture menus so click-after-hit buttons work")
+
+	var touch_down := func(pos: Vector2) -> void:
+		var ev := InputEventScreenTouch.new()
+		ev.index = 0
+		ev.position = pos
+		ev.pressed = true
+		root.router.handle_event(ev)
+	var touch_up := func(pos: Vector2) -> void:
+		var ev := InputEventScreenTouch.new()
+		ev.index = 0
+		ev.position = pos
+		ev.pressed = false
+		root.router.handle_event(ev)
+
+	# Post-click op124(field=8) button at (512, 230): tap 1 acts immediately; post-click hit prevents cancel on tap 2.
+	root.router.clock_msec_override = 1000
+	touch_down.call(Vector2(512, 230))
+	touch_up.call(Vector2(512, 230))
+	if int(tap_counts["actions"]) != 1 or int(tap_counts["cancels"]) != 0 or not root.router.click_latched():
+		failures.append("post-click op124(8) button must confirm immediately on first single tap")
+	root.advance_frame()
 	root.vm.SetPointer(512, 230)
 	root.vm.BeginFrameInput()
-	var hit124: int = root.vm.PictureStateBridge(1200, 8)
-	if hit124 != 1:
-		failures.append("PictureStateBridge(1200, 8) test setup must register hover hit")
-	if root.is_touch_blank_space(Vector2(512, 230)):
-		failures.append("is_touch_blank_space must return false over op124 field==8 interactive picture slot")
-	if not root.is_touch_blank_space(blank_pt):
-		failures.append("is_touch_blank_space must return true in blank area when BasicAllDeny bit 2 is clear")
+	if root.vm.PictureStateBridge(1201, 8) != 1:
+		failures.append("post-click PictureStateBridge(1201, 8) setup must register hit at (512,230)")
+	root.advance_frame()
+	root.router.clock_msec_override = 1120
+	touch_down.call(Vector2(512, 230))
+	touch_up.call(Vector2(512, 230))
+	if int(tap_counts["actions"]) != 2 or int(tap_counts["cancels"]) != 0:
+		failures.append("second tap on responsive post-click op124(8) button must act again instead of cancelling")
+
+	# Non-op124 button (EngineState coordinate button playing SFX / adding picture): tap 2 must not cancel.
+	root.router.reset_double_tap_state()
+	root.advance_frame()
+	root.router.clock_msec_override = 2000
+	touch_down.call(Vector2(300, 300))
+	touch_up.call(Vector2(300, 300))
+	if int(tap_counts["actions"]) != 3 or int(tap_counts["cancels"]) != 0:
+		failures.append("coordinate picture button must respond immediately on first tap")
+	root.stage.draw_picture(1202, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 300, 300, 100, 0], 1, 0)
+	root.advance_frame()
+	root.router.clock_msec_override = 2120
+	touch_down.call(Vector2(300, 300))
+	touch_up.call(Vector2(300, 300))
+	if int(tap_counts["actions"]) != 4 or int(tap_counts["cancels"]) != 0:
+		failures.append("coordinate button that updated picture slots must not cancel on second tap")
+
+	# True blank-space double-tap in picture menu: tap 1 acts cleanly (no swallow), frame has no response, tap 2 cancels.
+	root.router.reset_double_tap_state()
+	root.advance_frame()
+	root.router.clock_msec_override = 3000
+	touch_down.call(blank_pt)
+	touch_up.call(blank_pt)
+	if int(tap_counts["actions"]) != 5 or int(tap_counts["cancels"]) != 0:
+		failures.append("first blank tap in picture menu must still dispatch cleanly")
+	root.advance_frame()
+	root.router.clock_msec_override = 3150
+	touch_down.call(blank_pt + Vector2(4, -2))
+	touch_up.call(blank_pt + Vector2(4, -2))
+	if int(tap_counts["cancels"]) != 1 or int(tap_counts["actions"]) != 5 or (root.router.held_mask() & InputRouter.MASK_CANCEL) == 0 or (root.router.held_mask() & InputRouter.MASK_OK) != 0:
+		failures.append("second blank tap after confirmed no-op frame must trigger cancel without action")
+
+	# BasicAllDeny bit 2 must prevent blank double-tap cancel.
 	root.vm.ApplyInputPermission(0x202)
-	if root.is_touch_blank_space(blank_pt):
-		failures.append("is_touch_blank_space must return false when BasicAllDeny bit 2 is set")
+	root.router.clock_msec_override = 4000
+	touch_down.call(blank_pt)
+	touch_up.call(blank_pt)
+	root.advance_frame()
+	root.router.clock_msec_override = 4120
+	touch_down.call(blank_pt)
+	touch_up.call(blank_pt)
+	if int(tap_counts["cancels"]) != 1 or int(tap_counts["actions"]) != 7:
+		failures.append("BasicAllDeny bit 2 must block empirical blank double-tap cancel")
 	root.vm.ApplyInputPermission(0x002)
+	root.router.clock_msec_override = -1
+	root.router.mobile_double_tap_cancel_enabled = root.router._default_mobile_double_tap_enabled()
+	root.router.reset_double_tap_state()
 	root.overlays.open_backlog()
 	if root.is_touch_blank_space(blank_pt):
 		failures.append("is_touch_blank_space must return false while modal window is open")
