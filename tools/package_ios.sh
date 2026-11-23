@@ -12,6 +12,7 @@ OUT_DIR=""
 GAME_DATA_DIR=""
 WORK_ALL_DIR=""
 SLIM=false
+BROTLI=false
 FONT_OPT=""
 GODOT_BIN="${GODOT_BIN:-${GODOT:-$(command -v godot 2>/dev/null || command -v Godot 2>/dev/null || true)}}"
 DOTNET_BIN="${DOTNET_BIN:-${DOTNET:-$(command -v dotnet 2>/dev/null || true)}}"
@@ -29,6 +30,7 @@ Usage: tools/package_ios.sh [options]
   --game-data DIR    optional game_data directory to inject after build
   --work-all DIR     optional work/all directory (requires --game-data)
   --slim             repack media.pak with WebP slimming when injecting data
+  --brotli           compress large game_data JSONs as .json.br when injecting data
   --font FILE        optional Lolita.ttf to place at <app>/work/all/Lolita.ttf
   --godot PATH       Godot 4.7.2 Mono executable
   --dotnet PATH      dotnet 8 executable
@@ -53,6 +55,7 @@ while [ "$#" -gt 0 ]; do
     --game-data) need_arg "$@"; GAME_DATA_DIR="$2"; shift 2 ;;
     --work-all)  need_arg "$@"; WORK_ALL_DIR="$2"; shift 2 ;;
     --slim)      SLIM=true; shift ;;
+    --brotli)    BROTLI=true; shift ;;
     --font)      need_arg "$@"; FONT_OPT="$2"; shift 2 ;;
     --godot)     need_arg "$@"; GODOT_BIN="$2"; shift 2 ;;
     --dotnet)    need_arg "$@"; DOTNET_BIN="$2"; shift 2 ;;
@@ -132,6 +135,10 @@ xcodebuild \
   -derivedDataPath "$DERIVED_DATA" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
+  STRIP_INSTALLED_PRODUCT=YES \
+  DEPLOYMENT_POSTPROCESSING=YES \
+  COPY_PHASE_STRIP=YES \
+  DEBUG_INFORMATION_FORMAT=dwarf \
   build
 
 APP_SRC="$(find "$DERIVED_DATA/Build/Products" -type d -name '*.app' | head -n1 || true)"
@@ -157,6 +164,7 @@ if [ -n "$GAME_DATA_DIR" ] && [ -n "$WORK_ALL_DIR" ]; then
     INJ_ARGS+=(--media-pak "$SLIM_PAK")
   fi
   [ -n "$FONT_OPT" ] && INJ_ARGS+=(--font "$FONT_OPT")
+  [ "$BROTLI" = true ] && INJ_ARGS+=(--brotli)
   "$PYTHON_BIN" "$ROOT/tools/mobile/ios_inject_data.py" "${INJ_ARGS[@]}"
   rm -f "$OUT_DIR/media-slim.pak"
 fi

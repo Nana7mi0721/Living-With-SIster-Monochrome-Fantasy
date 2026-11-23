@@ -12,6 +12,17 @@ func _ready() -> void:
 			failures.append("data_dir must end with game_data (got %s)" % script.data_dir())
 		if script.missing_data_files().size() != 0:
 			failures.append("current checkout should have game_data, missing: %s" % str(script.missing_data_files()))
+		var br_dir := ProjectSettings.globalize_path("user://setup_wizard_br_test")
+		_remove_tree(br_dir)
+		DirAccess.make_dir_recursive_absolute(br_dir)
+		for f_name in ["manifest.json", "programs.json.br", "database.json.br", "map_tiles.json.br"]:
+			var fh := FileAccess.open(br_dir.path_join(f_name), FileAccess.WRITE)
+			if fh != null:
+				fh.store_string("ok")
+				fh.close()
+		if not script.missing_data_files_in(br_dir).is_empty():
+			failures.append("missing_data_files_in must accept .json.br payloads")
+		_remove_tree(br_dir)
 		var good_root := ProjectSettings.globalize_path("res://").path_join("../work/all").simplify_path()
 		if not DirAccess.dir_exists_absolute(good_root):
 			failures.append("work/all missing: %s" % good_root)

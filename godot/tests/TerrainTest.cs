@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using Godot;
 using Lwsmf.Core;
 using Lwsmf.Presentation;
@@ -119,6 +120,47 @@ public partial class TerrainTest : Node
             "TerrainBridge.LoadForMap loads Dungeon");
         Check(bridge.Mask(32, 3) == 0b1111 && bridge.IsBlocked(34, 3, 0) && !bridge.IsBlocked(34, 3, 3),
             "TerrainBridge Mask and IsBlocked match Dungeon terrain");
+
+        // Brotli (.json.br) transparent streaming load for ProgramLoader, GameDatabase, MapTileData, and TerrainBridge.
+        string brDir = Path.Combine(Path.GetTempPath(), "lwsmf_brotli_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(brDir);
+        try
+        {
+            static void WriteBrotliFrom(string srcPath, string dstBrPath)
+            {
+                using FileStream input = File.OpenRead(srcPath);
+                using FileStream output = File.Create(dstBrPath);
+                using var brotli = new BrotliStream(output, CompressionLevel.Fastest);
+                input.CopyTo(brotli);
+            }
+
+            string brPrograms = Path.Combine(brDir, "programs.json");
+            string brTiles = Path.Combine(brDir, "map_tiles.json");
+            string brDb = Path.Combine(brDir, "database.json");
+            WriteBrotliFrom(programs, brPrograms + ".br");
+            WriteBrotliFrom(tiles, brTiles + ".br");
+            WriteBrotliFrom(Path.Combine(repo, "game_data", "database.json"), brDb + ".br");
+
+            Check(ProgramLoader.Exists(brPrograms), "ProgramLoader.Exists must detect programs.json.br");
+            MapDefinition? brMap = ProgramLoader.LoadMap(brPrograms, "", 1000);
+            MapTileData? brTileData = MapTileData.Load(brTiles);
+            GameDatabase? brDatabase = GameDatabase.Load(brDb);
+            Check(brMap != null && brMap.Id == 1000, "ProgramLoader.LoadMap must decode programs.json.br");
+            Check(brTileData != null && brTileData.Maps.Count == 9, "MapTileData.Load must decode map_tiles.json.br");
+            Check(brDatabase != null && brDatabase.SourcePath.EndsWith("database.json.br", StringComparison.OrdinalIgnoreCase),
+                "GameDatabase.Load must decode database.json.br");
+            var brBridge = new TerrainBridge();
+            AddChild(brBridge);
+            Check(brBridge.LoadMapFromTiles(1000, brTiles, brPrograms) && brBridge.Valid && brBridge.BlockedCount() == 348,
+                "TerrainBridge.LoadMapFromTiles must decode .json.br artifacts with matching Dungeon passability");
+            brBridge.QueueFree();
+            ProgramLoader.ClearCache();
+            MapTileData.ClearCache();
+        }
+        finally
+        {
+            try { Directory.Delete(brDir, true); } catch (IOException) { }
+        }
 
         int failures = _failures;
         if (failures == 0)

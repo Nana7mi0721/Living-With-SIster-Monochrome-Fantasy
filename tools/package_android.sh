@@ -8,6 +8,7 @@ cd "$ROOT"
 
 VERSION="0.1.0"
 SLIM=false
+BROTLI=false
 BUILD_MODE="debug"
 KEYSTORE_OPT=""
 KS_USER_OPT="androiddebugkey"
@@ -30,6 +31,7 @@ Usage: tools/package_android.sh [options]
 
   --version V       package version (default: 0.1.0)
   --slim            repack media.pak with WebP slimming before APK staging
+  --brotli          compress large game_data JSONs as .json.br
   --media-pak FILE  use a prebuilt (for example pruned) media.pak
   --debug           export debug APK with auto/supplied debug keystore (default)
   --release         export release APK (requires --keystore)
@@ -71,6 +73,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --version)  need_arg "$@"; VERSION="$2"; shift 2 ;;
     --slim)     SLIM=true; shift ;;
+    --brotli)   BROTLI=true; shift ;;
     --debug)    BUILD_MODE="debug"; shift ;;
     --release)  BUILD_MODE="release"; shift ;;
     --keystore) need_arg "$@"; KEYSTORE_OPT="$2"; shift 2 ;;
@@ -159,6 +162,7 @@ if [ "$DRY_RUN" = true ]; then
   fi
   [ -n "$MEDIA_PAK_OPT" ] && PLAN_ARGS+=(--media-pak "$(to_win_path "$MEDIA_PAK_OPT")")
   [ -n "$FONT_OPT" ] && PLAN_ARGS+=(--font "$(to_win_path "$FONT_OPT")")
+  [ "$BROTLI" = true ] && PLAN_ARGS+=(--brotli)
   "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/android_data.py")" "${PLAN_ARGS[@]}"
   echo "ANDROID_PACKAGE_DRY_RUN_OK out=$APK_OUT"
   exit 0
@@ -192,6 +196,7 @@ echo "== staging godot/mobile_data =="
 STAGE_ARGS=(stage --version "$VERSION" --game-data "$GD_WIN" --work-all "$WA_WIN" --dest "$(to_win_path "$STAGE_DIR")")
 [ "${#PAK_ARG[@]}" -gt 0 ] && STAGE_ARGS+=("${PAK_ARG[@]}")
 [ -n "$FONT_OPT" ] && STAGE_ARGS+=(--font "$(to_win_path "$FONT_OPT")")
+[ "$BROTLI" = true ] && STAGE_ARGS+=(--brotli)
 "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/android_data.py")" "${STAGE_ARGS[@]}"
 
 mkdir -p "$ROOT/work/out" "$OUT_DIR"

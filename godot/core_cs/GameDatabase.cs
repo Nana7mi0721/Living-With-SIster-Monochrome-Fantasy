@@ -117,20 +117,22 @@ public sealed class GameDatabase
     /// </summary>
     public static GameDatabase? Load(string databasePath, string? basicDataDir = null)
     {
-        if (!File.Exists(databasePath)) return null;
+        string? actualPath = JsonArtifactIo.ResolvePath(databasePath);
+        if (actualPath == null) return null;
         RootDto? root;
         try
         {
-            root = JsonSerializer.Deserialize<RootDto>(File.ReadAllText(databasePath, Encoding.UTF8));
+            using Stream stream = JsonArtifactIo.OpenReadStream(actualPath);
+            root = JsonSerializer.Deserialize<RootDto>(stream);
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[GameDatabase] failed to read {databasePath}: {ex.Message}");
+            Console.Error.WriteLine($"[GameDatabase] failed to read {actualPath}: {ex.Message}");
             return null;
         }
         if (root == null) return null;
 
-        var db = new GameDatabase(Path.GetFullPath(databasePath));
+        var db = new GameDatabase(actualPath);
         db.AddContainer(DbContainer.CData, root.Cdata);
         db.AddContainer(DbContainer.Data, root.Database);
         db.AddContainer(DbContainer.Sys, root.System);

@@ -66,47 +66,26 @@ func _ready() -> void:
 		add_child(_leader)
 	_update_leader_position()
 
-## Load one map entry and its tileset from a map_tiles.json artifact.
+## Load one map entry and its tileset from a map_tiles.json(.br) artifact.
 func load_from_file(path: String, wanted_id: int) -> bool:
-	var text := FileAccess.get_file_as_string(path)
-	if text.is_empty():
-		push_error("MapLayer: cannot read %s" % path)
-		return false
-	var parsed = JSON.parse_string(text)
-	if typeof(parsed) != TYPE_DICTIONARY:
-		push_error("MapLayer: %s is not a JSON object" % path)
-		return false
-	var entry: Dictionary = {}
-	for item in parsed.get("maps", []):
-		if int(item.get("id", -1)) == wanted_id:
-			entry = item
-			break
-	if entry.is_empty():
-		push_error("MapLayer: map id %d not in %s" % [wanted_id, path])
-		return false
-	var tileset: Dictionary = {}
-	for item in parsed.get("tilesets", []):
-		if int(item.get("index", -1)) == int(entry.get("tileset_id", 0)):
-			tileset = item
-			break
-	if tileset.is_empty():
-		push_error("MapLayer: tileset %d missing for map %d" % [int(entry.get("tileset_id", 0)), wanted_id])
-		return false
-
-	map_id = wanted_id
-	map_file = str(entry.get("file", ""))
-	map_width = int(entry.get("width", 0))
-	map_height = int(entry.get("height", 0))
-	tileset_index = int(entry.get("tileset_id", 0))
-	_layers.clear()
-	for encoded in entry.get("layers", []):
-		_layers.append(_decode_u32(str(encoded)))
 	if _terrain_bridge != null:
 		_terrain_bridge.queue_free()
 	_terrain_bridge = TerrainBridge.new()
 	add_child(_terrain_bridge)
-	if not _terrain_bridge.LoadForMap(wanted_id, path.get_base_dir().path_join("programs.json")):
+	if not _terrain_bridge.LoadMapFromTiles(wanted_id, path, path.get_base_dir().path_join("programs.json")):
+		push_error("MapLayer: cannot load map id %d from %s" % [wanted_id, path])
+		return false
+	if not _terrain_bridge.Valid:
 		push_warning("MapLayer: C# terrain unavailable for map %d; every cell treated as passable" % wanted_id)
+
+	map_id = wanted_id
+	map_file = _terrain_bridge.MapFile
+	map_width = _terrain_bridge.MapWidth
+	map_height = _terrain_bridge.MapHeight
+	tileset_index = _terrain_bridge.TilesetId
+	_layers.clear()
+	for layer_idx in _terrain_bridge.LayerCount:
+		_layers.append(PackedInt64Array(_terrain_bridge.GetLayerWords(layer_idx)))
 	_build_terrain()
 	_build_tiles()
 	_leader_cell = Vector2i(clampi(_leader_cell.x, 0, maxi(0, map_width - 1)), clampi(_leader_cell.y, 0, maxi(0, map_height - 1)))

@@ -31,9 +31,12 @@ public static class ProgramLoader
     private static readonly Dictionary<string, CachedPrograms> Artifacts = new();
     private static readonly object CacheLock = new();
 
+    public static bool Exists(string jsonPath) => JsonArtifactIo.ResolvePath(jsonPath) != null;
+
     private static CachedPrograms? LoadArtifact(string jsonPath)
     {
-        string key = Path.GetFullPath(jsonPath);
+        string? key = JsonArtifactIo.ResolvePath(jsonPath);
+        if (key == null) return null;
         var info = new FileInfo(key);
         if (!info.Exists) return null;
 
@@ -51,7 +54,7 @@ public static class ProgramLoader
 
         var commonEvents = new Dictionary<int, Program>();
         var maps = new List<ParsedMap>();
-        using (var stream = File.OpenRead(key))
+        using (var stream = JsonArtifactIo.OpenReadStream(key))
         using (var document = JsonDocument.Parse(stream))
         {
             var root = document.RootElement;

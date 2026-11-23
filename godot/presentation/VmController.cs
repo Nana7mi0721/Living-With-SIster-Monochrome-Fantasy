@@ -157,7 +157,7 @@ public partial class VmController : Node, IHost, IVmSession
                 path = Path.GetFullPath(Path.Combine(rootDir, "game_data", "programs.json"));
             }
 
-            if (!File.Exists(path))
+            if (!ProgramLoader.Exists(path))
             {
                 LastError = $"programs.json not found at: {path}";
                 GD.PrintErr($"[VmController] {LastError}");

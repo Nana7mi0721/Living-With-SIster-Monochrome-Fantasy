@@ -57,17 +57,18 @@ public sealed class MapTileData
     {
         try
         {
-            var info = new FileInfo(path);
+            string? key = JsonArtifactIo.ResolvePath(path);
+            if (key == null) return null;
+            var info = new FileInfo(key);
             if (!info.Exists) return null;
-            string key = info.FullName;
             if (Cache.TryGetValue(key, out Cached? cached) &&
                 cached.Length == info.Length && cached.WriteTimeUtc == info.LastWriteTimeUtc)
             {
                 return cached.Data;
             }
 
-            byte[] bytes = File.ReadAllBytes(key);
-            using var doc = JsonDocument.Parse(bytes);
+            using Stream stream = JsonArtifactIo.OpenReadStream(key);
+            using var doc = JsonDocument.Parse(stream);
             JsonElement root = doc.RootElement;
             var data = new MapTileData();
             foreach (JsonElement element in root.GetProperty("tilesets").EnumerateArray())

@@ -16,14 +16,20 @@ from pathlib import Path
 from unittest import mock
 
 MOBILE_DIR = Path(__file__).resolve().parent
+TOOLS_DIR = MOBILE_DIR.parent
+REPO_ROOT = TOOLS_DIR.parent
 if str(MOBILE_DIR) not in sys.path:
     sys.path.insert(0, str(MOBILE_DIR))
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
 
 import android_data  # noqa: E402
+import brotli_json  # noqa: E402
 import env_check  # noqa: E402
 import export_preset_template  # noqa: E402
 import ios_inject_data  # noqa: E402
 import postprocess_android_apk  # noqa: E402
+import release_audit  # noqa: E402
 import strip_android_static_libs  # noqa: E402
 import windows_pe  # noqa: E402
 
@@ -515,6 +521,106 @@ class MobileToolsTest(unittest.TestCase):
             exe.write_bytes(both)
             self.assertEqual(windows_pe.main([str(exe)]), 1)
             self.assertEqual(exe.read_bytes(), both)
+
+    def test_brotli_json_android_ios_and_release_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            gd, wa = _make_fake_payload(t / "src")
+            staged_gd = t / "staged_gd"
+            self.assertEqual(
+                brotli_json.main(["--src", str(gd), "--dst", str(staged_gd), "--brotli", "--quality", "4"]),
+                0,
+            )
+            self.assertTrue((staged_gd / "manifest.json").is_file())
+            for name in ("programs.json", "database.json", "map_tiles.json"):
+                self.assertFalse((staged_gd / name).exists())
+                br = staged_gd / f"{name}.br"
+                self.assertTrue(br.is_file())
+                decoded = json.loads(brotli_json.decompress_bytes(br.read_bytes()).decode("utf-8"))
+                self.assertEqual(decoded, json.loads((gd / name).read_text(encoding="utf-8")))
+
+            # Android --brotli staging and verify-apk accept .json.br.blob entries.
+            android_stage = t / "android_stage"
+            rc = android_data.main(
+                [
+                    "stage",
+                    "--version",
+                    "0.2.0",
+                    "--game-data",
+                    str(gd),
+                    "--work-all",
+                    str(wa),
+                    "--dest",
+                    str(android_stage),
+                    "--brotli",
+                    "--allow-temp",
+                ]
+            )
+            self.assertEqual(rc, 0)
+            self.assertTrue((android_stage / "game_data/programs.json.br.blob").is_file())
+            apk_path = t / "brotli.apk"
+            _build_valid_apk(apk_path, android_stage)
+            self.assertEqual(android_data.main(["verify-apk", str(apk_path)]), 0)
+
+            # iOS --brotli injection stores .br entries without re-deflating.
+            ipa_in = t / "engine.ipa"
+            ipa_out = t / "full-br.ipa"
+            _build_synthetic_ipa(ipa_in)
+            rc = ios_inject_data.main(
+                [
+                    str(ipa_in),
+                    "--game-data",
+                    str(gd),
+                    "--work-all",
+                    str(wa),
+                    "--out",
+                    str(ipa_out),
+                    "--brotli",
+                ]
+            )
+            self.assertEqual(rc, 0)
+            with zipfile.ZipFile(ipa_out, "r") as zf:
+                info = zf.getinfo("Payload/Lwsmf.app/game_data/programs.json.br")
+                self.assertEqual(info.compress_type, zipfile.ZIP_STORED)
+
+            # release_audit accepts .json.br payloads cleanly.
+            dist_dir = t / "dist_br"
+            for rel in (
+                "game/Lwsmf.exe",
+                "game/Lwsmf.pck",
+                "game/data_Lwsmf_windows_x86_64/Lwsmf.dll",
+                "converter/cli.py",
+                "converter/convert.bat",
+                "README.txt",
+            ):
+                p = dist_dir / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text("stub", encoding="utf-8")
+            shutil.copytree(staged_gd, dist_dir / "game_data")
+            shutil.copytree(wa, dist_dir / "work/all")
+            shutil.copy2(REPO_ROOT / "godot/tests/fixtures/media_pack_tiny.pak", dist_dir / "work/all/media.pak")
+            errors, _ = release_audit.audit(dist_dir)
+            self.assertEqual(errors, [], f"unexpected release_audit errors: {errors}")
+
+    def test_ios_strip_and_inno_setup_template(self) -> None:
+        ios_script = (REPO_ROOT / "tools/package_ios.sh").read_text(encoding="utf-8")
+        for flag in (
+            "STRIP_INSTALLED_PRODUCT=YES",
+            "DEPLOYMENT_POSTPROCESSING=YES",
+            "COPY_PHASE_STRIP=YES",
+            "DEBUG_INFORMATION_FORMAT=dwarf",
+        ):
+            self.assertIn(flag, ios_script)
+
+        iss_tmpl = (REPO_ROOT / "tools/installer/lwsmf.iss.tmpl").read_text(encoding="utf-8")
+        self.assertIn("Compression=lzma2/ultra64", iss_tmpl)
+        self.assertIn("SolidCompression=yes", iss_tmpl)
+        self.assertIn("LZMADictionarySize=65536", iss_tmpl)
+        self.assertIn("media.pak", iss_tmpl)
+        self.assertIn("media_hd.pak", iss_tmpl)
+        self.assertIn("nocompression", iss_tmpl)
+
+        self.assertEqual(release_audit.repo_scan(REPO_ROOT), [])
 
 
 if __name__ == "__main__":

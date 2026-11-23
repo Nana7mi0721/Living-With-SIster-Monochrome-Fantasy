@@ -16,18 +16,17 @@ from pathlib import Path, PurePosixPath
 
 try:
     from pack_media import read_pak_entries, read_pak_index
+    import brotli_json
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from pack_media import read_pak_entries, read_pak_index
+    import brotli_json
 
 REQUIRED_FILES = [
     "game/Lwsmf.exe",
     "game/Lwsmf.pck",
     "game/data_Lwsmf_windows_x86_64/Lwsmf.dll",
     "game_data/manifest.json",
-    "game_data/programs.json",
-    "game_data/database.json",
-    "game_data/map_tiles.json",
     "work/all/media.pak",
     "work/all/BasicData/CDataBase.project",
     "work/all/BasicData/DataBase.project",
@@ -35,6 +34,12 @@ REQUIRED_FILES = [
     "converter/cli.py",
     "converter/convert.bat",
     "README.txt",
+]
+
+BROTLI_OR_PLAIN_GAME_DATA = [
+    "game_data/programs.json",
+    "game_data/database.json",
+    "game_data/map_tiles.json",
 ]
 
 FORBIDDEN_STAGE_DIRS = [
@@ -99,6 +104,10 @@ def audit(
         if not _nonempty_file(dist / rel):
             errors.append(f"missing or empty: {rel}")
 
+    for rel in BROTLI_OR_PLAIN_GAME_DATA:
+        if not _nonempty_file(dist / rel) and not _nonempty_file(dist / f"{rel}.br"):
+            errors.append(f"missing or empty: {rel} (or {rel}.br)")
+
     for rel in FORBIDDEN_STAGE_DIRS:
         if (dist / rel).exists():
             errors.append(f"forbidden directory must not be shipped: {rel}")
@@ -139,11 +148,17 @@ def audit(
 
     for rel_json in ("programs.json", "database.json", "map_tiles.json"):
         p = dist / "game_data" / rel_json
+        p_br = dist / "game_data" / f"{rel_json}.br"
         if p.is_file():
             try:
                 json.loads(p.read_text(encoding="utf-8"))
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"invalid game_data/{rel_json}: {exc}")
+        elif p_br.is_file():
+            try:
+                json.loads(brotli_json.decompress_bytes(p_br.read_bytes()).decode("utf-8"))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"invalid game_data/{rel_json}.br: {exc}")
 
     for item in manifest.get("assets") or []:
         if not isinstance(item, dict):
@@ -179,8 +194,9 @@ def audit(
             stats["bytes"] += path.stat().st_size
 
     prog_path = dist / "game_data/programs.json"
-    if prog_path.is_file() and pak_paths:
-        total_refs, miss = audit_program_assets(prog_path, pak_paths)
+    prog_br_path = dist / "game_data/programs.json.br"
+    if (prog_path.is_file() or prog_br_path.is_file()) and pak_paths:
+        total_refs, miss = audit_program_assets(prog_path if prog_path.is_file() else prog_br_path, pak_paths)
         stats["program_asset_total"] = total_refs
         stats["program_asset_missing"] = len(miss)
         if missing_out is not None:
@@ -195,8 +211,11 @@ def audit(
 
 
 def audit_program_assets(programs_json: Path, pak_paths: set[str]) -> tuple[int, list[str]]:
-    """Cross-check static picture/audio asset references in programs.json against media.pak."""
-    data = json.loads(programs_json.read_text(encoding="utf-8"))
+    """Cross-check static picture/audio asset references in programs.json(.br) against media.pak."""
+    if programs_json.suffix.lower() == ".br":
+        data = json.loads(brotli_json.decompress_bytes(programs_json.read_bytes()).decode("utf-8"))
+    else:
+        data = json.loads(programs_json.read_text(encoding="utf-8"))
     basenames = {PurePosixPath(p).name for p in pak_paths}
     refs: set[str] = set()
 

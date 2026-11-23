@@ -18,9 +18,15 @@ import zipfile
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
+TOOLS_DIR = Path(__file__).resolve().parents[1]
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+
+import brotli_json  # noqa: E402
+
 GAME_DATA_FILES = ("manifest.json", "programs.json", "database.json", "map_tiles.json")
 PROJECT_FILES = ("CDataBase.project", "DataBase.project", "SysDatabase.project")
-STORED_EXTENSIONS = {".ipa", ".zip", ".pak", ".ogg", ".mp3", ".wav", ".webp", ".png", ".jpg", ".jpeg"}
+STORED_EXTENSIONS = {".ipa", ".zip", ".pak", ".br", ".ogg", ".mp3", ".wav", ".webp", ".png", ".jpg", ".jpeg"}
 
 
 def fail(message: str) -> None:
@@ -101,6 +107,7 @@ def collect_payload_files(
     work_all_dir: Path,
     media_pak_override: Path | None,
     font_path: Path | None,
+    use_brotli: bool = False,
 ) -> tuple[dict[str, tuple[bytes, float, int]], set[str]]:
     gd = game_data_dir.resolve()
     wa = work_all_dir.resolve()
@@ -117,11 +124,17 @@ def collect_payload_files(
         if not src.is_file() or src.stat().st_size <= 0:
             fail(f"missing or empty game_data/{name}: {src}")
         st = src.stat()
-        if name in ("programs.json", "database.json", "map_tiles.json"):
-            raw = json.dumps(json.loads(src.read_text(encoding="utf-8")), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if name in brotli_json.BROTLI_JSON_NAMES:
+            raw = brotli_json.compact_json_bytes(src)
+            if use_brotli:
+                raw = brotli_json.compress_bytes(raw, quality=11)
+                out_name = f"{name}.br"
+            else:
+                out_name = name
         else:
             raw = src.read_bytes()
-        files[f"{app_prefix}/game_data/{name}"] = (raw, st.st_mtime, stat.S_IFREG | (st.st_mode & 0o777))
+            out_name = name
+        files[f"{app_prefix}/game_data/{out_name}"] = (raw, st.st_mtime, stat.S_IFREG | (st.st_mode & 0o777))
 
     for name in PROJECT_FILES:
         src = wa / "BasicData" / name
@@ -155,6 +168,7 @@ def inject(
     font: Path | None,
     force: bool,
     dry_run: bool = False,
+    use_brotli: bool = False,
 ) -> Path:
     source = ipa.resolve()
     if not source.is_file() or not zipfile.is_zipfile(source):
@@ -171,7 +185,7 @@ def inject(
         names = [safe_member_name(info.filename) for info in infos]
         app_prefix = app_prefix_from_names(names)
         payload_files, payload_dirs = collect_payload_files(
-            app_prefix, game_data_dir, work_all_dir, media_pak_override, font
+            app_prefix, game_data_dir, work_all_dir, media_pak_override, font, use_brotli=use_brotli
         )
 
         if dry_run:
@@ -208,7 +222,8 @@ def inject(
                 check_names = [safe_member_name(i.filename) for i in check_zip.infolist()]
                 if app_prefix_from_names(check_names) != app_prefix:
                     fail("output IPA bundle mismatch")
-                for req in (f"{app_prefix}/game_data/programs.json", f"{app_prefix}/work/all/media.pak"):
+                prog_req = f"{app_prefix}/game_data/programs.json" + (".br" if use_brotli else "")
+                for req in (prog_req, f"{app_prefix}/work/all/media.pak"):
                     if req not in check_names:
                         fail(f"output IPA missing injected entry: {req}")
                 bad = check_zip.testzip()
@@ -233,6 +248,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--media-pak", type=Path, default=None)
     parser.add_argument("--font", type=Path, default=None)
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--brotli", action="store_true", help="Compress large game_data JSONs as .json.br")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
@@ -242,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
         stem = args.ipa.name[:-4] if args.ipa.name.lower().endswith(".ipa") else args.ipa.name
         out = args.ipa.with_name(f"{stem}-full.ipa")
 
-    inject(args.ipa, args.game_data, args.work_all, out, args.media_pak, args.font, args.force, args.dry_run)
+    inject(args.ipa, args.game_data, args.work_all, out, args.media_pak, args.font, args.force, args.dry_run, use_brotli=args.brotli)
     return 0
 
 

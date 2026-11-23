@@ -9,6 +9,7 @@ signal setup_completed
 
 const AppPaths := preload("res://presentation_gd/AppPaths.gd")
 const DATA_FILES := ["manifest.json", "programs.json", "database.json", "map_tiles.json"]
+const BROTLI_CAPABLE_FILES := ["programs.json", "database.json", "map_tiles.json"]
 const RETAIL_FILES := [
 	"BasicData/CommonEvent.dat",
 	"BasicData/Game.dat",
@@ -47,13 +48,20 @@ static func converter_dir() -> String:
 	return package_root().path_join("converter")
 
 
-static func missing_data_files() -> Array[String]:
+static func missing_data_files_in(base_dir: String) -> Array[String]:
 	var missing: Array[String] = []
 	for name in DATA_FILES:
-		var path := data_dir().path_join(name)
-		if not FileAccess.file_exists(path):
-			missing.append(path)
+		var path := base_dir.path_join(name)
+		if FileAccess.file_exists(path):
+			continue
+		if name in BROTLI_CAPABLE_FILES and FileAccess.file_exists(path + ".br"):
+			continue
+		missing.append(path)
 	return missing
+
+
+static func missing_data_files() -> Array[String]:
+	return missing_data_files_in(data_dir())
 
 
 static func data_ready() -> bool:

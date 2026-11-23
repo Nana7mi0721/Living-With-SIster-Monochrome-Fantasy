@@ -31,13 +31,17 @@ export DOTNET_NOLOGO=1
 DEMO=false
 SLIM=false
 HD=false
+BROTLI=false
+INSTALLER=false
 for arg in "$@"; do
   case "$arg" in
     --demo) DEMO=true ;;
     --slim) SLIM=true ;;
     --hd) HD=true ;;
+    --brotli) BROTLI=true ;;
+    --installer) INSTALLER=true ;;
     *)
-      echo "usage: tools/package_release.sh [--demo] [--slim] [--hd]" >&2
+      echo "usage: tools/package_release.sh [--demo] [--slim] [--hd] [--brotli] [--installer]" >&2
       exit 2
       ;;
   esac
@@ -146,27 +150,13 @@ to_win_path() {
 echo "== localizing Lwsmf.exe Windows version resource (0x0804) =="
 "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/windows_pe.py")" "$(to_win_path "$STAGE/game/Lwsmf.exe")"
 
-echo "== staging compact game_data =="
+echo "== staging compact game_data (brotli=$BROTLI) =="
 mkdir -p "$STAGE/game_data"
 SRC_GD_WIN="$(to_win_path "$ROOT/game_data")"
 DST_GD_WIN="$(to_win_path "$STAGE/game_data")"
-"$PYTHON_BIN" - "$SRC_GD_WIN" "$DST_GD_WIN" <<'PY'
-import json, sys
-from pathlib import Path
-
-src_dir = Path(sys.argv[1])
-dst_dir = Path(sys.argv[2])
-written = 0
-for f in sorted(src_dir.glob("*.json")):
-    if f.name in ("programs.json", "database.json", "map_tiles.json"):
-        data = json.loads(f.read_text(encoding="utf-8"))
-        (dst_dir / f.name).write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    else:
-        (dst_dir / f.name).write_bytes(f.read_bytes())
-    written += 1
-if written == 0:
-    raise SystemExit(f"no json files found in {src_dir}")
-PY
+GD_ARGS=(--src "$SRC_GD_WIN" --dst "$DST_GD_WIN")
+[ "$BROTLI" = true ] && GD_ARGS+=(--brotli)
+"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/brotli_json.py")" "${GD_ARGS[@]}"
 
 echo "== staging minimal runtime assets =="
 mkdir -p "$STAGE/work/all/BasicData"
@@ -335,5 +325,48 @@ for k, v in buckets.items():
 print(f"  {'TOTAL UNCOMPRESSED':34s}: {total/1024/1024:8.2f} MB")
 print(f"  {'ZIP ARCHIVE':34s}: {zip_path.stat().st_size/1024/1024:8.2f} MB")
 PY
+
+if [ "$INSTALLER" = true ]; then
+  echo "== building Windows Inno Setup LZMA2 installer =="
+  ISCC_BIN="${ISCC_BIN:-$(command -v ISCC.exe 2>/dev/null || command -v iscc 2>/dev/null || true)}"
+  if [ -z "$ISCC_BIN" ]; then
+    for candidate in \
+      "${LOCALAPPDATA:-}/Programs/Inno Setup 6/ISCC.exe" \
+      "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
+      "/c/Program Files/Inno Setup 6/ISCC.exe"
+    do
+      if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+        ISCC_BIN="$candidate"
+        break
+      fi
+    done
+  fi
+  if [ -z "$ISCC_BIN" ] || [ ! -x "$ISCC_BIN" ]; then
+    echo "ERROR: ISCC.exe not found; install Inno Setup 6 or set ISCC_BIN=/path/to/ISCC.exe" >&2
+    exit 2
+  fi
+  ISS_PATH="$LOG_DIR/lwsmf-${PKG_NAME}.iss"
+  TMPL_WIN="$(to_win_path "$ROOT/tools/installer/lwsmf.iss.tmpl")"
+  ISS_WIN="$(to_win_path "$ISS_PATH")"
+  DIST_WIN="$(to_win_path "$ROOT/dist")"
+  STAGE_WIN="$(to_win_path "$OUT")"
+  SETUP_BASE="${PKG_NAME}-setup"
+  "$PYTHON_BIN" - "$TMPL_WIN" "$ISS_WIN" "LWSMF Remake" "0.1.0" "$STAGE_WIN" "$DIST_WIN" "$SETUP_BASE" <<'PY'
+import sys
+from pathlib import Path
+
+tmpl = Path(sys.argv[1]).read_text(encoding="utf-8")
+rendered = (
+    tmpl.replace("@APP_NAME@", sys.argv[3])
+    .replace("@APP_VERSION@", sys.argv[4])
+    .replace("@STAGE_DIR@", sys.argv[5].replace("/", "\\"))
+    .replace("@OUTPUT_DIR@", sys.argv[6].replace("/", "\\"))
+    .replace("@OUTPUT_BASE_FILENAME@", sys.argv[7])
+)
+Path(sys.argv[2]).write_text(rendered, encoding="utf-8")
+PY
+  "$ISCC_BIN" "$ISS_WIN"
+  echo "INSTALLER_OK exe=$ROOT/dist/${SETUP_BASE}.exe"
+fi
 
 echo "RELEASE_PACKAGE_OK dist=$OUT zip=$ZIP_OUT"

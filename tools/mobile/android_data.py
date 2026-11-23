@@ -24,12 +24,18 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+TOOLS_DIR = SCRIPT_DIR.parent
 REPO_ROOT = SCRIPT_DIR.parents[1]
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+
+import brotli_json  # noqa: E402
 
 MANIFEST_FILENAME = "mobile_data_manifest.json"
 BLOB_SUFFIX = ".blob"
 MEDIA_BLOB_SUFFIX = ".blob.cfb"
 GAME_DATA_FILES = ("manifest.json", "programs.json", "database.json", "map_tiles.json")
+BROTLI_GAME_DATA_FILES = set(brotli_json.BROTLI_JSON_NAMES)
 PROJECT_FILES = ("CDataBase.project", "DataBase.project", "SysDatabase.project")
 FORBIDDEN_SAVE_RE = re.compile(r"^(savedata.*\.sav|save_\d+\.json|quicksave\.json|system\.json)(\.bak)?$", re.I)
 FORBIDDEN_APK_PREFIXES = (
@@ -107,16 +113,18 @@ def collect_plan(
 
 
 def _compact_json_bytes(src: Path) -> bytes:
-    data = json.loads(src.read_text(encoding="utf-8"))
-    return json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return brotli_json.compact_json_bytes(src)
 
 
-def payload_digest(items: list[tuple[str, Path, bool]]) -> str:
+def payload_digest(items: list[tuple[str, Path, bool]], use_brotli: bool = False) -> str:
     h = hashlib.sha256()
+    if use_brotli:
+        h.update(b"brotli=1\0")
     for logical, src, compact in sorted(items, key=lambda kv: kv[0]):
         h.update(logical.encode("utf-8") + b"\0")
         if compact:
-            h.update(_compact_json_bytes(src))
+            raw = _compact_json_bytes(src)
+            h.update(brotli_json.compress_bytes(raw, quality=11) if use_brotli else raw)
         else:
             with src.open("rb") as f:
                 for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -129,13 +137,14 @@ def cmd_plan(args: argparse.Namespace) -> int:
     items = collect_plan(args.game_data, args.work_all, args.media_pak, args.font)
     total_raw = sum(p.stat().st_size for _, p, _ in items)
     media_override = str(args.media_pak) if args.media_pak else "-"
-    print(f"ANDROID_DATA_PLAN entries={len(items)} source_bytes={total_raw} media_override={media_override}")
+    print(f"ANDROID_DATA_PLAN entries={len(items)} source_bytes={total_raw} brotli={args.brotli} media_override={media_override}")
     for logical, src, compact in items:
         direct_res = logical.endswith("media.pak")
+        logical_out = (logical + ".br") if (args.brotli and compact) else logical
         suffix = MEDIA_BLOB_SUFFIX if direct_res else BLOB_SUFFIX
         print(
-            f"  {logical}{suffix:10s} <- {src.name} "
-            f"({src.stat().st_size / 1024 / 1024:.2f} MB, compact_json={compact}, direct_res={direct_res})"
+            f"  {logical_out}{suffix:10s} <- {src.name} "
+            f"({src.stat().st_size / 1024 / 1024:.2f} MB, compact_json={compact}, brotli={args.brotli and compact}, direct_res={direct_res})"
         )
     return 0
 
@@ -143,7 +152,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
 def cmd_stage(args: argparse.Namespace) -> int:
     safe_dest = ensure_safe_dest(args.dest, allow_temp=args.allow_temp)
     items = collect_plan(args.game_data, args.work_all, args.media_pak, args.font)
-    digest = payload_digest(items)
+    digest = payload_digest(items, use_brotli=args.brotli)
     staging_version = f"{args.version.strip()}+{digest[:16]}"
 
     if safe_dest.exists():
@@ -155,18 +164,21 @@ def cmd_stage(args: argparse.Namespace) -> int:
         if FORBIDDEN_SAVE_RE.match(PurePosixPath(logical).name):
             fail(f"refusing player save file in mobile stage: {logical}")
         direct_res = logical.endswith("media.pak")
+        logical_out = (logical + ".br") if (args.brotli and compact) else logical
         suffix = MEDIA_BLOB_SUFFIX if direct_res else BLOB_SUFFIX
-        rel_out = logical + suffix
+        rel_out = logical_out + suffix
         dst = safe_dest / rel_out
         dst.parent.mkdir(parents=True, exist_ok=True)
         if compact:
             raw = _compact_json_bytes(src)
+            if args.brotli:
+                raw = brotli_json.compress_bytes(raw, quality=11)
             dst.write_bytes(raw)
         else:
             shutil.copy2(src, dst)
         staged_files.append(
             {
-                "logical": logical,
+                "logical": logical_out,
                 "staged": rel_out,
                 "bytes": dst.stat().st_size,
                 "direct_res": direct_res,
@@ -201,12 +213,18 @@ def cmd_verify_apk(args: argparse.Namespace) -> int:
         required = [
             f"assets/mobile_data/{MANIFEST_FILENAME}",
             f"assets/mobile_data/work/all/media.pak{MEDIA_BLOB_SUFFIX}",
-            *(f"assets/mobile_data/game_data/{name}{BLOB_SUFFIX}" for name in GAME_DATA_FILES),
             *(f"assets/mobile_data/work/all/BasicData/{name}{BLOB_SUFFIX}" for name in PROJECT_FILES),
         ]
         for req in required:
             if req not in infos or infos[req].file_size <= 0:
                 errors.append(f"missing or empty APK asset: {req}")
+        for name in GAME_DATA_FILES:
+            plain = f"assets/mobile_data/game_data/{name}{BLOB_SUFFIX}"
+            br = f"assets/mobile_data/game_data/{name}.br{BLOB_SUFFIX}"
+            has_plain = plain in infos and infos[plain].file_size > 0
+            has_br = (name in BROTLI_GAME_DATA_FILES) and (br in infos and infos[br].file_size > 0)
+            if not has_plain and not has_br:
+                errors.append(f"missing or empty APK asset: {plain}")
 
         pak_entry = f"assets/mobile_data/work/all/media.pak{MEDIA_BLOB_SUFFIX}"
         if pak_entry in infos and infos[pak_entry].compress_type != zipfile.ZIP_STORED:
@@ -256,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--work-all", type=Path, default=REPO_ROOT / "work/all")
         p.add_argument("--media-pak", type=Path, default=None, help="Optional slim media.pak override")
         p.add_argument("--font", type=Path, default=None, help="Optional Lolita.ttf path")
+        p.add_argument("--brotli", action="store_true", help="Compress large game_data JSONs as .json.br")
         if name == "stage":
             p.add_argument("--version", default="0.1.0")
             p.add_argument("--dest", type=Path, default=REPO_ROOT / "godot/mobile_data")
