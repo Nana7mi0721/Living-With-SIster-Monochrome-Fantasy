@@ -13,6 +13,7 @@ signal fault_recover_requested
 signal fault_restart_requested
 signal fault_modal_closed
 signal save_overwrite_confirmed(slot: int, pointer_pos: Vector2, is_pointer: bool)
+signal save_load_confirmed(slot: int)
 signal save_overwrite_cancelled
 signal quit_confirmed
 signal quit_cancelled
@@ -45,12 +46,17 @@ var _title_confirm_open := false
 var _title_cancel_button: Button
 
 var _save_confirm_root: Control
+var _save_confirm_title: Label
 var _save_confirm_label: Label
+var _save_confirm_save_btn: Button
+var _save_confirm_load_btn: Button
 var _save_confirm_cancel: Button
 var _save_confirm_open := false
 var _save_confirm_slot := 0
 var _save_confirm_pos := Vector2.ZERO
 var _save_confirm_is_pointer := false
+var _save_confirm_slot_exists := true
+var _save_confirm_is_load_mode := false
 
 var _quit_confirm_root: Control
 var _quit_confirm_cancel: Button
@@ -278,6 +284,19 @@ func scroll_backlog_lines(direction: int) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if is_modal_open():
+		if event is InputEventMouseButton:
+			var mb := event as InputEventMouseButton
+			if mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
+				if close_topmost_modal() and is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
+		elif event is InputEventKey:
+			var modal_key := event as InputEventKey
+			if modal_key.pressed and not modal_key.echo and modal_key.keycode == KEY_ESCAPE:
+				if close_topmost_modal() and is_inside_tree() and get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
 	if not _backlog_open or not (event is InputEventKey):
 		return
 	var key := event as InputEventKey
@@ -286,16 +305,20 @@ func _input(event: InputEvent) -> void:
 	match key.keycode:
 		KEY_UP, KEY_W:
 			scroll_backlog_lines(-1)
-			get_viewport().set_input_as_handled()
+			if is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
 		KEY_DOWN, KEY_S:
 			scroll_backlog_lines(1)
-			get_viewport().set_input_as_handled()
+			if is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
 		KEY_PAGEUP:
 			scroll_backlog_page(-1)
-			get_viewport().set_input_as_handled()
+			if is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
 		KEY_PAGEDOWN:
 			scroll_backlog_page(1)
-			get_viewport().set_input_as_handled()
+			if is_inside_tree() and get_viewport() != null:
+				get_viewport().set_input_as_handled()
 
 
 # ---- F12 Return-to-Title Confirm -----------------------------------------
@@ -713,6 +736,30 @@ func refresh_debug(fps: float, frame_count: int, phase_name: String, active_inst
 
 # ---- Save Overwrite & Quit Modals ----------------------------------------
 
+static func _make_save_confirm_style(bg: Color, border: Color, draw_bg: bool = true) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.draw_center = draw_bg
+	sb.bg_color = bg
+	sb.border_color = border
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(2)
+	return sb
+
+
+static func _style_save_confirm_button(btn: Button, normal_box: StyleBoxFlat, hover_box: StyleBoxFlat, pressed_box: StyleBoxFlat, focus_box: StyleBoxFlat) -> void:
+	btn.custom_minimum_size = Vector2(148, 44)
+	btn.add_theme_font_override("font", UiSkin.font())
+	btn.add_theme_font_size_override("font_size", 18)
+	btn.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98, 1.0))
+	btn.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0, 1.0))
+	btn.add_theme_color_override("font_focus_color", Color(1.0, 1.0, 1.0, 1.0))
+	btn.add_theme_color_override("font_pressed_color", Color(1.0, 1.0, 1.0, 1.0))
+	btn.add_theme_stylebox_override("normal", normal_box)
+	btn.add_theme_stylebox_override("hover", hover_box)
+	btn.add_theme_stylebox_override("pressed", pressed_box)
+	btn.add_theme_stylebox_override("focus", focus_box)
+
+
 func _build_save_confirm() -> void:
 	if _save_confirm_root != null:
 		return
@@ -732,63 +779,107 @@ func _build_save_confirm() -> void:
 
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -240.0
-	panel.offset_right = 240.0
-	panel.offset_top = -90.0
-	panel.offset_bottom = 90.0
+	panel.offset_left = -280.0
+	panel.offset_right = 280.0
+	panel.offset_top = -120.0
+	panel.offset_bottom = 120.0
+	var card_style := _make_save_confirm_style(Color(0.106, 0.114, 0.145, 0.96), Color(0.92, 0.94, 0.98, 0.90))
+	card_style.set_content_margin_all(0)
+	panel.add_theme_stylebox_override("panel", card_style)
 	_save_confirm_root.add_child(panel)
 
 	var margin := MarginContainer.new()
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 16)
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_top", 24)
+	margin.add_theme_constant_override("margin_bottom", 24)
 	panel.add_child(margin)
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 12)
+	column.add_theme_constant_override("separation", 14)
 	margin.add_child(column)
 
-	var title := Label.new()
-	title.text = "覆盖存档？"
-	title.add_theme_font_size_override("font_size", 20)
-	column.add_child(title)
+	_save_confirm_title = Label.new()
+	_save_confirm_title.text = "存档槽 1"
+	_save_confirm_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_save_confirm_title.add_theme_font_override("font", UiSkin.bold_font())
+	_save_confirm_title.add_theme_font_size_override("font_size", 26)
+	_save_confirm_title.add_theme_color_override("font_color", Color(0.96, 0.97, 0.99, 1.0))
+	column.add_child(_save_confirm_title)
 
 	_save_confirm_label = Label.new()
+	_save_confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_save_confirm_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_save_confirm_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_save_confirm_label.custom_minimum_size = Vector2(0, 48)
+	_save_confirm_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_save_confirm_label.add_theme_font_override("font", UiSkin.font())
+	_save_confirm_label.add_theme_font_size_override("font_size", 18)
+	_save_confirm_label.add_theme_color_override("font_color", Color(0.84, 0.86, 0.90, 1.0))
 	column.add_child(_save_confirm_label)
 
 	var buttons := HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 8)
-	buttons.alignment = BoxContainer.ALIGNMENT_END
+	buttons.add_theme_constant_override("separation", 18)
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	column.add_child(buttons)
+
+	var normal_box := _make_save_confirm_style(Color(0.145, 0.157, 0.200, 0.95), Color(0.45, 0.48, 0.56, 0.85))
+	var hover_box := _make_save_confirm_style(Color(0.22, 0.245, 0.31, 1.0), Color(0.96, 0.97, 1.0, 0.98))
+	var pressed_box := _make_save_confirm_style(Color(0.28, 0.31, 0.39, 1.0), Color(0.96, 0.97, 1.0, 0.98))
+	# Keep focus center transparent so Button draws only the crisp highlight frame around its label.
+	var focus_box := _make_save_confirm_style(Color(0.22, 0.245, 0.31, 0.0), Color(0.96, 0.97, 1.0, 0.98), false)
+
+	_save_confirm_save_btn = Button.new()
+	_save_confirm_save_btn.text = "保存到此槽"
+	_style_save_confirm_button(_save_confirm_save_btn, normal_box, hover_box, pressed_box, focus_box)
+	_save_confirm_save_btn.pressed.connect(confirm_save_overwrite)
+	buttons.add_child(_save_confirm_save_btn)
+
+	_save_confirm_load_btn = Button.new()
+	_save_confirm_load_btn.text = "读取此存档"
+	_style_save_confirm_button(_save_confirm_load_btn, normal_box, hover_box, pressed_box, focus_box)
+	_save_confirm_load_btn.pressed.connect(confirm_save_load)
+	buttons.add_child(_save_confirm_load_btn)
 
 	_save_confirm_cancel = Button.new()
 	_save_confirm_cancel.text = "取消"
+	_style_save_confirm_button(_save_confirm_cancel, normal_box, hover_box, pressed_box, focus_box)
 	_save_confirm_cancel.pressed.connect(cancel_save_overwrite)
 	buttons.add_child(_save_confirm_cancel)
-
-	var ok_btn := Button.new()
-	ok_btn.text = "确定覆盖"
-	ok_btn.pressed.connect(confirm_save_overwrite)
-	buttons.add_child(ok_btn)
 
 
 func save_confirm_open() -> bool:
 	return _save_confirm_open
 
 
-func open_save_confirm(slot: int, pointer_pos: Vector2 = Vector2.ZERO, is_pointer: bool = false) -> void:
+func open_save_confirm(slot: int, pointer_pos: Vector2 = Vector2.ZERO, is_pointer: bool = false, slot_exists: bool = true, is_load_mode: bool = false) -> void:
+	if is_load_mode and not slot_exists:
+		return
 	_build_save_confirm()
 	_save_confirm_slot = maxi(1, slot)
 	_save_confirm_pos = pointer_pos
 	_save_confirm_is_pointer = is_pointer
+	_save_confirm_slot_exists = slot_exists
+	_save_confirm_is_load_mode = is_load_mode
+	if _save_confirm_title != null:
+		_save_confirm_title.text = "存档槽 %d" % _save_confirm_slot
 	if _save_confirm_label != null:
-		_save_confirm_label.text = "存档槽 %02d 已有数据，确定要覆盖吗？" % _save_confirm_slot
+		_save_confirm_label.text = "该槽位已有存档。" if slot_exists else "该槽位为空。"
+	if _save_confirm_save_btn != null:
+		_save_confirm_save_btn.visible = not is_load_mode
+	if _save_confirm_load_btn != null:
+		_save_confirm_load_btn.visible = slot_exists
+	if _save_confirm_cancel != null:
+		_save_confirm_cancel.visible = true
 	if _save_confirm_root != null:
 		_save_confirm_root.visible = true
 	_save_confirm_open = true
-	if _save_confirm_cancel != null and is_inside_tree():
-		_save_confirm_cancel.grab_focus()
+	if is_inside_tree():
+		if is_load_mode and _save_confirm_load_btn != null:
+			_save_confirm_load_btn.grab_focus()
+		elif slot_exists and _save_confirm_cancel != null:
+			_save_confirm_cancel.grab_focus()
+		elif _save_confirm_save_btn != null:
+			_save_confirm_save_btn.grab_focus()
 
 
 func cancel_save_overwrite() -> void:
@@ -808,6 +899,28 @@ func confirm_save_overwrite() -> bool:
 		_save_confirm_root.visible = false
 	save_overwrite_confirmed.emit(_save_confirm_slot, _save_confirm_pos, _save_confirm_is_pointer)
 	return true
+
+
+func confirm_save_load() -> bool:
+	if not _save_confirm_open:
+		return false
+	_save_confirm_open = false
+	if _save_confirm_root != null:
+		_save_confirm_root.visible = false
+	save_load_confirmed.emit(_save_confirm_slot)
+	return true
+
+
+func save_confirm_mode_state() -> Dictionary:
+	return {
+		"open": _save_confirm_open,
+		"slot": _save_confirm_slot,
+		"title": _save_confirm_title.text if _save_confirm_title != null else "",
+		"body": _save_confirm_label.text if _save_confirm_label != null else "",
+		"can_save": _save_confirm_open and _save_confirm_save_btn != null and _save_confirm_save_btn.visible,
+		"can_load": _save_confirm_open and _save_confirm_load_btn != null and _save_confirm_load_btn.visible,
+		"can_cancel": _save_confirm_open and _save_confirm_cancel != null and _save_confirm_cancel.visible,
+	}
 
 
 func _build_quit_confirm() -> void:

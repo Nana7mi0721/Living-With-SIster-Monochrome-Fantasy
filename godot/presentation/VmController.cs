@@ -341,6 +341,13 @@ public partial class VmController : Node, IHost, IVmSession
         return -1;
     }
 
+    /// <summary>Common-event argument cself[argIndex] stored at Magic.SelfArgBase + argIndex.</summary>
+    public int GetCommonEventSelf(int eventId, int argIndex)
+    {
+        if (argIndex < 0) return -1;
+        return GetEventSelf(eventId, Magic.SelfArgBase + argIndex);
+    }
+
     /// <summary>All live instance self slots for an event (test telemetry: stage28/29 coexist).</summary>
     public int[] GetEventSelfAll(int eventId, int slot)
     {

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -538,10 +539,15 @@ public sealed class GameSession
 
     // ---- save / load ----------------------------------------------------
 
+    [MemberNotNullWhen(true, nameof(_map), nameof(_mapRuntime))]
+    private bool CanSaveMapState() =>
+        _map != null && _mapRuntime != null
+        && Phase is not ("title" or "boot" or "failed" or "newgame");
+
     /// <summary>Build the complete slot payload from the live map state.</summary>
     public SaveState? BuildSaveState()
     {
-        if (Phase != "bedroom" || _map == null || _mapRuntime == null) return null;
+        if (!CanSaveMapState()) return null;
         if (_vm.Faulted) return null;
 
         var state = new SaveState
@@ -668,10 +674,22 @@ public sealed class GameSession
 
     public bool SaveGame() => SaveGameTo(_savePath);
 
+    /// <summary>Resolve the JSON file path for a 1-based save slot.</summary>
+    public string SlotSavePath(int slot) => ResolveSaveTarget(new SaveTarget(Math.Max(1, slot)));
+
+    /// <summary>Return true when the given 1-based save slot exists on disk.</summary>
+    public bool SlotExists(int slot) => SaveCodec.Exists(SlotSavePath(slot));
+
+    /// <summary>Load a 1-based slot directly from disk.</summary>
+    public bool LoadGameFromSlot(int slot) => LoadGameFrom(SlotSavePath(slot));
+
     /// <summary>Write one full slot to an explicit file (opcode 220 with a numeric slot).</summary>
-    public bool SaveGameTo(string path)
+    public bool SaveGameTo(string path) => SaveGameTo(path, 1);
+
+    /// <summary>Write one full slot to an explicit file and report the target slot number.</summary>
+    public bool SaveGameTo(string path, int slot)
     {
-        if (Phase != "bedroom" || _map == null || _mapRuntime == null)
+        if (!CanSaveMapState())
         {
             _view.SetStatus("save: only while walking a map");
             return false;
@@ -697,9 +715,64 @@ public sealed class GameSession
             return false;
         }
 
-        _view.SetStatus($"saved slot 01 (map {state.MapId} {state.LeaderX},{state.LeaderY})");
+        _view.SetStatus($"saved slot {Math.Max(1, slot):00} (map {state.MapId} {state.LeaderX},{state.LeaderY})");
         UpdateMapHud(false);
         return true;
+    }
+
+    /// <summary>Save directly to a 1-based slot, sync System.json slot markers, and redraw CE131.</summary>
+    public bool SaveGameToSlot(int slot)
+    {
+        int clamped = Math.Max(1, slot);
+        string path = SlotSavePath(clamped);
+        if (!SaveGameTo(path, clamped)) return false;
+
+        _vm.Vm.Vars.Set(546, clamped);
+        string systemPath = ResolveSaveTarget(new SaveTarget("Save/System.sav"));
+        try
+        {
+            SaveState systemState = SaveCodec.Read(systemPath) ?? new SaveState();
+            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + 0, Value = clamped });
+            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + 626, Value = _vm.Vm.Vars.Get(531) });
+            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + 546, Value = clamped });
+            SaveCodec.Write(systemPath, systemState);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException
+                                   or ArgumentException or NotSupportedException or InvalidOperationException)
+        {
+            _view.SetStatus("system save failed: " + ex.Message);
+        }
+
+        RefreshSaveUiForSlot(clamped);
+        return true;
+    }
+
+    /// <summary>Sync live CE131 selection args and invoke CE94 to repaint the save slot list.</summary>
+    public void RefreshSaveUiForSlot(int slot)
+    {
+        int clamped = Math.Max(1, slot);
+        Instance? ce131 = null;
+        foreach (Instance inst in _vm.Vm.Instances)
+        {
+            if (inst.EventId == 131)
+            {
+                ce131 = inst;
+                break;
+            }
+        }
+        if (ce131 == null) return;
+
+        int perPage = ce131.Self.Get(Magic.SelfArgBase + 27);
+        if (perPage <= 0) perPage = 4;
+        int row = (clamped - 1) % perPage;
+        int page = (clamped - 1) / perPage;
+
+        ce131.Self.Set(Magic.SelfArgBase + 10, row);
+        ce131.Self.Set(Magic.SelfArgBase + 11, page);
+        ce131.Self.Set(Magic.SelfArgBase + 12, clamped);
+
+        int mode = ce131.Self.Get(Magic.SelfArgBase + 0) != 0 ? 1 : 0;
+        _vm.Vm.StartEventWithArgs(94, new[] { mode, row, page }, Array.Empty<string>(), parallel: true);
     }
 
     /// <summary>
@@ -730,7 +803,7 @@ public sealed class GameSession
             return false;
         }
 
-        SaveState? rollback = Phase == "bedroom" && !_vm.Faulted ? BuildSaveState() : null;
+        SaveState? rollback = CanSaveMapState() && !_vm.Faulted ? BuildSaveState() : null;
         if (!ApplyLoadedState(state))
         {
             if (rollback != null && RestoreAfterFailedLoad(rollback))
@@ -837,7 +910,10 @@ public sealed class GameSession
                 }
                 else
                 {
-                    SaveGameTo(path);
+                    int slot = Math.Max(1, op.File.Slot);
+                    bool ok = SaveGameTo(path, slot);
+                    if (op.Owner == 435)
+                        _view.SetStatus($"[AutoSave] slot={slot} {(ok ? "ok" : "fail")}");
                 }
                 return null;
             case 221:

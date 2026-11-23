@@ -106,6 +106,7 @@ static func _find_retail_font_path() -> String:
 	var pkg_root := _AppPaths.package_root()
 	var res_root := _AppPaths.resource_root()
 	var exe_dir := OS.get_executable_path().get_base_dir()
+	var user_root := ProjectSettings.globalize_path("user://")
 	var data_root := pkg_root.path_join("work/all").simplify_path()
 	var dirs := [
 		data_root,
@@ -116,6 +117,11 @@ static func _find_retail_font_path() -> String:
 		exe_dir.path_join("Data"),
 		exe_dir.path_join("work/all"),
 		pkg_root.path_join("work/out/retail_pairing/game").simplify_path(),
+		exe_dir,
+		res_root,
+		res_root.path_join("work/all"),
+		user_root,
+		user_root.path_join("Data"),
 	]
 	for d in dirs:
 		for name in ["Lolita.ttf", "LOLITA.TTF", "lolita.ttf"]:
@@ -146,12 +152,15 @@ static func _find_retail_font_bytes_in_pak() -> Dictionary:
 	if not env_pak.is_empty():
 		pak_candidates.append(env_pak)
 	var pkg_root := _AppPaths.package_root()
+	var res_root := _AppPaths.resource_root()
 	var exe_dir := OS.get_executable_path().get_base_dir()
 	pak_candidates.append_array([
 		pkg_root.path_join("work/all/media.pak").simplify_path(),
 		pkg_root.path_join("media.pak").simplify_path(),
 		exe_dir.path_join("media.pak"),
 		exe_dir.path_join("work/all/media.pak"),
+		res_root.path_join("work/all/media.pak").simplify_path(),
+		exe_dir.path_join("Data/media.pak"),
 	])
 	if OS.has_feature("android"):
 		pak_candidates.append("res://mobile_data/work/all/media.pak.blob.cfb")
@@ -185,8 +194,11 @@ static func _find_system_bold_face() -> Font:
 		var ff := FontFile.new()
 		if ff.load_dynamic_font(path) != OK:
 			continue
+		ff.oversampling = 0.0
+		ff.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
 		ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
-		ff.hinting = TextServer.HINTING_LIGHT
+		ff.hinting = TextServer.HINTING_NORMAL
+		ff.generate_mipmaps = false
 		ff.allow_system_fallback = true
 		return ff
 	return null
@@ -202,8 +214,9 @@ static func _make_system_font(bold: bool) -> Font:
 	if bold:
 		sys.font_weight = 700
 	sys.allow_system_fallback = true
+	sys.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
 	sys.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
-	sys.hinting = TextServer.HINTING_LIGHT
+	sys.hinting = TextServer.HINTING_NORMAL
 	if bold:
 		var fv := FontVariation.new()
 		fv.base_font = sys
@@ -213,8 +226,12 @@ static func _make_system_font(bold: bool) -> Font:
 
 
 static func _configure_font_file(ff: FontFile, bold: bool, strict: bool) -> Font:
+	ff.oversampling = 0.0
+	ff.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
 	ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
-	ff.hinting = TextServer.HINTING_LIGHT
+	ff.hinting = TextServer.HINTING_NORMAL
+	ff.generate_mipmaps = false
+	ff.multichannel_signed_distance_field = false
 	ff.allow_system_fallback = not strict
 	ff.fallbacks = [] if strict else [_make_system_font(bold)]
 	if bold:

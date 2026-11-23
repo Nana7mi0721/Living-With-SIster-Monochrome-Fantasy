@@ -34,9 +34,12 @@ public partial class GameSessionController : Node
     public int Facing => _session?.Facing ?? 2;
     public int MapId => _session?.MapData?.Id ?? -1;
     public int GetEventSelf(int eventId, int slot) => _vm?.GetEventSelf(eventId, slot) ?? -1;
+    public int GetCommonEventSelf(int eventId, int argIndex) => _vm?.GetCommonEventSelf(eventId, argIndex) ?? -1;
     public int[] GetEventSelfAll(int eventId, int slot) => _vm?.GetEventSelfAll(eventId, slot) ?? Array.Empty<int>();
-    public int GetSaveSlotMode() => GetEventSelf(131, 0);
+    public int GetSaveSlotMode() => GetCommonEventSelf(131, 0);
     public string SavePath => _session?.SavePath ?? "";
+    public string SlotSavePath(int slot) => _session?.SlotSavePath(slot) ?? "";
+    public bool SlotExists(int slot) => _session?.SlotExists(slot) ?? false;
     public string SaveDirectory => Path.GetDirectoryName(_session?.SavePath ?? "") ?? "";
     public bool MessageOpen => _session?.MessageOpen ?? false;
     public bool HasChoices => _session?.HasChoices ?? false;
@@ -130,7 +133,11 @@ public partial class GameSessionController : Node
         }
     }
     public bool SaveGame() => _session?.SaveGame() ?? false;
+    public bool SaveGameToSlot(int slot) => _session?.SaveGameToSlot(slot) ?? false;
+    public void RefreshSaveUiForSlot(int slot) => _session?.RefreshSaveUiForSlot(slot);
     public bool LoadGame() => _session?.LoadGame() ?? false;
+    public bool LoadGameFrom(string path) => _session?.LoadGameFrom(path) ?? false;
+    public bool LoadGameFromSlot(int slot) => _session?.LoadGameFromSlot(slot) ?? false;
     public bool SaveQuick() => _session?.SaveGameTo(QuickSavePath()) ?? false;
     public bool LoadQuick() => _session?.LoadGameFrom(QuickSavePath()) ?? false;
     /// <summary>Same load entry point, kept distinct for callers that want the status line.</summary>

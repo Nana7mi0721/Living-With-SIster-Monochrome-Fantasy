@@ -26,6 +26,7 @@ window/size/window_height_override=1152
 window/stretch/mode="canvas_items"
 window/stretch/aspect="keep"
 window/handheld/orientation=4
+window/dpi/allow_hidpi=true
 
 [dotnet]
 

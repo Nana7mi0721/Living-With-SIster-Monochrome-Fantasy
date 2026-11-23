@@ -716,6 +716,62 @@ public partial class SaveLoadTest : Node
         Check(SaveCodec.FromBytes(new byte[] { 0xFF, 0xFE }) == null, "FromBytes must reject invalid UTF-8");
         Check(SaveCodec.FromBytes(Array.Empty<byte>()) == null, "FromBytes must reject empty byte arrays");
 
+        // Slot save + System.json sync + CE131 cself helper checks.
+        vars.Set(531, 42);
+        string slot6Path = Path.Combine(saveDir, "save_06.json");
+        string systemJsonPath = Path.Combine(saveDir, "System.json");
+        if (File.Exists(slot6Path)) File.Delete(slot6Path);
+        if (File.Exists(systemJsonPath)) File.Delete(systemJsonPath);
+        Check(session.SlotSavePath(6) == slot6Path, "SlotSavePath(6) must resolve to save_06.json");
+        Check(!session.SlotExists(6) && !session.SlotExists(7), "slots 6 and 7 must start empty");
+        Check(session.SaveGameToSlot(6), "SaveGameToSlot(6) must succeed on the map");
+        Check(File.Exists(slot6Path) && session.SlotExists(6) && !session.SlotExists(7),
+            "SaveGameToSlot(6) must create save_06.json without touching slot 7");
+        SaveState? syncedSystem = SaveCodec.Read(systemJsonPath);
+        Check(syncedSystem != null && syncedSystem.Vars.Count > 626
+              && syncedSystem.Vars[0] == 6 && syncedSystem.Vars[546] == 6 && syncedSystem.Vars[626] == 42,
+            "SaveGameToSlot(6) must sync System.json vars 0, 546 and 626");
+
+        Instance? ce131 = vm2.Vm.CreateInstance(131);
+        Check(ce131 != null, "CE131 must exist in programs.json");
+        if (ce131 != null)
+        {
+            ce131.Self.Set(Magic.SelfArgBase + 0, 1);
+            ce131.Self.Set(Magic.SelfArgBase + 27, 4);
+            Check(vm2.GetCommonEventSelf(131, 0) == 1 && vm2.GetCommonEventSelf(131, -1) == -1,
+                "GetCommonEventSelf must read cself[argIndex] and return -1 for negative indices");
+            session2.RefreshSaveUiForSlot(6);
+            Check(vm2.GetCommonEventSelf(131, 10) == 1 && vm2.GetCommonEventSelf(131, 11) == 1
+                  && vm2.GetCommonEventSelf(131, 12) == 6,
+                "RefreshSaveUiForSlot(6) must sync CE131 row/page/slot cself args");
+            Check(vm2.Vm.Instances.Any(i => i.EventId == 94),
+                "RefreshSaveUiForSlot must start CE94 to repaint the save UI");
+            foreach (Instance ce94 in vm2.Vm.Instances.Where(i => i.EventId == 94).ToList())
+                vm2.Vm.StopInstance(ce94.Id);
+            vm2.Vm.StopInstance(ce131.Id);
+        }
+
+        // Opcode 220 autosave (CE435, slot 1) succeeds on map and reports [AutoSave] status,
+        // while refusing during "title" and "failed" phases.
+        if (File.Exists(savePath)) File.Delete(savePath);
+        session.HandleSaveLoad(new SaveOp { Opcode = 220, Mode = 0, File = new SaveTarget(1), Owner = 435 });
+        Check(File.Exists(savePath) && session.SlotExists(1),
+            "opcode 220 autosave (Owner=435) must write slot 1 on the map");
+        Check(view.Status == "[AutoSave] slot=1 ok",
+            $"opcode 220 autosave must report '[AutoSave] slot=1 ok' (got '{view.Status}')");
+
+        string titleSaveDir = Path.Combine(saveDir, "title_autosave");
+        Directory.CreateDirectory(titleSaveDir);
+        string titleSavePath = Path.Combine(titleSaveDir, "save_01.json");
+        SessionHarness harnessTitle = new(this, dataPath, titleSavePath);
+        harnessTitle.Session.HandleSaveLoad(new SaveOp { Opcode = 220, Mode = 0, File = new SaveTarget(1), Owner = 435 });
+        Check(!File.Exists(titleSavePath) && harnessTitle.View.Status == "[AutoSave] slot=1 fail",
+            $"opcode 220 autosave must refuse during title phase (got '{harnessTitle.View.Status}')");
+        harnessTitle.Session.Fail("autosave-guard-probe");
+        harnessTitle.Session.HandleSaveLoad(new SaveOp { Opcode = 220, Mode = 0, File = new SaveTarget(1), Owner = 435 });
+        Check(!File.Exists(titleSavePath) && harnessTitle.View.Status == "[AutoSave] slot=1 fail",
+            $"opcode 220 autosave must refuse during failed phase (got '{harnessTitle.View.Status}')");
+
         try { Directory.Delete(saveDir, true); }
         catch (IOException) { }
 

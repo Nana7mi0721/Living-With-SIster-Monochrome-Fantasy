@@ -342,6 +342,34 @@ func _ready() -> void:
 				failures.append("rewriting a clean main slot after the backup test should succeed")
 			root.session.SetScriptedInput(false)
 
+			# Save/load confirm modal executes deterministic SlotSave / SlotLoad without click injection.
+			var slot3_path: String = root.session.SlotSavePath(3)
+			var thumb3_path: String = root.session.SaveDirectory.path_join("save3.jpg")
+			DirAccess.remove_absolute(slot3_path)
+			DirAccess.remove_absolute(slot3_path + ".bak")
+			DirAccess.remove_absolute(thumb3_path)
+			root._modal_release_guard = false
+			root.overlays.open_save_confirm(3, Vector2(200, 200), true, false, false)
+			if not root.overlays.confirm_save_overwrite():
+				failures.append("confirm_save_overwrite must emit and close modal")
+			if not root.session.SlotExists(3) or not FileAccess.file_exists(slot3_path):
+				failures.append("confirm_save_overwrite must write slot 3 directly to %s" % slot3_path)
+			var slot3_frames: int = root.frames
+			root._modal_release_guard = false
+			root.advance_frame()
+			root.advance_frame()
+			if root.frames <= slot3_frames:
+				failures.append("clock must advance after confirm_save_overwrite")
+			root.overlays.open_save_confirm(3, Vector2(200, 200), true, true, true)
+			if not root.overlays.confirm_save_load():
+				failures.append("confirm_save_load must emit and close modal")
+			if root.frames != slot3_frames or root.phase != "bedroom" or root.session.MapId != 1005:
+				failures.append("confirm_save_load must restore slot 3 state (frames=%d want=%d phase=%s)" % [root.frames, slot3_frames, root.phase])
+			root._modal_release_guard = false
+			DirAccess.remove_absolute(slot3_path)
+			DirAccess.remove_absolute(slot3_path + ".bak")
+			DirAccess.remove_absolute(thumb3_path)
+
 		# D-13: a core fault must latch the modal, stop the clock and lock save slots.
 		var before_frames: int = root.frames
 		var generation_before: int = root.session.Generation
@@ -495,6 +523,11 @@ func _ready() -> void:
 		root.router._right_click_latch = true
 		if (root.router.held_mask(not root._modal_release_guard) & (InputRouter.MASK_OK | InputRouter.MASK_CANCEL)) != 0:
 			failures.append("_key_state mask must suppress mouse OK/Cancel while modal_release_guard is active")
+		var prev_scripted_mask: int = root.router.scripted_key_mask
+		root.router.scripted_key_mask = InputRouter.MASK_OK | InputRouter.MASK_CANCEL
+		if (root.router.held_mask(not root._modal_release_guard) & (InputRouter.MASK_OK | InputRouter.MASK_CANCEL)) != 0:
+			failures.append("held_mask(false) must strip keyboard MASK_OK and MASK_CANCEL while modal_release_guard is active")
+		root.router.scripted_key_mask = prev_scripted_mask
 		var lx_guard: int = root.session.LeaderX
 		var ly_guard: int = root.session.LeaderY
 		root._on_map_cell_clicked(Vector2i(lx_guard + 1, ly_guard))
@@ -689,6 +722,14 @@ func _ready() -> void:
 			title_root._process(title_root.STEP)
 		if title_root.choice.is_open:
 			failures.append("title choice window must stay closed inside CE131 Save/Load screen")
+		var ce131_mode: int = title_root.session.GetCommonEventSelf(131, 0)
+		var ce131_slot_mode: int = title_root.session.GetSaveSlotMode()
+		var ce131_row: int = title_root.session.GetCommonEventSelf(131, 10)
+		var ce131_page: int = title_root.session.GetCommonEventSelf(131, 11)
+		if ce131_mode != 1 or ce131_slot_mode != 1:
+			failures.append("CE131 load screen must expose cself[0]=1 via GetCommonEventSelf/GetSaveSlotMode (got %d/%d)" % [ce131_mode, ce131_slot_mode])
+		if ce131_row < 0 or ce131_page < 0:
+			failures.append("CE131 cursor/page cself[10/11] must be non-negative (got row=%d page=%d)" % [ce131_row, ce131_page])
 		var before_f3 := str(title_root.stage._cmds.get(3, {}).get("file", ""))
 		var w_down := InputEventMouseButton.new()
 		w_down.button_index = MOUSE_BUTTON_WHEEL_DOWN
@@ -907,10 +948,42 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	if root.modal_release_guard():
 		failures.append("APPLICATION_PAUSED must clear held latches cleanly")
 
-	# 5. Save overwrite confirm modal + _modal_release_guard on cancel.
-	root.overlays.open_save_confirm(2, Vector2(120, 200), true)
-	if not root.overlays.save_confirm_open():
-		failures.append("open_save_confirm must open save overwrite confirm modal")
+	# 5. Save/load confirm modal 4-quadrant matrix + RMB/Esc _input close + _modal_release_guard.
+	root.overlays.open_save_confirm(5, Vector2(120, 200), true, false, true)
+	var st_empty_load: Dictionary = root.overlays.save_confirm_mode_state()
+	if bool(st_empty_load.get("open", true)):
+		failures.append("load mode on empty slot must not open modal")
+	root.overlays.open_save_confirm(5, Vector2(120, 200), true, true, true)
+	var st_data_load: Dictionary = root.overlays.save_confirm_mode_state()
+	if not bool(st_data_load.get("open", false)) or bool(st_data_load.get("can_save", true)) or not bool(st_data_load.get("can_load", false)) or not bool(st_data_load.get("can_cancel", false)):
+		failures.append("load mode on existing slot must show Load + Cancel only: %s" % str(st_data_load))
+	var rmb_modal := InputEventMouseButton.new()
+	rmb_modal.button_index = MOUSE_BUTTON_RIGHT
+	rmb_modal.pressed = true
+	root.overlays._input(rmb_modal)
+	if root.overlays.save_confirm_open() or not root.modal_release_guard():
+		failures.append("RMB in PlayOverlays._input must close topmost modal and arm _modal_release_guard")
+	root._modal_release_guard = false
+
+	root.overlays.open_save_confirm(6, Vector2(120, 200), true, false, false)
+	var st_empty_save: Dictionary = root.overlays.save_confirm_mode_state()
+	if not bool(st_empty_save.get("open", false)) or not bool(st_empty_save.get("can_save", false)) or bool(st_empty_save.get("can_load", true)) or not bool(st_empty_save.get("can_cancel", false)):
+		failures.append("save mode on empty slot must show Save + Cancel only: %s" % str(st_empty_save))
+	var esc_modal := InputEventKey.new()
+	esc_modal.keycode = KEY_ESCAPE
+	esc_modal.pressed = true
+	esc_modal.echo = false
+	root.overlays._input(esc_modal)
+	if root.overlays.save_confirm_open() or not root.modal_release_guard():
+		failures.append("Esc in PlayOverlays._input must close topmost modal and arm _modal_release_guard")
+	root._modal_release_guard = false
+
+	root.overlays.open_save_confirm(6, Vector2(120, 200), true, true, false)
+	var st_data_save: Dictionary = root.overlays.save_confirm_mode_state()
+	if not bool(st_data_save.get("open", false)) or not bool(st_data_save.get("can_save", false)) or not bool(st_data_save.get("can_load", false)) or not bool(st_data_save.get("can_cancel", false)):
+		failures.append("save mode on existing slot must show Save + Load + Cancel: %s" % str(st_data_save))
+	if str(st_data_save.get("title", "")) != "存档槽 6" or str(st_data_save.get("body", "")) != "该槽位已有存档。":
+		failures.append("save confirm modal title/body mismatch: %s" % str(st_data_save))
 	root.overlays.cancel_save_overwrite()
 	if root.overlays.save_confirm_open() or not root.modal_release_guard():
 		failures.append("cancelling save overwrite must arm _modal_release_guard")

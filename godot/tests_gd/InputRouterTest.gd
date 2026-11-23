@@ -403,6 +403,17 @@ func _ready() -> void:
 		failures.append("expanded arrow hitboxes must register hits in picture_state(..., 8, pointer)")
 	stage.queue_free()
 
+	# 25. held_mask(false) strips keyboard MASK_OK and MASK_CANCEL while keeping directional bits.
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+	_router.scripted_key_mask = InputRouter.MASK_OK | InputRouter.MASK_CANCEL | InputRouter.MASK_UP
+	if (_router.held_mask(true) & (InputRouter.MASK_OK | InputRouter.MASK_CANCEL)) != (InputRouter.MASK_OK | InputRouter.MASK_CANCEL):
+		failures.append("held_mask(true) must preserve scripted MASK_OK | MASK_CANCEL")
+	var masked_off := _router.held_mask(false)
+	if (masked_off & (InputRouter.MASK_OK | InputRouter.MASK_CANCEL)) != 0 or (masked_off & InputRouter.MASK_UP) == 0:
+		failures.append("held_mask(false) must strip MASK_OK and MASK_CANCEL while preserving MASK_UP (got %d)" % masked_off)
+	_router.scripted_key_mask = -1
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

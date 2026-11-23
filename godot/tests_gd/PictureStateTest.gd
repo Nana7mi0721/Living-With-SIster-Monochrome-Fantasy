@@ -421,6 +421,16 @@ func _ready() -> void:
 	check(neg_breath_rect.size.x >= 0.0 and neg_breath_rect.size.y >= 0.0,
 		"negative Breath amplitude must clamp Rect2 dimensions >= 0")
 
+	# Gauge glyphs (square/diamond/circle pairs) must measure identical per-cell widths.
+	var gauge_filled: Dictionary = stage._measure_text("\\f[20]■■■■■")
+	var gauge_empty: Dictionary = stage._measure_text("\\f[20]□□□□□")
+	check(is_equal_approx((gauge_filled["size"] as Vector2).x, (gauge_empty["size"] as Vector2).x),
+		"filled and empty square gauge runs must measure equal width")
+	var circle_filled: Dictionary = stage._measure_text("\\f[20]●●●")
+	var circle_empty: Dictionary = stage._measure_text("\\f[20]○○○")
+	check(is_equal_approx((circle_filled["size"] as Vector2).x, (circle_empty["size"] as Vector2).x),
+		"filled and empty circle gauge runs must measure equal width")
+
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await _check_multiply_alpha_fade()

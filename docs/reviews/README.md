@@ -8,6 +8,8 @@
 
 | 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
 | :--- | :---: | :--- | :--- |
+| [save_ui_font_and_gauge_remediation_2026_11_23.md](save_ui_font_and_gauge_remediation_2026_11_23.md) | 2026-11-23 | **存档界面 `CSelf600`、弹窗重构、自动存档、字体与进度条对齐修复报告** | 闭环修复 S-01..S-08 全部 8 项问题，新增 C#/GDScript 回归单测并通过双模式门禁（见 `D-84`） |
+| [save_ui_font_and_gauge_diagnosis_2026_11_23.md](save_ui_font_and_gauge_diagnosis_2026_11_23.md) | 2026-11-23 | **Commit `78c4e49a` 存档界面异常、自动存档、字体清晰度与格子进度条错位根因报告** | 定位 `CSelf600` 偏移、1 帧脉冲打空、`Esc` 穿透、`Phase` 守卫、HiDPI 字体与 `■`/`□` 左漂 8 项根因 |
 | [acceptance_audit_89fc8f5_remediation_2026_11_23.md](acceptance_audit_89fc8f5_remediation_2026_11_23.md) | 2026-11-23 | **`89fc8f5` 验收审查问题收口与回归验证报告** | 完成 6 项新增 P1、14 项 P2、12 项 P3 与残余项修复，记录 P1-6/P2-11 保留原设计依据，双模式门禁与 Python/Rust 单测全绿 |
 | [acceptance_audit_89fc8f5_2026_11_23.md](acceptance_audit_89fc8f5_2026_11_23.md) | 2026-11-23 | **Commit `89fc8f5` 整改验收与增量回归审查报告** | 复核 67 项基线（59 全通过 / 7 部分 / 1 未通过）并提出 32 项增量改进清单 |
 | [sister_ux_multiplatform_adaptation_2026_11_22.md](sister_ux_multiplatform_adaptation_2026_11_22.md) | 2026-11-22 | **姊妹作交互优化与多平台适配落地报告** | 落地移动端零拷贝与分级缓存、iOS 路径/退出合规、触控手势与 7 级返回、存单确认/跨端 `.zip`/`.sav` 互导与 PE 中文本地化，双模式门禁全绿（见 `D-83`） |

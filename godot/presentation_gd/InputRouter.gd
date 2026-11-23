@@ -334,6 +334,8 @@ func held_mask(allow_mouse: bool = true) -> int:
 			mask |= MASK_OK
 		if right_pressed or _right_click_latch:
 			mask |= MASK_CANCEL
+	else:
+		mask &= ~(MASK_OK | MASK_CANCEL)
 	if _action_entry_suppressed:
 		mask &= ~MASK_OK
 	return mask

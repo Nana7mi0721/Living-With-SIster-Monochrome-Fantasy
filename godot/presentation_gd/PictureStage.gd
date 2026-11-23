@@ -44,11 +44,59 @@ const BAND_ORDER: Array[int] = [
 const SCREEN_SIZE := Vector2(1024, 576)
 const UNCHANGED := -1000000
 const FADE_MAX := 600
+const GAUGE_GLYPHS := "■□◆◇●○"
 
 var assets: AssetDB
 ## z_index -> band Control, in BAND_ORDER order.
 var layers: Dictionary = {}
 var _screen_tint_overlay: ColorRect
+
+
+static func _contains_gauge_glyph(text: String) -> bool:
+	for g in ["■", "□", "◆", "◇", "●", "○"]:
+		if text.contains(g):
+			return true
+	return false
+
+
+# Pair filled/empty geometric gauge glyphs onto an identical cell advance so stacked
+# background/foreground bars align with zero cumulative horizontal drift.
+static func _gauge_cell_step(draw_font: Font, glyph: String, px: int) -> float:
+	var pair_a := glyph
+	var pair_b := glyph
+	match glyph:
+		"■", "□":
+			pair_a = "■"
+			pair_b = "□"
+		"◆", "◇":
+			pair_a = "◆"
+			pair_b = "◇"
+		"●", "○":
+			pair_a = "●"
+			pair_b = "○"
+	var w_a := draw_font.get_string_size(pair_a, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+	var w_b := draw_font.get_string_size(pair_b, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+	return maxf(w_a, w_b)
+
+
+static func _measure_run_width(draw_font: Font, text: String, px: int) -> float:
+	if text.is_empty():
+		return 0.0
+	if not _contains_gauge_glyph(text):
+		return draw_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+	var total := 0.0
+	var span_start := 0
+	var n := text.length()
+	for i in n:
+		var ch := text.substr(i, 1)
+		if GAUGE_GLYPHS.contains(ch):
+			if i > span_start:
+				total += draw_font.get_string_size(text.substr(span_start, i - span_start), HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+			total += _gauge_cell_step(draw_font, ch, px)
+			span_start = i + 1
+	if span_start < n:
+		total += draw_font.get_string_size(text.substr(span_start, n - span_start), HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+	return total
 
 
 ## Multi-run text renderer used for WOLF opcode-150 kind-2/4 text pictures.
@@ -57,6 +105,11 @@ var _screen_tint_overlay: ColorRect
 class PictureTextLabel extends Label:
 	var runs: Array = []  # Array of {text, pos, size, color, has_color, outline}
 	var line_pitch_ratio := 1.3
+
+	func _paint_span(draw_font: Font, pos: Vector2, text: String, px: int, col: Color, has_outline: bool, outline_color: Color) -> void:
+		if has_outline:
+			draw_string_outline(draw_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, 2, outline_color)
+		draw_string(draw_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, col)
 
 	func _draw() -> void:
 		if runs.is_empty():
@@ -73,9 +126,29 @@ class PictureTextLabel extends Label:
 			var col := Color(1, 1, 1, 1)
 			if bool(r.get("has_color", false)):
 				col = r.get("color", Color.WHITE)
-			if bool(r.get("outline", false)):
-				draw_string_outline(draw_font, pos, r_text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, 2, outline_color)
-			draw_string(draw_font, pos, r_text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, col)
+			var has_outline := bool(r.get("outline", false))
+			if not PictureStage._contains_gauge_glyph(r_text):
+				_paint_span(draw_font, pos, r_text, px, col, has_outline, outline_color)
+				continue
+			var x_cursor := pos.x
+			var span_start := 0
+			var n := r_text.length()
+			for i in n:
+				var ch := r_text.substr(i, 1)
+				if PictureStage.GAUGE_GLYPHS.contains(ch):
+					if i > span_start:
+						var span := r_text.substr(span_start, i - span_start)
+						_paint_span(draw_font, Vector2(x_cursor, pos.y), span, px, col, has_outline, outline_color)
+						x_cursor += draw_font.get_string_size(span, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+					var step := PictureStage._gauge_cell_step(draw_font, ch, px)
+					var glyph_w := draw_font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+					var glyph_x := x_cursor + maxf(0.0, (step - glyph_w) * 0.5)
+					_paint_span(draw_font, Vector2(glyph_x, pos.y), ch, px, col, has_outline, outline_color)
+					x_cursor += step
+					span_start = i + 1
+			if span_start < n:
+				var tail := r_text.substr(span_start, n - span_start)
+				_paint_span(draw_font, Vector2(x_cursor, pos.y), tail, px, col, has_outline, outline_color)
 
 
 var _pictures: Dictionary = {}     # number -> Control
@@ -460,9 +533,9 @@ func _measure_text(source: String) -> Dictionary:
 		var chunks: Array = line["chunks"]
 		for c in chunks:
 			var px := int(c["size"])
-			var sz := draw_font.get_string_size(str(c["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, px)
-			c["width"] = sz.x
-			lw += sz.x
+			var run_w := _measure_run_width(draw_font, str(c["text"]), px)
+			c["width"] = run_w
+			lw += run_w
 			max_px = maxi(max_px, px)
 		if max_px <= 0:
 			max_px = font_px

@@ -64,7 +64,6 @@ var _show_title_fps := false
 var _title_fps_timer := 0.0
 var _hotkeys: Dictionary = DEFAULT_HOTKEYS.duplicate()
 var _ios_override: int = -1
-var _pending_save_overwrite_confirmed := false
 var _last_restart_ok := false
 
 # Row CE43 last painted; Sys20 mirrors it so a cursor move repaints the title menu.
@@ -219,7 +218,8 @@ func _build_overlays() -> void:
 	overlays.drawer_closed.connect(func() -> void: _arm_modal_release_guard())
 	overlays.title_cancelled.connect(func() -> void: _arm_modal_release_guard())
 	overlays.title_confirmed.connect(_on_title_confirmed)
-	overlays.save_overwrite_confirmed.connect(_on_save_overwrite_confirmed)
+	overlays.save_overwrite_confirmed.connect(_on_save_slot_save_requested)
+	overlays.save_load_confirmed.connect(_on_save_slot_load_requested)
 	overlays.save_overwrite_cancelled.connect(func() -> void: _arm_modal_release_guard())
 	overlays.quit_confirmed.connect(_on_quit_confirmed)
 	overlays.quit_cancelled.connect(func() -> void: _arm_modal_release_guard())
@@ -408,7 +408,6 @@ func advance_frame() -> void:
 		return
 	router.clear_frame_latches()
 	_action_input_pending = false
-	_pending_save_overwrite_confirmed = false
 
 
 ## Opcode 123 polls through this bound method so the Callable stays alive across the session.
@@ -1448,10 +1447,14 @@ func _release_modal_guard_if_free() -> void:
 		return
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
 		return
-	if router.pointer_pressed or router.right_pressed or router.middle_pressed:
+	if router != null and (router.pointer_pressed or router.right_pressed or router.middle_pressed):
 		return
+	for key in [KEY_ESCAPE, KEY_X, KEY_BACKSPACE, KEY_Z, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:
+		if Input.is_key_pressed(key):
+			return
 	_modal_release_guard = false
-	router.clear_frame_latches()
+	if router != null:
+		router.clear_frame_latches()
 
 
 func status(line: String, quiet: bool = false) -> void:
@@ -1851,6 +1854,7 @@ func _trigger_quick_save() -> void:
 func _trigger_quick_load() -> void:
 	var loaded := session.LoadQuick()
 	frames = session.Frames
+	phase = session.Phase
 	if vm.Faulted:
 		status("load faulted")
 		_show_toast("读档失败")
@@ -1897,7 +1901,7 @@ func _save_load_hit_interactive(pointer: Vector2) -> bool:
 
 
 func _maybe_handle_save_ui_action(is_pointer: bool) -> bool:
-	if not _save_load_ui_active() or _pending_save_overwrite_confirmed:
+	if not _save_load_ui_active():
 		return false
 	if is_pointer:
 		if overlays != null and overlays.save_page_bar_rect().has_point(router.hover_position):
@@ -1905,32 +1909,53 @@ func _maybe_handle_save_ui_action(is_pointer: bool) -> bool:
 		if not _save_load_hit_interactive(router.hover_position):
 			router.trigger_cancel_pulse(router.last_input_source)
 			return true
-	if session.GetSaveSlotMode() != 0:
+	var is_load_mode: bool = (phase == "title") or (int(session.GetSaveSlotMode()) != 0)
+	var per_page: int = int(session.GetCommonEventSelf(131, 27))
+	if per_page <= 0:
+		per_page = 4
+	var row: int = _save_load_hit_slot(router.hover_position) if is_pointer else int(session.GetCommonEventSelf(131, 10))
+	if row < 0 or row >= per_page:
 		return false
-	var row := _save_load_hit_slot(router.hover_position) if is_pointer else session.GetEventSelf(131, 10)
-	if row < 0 or row > 3:
-		return false
-	var page := maxi(0, session.GetEventSelf(131, 11))
-	var slot := page * 4 + row + 1
-	var slot_path: String = session.SaveDirectory.path_join("save_%02d.json" % slot)
-	if not FileAccess.file_exists(slot_path):
-		return false
+	var page: int = maxi(0, int(session.GetCommonEventSelf(131, 11)))
+	var slot: int = page * per_page + row + 1
+	var slot_exists: bool = bool(session.SlotExists(slot))
 	if router != null:
 		router.clear_pointer_latches()
 		router.clear_click_latch()
+		router.suppress_action_until_release()
+	if vm != null:
+		vm.SetPointerHeld(false)
+	if is_load_mode and not slot_exists:
+		return true
 	if overlays != null:
-		overlays.open_save_confirm(slot, router.hover_position, is_pointer)
+		overlays.open_save_confirm(slot, router.hover_position, is_pointer, slot_exists, is_load_mode)
 	return true
 
 
-func _on_save_overwrite_confirmed(_slot: int, pointer_pos: Vector2, is_pointer: bool) -> void:
-	_pending_save_overwrite_confirmed = true
-	_modal_release_guard = false
-	if router != null:
-		if is_pointer:
-			router.hover_position = pointer_pos
-			router.mouse_seen = true
-		router.trigger_action_pulse("mouse" if is_pointer else "keyboard")
+func _on_save_slot_save_requested(slot: int, _pointer_pos: Vector2, _is_pointer: bool) -> void:
+	_on_pro_feature(0, 0, "Save/save%d.jpg" % slot)
+	var ok: bool = bool(session.SaveGameToSlot(slot))
+	frames = session.Frames
+	phase = session.Phase
+	_arm_modal_release_guard()
+	if ok:
+		_show_toast("已保存至存档槽 %02d" % slot)
+	else:
+		_show_toast("保存失败")
+
+
+func _on_save_slot_load_requested(slot: int) -> void:
+	_arm_modal_release_guard()
+	var loaded: bool = bool(session.LoadGameFrom(session.SlotSavePath(slot)))
+	frames = session.Frames
+	phase = session.Phase
+	if vm.Faulted:
+		_show_toast("读档失败")
+		report_fault(vm.FaultReason)
+	elif loaded:
+		_show_toast("已读取存档槽 %02d" % slot)
+	else:
+		_show_toast("读档失败")
 
 
 func _on_quit_confirmed() -> void:
