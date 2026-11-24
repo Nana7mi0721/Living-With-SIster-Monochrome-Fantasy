@@ -27,6 +27,10 @@ var _fade_end_msec: Array[int] = [0, 0]
 var _active_se_voice := 0
 var _next_se_voice := 0
 var _master_volumes: Array[int] = [100, 100, 100]
+var _app_paused := false
+var _prev_master_muted := false
+var _paused_positions: Array[float] = [0.0, 0.0]
+var _paused_playing: Array[bool] = [false, false]
 
 
 func _init(assets: AssetDB) -> void:
@@ -128,12 +132,15 @@ func _play_se(file: String, volume: int, tempo: int, frames: int) -> bool:
 	if cached == null:
 		push_warning("AudioManager: missing audio %s" % file)
 		return false
-	# Duplicate cached resource and force non-looping so embedded loop markers or shared
-	# BGM/BGS cache entries never cause a one-shot sound effect to repeat indefinitely.
-	var stream := cached.duplicate() as AudioStream
-	if stream == null:
-		stream = cached
-	_apply_loop(stream, false, 0)
+	# AssetDB initializes cached streams with loop=false; reuse shared read-only stream zero-copy
+	# unless the cached resource somehow carries looping metadata.
+	var stream := cached
+	var needs_unloop := ("loop" in cached and bool(cached.get("loop"))) \
+		or (cached is AudioStreamWAV and (cached as AudioStreamWAV).loop_mode != AudioStreamWAV.LOOP_DISABLED)
+	if needs_unloop:
+		var dup := cached.duplicate() as AudioStream
+		stream = dup if dup != null else cached
+		_apply_loop(stream, false, 0)
 	var voice := _take_se_voice()
 	var player := _se_players[voice]
 	_invalidate_se_voice(voice)
@@ -183,6 +190,8 @@ func stop(channel: int, frames: int = 0) -> void:
 
 
 func reset() -> void:
+	_paused_playing = [false, false]
+	_paused_positions = [0.0, 0.0]
 	for voice in _se_players.size():
 		_invalidate_se_voice(voice)
 	for channel in _players.size():
@@ -190,6 +199,37 @@ func reset() -> void:
 		_players[channel].stop()
 	for channel in CHANNEL_COUNT:
 		_tracks[channel] = {}
+
+
+func pause_for_background() -> void:
+	if _app_paused:
+		return
+	_app_paused = true
+	if AudioServer.get_bus_count() > 0:
+		_prev_master_muted = AudioServer.is_bus_mute(0)
+		AudioServer.set_bus_mute(0, true)
+	for channel in [CHANNEL_BGM, CHANNEL_BGS]:
+		var player := _players[channel]
+		if player.playing:
+			_paused_positions[channel] = player.get_playback_position()
+			_paused_playing[channel] = true
+			player.stop()
+		else:
+			_paused_playing[channel] = false
+
+
+func resume_from_background() -> void:
+	if not _app_paused:
+		return
+	_app_paused = false
+	if AudioServer.get_bus_count() > 0:
+		AudioServer.set_bus_mute(0, _prev_master_muted)
+	for channel in [CHANNEL_BGM, CHANNEL_BGS]:
+		if _paused_playing[channel] and not _tracks[channel].is_empty():
+			var player := _players[channel]
+			if player.stream != null:
+				player.play(_paused_positions[channel])
+		_paused_playing[channel] = false
 
 
 ## One entry per live long-form track (BGM/BGS), in SaveState order. Transient SE are omitted

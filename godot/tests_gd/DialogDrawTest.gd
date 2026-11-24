@@ -387,6 +387,36 @@ func _ready() -> void:
 	if choice.selected != 1:
 		failures.append("ChoiceWindow.open must snap selected to first visible option when index 0 is empty (got %d)" % choice.selected)
 
+	# Touch row height widens to 36px while desktop stays 27px, and hits_any_row matches row_rects.
+	choice.set_touch_mode(true)
+	choice.open(PackedStringArray(["Tap A", "Tap B"]), Vector2(260, 220), true, 0)
+	if not is_equal_approx(choice.line_height(), ChoiceWindow.TOUCH_LINE_HEIGHT):
+		failures.append("touch mode choice line height should be %.1f (got %.1f)" % [ChoiceWindow.TOUCH_LINE_HEIGHT, choice.line_height()])
+	var touch_rows := choice.row_rects()
+	if touch_rows.is_empty() or not choice.hits_any_row(touch_rows[0].get_center()) or choice.hits_any_row(Vector2(10, 10)):
+		failures.append("hits_any_row must match visible row_rects")
+	choice.set_touch_mode(false)
+
+	# Large \f[32] glyphs expand bubble height without clipping, and confirm fast-forward stops at next \! wait.
+	var big_msg := MessageWindow.new(assets)
+	add_child(big_msg)
+	big_msg.open("\\f[32]大字\n第二行")
+	var big_bubble := big_msg.bubble_rect()
+	for idx in big_msg.laid_out_characters():
+		if not big_bubble.encloses(big_msg.character_rect(idx)):
+			failures.append("\\f[32] glyph %d escaped bubble %s" % [idx, str(big_bubble)])
+			break
+	var wait_ff := MessageWindow.new(assets)
+	add_child(wait_ff)
+	wait_ff.open("abc\\!def")
+	wait_ff.confirm()
+	if not wait_ff.waiting_for_continue or int(wait_ff.revealed) != 3 or wait_ff.finished:
+		failures.append("fast-forward confirm must stop at mid-message \\! wait (revealed=%d wait=%s fin=%s)" % [int(wait_ff.revealed), str(wait_ff.waiting_for_continue), str(wait_ff.finished)])
+	wait_ff.confirm()
+	wait_ff.confirm()
+	if not wait_ff.finished:
+		failures.append("subsequent confirm after \\! wait must finish remaining text")
+
 	# 4c. Backlog uses the shared UI font, supports key echo scrolling, and yields to title confirm.
 	var overlays := PlayOverlays.new()
 	add_child(overlays)

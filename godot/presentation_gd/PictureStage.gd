@@ -676,6 +676,22 @@ func visible_slot_signature() -> PackedInt32Array:
 	return slots
 
 
+## Signature of foreground interactive picture slots (excludes blinking HUD/cursor overlays).
+func foreground_slot_signature() -> PackedInt32Array:
+	var slots: PackedInt32Array = []
+	var keys: Array = _cmds.keys()
+	keys.sort()
+	for raw_num in keys:
+		var number := int(raw_num)
+		if number >= HUD_TOP_SLOT_MIN and number < 12000:
+			continue
+		var st: Dictionary = _states.get(number, {})
+		if bool(st.get("hidden", false)) or bool(st.get("erase_after", false)):
+			continue
+		slots.append(number)
+	return slots
+
+
 func has_active_hit_polls() -> bool:
 	for dict in [_polled_hit_slots, _last_polled_hit_slots]:
 		for slot_key in dict.keys():
@@ -1364,9 +1380,15 @@ func _state_animating(state: Dictionary) -> bool:
 		return bool(state.get("erase_after", false)) and state.get("transition", null) != null
 	if int(state.get("fade", 0)) > 0:
 		return true
-	for key in ["transition", "tone_transition", "shake", "zoom", "breath", "pattern"]:
+	for key in ["transition", "tone_transition", "shake", "breath"]:
 		if state.get(key, null) != null:
 			return true
+	var zoom: Variant = state.get("zoom", null)
+	if zoom is Dictionary and int((zoom as Dictionary).get("elapsed", 0)) < int((zoom as Dictionary).get("duration", 0)):
+		return true
+	var pattern: Variant = state.get("pattern", null)
+	if pattern is Dictionary and not bool((pattern as Dictionary).get("done", false)):
+		return true
 	return not (state.get("effects", []) as Array).is_empty()
 
 

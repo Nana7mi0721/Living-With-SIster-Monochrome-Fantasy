@@ -147,9 +147,17 @@ func build_window_node(spec: Dictionary, texture: Texture2D, args: Array, assets
 	var sw := maxi(0, int(args[1]) if args.size() > 1 else (0 if not spec.is_empty() else 18))
 	var sh := maxi(0, int(args[2]) if args.size() > 2 else (0 if not spec.is_empty() else 18))
 	if not spec.is_empty():
-		if str(spec.get("shape", "")) == "LINE" and sw > 0 and sh == 0:
+		var shape := str(spec.get("shape", ""))
+		if shape == "LINE" and sw > 0 and sh == 0:
 			sh = 1
 		var size := Vector2(maxi(1, sw), maxi(1, sh))
+		if shape == "CIRCLE" or shape == "TRI":
+			var vector := _build_vector_shape_node(spec, size)
+			vector.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			vector.use_parent_material = true
+			vector.size = size
+			vector.set_meta("window_size", size)
+			return vector
 		var rect := TextureRect.new()
 		rect.texture = sysgraphic_texture(spec, int(size.x), int(size.y))
 		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -194,3 +202,43 @@ func build_window_node(spec: Dictionary, texture: Texture2D, args: Array, assets
 	nine.size = win_size
 	nine.set_meta("window_size", win_size)
 	return nine
+
+
+static func _build_vector_shape_node(spec: Dictionary, initial_size: Vector2) -> Control:
+	var shape := str(spec.get("shape", ""))
+	var dir := str(spec.get("dir", "DOWN"))
+	var ctrl := Control.new()
+	ctrl.size = initial_size
+	ctrl.draw.connect(func() -> void:
+		var s := ctrl.size
+		if s.x <= 0.0 or s.y <= 0.0:
+			return
+		if shape == "CIRCLE":
+			var rx := s.x * 0.5
+			var ry := s.y * 0.5
+			var center := Vector2(rx, ry)
+			if is_equal_approx(rx, ry):
+				ctrl.draw_circle(center, rx, Color.WHITE)
+			else:
+				var segs := 48
+				var pts := PackedVector2Array()
+				pts.resize(segs)
+				for i in segs:
+					var angle := TAU * float(i) / float(segs)
+					pts[i] = center + Vector2(cos(angle) * rx, sin(angle) * ry)
+				ctrl.draw_colored_polygon(pts, Color.WHITE)
+		elif shape == "TRI":
+			var pts: PackedVector2Array
+			match dir:
+				"LEFT":
+					pts = PackedVector2Array([Vector2(0.0, s.y * 0.5), Vector2(s.x, 0.0), Vector2(s.x, s.y)])
+				"RIGHT":
+					pts = PackedVector2Array([Vector2(s.x, s.y * 0.5), Vector2(0.0, 0.0), Vector2(0.0, s.y)])
+				"UP":
+					pts = PackedVector2Array([Vector2(s.x * 0.5, 0.0), Vector2(s.x, s.y), Vector2(0.0, s.y)])
+				_:
+					pts = PackedVector2Array([Vector2(s.x * 0.5, s.y), Vector2(0.0, 0.0), Vector2(s.x, 0.0)])
+			ctrl.draw_colored_polygon(pts, Color.WHITE)
+	)
+	ctrl.resized.connect(ctrl.queue_redraw)
+	return ctrl

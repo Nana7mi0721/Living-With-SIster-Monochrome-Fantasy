@@ -160,6 +160,20 @@ func _ready() -> void:
 	_expect(is_equal_approx(bgm_tween_player.volume_db, db_before_master),
 		"retargeting fade-in must not pop player volume immediately to full target")
 
+	# 11. Zero-copy shared SE streams and background pause/resume audio lifecycle.
+	_expect(mixer.play(AudioManager.CHANNEL_SE, "Sound/stub.wav", 100, 0, 100, 0), "shared se 1")
+	var se_shared_a := mixer.player_for(AudioManager.CHANNEL_SE).stream
+	_expect(mixer.play(AudioManager.CHANNEL_SE, "Sound/stub.wav", 90, 0, 100, 0), "shared se 2")
+	var se_shared_b := mixer.player_for(AudioManager.CHANNEL_SE).stream
+	_expect(se_shared_a != null and se_shared_a == se_shared_b,
+		"SE voices should share cached non-looping AudioStream without per-play deep duplicate")
+	mixer.pause_for_background()
+	_expect(mixer.is_background_paused(), "pause_for_background marks background pause active")
+	_expect(mixer.player_for(AudioManager.CHANNEL_BGM).stream_paused, "pause_for_background pauses active BGM")
+	mixer.resume_from_background()
+	_expect(not mixer.is_background_paused(), "resume_from_background clears background pause")
+	_expect(not mixer.player_for(AudioManager.CHANNEL_BGM).stream_paused, "resume_from_background unpauses BGM")
+
 	mixer.reset()
 	if failures == 0:
 		print("AUDIO_MANAGER_TEST_OK checks=%d" % checks)

@@ -1096,7 +1096,7 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root._modal_release_guard = false
 	_remove_test_tree(transfer_dir)
 
-	# 7. Touch drawer tab visibility/position across title, map, and save UI.
+	# 7. Touch drawer tab visibility/position across title, map, and save UI (Special 1 + P0-3).
 	root.vm.StopAll()
 	root.vm.ApplyInputPermission(0x0ff)
 	root.stage.clear_pictures()
@@ -1104,8 +1104,10 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root.phase = "title"
 	root.choice.open(PackedStringArray(["Start", "Continue"]), Vector2(260, 220), false, 0)
 	root._sync_mobile_and_overlay_state(0.0)
-	if not root.overlays._drawer_tab.visible or root.overlays._drawer_tab.position.y < 16.0 or root.overlays._drawer_tab.position.y > 50.0:
-		failures.append("touch drawer tab must be visible at y in 16..50 on title (vis=%s y=%s)" % [str(root.overlays._drawer_tab.visible), str(root.overlays._drawer_tab.position.y)])
+	if not root.overlays._drawer_tab.visible or root.overlays._drawer_tab.position.y < 36.0:
+		failures.append("touch drawer tab must be visible at y >= 36 on title to clear header bar (vis=%s y=%s)" % [str(root.overlays._drawer_tab.visible), str(root.overlays._drawer_tab.position.y)])
+	if not root.overlays.consumes_touch_point(root.overlays._drawer_tab.position + Vector2(10, 10)):
+		failures.append("PlayOverlays.consumes_touch_point must intercept taps on drawer tab")
 	root.choice.close()
 	root._sync_mobile_and_overlay_state(0.0)
 	if root.overlays._drawer_tab.visible:
@@ -1114,11 +1116,13 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root._sync_mobile_and_overlay_state(0.0)
 	if root.overlays._drawer_tab.visible:
 		failures.append("touch drawer tab must hide on normal map outside save UI")
+	# Save UI takes priority even when phase == "title" (entering Continue from title).
+	root.phase = "title"
 	root.vm.StartEvent(131)
 	root.stage.draw_picture(12050, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 512, 230, 100, 0], 1, 0)
 	root._sync_mobile_and_overlay_state(0.0)
-	if not root.overlays._drawer_tab.visible or root.overlays._drawer_tab.position.y < 16.0 or root.overlays._drawer_tab.position.y > 50.0:
-		failures.append("touch drawer tab must be visible at y in 16..50 in save UI (vis=%s y=%s)" % [str(root.overlays._drawer_tab.visible), str(root.overlays._drawer_tab.position.y)])
+	if not root.overlays._drawer_tab.visible or root.overlays._drawer_tab.position.y < 16.0 or root.overlays._drawer_tab.position.y > 20.0:
+		failures.append("touch drawer tab must be visible at y in 16..20 in save UI (vis=%s y=%s)" % [str(root.overlays._drawer_tab.visible), str(root.overlays._drawer_tab.position.y)])
 	root.vm.StopAll()
 	root.stage.clear_pictures()
 	root.overlays.set_touch_ui_enabled(false)

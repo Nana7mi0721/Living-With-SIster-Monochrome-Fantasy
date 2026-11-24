@@ -39,6 +39,7 @@ var _backlog_root: Control
 var _backlog_header: Label
 var _backlog_label: Label
 var _backlog_scroll: ScrollContainer
+var _backlog_close_btn: Button
 var _backlog_open := false
 
 var _title_confirm_root: Control
@@ -91,12 +92,13 @@ var _drawer_quicksave_btn: Button
 var _drawer_quickload_btn: Button
 var _drawer_open := false
 var _touch_ui_enabled := false
-var _drawer_tab_allowed := false
+var _drawer_tab_context := "hidden"
 
 var _fault_root: Control
 var _fault_reason: Label
 var _fault_hint: Label
 var _fault_recover_button: Button
+var _fault_close_button: Button
 var _diagnostics_path := ""
 
 var _stats_root: PanelContainer
@@ -209,10 +211,12 @@ func _build_backlog_overlay() -> void:
 	footer.alignment = BoxContainer.ALIGNMENT_END
 	column.add_child(footer)
 	var close_button := Button.new()
-	close_button.text = "关闭（F4/Esc）"
+	_backlog_close_btn = close_button
+	close_button.text = "关闭" if _touch_ui_enabled else "关闭（F4/Esc）"
 	close_button.add_theme_font_override("font", UiSkin.font())
 	close_button.pressed.connect(close_backlog)
 	footer.add_child(close_button)
+	_sync_touch_hint_labels()
 
 
 func push_backlog(text: String) -> void:
@@ -437,6 +441,33 @@ func is_modal_open() -> bool:
 	return _backlog_open or _title_confirm_open or _save_confirm_open or _quit_confirm_open or _transfer_open or _drawer_open
 
 
+## True when a native screen touch at logical [param pos] belongs to PlayOverlays UI
+## (any modal, fault dialog, mobile drawer tab, or save page shortcut bar).
+func consumes_touch_point(pos: Vector2) -> bool:
+	if is_modal_open() or fault_modal_visible():
+		return true
+	if _drawer_tab != null and _drawer_tab.visible:
+		var tab_size := _drawer_tab.size
+		if tab_size.x <= 0.0 or tab_size.y <= 0.0:
+			tab_size = _drawer_tab.custom_minimum_size
+		if Rect2(_drawer_tab.position, tab_size).has_point(pos):
+			return true
+	var bar_rect := save_page_bar_rect()
+	if bar_rect.size.x > 0.0 and bar_rect.size.y > 0.0 and bar_rect.has_point(pos):
+		return true
+	return false
+
+
+func _sync_touch_hint_labels() -> void:
+	if _backlog_header != null:
+		_backlog_header.text = "消息回顾（最近 %d 条，上下滑动浏览）" % BACKLOG_LIMIT if _touch_ui_enabled \
+			else "消息回顾（最近 %d 条，只读；↑/↓ 或 W/S 行滚动，PageUp/PageDown 翻页）" % BACKLOG_LIMIT
+	if _backlog_close_btn != null:
+		_backlog_close_btn.text = "关闭" if _touch_ui_enabled else "关闭（F4/Esc）"
+	if _fault_close_button != null:
+		_fault_close_button.text = "隐藏（返回键重开）" if _touch_ui_enabled else "隐藏（Esc/F12/返回键 重开）"
+
+
 func close_non_fault_modals() -> void:
 	_backlog_open = false
 	if _backlog_root != null:
@@ -548,25 +579,32 @@ func _build_fault_modal(has_save: bool) -> void:
 	_fault_hint.add_theme_font_size_override("font_size", 14)
 	column.add_child(_fault_hint)
 
-	var buttons := HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 8)
+	var buttons := GridContainer.new()
+	buttons.columns = 2
+	buttons.add_theme_constant_override("h_separation", 8)
+	buttons.add_theme_constant_override("v_separation", 8)
 	column.add_child(buttons)
 	var export_button := Button.new()
 	export_button.text = "导出诊断包"
+	export_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	export_button.pressed.connect(func() -> void: fault_export_requested.emit())
 	buttons.add_child(export_button)
 	var recover_button := Button.new()
 	recover_button.text = "回到最近存档（若存在）"
+	recover_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	recover_button.disabled = not has_save
 	recover_button.pressed.connect(func() -> void: fault_recover_requested.emit())
 	buttons.add_child(recover_button)
 	_fault_recover_button = recover_button
 	var restart_button := Button.new()
 	restart_button.text = "返回标题（放弃当前进度）"
+	restart_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	restart_button.pressed.connect(func() -> void: fault_restart_requested.emit())
 	buttons.add_child(restart_button)
 	var close_button := Button.new()
-	close_button.text = "隐藏（Esc/F12/返回键 重开）"
+	_fault_close_button = close_button
+	close_button.text = "隐藏（返回键重开）" if _touch_ui_enabled else "隐藏（Esc/F12/返回键 重开）"
+	close_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	close_button.pressed.connect(func() -> void:
 		_fault_root.visible = false
 		fault_modal_closed.emit()
@@ -1104,8 +1142,9 @@ func _build_drawer() -> void:
 	_drawer_tab.name = "DrawerTab"
 	_drawer_tab.text = "菜单"
 	_drawer_tab.z_index = 96
-	_drawer_tab.custom_minimum_size = Vector2(64, 34)
-	_drawer_tab.visible = _touch_ui_enabled
+	_style_modal_button(_drawer_tab, _modal_button_boxes(), Vector2(64, 34), 16)
+	_drawer_tab.size = Vector2(64, 34)
+	_drawer_tab.visible = false
 	_drawer_tab.pressed.connect(toggle_drawer)
 	add_child(_drawer_tab)
 
@@ -1189,8 +1228,11 @@ func _layout_drawer() -> void:
 	var top_inset := float(_safe_insets.get("top", 0.0))
 	var bottom_inset := float(_safe_insets.get("bottom", 0.0))
 	if _drawer_tab != null:
-		_drawer_tab.position = Vector2(12.0 + left_inset, 16.0 + top_inset)
-		_drawer_tab.visible = _touch_ui_enabled and _drawer_tab_allowed and not _drawer_open and not is_modal_open()
+		# Title header bar occupies y=0..28 -> place below at y=36..70; save header occupies y=0..68 -> center at y=17..51.
+		var base_y := 36.0 if _drawer_tab_context == "title" else 17.0
+		_drawer_tab.position = Vector2(12.0 + left_inset, maxf(base_y, 8.0 + top_inset))
+		_drawer_tab.size = Vector2(64.0, 34.0)
+		_drawer_tab.visible = _touch_ui_enabled and _drawer_tab_context != "hidden" and not _drawer_open and not is_modal_open()
 	if _drawer_panel != null:
 		_drawer_panel.position = Vector2(12.0 + left_inset, 12.0 + top_inset)
 		_drawer_panel.size = Vector2(236.0, 552.0 - top_inset - bottom_inset)
@@ -1206,11 +1248,16 @@ func set_touch_ui_enabled(enabled: bool) -> void:
 	_touch_ui_enabled = enabled
 	if enabled and _drawer_root == null:
 		_build_drawer()
+	_sync_touch_hint_labels()
 	_layout_drawer()
 
 
-func update_drawer_state(in_title: bool, can_quick: bool, perf_label: String, scale_label: String, allow_tab: bool = false) -> void:
-	_drawer_tab_allowed = allow_tab
+func update_drawer_state(in_title: bool, can_quick: bool, perf_label: String, scale_label: String, tab_context: Variant = "hidden") -> void:
+	if typeof(tab_context) == TYPE_BOOL:
+		_drawer_tab_context = ("title" if in_title else "save") if bool(tab_context) else "hidden"
+	else:
+		var ctx := str(tab_context)
+		_drawer_tab_context = ctx if ctx in ["title", "save"] else "hidden"
 	if _drawer_root == null:
 		return
 	if _drawer_quicksave_btn != null:

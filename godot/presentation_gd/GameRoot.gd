@@ -63,6 +63,8 @@ var _perf_tier := 0
 var _window_focused := true
 var _show_title_fps := false
 var _title_fps_timer := 0.0
+var _last_safe_area := Rect2i()
+var _safe_area_poll_timer := 0.0
 var _hotkeys: Dictionary = DEFAULT_HOTKEYS.duplicate()
 var _ios_override: int = -1
 var _last_restart_ok := false
@@ -157,6 +159,7 @@ func _start_game() -> void:
 	router.blank_space_predicate = Callable(self, "is_touch_blank_space")
 	router.touch_action_tap_recorder = Callable(self, "record_touch_action_tap")
 	router.empirical_blank_verifier = Callable(self, "is_empirical_blank_double_tap")
+	router.ui_touch_consumer = Callable(self, "_overlays_consume_touch_point")
 	router.action_pressed.connect(_on_action)
 	router.cancel_pressed.connect(_on_cancel)
 	router.wheel_pressed.connect(_on_wheel)
@@ -175,6 +178,7 @@ func _start_game() -> void:
 	vm.name = "Vm"
 	vm.SetKeyStateProvider(self, "_key_state")
 	vm.SetPictureStateProvider(self, "_picture_state")
+	vm.SetMediaPak(assets.media_pak)
 	add_child(vm)
 
 	map_view = MapLayer.new()
@@ -450,6 +454,10 @@ func advance_frame() -> void:
 	if vm.Faulted:
 		report_fault(vm.FaultReason)
 		return
+	if vm.ConsumeOkObserved():
+		router.consume_touch_ok()
+	if vm.ConsumeCancelObserved():
+		router.consume_touch_cancel()
 	router.clear_frame_latches()
 	_action_input_pending = false
 
@@ -492,8 +500,10 @@ func _on_action() -> void:
 	var action_denied := (int(session.BasicAllDeny) & 1) != 0
 	if choice.is_open:
 		if action_denied:
+			router.clear_click_latch()
 			return
 		if pointer and choice.hover_at(router.hover_position) < 0:
+			router.clear_click_latch()
 			return
 		if pointer:
 			_arm_modal_release_guard()
@@ -515,6 +525,7 @@ func _on_action() -> void:
 			_suppress_confirmed_action_until_release()
 		return
 	if action_denied:
+		router.clear_click_latch()
 		return
 	if _maybe_handle_save_ui_action(pointer):
 		return
@@ -535,6 +546,10 @@ func _on_cancel() -> void:
 		return
 	var pointer := router != null and router.is_pointer_input()
 	if choice.is_open:
+		if not choice.allow_cancel:
+			if router != null:
+				router.consume_touch_cancel()
+			return
 		if pointer:
 			_arm_modal_release_guard()
 		choice.cancel()
@@ -624,7 +639,6 @@ func _picture_state(number: int, field: int, pointer: Vector2) -> Variant:
 
 ## Channel 0 = BGM, 1 = BGS, 2 = SE.
 func _on_sound(channel: int, action: int, file: String, volume: int, frames: int) -> void:
-	_mark_empirical_tap_dirty()
 	_sync_master_audio_volumes()
 	if action == 1:
 		audio.stop(channel, frames)
@@ -794,7 +808,6 @@ func _tick_transition() -> void:
 
 
 func _on_effect(kind: int, duration: int, args: Array) -> void:
-	_mark_empirical_tap_dirty()
 	_flush_pending_pictures()
 	if not stage.effect(kind, duration, args):
 		if OS.get_environment("LWsmf_TRACE_EFFECTS") == "1":
@@ -923,12 +936,17 @@ func _notification(what: int) -> void:
 		_window_focused = false
 		_save_display_settings()
 		_clear_held_input()
+		if audio != null:
+			audio.pause_for_background()
 		if not _is_headless():
 			OS.low_processor_usage_mode = false
 			Engine.max_fps = 5
 		return
 	if what == NOTIFICATION_APPLICATION_RESUMED:
 		_window_focused = true
+		if audio != null:
+			audio.resume_from_background()
+		_apply_safe_area()
 		_apply_performance_tier()
 		return
 	if what == NOTIFICATION_WM_SIZE_CHANGED:
@@ -1266,6 +1284,10 @@ static func _is_headless() -> bool:
 	return DisplayServer.get_name() == "headless" or OS.has_feature("headless")
 
 
+static func is_desktop_platform() -> bool:
+	return not (OS.has_feature("android") or OS.has_feature("ios") or OS.has_feature("mobile"))
+
+
 static func clamp_window_size(desired: Vector2i, usable: Rect2i) -> Vector2i:
 	if usable.size.x <= 0 or usable.size.y <= 0:
 		return desired
@@ -1286,7 +1308,7 @@ static func fit_window_size(desired: Vector2i, usable: Rect2i) -> Vector2i:
 
 
 func _fit_window_to_usable_area() -> void:
-	if _is_headless() or DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+	if _is_headless() or not is_desktop_platform() or DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
 		return
 	var usable := DisplayServer.screen_get_usable_rect()
 	var current := DisplayServer.window_get_size()
@@ -1377,6 +1399,8 @@ func _load_display_settings() -> void:
 	_apply_performance_tier()
 	if assets != null and cfg.has_section_key("display", "hd_textures"):
 		assets.set_hd_enabled(bool(cfg.get_value("display", "hd_textures", assets.hd_enabled)))
+	if not is_desktop_platform():
+		return
 	var w := int(cfg.get_value("display", "window_width", 0))
 	var h := int(cfg.get_value("display", "window_height", 0))
 	var want_fs := bool(cfg.get_value("display", "fullscreen", false))
@@ -1398,6 +1422,8 @@ func _load_display_settings() -> void:
 
 ## Records the windowed pose so leaving fullscreen restores the pre-F11 geometry.
 func toggle_fullscreen() -> void:
+	if not is_desktop_platform():
+		return
 	if _is_headless():
 		_fullscreen = not _fullscreen
 		status("fullscreen=%s (headless)" % str(_fullscreen))
@@ -1825,6 +1851,7 @@ func _apply_safe_area() -> void:
 		return
 	var win_size := DisplayServer.window_get_size()
 	var safe := DisplayServer.get_display_safe_area()
+	_last_safe_area = safe
 	if win_size.x <= 0 or win_size.y <= 0 or safe.size.x <= 0 or safe.size.y <= 0:
 		overlays.apply_safe_area({})
 		return
@@ -1863,8 +1890,19 @@ func _sync_mobile_and_overlay_state(delta: float) -> void:
 		router.sidebar_open_hint = overlays != null and overlays.drawer_open()
 	if overlays != null:
 		overlays.update_save_page_bar(save_ui and not _modal_window_open(), phase == "title")
-		var allow_drawer_tab: bool = save_ui or (phase == "title" and choice != null and choice.is_open)
-		overlays.update_drawer_state(phase == "title", can_open_quick_ui(), PERF_FPS_LABELS[_perf_tier], scaling_mode_name(), allow_drawer_tab)
+		var drawer_tab_ctx := "hidden"
+		if save_ui:
+			drawer_tab_ctx = "save"
+		elif phase == "title" and choice != null and choice.is_open:
+			drawer_tab_ctx = "title"
+		overlays.update_drawer_state(phase == "title", can_open_quick_ui(), PERF_FPS_LABELS[_perf_tier], scaling_mode_name(), drawer_tab_ctx)
+	if not _is_headless():
+		_safe_area_poll_timer += delta
+		if _safe_area_poll_timer >= 0.5:
+			_safe_area_poll_timer = 0.0
+			var current_safe := DisplayServer.get_display_safe_area()
+			if current_safe != _last_safe_area:
+				_apply_safe_area()
 	if _show_title_fps and not _is_headless():
 		_title_fps_timer += delta
 		if _title_fps_timer >= 0.5:
@@ -1889,6 +1927,12 @@ func _on_touch_sidebar_swipe(open: bool) -> void:
 func _on_touch_mode_changed(active: bool) -> void:
 	if overlays != null:
 		overlays.set_touch_ui_enabled(active)
+	if choice != null:
+		choice.set_touch_mode(active)
+
+
+func _overlays_consume_touch_point(point: Vector2) -> bool:
+	return overlays != null and overlays.consumes_touch_point(point)
 
 
 func _on_drawer_action(action: String) -> void:
@@ -1990,12 +2034,7 @@ func _save_load_hit_interactive(pointer: Vector2) -> bool:
 func _choice_contains_point(point: Vector2) -> bool:
 	if choice == null or not choice.is_open:
 		return false
-	if not choice.override_rects.is_empty():
-		for rect in choice.override_rects:
-			if rect is Rect2 and rect.has_point(point):
-				return true
-		return false
-	return choice.window_rect().has_point(point)
+	return choice.hits_any_row(point)
 
 
 func _clear_empirical_tap() -> void:
@@ -2023,9 +2062,9 @@ func _update_empirical_tap_after_frame() -> void:
 		_empirical_tap_dirty = true
 	elif phase != _empirical_tap_phase:
 		_empirical_tap_dirty = true
-	elif session != null and (session.MapId != _empirical_tap_map_id or session.DescribeInstances() != _empirical_tap_instances):
+	elif session != null and (session.MapId != _empirical_tap_map_id or session.GetForegroundStackSignature() != _empirical_tap_instances):
 		_empirical_tap_dirty = true
-	elif stage != null and stage.visible_slot_signature() != _empirical_tap_slots:
+	elif _empirical_tap_frames <= 2 and stage != null and stage.foreground_slot_signature() != _empirical_tap_slots:
 		_empirical_tap_dirty = true
 	elif _modal_window_open() or (overlays != null and overlays.drawer_open()) or _save_load_ui_active():
 		_empirical_tap_dirty = true
@@ -2080,8 +2119,8 @@ func record_touch_action_tap(point: Vector2) -> bool:
 	_empirical_tap_frames = 0
 	_empirical_tap_phase = phase
 	_empirical_tap_map_id = session.MapId if session != null else -1
-	_empirical_tap_instances = session.DescribeInstances() if session != null else ""
-	_empirical_tap_slots = stage.visible_slot_signature() if stage != null else PackedInt32Array()
+	_empirical_tap_instances = session.GetForegroundStackSignature() if session != null else ""
+	_empirical_tap_slots = stage.foreground_slot_signature() if stage != null else PackedInt32Array()
 	return true
 
 
@@ -2097,9 +2136,9 @@ func is_empirical_blank_double_tap(point: Vector2) -> bool:
 	if session != null:
 		if session.MapId != _empirical_tap_map_id:
 			return false
-		if session.DescribeInstances() != _empirical_tap_instances:
+		if session.GetForegroundStackSignature() != _empirical_tap_instances:
 			return false
-	if stage != null and stage.visible_slot_signature() != _empirical_tap_slots:
+	if _empirical_tap_frames <= 2 and stage != null and stage.foreground_slot_signature() != _empirical_tap_slots:
 		return false
 	return true
 
@@ -2191,7 +2230,13 @@ func handle_back_request() -> String:
 		if overlays.close_topmost_modal():
 			_arm_modal_release_guard()
 		return "drawer_closed" if was_drawer else "modal_closed"
-	if _save_load_ui_active() or (choice != null and choice.is_open and phase != "title"):
+	if _save_load_ui_active():
+		if router != null:
+			router.trigger_cancel_pulse("touch")
+		return "submenu_cancel"
+	if choice != null and choice.is_open and phase != "title":
+		if not choice.allow_cancel:
+			return "choice_cancel_blocked"
 		if router != null:
 			router.trigger_cancel_pulse("touch")
 		return "submenu_cancel"

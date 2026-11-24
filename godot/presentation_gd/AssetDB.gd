@@ -393,6 +393,10 @@ func audio(logical: String) -> AudioStream:
 	if stream == null:
 		_record_miss(logical)
 		return null
+	if "loop" in stream:
+		stream.set("loop", false)
+	if "loop_mode" in stream and stream is AudioStreamWAV:
+		(stream as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_DISABLED
 	_store(key, stream, size)
 	return stream
 

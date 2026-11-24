@@ -117,6 +117,10 @@ public partial class VmController : Node, IHost, IVmSession
     private bool _rightPressed;
     private bool _rightPressPending;
     private bool _rightPressFrame;
+    private bool _rightPressSeen;
+    private int _rightPressTtl;
+    private bool _okConsumedThisFrame;
+    private bool _cancelConsumedThisFrame;
     private bool _middlePressed;
     private bool _middlePressPending;
     private bool _middlePressFrame;
@@ -839,6 +843,12 @@ public partial class VmController : Node, IHost, IVmSession
     {
         bool firstPressObservation = field == 7 && _pointerPressFrame && !_pointerPressSeen;
         if (firstPressObservation) _pointerPressSeen = true;
+        if (field == 7 && (_pointerPressFrame || _pointerPressed)) _okConsumedThisFrame = true;
+        if (field == 8)
+        {
+            if (_rightPressFrame && !_rightPressSeen) _rightPressSeen = true;
+            if (_rightPressFrame || _rightPressed) _cancelConsumedThisFrame = true;
+        }
         int? result = field switch
         {
             // game.rs 6898-6900: the static map id and BGM id are 0 and -1.
@@ -943,6 +953,10 @@ public partial class VmController : Node, IHost, IVmSession
         _rightPressed = false;
         _rightPressPending = false;
         _rightPressFrame = false;
+        _rightPressSeen = false;
+        _rightPressTtl = 0;
+        _okConsumedThisFrame = false;
+        _cancelConsumedThisFrame = false;
         _middlePressed = false;
         _middlePressPending = false;
         _middlePressFrame = false;
@@ -956,6 +970,8 @@ public partial class VmController : Node, IHost, IVmSession
     /// <summary>Turn the latched press into this frame's answer, once per 1/60 s step.</summary>
     public void BeginFrameInput()
     {
+        _okConsumedThisFrame = false;
+        _cancelConsumedThisFrame = false;
         if (_pointerPressPending)
         {
             _pointerPressFrame = true;
@@ -963,7 +979,7 @@ public partial class VmController : Node, IHost, IVmSession
             _pointerPressSeen = false;
             _pointerPressTtl = 2;
         }
-        else if (_pointerPressed && _pointerPressFrame && !_pointerPressSeen && _pointerPressTtl > 0)
+        else if (_pointerPressFrame && !_pointerPressSeen && _pointerPressTtl > 0)
         {
             _pointerPressTtl--;
         }
@@ -973,8 +989,23 @@ public partial class VmController : Node, IHost, IVmSession
             _pointerPressSeen = false;
             _pointerPressTtl = 0;
         }
-        _rightPressFrame = _rightPressPending;
-        _rightPressPending = false;
+        if (_rightPressPending)
+        {
+            _rightPressFrame = true;
+            _rightPressPending = false;
+            _rightPressSeen = false;
+            _rightPressTtl = 2;
+        }
+        else if (_rightPressFrame && !_rightPressSeen && _rightPressTtl > 0)
+        {
+            _rightPressTtl--;
+        }
+        else
+        {
+            _rightPressFrame = false;
+            _rightPressSeen = false;
+            _rightPressTtl = 0;
+        }
         _middlePressFrame = _middlePressPending;
         _middlePressPending = false;
 
@@ -1030,11 +1061,32 @@ public partial class VmController : Node, IHost, IVmSession
 
     public int KeyCodeAuto(uint mask, uint autoKeys)
     {
+        int code;
         if (_keyStateTarget != null && GodotObject.IsInstanceValid(_keyStateTarget))
         {
-            return _keyStateTarget.Call(_keyStateMethod, (long)mask, (long)autoKeys).AsInt32();
+            code = _keyStateTarget.Call(_keyStateMethod, (long)mask, (long)autoKeys).AsInt32();
         }
-        return KeyCodeProvider?.Invoke(mask) ?? 0;
+        else
+        {
+            code = KeyCodeProvider?.Invoke(mask) ?? 0;
+        }
+        if (code == KeyCodes.CodeOk) _okConsumedThisFrame = true;
+        else if (code == KeyCodes.CodeCancel) _cancelConsumedThisFrame = true;
+        return code;
+    }
+
+    public bool ConsumeOkObserved()
+    {
+        bool seen = _okConsumedThisFrame;
+        _okConsumedThisFrame = false;
+        return seen;
+    }
+
+    public bool ConsumeCancelObserved()
+    {
+        bool seen = _cancelConsumedThisFrame;
+        _cancelConsumedThisFrame = false;
+        return seen;
     }
 
     /// End every running script; GDScript cannot reach the EventVm property (Vm).

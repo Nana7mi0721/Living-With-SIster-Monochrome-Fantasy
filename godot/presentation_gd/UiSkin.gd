@@ -81,6 +81,9 @@ const TEXT_COLORS: Array[Color] = [
 
 static var _font: Font = null
 static var _bold_font: Font = null
+static var _base_retail_font: FontFile = null
+static var _base_retail_source: String = ""
+static var _base_retail_probed := false
 static var _strict_font_override: int = -1
 static var _font_source: String = "unloaded"
 static var _font_logged := false
@@ -98,12 +101,16 @@ static func set_strict_font_mode(enabled: bool) -> void:
 	_strict_font_override = 1 if enabled else 0
 	_font = null
 	_bold_font = null
+	_base_retail_font = null
+	_base_retail_probed = false
 
 
 static func clear_strict_font_mode_override() -> void:
 	_strict_font_override = -1
 	_font = null
 	_bold_font = null
+	_base_retail_font = null
+	_base_retail_probed = false
 
 
 static func _find_retail_font_path() -> String:
@@ -276,15 +283,18 @@ static func font_status() -> String:
 	return _font_source
 
 
-static func _build_font(bold: bool) -> Font:
-	var strict := is_strict_font_mode()
+static func _load_base_retail_font(strict: bool) -> FontFile:
+	if _base_retail_probed:
+		return _base_retail_font
+	_base_retail_probed = true
 	var ttf_path := _find_retail_font_path()
 	if not ttf_path.is_empty():
 		var ff := FontFile.new()
 		if ff.load_dynamic_font(ttf_path) == OK and ff.has_char(0x4E2D):
-			var built := _configure_font_file(ff, bold, strict)
-			_record_font_source("file:" + ttf_path.get_file(), built)
-			return built
+			_configure_font_file(ff, false, strict)
+			_base_retail_font = ff
+			_base_retail_source = "file:" + ttf_path.get_file()
+			return _base_retail_font
 	var pak_info := _find_retail_font_bytes_in_pak()
 	if not pak_info.is_empty():
 		var pak_bytes: PackedByteArray = pak_info["bytes"]
@@ -306,15 +316,32 @@ static func _build_font(bold: bool) -> Font:
 				cf.close()
 		var ff_cached := FontFile.new()
 		if ff_cached.load_dynamic_font(cache_path) == OK and ff_cached.has_char(0x4E2D):
-			var built := _configure_font_file(ff_cached, bold, strict)
-			_record_font_source("pak:" + entry, built)
-			return built
+			_configure_font_file(ff_cached, false, strict)
+			_base_retail_font = ff_cached
+			_base_retail_source = "pak:" + entry
+			return _base_retail_font
 		var ff := FontFile.new()
 		ff.data = pak_bytes
 		if ff.has_char(0x4E2D) or ff.get_face_count() > 0:
-			var built := _configure_font_file(ff, bold, strict)
-			_record_font_source("pak_mem:" + entry, built)
-			return built
+			_configure_font_file(ff, false, strict)
+			_base_retail_font = ff
+			_base_retail_source = "pak_mem:" + entry
+			return _base_retail_font
+	return null
+
+
+static func _build_font(bold: bool) -> Font:
+	var strict := is_strict_font_mode()
+	var base := _load_base_retail_font(strict)
+	if base != null:
+		if bold:
+			var fv := FontVariation.new()
+			fv.base_font = base
+			fv.variation_embolden = RETAIL_EMBOLDEN
+			_record_font_source(_base_retail_source, fv)
+			return fv
+		_record_font_source(_base_retail_source, base)
+		return base
 	var fallback := _make_system_font(bold)
 	_record_font_source("system", fallback)
 	return fallback

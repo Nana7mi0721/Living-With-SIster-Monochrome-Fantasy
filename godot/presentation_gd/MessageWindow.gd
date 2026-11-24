@@ -87,6 +87,7 @@ var _char_timer := 0.0
 var _cursor_time := 0.0
 var _last_blink_phase: int = -1
 var _center_content_height := CENTER_LINE_HEIGHT
+var _bubble_content_height := float(LINE_HEIGHT)
 var _boundary_events: Array = []
 var _event_cursor := 0
 
@@ -210,7 +211,21 @@ func confirm() -> void:
 		queue_redraw()
 		return
 	if not finished:
+		var current := int(revealed)
+		for i in range(_event_cursor, _boundary_events.size()):
+			var ev: Dictionary = _boundary_events[i]
+			if String(ev["kind"]) == "wait":
+				var stop_idx := int(ev["index"])
+				if stop_idx >= current:
+					revealed = float(stop_idx)
+					_event_cursor = i + 1
+					_pause_timer = 0.0
+					waiting_for_continue = true
+					_last_blink_phase = -1
+					queue_redraw()
+					return
 		revealed = float(_chars.size())
+		_event_cursor = _boundary_events.size()
 		_finish_reveal()
 		return
 	close()
@@ -311,14 +326,15 @@ func bubble_rect() -> Rect2:
 		return Rect2(CENTER_BOX_X, top, CENTER_BOX_WIDTH, height)
 	var pad_y := _bubble_padding_y()
 	var step := float(FONT_SIZE) + _effective_line_gap()
-	var content_h := float(maxi(1, _lines)) * step
+	var content_h := maxf(float(maxi(1, _lines)) * step, _bubble_content_height)
 	var bottom := BUBBLE_BOTTOM
+	var max_bubble_h := maxf(WINDOW_SIZE.y, content_h + pad_y * 2.0 + BUBBLE_CURSOR_RESERVE)
 	var height := clampf(
 		maxf(BUBBLE_MIN_HEIGHT, content_h + pad_y * 2.0 + BUBBLE_CURSOR_RESERVE),
 		BUBBLE_MIN_HEIGHT,
-		WINDOW_SIZE.y
+		minf(max_bubble_h, 480.0)
 	)
-	var top := 46.0 if position_mode == _WolfConst.MSG_POS_TOP else clampf(bottom - height, WINDOW_POS.y, WINDOW_POS.y + WINDOW_SIZE.y - height)
+	var top := 46.0 if position_mode == _WolfConst.MSG_POS_TOP else clampf(bottom - height, 46.0, bottom - height)
 	return Rect2(BUBBLE_X, top, BUBBLE_WIDTH, height)
 
 
@@ -427,6 +443,8 @@ func _layout() -> void:
 		line_widths.append(0.0)
 	if is_center:
 		_center_content_height = y + maxf(CENTER_LINE_HEIGHT, float(row_size) + 6.0)
+	else:
+		_bubble_content_height = y + float(row_size) + _effective_line_gap()
 	var bubble := bubble_rect()
 	var compact_ratio := 1.0 if is_center else ((float(FONT_SIZE) + _effective_line_gap()) / float(LINE_HEIGHT))
 	var y_origin := (bubble.position.y + CENTER_PADDING_Y) if is_center else (bubble.position.y + _bubble_padding_y())

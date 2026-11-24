@@ -299,10 +299,14 @@ func _ready() -> void:
 	if _action != tap_actions_before + 1 or not _router.click_latched():
 		failures.append("single-finger tap (< 24px) must emit action_pressed and latch click")
 	if (_router.held_mask() & InputRouter.MASK_OK) == 0:
-		failures.append("single-finger tap must set MASK_OK for one frame")
+		failures.append("single-finger tap must set MASK_OK")
+	# Multi-frame consumable touch TTL survives Wait(1)/Wait(2) frames, clears after 3 frames or immediately on consume.
 	_router.clear_frame_latches()
+	if (_router.held_mask() & InputRouter.MASK_OK) == 0:
+		failures.append("single-finger tap MASK_OK must survive first unconsumed frame for Wait(1) menus")
+	_router.consume_touch_ok()
 	if (_router.held_mask() & InputRouter.MASK_OK) != 0:
-		failures.append("single-finger tap MASK_OK must clear on clear_frame_latches()")
+		failures.append("consume_touch_ok() must clear MASK_OK immediately")
 
 	# Drag >= 24px must NOT fire a tap on release.
 	tap_actions_before = _action
@@ -323,6 +327,7 @@ func _ready() -> void:
 	_router.handle_event(_touch(1, Vector2(262, 222), false))
 	if _cancel != two_cancel_before + 1 or (_router.held_mask() & InputRouter.MASK_CANCEL) == 0:
 		failures.append("two-finger tap (< 36px) must emit cancel_pressed and latch MASK_CANCEL")
+	_router.consume_touch_cancel()
 	_router.clear_frame_latches()
 
 	two_cancel_before = _cancel
@@ -334,19 +339,21 @@ func _ready() -> void:
 	if _cancel != two_cancel_before:
 		failures.append("two-finger drag >= 36px must not emit cancel_pressed")
 
-	# 21. Left-edge open swipe and sidebar close swipe.
+	# 21. Two-finger swipe down opens sidebar (avoiding Android left-edge back conflict); left swipe closes it.
 	_router.sidebar_open_hint = false
 	_router.handle_event(_touch(0, Vector2(30, 250), true))
 	_router.handle_event(_drag(0, Vector2(100, 255)))
 	_router.handle_event(_touch(0, Vector2(100, 255), false))
+	if not swipe_events.is_empty():
+		failures.append("single-finger left-edge swipe must not open sidebar (Android back conflict), got %s" % str(swipe_events))
+	_router.handle_event(_touch(0, Vector2(400, 120), true))
+	_router.handle_event(_touch(1, Vector2(500, 120), true))
+	_router.handle_event(_drag(0, Vector2(405, 190)))
+	_router.handle_event(_drag(1, Vector2(505, 190)))
+	_router.handle_event(_touch(0, Vector2(405, 190), false))
+	_router.handle_event(_touch(1, Vector2(505, 190), false))
 	if swipe_events != [true]:
-		failures.append("left-edge swipe (x<=60, dx>=56) must emit touch_sidebar_swipe(true) (got %s)" % str(swipe_events))
-	# Starting outside edge (> 60) must not emit open swipe.
-	_router.handle_event(_touch(0, Vector2(120, 250), true))
-	_router.handle_event(_drag(0, Vector2(220, 250)))
-	_router.handle_event(_touch(0, Vector2(220, 250), false))
-	if swipe_events != [true]:
-		failures.append("non-edge swipe must not emit touch_sidebar_swipe(true)")
+		failures.append("two-finger swipe down (dy>=56) must emit touch_sidebar_swipe(true) (got %s)" % str(swipe_events))
 
 	_router.sidebar_open_hint = true
 	_router.handle_event(_touch(0, Vector2(200, 250), true))

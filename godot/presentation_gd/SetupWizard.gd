@@ -131,6 +131,10 @@ func _ready() -> void:
 	_refresh_data_status()
 
 
+static func is_mobile_platform() -> bool:
+	return OS.has_feature("android") or OS.has_feature("ios") or OS.has_feature("mobile")
+
+
 func _build_ui() -> void:
 	var dim := ColorRect.new()
 	dim.color = Color(0.04, 0.045, 0.05, 0.98)
@@ -157,6 +161,35 @@ func _build_ui() -> void:
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 10)
 	margin.add_child(column)
+
+	if is_mobile_platform():
+		var m_title := Label.new()
+		m_title.text = "游戏数据包缺失或不完整"
+		m_title.add_theme_font_size_override("font_size", 24)
+		column.add_child(m_title)
+
+		var m_intro := Label.new()
+		m_intro.text = "未在应用数据目录检测到完整的 game_data。请确认已安装包含数据包的完整版本（iOS 请确认已注入数据，Android 请重新安装完整 APK）。"
+		m_intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		m_intro.custom_minimum_size = Vector2(0, 64)
+		column.add_child(m_intro)
+
+		_status = Label.new()
+		_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		column.add_child(_status)
+
+		_retry_button = Button.new()
+		_retry_button.text = "重新检查 game_data"
+		_retry_button.pressed.connect(func() -> void: get_tree().reload_current_scene())
+		column.add_child(_retry_button)
+
+		_detail = RichTextLabel.new()
+		_detail.bbcode_enabled = true
+		_detail.fit_content = true
+		_detail.custom_minimum_size = Vector2(0, 80)
+		_detail.add_theme_font_override("normal_font", UiSkin.font())
+		column.add_child(_detail)
+		return
 
 	var title := Label.new()
 	title.text = "首次运行：需要生成或修复 game_data"
@@ -231,9 +264,12 @@ func _refresh_data_status() -> void:
 		_detail.text = "可以直接关闭此窗口并重新开始。"
 		return
 	_status.text = "缺少 %d 个文件：%s" % [missing.size(), ", ".join(missing.map(func(p): return p.get_file()))]
-	_detail.text = "转换后目标目录：%s\n\n手动命令：\n[code]%s[/code]" % [
-		data_dir(), build_convert_command(_root_edit.text if _root_edit != null else "")
-	]
+	if is_mobile_platform():
+		_detail.text = "数据目录：%s" % data_dir()
+	else:
+		_detail.text = "转换后目标目录：%s\n\n手动命令：\n[code]%s[/code]" % [
+			data_dir(), build_convert_command(_root_edit.text if _root_edit != null else "")
+		]
 
 
 ## Write a standalone batch script so paths containing ')' cannot break cmd.exe grouping.
@@ -275,6 +311,8 @@ static func _build_posix_args(base: String, root: String, out_dir: String, repor
 
 
 func start_conversion() -> bool:
+	if is_mobile_platform():
+		return false
 	if _pid > 0 and OS.is_process_running(_pid):
 		_status.text = "转换仍在进行，请稍候…"
 		return false

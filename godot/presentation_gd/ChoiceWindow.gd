@@ -9,6 +9,7 @@ signal chosen(index: int)
 
 const FONT_SIZE := 20
 const LINE_HEIGHT := 27.0
+const TOUCH_LINE_HEIGHT := 36.0
 const PADDING_X := 10.0
 const PADDING_Y := 6.0
 const MIN_WIDTH := 240.0
@@ -23,6 +24,7 @@ var is_open := false
 var position_hint := Vector2(260, 220)
 ## When true the last option may be cancelled with the cancel key (arg bit 4 clear).
 var allow_cancel := true
+var touch_mode := false
 
 var _hover := -1
 
@@ -37,7 +39,24 @@ func _init(p_assets: AssetDB = null) -> void:
 
 
 func line_height() -> float:
-	return LINE_HEIGHT
+	return TOUCH_LINE_HEIGHT if touch_mode else LINE_HEIGHT
+
+
+func set_touch_mode(active: bool) -> void:
+	if touch_mode == active:
+		return
+	touch_mode = active
+	if is_open:
+		queue_redraw()
+
+
+func hits_any_row(point: Vector2) -> bool:
+	if not is_open:
+		return false
+	for rect in row_rects():
+		if rect is Rect2 and rect.has_point(point):
+			return true
+	return false
 
 
 func is_offscreen_parked() -> bool:

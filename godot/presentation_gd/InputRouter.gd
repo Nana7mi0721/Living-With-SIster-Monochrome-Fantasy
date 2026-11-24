@@ -19,9 +19,10 @@ const TOUCH_TAP_MAX_DIST := 24.0
 const TOUCH_DOUBLE_TAP_MAX_MS := 320
 const TOUCH_DOUBLE_TAP_MAX_DIST := 48.0
 const TOUCH_TWO_FINGER_MAX_DIST := 36.0
-const TOUCH_EDGE_MAX_X := 60.0
+const TOUCH_TWO_FINGER_SWIPE_MIN_DY := 56.0
 const TOUCH_SWIPE_MIN_DX := 56.0
 const TOUCH_WHEEL_STEP_PX := 48.0
+const TOUCH_PULSE_TTL_FRAMES := 3
 
 # Host mask bits, mirrored from core_cs/KeyCodes.cs so the VM can read them directly.
 const MASK_OK := 1
@@ -58,13 +59,16 @@ var mobile_double_tap_cancel_enabled := _default_mobile_double_tap_enabled()
 var blank_space_predicate: Callable = Callable()
 var empirical_blank_verifier: Callable = Callable()
 var touch_action_tap_recorder: Callable = Callable()
+var ui_touch_consumer: Callable = Callable()
 var clock_msec_override := -1
-## One-frame press latches cleared by clear_frame_latches() after each VM step.
+## One-frame press latches plus consumable multi-frame touch/cancel pulses.
 var _wheel_bits := 0
 var _wheel_dir := 0
 var _click_latch := false
 var _right_click_latch := false
 var _middle_click_latch := false
+var _touch_ok_ttl := 0
+var _touch_cancel_ttl := 0
 ## A newly entered event must not consume the click/key that opened it.
 var _action_entry_suppressed := false
 var _touches: Dictionary = {}
@@ -93,15 +97,30 @@ func is_pointer_input() -> bool:
 func trigger_action_pulse(source: String = "touch") -> void:
 	last_input_source = source
 	_click_latch = true
+	if source == "touch":
+		_touch_ok_ttl = TOUCH_PULSE_TTL_FRAMES
 	action_pressed.emit()
 
 
 func trigger_cancel_pulse(source: String = "touch") -> void:
 	_click_latch = false
+	_touch_ok_ttl = 0
 	pointer_pressed = false
 	last_input_source = source
 	_right_click_latch = true
+	if source == "touch":
+		_touch_cancel_ttl = TOUCH_PULSE_TTL_FRAMES
 	cancel_pressed.emit()
+
+
+func consume_touch_ok() -> void:
+	_click_latch = false
+	_touch_ok_ttl = 0
+
+
+func consume_touch_cancel() -> void:
+	_right_click_latch = false
+	_touch_cancel_ttl = 0
 
 
 func has_active_touches() -> bool:
@@ -256,6 +275,10 @@ func handle_event(event: InputEvent) -> bool:
 func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 	_set_touch_mode(true)
 	var clamped := st.position.clamp(Vector2.ZERO, LOGICAL_RECT.size)
+	if ui_touch_consumer.is_valid() and bool(ui_touch_consumer.call(clamped)):
+		clear_touch_state()
+		reset_double_tap_state()
+		return false
 	if st.pressed:
 		var first_finger := _touches.is_empty()
 		_touches[st.index] = {
@@ -301,6 +324,8 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 						_last_blank_tap_ms = now_ms
 						_last_blank_tap_pos = clamped
 						_last_blank_tap_empirical = false
+						_click_latch = false
+						_touch_ok_ttl = 0
 						hover_position = clamped
 						mouse_seen = true
 						last_input_source = "touch"
@@ -322,11 +347,13 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 						_last_blank_tap_pos = clamped
 						_last_blank_tap_empirical = true
 					_click_latch = true
+					_touch_ok_ttl = TOUCH_PULSE_TTL_FRAMES
 					action_pressed.emit()
 			elif _touch_max_fingers == 2 and _touch_peak_dist < TOUCH_TWO_FINGER_MAX_DIST:
 				reset_double_tap_state()
 				last_input_source = "touch"
 				_right_click_latch = true
+				_touch_cancel_ttl = TOUCH_PULSE_TTL_FRAMES
 				cancel_pressed.emit()
 			else:
 				reset_double_tap_state()
@@ -339,6 +366,10 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 func _handle_screen_drag(sd: InputEventScreenDrag) -> bool:
 	_set_touch_mode(true)
 	var clamped := sd.position.clamp(Vector2.ZERO, LOGICAL_RECT.size)
+	if ui_touch_consumer.is_valid() and bool(ui_touch_consumer.call(clamped)):
+		clear_touch_state()
+		reset_double_tap_state()
+		return false
 	if not _touches.has(sd.index):
 		return true
 	var entry: Dictionary = _touches[sd.index]
@@ -353,6 +384,26 @@ func _handle_screen_drag(sd: InputEventScreenDrag) -> bool:
 	if _touches.size() > 1 or max_dist >= TOUCH_TAP_MAX_DIST:
 		reset_double_tap_state()
 
+	# Two-finger vertical swipe opens/closes quick drawer without conflicting with Android left-edge back.
+	if _touches.size() == 2 and not _touch_swipe_locked and not _touch_gesture_consumed:
+		var entries: Array = _touches.values()
+		var d0: Vector2 = (entries[0]["pos"] as Vector2) - (entries[0]["start"] as Vector2)
+		var d1: Vector2 = (entries[1]["pos"] as Vector2) - (entries[1]["start"] as Vector2)
+		if d0.y >= TOUCH_TWO_FINGER_SWIPE_MIN_DY and d1.y >= TOUCH_TWO_FINGER_SWIPE_MIN_DY \
+				and absf(d0.y) > absf(d0.x) * 1.25 and absf(d1.y) > absf(d1.x) * 1.25:
+			_touch_gesture_consumed = true
+			_touch_swipe_locked = true
+			reset_double_tap_state()
+			touch_sidebar_swipe.emit(true)
+			return true
+		if sidebar_open_hint and d0.y <= -TOUCH_TWO_FINGER_SWIPE_MIN_DY and d1.y <= -TOUCH_TWO_FINGER_SWIPE_MIN_DY \
+				and absf(d0.y) > absf(d0.x) * 1.25 and absf(d1.y) > absf(d1.x) * 1.25:
+			_touch_gesture_consumed = true
+			_touch_swipe_locked = true
+			reset_double_tap_state()
+			touch_sidebar_swipe.emit(false)
+			return true
+
 	if _touches.size() == 1 and not _touch_swipe_locked:
 		if not _touch_gesture_consumed:
 			hover_position = clamped
@@ -361,12 +412,6 @@ func _handle_screen_drag(sd: InputEventScreenDrag) -> bool:
 		var dx := clamped.x - start_pos.x
 		var dy := clamped.y - start_pos.y
 		if not _touch_scroll_locked:
-			if start_pos.x <= TOUCH_EDGE_MAX_X and dx >= TOUCH_SWIPE_MIN_DX and absf(dx) > absf(dy) * 1.25:
-				_touch_gesture_consumed = true
-				_touch_swipe_locked = true
-				reset_double_tap_state()
-				touch_sidebar_swipe.emit(true)
-				return true
 			if sidebar_open_hint and dx <= -TOUCH_SWIPE_MIN_DX and absf(dx) > absf(dy) * 1.25:
 				_touch_gesture_consumed = true
 				_touch_swipe_locked = true
@@ -404,9 +449,9 @@ func held_mask(allow_mouse: bool = true) -> int:
 	var mask := scripted_key_mask if scripted_key_mask >= 0 else _physical_mask()
 	mask |= _wheel_bits
 	if allow_mouse:
-		if pointer_pressed or _click_latch:
+		if pointer_pressed or _click_latch or _touch_ok_ttl > 0:
 			mask |= MASK_OK
-		if right_pressed or _right_click_latch:
+		if right_pressed or _right_click_latch or _touch_cancel_ttl > 0:
 			mask |= MASK_CANCEL
 	else:
 		mask &= ~(MASK_OK | MASK_CANCEL)
@@ -449,12 +494,12 @@ func wheel_notch() -> int:
 ## Button state for one frame: true when physically held or clicked within this tick.
 func left_frame_pressed() -> bool:
 	_reconcile_pointer_buttons()
-	return not _action_entry_suppressed and (pointer_pressed or _click_latch)
+	return not _action_entry_suppressed and (pointer_pressed or _click_latch or _touch_ok_ttl > 0)
 
 
 func right_frame_pressed() -> bool:
 	_reconcile_pointer_buttons()
-	return right_pressed or _right_click_latch
+	return right_pressed or _right_click_latch or _touch_cancel_ttl > 0
 
 
 func middle_frame_pressed() -> bool:
@@ -463,19 +508,21 @@ func middle_frame_pressed() -> bool:
 
 
 func click_latched() -> bool:
-	return _click_latch
+	return _click_latch or _touch_ok_ttl > 0
 
 
 ## A physical click may drive exactly one VM menu. Drop only the one-frame OK latch;
 ## keep held state so a fresh release/press pair still behaves like the device.
 func clear_click_latch() -> void:
 	_click_latch = false
+	_touch_ok_ttl = 0
 
 
 ## Drop the action that opened a new event, and keep masking it until the device releases.
 func suppress_action_until_release() -> void:
 	_action_entry_suppressed = true
 	_click_latch = false
+	_touch_ok_ttl = 0
 
 
 func action_entry_suppressed() -> bool:
@@ -519,13 +566,15 @@ func release_action_suppression_if_free() -> void:
 	_click_latch = false
 
 
-## Clear one-frame press/wheel latches at the end of a VM step.
+## Clear one-frame press/wheel latches and decay consumable multi-frame touch pulses.
 func clear_frame_latches() -> void:
 	_wheel_bits = 0
 	_wheel_dir = 0
 	_click_latch = false
 	_right_click_latch = false
 	_middle_click_latch = false
+	_touch_ok_ttl = maxi(0, _touch_ok_ttl - 1)
+	_touch_cancel_ttl = maxi(0, _touch_cancel_ttl - 1)
 	release_action_suppression_if_free()
 
 
@@ -543,5 +592,7 @@ func clear_pointer_latches() -> void:
 	_click_latch = false
 	_right_click_latch = false
 	_middle_click_latch = false
+	_touch_ok_ttl = 0
+	_touch_cancel_ttl = 0
 	clear_touch_state()
 	clear_suppression()
