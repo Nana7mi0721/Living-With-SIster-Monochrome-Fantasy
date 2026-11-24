@@ -8,15 +8,14 @@ extends Control
 
 signal completed(ok: bool)
 
+const _BootSplashOverlayScript = preload("res://presentation_gd/BootSplashOverlay.gd")
+
 const SOURCE_ROOT := "res://mobile_data"
 const TARGET_ROOT := "user://mobile_data"
 const MANIFEST_NAME := "mobile_data_manifest.json"
 const MARKER_NAME := ".staging_version"
 const CHUNK_BYTES := 1024 * 1024
-const SPLASH_STATIC_PATH := "res://assets/boot/splash_static.png"
-const SPLASH_FRAME_0_PATH := "res://assets/boot/splash_frame_0.png"
-const SPLASH_FRAME_1_PATH := "res://assets/boot/splash_frame_1.png"
-const SPLASH_ANIM_INTERVAL := 1.0 / 4.5
+const SPLASH_REVEAL_SPEED := 3.2
 
 var source_root := SOURCE_ROOT
 var target_root := TARGET_ROOT
@@ -35,10 +34,12 @@ var _worker_done := false
 var _worker_ok := false
 var _worker_error := ""
 
-var _splash_rect: TextureRect
-var _splash_frames: Array[Texture2D] = []
-var _splash_frame_idx := 0
-var _splash_anim_timer := 0.0
+var _splash_stage: Control
+var _splash_base_rect: TextureRect
+var _splash_reveal_clip: Control
+var _splash_progress_rect: TextureRect
+var _splash_target_progress := 0.0
+var _splash_display_progress := 0.0
 var _bar: ProgressBar
 var _status: Label
 var _retry: Button
@@ -207,15 +208,39 @@ func _build_ui() -> void:
 	root_column.add_theme_constant_override("separation", 18)
 	center.add_child(root_column)
 
-	_splash_rect = TextureRect.new()
-	_splash_rect.custom_minimum_size = Vector2(320, 180)
-	_splash_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_splash_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_splash_rect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_splash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_splash_stage = Control.new()
+	_splash_stage.custom_minimum_size = Vector2(384, 216)
+	_splash_stage.size = Vector2(384, 216)
+	_splash_stage.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_splash_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_column.add_child(_splash_stage)
+
+	_splash_base_rect = TextureRect.new()
+	_splash_base_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_splash_base_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_splash_base_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_splash_base_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_splash_stage.add_child(_splash_base_rect)
+
+	_splash_reveal_clip = Control.new()
+	_splash_reveal_clip.clip_contents = true
+	_splash_reveal_clip.position = Vector2.ZERO
+	_splash_reveal_clip.size = Vector2(0.0, 216.0)
+	_splash_reveal_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_splash_stage.add_child(_splash_reveal_clip)
+
+	_splash_progress_rect = TextureRect.new()
+	_splash_progress_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_splash_progress_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_splash_progress_rect.position = Vector2.ZERO
+	_splash_progress_rect.size = Vector2(384.0, 216.0)
+	_splash_progress_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_splash_reveal_clip.add_child(_splash_progress_rect)
+
+	_splash_stage.resized.connect(_sync_splash_reveal)
 	_load_splash_textures()
-	_splash_rect.visible = _splash_rect.texture != null
-	root_column.add_child(_splash_rect)
+	_splash_stage.visible = _splash_base_rect.texture != null
+	_sync_splash_reveal()
 
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(720, 0)
@@ -477,42 +502,35 @@ func _worker_run(job: Dictionary) -> void:
 
 
 func _load_splash_textures() -> void:
-	_splash_frames.clear()
-	if ResourceLoader.exists(SPLASH_FRAME_0_PATH) and ResourceLoader.exists(SPLASH_FRAME_1_PATH):
-		var f0 := _load_boot_texture(SPLASH_FRAME_0_PATH)
-		var f1 := _load_boot_texture(SPLASH_FRAME_1_PATH)
-		if f0 != null and f1 != null:
-			_splash_frames = [f0, f1]
-			_splash_rect.texture = _splash_frames[0]
-			return
-	if ResourceLoader.exists(SPLASH_STATIC_PATH):
-		var static_tex := _load_boot_texture(SPLASH_STATIC_PATH)
-		if static_tex != null:
-			_splash_rect.texture = static_tex
+	var pair: Dictionary = _BootSplashOverlayScript.load_logo_pair(null)
+	var base_tex: Texture2D = pair.get("base", null)
+	var prog_tex: Texture2D = pair.get("progress", null)
+	if _splash_base_rect != null:
+		_splash_base_rect.texture = base_tex
+	if _splash_progress_rect != null:
+		_splash_progress_rect.texture = prog_tex
+	if _splash_reveal_clip != null:
+		_splash_reveal_clip.visible = prog_tex != null
 
 
-static func _load_boot_texture(path: String) -> Texture2D:
-	var loaded := ResourceLoader.load(path)
-	if loaded is Texture2D:
-		return loaded as Texture2D
-	if not FileAccess.file_exists(path):
-		return null
-	var raw := FileAccess.get_file_as_bytes(path)
-	if raw.is_empty():
-		return null
-	var img := Image.new()
-	if img.load_png_from_buffer(raw) != OK:
-		return null
-	return ImageTexture.create_from_image(img)
+func _sync_splash_reveal() -> void:
+	if _splash_stage == null:
+		return
+	var stage_size := _splash_stage.size
+	if stage_size.x <= 0.0 or stage_size.y <= 0.0:
+		stage_size = _splash_stage.custom_minimum_size
+	if _splash_progress_rect != null:
+		_splash_progress_rect.position = Vector2.ZERO
+		_splash_progress_rect.size = stage_size
+	if _splash_reveal_clip != null:
+		_splash_reveal_clip.position = Vector2.ZERO
+		_splash_reveal_clip.size = Vector2(stage_size.x * clampf(_splash_display_progress, 0.0, 1.0), stage_size.y)
 
 
 func _process(delta: float) -> void:
-	if _splash_frames.size() >= 2 and _splash_rect != null:
-		_splash_anim_timer += delta
-		if _splash_anim_timer >= SPLASH_ANIM_INTERVAL:
-			_splash_anim_timer = fmod(_splash_anim_timer, SPLASH_ANIM_INTERVAL)
-			_splash_frame_idx = (_splash_frame_idx + 1) % _splash_frames.size()
-			_splash_rect.texture = _splash_frames[_splash_frame_idx]
+	if absf(_splash_display_progress - _splash_target_progress) > 0.0001:
+		_splash_display_progress = move_toward(_splash_display_progress, _splash_target_progress, maxf(delta, 0.0) * SPLASH_REVEAL_SPEED)
+		_sync_splash_reveal()
 	if not _running:
 		return
 	_mutex.lock()
@@ -535,14 +553,19 @@ func _on_worker_finished() -> void:
 	_running = false
 	set_process(false)
 	_set_progress(_total_bytes)
+	_splash_display_progress = 1.0
+	_sync_splash_reveal()
 	if _status != null:
 		_status.text = "数据准备完成，正在进入游戏…"
 	completed.emit(true)
 
 
 func _set_progress(done_bytes: int) -> void:
+	var ratio := 1.0 if _total_bytes <= 0 else clampf(float(done_bytes) / float(_total_bytes), 0.0, 1.0)
+	_splash_target_progress = ratio
+	_sync_splash_reveal()
 	if _bar != null:
-		_bar.value = 100.0 if _total_bytes <= 0 else minf(100.0, 100.0 * float(done_bytes) / float(_total_bytes))
+		_bar.value = 100.0 * ratio
 	if _status != null and _total_bytes > 0:
 		_status.text = "已准备 %.1f / %.1f MB" % [
 			float(done_bytes) / 1048576.0,

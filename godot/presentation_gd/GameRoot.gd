@@ -114,6 +114,7 @@ func _ready() -> void:
 		_boot_splash = BootSplashOverlayScript.new()
 		_boot_splash.name = "BootSplashOverlay"
 		add_child(_boot_splash)
+		_boot_splash.call("set_progress", 0.10, true)
 		call_deferred("_start_game")
 		return
 	_start_game()
@@ -147,6 +148,9 @@ func _start_game() -> void:
 		add_child(wizard)
 		return
 	assets = AssetDB.new()
+	if _boot_splash != null:
+		_boot_splash.call("load_retail_textures", assets)
+		_boot_splash.call("set_progress", 0.35)
 
 	stage = PictureStage.new(assets)
 	add_child(stage)
@@ -247,6 +251,8 @@ func _start_game() -> void:
 		phase = "failed"
 		push_error("GameRoot: programs.json missing")
 		return
+	if _boot_splash != null:
+		_boot_splash.call("set_progress", 0.75)
 	_seed_live_rng_if_windowed()
 	if not session.StartTitle():
 		_dismiss_boot_splash(0.0)
@@ -254,6 +260,8 @@ func _start_game() -> void:
 		push_error("GameRoot: title event missing")
 		return
 	phase = session.Phase
+	if _boot_splash != null:
+		_boot_splash.call("set_progress", 1.0)
 
 
 func _build_overlays() -> void:
@@ -330,7 +338,7 @@ func _process(delta: float) -> void:
 		advance_frame()
 		guard += 1
 	_sync_title_menu()
-	if _boot_splash != null and frames >= 1:
+	if _boot_splash != null and frames >= 1 and bool(_boot_splash.call("is_reveal_complete")):
 		_dismiss_boot_splash(0.25)
 	_sync_mobile_and_overlay_state(delta)
 	if overlays != null:

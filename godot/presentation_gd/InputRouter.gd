@@ -301,7 +301,9 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 			hover_position = clamped
 			mouse_seen = true
 		last_input_source = "touch"
-		return true
+		# While the quick drawer is open, return false so drawer buttons/scrim still receive taps
+		# while InputRouter tracks the touch sequence for swipe-left / two-finger swipe-up close.
+		return not sidebar_open_hint
 
 	if _touches.has(st.index):
 		var entry: Dictionary = _touches[st.index]
@@ -310,6 +312,10 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 		_touch_peak_dist = maxf(_touch_peak_dist, maxf(float(entry["max_dist"]), dist))
 		_touches.erase(st.index)
 	if _touches.is_empty():
+		if sidebar_open_hint:
+			reset_double_tap_state()
+			clear_touch_state()
+			return false
 		if not _touch_gesture_consumed:
 			if _touch_max_fingers == 1 and _touch_peak_dist < TOUCH_TAP_MAX_DIST:
 				var now_ms: int = _now_msec()

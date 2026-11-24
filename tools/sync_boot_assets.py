@@ -11,6 +11,7 @@ import struct
 import sys
 import zlib
 from pathlib import Path
+import io
 
 try:
     from PIL import Image as _PilImage
@@ -19,6 +20,10 @@ except ImportError:
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = REPO_ROOT / "godot/assets/boot/splash_static.png"
+DEFAULT_RETAIL_LOGO = REPO_ROOT / "work/all/SystemFile/logo.jpg"
+DEFAULT_MEDIA_PAK = REPO_ROOT / "work/all/media.pak"
+DEFAULT_RETAIL_OUT_DIR = REPO_ROOT / "work/out/boot_assets"
+PAK_MAGIC = b"WOLFMPK1"
 PLACEHOLDER_SIZE = (1024, 576)
 MAIN_ICON_SIZE = 192
 ADAPTIVE_SIZE = 432
@@ -403,6 +408,87 @@ def _sync_with_stdlib(source: Path, out_dir: Path) -> list[Path]:
     return [main_path, fg_path, bg_path]
 
 
+def extract_entry_from_media_pak(pak_path: Path, entry_name: str = "systemfile/logo.jpg") -> bytes | None:
+    if not pak_path.is_file():
+        return None
+    tools_dir = str(Path(__file__).resolve().parent)
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+    import pack_media
+
+    want = entry_name.replace("\\", "/").strip("/").lower()
+    with pak_path.open("rb") as f:
+        header = f.read(pack_media.HEADER_SIZE)
+        if len(header) < pack_media.HEADER_SIZE or header[:8] != pack_media.MAGIC:
+            return None
+        ver, flags, count, index_offset, index_size = struct.unpack("<HHIQQ", header[8:])
+        if ver != pack_media.VERSION or flags != 0:
+            return None
+        f.seek(index_offset)
+        idx = pack_media.xor_bytes(f.read(index_size), index_offset)
+        pos = 0
+        for _ in range(count):
+            if pos + 22 > len(idx):
+                return None
+            plen, off, sz, crc = struct.unpack_from("<HQQI", idx, pos)
+            pos += 22
+            rel = idx[pos : pos + plen].decode("utf-8", errors="replace").replace("\\", "/").lower()
+            pos += plen
+            if rel == want:
+                f.seek(off)
+                plain = pack_media.xor_bytes(f.read(sz), off)
+                if (zlib.crc32(plain) & 0xFFFFFFFF) != crc:
+                    return None
+                return plain
+    return None
+
+
+def resolve_retail_logo(
+    repo_root: Path = REPO_ROOT,
+    retail_logo: Path | None = None,
+    media_pak: Path | None = None,
+) -> tuple[str, bytes] | None:
+    logo_path = retail_logo or (repo_root / "work/all/SystemFile/logo.jpg")
+    if logo_path.is_file():
+        return (str(logo_path), logo_path.read_bytes())
+    pak_path = media_pak or (repo_root / "work/all/media.pak")
+    data = extract_entry_from_media_pak(pak_path, "systemfile/logo.jpg")
+    if data:
+        return (f"{pak_path}::systemfile/logo.jpg", data)
+    return None
+
+
+def _write_splash_png_from_bytes(raw_bytes: bytes, dest_png: Path) -> None:
+    dest_png.parent.mkdir(parents=True, exist_ok=True)
+    if _PilImage is not None:
+        with _PilImage.open(io.BytesIO(raw_bytes)) as img:
+            img.convert("RGB").save(dest_png, format="PNG", optimize=True)
+        return
+    if raw_bytes[:8] == PNG_SIGNATURE:
+        dest_png.write_bytes(raw_bytes)
+        return
+    raise RuntimeError("Pillow is required to convert non-PNG retail logo.jpg into splash_static.png")
+
+
+def sync_from_retail(
+    repo_root: Path = REPO_ROOT,
+    out_dir: Path | None = None,
+    retail_logo: Path | None = None,
+    media_pak: Path | None = None,
+    use_pillow: bool = True,
+) -> list[Path]:
+    resolved = resolve_retail_logo(repo_root=repo_root, retail_logo=retail_logo, media_pak=media_pak)
+    if resolved is None:
+        raise FileNotFoundError("retail SystemFile/logo.jpg not found in work/all or media.pak")
+    _origin, raw_bytes = resolved
+    target_dir = (out_dir or (repo_root / "work/out/boot_assets")).resolve()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    splash_png = target_dir / "splash_static.png"
+    _write_splash_png_from_bytes(raw_bytes, splash_png)
+    derived = sync_boot_assets(splash_png, out_dir=target_dir, use_pillow=use_pillow)
+    return [splash_png, *derived]
+
+
 def sync_boot_assets(source: Path, out_dir: Path | None = None, use_pillow: bool = True) -> list[Path]:
     src = source.resolve()
     if not src.is_file():
@@ -426,7 +512,24 @@ def main(argv: list[str] | None = None) -> int:
         "--out-dir",
         type=Path,
         default=None,
-        help="Output directory for derived Android icons (default: source directory)",
+        help="Output directory for derived icons (default: source dir, or work/out/boot_assets with --from-retail)",
+    )
+    parser.add_argument(
+        "--from-retail",
+        action="store_true",
+        help="Derive local packaging splash_static.png + Android icons from work/all/SystemFile/logo.jpg or media.pak without modifying git placeholders",
+    )
+    parser.add_argument(
+        "--retail-logo",
+        type=Path,
+        default=None,
+        help="Explicit path to retail SystemFile/logo.jpg (used with --from-retail)",
+    )
+    parser.add_argument(
+        "--media-pak",
+        type=Path,
+        default=None,
+        help="Explicit path to retail media.pak (fallback for --from-retail)",
     )
     parser.add_argument(
         "--init-placeholder",
@@ -439,6 +542,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Force pure-Python stdlib PNG fallback instead of Pillow",
     )
     args = parser.parse_args(argv)
+
+    if args.from_retail:
+        outputs = sync_from_retail(
+            repo_root=REPO_ROOT,
+            out_dir=args.out_dir,
+            retail_logo=args.retail_logo,
+            media_pak=args.media_pak,
+            use_pillow=not args.no_pillow,
+        )
+        print(f"SYNC_BOOT_ASSETS_OK mode=retail out_dir={outputs[0].parent} outputs={len(outputs)}")
+        return 0
 
     if args.init_placeholder and not args.source.is_file():
         create_black_placeholder(args.source)

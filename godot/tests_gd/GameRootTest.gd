@@ -1036,6 +1036,19 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 		add_child(splash_node)
 		if splash_node.z_index != 190:
 			failures.append("BootSplashOverlay must use z_index=190 (got %d)" % splash_node.z_index)
+		splash_node.size = Vector2(1024.0, 576.0)
+		splash_node.call("set_progress", 0.5, true)
+		if absf(float(splash_node.call("get_reveal_width")) - 512.0) > 1.0:
+			failures.append("BootSplashOverlay set_progress(0.5) must reveal half width 512px (got %s)" % str(splash_node.call("get_reveal_width")))
+		splash_node.call("set_progress", 1.0, false)
+		splash_node._process(0.5)
+		if not bool(splash_node.call("is_reveal_complete")):
+			failures.append("BootSplashOverlay must complete horizontal reveal after advancing toward 1.0")
+		var jpg_probe := Image.create(8, 8, false, Image.FORMAT_RGB8)
+		jpg_probe.fill(Color(0.2, 0.3, 0.4))
+		var jpg_tex: Texture2D = splash_script.decode_image_texture(jpg_probe.save_jpg_to_buffer())
+		if jpg_tex == null or jpg_tex.get_width() != 8:
+			failures.append("BootSplashOverlay.decode_image_texture must decode JPEG bytes via magic sniffing")
 		splash_node.call("fade_out_and_free", 0.0)
 
 	var export_src_dir := transfer_dir.path_join("export_src")
@@ -1119,6 +1132,42 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 		failures.append("touch drawer tab must be visible at y >= 36 on title to clear header bar (vis=%s y=%s)" % [str(root.overlays._drawer_tab.visible), str(root.overlays._drawer_tab.position.y)])
 	if not root.overlays.consumes_touch_point(root.overlays._drawer_tab.position + Vector2(10, 10)):
 		failures.append("PlayOverlays.consumes_touch_point must intercept taps on drawer tab")
+	# When drawer is open, swipe-left close gesture must stay reachable while taps must not bleed into game.
+	root.overlays.open_drawer()
+	root._sync_mobile_and_overlay_state(0.0)
+	var drawer_bleed_actions := [0]
+	var drawer_bleed_cb := func() -> void: drawer_bleed_actions[0] = int(drawer_bleed_actions[0]) + 1
+	root.router.action_pressed.connect(drawer_bleed_cb)
+	var dt_down := InputEventScreenTouch.new()
+	dt_down.index = 0
+	dt_down.position = Vector2(180.0, 200.0)
+	dt_down.pressed = true
+	root.router.handle_event(dt_down)
+	var dt_up := InputEventScreenTouch.new()
+	dt_up.index = 0
+	dt_up.position = Vector2(180.0, 200.0)
+	dt_up.pressed = false
+	root.router.handle_event(dt_up)
+	if int(drawer_bleed_actions[0]) != 0:
+		failures.append("tapping while drawer is open must not bleed action_pressed into game")
+	var ds_down := InputEventScreenTouch.new()
+	ds_down.index = 0
+	ds_down.position = Vector2(200.0, 200.0)
+	ds_down.pressed = true
+	root.router.handle_event(ds_down)
+	var ds_drag := InputEventScreenDrag.new()
+	ds_drag.index = 0
+	ds_drag.position = Vector2(110.0, 200.0)
+	root.router.handle_event(ds_drag)
+	var ds_up := InputEventScreenTouch.new()
+	ds_up.index = 0
+	ds_up.position = Vector2(110.0, 200.0)
+	ds_up.pressed = false
+	root.router.handle_event(ds_up)
+	root.router.action_pressed.disconnect(drawer_bleed_cb)
+	if root.overlays.drawer_open():
+		failures.append("single-finger swipe left must close open mobile quick drawer")
+	root._modal_release_guard = false
 	root.choice.close()
 	root._sync_mobile_and_overlay_state(0.0)
 	if root.overlays._drawer_tab.visible:

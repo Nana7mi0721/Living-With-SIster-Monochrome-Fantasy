@@ -1119,6 +1119,43 @@ class MobileToolsTest(unittest.TestCase):
         rel_script = (REPO_ROOT / "tools/package_release.sh").read_text(encoding="utf-8")
         self.assertIn("if pck.is_file()", rel_script)
 
+    def test_sync_boot_assets_from_retail_logo_and_pak(self) -> None:
+        import io as _io
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            buf = _io.BytesIO()
+            img = Image.new("RGB", (64, 36), (0, 0, 0))
+            for y in range(12, 24):
+                for x in range(24, 40):
+                    img.putpixel((x, y), (240, 240, 240))
+            img.save(buf, format="JPEG")
+            jpg_bytes = buf.getvalue()
+
+            # 1. Derive directly from media.pak when loose logo.jpg is absent.
+            pak = t / "media.pak"
+            pack_media.write_pak([("SystemFile/logo.jpg", jpg_bytes)], pak)
+            out_pak = t / "out_pak"
+            rc = sync_boot_assets.main(
+                ["--from-retail", "--retail-logo", str(t / "missing_logo.jpg"), "--media-pak", str(pak), "--out-dir", str(out_pak)]
+            )
+            self.assertEqual(rc, 0)
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out_pak / "splash_static.png"), (64, 36))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out_pak / "android_icon_192.png"), (192, 192))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out_pak / "android_adaptive_fg_432.png"), (432, 432))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out_pak / "android_adaptive_bg_432.png"), (432, 432))
+
+            # 2. Loose retail SystemFile/logo.jpg takes precedence when present.
+            loose_logo = t / "logo.jpg"
+            loose_logo.write_bytes(jpg_bytes)
+            out_loose = t / "out_loose"
+            rc2 = sync_boot_assets.main(
+                ["--from-retail", "--retail-logo", str(loose_logo), "--out-dir", str(out_loose)]
+            )
+            self.assertEqual(rc2, 0)
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out_loose / "splash_static.png"), (64, 36))
+
 
 if __name__ == "__main__":
     unittest.main()

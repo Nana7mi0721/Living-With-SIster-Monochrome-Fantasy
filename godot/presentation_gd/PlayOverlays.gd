@@ -441,11 +441,19 @@ func is_modal_open() -> bool:
 	return _backlog_open or _title_confirm_open or _save_confirm_open or _quit_confirm_open or _transfer_open or _drawer_open
 
 
+func is_blocking_modal_open() -> bool:
+	return _backlog_open or _title_confirm_open or _save_confirm_open or _quit_confirm_open or _transfer_open or fault_modal_visible()
+
+
 ## True when a native screen touch at logical [param pos] belongs to PlayOverlays UI
-## (any modal, fault dialog, mobile drawer tab, or save page shortcut bar).
+## (blocking modals, fault dialog, mobile drawer tab, or save page shortcut bar).
+## When only the mobile quick drawer is open, drags pass through to InputRouter so
+## swipe-left / two-finger swipe-up close gestures remain reachable while tap dispatch stays suppressed.
 func consumes_touch_point(pos: Vector2) -> bool:
-	if is_modal_open() or fault_modal_visible():
+	if is_blocking_modal_open():
 		return true
+	if _drawer_open:
+		return false
 	if _drawer_tab != null and _drawer_tab.visible:
 		var tab_size := _drawer_tab.size
 		if tab_size.x <= 0.0 or tab_size.y <= 0.0:

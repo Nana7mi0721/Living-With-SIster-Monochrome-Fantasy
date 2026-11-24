@@ -56,10 +56,11 @@
    - `LegacySaveImporter.cs` 补齐 `raw[6] != 0x55` Shift-JIS (`cp932`) 解码与 `ValidateFile`；`GameSession.cs` / `GameSessionController.cs` 补齐单槽/系统/批量导出、`ImportRetailSystemSave` 与 `ImportRetailSaveToSlot` 同步写入 `System.json` 槽位标记（`Var[0]/546/626`）；
    - `PlayOverlays.gd` 将默认导出切换为原版 `.sav`（单槽 + 打包 ZIP，同时保留重制版 JSON ZIP 备份），支持单文件/ZIP 文件头自动分流及原生系统文件对话框；
    - `SaveImportTest.cs` 新增往返单测，并在 `crates/wolf-save/tests/rebuild.rs` 通过 Rust `wolf-save` 字节级解析与重构交叉校验。
-3. **专项 3（三端启动画面四层无缝替换）**：
-   - 建立 `godot/assets/boot/` 纯黑占位单源与 [sync_boot_assets.py](../../tools/sync_boot_assets.py)（自动派生 Android `192×192` / `432×432` 图标，含无 Pillow 纯标准库 PNG 回退）；
+3. **专项 3（三端启动画面四层无缝替换 — 升级为原版两层横向揭示）**：
+   - 建立 `godot/assets/boot/` 纯黑占位单源与 [sync_boot_assets.py](../../tools/sync_boot_assets.py)（自动派生 Android `192×192` / `432×432` 图标，含无 Pillow 纯标准库 PNG 回退；支持 `--from-retail` 在本地打包期自动从 `work/all/SystemFile/logo.jpg` 或 `media.pak` 派生而不污染 Git 纯黑占位图）；
    - 配置 `godot/project.godot` `boot_splash/*`、Android 图标及 iOS `LaunchScreen.storyboard`（`package_ios.sh` 新增导出后 `SplashImage.imageset` 校验）；
-   - 更新 `MobileDataBootstrap.gd` 纯黑背景与启动图展示，新增 [BootSplashOverlay.gd](../../godot/presentation_gd/BootSplashOverlay.gd)（`z_index = 190`，非无头主场景延迟启动并在首帧 0.25s 淡出，无头/测试场景同步跳过）。
+   - [BootSplashOverlay.gd](../../godot/presentation_gd/BootSplashOverlay.gd) 与 [MobileDataBootstrap.gd](../../godot/presentation_gd/MobileDataBootstrap.gd) 升级为原版 WOLF Pro 两层 1024×576 横向揭示（底图 `SystemFile/logo.jpg` + `clip_contents` 进度层 `SystemFile/logo2.jpg` 从 `0 → 100%` 平滑覆盖），运行时动态读取 `AssetDB` / `work/all` / `media.pak` 并支持 PNG/JPEG/WebP 魔数解码（不向 Git 提交原版图）；Android 首次启动喂入真实解压进度，常规冷启动分阶段推进（`0.10 → 0.35 → 0.75 → 1.0`）并在揭示完成与首帧就绪后 0.25s 淡出，无头/测试场景同步跳过；
+   - 同步修复 `PlayOverlays.consumes_touch_point()` 与 `InputRouter` 在移动端抽屉打开时放行左滑/双指上滑关闭手势且保持拦截底层点击穿透。
 
 ---
 
@@ -68,5 +69,5 @@
 - `dotnet build godot/Lwsmf.csproj -c Release`：0 warnings, 0 errors（反射序列化已关闭）
 - `bash tools/godot_check.sh`：38 / 38 项全通过（含 `149655/149655` 与 `989439/989439` Oracle 轨迹一致、`SaveImportTest`、`SaveLoadTest`、9 项 GDScript 表现层测试与 `lint_decisions.py`）
 - `LWsmf_RENDER=1 bash tools/godot_check.sh`：OpenGL3 渲染回归门禁全通过
-- `python -m unittest tools/mobile/test_mobile_tools.py`：23 / 23 项全通过（含 `release_audit.repo_scan` 零违规）
+- `python -m unittest tools/mobile/test_mobile_tools.py`：24 / 24 项全通过（含 `release_audit.repo_scan` 零违规与 `sync_boot_assets --from-retail` 测试）
 - `cargo test -p wolf-save`（含 C# 导出 `.sav` 字节级解析与重构交叉验证）：全通过
