@@ -55,6 +55,8 @@ public partial class GameSessionController : Node
 
     public string DescribeEvent(int eventId) => _session?.DescribeEvent(eventId) ?? "missing";
     public string DescribeInstances() => _session?.DescribeInstances() ?? "";
+    public string GetForegroundStackSignature() => _session?.GetForegroundStackSignature() ?? "";
+    public string LastImportNotice => _session?.LastImportNotice ?? "";
     public uint MovementDeny => _session?.MovementDeny ?? 0;
     public uint BasicAllDeny => _session?.BasicAllDeny ?? 0;
 
@@ -222,7 +224,6 @@ public partial class GameSessionController : Node
     private sealed class CallableView : IGameSessionView
     {
         private readonly Godot.Control _host;
-        private readonly JsonSerializerOptions _json = new();
 
         public CallableView(Godot.Control host) => _host = host;
 
@@ -299,7 +300,7 @@ public partial class GameSessionController : Node
 
         public void RestorePictures(IReadOnlyList<SavedPicture> pictures)
         {
-            if (HostAlive) _host.Call("_on_restore_pictures", JsonSerializer.Serialize(pictures, _json));
+            if (HostAlive) _host.Call("_on_restore_pictures", JsonSerializer.Serialize(pictures, LwsmfJsonContext.Default.IReadOnlyListSavedPicture));
         }
 
         public IReadOnlyList<SavedPicture> SnapshotPictures()
@@ -336,7 +337,7 @@ public partial class GameSessionController : Node
 
         public void RestoreAudio(IReadOnlyList<SavedAudio> audio)
         {
-            if (HostAlive) _host.Call("_on_restore_audio", JsonSerializer.Serialize(audio, _json));
+            if (HostAlive) _host.Call("_on_restore_audio", JsonSerializer.Serialize(audio, LwsmfJsonContext.Default.IReadOnlyListSavedAudio));
         }
 
         public IReadOnlyList<SavedAudio> SnapshotAudio()

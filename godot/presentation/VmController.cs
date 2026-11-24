@@ -1080,6 +1080,13 @@ public partial class VmController : Node, IHost, IVmSession
         DatabaseStore?.ApplySavedCells(cells);
     }
 
+    public SavedDbOverlays? SnapshotDbOverlays() => DatabaseStore?.SnapshotOverlays();
+
+    public void RestoreDbOverlays(SavedDbOverlays? overlays) => DatabaseStore?.RestoreOverlays(overlays);
+
+    public DbValue? ReadDatabaseWithOverlay(DbOp op, SavedDbOverlays? overlays) =>
+        DatabaseStore?.ReadWithOverlay(op, overlays);
+
     /// Start a common event by id. The real starter returns Instance, a project type that
     /// GDScript cannot marshal, so the presentation layer gets a bool.
     public bool StartEvent(int eventId) => StartCommonEvent(eventId) != null;
@@ -1096,6 +1103,11 @@ public partial class VmController : Node, IHost, IVmSession
 
     /// <summary>Directory holding runtime saves and thumbnail JPGs for GET_FILE_EXIST.</summary>
     public string SaveDirectory { get; set; } = "";
+
+    /// <summary>Optional active media.pak reader for mobile GET_FILE_EXIST probes.</summary>
+    public MediaPakReader? MediaPak { get; set; }
+
+    public void SetMediaPak(MediaPakReader? pak) => MediaPak = pak;
 
     public bool FileExists(string path)
     {
@@ -1122,10 +1134,39 @@ public partial class VmController : Node, IHost, IVmSession
             string saveSubRel = Path.Combine(segments.GetRange(1, segments.Count - 1).ToArray());
             if (ExistsWithinRoot(SaveDirectory, saveSubRel)) return true;
             if (ExistsWithinRoot(SaveDirectory, relPath)) return true;
+            if (ExistsInSaveDirectoryCaseInsensitive(SaveDirectory, segments[^1])) return true;
         }
 
         string pkgRoot = AppPaths.PackageRoot();
         if (!string.IsNullOrEmpty(pkgRoot) && ExistsWithinRoot(pkgRoot, relPath)) return true;
+        if (MediaPak != null && MediaPak.IsOpen && MediaPak.Has(string.Join('/', segments))) return true;
+        return false;
+    }
+
+    private static bool ExistsInSaveDirectoryCaseInsensitive(string saveDir, string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName) || !Directory.Exists(saveDir)) return false;
+        try
+        {
+            string? jsonName = fileName.EndsWith(".sav", StringComparison.OrdinalIgnoreCase)
+                ? Path.ChangeExtension(fileName, ".json")
+                : null;
+            string? jsonBakName = jsonName != null ? jsonName + ".bak" : null;
+            foreach (string existing in Directory.EnumerateFiles(saveDir))
+            {
+                string existingName = Path.GetFileName(existing);
+                if (string.Equals(existingName, fileName, StringComparison.OrdinalIgnoreCase)) return true;
+                if (jsonName != null && (string.Equals(existingName, jsonName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(existingName, jsonBakName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
         return false;
     }
 

@@ -85,15 +85,34 @@ public sealed class AutoEvents
         return new AutoEvents(events);
     }
 
-    /// <summary>Seed the latched state after a load, then replay the HUD painters once.</summary>
+    /// <summary>Seed the latched state after a load, rebind restored parallel instances, then replay HUD painters once.</summary>
     public void PrimeLatched(EventVm vm)
     {
         if (!Enabled) return;
+        RebindRunning(vm);
         foreach (var ev in _events)
         {
             _latched[ev.Id] = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
         }
         Sync(vm);
+    }
+
+    /// <summary>Rebuild the active parallel instance index from live VM coroutines (e.g. after save restore).</summary>
+    public void RebindRunning(EventVm vm)
+    {
+        _running.Clear();
+        foreach (var ev in _events)
+        {
+            if (!ev.IsParallel && ev.Operator == 0) continue;
+            foreach (var inst in vm.Instances)
+            {
+                if (inst.EventId == ev.Id && inst.IsParallel)
+                {
+                    _running[ev.Id] = inst.Id;
+                    break;
+                }
+            }
+        }
     }
 
     public AutoSyncReport Sync(EventVm vm)
@@ -129,13 +148,42 @@ public sealed class AutoEvents
                     TraceStart(ev.Id, inst.Id);
                 }
             }
-            else if (!now && _running.Remove(ev.Id, out int instanceId))
+            else if (!now)
             {
-                if (vm.FindInstance(instanceId) != null)
+                int trackedId = -1;
+                if (_running.Remove(ev.Id, out int instanceId))
                 {
-                    vm.StopInstance(instanceId);
-                    stopped++;
-                    TraceStop(ev.Id, instanceId);
+                    trackedId = instanceId;
+                    if (vm.FindInstance(instanceId) != null)
+                    {
+                        vm.StopInstance(instanceId);
+                        stopped++;
+                        TraceStop(ev.Id, instanceId);
+                    }
+                }
+                List<int>? orphanIds = null;
+                if (ev.IsParallel || ev.Operator != 0)
+                {
+                    foreach (var inst in vm.Instances)
+                    {
+                        if (inst.EventId == ev.Id && inst.IsParallel && inst.Id != trackedId)
+                        {
+                            orphanIds ??= new List<int>();
+                            orphanIds.Add(inst.Id);
+                        }
+                    }
+                }
+                if (orphanIds != null)
+                {
+                    foreach (int orphanId in orphanIds)
+                    {
+                        if (vm.FindInstance(orphanId) != null)
+                        {
+                            vm.StopInstance(orphanId);
+                            stopped++;
+                            TraceStop(ev.Id, orphanId);
+                        }
+                    }
                 }
             }
             _latched[ev.Id] = now;

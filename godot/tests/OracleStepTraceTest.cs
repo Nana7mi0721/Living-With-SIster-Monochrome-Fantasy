@@ -116,7 +116,7 @@ public partial class OracleStepTraceTest : Node
                 if (!first) sb.Append(',');
                 first = false;
                 sb.Append('"').Append(pair.Key).Append("\":")
-                  .Append(JsonSerializer.Serialize(pair.Value));
+                  .Append(JsonSerializer.Serialize(pair.Value, LwsmfJsonContext.Default.String));
             }
             sb.Append("},\"effects\":[");
             for (int e = 0; e < s.Effects.Count; e++)

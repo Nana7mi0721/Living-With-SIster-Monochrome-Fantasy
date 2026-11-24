@@ -106,25 +106,8 @@ public partial class PerformanceProbeTest : Node
                 if (staticMb > 512.0) failures.Add($"strict static_mb={staticMb:F3} > 512");
             }
 
-            WriteReport(reportPath, new
-            {
-                schema = "lwsmf.performance.core",
-                schema_version = 1,
-                startup_ms = Round(startupMs),
-                startup_frames = startupFrames,
-                frames = measuredFrames,
-                session_frames = sessionFrames,
-                map = measuredMap,
-                avg_ms = Round(avgMs),
-                p50_ms = Round(p50Ms),
-                p95_ms = Round(p95Ms),
-                max_ms = Round(maxMs),
-                gc_mb = Round(gcMb),
-                static_mb = Round(staticMb),
-                static_peak_mb = Round(staticPeakMb),
-                strict,
-                frame_ms = samples.Select(Round).ToArray(),
-            });
+            WriteReport(reportPath, startupMs, startupFrames, measuredFrames, sessionFrames, measuredMap,
+                avgMs, p50Ms, p95Ms, maxMs, gcMb, staticMb, staticPeakMb, strict, samples);
 
             if (failures.Count > 0)
             {
@@ -163,12 +146,36 @@ public partial class PerformanceProbeTest : Node
 
     private static double Round(double value) => Math.Round(value, 4, MidpointRounding.AwayFromZero);
 
-    private static void WriteReport(string path, object payload)
+    private static void WriteReport(
+        string path, double startupMs, int startupFrames, int measuredFrames, int sessionFrames, int measuredMap,
+        double avgMs, double p50Ms, double p95Ms, double maxMs, double gcMb, double staticMb, double staticPeakMb,
+        bool strict, double[] samples)
     {
-        string json = System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions
+        using var ms = new MemoryStream();
+        using (var writer = new System.Text.Json.Utf8JsonWriter(ms, new System.Text.Json.JsonWriterOptions { Indented = true }))
         {
-            WriteIndented = true,
-        });
+            writer.WriteStartObject();
+            writer.WriteString("schema", "lwsmf.performance.core");
+            writer.WriteNumber("schema_version", 1);
+            writer.WriteNumber("startup_ms", Round(startupMs));
+            writer.WriteNumber("startup_frames", startupFrames);
+            writer.WriteNumber("frames", measuredFrames);
+            writer.WriteNumber("session_frames", sessionFrames);
+            writer.WriteNumber("map", measuredMap);
+            writer.WriteNumber("avg_ms", Round(avgMs));
+            writer.WriteNumber("p50_ms", Round(p50Ms));
+            writer.WriteNumber("p95_ms", Round(p95Ms));
+            writer.WriteNumber("max_ms", Round(maxMs));
+            writer.WriteNumber("gc_mb", Round(gcMb));
+            writer.WriteNumber("static_mb", Round(staticMb));
+            writer.WriteNumber("static_peak_mb", Round(staticPeakMb));
+            writer.WriteBoolean("strict", strict);
+            writer.WriteStartArray("frame_ms");
+            foreach (double sample in samples) writer.WriteNumberValue(Round(sample));
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+        string json = Encoding.UTF8.GetString(ms.ToArray());
         File.WriteAllText(path, json + System.Environment.NewLine, new UTF8Encoding(false));
     }
 }

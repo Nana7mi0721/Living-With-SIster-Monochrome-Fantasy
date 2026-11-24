@@ -47,6 +47,12 @@ public interface IVmSession
     void ResetDialogueState() { }
     void RestoreDialogue(string? message, string[] choices, bool allowCancel = true);
     DbValue? Database(DbOp op);
+    /// <summary>Snapshot runtime op250 database overlays for SaveState persistence.</summary>
+    SavedDbOverlays? SnapshotDbOverlays() => null;
+    /// <summary>Clear and restore runtime op250 database overlays from a loaded SaveState.</summary>
+    void RestoreDbOverlays(SavedDbOverlays? overlays) { }
+    /// <summary>Read a database cell against base .dat tables plus an explicit save's overlay layer.</summary>
+    DbValue? ReadDatabaseWithOverlay(DbOp op, SavedDbOverlays? overlays) => Database(op);
     /// <summary>Apply the 250 retail database overlay cells captured by the importer.</summary>
     void ApplySavedCells(IReadOnlyList<LegacySaveImporter.DatabaseCell> cells);
     /// <summary>220/221/222 hook: the session owns the slot files, the VM only asks.</summary>
@@ -173,6 +179,17 @@ public sealed class GameSession
             parts.Add($"{inst.EventId}:{inst.Id}@{inst.Pc} p={inst.ParentId?.ToString() ?? "-"} w={inst.Wait.Kind}");
         }
         return string.Join(" | ", parts);
+    }
+
+    /// <summary>Stable foreground non-parallel event ID chain (excludes pc/wait ticks and parallel loops).</summary>
+    public string GetForegroundStackSignature()
+    {
+        var ids = new List<string>();
+        foreach (var inst in _vm.Vm.Instances)
+        {
+            if (!inst.IsParallel) ids.Add(inst.EventId.ToString());
+        }
+        return string.Join(",", ids);
     }
     /// <summary>Rebuilt CE242 drive (crates/wolf-game/src/battle_wiring.rs).</summary>
     public BattleWiring BattleWiring => _battleWiring;
@@ -358,22 +375,29 @@ public sealed class GameSession
         return _autoEvents;
     }
 
-    /// <summary>Map changes are applied between frames, never inside a running coroutine.</summary>
+    /// <summary>Map changes and loads are applied between frames, never inside a running coroutine.</summary>
     private void ApplyPending()
     {
-        while (_teleports.Count > 0) ApplyTeleport(_teleports.Dequeue());
-        while (_pendingSystemLoads.Count > 0) LoadSystemData(_pendingSystemLoads.Dequeue());
         if (_pendingGameLoad != null)
         {
+            _teleports.Clear();
+            _pendingSystemLoads.Clear();
+            _pendingLoad = false;
             string path = _pendingGameLoad;
             _pendingGameLoad = null;
             LoadGameFrom(path);
+            return;
         }
         if (_pendingLoad)
         {
+            _teleports.Clear();
+            _pendingSystemLoads.Clear();
             _pendingLoad = false;
             LoadGame();
+            return;
         }
+        while (_teleports.Count > 0) ApplyTeleport(_teleports.Dequeue());
+        while (_pendingSystemLoads.Count > 0) LoadSystemData(_pendingSystemLoads.Dequeue());
     }
 
     private void UpdateMapHud(bool blocked)
@@ -486,7 +510,9 @@ public sealed class GameSession
             StartNewGameNow();
             return;
         }
-        if (_map != null && _map.Id == request.Map && _leaderX == request.X && _leaderY == request.Y) return;
+        MapDefinition? resolvedTarget = ResolveMapDefinition(request.Map);
+        int targetMapId = resolvedTarget?.Id ?? request.Map;
+        if (_map != null && _map.Id == targetMapId && _leaderX == request.X && _leaderY == request.Y) return;
 
         _leaderX = request.X;
         _leaderY = request.Y;
@@ -619,6 +645,7 @@ public sealed class GameSession
 
         state.Pictures.AddRange(_view.SnapshotPictures().Where(p => !IsSaveUiPicture(p.Number)));
         state.Audio.AddRange(_view.SnapshotAudio());
+        state.DbOverlays = _vm.SnapshotDbOverlays();
 
         bool hasMessageWait = persistedInstances.Any(i => i.Wait.Kind == WaitStateKind.Message);
         bool hasChoiceWait = persistedInstances.Any(i => i.Wait.Kind == WaitStateKind.Choice);
@@ -990,31 +1017,10 @@ public sealed class GameSession
         _view.SetStatus("system load: restored " + Path.GetFileName(path));
     }
 
-    /// <summary>Read a 221 address: normal, self and system banks share the VM's magic ids.</summary>
+    /// <summary>Read a 221 address: CData cells read target save's overlay; variable banks decode via Magic.</summary>
     private int ReadSaveAddress(SaveState state, SaveOp op, string path)
     {
         int address = op.Address;
-        if (address is >= 2_000_000 and <= 2_999_999)
-        {
-            int index = address - 2_000_000;
-            return index < state.Vars.Count ? state.Vars[index] : 0;
-        }
-        if (address is >= 1_600_000 and <= 1_699_999)
-        {
-            EventSelfVars? bank = FindSelfBank(state, op.Owner);
-            if (bank == null) return 0;
-            int index = address - 1_600_000;
-            if (bank.NumMap != null && bank.NumMap.TryGetValue(index, out int value)) return value;
-            return index < bank.Nums.Length ? bank.Nums[index] : 0;
-        }
-        if (address is >= 9_000_000 and <= 9_099_999)
-        {
-            int index = address - 9_000_000;
-            if (index == 24) return SaveCodec.Exists(path) ? 1 : 0;
-            if (index == 29) return (int)(state.PlayFrames / 60);
-            if (index <= 12) return index < state.SysVars.Count ? state.SysVars[index] : 0;
-        }
-        // SaveState does not persist CData overlays; CData probes read the live database.
         if (address is >= 1_100_000_000 and < 1_200_000_000)
         {
             int offset = address - 1_100_000_000;
@@ -1022,7 +1028,7 @@ public sealed class GameSession
             int rem = offset % 1_000_000;
             int row = rem / 100;
             int col = rem % 100;
-            DbValue? cell = _vm.Database(new DbOp
+            DbValue? cell = _vm.ReadDatabaseWithOverlay(new DbOp
             {
                 Container = DbContainer.CData,
                 Direction = DbDirection.Read,
@@ -1030,7 +1036,7 @@ public sealed class GameSession
                 DataId = row,
                 ItemId = col,
                 Destination = op.Destination
-            });
+            }, state.DbOverlays);
             if (cell == null) return 0;
             if (cell.IsString)
             {
@@ -1039,47 +1045,130 @@ public sealed class GameSession
             }
             return cell.Num;
         }
-        return 0;
+
+        var magic = Magic.Decode(address);
+        switch (magic.Kind)
+        {
+            case MagicKind.Var:
+            {
+                int index = (int)magic.Index;
+                return index >= 0 && index < state.Vars.Count ? state.Vars[index] : 0;
+            }
+            case MagicKind.StrVar:
+            {
+                int index = (int)magic.Index;
+                op.LoadedString = index >= 0 && index < state.StrVars.Count ? state.StrVars[index] : "";
+                return 0;
+            }
+            case MagicKind.SelfVar:
+            {
+                EventSelfVars? bank = FindSelfBank(state, op.Owner);
+                int index = (int)magic.Index;
+                if (magic.IsStringSlot)
+                {
+                    if (bank == null)
+                    {
+                        op.LoadedString = "";
+                        return 0;
+                    }
+                    if (bank.StrMap != null && bank.StrMap.TryGetValue(index, out string? sVal))
+                    {
+                        op.LoadedString = sVal ?? "";
+                        return 0;
+                    }
+                    op.LoadedString = index >= 0 && index < bank.Strings.Length ? (bank.Strings[index] ?? "") : "";
+                    return 0;
+                }
+                if (bank == null) return 0;
+                if (bank.NumMap != null && bank.NumMap.TryGetValue(index, out int value)) return value;
+                return index >= 0 && index < bank.Nums.Length ? bank.Nums[index] : 0;
+            }
+            case MagicKind.SysVar:
+            {
+                if (magic.IsSysStr)
+                {
+                    int strIdx = (int)(magic.Index - Magic.SysStrOffset);
+                    op.LoadedString = strIdx >= 0 && strIdx < state.SysStrVars.Count ? state.SysStrVars[strIdx] : "";
+                    return 0;
+                }
+                int index = (int)magic.Index;
+                if (index == 24) return SaveCodec.Exists(path) ? 1 : 0;
+                if (index == 29) return (int)(state.PlayFrames / 60);
+                return index >= 0 && index < state.SysVars.Count ? state.SysVars[index] : 0;
+            }
+            default:
+                return 0;
+        }
     }
 
     /// <summary>Write one 222 value; false means the address is outside every bank.</summary>
     private static bool WriteSaveAddress(SaveState state, SaveOp op)
     {
-        int address = op.Address;
-        if (address is >= 2_000_000 and <= 2_999_999)
+        var magic = Magic.Decode(op.Address);
+        switch (magic.Kind)
         {
-            int index = address - 2_000_000;
-            if (index >= Variables.MaxSlots) return false;
-            while (state.Vars.Count <= index) state.Vars.Add(0);
-            state.Vars[index] = op.Value;
-            return true;
-        }
-        if (address is >= 1_600_000 and <= 1_699_999)
-        {
-            EventSelfVars? bank = FindSelfBank(state, op.Owner);
-            if (bank == null)
+            case MagicKind.Var:
             {
-                bank = new EventSelfVars { Id = op.Owner, NumMap = new Dictionary<int, int>() };
-                state.SelfVars.Add(bank);
-            }
-            bank.NumMap ??= new Dictionary<int, int>();
-            bank.NumMap[address - 1_600_000] = op.Value;
-            return true;
-        }
-        if (address is >= 9_000_000 and <= 9_099_999)
-        {
-            int index = address - 9_000_000;
-            if (index == 29)
-            {
-                state.PlayFrames = Math.Max(0, op.Value) * 60L;
+                int index = (int)magic.Index;
+                if (index < 0 || index >= Variables.MaxSlots) return false;
+                while (state.Vars.Count <= index) state.Vars.Add(0);
+                state.Vars[index] = op.Value;
                 return true;
             }
-            if (index > 12) return false;
-            while (state.SysVars.Count <= index) state.SysVars.Add(0);
-            state.SysVars[index] = op.Value;
-            return true;
+            case MagicKind.StrVar:
+            {
+                int index = (int)magic.Index;
+                if (index < 0 || index >= Variables.MaxSlots) return false;
+                while (state.StrVars.Count <= index) state.StrVars.Add("");
+                state.StrVars[index] = op.StringValue ?? "";
+                return true;
+            }
+            case MagicKind.SelfVar:
+            {
+                int index = (int)magic.Index;
+                if (index < 0 || index >= SelfVars.TotalSlots) return false;
+                EventSelfVars? bank = FindSelfBank(state, op.Owner);
+                if (bank == null)
+                {
+                    bank = new EventSelfVars { Id = op.Owner };
+                    state.SelfVars.Add(bank);
+                }
+                if (magic.IsStringSlot || op.IsString)
+                {
+                    bank.StrMap ??= new Dictionary<int, string>();
+                    bank.StrMap[index] = op.StringValue ?? "";
+                }
+                else
+                {
+                    bank.NumMap ??= new Dictionary<int, int>();
+                    bank.NumMap[index] = op.Value;
+                }
+                return true;
+            }
+            case MagicKind.SysVar:
+            {
+                if (magic.IsSysStr)
+                {
+                    int strIdx = (int)(magic.Index - Magic.SysStrOffset);
+                    if (strIdx < 0 || strIdx >= Variables.MaxSlots) return false;
+                    while (state.SysStrVars.Count <= strIdx) state.SysStrVars.Add("");
+                    state.SysStrVars[strIdx] = op.StringValue ?? "";
+                    return true;
+                }
+                int index = (int)magic.Index;
+                if (index == 29)
+                {
+                    state.PlayFrames = Math.Max(0, op.Value) * 60L;
+                    return true;
+                }
+                if (index < 0 || index >= Variables.MaxSlots) return false;
+                while (state.SysVars.Count <= index) state.SysVars.Add(0);
+                state.SysVars[index] = op.Value;
+                return true;
+            }
+            default:
+                return false;
         }
-        return false;
     }
 
     private static EventSelfVars? FindSelfBank(SaveState state, int owner)
@@ -1104,6 +1193,7 @@ public sealed class GameSession
         _facing = state.Facing;
         _vm.Vm.Vars.Restore(state.Vars, state.StrVars, state.SysVars, state.SysStrVars);
         _vm.Vm.Rng.RestoreState(state.RngState, state.RngEventState, state.RngEventSeed, state.RngDraws);
+        _vm.RestoreDbOverlays(state.DbOverlays);
         _vm.Vm.CommonSelf.Clear();
         foreach (var saved in state.CommonSelf)
         {
@@ -1140,14 +1230,17 @@ public sealed class GameSession
         return ApplyLoadedState(snapshot);
     }
 
-    /// <summary>True when programs.json resolves the slot's map exactly like EnterMap.</summary>
-    private bool CanEnterMap(int mapId)
+    /// <summary>Resolve a SystemDB map row or artifact id into its MapDefinition.</summary>
+    private MapDefinition? ResolveMapDefinition(int mapRowId)
     {
-        string mapPath = _vm.MapPath(mapId);
+        string mapPath = _vm.MapPath(mapRowId);
         return mapPath.Length > 0
-            ? ProgramLoader.LoadMap(_dataPath, mapPath, null) != null
-            : ProgramLoader.LoadMap(_dataPath, "", mapId) != null;
+            ? ProgramLoader.LoadMap(_dataPath, mapPath, null)
+            : ProgramLoader.LoadMap(_dataPath, "", mapRowId);
     }
+
+    /// <summary>True when programs.json resolves the slot's map exactly like EnterMap.</summary>
+    private bool CanEnterMap(int mapId) => ResolveMapDefinition(mapId) != null;
 
     /// <summary>Validate remake save JSON against the SaveCodec schema and semantic constraints.</summary>
     public static bool ValidateSaveJson(string json, out string error)
@@ -1296,6 +1389,24 @@ public sealed class GameSession
         }
         state.Pictures.AddRange(picByNum.Values.Take(SaveCodec.MaxPictures));
 
+        if (data.DatabaseCells.Count > 0)
+        {
+            var overlays = new SavedDbOverlays();
+            foreach (var cell in data.DatabaseCells)
+            {
+                if (cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
+                overlays.Nums.Add(new SavedDbNumCell
+                {
+                    Container = (int)DbContainer.CData,
+                    Type = cell.Type,
+                    Row = cell.Row,
+                    Column = cell.Column,
+                    Value = cell.Value
+                });
+            }
+            state.DbOverlays = overlays;
+        }
+
         if (!ValidateSaveJson(SaveCodec.ToJson(state), out string validationError))
         {
             error = "converted save failed validation: " + validationError;
@@ -1316,11 +1427,6 @@ public sealed class GameSession
         }
 
         error = "";
-        if (data.DatabaseCells.Count > 0)
-        {
-            LastImportNotice = $"{data.DatabaseCells.Count} retail database cells were not carried into the slot "
-                + "(the save format does not persist the op250 overlay)";
-        }
         return true;
     }
 
@@ -1622,10 +1728,7 @@ public sealed class GameSession
 
         // Opcode 130 carries a SystemDB row, not the artifact map id: row 1 is
         // SampleMapA, while programs.json's id 1 is SampleMapA_1. Resolve the file first.
-        string mapPath = _vm.MapPath(mapId);
-        _map = mapPath.Length > 0
-            ? ProgramLoader.LoadMap(_dataPath, mapPath, null)
-            : ProgramLoader.LoadMap(_dataPath, "", mapId);
+        _map = ResolveMapDefinition(mapId);
         if (_map == null)
         {
             _view.SetStatus($"map {mapId} missing from programs.json");

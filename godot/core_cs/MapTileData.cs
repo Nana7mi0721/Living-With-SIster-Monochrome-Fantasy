@@ -44,6 +44,7 @@ public sealed class MapTileData
     }
 
     private static readonly Dictionary<string, Cached> Cache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly object CacheLock = new();
 
     public List<MapTileset> Tilesets { get; } = new();
     public List<MapTileEntry> Maps { get; } = new();
@@ -57,14 +58,18 @@ public sealed class MapTileData
     {
         try
         {
-            string? key = JsonArtifactIo.ResolvePath(path);
-            if (key == null) return null;
+            string? resolved = JsonArtifactIo.ResolvePath(path);
+            if (resolved == null) return null;
+            string key = Path.GetFullPath(resolved);
             var info = new FileInfo(key);
             if (!info.Exists) return null;
-            if (Cache.TryGetValue(key, out Cached? cached) &&
-                cached.Length == info.Length && cached.WriteTimeUtc == info.LastWriteTimeUtc)
+            lock (CacheLock)
             {
-                return cached.Data;
+                if (Cache.TryGetValue(key, out Cached? cached) &&
+                    cached.Length == info.Length && cached.WriteTimeUtc == info.LastWriteTimeUtc)
+                {
+                    return cached.Data;
+                }
             }
 
             using Stream stream = JsonArtifactIo.OpenReadStream(key);
@@ -110,12 +115,15 @@ public sealed class MapTileData
                 });
             }
 
-            Cache[key] = new Cached
+            lock (CacheLock)
             {
-                Length = info.Length,
-                WriteTimeUtc = info.LastWriteTimeUtc,
-                Data = data
-            };
+                Cache[key] = new Cached
+                {
+                    Length = info.Length,
+                    WriteTimeUtc = info.LastWriteTimeUtc,
+                    Data = data
+                };
+            }
             return data;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or FormatException or InvalidOperationException)
@@ -158,9 +166,15 @@ public sealed class MapTileData
         return Terrain.FromLayers(width, height, entry.Layers, tileset.Passability);
     }
 
-    public static int CachedArtifactCount => Cache.Count;
+    public static int CachedArtifactCount
+    {
+        get { lock (CacheLock) return Cache.Count; }
+    }
 
-    public static void ClearCache() => Cache.Clear();
+    public static void ClearCache()
+    {
+        lock (CacheLock) Cache.Clear();
+    }
 
     private static uint[] DecodeU32(string base64)
     {

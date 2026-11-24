@@ -731,11 +731,7 @@ public sealed class LegacySaveImporter
             string? dir = Path.GetDirectoryName(reportPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true
-            };
-            string json = JsonSerializer.Serialize(report, options);
+            string json = JsonSerializer.Serialize(report, LwsmfJsonContext.Indented.ImportReport);
             WriteTextAtomic(reportPath, json);
 
             var warnings = new List<string>();
@@ -743,7 +739,7 @@ public sealed class LegacySaveImporter
             if (warnings.Count > 0)
             {
                 string warningPath = Path.Combine(dir ?? ".", "encoding_warnings.json");
-                WriteTextAtomic(warningPath, JsonSerializer.Serialize(warnings, options));
+                WriteTextAtomic(warningPath, JsonSerializer.Serialize(warnings, LwsmfJsonContext.Indented.ListString));
             }
         }
 

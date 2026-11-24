@@ -67,14 +67,14 @@ public sealed class EventVm
     /// </summary>
     public void ApplyInputPermission(uint raw)
     {
-        // exec.rs InputState: the low byte is already the port's host-bit layout.
-        uint target = raw & InputTargetMask;
+        uint rawTarget = raw & InputTargetMask;
         uint state = (raw >> 8) & 0x3;
         if ((raw & InputDeviceFlag) != 0)
         {
-            if (target != 0) DeviceDeny = state != 0;
+            if (rawTarget != 0) DeviceDeny = state != 0;
             return;
         }
+        uint target = KeyCodes.FromWolfBits(rawTarget);
         if (target == 0) return;
         switch (state)
         {
@@ -385,7 +385,7 @@ public sealed class EventVm
         {
             MagicKind.StrVar => Vars.GetStr((int)magic.Index),
             MagicKind.SelfVar => inst.Self.GetStr((int)magic.Index),
-            MagicKind.SysVar => Vars.GetSysStr((int)magic.Index),
+            MagicKind.SysVar => Vars.GetSysStr(magic.IsSysStr ? (int)(magic.Index - Magic.SysStrOffset) : (int)magic.Index),
             MagicKind.Literal => magic.Index.ToString(),
             MagicKind.Var => Vars.Get((int)magic.Index).ToString(),
             _ => ""
@@ -405,7 +405,7 @@ public sealed class EventVm
                 inst.Self.SetStr((int)magic.Index, value);
                 break;
             case MagicKind.SysVar:
-                Vars.SetSysStr((int)magic.Index, value);
+                Vars.SetSysStr(magic.IsSysStr ? (int)(magic.Index - Magic.SysStrOffset) : (int)magic.Index, value);
                 break;
         }
     }
@@ -1196,35 +1196,7 @@ public sealed class EventVm
                         break;
                     }
 
-                    int paramStatus = slot.Params.Length > 1 ? slot.Params[1] : 0;
-                    int numCount = paramStatus & 0x0F;
-                    int rawStrCount = (paramStatus >> 4) & 0x0F;
-                    int strCount = Math.Min(rawStrCount, 4);
-                    bool hasRet = ((paramStatus >> 24) & 1) != 0;
-
-                    int[] childArgs = new int[numCount];
-                    for (int i = 0; i < numCount; i++)
-                    {
-                        childArgs[i] = 2 + i < slot.Params.Length ? EvalNum(slot.Params[2 + i], inst) : 0;
-                    }
-
-                    // String operands live after the numeric ones; bit 12+k marks a literal
-                    // (top-level strings[1+k]) instead of a magic address into a string bank.
-                    string[] childStrings = new string[strCount];
-                    for (int k = 0; k < strCount; k++)
-                    {
-                        bool literal = ((paramStatus >> (12 + k)) & 1) != 0;
-                        int wordIdx = 2 + numCount + k;
-                        int word = wordIdx < slot.Params.Length ? slot.Params[wordIdx] : 0;
-                        childStrings[k] = (literal || word == 0
-                            ? (1 + k < slot.Strings.Length ? slot.Strings[1 + k] : "")
-                            : EvalStr(word, inst)) ?? "";
-                    }
-
-                    // Numeric args, then string args, then the optional return slot:
-                    // 2 + total_count, not 2 + number_count.
-                    int retIdx = 2 + numCount + rawStrCount;
-                    int? returnTo = hasRet && retIdx < slot.Params.Length ? slot.Params[retIdx] : null;
+                    var (childArgs, childStrings, returnTo) = DecodeCallArguments(slot, inst);
 
                     if (CallDepth(inst) >= MaxCallDepth)
                     {
@@ -1269,18 +1241,19 @@ public sealed class EventVm
                     int argc = slot.Params.Length;
                     int fileRaw = argc > 1 ? slot.Params[1] : 0;
                     var fileMagic = Magic.Decode(fileRaw);
-                    bool isStrFile = fileMagic.Kind == MagicKind.StrVar
-                        || (fileMagic.Kind == MagicKind.SelfVar && (fileMagic.Index % Magic.SelfSlotsPerGroup) is >= 5 and <= 9);
-                    SaveTarget target = isStrFile
+                    SaveTarget target = fileMagic.IsStringSlot
                         ? new SaveTarget(EvalStr(fileRaw, inst))
                         : new SaveTarget(EvalNum(fileRaw, inst));
                     int mode = opc == 220 && argc > 0 ? EvalNum(slot.Params[0], inst) : 0;
                     int dest = opc == 221 && argc > 0 ? slot.Params[0] : 0;
-                    int val = opc == 222 && argc > 0 ? EvalNum(slot.Params[0], inst) : 0;
                     int flag = argc >= 4 ? EvalNum(slot.Params[3], inst) : 0;
                     int addr = opc == 220 || argc <= 2
                         ? 0
                         : (flag == 1 ? EvalNum(slot.Params[2], inst) : slot.Params[2]);
+                    bool isStr222 = opc == 222 && argc > 0
+                        && (Magic.Decode(slot.Params[0]).IsStringSlot || Magic.Decode(addr).IsStringSlot);
+                    int val = opc == 222 && argc > 0 && !isStr222 ? EvalNum(slot.Params[0], inst) : 0;
+                    string? strVal = isStr222 ? EvalStr(slot.Params[0], inst) : null;
 
                     var saveOp = new SaveOp
                     {
@@ -1290,6 +1263,8 @@ public sealed class EventVm
                         Destination = dest,
                         Address = addr,
                         Value = val,
+                        StringValue = strVal,
+                        IsString = isStr222,
                         Flag = flag,
                         Owner = inst.EventId
                     };
@@ -1366,7 +1341,7 @@ public sealed class EventVm
                         {
                             int valRaw = slot.Params[4];
                             var valMagic = Magic.Decode(valRaw);
-                            if (valMagic.IsString || (valMagic.Kind == MagicKind.SelfVar && !string.IsNullOrEmpty(EvalStr(valRaw, inst))))
+                            if (valMagic.IsStringSlot)
                             {
                                 source = new DbValue(EvalStr(valRaw, inst));
                             }
@@ -1931,9 +1906,9 @@ public sealed class EventVm
         return (file, vol, tempo);
     }
 
-    private static int FirstUnitLen(string text)
+    private static int FirstUnitLen(ReadOnlySpan<char> text)
     {
-        if (string.IsNullOrEmpty(text))
+        if (text.IsEmpty)
             return 0;
         if (text[0] != '\\')
             return char.IsHighSurrogate(text[0]) && text.Length > 1 && char.IsLowSurrogate(text[1]) ? 2 : 1;
@@ -1945,21 +1920,22 @@ public sealed class EventVm
             return 1;
         if (nameEnd < text.Length && text[nameEnd] == '[')
         {
-            int close = text.IndexOf(']', nameEnd + 1);
-            if (close >= 0)
-                return close + 1;
+            int relClose = text.Slice(nameEnd + 1).IndexOf(']');
+            if (relClose >= 0)
+                return nameEnd + 1 + relClose + 1;
         }
         return nameEnd;
     }
 
     private static int LastUnitStart(string text)
     {
+        ReadOnlySpan<char> span = text.AsSpan();
         int end = 0;
         int last = 0;
-        while (end < text.Length)
+        while (end < span.Length)
         {
             last = end;
-            end += FirstUnitLen(text.Substring(end));
+            end += FirstUnitLen(span.Slice(end));
         }
         return last;
     }

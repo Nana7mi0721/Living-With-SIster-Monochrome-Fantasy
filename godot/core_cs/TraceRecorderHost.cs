@@ -36,7 +36,7 @@ public sealed class TraceRecorderHost : IHost
         var argsArr = new JsonArray();
         foreach (int a in cmd.Args)
         {
-            argsArr.Add(a);
+            argsArr.Add((JsonNode?)JsonValue.Create(a));
         }
 
         string actionStr = cmd.Action switch
@@ -84,7 +84,7 @@ public sealed class TraceRecorderHost : IHost
         var optsArr = new JsonArray();
         foreach (var opt in options)
         {
-            optsArr.Add(opt);
+            optsArr.Add((JsonNode?)JsonValue.Create(opt));
         }
 
         var eff = new JsonObject
@@ -145,7 +145,7 @@ public sealed class TraceRecorderHost : IHost
         var argsArr = new JsonArray();
         foreach (int a in args)
         {
-            argsArr.Add(a);
+            argsArr.Add((JsonNode?)JsonValue.Create(a));
         }
 
         var eff = new JsonObject
@@ -162,7 +162,7 @@ public sealed class TraceRecorderHost : IHost
         var argsArr = new JsonArray();
         foreach (int a in args)
         {
-            argsArr.Add(a);
+            argsArr.Add((JsonNode?)JsonValue.Create(a));
         }
 
         var eff = new JsonObject

@@ -165,7 +165,7 @@ public partial class RouteTraceTest : Node
                 if (!first) sb.Append(',');
                 first = false;
                 sb.Append('"').Append(pair.Key).Append("\":")
-                  .Append(JsonSerializer.Serialize(pair.Value));
+                  .Append(JsonSerializer.Serialize(pair.Value, LwsmfJsonContext.Default.String));
             }
             sb.Append("},\"effects\":[");
             for (int e = 0; e < s.Effects.Count; e++)
@@ -323,7 +323,7 @@ internal sealed class RouteHost : IHost
     public void CommonEventCall(int target, int[] args, string[] strings)
     {
         var array = new JsonArray();
-        foreach (int arg in args) array.Add(arg);
+        foreach (int arg in args) array.Add((JsonNode?)JsonValue.Create(arg));
         PendingEffects.Add(new JsonObject
         {
             ["kind"] = "call",
@@ -336,7 +336,7 @@ internal sealed class RouteHost : IHost
     public void Picture(PictureCmd cmd)
     {
         var args = new JsonArray();
-        foreach (int arg in cmd.Args) args.Add(arg);
+        foreach (int arg in cmd.Args) args.Add((JsonNode?)JsonValue.Create(arg));
         string action = cmd.Action switch
         {
             PictureAction.Draw => "draw",
@@ -414,7 +414,7 @@ internal sealed class RouteHost : IHost
     public void Effect(int kind, int duration, int[] args)
     {
         var array = new JsonArray();
-        foreach (int arg in args) array.Add(arg);
+        foreach (int arg in args) array.Add((JsonNode?)JsonValue.Create(arg));
         PendingEffects.Add(new JsonObject
         {
             ["kind"] = "effect",

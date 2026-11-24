@@ -123,6 +123,25 @@ public static class AutoEventsTest
         Check(guardedStart.Started == 0 && nonLoopVm.Instances.Count == 1,
             $"live play must not double-start live CE242, started={guardedStart.Started} count={nonLoopVm.Instances.Count}");
 
+        // Loaded parallel auto-event instances must stop once their condition turns false.
+        var restoredVm = new EventVm();
+        var waitProg = Program.FromSlots(335, "restored-335", new List<Slot> { Slot.Command(180, [10]), Slot.Command(104) });
+        waitProg.RunCondition = 2;
+        waitProg.ConditionOperator = 2;
+        waitProg.ConditionVariable = 2_000_062;
+        waitProg.ConditionValue = 1;
+        restoredVm.RegisterProgram(waitProg);
+        var loadedInst = new Instance { Id = 77, EventId = 335, Program = waitProg, Pc = 0, IsParallel = true };
+        restoredVm.RestoreInstance(loadedInst);
+        restoredVm.Vars.Set(62, 1);
+        var restoredAuto = AutoEvents.FromPrograms(restoredVm.Programs.Values);
+        restoredAuto.PrimeLatched(restoredVm);
+        Check(restoredAuto.IsRunning(restoredVm, 335), "PrimeLatched must rebind restored parallel auto-event instance");
+        restoredVm.Vars.Set(62, 0);
+        var stoppedLoaded = restoredAuto.Sync(restoredVm);
+        Check(stoppedLoaded.Stopped == 1 && restoredVm.FindInstance(77) == null,
+            $"restored parallel auto-event must stop when condition turns false (stopped={stoppedLoaded.Stopped})");
+
         Console.WriteLine($"AUTO_EVENTS_TEST_OK count={auto.EventCount} start={opened.Started} resume={replayed.Started} gated={gated.Started}");
     }
 

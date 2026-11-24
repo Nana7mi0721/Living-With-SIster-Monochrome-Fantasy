@@ -91,6 +91,7 @@ public static class KeyCodes
         if ((bits & 0x01) != 0) result |= Ok;
         if ((bits & 0x02) != 0) result |= Cancel;
         if ((bits & 0x04) != 0) result |= Sub;
+        if ((bits & 0x08) != 0) result |= Pause;
         if ((bits & 0x10) != 0) result |= Down;
         if ((bits & 0x20) != 0) result |= Left;
         if ((bits & 0x40) != 0) result |= Right;

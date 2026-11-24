@@ -148,6 +148,8 @@ public sealed class SaveOp
     public int Destination { get; init; }
     public int Address { get; init; }
     public int Value { get; init; }
+    public string? StringValue { get; init; }
+    public bool IsString { get; init; }
     public int Flag { get; init; }
     public int Owner { get; init; }
     /// <summary>Populated by 221 when reading a string cell (e.g., CData string field).</summary>

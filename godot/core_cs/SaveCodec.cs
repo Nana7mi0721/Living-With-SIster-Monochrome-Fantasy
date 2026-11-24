@@ -192,14 +192,46 @@ public sealed class SavedDialogue
     [JsonPropertyName("allow_cancel")] public bool AllowCancel { get; set; } = true;
 }
 
+public sealed class SavedDbNumCell
+{
+    [JsonPropertyName("c")] public int Container { get; set; }
+    [JsonPropertyName("t")] public int Type { get; set; }
+    [JsonPropertyName("r")] public int Row { get; set; }
+    [JsonPropertyName("k")] public int Column { get; set; }
+    [JsonPropertyName("v")] public int Value { get; set; }
+}
+
+public sealed class SavedDbTextCell
+{
+    [JsonPropertyName("c")] public int Container { get; set; }
+    [JsonPropertyName("t")] public int Type { get; set; }
+    [JsonPropertyName("r")] public int Row { get; set; }
+    [JsonPropertyName("k")] public int Column { get; set; }
+    [JsonPropertyName("v")] public string Value { get; set; } = "";
+}
+
+public sealed class SavedDbRowCount
+{
+    [JsonPropertyName("c")] public int Container { get; set; }
+    [JsonPropertyName("t")] public int Type { get; set; }
+    [JsonPropertyName("n")] public int Count { get; set; }
+}
+
+/// <summary>Sparse runtime op250 database overrides persisted per save slot.</summary>
+public sealed class SavedDbOverlays
+{
+    [JsonPropertyName("row_counts")] public List<SavedDbRowCount> RowCounts { get; set; } = new();
+    [JsonPropertyName("nums")] public List<SavedDbNumCell> Nums { get; set; } = new();
+    [JsonPropertyName("texts")] public List<SavedDbTextCell> Texts { get; set; } = new();
+}
+
 /// <summary>
-/// Remake save slot. The retail .sav format is handled by <see cref="LegacySaveImporter"/>
-/// (read-only); this format is what the remake writes under user://.
+/// Remake save slot written under user://. Schema v2 adds sparse op250 database overlays.
 /// </summary>
 public sealed class SaveState
 {
     public const string SchemaName = "lwsmf.save";
-    public const int SchemaVersionNumber = 1;
+    public const int SchemaVersionNumber = 2;
 
     [JsonPropertyName("schema")] public string Schema { get; set; } = SchemaName;
     [JsonPropertyName("schema_version")] public int SchemaVersion { get; set; } = SchemaVersionNumber;
@@ -225,6 +257,7 @@ public sealed class SaveState
     [JsonPropertyName("pictures")] public List<SavedPicture> Pictures { get; set; } = new();
     [JsonPropertyName("audio")] public List<SavedAudio> Audio { get; set; } = new();
     [JsonPropertyName("dialogue")] public SavedDialogue? Dialogue { get; set; }
+    [JsonPropertyName("db_overlays")] public SavedDbOverlays? DbOverlays { get; set; }
 }
 
 /// <summary>Which file supplied a decoded slot: the main slot or its .bak rotation.</summary>
@@ -267,16 +300,11 @@ public static class SaveCodec
     /// <summary>Exactly one BGM, one BGS and one SE track can be live.</summary>
     public const int MaxAudio = 3;
 
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
-
     // Invalid UTF-8 must fail the read instead of silently decoding replacement chars.
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
-    public static string ToJson(SaveState state) => JsonSerializer.Serialize(state, Options);
+    public static string ToJson(SaveState state) =>
+        JsonSerializer.Serialize(state, LwsmfJsonContext.SaveIndented.SaveState);
 
     public static SaveState? FromJson(string json)
     {
@@ -284,7 +312,7 @@ public static class SaveCodec
         try
         {
             if (StrictUtf8.GetByteCount(json) > MaxSaveBytes) return null;
-            var state = JsonSerializer.Deserialize<SaveState>(json, Options);
+            var state = JsonSerializer.Deserialize(json, LwsmfJsonContext.SaveIndented.SaveState);
             if (state == null) return null;
             if (state.Schema != SaveState.SchemaName) return null;
             if (state.SchemaVersion > SaveState.SchemaVersionNumber) return null;
@@ -346,6 +374,16 @@ public static class SaveCodec
         {
             if (ev == null) continue;
             ev.Self ??= new EventSelfVars();
+        }
+        if (state.DbOverlays != null)
+        {
+            state.DbOverlays.RowCounts ??= new List<SavedDbRowCount>();
+            state.DbOverlays.Nums ??= new List<SavedDbNumCell>();
+            state.DbOverlays.Texts ??= new List<SavedDbTextCell>();
+            foreach (var text in state.DbOverlays.Texts)
+            {
+                if (text != null) text.Value ??= "";
+            }
         }
     }
 
@@ -441,6 +479,24 @@ public static class SaveCodec
             foreach (string choice in state.Dialogue.Choices)
             {
                 if (choice == null || choice.Length > MaxDialogue) return false;
+            }
+        }
+        if (state.DbOverlays != null)
+        {
+            if (state.DbOverlays.RowCounts.Count > 4096) return false;
+            if (state.DbOverlays.Nums.Count > 100_000 || state.DbOverlays.Texts.Count > 100_000) return false;
+            foreach (var rc in state.DbOverlays.RowCounts)
+            {
+                if (rc == null || rc.Container is < 0 or > 2 || rc.Type < 0 || rc.Count < 0) return false;
+            }
+            foreach (var cell in state.DbOverlays.Nums)
+            {
+                if (cell == null || cell.Container is < 0 or > 2 || cell.Type < 0 || cell.Row < 0 || cell.Column < 0) return false;
+            }
+            foreach (var cell in state.DbOverlays.Texts)
+            {
+                if (cell == null || cell.Container is < 0 or > 2 || cell.Type < 0 || cell.Row < 0 || cell.Column < 0) return false;
+                if (cell.Value == null || cell.Value.Length > MaxDialogue) return false;
             }
         }
         return true;

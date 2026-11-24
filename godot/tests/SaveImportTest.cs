@@ -503,10 +503,18 @@ public partial class SaveImportTest : Node
                 return false;
             }
             var rawSlot = LegacySaveImporter.ImportFile(sampleSav, 1);
-            if (rawSlot.Recovered.DatabaseCells.Count > 0 && string.IsNullOrEmpty(harness.Session.LastImportNotice))
+            if (rawSlot.Recovered.DatabaseCells.Count > 0)
             {
-                GD.PrintErr("SAVE_TRANSFER_FAILED: LastImportNotice must warn when retail DatabaseCells are dropped");
-                return false;
+                if (imported.DbOverlays == null || imported.DbOverlays.Nums.Count != rawSlot.Recovered.DatabaseCells.Count)
+                {
+                    GD.PrintErr($"SAVE_TRANSFER_FAILED: expected {rawSlot.Recovered.DatabaseCells.Count} persisted DbOverlays cells, got {imported.DbOverlays?.Nums.Count ?? 0}");
+                    return false;
+                }
+                if (!string.IsNullOrEmpty(harness.Session.LastImportNotice))
+                {
+                    GD.PrintErr($"SAVE_TRANSFER_FAILED: unexpected LastImportNotice when DbOverlays persisted: {harness.Session.LastImportNotice}");
+                    return false;
+                }
             }
 
             if (harness.Session.ImportRetailSaveToSlot(sampleSav, 0, out string badSlotErr) || string.IsNullOrEmpty(badSlotErr))

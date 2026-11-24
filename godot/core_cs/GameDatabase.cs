@@ -35,19 +35,19 @@ public sealed class GameDatabase
     private const int WindowSkinColumn = 24;
     private const string WindowSkinFile = "SystemFile/WindowBase.png";
 
-    private sealed class ContainerDto
+    internal sealed class ContainerDto
     {
         [JsonPropertyName("types")] public List<TypeDto> Types { get; set; } = new();
     }
 
-    private sealed class RootDto
+    internal sealed class RootDto
     {
         [JsonPropertyName("cdata")] public ContainerDto? Cdata { get; set; }
         [JsonPropertyName("database")] public ContainerDto? Database { get; set; }
         [JsonPropertyName("system")] public ContainerDto? System { get; set; }
     }
 
-    private sealed class TypeDto
+    internal sealed class TypeDto
     {
         [JsonPropertyName("data_id_method")] public int DataIdMethod { get; set; }
         [JsonPropertyName("fields")] public List<FieldDto> Fields { get; set; } = new();
@@ -55,14 +55,14 @@ public sealed class GameDatabase
         [JsonPropertyName("rows")] public List<RowDto> Rows { get; set; } = new();
     }
 
-    private sealed class FieldDto
+    internal sealed class FieldDto
     {
         [JsonPropertyName("index")] public int Index { get; set; }
         [JsonPropertyName("kind")] public string Kind { get; set; } = "";
         [JsonPropertyName("raw")] public int Raw { get; set; }
     }
 
-    private sealed class RowDto
+    internal sealed class RowDto
     {
         [JsonPropertyName("numbers")] public List<int> Numbers { get; set; } = new();
         [JsonPropertyName("strings")] public List<string> Strings { get; set; } = new();
@@ -123,7 +123,7 @@ public sealed class GameDatabase
         try
         {
             using Stream stream = JsonArtifactIo.OpenReadStream(actualPath);
-            root = JsonSerializer.Deserialize<RootDto>(stream);
+            root = JsonSerializer.Deserialize(stream, LwsmfJsonContext.Default.RootDto);
         }
         catch (Exception ex)
         {
@@ -214,6 +214,234 @@ public sealed class GameDatabase
         _rowCounts.Clear();
     }
 
+    /// <summary>Capture all runtime op250 overlay writes in deterministic order for SaveState persistence.</summary>
+    public SavedDbOverlays SnapshotOverlays()
+    {
+        var snapshot = new SavedDbOverlays();
+        foreach (var pair in _rowCounts)
+        {
+            snapshot.RowCounts.Add(new SavedDbRowCount
+            {
+                Container = (int)pair.Key.Item1,
+                Type = pair.Key.Item2,
+                Count = pair.Value
+            });
+        }
+        snapshot.RowCounts.Sort((a, b) =>
+        {
+            int c = a.Container.CompareTo(b.Container);
+            return c != 0 ? c : a.Type.CompareTo(b.Type);
+        });
+
+        foreach (var pair in _cells)
+        {
+            snapshot.Nums.Add(new SavedDbNumCell
+            {
+                Container = (int)pair.Key.Item1,
+                Type = pair.Key.Item2,
+                Row = pair.Key.Item3,
+                Column = pair.Key.Item4,
+                Value = pair.Value
+            });
+        }
+        snapshot.Nums.Sort((a, b) =>
+        {
+            int c = a.Container.CompareTo(b.Container);
+            if (c != 0) return c;
+            c = a.Type.CompareTo(b.Type);
+            if (c != 0) return c;
+            c = a.Row.CompareTo(b.Row);
+            return c != 0 ? c : a.Column.CompareTo(b.Column);
+        });
+
+        foreach (var pair in _texts)
+        {
+            snapshot.Texts.Add(new SavedDbTextCell
+            {
+                Container = (int)pair.Key.Item1,
+                Type = pair.Key.Item2,
+                Row = pair.Key.Item3,
+                Column = pair.Key.Item4,
+                Value = pair.Value
+            });
+        }
+        snapshot.Texts.Sort((a, b) =>
+        {
+            int c = a.Container.CompareTo(b.Container);
+            if (c != 0) return c;
+            c = a.Type.CompareTo(b.Type);
+            if (c != 0) return c;
+            c = a.Row.CompareTo(b.Row);
+            return c != 0 ? c : a.Column.CompareTo(b.Column);
+        });
+        return snapshot;
+    }
+
+    /// <summary>Replace all runtime op250 overlays with a loaded save's sparse overlay layer.</summary>
+    public void RestoreOverlays(SavedDbOverlays? overlays)
+    {
+        ClearOverlays();
+        if (overlays == null) return;
+        foreach (var rc in overlays.RowCounts)
+        {
+            if (rc.Container is < 0 or > 2 || rc.Type < 0 || rc.Count < 0) continue;
+            _rowCounts[((DbContainer)rc.Container, rc.Type)] = rc.Count;
+        }
+        foreach (var cell in overlays.Nums)
+        {
+            if (cell.Container is < 0 or > 2 || cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
+            var key = ((DbContainer)cell.Container, cell.Type, cell.Row, cell.Column);
+            _cells[key] = cell.Value;
+            _texts.Remove(key);
+        }
+        foreach (var cell in overlays.Texts)
+        {
+            if (cell.Container is < 0 or > 2 || cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
+            var key = ((DbContainer)cell.Container, cell.Type, cell.Row, cell.Column);
+            _texts[key] = cell.Value ?? "";
+            _cells.Remove(key);
+        }
+    }
+
+    /// <summary>
+    /// Evaluate a database read against the base .dat tables plus an explicit save's
+    /// overlay layer, completely isolated from the live runtime overlay.
+    /// </summary>
+    public DbValue? ReadWithOverlay(DbOp op, SavedDbOverlays? overlays)
+    {
+        var container = op.Container;
+        var (dbType, column) = ResolveLabels(container, op.DbType, op.ItemId, op.TypeLabel, op.FieldLabel);
+        int row = op.DataId;
+
+        bool hasOverlayRowCount = TryFindOverlayRowCount(overlays, container, dbType, out int overlayRowCount);
+        int effectiveRowCount = hasOverlayRowCount ? overlayRowCount : BaseRowCount(container, dbType);
+        if (row == RowCountQuery) return new DbValue(effectiveRowCount);
+        if (column == FirstEmptyColumn) return new DbValue(FirstEmptyRowWithOverlay(container, dbType, effectiveRowCount, overlays));
+        bool wantsText = IsTextDestination(op.Destination);
+        if (column < 0) return EmptyLike(wantsText);
+
+        if (TryFindOverlayNum(overlays, container, dbType, row, column, out int number)
+            || _engineCells.TryGetValue((container, dbType, row, column), out number))
+        {
+            return new DbValue(number);
+        }
+        if (TryFindOverlayText(overlays, container, dbType, row, column, out string overlayText))
+        {
+            return new DbValue(overlayText);
+        }
+        if (_engineTexts.TryGetValue((container, dbType, row, column), out string? engineText))
+        {
+            return new DbValue(engineText);
+        }
+
+        bool hasTable = _tables.TryGetValue(container, out var tables)
+            && dbType >= 0 && dbType < tables.Count;
+        if (hasTable && row >= 0 && row < effectiveRowCount)
+        {
+            if (TryTableNum(container, dbType, row, column, out number)) return new DbValue(number);
+            if (TryTableText(container, dbType, row, column, out string tableText)) return new DbValue(tableText);
+        }
+        if (row >= ExtensionRowBase) return EmptyLike(wantsText);
+        if (row >= 0 && hasOverlayRowCount) return EmptyLike(wantsText);
+        int fieldCount = FieldCount(container, dbType);
+        if (fieldCount >= 0 && column >= fieldCount) return EmptyLike(wantsText);
+        return null;
+    }
+
+    private int BaseRowCount(DbContainer container, int dbType)
+    {
+        if (!_tables.TryGetValue(container, out var tables)) return 0;
+        return dbType >= 0 && dbType < tables.Count ? tables[dbType].Rows.Count : 0;
+    }
+
+    private static bool TryFindOverlayRowCount(SavedDbOverlays? overlays, DbContainer container, int dbType, out int count)
+    {
+        if (overlays?.RowCounts != null)
+        {
+            int c = (int)container;
+            for (int i = overlays.RowCounts.Count - 1; i >= 0; i--)
+            {
+                var rc = overlays.RowCounts[i];
+                if (rc.Container == c && rc.Type == dbType)
+                {
+                    count = rc.Count;
+                    return true;
+                }
+            }
+        }
+        count = 0;
+        return false;
+    }
+
+    private static bool TryFindOverlayNum(SavedDbOverlays? overlays, DbContainer container, int dbType, int row, int column, out int value)
+    {
+        if (overlays?.Nums != null)
+        {
+            int c = (int)container;
+            for (int i = overlays.Nums.Count - 1; i >= 0; i--)
+            {
+                var cell = overlays.Nums[i];
+                if (cell.Container == c && cell.Type == dbType && cell.Row == row && cell.Column == column)
+                {
+                    value = cell.Value;
+                    return true;
+                }
+            }
+        }
+        value = 0;
+        return false;
+    }
+
+    private static bool TryFindOverlayText(SavedDbOverlays? overlays, DbContainer container, int dbType, int row, int column, out string value)
+    {
+        if (overlays?.Texts != null)
+        {
+            int c = (int)container;
+            for (int i = overlays.Texts.Count - 1; i >= 0; i--)
+            {
+                var cell = overlays.Texts[i];
+                if (cell.Container == c && cell.Type == dbType && cell.Row == row && cell.Column == column)
+                {
+                    value = cell.Value ?? "";
+                    return true;
+                }
+            }
+        }
+        value = "";
+        return false;
+    }
+
+    private int FirstEmptyRowWithOverlay(DbContainer container, int dbType, int count, SavedDbOverlays? overlays)
+    {
+        if (count <= 0) return 0;
+        int fieldCount = FieldCount(container, dbType);
+        if (fieldCount < 0) return 0;
+        var fields = _tables[container][dbType].Fields;
+        for (int row = 0; row < count; row++)
+        {
+            bool empty = true;
+            for (int column = 0; column < fieldCount; column++)
+            {
+                if (fields[column].IsString)
+                {
+                    string text = TryFindOverlayText(overlays, container, dbType, row, column, out string overlay)
+                        ? overlay
+                        : TableText(container, dbType, row, column);
+                    if (text.Length != 0) { empty = false; break; }
+                }
+                else
+                {
+                    int number = TryFindOverlayNum(overlays, container, dbType, row, column, out int overlay)
+                        ? overlay
+                        : TableNum(container, dbType, row, column);
+                    if (number != 0) { empty = false; break; }
+                }
+            }
+            if (empty) return row;
+        }
+        return count;
+    }
+
     /// <summary>Current row count, including a runtime 250 row-count write.</summary>
     public int RowCount(DbContainer container, int dbType)
     {
@@ -284,7 +512,7 @@ public sealed class GameDatabase
         if (hasTable && RowExists(container, dbType, row))
         {
             if (TryTableNum(container, dbType, row, column, out number)) return new DbValue(number);
-            if (TryTableText(container, dbType, row, column, out text)) return new DbValue(text);
+            if (TryTableText(container, dbType, row, column, out string tableText)) return new DbValue(tableText);
         }
         if (row >= ExtensionRowBase) return EmptyLike(wantsText);
         if (row >= 0 && _rowCounts.ContainsKey((container, dbType))) return EmptyLike(wantsText);

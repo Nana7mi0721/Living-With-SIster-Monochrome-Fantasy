@@ -274,15 +274,19 @@ public partial class SaveLoadTest : Node
         long saveBytes = new FileInfo(savePath).Length;
         Check(saveBytes < 50 * 1024, $"save slot must stay under 50 KB (got {saveBytes} bytes)");
 
-        // Schema guard: future versions are rejected; pre-versioned (< 1) slots migrate to current.
+        // Schema guard: future versions are rejected; v1 and pre-versioned (< 1) slots migrate to current.
         string savedJson = File.ReadAllText(savePath);
-        Check(SaveCodec.FromJson(savedJson.Replace("\"schema_version\": 1", "\"schema_version\": 99")) == null,
+        string currentSchemaToken = $"\"schema_version\": {SaveState.SchemaVersionNumber}";
+        Check(SaveCodec.FromJson(savedJson.Replace(currentSchemaToken, "\"schema_version\": 99")) == null,
             "schema_version 99 must be rejected");
-        SaveState? migratedV0 = SaveCodec.FromJson(savedJson.Replace("\"schema_version\": 1", "\"schema_version\": 0"));
+        SaveState? migratedV1 = SaveCodec.FromJson(savedJson.Replace(currentSchemaToken, "\"schema_version\": 1"));
+        Check(migratedV1 != null && migratedV1.SchemaVersion == SaveState.SchemaVersionNumber && migratedV1.DbOverlays != null,
+            "schema_version 1 must migrate to current schema version with DbOverlays initialized");
+        SaveState? migratedV0 = SaveCodec.FromJson(savedJson.Replace(currentSchemaToken, "\"schema_version\": 0"));
         Check(migratedV0 != null && migratedV0.SchemaVersion == SaveState.SchemaVersionNumber,
             "schema_version 0 must migrate to current schema version");
         SaveState? migratedNeg = SaveCodec.FromBytes(System.Text.Encoding.UTF8.GetBytes(
-            savedJson.Replace("\"schema_version\": 1", "\"schema_version\": -1")));
+            savedJson.Replace(currentSchemaToken, "\"schema_version\": -1")));
         Check(migratedNeg != null && migratedNeg.SchemaVersion == SaveState.SchemaVersionNumber,
             "schema_version < 1 via FromBytes must migrate to current schema version");
 
@@ -455,6 +459,39 @@ public partial class SaveLoadTest : Node
             Address = 2_000_300,
         }) == 7, "221 must resolve save/system.sav case-insensitively to System.json");
 
+        // 222/221 must also persist StrVar and SysVar > 12 (P1-9).
+        session.HandleSaveLoad(new SaveOp
+        {
+            Opcode = 222,
+            File = new SaveTarget("Save/System.sav"),
+            Address = Magic.StrBase + 5,
+            StringValue = "persist-str",
+            IsString = true,
+        });
+        var readStrOp = new SaveOp
+        {
+            Opcode = 221,
+            File = new SaveTarget("Save/System.sav"),
+            Address = Magic.StrBase + 5,
+            Destination = Magic.StrBase + 5,
+        };
+        session.HandleSaveLoad(readStrOp);
+        Check(readStrOp.LoadedString == "persist-str",
+            $"221/222 StrVar roundtrip failed (got '{readStrOp.LoadedString}')");
+        session.HandleSaveLoad(new SaveOp
+        {
+            Opcode = 222,
+            File = new SaveTarget("Save/System.sav"),
+            Address = Magic.SysBase + 100,
+            Value = 80,
+        });
+        Check(session.HandleSaveLoad(new SaveOp
+        {
+            Opcode = 221,
+            File = new SaveTarget("Save/System.sav"),
+            Address = Magic.SysBase + 100,
+        }) == 80, "221/222 must support SysVar > 12 (Sys[100])");
+
         // 220 with a path operand is the retail system-data file: banks only, no map and
         // no coroutine state, and the load is deferred to the frame boundary.
         vars.Set(300, 41);
@@ -476,11 +513,11 @@ public partial class SaveLoadTest : Node
         Check(session.Phase == "bedroom", "220 system load must not leave the live map (" + session.Phase + ")");
 
         // 221 with flag == 1 indirect address + CData (1_100_000_000) numeric and string cells
-        // (CE94 pc 335/345/348 save-card party & hero icon lookup).
+        // (CE94 pc 335/345/348 save-card party & hero icon lookup). Use slot 2 so slot 1 stays untouched.
         var op221Prog = Program.FromSlots(940, "Op221CData", new List<Slot>
         {
-            Slot.Command(221, [1_600_011, 1, 1_600_062, 1]),
-            Slot.Command(221, [1_600_007, 1, 1_600_064, 1]),
+            Slot.Command(221, [1_600_011, 2, 1_600_062, 1]),
+            Slot.Command(221, [1_600_007, 2, 1_600_064, 1]),
             Slot.Command(172)
         });
         vm.Vm.RegisterProgram(op221Prog);
@@ -497,14 +534,39 @@ public partial class SaveLoadTest : Node
                 ItemId = 1,
                 Source = new DbValue(12)
             });
-            op221Inst.Self.Set(662, 1_106_000_001); // CData[6][0][1] -> hero id 12
+            string slot2Path = session.SlotSavePath(2);
+            Check(session.SaveGameTo(slot2Path, 2), "SaveGameTo(slot 2) must persist op250 CData overlays");
+            // Mutate live CData after saving so 221 proves it reads slot 2's overlay, not live memory.
+            vm.Database(new DbOp
+            {
+                Container = DbContainer.CData,
+                Direction = DbDirection.Write,
+                DbType = 6,
+                DataId = 0,
+                ItemId = 1,
+                Source = new DbValue(77)
+            });
+            op221Inst.Self.Set(662, 1_106_000_001); // CData[6][0][1] -> hero id 12 from slot 2
             op221Inst.Self.Set(664, 1_100_001_203); // CData[0][12][3] -> "SystemFile/charicon.png"
             int budget = 32;
             vm.Vm.StepInstance(op221Inst, ref budget);
             Check(op221Inst.Self.Get(611) == 12,
-                $"221 flag==1 CData numeric must return 12 (got {op221Inst.Self.Get(611)})");
+                $"221 flag==1 CData numeric must return 12 from saved overlay (got {op221Inst.Self.Get(611)})");
             Check(op221Inst.Self.GetStr(607) == "SystemFile/charicon.png",
                 $"221 flag==1 CData string must store into cself[7] (got '{op221Inst.Self.GetStr(607)}')");
+
+            // LoadGameFrom(slot 2) must clear live overlay (77) and restore saved overlay (12).
+            Check(session.LoadGameFrom(slot2Path), "LoadGameFrom(slot 2) must restore persisted op250 overlays");
+            DbValue? restoredCell = vm.Database(new DbOp
+            {
+                Container = DbContainer.CData,
+                Direction = DbDirection.Read,
+                DbType = 6,
+                DataId = 0,
+                ItemId = 1
+            });
+            Check(restoredCell != null && !restoredCell.IsString && restoredCell.Num == 12,
+                $"LoadGameFrom must restore CData[6][0][1]==12 and wipe stale live 77 (got {restoredCell?.Num})");
         }
 
         // Strict gate: the whole title -> new game -> load chain must not meet an

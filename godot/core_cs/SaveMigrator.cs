@@ -31,6 +31,11 @@ public static class SaveMigrator
         {
             state.SchemaVersion = SaveState.SchemaVersionNumber;
         }
+        if (state.SchemaVersion == 1)
+        {
+            state.SchemaVersion = SaveState.SchemaVersionNumber;
+            state.DbOverlays ??= new SavedDbOverlays();
+        }
         if (state.PlayFrames < 0) state.PlayFrames = 0;
         if (state.MapId < 0) state.MapId = 0;
 
@@ -44,6 +49,12 @@ public static class SaveMigrator
         state.Instances ??= new List<SavedInstance>();
         state.Pictures ??= new List<SavedPicture>();
         state.Audio ??= new List<SavedAudio>();
+        if (state.DbOverlays != null)
+        {
+            state.DbOverlays.RowCounts ??= new List<SavedDbRowCount>();
+            state.DbOverlays.Nums ??= new List<SavedDbNumCell>();
+            state.DbOverlays.Texts ??= new List<SavedDbTextCell>();
+        }
 
         state.Pictures.RemoveAll(p => p != null && IsTransientUiPicture(p.Number));
         state.Audio.RemoveAll(a => a != null && a.Channel == 2); // CHANNEL_SE is transient.

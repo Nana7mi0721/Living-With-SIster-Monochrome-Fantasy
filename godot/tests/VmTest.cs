@@ -956,6 +956,30 @@ public static class VmTest
         if (vm.Faulted)
             throw new Exception("125/126/123 must be handled opcodes");
 
+        // Single-direction WOLF editor bits (Down=0x10, Left=0x20, Right=0x40, Up=0x80) must map to host bits.
+        var dirVm = new EventVm();
+        dirVm.ApplyInputPermission(0x210); // ban WOLF Down (0x10)
+        if ((dirVm.BasicAllDeny & KeyCodes.Down) == 0 || (dirVm.BasicAllDeny & KeyCodes.Up) != 0)
+            throw new Exception($"126 WOLF Down (0x10) mapped incorrectly: 0x{dirVm.BasicAllDeny:X}");
+        dirVm.ApplyInputPermission(0x280); // ban WOLF Up (0x80)
+        if ((dirVm.BasicAllDeny & KeyCodes.Up) == 0 || (dirVm.BasicAllDeny & KeyCodes.Right) != 0)
+            throw new Exception($"126 WOLF Up (0x80) mapped incorrectly: 0x{dirVm.BasicAllDeny:X}");
+
+        // Opcode 250 writing an empty string self-var slot (CSelf5 = 1_600_005) must emit a string DbValue (not int 0).
+        DbOp? last250 = null;
+        var dbHost = new DelegateDbHost(op => { last250 = op; return null; });
+        var dbVm = new EventVm { Host = dbHost };
+        dbVm.RegisterProgram(Program.FromSlots(922, "Op250EmptyStr", new List<Slot>
+        {
+            Slot.Command(250, [0, 0, 0, 0, 1_600_005]),
+            Slot.Command(172)
+        }));
+        var dbInst = dbVm.CreateInstance(922)!;
+        dbInst.Self.SetStr(Magic.SelfArgBase + 5, "");
+        dbVm.StepFrame();
+        if (last250?.Source == null || !last250.Source.IsString || last250.Source.Str != "")
+            throw new Exception($"250 empty CSelf5 write must construct string DbValue, got IsString={last250?.Source?.IsString}");
+
         // DeviceDeny must allow WOLF-layout direction auto-key (0x10 = Down) while still blocking physical Up.
         var devSlots = new List<Slot>
         {
@@ -1947,5 +1971,10 @@ public static class VmTest
             ProgramLoader.ClearCache();
             try { System.IO.Directory.Delete(tmpDir, true); } catch (System.IO.IOException) { }
         }
+    }
+
+    private sealed class DelegateDbHost(Func<DbOp, DbValue?> handler) : NullHost
+    {
+        public override DbValue? Database(DbOp op) => handler(op);
     }
 }

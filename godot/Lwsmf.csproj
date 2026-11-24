@@ -11,6 +11,8 @@
     <LangVersion>12</LangVersion>
     <RootNamespace>Lwsmf</RootNamespace>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <!-- Release and ExportRelease must not ship test-only C# types; Debug keeps them for the gate. -->

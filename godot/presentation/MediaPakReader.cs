@@ -127,20 +127,15 @@ public partial class MediaPakReader : RefCounted
         {
             if (_file == null)
                 throw new IOException("Media pack stream is disposed");
-            const int ChunkSize = 64 * 1024;
-            int offset = 0;
-            while (offset < destination.Length)
+            if (destination.Length == 0)
+                return;
+            byte[] chunk = _file.GetBuffer(destination.Length);
+            if (chunk.Length != destination.Length)
             {
-                int take = Math.Min(ChunkSize, destination.Length - offset);
-                byte[] chunk = _file.GetBuffer(take);
-                if (chunk.Length != take)
-                {
-                    throw new EndOfStreamException(
-                        $"Unexpected EOF reading media pack: expected {take} bytes, got {chunk.Length}");
-                }
-                chunk.AsSpan().CopyTo(destination.Slice(offset, take));
-                offset += take;
+                throw new EndOfStreamException(
+                    $"Unexpected EOF reading media pack: expected {destination.Length} bytes, got {chunk.Length}");
             }
+            chunk.AsSpan().CopyTo(destination);
         }
 
         public byte[] ReadBytes(int length)

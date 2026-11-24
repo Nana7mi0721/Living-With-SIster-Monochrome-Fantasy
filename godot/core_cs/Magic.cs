@@ -22,6 +22,7 @@ public readonly struct Magic
     public const int SelfSlotsPerGroup = 100;
     public const int SelfGroups = 10;
     public const int SelfArgBase = 6 * SelfSlotsPerGroup; // 600
+    public const int SysStrOffset = 100_000; // 9_100_000..9_165_535
 
     public int Raw { get; }
     public MagicKind Kind { get; }
@@ -37,6 +38,11 @@ public readonly struct Magic
     public byte Flags => (byte)((Raw >> 28) & 0x0F);
     public bool IsStorage => Kind != MagicKind.Literal && Kind != MagicKind.Opaque;
     public bool IsString => Kind == MagicKind.StrVar;
+    public bool IsSysStr => Kind == MagicKind.SysVar && Index >= SysStrOffset && Index < SysStrOffset + Variables.MaxSlots;
+    public bool IsStringSlot =>
+        Kind == MagicKind.StrVar
+        || (Kind == MagicKind.SelfVar && (Index % SelfSlotsPerGroup) is >= 5 and <= 9)
+        || IsSysStr;
 
     public static Magic Decode(int raw)
     {
