@@ -13,6 +13,13 @@ public sealed class LegacySaveImporter
     private const byte StartByte = 0x19;
     private const byte EndByte = 0x19;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
+    private static readonly Encoding ShiftJisEncoding = InitShiftJis();
+
+    private static Encoding InitShiftJis()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        return Encoding.GetEncoding(932);
+    }
 
     public static readonly string[] NotRecoverableFields =
     [
@@ -23,11 +30,12 @@ public sealed class LegacySaveImporter
         "audio_phase"
     ];
 
-    public sealed class SaveReader(byte[] buffer, int position = 0, List<string>? warnings = null)
+    public sealed class SaveReader(byte[] buffer, int position = 0, List<string>? warnings = null, bool isUtf8 = true)
     {
         public byte[] Buffer { get; } = buffer;
         public int Position { get; set; } = position;
         public List<string> Warnings { get; } = warnings ?? [];
+        public bool IsUtf8 { get; } = isUtf8;
 
         public int Remaining => Buffer.Length - Position;
 
@@ -101,6 +109,10 @@ public sealed class LegacySaveImporter
             int len = raw.Length;
             if (raw[^1] == 0) len--;
             if (len <= 0) return "";
+            if (!IsUtf8)
+            {
+                return ShiftJisEncoding.GetString(raw, 0, len);
+            }
             try
             {
                 return StrictUtf8.GetString(raw, 0, len);
@@ -146,12 +158,15 @@ public sealed class LegacySaveImporter
         [JsonPropertyName("choice_anchor")] public int[] ChoiceAnchor { get; set; } = [512, 240];
         [JsonPropertyName("database_overrides")] public List<int> DatabaseOverrides { get; set; } = [];
         [JsonIgnore] public List<DatabaseCell> DatabaseCells { get; set; } = [];
+        [JsonIgnore] public List<DatabaseTextCell> DatabaseTextCells { get; set; } = [];
         /// <summary>Event id -> CSelf0..99 numbers (SavePart3 list table).</summary>
         [JsonIgnore] public Dictionary<int, int[]> CommonSelfNumbers { get; set; } = [];
         /// <summary>Event id -> CSelf5..9 strings (SavePart3 slot table).</summary>
         [JsonIgnore] public Dictionary<int, string[]> CommonSelfStrings { get; set; } = [];
         /// <summary>Complete SavePart5 picture records for a real load (not the summary view).</summary>
         [JsonIgnore] public List<SavedPicture> PictureStates { get; set; } = [];
+        [JsonIgnore] public string BgmFile { get; set; } = "";
+        [JsonIgnore] public string BgsFile { get; set; } = "";
     }
 
     public sealed class DatabaseCell
@@ -160,6 +175,14 @@ public sealed class LegacySaveImporter
         public int Row { get; set; }
         public int Column { get; set; }
         public int Value { get; set; }
+    }
+
+    public sealed class DatabaseTextCell
+    {
+        public int Type { get; set; }
+        public int Row { get; set; }
+        public int Column { get; set; }
+        public string Value { get; set; } = "";
     }
 
     public sealed class SlotResult
@@ -238,7 +261,8 @@ public sealed class LegacySaveImporter
         }
 
         var warnings = new List<string>();
-        var r = new SaveReader(dec, CryptStart + 1, warnings);
+        bool isUtf8 = raw[6] == 0x55;
+        var r = new SaveReader(dec, CryptStart + 1, warnings, isUtf8);
         string saveName = r.ReadMemDataString(2, "save_name");
         ushort fileVersion = r.ReadU16();
 
@@ -313,8 +337,8 @@ public sealed class LegacySaveImporter
         r.ReadMemData(2); r.ReadMemData(2);
         r.ReadU32();
         for (int i = 0; i < 3; i++) r.ReadU32();
-        r.ReadMemData(2); for (int i = 0; i < 3; i++) r.ReadU32();
-        r.ReadMemData(2); for (int i = 0; i < 3; i++) r.ReadU32();
+        string bgmPath1 = r.ReadMemDataString(2, "bgm_path1"); for (int i = 0; i < 3; i++) r.ReadU32();
+        string bgmPath2 = r.ReadMemDataString(2, "bgm_path2"); for (int i = 0; i < 3; i++) r.ReadU32();
         r.ReadMemData(2); r.ReadMemData(2); r.ReadU8();
         r.ReadU8();
         for (int i = 0; i < 3; i++) r.ReadMemData(2);
@@ -445,7 +469,7 @@ public sealed class LegacySaveImporter
                     Kind = isText == 1 ? 2 : isWin == 1 ? 4 : 0,
                     Action = 0,
                     File = isText == 1 ? "" : picName,
-                    Text = isText == 1 ? DecodePictureText(picBytes, warnings, $"picture[{picId}] text") : "",
+                    Text = isText == 1 ? DecodePictureText(picBytes, warnings, $"picture[{picId}] text", isUtf8) : "",
                     Anchor = anchor,
                     Args =
                     [
@@ -464,6 +488,7 @@ public sealed class LegacySaveImporter
             throw new InvalidDataException($"VariableDatabase type count {typeCount} exceeds remaining {r.Remaining} bytes");
         var dbOverrides = new List<int>();
         var dbCells = new List<DatabaseCell>();
+        var dbTextCells = new List<DatabaseTextCell>();
         for (uint t = 0; t < typeCount; t++)
         {
             int unk = r.ReadI32();
@@ -502,9 +527,13 @@ public sealed class LegacySaveImporter
                     if (cfg[k] < 2000)
                         dbCells.Add(new DatabaseCell { Type = (int)t, Row = (int)row, Column = k, Value = r.ReadI32() });
                 }
-                foreach (uint def in cfg)
+                for (int k = 0; k < cfg.Length; k++)
                 {
-                    if (def >= 2000) r.ReadMemData(4);
+                    if (cfg[k] >= 2000)
+                    {
+                        string textVal = r.ReadMemDataString(4, $"db[{t}:{row}:{k}]");
+                        dbTextCells.Add(new DatabaseTextCell { Type = (int)t, Row = (int)row, Column = k, Value = textVal });
+                    }
                 }
             }
         }
@@ -561,16 +590,40 @@ public sealed class LegacySaveImporter
                 ChoiceAnchor = [sys3, sys4],
                 DatabaseOverrides = dbOverrides,
                 DatabaseCells = dbCells,
+                DatabaseTextCells = dbTextCells,
                 CommonSelfNumbers = commonSelfNumbers,
                 CommonSelfStrings = commonSelfStrings,
-                PictureStates = pictureStates
+                PictureStates = pictureStates,
+                BgmFile = bgmPath1,
+                BgsFile = bgmPath2
             },
             NotRecoverable = NotRecoverableFields
         };
     }
 
+    /// <summary>Validate a retail .sav file without altering live session state.</summary>
+    public static bool ValidateFile(string path, out string error)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            error = "retail save file not found";
+            return false;
+        }
+        try
+        {
+            _ = ImportFile(path, 0, rejectBadChecksum: true);
+            error = "";
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or IOException or UnauthorizedAccessException)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
     internal static string DecodePictureText(byte[] bytes, List<string>? warnings = null,
-        string field = "picture_text")
+        string field = "picture_text", bool isUtf8 = true)
     {
         var sb = new StringBuilder();
         int i = 0;
@@ -579,7 +632,17 @@ public sealed class LegacySaveImporter
         {
             if (bytes[i] != 1)
             {
-                int len = CharLen(bytes[i]);
+                int len;
+                if (!isUtf8)
+                {
+                    byte b = bytes[i];
+                    bool sjisLead = (b is >= 0x81 and <= 0x9F) || (b is >= 0xE0 and <= 0xFC);
+                    len = sjisLead && i + 1 < bytes.Length && bytes[i + 1] != 0 ? 2 : 1;
+                    sb.Append(ShiftJisEncoding.GetString(bytes, i, len));
+                    i += len;
+                    continue;
+                }
+                len = CharLen(bytes[i]);
                 if (i + len > bytes.Length) len = bytes.Length - i;
                 for (int k = 1; k < len; k++)
                 {

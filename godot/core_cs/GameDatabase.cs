@@ -102,6 +102,25 @@ public sealed class GameDatabase
 
     public string SourcePath { get; }
 
+    /// <summary>Inspect a CDataBase type's field string/numeric flags and base row count for .sav export.</summary>
+    public bool TryGetCDataSchema(int dbType, out bool[] fieldIsString, out int baseRowCount)
+    {
+        if (_tables.TryGetValue(DbContainer.CData, out var tables) && dbType >= 0 && dbType < tables.Count)
+        {
+            Table table = tables[dbType];
+            fieldIsString = new bool[table.Fields.Length];
+            for (int i = 0; i < table.Fields.Length; i++)
+            {
+                fieldIsString[i] = table.Fields[i].IsString;
+            }
+            baseRowCount = table.Rows.Count;
+            return true;
+        }
+        fieldIsString = Array.Empty<bool>();
+        baseRowCount = 0;
+        return false;
+    }
+
     private GameDatabase(string sourcePath)
     {
         SourcePath = sourcePath;

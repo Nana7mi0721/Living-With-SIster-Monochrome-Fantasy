@@ -523,3 +523,28 @@ fn vardb_setters_refuse_what_they_cannot_encode() {
     let parsed = wolf_save::vardb::parse_bytes(&bytes).expect("reparse");
     assert_eq!(parsed.number(0, 0, 1), Some(-1));
 }
+
+/// Optional cross-runtime check: when `LWsmf_EXPORT_PROBE` points at a C#-exported `.sav`,
+/// Rust `wolf-save` must parse it cleanly, validate its checksum, and rebuild identical bytes.
+#[test]
+fn csharp_exported_sav_parses_and_rebuilds_byte_exact() {
+    let Ok(probe) = std::env::var("LWsmf_EXPORT_PROBE") else {
+        return;
+    };
+    let data = std::fs::read(&probe)
+        .unwrap_or_else(|err| panic!("cannot read C# exported probe {probe}: {err}"));
+    let save = SaveFile::parse(&data)
+        .unwrap_or_else(|err| panic!("wolf-save failed to parse C# exported {probe}: {err}"));
+    assert!(save.checksum_ok(), "C# exported {probe} checksum mismatch");
+    assert_eq!(save.file_version, 0x008C);
+    assert!(save.is_utf8);
+    let rebuilt = save
+        .to_bytes_rebuilt()
+        .unwrap_or_else(|err| panic!("wolf-save failed to rebuild {probe}: {err}"));
+    assert_eq!(
+        rebuilt,
+        data,
+        "C# exported {probe} diverged from wolf-save rebuild at {:?}",
+        first_difference(&data, &rebuilt)
+    );
+}

@@ -1317,14 +1317,76 @@ static func is_valid_save_archive_entry(entry_name: String) -> bool:
 		if part.is_empty() or part == "." or part == "..":
 			return false
 	var file_name := parts[-1].to_lower()
-	if file_name == "quicksave.json" or file_name == "system.json":
+	if file_name == "quicksave.json" or file_name == "system.json" or file_name == "system.sav":
 		return true
 	if file_name.begins_with("save_") and file_name.ends_with(".json") and file_name.length() == 12:
 		var digits := file_name.substr(5, 2)
 		return digits.is_valid_int()
+	if file_name.begins_with("savedata") and file_name.ends_with(".sav") and file_name.length() == 14:
+		var sav_digits := file_name.substr(8, 2)
+		return sav_digits.is_valid_int()
 	if file_name.begins_with("save") and (file_name.ends_with(".jpg") or file_name.ends_with(".jpeg")):
 		return true
 	return false
+
+
+static func _retail_sav_slot_from_name(file_name: String) -> int:
+	var lower := file_name.get_file().to_lower()
+	if lower.begins_with("savedata") and lower.ends_with(".sav") and lower.length() == 14:
+		var digits := lower.substr(8, 2)
+		if digits.is_valid_int():
+			return clampi(int(digits), 1, 99)
+	return -1
+
+
+static func _detect_import_kind(file_path: String) -> String:
+	var f := FileAccess.open(file_path, FileAccess.READ)
+	if f == null:
+		return "unknown"
+	var head := f.get_buffer(64)
+	f.close()
+	if head.size() >= 2 and head[0] == 0x50 and head[1] == 0x4B:
+		return "zip"
+	for b in head:
+		if b == 0x20 or b == 0x09 or b == 0x0A or b == 0x0D or b == 0xEF or b == 0xBB or b == 0xBF:
+			continue
+		if b == 0x7B: # '{'
+			return "json"
+		break
+	return "sav"
+
+
+static func _remove_dir_recursive(dir_path: String) -> void:
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return
+	dir.include_hidden = true
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		if entry != "." and entry != "..":
+			var child := dir_path.path_join(entry)
+			if dir.current_is_dir():
+				_remove_dir_recursive(child)
+			else:
+				DirAccess.remove_absolute(child)
+		entry = dir.get_next()
+	dir.list_dir_end()
+	DirAccess.remove_absolute(dir_path)
+
+
+static func export_retail_sav_zip(dest_zip: String, session_ctrl: Object) -> Dictionary:
+	if session_ctrl == null or not session_ctrl.has_method("ExportAllToRetailSavDir"):
+		return {"ok": false, "error": "当前会话不支持原版 .sav 导出", "count": 0, "path": ""}
+	var stage_dir := ProjectSettings.globalize_path("user://cache/retail_export_%d" % Time.get_ticks_usec())
+	var exported_count := int(session_ctrl.call("ExportAllToRetailSavDir", stage_dir, true))
+	if exported_count <= 0:
+		var err := str(session_ctrl.get("LastError"))
+		_remove_dir_recursive(stage_dir)
+		return {"ok": false, "error": err if not err.is_empty() else "当前存档目录没有可导出的槽位", "count": 0, "path": ""}
+	var zip_res := export_saves_zip(stage_dir, dest_zip)
+	_remove_dir_recursive(stage_dir)
+	return zip_res
 
 
 static func _save_transfer_files(save_dir: String) -> PackedStringArray:
@@ -1484,7 +1546,8 @@ static func inspect_save_zip(zip_path: String, save_dir: String = "", session_ct
 			reader.close()
 			return {"ok": false, "error": "解压总大小超过 256 MiB 上限"}
 		var leaf := entry_name.replace("\\", "/").get_file()
-		if leaf.to_lower().ends_with(".json"):
+		var leaf_lower := leaf.to_lower()
+		if leaf_lower.ends_with(".json"):
 			var json_text := data.get_string_from_utf8()
 			if session_ctrl != null and session_ctrl.has_method("ValidateSaveJson"):
 				var err := str(session_ctrl.call("ValidateSaveJson", json_text))
@@ -1494,9 +1557,28 @@ static func inspect_save_zip(zip_path: String, save_dir: String = "", session_ct
 			elif not (JSON.parse_string(json_text) is Dictionary):
 				reader.close()
 				return {"ok": false, "error": "%s 不是有效 JSON" % leaf}
+		elif leaf_lower.ends_with(".sav"):
+			if data.size() <= 0x14:
+				reader.close()
+				return {"ok": false, "error": "%s 体积过小，不是有效的原版存档" % leaf}
+			if session_ctrl != null and session_ctrl.has_method("ValidateRetailSave"):
+				var tmp_sav := ProjectSettings.globalize_path("user://cache/inspect_%d.sav" % Time.get_ticks_usec())
+				if _write_file_atomic(tmp_sav, data):
+					var sav_err := str(session_ctrl.call("ValidateRetailSave", tmp_sav))
+					DirAccess.remove_absolute(tmp_sav)
+					if not sav_err.is_empty():
+						reader.close()
+						return {"ok": false, "error": "%s 校验失败：%s" % [leaf, sav_err]}
 		valid_names.append(leaf)
-		if not save_dir.is_empty() and FileAccess.file_exists(save_dir.path_join(leaf)):
-			conflicts.append(leaf)
+		var conflict_target := leaf
+		if leaf_lower == "system.sav":
+			conflict_target = "System.json"
+		elif leaf_lower.ends_with(".sav"):
+			var sav_slot := _retail_sav_slot_from_name(leaf_lower)
+			if sav_slot > 0:
+				conflict_target = "save_%02d.json" % sav_slot
+		if not save_dir.is_empty() and FileAccess.file_exists(save_dir.path_join(conflict_target)):
+			conflicts.append(conflict_target)
 	reader.close()
 	if valid_names.is_empty():
 		return {"ok": false, "error": "压缩包内未找到有效存档文件"}
@@ -1523,6 +1605,29 @@ static func apply_save_zip(zip_path: String, save_dir: String, backup_dir: Strin
 			continue
 		var data := reader.read_file(entry_name)
 		var leaf := entry_name.replace("\\", "/").get_file()
+		var leaf_lower := leaf.to_lower()
+		if leaf_lower.ends_with(".sav"):
+			var tmp_sav := ProjectSettings.globalize_path("user://cache/apply_%d_%d.sav" % [Time.get_ticks_usec(), imported])
+			if not _write_file_atomic(tmp_sav, data):
+				reader.close()
+				return {"ok": false, "error": "暂存原版存档失败：%s" % leaf, "imported": imported, "backup_path": backup_path}
+			var sav_ok := false
+			var sav_err := "当前会话不支持原版 .sav 导入"
+			if leaf_lower == "system.sav":
+				if session_ctrl != null and session_ctrl.has_method("ImportRetailSystemSave"):
+					sav_ok = bool(session_ctrl.call("ImportRetailSystemSave", tmp_sav))
+					sav_err = str(session_ctrl.get("LastError"))
+			else:
+				var slot_num := _retail_sav_slot_from_name(leaf_lower)
+				if slot_num > 0 and session_ctrl != null and session_ctrl.has_method("ImportRetailSaveToSlot"):
+					sav_ok = bool(session_ctrl.call("ImportRetailSaveToSlot", tmp_sav, slot_num))
+					sav_err = str(session_ctrl.get("LastError"))
+			DirAccess.remove_absolute(tmp_sav)
+			if not sav_ok:
+				reader.close()
+				return {"ok": false, "error": "导入原版存档 %s 失败：%s" % [leaf, sav_err], "imported": imported, "backup_path": backup_path}
+			imported += 1
+			continue
 		if not _write_file_atomic(save_dir.path_join(leaf), data):
 			reader.close()
 			return {"ok": false, "error": "写入存档文件失败：%s" % leaf, "imported": imported, "backup_path": backup_path}
@@ -1550,10 +1655,10 @@ func _build_save_transfer() -> void:
 
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -340.0
-	panel.offset_right = 340.0
-	panel.offset_top = -220.0
-	panel.offset_bottom = 220.0
+	panel.offset_left = -356.0
+	panel.offset_right = 356.0
+	panel.offset_top = -252.0
+	panel.offset_bottom = 252.0
 	panel.add_theme_stylebox_override("panel", _make_modal_card_style())
 	_transfer_root.add_child(panel)
 
@@ -1597,7 +1702,7 @@ func _build_save_transfer() -> void:
 	slot_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_child(slot_row)
 	var slot_lbl := Label.new()
-	slot_lbl.text = "原版 .sav 导入目标槽位："
+	slot_lbl.text = "目标 / 导出槽位："
 	slot_lbl.add_theme_font_override("font", UiSkin.font())
 	slot_lbl.add_theme_font_size_override("font_size", 16)
 	slot_lbl.add_theme_color_override("font_color", Color(0.90, 0.92, 0.96, 1.0))
@@ -1617,28 +1722,39 @@ func _build_save_transfer() -> void:
 		spin_edit.add_theme_stylebox_override("focus", boxes["hover"])
 	slot_row.add_child(_transfer_slot_spin)
 
-	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", 14)
-	actions.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_child(actions)
+	var primary_actions := HBoxContainer.new()
+	primary_actions.add_theme_constant_override("separation", 12)
+	primary_actions.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_child(primary_actions)
 
-	var exp_btn := Button.new()
-	exp_btn.text = "导出存档包 (.zip)"
-	_style_modal_button(exp_btn, boxes, Vector2(188, 42), 16)
-	exp_btn.pressed.connect(_on_transfer_export_pressed)
-	actions.add_child(exp_btn)
+	var exp_retail_zip_btn := Button.new()
+	exp_retail_zip_btn.text = "导出原版存档包 (.zip)"
+	_style_modal_button(exp_retail_zip_btn, boxes, Vector2(216, 40), 15)
+	exp_retail_zip_btn.pressed.connect(_on_transfer_export_retail_zip_pressed)
+	primary_actions.add_child(exp_retail_zip_btn)
 
-	var imp_zip_btn := Button.new()
-	imp_zip_btn.text = "导入存档包 (.zip)"
-	_style_modal_button(imp_zip_btn, boxes, Vector2(188, 42), 16)
-	imp_zip_btn.pressed.connect(_on_transfer_import_zip_pressed)
-	actions.add_child(imp_zip_btn)
+	var exp_slot_sav_btn := Button.new()
+	exp_slot_sav_btn.text = "导出当前槽位 (.sav)"
+	_style_modal_button(exp_slot_sav_btn, boxes, Vector2(200, 40), 15)
+	exp_slot_sav_btn.pressed.connect(_on_transfer_export_slot_sav_pressed)
+	primary_actions.add_child(exp_slot_sav_btn)
 
-	var imp_sav_btn := Button.new()
-	imp_sav_btn.text = "导入原版 .sav"
-	_style_modal_button(imp_sav_btn, boxes, Vector2(188, 42), 16)
-	imp_sav_btn.pressed.connect(_on_transfer_import_sav_pressed)
-	actions.add_child(imp_sav_btn)
+	var secondary_actions := HBoxContainer.new()
+	secondary_actions.add_theme_constant_override("separation", 12)
+	secondary_actions.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_child(secondary_actions)
+
+	var imp_any_btn := Button.new()
+	imp_any_btn.text = "智能导入 (.sav/.zip/.json)"
+	_style_modal_button(imp_any_btn, boxes, Vector2(226, 40), 15)
+	imp_any_btn.pressed.connect(_on_transfer_import_any_pressed)
+	secondary_actions.add_child(imp_any_btn)
+
+	var exp_json_btn := Button.new()
+	exp_json_btn.text = "导出重制版完整备份 (JSON .zip)"
+	_style_modal_button(exp_json_btn, boxes, Vector2(248, 40), 15)
+	exp_json_btn.pressed.connect(_on_transfer_export_pressed)
+	secondary_actions.add_child(exp_json_btn)
 
 	_transfer_status = Label.new()
 	_transfer_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1687,7 +1803,7 @@ func open_save_transfer(save_dir: String, session_ctrl: Object = null) -> void:
 	_clear_pending_import()
 	_refresh_transfer_listing()
 	if _transfer_status != null:
-		_transfer_status.text = "可导出当前所有 JSON/缩略图为 ZIP，或从 ZIP / 原版 SaveDataXX.sav 导入。"
+		_transfer_status.text = "默认导出兼容原版 Game.exe 的 .sav 存档；智能导入自动识别 .sav / System.sav / .zip / .json。"
 	if _transfer_root != null:
 		_transfer_root.visible = true
 	_transfer_open = true
@@ -1734,6 +1850,20 @@ func _cancel_pending_import() -> void:
 func _open_file_dialog(mode: String, filters: PackedStringArray, default_name: String = "") -> void:
 	if DisplayServer.get_name() == "headless":
 		return
+	_file_dialog_mode = mode
+	var is_save := mode.begins_with("export_")
+	if DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_FILE):
+		var native_mode := DisplayServer.FILE_DIALOG_MODE_SAVE_FILE if is_save else DisplayServer.FILE_DIALOG_MODE_OPEN_FILE
+		var title := "导出存档" if is_save else "选择存档文件"
+		var start_dir := OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS) if not OS.has_feature("mobile") else ""
+		var err := DisplayServer.file_dialog_show(
+			title, start_dir, default_name if is_save else "", false, native_mode, filters,
+			func(status: bool, selected_paths: PackedStringArray, _filter_idx: int) -> void:
+				if status and not selected_paths.is_empty():
+					_on_transfer_file_selected(selected_paths[0])
+		)
+		if err == OK:
+			return
 	if _file_dialog == null:
 		_file_dialog = FileDialog.new()
 		_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
@@ -1741,9 +1871,8 @@ func _open_file_dialog(mode: String, filters: PackedStringArray, default_name: S
 		_file_dialog.theme = theme
 		_file_dialog.file_selected.connect(_on_transfer_file_selected)
 		add_child(_file_dialog)
-	_file_dialog_mode = mode
 	_file_dialog.filters = filters
-	if mode == "export_zip":
+	if is_save:
 		_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 		_file_dialog.current_file = default_name
 	else:
@@ -1752,17 +1881,53 @@ func _open_file_dialog(mode: String, filters: PackedStringArray, default_name: S
 	_file_dialog.popup_centered_ratio(0.75)
 
 
+func _on_transfer_export_retail_zip_pressed() -> void:
+	var stamp := Time.get_datetime_string_from_system().replace(":", "").replace("-", "").replace("T", "_")
+	var default_name := "lwsmf_retail_saves_%s.zip" % stamp
+	if OS.has_feature("mobile") and not DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_FILE):
+		var dest := ProjectSettings.globalize_path("user://exports").path_join(default_name)
+		var res := export_retail_sav_zip(dest, _transfer_session)
+		if _transfer_status != null:
+			_transfer_status.text = "已导出原版存档包（%d 个文件）：%s" % [int(res["count"]), str(res["path"])] if bool(res["ok"]) else str(res["error"])
+		return
+	_open_file_dialog("export_retail_zip", PackedStringArray(["*.zip ; ZIP Archive"]), default_name)
+
+
+func _on_transfer_export_slot_sav_pressed() -> void:
+	var slot := maxi(1, int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1)
+	var default_name := "SaveData%02d.sav" % slot
+	if OS.has_feature("mobile") and not DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_FILE):
+		var dest := ProjectSettings.globalize_path("user://exports").path_join(default_name)
+		_export_single_slot_sav(slot, dest)
+		return
+	_open_file_dialog("export_slot_sav", PackedStringArray(["*.sav ; WOLF Retail Save"]), default_name)
+
+
+func _export_single_slot_sav(slot: int, dest_path: String) -> void:
+	if _transfer_session == null or not _transfer_session.has_method("ExportSlotToRetailSav"):
+		if _transfer_status != null:
+			_transfer_status.text = "当前会话不支持原版 .sav 导出。"
+		return
+	var ok := bool(_transfer_session.call("ExportSlotToRetailSav", slot, dest_path))
+	var err := str(_transfer_session.get("LastError"))
+	if _transfer_status != null:
+		_transfer_status.text = "已导出槽位 %02d 为原版存档：%s" % [slot, dest_path] if ok else ("导出失败：" + err)
+
+
 func _on_transfer_export_pressed() -> void:
-	if OS.has_feature("mobile"):
-		var exports_dir := ProjectSettings.globalize_path("user://exports")
-		var stamp := Time.get_datetime_string_from_system().replace(":", "").replace("-", "").replace("T", "_")
-		var dest := exports_dir.path_join("lwsmf_saves_%s.zip" % stamp)
+	var stamp := Time.get_datetime_string_from_system().replace(":", "").replace("-", "").replace("T", "_")
+	var default_name := "lwsmf_json_backup_%s.zip" % stamp
+	if OS.has_feature("mobile") and not DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_FILE):
+		var dest := ProjectSettings.globalize_path("user://exports").path_join(default_name)
 		var res := export_saves_zip(_transfer_save_dir, dest)
 		if _transfer_status != null:
 			_transfer_status.text = "已导出 %d 个文件至：%s" % [int(res["count"]), str(res["path"])] if bool(res["ok"]) else str(res["error"])
 		return
-	var stamp_name := "lwsmf_saves_%d.zip" % int(Time.get_unix_time_from_system())
-	_open_file_dialog("export_zip", PackedStringArray(["*.zip ; ZIP Archive"]), stamp_name)
+	_open_file_dialog("export_zip", PackedStringArray(["*.zip ; ZIP Archive"]), default_name)
+
+
+func _on_transfer_import_any_pressed() -> void:
+	_open_file_dialog("import_any", PackedStringArray(["*.sav, *.zip, *.json ; Save Files (*.sav, *.zip, *.json)"]))
 
 
 func _on_transfer_import_zip_pressed() -> void:
@@ -1776,10 +1941,19 @@ func _on_transfer_import_sav_pressed() -> void:
 func _on_transfer_file_selected(path: String) -> void:
 	if path.is_empty():
 		return
+	if _file_dialog_mode == "export_retail_zip":
+		var res := export_retail_sav_zip(path, _transfer_session)
+		if _transfer_status != null:
+			_transfer_status.text = "原版存档包导出成功（%d 个文件）：%s" % [int(res["count"]), str(res["path"])] if bool(res["ok"]) else str(res["error"])
+		return
+	if _file_dialog_mode == "export_slot_sav":
+		var slot := maxi(1, int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1)
+		_export_single_slot_sav(slot, path)
+		return
 	if _file_dialog_mode == "export_zip":
 		var res := export_saves_zip(_transfer_save_dir, path)
 		if _transfer_status != null:
-			_transfer_status.text = "导出成功（%d 个文件）：%s" % [int(res["count"]), str(res["path"])] if bool(res["ok"]) else str(res["error"])
+			_transfer_status.text = "重制版备份导出成功（%d 个文件）：%s" % [int(res["count"]), str(res["path"])] if bool(res["ok"]) else str(res["error"])
 		return
 
 	_clear_pending_import()
@@ -1794,7 +1968,8 @@ func _on_transfer_file_selected(path: String) -> void:
 			return
 		is_temp = true
 
-	if _file_dialog_mode == "import_zip":
+	var kind := _detect_import_kind(resolved_path)
+	if _file_dialog_mode == "import_zip" or (_file_dialog_mode == "import_any" and kind == "zip"):
 		var check := inspect_save_zip(resolved_path, _transfer_save_dir, _transfer_session)
 		if not bool(check.get("ok", false)):
 			if is_temp and FileAccess.file_exists(resolved_path):
@@ -1817,10 +1992,50 @@ func _on_transfer_file_selected(path: String) -> void:
 			_transfer_cancel_import_btn.visible = true
 		return
 
-	if _file_dialog_mode == "import_sav":
+	if _file_dialog_mode == "import_any" and kind == "json":
+		var json_text := FileAccess.get_file_as_string(resolved_path)
+		if _transfer_session != null and _transfer_session.has_method("ValidateSaveJson"):
+			var jerr := str(_transfer_session.call("ValidateSaveJson", json_text))
+			if not jerr.is_empty():
+				if is_temp and FileAccess.file_exists(resolved_path):
+					DirAccess.remove_absolute(resolved_path)
+				if _transfer_status != null:
+					_transfer_status.text = "JSON 存档校验失败：" + jerr
+				return
 		_pending_sav_path = resolved_path
-		var target_slot := int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1
-		var target_name := "save_%02d.json" % maxi(1, target_slot)
+		var leaf_lower := path.get_file().to_lower()
+		var target_slot := maxi(1, int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1)
+		var target_name := "System.json" if leaf_lower == "system.json" else ("save_%02d.json" % target_slot)
+		var exists := FileAccess.file_exists(_transfer_save_dir.path_join(target_name))
+		if _transfer_status != null:
+			_transfer_status.text = "已选择 JSON 存档 %s -> %s%s" % [path.get_file(), target_name, "（将覆盖现有文件！）" if exists else ""]
+		if _transfer_confirm_btn != null:
+			_transfer_confirm_btn.visible = true
+		if _transfer_cancel_import_btn != null:
+			_transfer_cancel_import_btn.visible = true
+		return
+
+	# Retail .sav (SaveDataNN.sav or System.sav)
+	if _transfer_session != null and _transfer_session.has_method("ValidateRetailSave"):
+		var sav_err := str(_transfer_session.call("ValidateRetailSave", resolved_path))
+		if not sav_err.is_empty():
+			if is_temp and FileAccess.file_exists(resolved_path):
+				DirAccess.remove_absolute(resolved_path)
+			if _transfer_status != null:
+				_transfer_status.text = "原版 .sav 校验失败：" + sav_err
+			return
+	_pending_sav_path = resolved_path
+	var orig_leaf := path.get_file().to_lower()
+	if orig_leaf == "system.sav":
+		var sys_exists := FileAccess.file_exists(_transfer_save_dir.path_join("System.json"))
+		if _transfer_status != null:
+			_transfer_status.text = "已选择原版系统档 %s -> System.json%s" % [path.get_file(), "（将覆盖现有系统档！）" if sys_exists else ""]
+	else:
+		var detected_slot := _retail_sav_slot_from_name(orig_leaf)
+		if detected_slot > 0 and _transfer_slot_spin != null:
+			_transfer_slot_spin.value = clampi(detected_slot, int(_transfer_slot_spin.min_value), int(_transfer_slot_spin.max_value))
+		var target_slot := maxi(1, int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1)
+		var target_name := "save_%02d.json" % target_slot
 		var exists := FileAccess.file_exists(_transfer_save_dir.path_join(target_name))
 		if _transfer_status != null:
 			_transfer_status.text = "已选择原版存档 %s -> %s%s" % [
@@ -1828,10 +2043,10 @@ func _on_transfer_file_selected(path: String) -> void:
 				target_name,
 				"（将覆盖现有槽位！）" if exists else "",
 			]
-		if _transfer_confirm_btn != null:
-			_transfer_confirm_btn.visible = true
-		if _transfer_cancel_import_btn != null:
-			_transfer_cancel_import_btn.visible = true
+	if _transfer_confirm_btn != null:
+		_transfer_confirm_btn.visible = true
+	if _transfer_cancel_import_btn != null:
+		_transfer_cancel_import_btn.visible = true
 
 
 func _commit_pending_import() -> void:
@@ -1844,13 +2059,29 @@ func _commit_pending_import() -> void:
 			_transfer_status.text = "导入完成，共写入 %d 个文件。" % int(res.get("imported", 0)) if bool(res.get("ok", false)) else str(res.get("error", "导入失败"))
 		return
 	if not _pending_sav_path.is_empty():
-		var slot := int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1
+		var kind := _detect_import_kind(_pending_sav_path)
+		var leaf_lower := _pending_sav_path.get_file().to_lower()
+		var slot := maxi(1, int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1)
 		var ok := false
 		var err := "无法调用导入接口"
-		if _transfer_session != null and _transfer_session.has_method("ImportRetailSaveToSlot"):
-			ok = bool(_transfer_session.call("ImportRetailSaveToSlot", _pending_sav_path, slot))
-			err = str(_transfer_session.get("LastError"))
+		var success_msg := ""
+		if kind == "json":
+			var target_name := "System.json" if leaf_lower == "system.json" else ("save_%02d.json" % slot)
+			var raw_bytes := FileAccess.get_file_as_bytes(_pending_sav_path)
+			ok = not raw_bytes.is_empty() and _write_file_atomic(_transfer_save_dir.path_join(target_name), raw_bytes)
+			err = "写入 JSON 存档失败"
+			success_msg = "已将 JSON 存档导入至 %s。" % target_name
+		elif leaf_lower == "system.sav":
+			if _transfer_session != null and _transfer_session.has_method("ImportRetailSystemSave"):
+				ok = bool(_transfer_session.call("ImportRetailSystemSave", _pending_sav_path))
+				err = str(_transfer_session.get("LastError"))
+			success_msg = "已将原版系统档导入至 System.json。"
+		else:
+			if _transfer_session != null and _transfer_session.has_method("ImportRetailSaveToSlot"):
+				ok = bool(_transfer_session.call("ImportRetailSaveToSlot", _pending_sav_path, slot))
+				err = str(_transfer_session.get("LastError"))
+			success_msg = "已将原版存档导入至 save_%02d.json。" % slot
 		_clear_pending_import()
 		_refresh_transfer_listing()
 		if _transfer_status != null:
-			_transfer_status.text = "已将原版存档导入至 save_%02d.json。" % slot if ok else ("原版存档导入失败：" + err)
+			_transfer_status.text = success_msg if ok else ("存档导入失败：" + err)

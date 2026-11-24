@@ -47,6 +47,8 @@ public interface IVmSession
     void ResetDialogueState() { }
     void RestoreDialogue(string? message, string[] choices, bool allowCancel = true);
     DbValue? Database(DbOp op);
+    /// <summary>Underlying database store when available, used for schema-aware .sav exports.</summary>
+    GameDatabase? DatabaseStore => null;
     /// <summary>Snapshot runtime op250 database overlays for SaveState persistence.</summary>
     SavedDbOverlays? SnapshotDbOverlays() => null;
     /// <summary>Clear and restore runtime op250 database overlays from a loaded SaveState.</summary>
@@ -1389,7 +1391,7 @@ public sealed class GameSession
         }
         state.Pictures.AddRange(picByNum.Values.Take(SaveCodec.MaxPictures));
 
-        if (data.DatabaseCells.Count > 0)
+        if (data.DatabaseCells.Count > 0 || data.DatabaseTextCells.Count > 0)
         {
             var overlays = new SavedDbOverlays();
             foreach (var cell in data.DatabaseCells)
@@ -1404,7 +1406,27 @@ public sealed class GameSession
                     Value = cell.Value
                 });
             }
+            foreach (var cell in data.DatabaseTextCells)
+            {
+                if (cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
+                overlays.Texts.Add(new SavedDbTextCell
+                {
+                    Container = (int)DbContainer.CData,
+                    Type = cell.Type,
+                    Row = cell.Row,
+                    Column = cell.Column,
+                    Value = cell.Value
+                });
+            }
             state.DbOverlays = overlays;
+        }
+        if (!string.IsNullOrEmpty(data.BgmFile))
+        {
+            state.Audio.Add(new SavedAudio { Channel = 0, File = data.BgmFile, Volume = 100, Loop = true, Tempo = 100 });
+        }
+        if (!string.IsNullOrEmpty(data.BgsFile))
+        {
+            state.Audio.Add(new SavedAudio { Channel = 1, File = data.BgsFile, Volume = 100, Loop = true, Tempo = 100 });
         }
 
         if (!ValidateSaveJson(SaveCodec.ToJson(state), out string validationError))
@@ -1419,6 +1441,14 @@ public sealed class GameSession
         try
         {
             SaveCodec.Write(targetPath, state);
+            // Sync System.json slot markers so Title/Continue UI reflects the imported slot immediately.
+            string systemPath = ResolveSaveTarget(new SaveTarget("Save/System.sav"));
+            SaveState systemState = SaveCodec.Read(systemPath) ?? new SaveState();
+            int v531 = state.Vars.Count > 531 ? state.Vars[531] : 0;
+            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + 0, Value = normalizedSlot });
+            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + 626, Value = v531 });
+            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + 546, Value = normalizedSlot });
+            SaveCodec.Write(systemPath, systemState);
         }
         catch (Exception ex)
         {
@@ -1428,6 +1458,196 @@ public sealed class GameSession
 
         error = "";
         return true;
+    }
+
+    /// <summary>Validate a retail .sav file without altering live session state.</summary>
+    public static bool ValidateRetailSave(string savPath, out string error) =>
+        LegacySaveImporter.ValidateFile(savPath, out error);
+
+    /// <summary>Import a retail System.sav file into System.json without mutating the live session.</summary>
+    public bool ImportRetailSystemSave(string savPath, out string error)
+    {
+        if (string.IsNullOrWhiteSpace(savPath) || !File.Exists(savPath))
+        {
+            error = "retail system save file not found";
+            return false;
+        }
+
+        LegacySaveImporter.SlotResult parsed;
+        try
+        {
+            parsed = LegacySaveImporter.ImportFile(savPath, 0, rejectBadChecksum: true);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or IOException or UnauthorizedAccessException)
+        {
+            error = "retail system save import failed: " + ex.Message;
+            return false;
+        }
+
+        var data = parsed.Recovered;
+        var numbers = new List<int>(Enumerable.Repeat(0, WolfIds.VarPollMax));
+        foreach (KeyValuePair<string, int> pair in data.Variables)
+        {
+            if (int.TryParse(pair.Key, out int index) && index >= 0 && index < numbers.Count)
+            {
+                numbers[index] = pair.Value;
+            }
+        }
+
+        var state = new SaveState
+        {
+            SavedAt = DateTime.UtcNow.ToString("o"),
+            PlayFrames = data.PlayTime.Frames,
+            Vars = numbers,
+        };
+        foreach (KeyValuePair<int, SelfVars> bank in BuildCommonSelfFromRetail(data))
+        {
+            state.CommonSelf.Add(SavedSelf(bank.Key, bank.Value));
+        }
+
+        string systemPath = ResolveSaveTarget(new SaveTarget("Save/System.sav"));
+        try
+        {
+            SaveCodec.Write(systemPath, state);
+        }
+        catch (Exception ex)
+        {
+            error = "system save write failed: " + ex.Message;
+            return false;
+        }
+
+        error = "";
+        return true;
+    }
+
+    /// <summary>Export one 1-based JSON slot to a retail WOLF .sav file atomically.</summary>
+    public bool ExportSlotToRetailSav(int slot, string destPath, out string error)
+    {
+        if (slot < 1 || slot > 99)
+        {
+            error = $"slot {slot} out of range (1..99)";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(destPath))
+        {
+            error = "destination path is empty";
+            return false;
+        }
+        string srcPath = SlotSavePath(slot);
+        SaveState? state = SaveCodec.Read(srcPath);
+        if (state == null)
+        {
+            error = $"save slot {slot:00} not found or unreadable";
+            return false;
+        }
+        try
+        {
+            byte[] encoded = LegacySaveExporter.ExportSaveState(state, _vm.DatabaseStore, $"LWSMF Save {slot:00}");
+            LegacySaveExporter.WriteAtomic(destPath, encoded);
+            error = "";
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            error = "retail export failed: " + ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>Export System.json to a retail WOLF System.sav file atomically.</summary>
+    public bool ExportSystemToRetailSav(string destPath, out string error)
+    {
+        if (string.IsNullOrWhiteSpace(destPath))
+        {
+            error = "destination path is empty";
+            return false;
+        }
+        string systemPath = ResolveSaveTarget(new SaveTarget("Save/System.sav"));
+        SaveState? state = SaveCodec.Read(systemPath);
+        if (state == null)
+        {
+            error = "System.json not found or unreadable";
+            return false;
+        }
+        try
+        {
+            byte[] encoded = LegacySaveExporter.ExportSystemState(state, "LWSMF System");
+            LegacySaveExporter.WriteAtomic(destPath, encoded);
+            error = "";
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            error = "retail system export failed: " + ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>Export all existing save_NN.json slots (plus System.json and optional thumbnails) into a directory of retail .sav files.</summary>
+    public bool ExportAllToRetailSavDir(string destDir, bool includeThumbnails, out int exportedCount, out string error)
+    {
+        exportedCount = 0;
+        if (string.IsNullOrWhiteSpace(destDir))
+        {
+            error = "destination directory is empty";
+            return false;
+        }
+        string saveDir = Path.GetDirectoryName(_savePath) ?? ".";
+        if (!Directory.Exists(saveDir))
+        {
+            error = "save directory does not exist";
+            return false;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(destDir);
+            for (int slot = 1; slot <= 99; slot++)
+            {
+                string srcPath = SlotSavePath(slot);
+                if (!SaveCodec.Exists(srcPath)) continue;
+                string outSav = Path.Combine(destDir, $"SaveData{slot:00}.sav");
+                if (!ExportSlotToRetailSav(slot, outSav, out string slotErr))
+                {
+                    error = slotErr;
+                    return false;
+                }
+                exportedCount++;
+                if (includeThumbnails)
+                {
+                    string thumbName = $"save{slot}.jpg";
+                    string thumbSrc = Path.Combine(saveDir, thumbName);
+                    if (File.Exists(thumbSrc))
+                    {
+                        File.Copy(thumbSrc, Path.Combine(destDir, thumbName), overwrite: true);
+                        exportedCount++;
+                    }
+                }
+            }
+
+            string systemPath = ResolveSaveTarget(new SaveTarget("Save/System.sav"));
+            if (SaveCodec.Exists(systemPath))
+            {
+                string outSys = Path.Combine(destDir, "System.sav");
+                if (ExportSystemToRetailSav(outSys, out _))
+                {
+                    exportedCount++;
+                }
+            }
+
+            if (exportedCount == 0)
+            {
+                error = "no save slots found to export";
+                return false;
+            }
+            error = "";
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            error = "batch retail export failed: " + ex.Message;
+            return false;
+        }
     }
 
     private static Dictionary<int, SelfVars> BuildCommonSelfFromRetail(LegacySaveImporter.RecoveredData data)

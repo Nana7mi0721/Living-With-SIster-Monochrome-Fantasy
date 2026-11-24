@@ -167,6 +167,62 @@ public partial class GameSessionController : Node
         LastError = ok ? "" : error;
         return ok;
     }
+
+    /// <summary>Import a retail System.sav file into System.json without altering the live session.</summary>
+    public bool ImportRetailSystemSave(string savPath)
+    {
+        if (_session == null)
+        {
+            LastError = "session not initialized";
+            return false;
+        }
+        bool ok = _session.ImportRetailSystemSave(savPath, out string error);
+        LastError = ok ? "" : error;
+        return ok;
+    }
+
+    /// <summary>Validate a retail .sav file and return an empty string on success or an error message.</summary>
+    public string ValidateRetailSave(string savPath) =>
+        GameSession.ValidateRetailSave(savPath, out string error) ? "" : error;
+
+    /// <summary>Export one 1-based slot into a retail WOLF .sav file.</summary>
+    public bool ExportSlotToRetailSav(int slot, string destPath)
+    {
+        if (_session == null)
+        {
+            LastError = "session not initialized";
+            return false;
+        }
+        bool ok = _session.ExportSlotToRetailSav(slot, destPath, out string error);
+        LastError = ok ? "" : error;
+        return ok;
+    }
+
+    /// <summary>Export System.json into a retail WOLF System.sav file.</summary>
+    public bool ExportSystemToRetailSav(string destPath)
+    {
+        if (_session == null)
+        {
+            LastError = "session not initialized";
+            return false;
+        }
+        bool ok = _session.ExportSystemToRetailSav(destPath, out string error);
+        LastError = ok ? "" : error;
+        return ok;
+    }
+
+    /// <summary>Export all slots and optional thumbnails as retail .sav files into destDir; returns count or -1 on error.</summary>
+    public int ExportAllToRetailSavDir(string destDir, bool includeThumbnails = true)
+    {
+        if (_session == null)
+        {
+            LastError = "session not initialized";
+            return -1;
+        }
+        bool ok = _session.ExportAllToRetailSavDir(destDir, includeThumbnails, out int count, out string error);
+        LastError = ok ? "" : error;
+        return ok ? count : -1;
+    }
     public void MoveLeader(int dx, int dy, int facing) => _session?.MoveLeader(dx, dy, facing);
     public void PressActionKey() => _session?.PressActionKey();
     public void PickChoice(int index) => _session?.PickChoice(index);

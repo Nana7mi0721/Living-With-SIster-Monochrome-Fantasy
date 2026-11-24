@@ -60,6 +60,12 @@ public partial class SaveImportTest : Node
             return;
         }
 
+        if (!TryRetailExportRoundtrip(rootDir, saveDir))
+        {
+            GetTree().Quit(7);
+            return;
+        }
+
         GD.Print($"SAVE_IMPORT_OK 8/8 retail saves verified and exported to {reportPath}");
         GetTree().Quit(0);
     }
@@ -581,6 +587,169 @@ public partial class SaveImportTest : Node
         }
 
         GD.Print("SAVE_TRANSFER_API_OK");
+        return true;
+    }
+
+    private bool TryRetailExportRoundtrip(string rootDir, string saveDir)
+    {
+        // 1. Shift-JIS (raw[6] != 0x55) decoding verification in SaveReader & DecodePictureText.
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+        var sjis = System.Text.Encoding.GetEncoding(932);
+        byte[] sjisBytes = sjis.GetBytes("妹相随");
+        byte[] memBuf = new byte[2 + sjisBytes.Length + 1];
+        memBuf[0] = (byte)(sjisBytes.Length + 1);
+        memBuf[1] = 0;
+        Array.Copy(sjisBytes, 0, memBuf, 2, sjisBytes.Length);
+        var sjisWarnings = new List<string>();
+        var sjisReader = new LegacySaveImporter.SaveReader(memBuf, 0, sjisWarnings, isUtf8: false);
+        string decodedSjis = sjisReader.ReadMemDataString(2, "sjis_test");
+        if (decodedSjis != "妹相随" || sjisWarnings.Count != 0)
+        {
+            GD.PrintErr($"RETAIL_EXPORT_FAILED: Shift-JIS decode mismatch got '{decodedSjis}' warnings={sjisWarnings.Count}");
+            return false;
+        }
+
+        // 2. EncodePictureText <-> DecodePictureText roundtrip for \E, \f[n], \c[n].
+        string styled = "\\E\\c[1]周六\\c[0] \\f[24]大字";
+        byte[] encodedText = LegacySaveExporter.EncodePictureText(styled);
+        string decodedText = LegacySaveImporter.DecodePictureText(encodedText);
+        if (decodedText != styled)
+        {
+            GD.PrintErr($"RETAIL_EXPORT_FAILED: picture text roundtrip mismatch want='{styled}' got='{decodedText}'");
+            return false;
+        }
+
+        // 3. Full SaveState -> LegacySaveExporter -> LegacySaveImporter roundtrip (Vars, CommonSelf, Pictures, DbOverlays, Audio, PlayFrames, ChoiceAnchor).
+        string tempDir = Path.Combine(Path.GetTempPath(), $"lwsmf_retail_rt_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        string dataPath = Path.GetFullPath(Path.Combine(rootDir, "..", "game_data", "programs.json"));
+        try
+        {
+            var state = new SaveState
+            {
+                PlayFrames = 123456,
+                MapId = 1005,
+                MapFile = "SampleMapA.mps",
+                Vars = new List<int>(new int[800]),
+                SysVars = [0, 0, 0, 480, 260],
+                CommonSelf =
+                [
+                    new EventSelfVars
+                    {
+                        Id = 12,
+                        NumMap = new Dictionary<int, int> { [600] = 777, [604] = -42 },
+                        StrMap = new Dictionary<int, string> { [605] = "你好世界", [609] = "tail" }
+                    }
+                ],
+                Pictures =
+                [
+                    new SavedPicture { Number = 50, Kind = 0, File = "cg/bg_01.png", Anchor = 1, Args = [0, 1, 1, 0, 200, 100, 200, 100, 10, 0, 100, 0] },
+                    new SavedPicture { Number = 51, Kind = 2, Text = styled, Anchor = 0, Args = [0, 320, 64, 0, 255, 20, 30, 100, 0, 0, 100, 0] },
+                    new SavedPicture { Number = 12050, Kind = 0, File = "SystemFile/WindowBase.png", Anchor = 0, Args = [0, 1, 1, 0, 255, 0, 0, 100, 0, 0, 100, 0] }
+                ],
+                Audio =
+                [
+                    new SavedAudio { Channel = 0, File = "BGM/test.ogg", Volume = 80, Loop = true, Tempo = 100 },
+                    new SavedAudio { Channel = 1, File = "BGM/rain.ogg", Volume = 40, Loop = true, Tempo = 100 }
+                ],
+                DbOverlays = new SavedDbOverlays
+                {
+                    Nums = [new SavedDbNumCell { Container = (int)DbContainer.CData, Type = 2, Row = 1, Column = 0, Value = 9876 }],
+                    Texts = [new SavedDbTextCell { Container = (int)DbContainer.CData, Type = 2, Row = 1, Column = 1, Value = "自定义名称" }]
+                }
+            };
+            state.Vars[0] = 3;
+            state.Vars[160] = 25;
+            state.Vars[531] = 4;
+            state.Vars[799] = -99;
+
+            string savPath = Path.Combine(tempDir, "SaveData01.sav");
+            byte[] encoded = LegacySaveExporter.ExportSaveState(state, null, "Roundtrip Test");
+            LegacySaveExporter.WriteAtomic(savPath, encoded);
+
+            if (!GameSession.ValidateRetailSave(savPath, out string valErr))
+            {
+                GD.PrintErr($"RETAIL_EXPORT_FAILED: exported .sav failed ValidateRetailSave: {valErr}");
+                return false;
+            }
+            var parsed = LegacySaveImporter.ImportFile(savPath, 1, rejectBadChecksum: true);
+            var rec = parsed.Recovered;
+            if (!parsed.ChecksumOk
+                || rec.PlayTime.Frames != 123456
+                || rec.ChoiceAnchor[0] != 480 || rec.ChoiceAnchor[1] != 260
+                || rec.Variables["0"] != 3 || rec.Variables["160"] != 25 || rec.Variables["799"] != -99
+                || rec.CommonSelfNumbers[12][0] != 777 || rec.CommonSelfNumbers[12][4] != -42
+                || rec.CommonSelfStrings[12][0] != "你好世界" || rec.CommonSelfStrings[12][4] != "tail"
+                || rec.PictureStates.Count != 2
+                || rec.PictureStates[0].File != "cg/bg_01.png"
+                || rec.PictureStates[1].Text != styled
+                || rec.BgmFile != "BGM/test.ogg" || rec.BgsFile != "BGM/rain.ogg"
+                || !rec.DatabaseCells.Exists(c => c.Type == 2 && c.Row == 1 && c.Column == 0 && c.Value == 9876)
+                || !rec.DatabaseTextCells.Exists(c => c.Type == 2 && c.Row == 1 && c.Column == 1 && c.Value == "自定义名称"))
+            {
+                GD.PrintErr("RETAIL_EXPORT_FAILED: SaveState -> .sav -> ImportFile roundtrip data mismatch");
+                return false;
+            }
+
+            // 4. Session ImportRetailSystemSave + ImportRetailSaveToSlot System.json sync + ExportAllToRetailSavDir.
+            string slot1Path = Path.Combine(tempDir, "saves", "save_01.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(slot1Path)!);
+            var harness = new SessionHarness(this, dataPath, slot1Path);
+
+            string retailSysSav = Path.Combine(saveDir, "System.sav");
+            if (File.Exists(retailSysSav))
+            {
+                if (!harness.Session.ImportRetailSystemSave(retailSysSav, out string sysErr))
+                {
+                    GD.PrintErr($"RETAIL_EXPORT_FAILED: ImportRetailSystemSave failed on retail System.sav: {sysErr}");
+                    return false;
+                }
+            }
+
+            if (!harness.Session.ImportRetailSaveToSlot(savPath, 4, out string slotErr))
+            {
+                GD.PrintErr($"RETAIL_EXPORT_FAILED: ImportRetailSaveToSlot failed on exported .sav: {slotErr}");
+                return false;
+            }
+            string sysJsonPath = Path.Combine(Path.GetDirectoryName(slot1Path)!, "System.json");
+            SaveState? sysAfter = SaveCodec.Read(sysJsonPath);
+            if (sysAfter == null || sysAfter.Vars.Count <= 626
+                || sysAfter.Vars[0] != 4 || sysAfter.Vars[546] != 4 || sysAfter.Vars[626] != 4)
+            {
+                GD.PrintErr("RETAIL_EXPORT_FAILED: ImportRetailSaveToSlot did not sync System.json slot markers (Var[0]/546/626)");
+                return false;
+            }
+
+            string outDir = Path.Combine(tempDir, "exported");
+            if (!harness.Session.ExportAllToRetailSavDir(outDir, true, out int expCount, out string expErr)
+                || expCount < 2
+                || !File.Exists(Path.Combine(outDir, "SaveData04.sav"))
+                || !File.Exists(Path.Combine(outDir, "System.sav")))
+            {
+                GD.PrintErr($"RETAIL_EXPORT_FAILED: ExportAllToRetailSavDir failed count={expCount} err={expErr}");
+                return false;
+            }
+            bool okSav = GameSession.ValidateRetailSave(Path.Combine(outDir, "SaveData04.sav"), out string e1);
+            bool okSys = GameSession.ValidateRetailSave(Path.Combine(outDir, "System.sav"), out string e2);
+            if (!okSav || !okSys)
+            {
+                GD.PrintErr($"RETAIL_EXPORT_FAILED: batch exported .sav failed validation: {e1} / {e2}");
+                return false;
+            }
+
+            // Optional external probe output for Rust wolf-save cross-check when LWsmf_EXPORT_PROBE is set.
+            string? probeOut = System.Environment.GetEnvironmentVariable("LWsmf_EXPORT_PROBE");
+            if (!string.IsNullOrWhiteSpace(probeOut))
+            {
+                LegacySaveExporter.WriteAtomic(probeOut, encoded);
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
+
+        GD.Print("RETAIL_EXPORT_ROUNDTRIP_OK");
         return true;
     }
 }
