@@ -201,6 +201,10 @@ func reset() -> void:
 		_tracks[channel] = {}
 
 
+func is_background_paused() -> bool:
+	return _app_paused
+
+
 func pause_for_background() -> void:
 	if _app_paused:
 		return

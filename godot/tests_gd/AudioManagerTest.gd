@@ -169,10 +169,13 @@ func _ready() -> void:
 		"SE voices should share cached non-looping AudioStream without per-play deep duplicate")
 	mixer.pause_for_background()
 	_expect(mixer.is_background_paused(), "pause_for_background marks background pause active")
-	_expect(mixer.player_for(AudioManager.CHANNEL_BGM).stream_paused, "pause_for_background pauses active BGM")
+	_expect(not mixer.player_for(AudioManager.CHANNEL_BGM).playing, "pause_for_background stops active BGM playback")
+	if AudioServer.get_bus_count() > 0:
+		_expect(AudioServer.is_bus_mute(0), "pause_for_background mutes master bus")
 	mixer.resume_from_background()
 	_expect(not mixer.is_background_paused(), "resume_from_background clears background pause")
-	_expect(not mixer.player_for(AudioManager.CHANNEL_BGM).stream_paused, "resume_from_background unpauses BGM")
+	if AudioServer.get_bus_count() > 0:
+		_expect(not AudioServer.is_bus_mute(0), "resume_from_background unmutes master bus")
 
 	mixer.reset()
 	if failures == 0:

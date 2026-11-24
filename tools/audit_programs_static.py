@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only static audit scanner for imoto-life's game_data/programs.json.
+"""Read-only static audit scanner for LWSMF's game_data/programs.json.
 
 Aligned with converter/export/programs.py & converter/parse/commonevent.py
 (schema "wolf.programs", version 1). Zero third-party dependencies.
@@ -484,7 +484,7 @@ def render_markdown(report: dict[str, Any], source: str) -> str:
     s3 = report["scan3_op124_state_queries"]
     s4 = report["scan4_op150_and_effects"]
     lines: list[str] = [
-        "# imoto-life 第一阶段静态摸底扫描报告",
+        "# LWSMF 第一阶段静态摸底扫描报告",
         "",
         f"- **数据源**：`{source}`",
         f"- **总计**：`{json.dumps(report['totals'], ensure_ascii=False)}`",
@@ -543,7 +543,7 @@ def render_markdown(report: dict[str, Any], source: str) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Read-only static audit for imoto-life programs.json")
+    parser = argparse.ArgumentParser(description="Read-only static audit for LWSMF programs.json")
     parser.add_argument("--programs", default="game_data/programs.json", help="Path to game_data/programs.json")
     parser.add_argument("--assets", default="", help="Optional path to unpacked retail Data/ directory for image size checks")
     parser.add_argument("--out-dir", default="reports/static_audit", help="Directory to write JSON and Markdown reports")

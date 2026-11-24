@@ -979,7 +979,7 @@ public partial class VmController : Node, IHost, IVmSession
             _pointerPressSeen = false;
             _pointerPressTtl = 2;
         }
-        else if (_pointerPressFrame && !_pointerPressSeen && _pointerPressTtl > 0)
+        else if (_pointerPressFrame && !_pointerPressSeen && _pointerPressTtl > 0 && _pointerPressed)
         {
             _pointerPressTtl--;
         }
@@ -996,7 +996,7 @@ public partial class VmController : Node, IHost, IVmSession
             _rightPressSeen = false;
             _rightPressTtl = 2;
         }
-        else if (_rightPressFrame && !_rightPressSeen && _rightPressTtl > 0)
+        else if (_rightPressFrame && !_rightPressSeen && _rightPressTtl > 0 && _rightPressed)
         {
             _rightPressTtl--;
         }
