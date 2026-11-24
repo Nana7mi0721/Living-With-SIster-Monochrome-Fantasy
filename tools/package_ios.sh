@@ -140,6 +140,37 @@ EXPORT_TARGET="$OUT_DIR/Lwsmf.xcodeproj"
 XCODEPROJ="$(find "$OUT_DIR" -maxdepth 3 -type d -name '*.xcodeproj' | head -n1 || true)"
 [ -n "$XCODEPROJ" ] || { echo "ERROR: .xcodeproj not found under $OUT_DIR" >&2; exit 1; }
 
+echo "== verifying iOS launch screen SplashImage.imageset =="
+SPLASH_SET="$(find "$OUT_DIR" -type d -name 'SplashImage.imageset' | head -n1 || true)"
+if [ -z "$SPLASH_SET" ]; then
+  echo "ERROR: SplashImage.imageset missing in exported iOS project under $OUT_DIR; custom launch screen did not export." >&2
+  exit 1
+fi
+"$PYTHON_BIN" - "$SPLASH_SET" "$ROOT/godot/assets/boot/splash_static.png" <<'PY'
+import hashlib, sys
+from pathlib import Path
+
+imageset = Path(sys.argv[1])
+expected_src = Path(sys.argv[2])
+pngs = sorted(p for p in imageset.glob("*.png") if p.is_file() and p.stat().st_size > 0)
+if not pngs:
+    print(f"ERROR: SplashImage.imageset has no PNG files: {imageset}", file=sys.stderr)
+    raise SystemExit(1)
+if not expected_src.is_file():
+    print(f"ERROR: custom splash source missing: {expected_src}", file=sys.stderr)
+    raise SystemExit(1)
+expected_sha = hashlib.sha256(expected_src.read_bytes()).hexdigest()
+matched = [p.name for p in pngs if hashlib.sha256(p.read_bytes()).hexdigest() == expected_sha]
+if not matched:
+    print(
+        f"ERROR: SplashImage.imageset PNGs ({', '.join(p.name for p in pngs)}) do not match "
+        f"{expected_src.name}; Godot default splash may have leaked.",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+print(f"IOS_SPLASH_VERIFY_OK imageset={imageset} matched={','.join(matched)}")
+PY
+
 SCHEMES="$(xcodebuild -list -project "$XCODEPROJ" | awk '/Schemes:/{f=1;next} f&&/^[[:space:]]*$/{exit} f{gsub(/^[[:space:]]+|[[:space:]]+$/,""); if(length($0)) print}')"
 SCHEME="$(printf '%s\n' "$SCHEMES" | grep -Fx "Lwsmf" || printf '%s\n' "$SCHEMES" | head -n1)"
 [ -n "$SCHEME" ] || { echo "ERROR: no Xcode scheme detected" >&2; exit 1; }

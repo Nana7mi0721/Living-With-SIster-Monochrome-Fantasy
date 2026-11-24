@@ -1026,6 +1026,17 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 		failures.append("is_valid_save_archive_entry must reject path traversal and unsupported filenames")
 	if not PlayOverlays.is_valid_save_archive_entry("save_01.json") or not PlayOverlays.is_valid_save_archive_entry("System.json"):
 		failures.append("is_valid_save_archive_entry must accept valid save_NN.json and System.json")
+	if not PlayOverlays.is_valid_save_archive_entry("SaveData01.sav") or not PlayOverlays.is_valid_save_archive_entry("System.sav"):
+		failures.append("is_valid_save_archive_entry must accept retail SaveDataNN.sav and System.sav")
+	var splash_script := load("res://presentation_gd/BootSplashOverlay.gd")
+	if splash_script == null:
+		failures.append("BootSplashOverlay.gd did not load")
+	else:
+		var splash_node: Control = splash_script.new()
+		add_child(splash_node)
+		if splash_node.z_index != 190:
+			failures.append("BootSplashOverlay must use z_index=190 (got %d)" % splash_node.z_index)
+		splash_node.call("fade_out_and_free", 0.0)
 
 	var export_src_dir := transfer_dir.path_join("export_src")
 	DirAccess.make_dir_recursive_absolute(export_src_dir)

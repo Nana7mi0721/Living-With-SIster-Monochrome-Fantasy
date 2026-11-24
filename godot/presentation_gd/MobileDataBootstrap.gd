@@ -13,6 +13,10 @@ const TARGET_ROOT := "user://mobile_data"
 const MANIFEST_NAME := "mobile_data_manifest.json"
 const MARKER_NAME := ".staging_version"
 const CHUNK_BYTES := 1024 * 1024
+const SPLASH_STATIC_PATH := "res://assets/boot/splash_static.png"
+const SPLASH_FRAME_0_PATH := "res://assets/boot/splash_frame_0.png"
+const SPLASH_FRAME_1_PATH := "res://assets/boot/splash_frame_1.png"
+const SPLASH_ANIM_INTERVAL := 1.0 / 4.5
 
 var source_root := SOURCE_ROOT
 var target_root := TARGET_ROOT
@@ -31,6 +35,10 @@ var _worker_done := false
 var _worker_ok := false
 var _worker_error := ""
 
+var _splash_rect: TextureRect
+var _splash_frames: Array[Texture2D] = []
+var _splash_frame_idx := 0
+var _splash_anim_timer := 0.0
 var _bar: ProgressBar
 var _status: Label
 var _retry: Button
@@ -186,7 +194,7 @@ func _apply_bootstrap_theme() -> void:
 
 func _build_ui() -> void:
 	var dim := ColorRect.new()
-	dim.color = Color(0.035, 0.04, 0.05, 1.0)
+	dim.color = Color(0, 0, 0, 1)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
 
@@ -194,9 +202,24 @@ func _build_ui() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
 
+	var root_column := VBoxContainer.new()
+	root_column.alignment = BoxContainer.ALIGNMENT_CENTER
+	root_column.add_theme_constant_override("separation", 18)
+	center.add_child(root_column)
+
+	_splash_rect = TextureRect.new()
+	_splash_rect.custom_minimum_size = Vector2(320, 180)
+	_splash_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_splash_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_splash_rect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_splash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_load_splash_textures()
+	_splash_rect.visible = _splash_rect.texture != null
+	root_column.add_child(_splash_rect)
+
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(720, 0)
-	center.add_child(panel)
+	root_column.add_child(panel)
 
 	var margin := MarginContainer.new()
 	for side in ["left", "right"]:
@@ -453,7 +476,43 @@ func _worker_run(job: Dictionary) -> void:
 	_finish_worker(true)
 
 
-func _process(_delta: float) -> void:
+func _load_splash_textures() -> void:
+	_splash_frames.clear()
+	if ResourceLoader.exists(SPLASH_FRAME_0_PATH) and ResourceLoader.exists(SPLASH_FRAME_1_PATH):
+		var f0 := _load_boot_texture(SPLASH_FRAME_0_PATH)
+		var f1 := _load_boot_texture(SPLASH_FRAME_1_PATH)
+		if f0 != null and f1 != null:
+			_splash_frames = [f0, f1]
+			_splash_rect.texture = _splash_frames[0]
+			return
+	if ResourceLoader.exists(SPLASH_STATIC_PATH):
+		var static_tex := _load_boot_texture(SPLASH_STATIC_PATH)
+		if static_tex != null:
+			_splash_rect.texture = static_tex
+
+
+static func _load_boot_texture(path: String) -> Texture2D:
+	var loaded := ResourceLoader.load(path)
+	if loaded is Texture2D:
+		return loaded as Texture2D
+	if not FileAccess.file_exists(path):
+		return null
+	var raw := FileAccess.get_file_as_bytes(path)
+	if raw.is_empty():
+		return null
+	var img := Image.new()
+	if img.load_png_from_buffer(raw) != OK:
+		return null
+	return ImageTexture.create_from_image(img)
+
+
+func _process(delta: float) -> void:
+	if _splash_frames.size() >= 2 and _splash_rect != null:
+		_splash_anim_timer += delta
+		if _splash_anim_timer >= SPLASH_ANIM_INTERVAL:
+			_splash_anim_timer = fmod(_splash_anim_timer, SPLASH_ANIM_INTERVAL)
+			_splash_frame_idx = (_splash_frame_idx + 1) % _splash_frames.size()
+			_splash_rect.texture = _splash_frames[_splash_frame_idx]
 	if not _running:
 		return
 	_mutex.lock()

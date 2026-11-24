@@ -33,6 +33,7 @@ import pack_media  # noqa: E402
 import postprocess_android_apk  # noqa: E402
 import release_audit  # noqa: E402
 import strip_android_static_libs  # noqa: E402
+import sync_boot_assets  # noqa: E402
 import windows_pe  # noqa: E402
 
 
@@ -983,6 +984,140 @@ class MobileToolsTest(unittest.TestCase):
                 ),
                 1,
             )
+
+    def test_sync_boot_assets_pillow_and_stdlib_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            # 1024x576 black splash with a centered 200x200 white square logo.
+            w, h = 1024, 576
+            rgba = bytearray(w * h * 4)
+            for i in range(3, len(rgba), 4):
+                rgba[i] = 255
+            for y in range(188, 388):
+                for x in range(412, 612):
+                    off = (y * w + x) * 4
+                    rgba[off] = 240
+                    rgba[off + 1] = 240
+                    rgba[off + 2] = 240
+            src = t / "splash_static.png"
+            sync_boot_assets.write_png_rgba(src, w, h, rgba)
+
+            for label, use_pillow in (("pillow", True), ("stdlib", False)):
+                out_dir = t / label
+                outputs = sync_boot_assets.sync_boot_assets(src, out_dir=out_dir, use_pillow=use_pillow)
+                self.assertEqual(len(outputs), 3)
+                icon_path = out_dir / "android_icon_192.png"
+                fg_path = out_dir / "android_adaptive_fg_432.png"
+                bg_path = out_dir / "android_adaptive_bg_432.png"
+                self.assertEqual(sync_boot_assets.read_png_dimensions(icon_path), (192, 192))
+                self.assertEqual(sync_boot_assets.read_png_dimensions(fg_path), (432, 432))
+                self.assertEqual(sync_boot_assets.read_png_dimensions(bg_path), (432, 432))
+
+                # Adaptive foreground keeps corners transparent outside the 62% safe zone
+                # and renders the centered logo at the center pixel.
+                fg_w, fg_h, fg_rgba = sync_boot_assets.read_png_rgba(fg_path)
+                self.assertEqual((fg_w, fg_h), (432, 432))
+                self.assertEqual(fg_rgba[3], 0, f"{label}: top-left corner must be transparent")
+                center_off = ((216 * 432) + 216) * 4
+                self.assertGreater(fg_rgba[center_off], 200, f"{label}: center logo pixel missing")
+                self.assertEqual(fg_rgba[center_off + 3], 255)
+
+                # Adaptive background must be pure black #000000.
+                bg_w, bg_h, bg_rgba = sync_boot_assets.read_png_rgba(bg_path)
+                self.assertEqual((bg_w, bg_h), (432, 432))
+                self.assertEqual(tuple(bg_rgba[:4]), (0, 0, 0, 255))
+
+            # Repo placeholder assets must exist with exact dimensions.
+            boot_dir = REPO_ROOT / "godot/assets/boot"
+            self.assertEqual(sync_boot_assets.read_png_dimensions(boot_dir / "splash_static.png"), (1024, 576))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(boot_dir / "android_icon_192.png"), (192, 192))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(boot_dir / "android_adaptive_fg_432.png"), (432, 432))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(boot_dir / "android_adaptive_bg_432.png"), (432, 432))
+
+    def test_ios_inject_streams_without_full_read_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            gd, wa = _make_fake_payload(t / "src")
+            # Build a multi-MB media.pak (> 2x STREAM_CHUNK_BYTES) to exercise multi-chunk streaming.
+            big_pak = t / "big_media.pak"
+            pack_media.write_pak(
+                [
+                    ("Lolita.ttf", b"TTF_STUB"),
+                    ("Picture/large.bin", b"\x5a" * (2 * 1024 * 1024 + 137)),
+                ],
+                big_pak,
+            )
+            ipa_in = t / "engine.ipa"
+            ipa_out = t / "streamed.ipa"
+            _build_synthetic_ipa(ipa_in)
+
+            orig_read_bytes = Path.read_bytes
+
+            def guarded_read_bytes(self_path: Path) -> bytes:
+                if self_path.resolve() in (big_pak.resolve(), ipa_out.resolve()):
+                    raise AssertionError(f"streaming violated: full read_bytes() called on {self_path.name}")
+                return orig_read_bytes(self_path)
+
+            with mock.patch.object(Path, "read_bytes", guarded_read_bytes):
+                ios_inject_data.inject(
+                    ipa=ipa_in,
+                    game_data_dir=gd,
+                    work_all_dir=wa,
+                    output=ipa_out,
+                    media_pak_override=big_pak,
+                    font=None,
+                    force=True,
+                )
+
+            self.assertTrue(ipa_out.is_file())
+            with zipfile.ZipFile(ipa_out, "r") as zf:
+                info = zf.getinfo("Payload/Lwsmf.app/work/all/media.pak")
+                self.assertEqual(info.compress_type, zipfile.ZIP_STORED)
+                self.assertEqual(info.file_size, big_pak.stat().st_size)
+                self.assertIsNone(zf.testzip())
+
+            # Verify chunked sha256_file matches stdlib hashlib.
+            import hashlib as _hashlib
+
+            expected_sha = _hashlib.sha256(orig_read_bytes(ipa_out)).hexdigest()
+            self.assertEqual(ios_inject_data.sha256_file(ipa_out), expected_sha)
+
+    def test_boot_splash_and_packaging_configs(self) -> None:
+        proj_text = (REPO_ROOT / "godot/project.godot").read_text(encoding="utf-8")
+        for line in (
+            "boot_splash/bg_color=Color(0, 0, 0, 1)",
+            'boot_splash/image="res://assets/boot/splash_static.png"',
+            "boot_splash/fullsize=false",
+            "boot_splash/stretch_mode=1",
+            "boot_splash/use_filter=true",
+            "boot_splash/show_image=true",
+            "boot_splash/minimum_display_time=0",
+        ):
+            self.assertIn(line, proj_text)
+
+        presets = env_check.parse_export_presets(REPO_ROOT / "godot/export_presets.cfg")
+        self.assertEqual(presets["Android"]["launcher_icons/main_192x192"], "res://assets/boot/android_icon_192.png")
+        self.assertEqual(
+            presets["Android"]["launcher_icons/adaptive_foreground_432x432"],
+            "res://assets/boot/android_adaptive_fg_432.png",
+        )
+        self.assertEqual(
+            presets["Android"]["launcher_icons/adaptive_background_432x432"],
+            "res://assets/boot/android_adaptive_bg_432.png",
+        )
+        self.assertEqual(presets["iOS"]["entitlements/increased_memory_limit"], "true")
+        self.assertEqual(presets["iOS"]["storyboard/use_launch_screen_storyboard"], "true")
+        self.assertEqual(presets["iOS"]["storyboard/image_scale_mode"], "1")
+        self.assertEqual(presets["iOS"]["storyboard/custom_image@2x"], "res://assets/boot/splash_static.png")
+        self.assertEqual(presets["iOS"]["storyboard/custom_image@3x"], "res://assets/boot/splash_static.png")
+        self.assertEqual(presets["iOS"]["storyboard/use_custom_bg_color"], "true")
+        self.assertEqual(presets["iOS"]["storyboard/custom_bg_color"], "Color(0, 0, 0, 1)")
+
+        ios_script = (REPO_ROOT / "tools/package_ios.sh").read_text(encoding="utf-8")
+        self.assertIn("SplashImage.imageset", ios_script)
+
+        rel_script = (REPO_ROOT / "tools/package_release.sh").read_text(encoding="utf-8")
+        self.assertIn("if pck.is_file()", rel_script)
 
 
 if __name__ == "__main__":

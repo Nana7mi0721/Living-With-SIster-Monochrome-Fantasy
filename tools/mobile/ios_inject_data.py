@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import struct
 import sys
@@ -30,6 +31,7 @@ GAME_DATA_FILES = ("manifest.json", "programs.json", "database.json", "map_tiles
 PROJECT_FILES = ("CDataBase.project", "DataBase.project", "SysDatabase.project")
 STORED_EXTENSIONS = {".ipa", ".zip", ".pak", ".br", ".ogg", ".mp3", ".wav", ".webp", ".png", ".jpg", ".jpeg"}
 FONT_PAK_NAMES = {"lolita.ttf", "data/lolita.ttf"}
+STREAM_CHUNK_BYTES = 1024 * 1024
 
 
 def fail(message: str) -> None:
@@ -112,6 +114,14 @@ def pak_has_font(pak_path: Path) -> bool:
     return any(n.lstrip("/") in FONT_PAK_NAMES for n in names)
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(STREAM_CHUNK_BYTES), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def collect_payload_files(
     app_prefix: str,
     game_data_dir: Path,
@@ -120,10 +130,10 @@ def collect_payload_files(
     font_path: Path | None,
     use_brotli: bool = False,
     allow_missing_font: bool = False,
-) -> tuple[dict[str, tuple[bytes, float, int]], set[str]]:
+) -> tuple[dict[str, tuple[bytes | Path, float, int]], set[str]]:
     gd = game_data_dir.resolve()
     wa = work_all_dir.resolve()
-    files: dict[str, tuple[bytes, float, int]] = {}
+    files: dict[str, tuple[bytes | Path, float, int]] = {}
     dirs = {
         f"{app_prefix}/game_data",
         f"{app_prefix}/work",
@@ -143,30 +153,31 @@ def collect_payload_files(
                 out_name = f"{name}.br"
             else:
                 out_name = name
+            payload: bytes | Path = raw
         else:
-            raw = src.read_bytes()
+            payload = src
             out_name = name
-        files[f"{app_prefix}/game_data/{out_name}"] = (raw, st.st_mtime, stat.S_IFREG | (st.st_mode & 0o777))
+        files[f"{app_prefix}/game_data/{out_name}"] = (payload, st.st_mtime, stat.S_IFREG | (st.st_mode & 0o777))
 
     for name in PROJECT_FILES:
         src = wa / "BasicData" / name
         if not src.is_file() or src.stat().st_size <= 0:
             fail(f"missing or empty BasicData/{name}: {src}")
         st = src.stat()
-        files[f"{app_prefix}/work/all/BasicData/{name}"] = (src.read_bytes(), st.st_mtime, stat.S_IFREG | (st.st_mode & 0o777))
+        files[f"{app_prefix}/work/all/BasicData/{name}"] = (src, st.st_mtime, stat.S_IFREG | (st.st_mode & 0o777))
 
     pak_src = (media_pak_override or (wa / "media.pak")).resolve()
     if not pak_src.is_file() or pak_src.stat().st_size <= 0:
         fail(f"missing or empty media.pak: {pak_src}")
     st = pak_src.stat()
-    files[f"{app_prefix}/work/all/media.pak"] = (pak_src.read_bytes(), st.st_mtime, stat.S_IFREG | (st.st_mode & 0o777))
+    files[f"{app_prefix}/work/all/media.pak"] = (pak_src, st.st_mtime, stat.S_IFREG | (st.st_mode & 0o777))
 
     if font_path is not None:
         f = font_path.resolve()
         if not f.is_file() or f.stat().st_size <= 0:
             fail(f"font file not found or empty: {font_path}")
         st = f.stat()
-        files[f"{app_prefix}/work/all/Lolita.ttf"] = (f.read_bytes(), st.st_mtime, stat.S_IFREG | (st.st_mode & 0o777))
+        files[f"{app_prefix}/work/all/Lolita.ttf"] = (f, st.st_mtime, stat.S_IFREG | (st.st_mode & 0o777))
     elif not allow_missing_font and not pak_has_font(pak_src):
         fail(
             "Lolita.ttf missing: pass --font /path/to/Lolita.ttf, include Lolita.ttf in media.pak, "
@@ -174,6 +185,10 @@ def collect_payload_files(
         )
 
     return files, dirs
+
+
+def _payload_size(payload: bytes | Path) -> int:
+    return len(payload) if isinstance(payload, bytes) else payload.stat().st_size
 
 
 def inject(
@@ -213,7 +228,7 @@ def inject(
         )
 
         if dry_run:
-            total = sum(len(v[0]) for v in payload_files.values())
+            total = sum(_payload_size(v[0]) for v in payload_files.values())
             print(f"IOS_INJECT_DRY_RUN app={app_prefix} files={len(payload_files)} payload_bytes={total} out={destination}")
             return destination
 
@@ -233,14 +248,26 @@ def inject(
                     if name in seen:
                         fail(f"duplicate archive member in input IPA: {name}")
                     seen.add(name)
-                    out_zip.writestr(clone_zipinfo(info), archive.read(info))
+                    cloned = clone_zipinfo(info)
+                    if info.is_dir():
+                        out_zip.writestr(cloned, b"")
+                    else:
+                        use_zip64 = info.file_size >= zipfile.ZIP64_LIMIT
+                        with archive.open(info, "r") as src_stream, out_zip.open(cloned, "w", force_zip64=use_zip64) as dst_stream:
+                            shutil.copyfileobj(src_stream, dst_stream, length=STREAM_CHUNK_BYTES)
 
                 now_ts = datetime.now().timestamp()
                 for d in sorted(payload_dirs, key=str.lower):
                     out_zip.writestr(data_zipinfo(d, True, now_ts, stat.S_IFDIR | 0o755), b"")
                 for arcname in sorted(payload_files, key=str.lower):
-                    raw, mtime, mode = payload_files[arcname]
-                    out_zip.writestr(data_zipinfo(arcname, False, mtime, mode), raw)
+                    payload, mtime, mode = payload_files[arcname]
+                    zinfo = data_zipinfo(arcname, False, mtime, mode)
+                    if isinstance(payload, Path):
+                        use_zip64 = payload.stat().st_size >= zipfile.ZIP64_LIMIT
+                        with payload.open("rb") as src_stream, out_zip.open(zinfo, "w", force_zip64=use_zip64) as dst_stream:
+                            shutil.copyfileobj(src_stream, dst_stream, length=STREAM_CHUNK_BYTES)
+                    else:
+                        out_zip.writestr(zinfo, payload)
 
             with zipfile.ZipFile(temp, "r") as check_zip:
                 check_names = [safe_member_name(i.filename) for i in check_zip.infolist()]
@@ -259,7 +286,7 @@ def inject(
             if temp.exists():
                 temp.unlink()
 
-    sha = hashlib.sha256(destination.read_bytes()).hexdigest()
+    sha = sha256_file(destination)
     print(f"IOS_INJECT_OK out={destination} sha256={sha}")
     return destination
 

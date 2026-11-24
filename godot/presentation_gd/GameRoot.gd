@@ -8,6 +8,7 @@ const STEP := 1.0 / 60.0
 const MAX_STEPS_PER_FRAME := 8
 const SetupWizardScript := preload("res://presentation_gd/SetupWizard.gd")
 const MobileDataBootstrapScript := preload("res://presentation_gd/MobileDataBootstrap.gd")
+const BootSplashOverlayScript := preload("res://presentation_gd/BootSplashOverlay.gd")
 const AppPaths := preload("res://presentation_gd/AppPaths.gd")
 const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
 const _PlayOverlays := preload("res://presentation_gd/PlayOverlays.gd")
@@ -53,6 +54,7 @@ var _transition_freeze_active := false
 var _transition_mode := 0
 var _transition_frames := 0
 var _transition_elapsed := 0
+var _boot_splash: Control = null
 
 var _modal_release_guard := false
 var _fullscreen := false
@@ -108,11 +110,36 @@ func _ready() -> void:
 		bootstrap.completed.connect(_on_mobile_data_bootstrap_completed)
 		add_child(bootstrap)
 		return
+	if _should_use_boot_splash():
+		_boot_splash = BootSplashOverlayScript.new()
+		_boot_splash.name = "BootSplashOverlay"
+		add_child(_boot_splash)
+		call_deferred("_start_game")
+		return
 	_start_game()
+
+
+func _should_use_boot_splash() -> bool:
+	if _is_headless():
+		return false
+	# Defer boot only when GameRoot is launched as the top-level main scene; test harnesses
+	# mount GameRoot as a child node and expect synchronous session setup in _ready().
+	var tree := get_tree()
+	return tree != null and get_parent() == tree.root
+
+
+func _dismiss_boot_splash(duration: float = 0.25) -> void:
+	if _boot_splash == null:
+		return
+	var splash: Control = _boot_splash
+	_boot_splash = null
+	if is_instance_valid(splash):
+		splash.call("fade_out_and_free", duration)
 
 
 func _start_game() -> void:
 	if not SetupWizardScript.data_ready():
+		_dismiss_boot_splash(0.0)
 		phase = "setup"
 		var wizard = SetupWizardScript.new()
 		wizard.name = "SetupWizard"
@@ -216,11 +243,13 @@ func _start_game() -> void:
 	vm.connect("ForegroundEventEntered", _on_event_entered)
 
 	if not vm.LoadPrograms(""):
+		_dismiss_boot_splash(0.0)
 		phase = "failed"
 		push_error("GameRoot: programs.json missing")
 		return
 	_seed_live_rng_if_windowed()
 	if not session.StartTitle():
+		_dismiss_boot_splash(0.0)
 		phase = "failed"
 		push_error("GameRoot: title event missing")
 		return
@@ -288,7 +317,7 @@ func _process(delta: float) -> void:
 		overlays.tick_toast()
 	if message != null:
 		message.paused = _modal_window_open()
-	if phase == "failed" or phase == "setup" or phase == "bootstrap" or faulted:
+	if phase == "boot" or phase == "failed" or phase == "setup" or phase == "bootstrap" or faulted:
 		if not _is_headless() and OS.low_processor_usage_mode:
 			OS.low_processor_usage_mode = false
 		if phase == "failed" and overlays != null:
@@ -301,6 +330,8 @@ func _process(delta: float) -> void:
 		advance_frame()
 		guard += 1
 	_sync_title_menu()
+	if _boot_splash != null and frames >= 1:
+		_dismiss_boot_splash(0.25)
 	_sync_mobile_and_overlay_state(delta)
 	if overlays != null:
 		if overlays.stats_open():
@@ -397,7 +428,7 @@ func _grab_viewport_image() -> Image:
 
 
 func advance_frame() -> void:
-	if phase == "failed" or phase == "setup" or phase == "bootstrap" or faulted:
+	if phase == "boot" or phase == "failed" or phase == "setup" or phase == "bootstrap" or faulted:
 		if phase == "failed" and overlays != null:
 			report_fault(_failure_reason())
 		return
@@ -1163,7 +1194,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			overlays.show_fault_modal(_failure_reason(), session != null and session.HasSave)
 			get_viewport().set_input_as_handled()
 		return
-	if phase == "setup" or phase == "bootstrap":
+	if phase == "boot" or phase == "setup" or phase == "bootstrap":
 		return
 	if key.keycode == int(_hotkeys.get("stats", KEY_F2)):
 		if overlays != null:
@@ -1624,6 +1655,7 @@ func report_fault(reason: String) -> void:
 		return
 	faulted = true
 	phase = "faulted"
+	_dismiss_boot_splash(0.0)
 	_clear_transition_overlays()
 	if choice != null:
 		choice.close()

@@ -347,9 +347,10 @@ sha_file = zip_path.parent / "SHA256SUMS.txt"
 sha_file.write_text("\n".join(sha_lines) + "\n", encoding="utf-8")
 
 # Size ledger
+pck = out_dir / "game/Lwsmf.pck"
 buckets = {
     "game/Lwsmf.exe": (out_dir / "game/Lwsmf.exe").stat().st_size,
-    "game/Lwsmf.pck": (out_dir / "game/Lwsmf.pck").stat().st_size,
+    "game/Lwsmf.pck": pck.stat().st_size if pck.is_file() else 0,
     "game/data_Lwsmf_windows_x86_64": sum(p.stat().st_size for p in (out_dir / "game/data_Lwsmf_windows_x86_64").rglob("*") if p.is_file()),
     "game_data": sum(p.stat().st_size for p in (out_dir / "game_data").rglob("*") if p.is_file()),
     "work/all/media.pak": pak.stat().st_size,
