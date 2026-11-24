@@ -1,6 +1,6 @@
 class_name PlayOverlays
 extends Control
-## Front-end overlays extracted from GameRoot: Toast, Fault Modal, F4 Backlog,
+## Front-end overlays extracted from GameRoot: Toast, Fault Modal, F9 Backlog,
 ## F12 Return-to-Title Confirm, Save Overwrite Confirm, Quit Confirm, Save Transfer,
 ## Mobile Quick Drawer, and F2/F3 HUDs.
 
@@ -154,7 +154,7 @@ func tick_toast() -> void:
 		_toast_label.visible = false
 
 
-# ---- F4 Backlog ----------------------------------------------------------
+# ---- F9 Backlog ----------------------------------------------------------
 
 func _build_backlog_overlay() -> void:
 	_backlog_root = Control.new()
@@ -212,7 +212,7 @@ func _build_backlog_overlay() -> void:
 	column.add_child(footer)
 	var close_button := Button.new()
 	_backlog_close_btn = close_button
-	close_button.text = "关闭" if _touch_ui_enabled else "关闭（F4/Esc）"
+	close_button.text = "关闭" if _touch_ui_enabled else "关闭（F9/Esc）"
 	close_button.add_theme_font_override("font", UiSkin.font())
 	close_button.pressed.connect(close_backlog)
 	footer.add_child(close_button)
@@ -471,7 +471,7 @@ func _sync_touch_hint_labels() -> void:
 		_backlog_header.text = "消息回顾（最近 %d 条，上下滑动浏览）" % BACKLOG_LIMIT if _touch_ui_enabled \
 			else "消息回顾（最近 %d 条，只读；↑/↓ 或 W/S 行滚动，PageUp/PageDown 翻页）" % BACKLOG_LIMIT
 	if _backlog_close_btn != null:
-		_backlog_close_btn.text = "关闭" if _touch_ui_enabled else "关闭（F4/Esc）"
+		_backlog_close_btn.text = "关闭" if _touch_ui_enabled else "关闭（F9/Esc）"
 	if _fault_close_button != null:
 		_fault_close_button.text = "隐藏（返回键重开）" if _touch_ui_enabled else "隐藏（Esc/F12/返回键 重开）"
 

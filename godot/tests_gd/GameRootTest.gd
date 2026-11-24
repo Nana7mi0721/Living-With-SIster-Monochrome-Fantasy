@@ -288,7 +288,7 @@ func _ready() -> void:
 			if root.session.LeaderX != pre_save_lx or root.session.LeaderY != pre_save_ly:
 				failures.append("load reset probe should preserve saved coordinates")
 
-		# F5/F9: save the bedroom, walk a frame, then reload the same slot.
+		# F6/F7: save the bedroom, walk a frame, then reload the same slot.
 		if root.phase == "bedroom":
 			# W4 Day1-2: two live tracks must survive the save/load round trip. This scene
 			# runs against the retail asset root, so use a track that root really ships.
@@ -474,7 +474,15 @@ func _ready() -> void:
 		if root.is_fullscreen() != fullscreen_before:
 			failures.append("a second F11 must restore the original window mode")
 
-		# F4 backlog: messages are remembered in memory and the overlay pauses the clock.
+		# F4 cycles the same fullscreen latch in the headless harness.
+		root.cycle_window_size()
+		if root.is_fullscreen() == fullscreen_before:
+			failures.append("F4 must cycle the window/fullscreen state")
+		root.cycle_window_size()
+		if root.is_fullscreen() != fullscreen_before:
+			failures.append("a second F4 must return to the original window state")
+
+		# F9 backlog: messages are remembered in memory and the overlay pauses the clock.
 		root._on_message("Backlog probe", -1)
 		if root.backlog_size() < 1:
 			failures.append("messages must enter the backlog ring")
@@ -489,7 +497,7 @@ func _ready() -> void:
 		root.message.close()
 		root.open_backlog()
 		if not root.backlog_open():
-			failures.append("F4 must open the backlog overlay")
+			failures.append("F9 backlog action must open the backlog overlay")
 		root.close_backlog()
 		if root.backlog_open():
 			failures.append("closing the backlog must hide it")
@@ -546,30 +554,36 @@ func _ready() -> void:
 		if root.session.LeaderX != lx_guard or root.session.LeaderY != ly_guard:
 			failures.append("bedroom map clicks must never move the hidden leader")
 
-		# F4/F12 mutual exclusion: neither modal may open on top of the other.
+		# F9/F12 mutual exclusion: neither modal may open on top of the other.
 		root.open_backlog()
 		root.request_return_to_title()
 		if root.title_confirm_open():
-			failures.append("F12 title confirm must not open while F4 backlog is open")
+			failures.append("F12 title confirm must not open while F9 backlog is open")
 		root.close_backlog()
 		root._release_modal_guard_if_free()
 		root.request_return_to_title()
 		root.open_backlog()
 		if root.backlog_open():
-			failures.append("F4 backlog must not open while F12 title confirm is open")
+			failures.append("F9 backlog must not open while F12 title confirm is open")
 		root.cancel_return_to_title()
 		root._release_modal_guard_if_free()
 
-		# F8 scaling mode cycling + window clamp helper + F2 stats + F3 debug overlays.
+		# Shift+F4 scaling mode cycling + window helpers + F2 stats + F3 debug overlays.
 		var scale0: String = root.scaling_mode_name()
 		var scale1: String = root.cycle_scaling_mode()
 		var scale2: String = root.cycle_scaling_mode()
 		var scale3: String = root.cycle_scaling_mode()
 		if scale1 == scale0 or scale2 == scale1 or scale3 != scale0:
-			failures.append("F8 must cycle through all three scaling modes (%s -> %s -> %s -> %s)" % [scale0, scale1, scale2, scale3])
+			failures.append("Shift+F4 must cycle through all three scaling modes (%s -> %s -> %s -> %s)" % [scale0, scale1, scale2, scale3])
 		var clamped_win: Vector2i = root.clamp_window_size(Vector2i(4000, 3000), Rect2i(0, 0, 1920, 1080))
 		if clamped_win != Vector2i(1920, 1080):
 			failures.append("clamp_window_size must clamp oversized windows to usable rect (got %s)" % str(clamped_win))
+		if root.window_growth_target(Vector2i(1024, 576), Rect2i(0, 0, 1920, 1040)) != Vector2i.ZERO:
+			failures.append("F4 must enter fullscreen when 2x does not fit the usable rect")
+		if root.window_growth_target(Vector2i(1024, 576), Rect2i(0, 0, 3840, 2160)) != Vector2i(2048, 1152):
+			failures.append("F4 must double a 1024x576 window when 2x fits the usable rect")
+		if root.window_growth_target(Vector2i(2048, 1152), Rect2i(0, 0, 3840, 2160)) != Vector2i.ZERO:
+			failures.append("F4 must enter fullscreen when the next double no longer fits")
 		root.vm.SetVar(160, 7)
 		var v160_before: int = root.vm.GetVar(160)
 		root.overlays.toggle_stats(root.vm)
@@ -875,10 +889,10 @@ func _item_rows_visible(root) -> bool:
 
 func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	# 1. Hotkeys parser: overrides valid entries and ignores malformed lines cleanly.
-	var hotkeys: Dictionary = script.parse_hotkeys_text("backlog=F7\nperf_tier = F1\nbad_line\nquick_save=NotAKey\nunknown=F4\n")
-	if int(hotkeys.get("backlog", KEY_NONE)) != KEY_F7 or int(hotkeys.get("perf_tier", KEY_NONE)) != KEY_F1:
+	var hotkeys: Dictionary = script.parse_hotkeys_text("backlog=F9\nframe_rate = F1\nwindow_size=F2\nbad_line\nquick_save=NotAKey\nunknown=F4\n")
+	if int(hotkeys.get("backlog", KEY_NONE)) != KEY_F9 or int(hotkeys.get("frame_rate", KEY_NONE)) != KEY_F1 or int(hotkeys.get("window_size", KEY_NONE)) != KEY_F2:
 		failures.append("parse_hotkeys_text must apply valid hotkey overrides")
-	if int(hotkeys.get("quick_save", KEY_NONE)) != KEY_F5:
+	if int(hotkeys.get("quick_save", KEY_NONE)) != KEY_F6:
 		failures.append("parse_hotkeys_text must keep default when key string is invalid")
 
 	var root = script.new()

@@ -2,7 +2,7 @@
 
 > 状态：**现行（标准版与 `--slim` 版均已完成打包与发布审计）**
 >
-> 更新日期：2026-11-21（Asia/Shanghai）
+> 更新日期：2026-11-24（Asia/Shanghai）
 >
 > 适用：Godot 4.7.2 .NET，Windows x64
 >
@@ -64,11 +64,11 @@ bash tools/package_release.sh --slim
 3. 执行 Godot `--export-release "Windows Desktop"` 至 `godot/build/release/` 并剔除任何 `.pdb`。
 4. 将 `game_data/{programs,database,map_tiles}.json` 压缩为单行紧凑 JSON 放入 `$STAGE/game_data/`。
 5. 仅复制 `work/all/BasicData/*.project` 与 `work/all/media.pak`（`--slim` 时调用 `tools/pack_media.py --from-pak ... --slim`），跳过 `work/all/save/` 与冗余 `BasicData/*.dat`/`MapChip/`/`MapData/`/`SystemFile/`。
-6. Staging `converter/`（剥离 `__pycache__`、`.pyc` 与 `tests/`）及最新 `README.txt`。
+6. Staging `converter/`（剥离 `__pycache__`、`.pyc` 与 `tests/`）、最新 `README.txt` 与 `按键说明.txt`。
 7. 在替换 `dist/` 之前先对 `$STAGE` 执行 `python tools/release_audit.py --dist "$STAGE"`。
 8. 通过后替换进 `dist/Lwsmf-win64`（或 `dist/Lwsmf-win64-slim`），旧目录备份到 `work/out/dist-backup-*`，随后生成 `.zip` 与 `dist/SHA256SUMS.txt` 并打印体积账本。
 
-## 5. 实测包体账本与校验指纹（2026-11-21）
+## 5. 实测包体账本与校验指纹（2026-11-21 基线）
 
 | 组成部分 | 基线估算（未优化） | 标准包 `Lwsmf-win64` | Slim 包 `Lwsmf-win64-slim` | 说明 |
 | :--- | ---: | ---: | ---: | :--- |
@@ -92,7 +92,23 @@ bash tools/package_release.sh --slim
   - `Lwsmf-win64-slim/work/all/media.pak` SHA-256：`e3669a9e1e587e822c022c8d63345031eff539d687753f77a4ca578e31f2dbd1`
 - **Slim 载荷实测**：通过宿主 Godot 读取 `dist/Lwsmf-win64-slim/work/all/media.pak`（3,802 条）与紧凑 JSON，`BattleEffect/kaenbeam.png`、`BattleEffect/pipo-btleffect162.png`、`Picture/title01.jpg`、`Picture/item_list_base.png`、`SystemGraphic/TitleGraphic.jpg`、`SystemFile/WindowBase.png`、`cg/bg_01_home_a.jpg`、`SystemFile/[SE]Cursor.ogg` 与 `programs.json`（550 公共事件）+ `database.json` 全部零错误解码（`SLIM_PAYLOAD_SMOKE_OK misses=0`）。注：在自动化沙盒终端内直接拉起新建 `.exe` 会触发 Low-IL ACL 限制（`0xC0000142`），独立桌面会话双击解压包正常运行不受此限。
 
-### 5.1 可选 2× HD 包（`media_hd.pak`，2026-11-22）
+### 5.1 2026-11-24 标准包复测
+
+2026-11-24 按当前代码与 `work/all/media.pak`（3,904 条）重建 `Lwsmf-win64`，发布审计通过：
+
+| 指标 | 实测值 |
+| :--- | ---: |
+| 审计标记 | `RELEASE_AUDIT_OK files=217 bytes=988200698 pak_entries=3904 assets=172` |
+| 非压缩总计 | **942.42 MB** |
+| `Lwsmf-win64.zip` | **808.36 MB（847,626,241 B）** |
+| ZIP SHA-256 | `305271512ca8655b4ff0701cd5079f5e66ad8829b4619371292320d7187317b2` |
+| `game/Lwsmf.exe` SHA-256 | `cf03f006f72f7753026a79aa9b53bde5efc03b56e7b301b0e5fb5b32245e098a` |
+| `work/all/media.pak` SHA-256 | `d923b3acaee9f630d6b5f56f8ea380727097d0a44da0548712bc49f484ec063d` |
+| `按键说明.txt` | 2,472 B，与 `docs/godot/HOTKEYS.md` 字节一致 |
+
+本轮只重建标准包；Slim 列仍为 2026-11-21 基线。`work/all/other` 增至 11.76 MB 是因为打包源中的 `Lolita.ttf` 以根目录字体形式随包分发。
+
+### 5.2 可选 2× HD 包（`media_hd.pak`，2026-11-22）
 
 ```bash
 # 1) 生成 2× 素材（Real-CUGAN CLI 出 PNG，Pillow 转无损 WebP；输出 work/hd，不入库）
@@ -119,7 +135,9 @@ bash tools/package_release.sh --hd
 | 引擎回退 | 274 张（253 CPU + 21 色噪/涂抹/不稳） | 其余 2,153 张为 Real-CUGAN 2× |
 | 校验标记 | `HD_MANIFEST_VERIFY_OK entries=2421 missing=0 mismatch=0 degraded=0 uncovered=0 opaque_alpha_dropped=4` | 4 张源 alpha 恒为 255，丢通道无视觉影响 |
 
-运行侧：`project.godot` 默认窗口 2048×1152、`stretch/mode=canvas_items`；桌面自动探测 `<root>/media_hd.pak`，移动端（`mobile` feature）默认关闭并回退 1×；缓存预算桌面 512 MB / 移动 192 MB。开关写入 `user://display_settings.cfg` 的 `display/hd_textures`，也可用 `LWsmf_HD_PAK` 指定包路径。
+运行侧：`project.godot` 默认窗口 1024×576、`stretch/mode=canvas_items`；桌面自动探测 `<root>/media_hd.pak`，移动端（`mobile` feature）默认关闭并回退 1×；缓存预算桌面 512 MB / 移动 192 MB。开关写入 `user://display_settings.cfg` 的 `display/hd_textures`，也可用 `LWsmf_HD_PAK` 指定包路径。
+
+> 上表为 2026-11-21 基线；2026-11-24 重建的标准包（含 `按键说明.txt`）见 §5.1。
 
 ## 6. 发布审计与移动端配套
 

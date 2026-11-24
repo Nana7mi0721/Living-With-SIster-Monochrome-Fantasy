@@ -598,6 +598,7 @@ class MobileToolsTest(unittest.TestCase):
                 "converter/cli.py",
                 "converter/convert.bat",
                 "README.txt",
+                "按键说明.txt",
             ):
                 p = dist_dir / rel
                 p.parent.mkdir(parents=True, exist_ok=True)

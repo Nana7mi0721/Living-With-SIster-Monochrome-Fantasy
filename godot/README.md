@@ -25,12 +25,20 @@
 | 方向键 / WASD | 地图上移动（地形通行 + active 事件页阻挡；点击相邻格也会走一步） |
 | Enter / Z / Space | 决定（标题菜单、消息关闭、动作键） |
 | Esc / X | 取消 |
-| F5 | 快速保存到 `user://quicksave.json`（与 `CE435` 原生自动存档槽 1 隔离） |
-| F9 | 快速读取 `user://quicksave.json` |
-| F8 | 切换缩放/纹理过滤模式（Integer / Fit-Nearest / Fit-Linear） |
-| F11 | 无边框全屏切换 |
-| F4 / F12 | 消息回顾 / 返回标题确认 |
+| F4 | 窗口尺寸循环：1024×576 → 2× → … → 全屏 → 最小 |
+| Shift+F4 | 切换缩放/纹理过滤模式（Integer / Fit-Nearest / Fit-Linear） |
+| F5 | 帧率循环：60 / 30 / 15 fps |
+| Shift+F5 | 开关标题栏实时帧率信息 |
+| F6 / F7 | 快速保存 / 读取 `user://quicksave.json`（与 `CE435` 原生自动存档槽 1 隔离） |
+| F8 | 存档导入 / 导出 |
+| F9 | 消息回顾 |
+| F10 | 导出诊断快照 |
+| F11 | 全屏 ↔ 最小窗口（1024×576） |
+| F12 | 返回标题确认 |
 | F2 / F3 | 游玩倾向统计浮层 / 运行时调试浮层 |
+
+`W` 保持为移动与消息回顾滚动键，不参与帧率切换。完整说明见
+[`../docs/godot/HOTKEYS.md`](../docs/godot/HOTKEYS.md)。
 
 标题菜单第 2 行（"继续"）按原作公共事件读取存档。
 
@@ -63,7 +71,7 @@ LWsmf_RENDER=1 bash tools/godot_check.sh   # 带窗口的截图/渲染分支
 
 ## 高清素材层（可选 2×）
 
-- `project.godot` 的逻辑分辨率仍为 1024×576，渲染模式为 `canvas_items`，默认窗口 2048×1152；字体与矢量图元在设备分辨率绘制。
+- `project.godot` 的逻辑分辨率仍为 1024×576，渲染模式为 `canvas_items`，默认窗口 1024×576；字体与矢量图元在设备分辨率绘制。
 - `AssetDB` 启动时自动探测 `<root>/media_hd.pak`，也可用 `LWsmf_HD_PAK` 指定；命中条目走 2× 贴图，缺失/移动端/关闭开关时回退 1× 的 `media.pak`。
 - `hd_scale(logical)` 只用于把贴图像素换回逻辑绘制尺寸（`PictureStage`）与九宫格取样（`UiSkin`），不改任何布局数据。
 - 生成与校验：`python tools/upscale_assets.py --out work/hd` → `python tools/verify_hd_manifest.py` → `python tools/pack_media.py --hd-root work/hd --out work/all/media_hd.pak`；发布用 `bash tools/package_release.sh --hd`。

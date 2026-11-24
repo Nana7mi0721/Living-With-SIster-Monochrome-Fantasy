@@ -34,6 +34,7 @@ REQUIRED_FILES = [
     "converter/cli.py",
     "converter/convert.bat",
     "README.txt",
+    "按键说明.txt",
 ]
 
 BROTLI_OR_PLAIN_GAME_DATA = [
@@ -182,6 +183,9 @@ def audit(
     readme = dist / "README.txt"
     if readme.is_file():
         _scan_text_privacy(readme, "README.txt", errors)
+    hotkeys = dist / "按键说明.txt"
+    if hotkeys.is_file():
+        _scan_text_privacy(hotkeys, "按键说明.txt", errors)
     conv_dir = dist / "converter"
     if conv_dir.is_dir():
         for p in conv_dir.rglob("*"):

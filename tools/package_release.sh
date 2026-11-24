@@ -282,17 +282,24 @@ game_data\                       已转换游戏数据（JSON）
 work\all\media.pak               加密媒体归档（WOLFMPK1）
 work\all\BasicData\*.project     数据库结构描述
 converter\                       可选：本地数据转换器（Python 源码）
+按键说明.txt                     完整快捷键与窗口/帧率行为说明
 
 快捷键
 ------
 Enter / Z / 鼠标左键   确认 / 对话推进 / 地图交互
 Esc / X / 鼠标右键     取消 / 返回
-F4                     消息回顾（Backlog）
-F5 / F9                快速保存 / 读取（user://quicksave.json，不覆盖槽 1 自动存档）
-F8                     切换缩放与过滤（Integer / Fit-Nearest / Fit-Linear）
-F11                    无边框全屏切换
+F4                     窗口尺寸循环（1024×576 → 2x → … → 全屏 → 最小）
+Shift+F4               切换缩放与过滤（Integer / Fit-Nearest / Fit-Linear）
+F5                     帧率循环（60 / 30 / 15 fps）
+Shift+F5               开关标题栏实时帧率信息
+F6 / F7                快速保存 / 读取（user://quicksave.json，不覆盖槽 1 自动存档）
+F8                     存档导入 / 导出
+F9                     消息回顾（Backlog）
+F10                    导出诊断快照
+F11                    全屏 ↔ 最小窗口（1024×576）
 F12                    返回标题确认
 F2 / F3                游玩统计浮层 / 运行时调试浮层
+方向键 / W A S D        移动与选择光标（回顾界面 W/S 滚动）
 
 重新转换（可选）
 ----------------
@@ -301,6 +308,8 @@ F2 / F3                游玩统计浮层 / 运行时调试浮层
 3. 在本发布包根目录执行：
    converter\convert.bat --root "<原版Data目录>" --out game_data --reports reports
 EOF
+
+cp "$ROOT/docs/godot/HOTKEYS.md" "$STAGE/按键说明.txt"
 
 echo "== pre-swap release audit =="
 "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/release_audit.py")" --dist "$(to_win_path "$STAGE")"
@@ -355,7 +364,7 @@ buckets = {
     "game_data": sum(p.stat().st_size for p in (out_dir / "game_data").rglob("*") if p.is_file()),
     "work/all/media.pak": pak.stat().st_size,
     "work/all/other": sum(p.stat().st_size for p in (out_dir / "work/all").rglob("*") if p.is_file() and p != pak),
-    "converter+README": sum(p.stat().st_size for p in (out_dir / "converter").rglob("*") if p.is_file()) + (out_dir / "README.txt").stat().st_size,
+    "converter+README+按键说明": sum(p.stat().st_size for p in (out_dir / "converter").rglob("*") if p.is_file()) + (out_dir / "README.txt").stat().st_size + (out_dir / "按键说明.txt").stat().st_size,
 }
 total = sum(buckets.values())
 print("=== SIZE LEDGER ===")

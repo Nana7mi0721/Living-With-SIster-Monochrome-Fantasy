@@ -16,18 +16,19 @@ const _PlayOverlays := preload("res://presentation_gd/PlayOverlays.gd")
 const SCALE_MODES: Array[String] = ["Integer", "Fit-Nearest", "Fit-Linear"]
 const PERF_FPS_LEVELS: Array[int] = [60, 30, 15]
 const PERF_FPS_LABELS: Array[String] = ["高 (60 fps)", "中 (30 fps)", "低 (15 fps)"]
+const BASE_WINDOW_SIZE := Vector2i(1024, 576)
 const DISPLAY_SETTINGS_PATH := "user://display_settings.cfg"
 const HOTKEYS_SETTINGS_PATH := "user://hotkeys.cfg"
 const DEFAULT_HOTKEYS: Dictionary = {
 	"stats": KEY_F2,
 	"debug": KEY_F3,
-	"backlog": KEY_F4,
-	"quick_save": KEY_F5,
-	"diag_snapshot": KEY_F6,
-	"save_transfer": KEY_F7,
-	"scale_mode": KEY_F8,
-	"quick_load": KEY_F9,
-	"perf_tier": KEY_F10,
+	"window_size": KEY_F4,
+	"frame_rate": KEY_F5,
+	"quick_save": KEY_F6,
+	"quick_load": KEY_F7,
+	"save_transfer": KEY_F8,
+	"backlog": KEY_F9,
+	"diag_snapshot": KEY_F10,
 	"fullscreen": KEY_F11,
 	"return_to_title": KEY_F12,
 }
@@ -1173,9 +1174,10 @@ func _input(_event: InputEvent) -> void:
 		OS.low_processor_usage_mode = false
 
 
-## Hotkeys: F2 stats/milestones, F3 debug, F4 backlog, F5 quick save, F6 diagnostic snapshot,
-## F7 save import/export, F8 scaling (Shift+F8 title FPS), F9 quick load, F10 perf tier,
-## F11 fullscreen, F12 return-to-title confirm. Overridable via --hotkeys=<file> or user://hotkeys.cfg.
+## Hotkeys: F2 stats, F3 debug, F4 window growth (Shift+F4 scaling mode), F5 frame rate
+## (Shift+F5 title FPS), F6/F7 quick save/load, F8 save import/export, F9 backlog,
+## F10 diagnostic snapshot, F11 fullscreen/minimum, F12 return-to-title confirm.
+## Overridable via --hotkeys=<file> or user://hotkeys.cfg.
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey):
 		return
@@ -1186,15 +1188,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		toggle_fullscreen()
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == int(_hotkeys.get("scale_mode", KEY_F8)):
+	if key.keycode == int(_hotkeys.get("window_size", KEY_F4)):
+		if key.shift_pressed:
+			cycle_scaling_mode()
+		else:
+			cycle_window_size()
+		get_viewport().set_input_as_handled()
+		return
+	if key.keycode == int(_hotkeys.get("frame_rate", KEY_F5)):
 		if key.shift_pressed:
 			toggle_titlebar_fps()
 		else:
-			cycle_scaling_mode()
-		get_viewport().set_input_as_handled()
-		return
-	if key.keycode == int(_hotkeys.get("perf_tier", KEY_F10)):
-		cycle_performance_tier()
+			cycle_performance_tier()
 		get_viewport().set_input_as_handled()
 		return
 	if faulted:
@@ -1214,16 +1219,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			overlays.toggle_debug()
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == KEY_W and overlays != null and overlays.debug_open():
-		cycle_performance_tier()
-		get_viewport().set_input_as_handled()
-		return
-	if key.keycode == int(_hotkeys.get("diag_snapshot", KEY_F6)):
+	if key.keycode == int(_hotkeys.get("diag_snapshot", KEY_F10)):
 		dump_diagnostic_snapshot(true)
 		_show_toast("已导出诊断快照 user://diagnostic_snapshot.txt")
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == int(_hotkeys.get("backlog", KEY_F4)):
+	if key.keycode == int(_hotkeys.get("backlog", KEY_F9)):
 		if title_confirm_open():
 			get_viewport().set_input_as_handled()
 			return
@@ -1248,14 +1249,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _modal_window_open():
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == int(_hotkeys.get("save_transfer", KEY_F7)):
+	if key.keycode == int(_hotkeys.get("save_transfer", KEY_F8)):
 		open_save_transfer()
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == int(_hotkeys.get("quick_save", KEY_F5)):
+	if key.keycode == int(_hotkeys.get("quick_save", KEY_F6)):
 		_trigger_quick_save()
 		get_viewport().set_input_as_handled()
-	elif key.keycode == int(_hotkeys.get("quick_load", KEY_F9)):
+	elif key.keycode == int(_hotkeys.get("quick_load", KEY_F7)):
 		_trigger_quick_load()
 		get_viewport().set_input_as_handled()
 
@@ -1334,6 +1335,21 @@ static func clamp_window_size(desired: Vector2i, usable: Rect2i) -> Vector2i:
 		clampi(desired.x, mini(320, usable.size.x), usable.size.x),
 		clampi(desired.y, mini(180, usable.size.y), usable.size.y)
 	)
+
+
+## Next F4 window size: double the current content, but return an empty vector
+## when the doubled window no longer fits and the caller should enter fullscreen.
+static func window_growth_target(current: Vector2i, usable: Rect2i) -> Vector2i:
+	var from := Vector2i(
+		maxi(BASE_WINDOW_SIZE.x, current.x),
+		maxi(BASE_WINDOW_SIZE.y, current.y)
+	)
+	var target := from * 2
+	if usable.size.x <= 0 or usable.size.y <= 0:
+		return target
+	if target.x <= usable.size.x and target.y <= usable.size.y:
+		return target
+	return Vector2i.ZERO
 
 
 ## Shrinks [param desired] uniformly until it fits [param usable]; never enlarges.
@@ -1454,12 +1470,79 @@ func _load_display_settings() -> void:
 	if want_fs:
 		_windowed_position = DisplayServer.window_get_position()
 		if _windowed_size == Vector2i.ZERO:
-			_windowed_size = DisplayServer.window_get_size()
+			_windowed_size = BASE_WINDOW_SIZE
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		_fullscreen = true
 
 
-## Records the windowed pose so leaving fullscreen restores the pre-F11 geometry.
+func _display_is_fullscreen() -> bool:
+	return _fullscreen or (
+		DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+		or DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	)
+
+
+func _center_window(size: Vector2i) -> void:
+	var usable := DisplayServer.screen_get_usable_rect()
+	if usable.size.x <= 0 or usable.size.y <= 0:
+		return
+	var pos := Vector2i(
+		usable.position.x + maxi(0, (usable.size.x - size.x) / 2),
+		usable.position.y + maxi(0, (usable.size.y - size.y) / 2)
+	)
+	DisplayServer.window_set_position(Vector2i(
+		clampi(pos.x, usable.position.x, maxi(usable.position.x, usable.end.x - size.x)),
+		clampi(pos.y, usable.position.y, maxi(usable.position.y, usable.end.y - size.y))))
+
+
+func _apply_windowed_size(desired: Vector2i) -> void:
+	var usable := DisplayServer.screen_get_usable_rect()
+	var fitted := clamp_window_size(fit_window_size(desired, usable), usable)
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_size(fitted)
+	_windowed_size = fitted
+	_fullscreen = false
+	_center_window(fitted)
+	_apply_scaling_mode()
+	_apply_safe_area()
+	_save_display_settings()
+
+
+func _enter_fullscreen() -> void:
+	_windowed_position = DisplayServer.window_get_position()
+	_windowed_size = DisplayServer.window_get_size()
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	_fullscreen = true
+	_save_display_settings()
+
+
+## F4: minimum -> 2x -> 4x ... -> fullscreen -> minimum.
+func cycle_window_size() -> String:
+	if not is_desktop_platform():
+		return ""
+	if _is_headless():
+		_fullscreen = not _fullscreen
+		var headless_label := "fullscreen" if _fullscreen else "minimum"
+		status("window=%s (headless)" % headless_label)
+		return headless_label
+	if _display_is_fullscreen():
+		_apply_windowed_size(BASE_WINDOW_SIZE)
+		_show_toast("窗口: 最小 1024×576")
+		status("window=1024x576")
+		return "1024x576"
+	var target := window_growth_target(DisplayServer.window_get_size(), DisplayServer.screen_get_usable_rect())
+	if target == Vector2i.ZERO:
+		_enter_fullscreen()
+		_show_toast("窗口: 全屏")
+		status("window=fullscreen")
+		return "fullscreen"
+	_apply_windowed_size(target)
+	_show_toast("窗口: %d×%d" % [target.x, target.y])
+	status("window=%dx%d" % [target.x, target.y])
+	return "%dx%d" % [target.x, target.y]
+
+
+## F11: toggle between fullscreen and the 1024x576 minimum window.
 func toggle_fullscreen() -> void:
 	if not is_desktop_platform():
 		return
@@ -1467,18 +1550,12 @@ func toggle_fullscreen() -> void:
 		_fullscreen = not _fullscreen
 		status("fullscreen=%s (headless)" % str(_fullscreen))
 		return
-	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-		if _windowed_size != Vector2i.ZERO:
-			DisplayServer.window_set_size(_windowed_size)
-			DisplayServer.window_set_position(_windowed_position)
-		_fullscreen = false
+	if _display_is_fullscreen():
+		_apply_windowed_size(BASE_WINDOW_SIZE)
+		_show_toast("窗口: 最小 1024×576")
 	else:
-		_windowed_position = DisplayServer.window_get_position()
-		_windowed_size = DisplayServer.window_get_size()
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-		_fullscreen = true
-	_save_display_settings()
+		_enter_fullscreen()
+		_show_toast("窗口: 全屏")
 	status("fullscreen=%s" % str(_fullscreen))
 
 
@@ -1827,8 +1904,8 @@ func cycle_performance_tier() -> int:
 	_apply_performance_tier()
 	_save_display_settings()
 	var label := PERF_FPS_LABELS[_perf_tier]
-	_show_toast("性能档位: %s" % label)
-	status("perf_tier=%s" % label)
+	_show_toast("帧率: %s" % label)
+	status("frame_rate=%s" % label)
 	return PERF_FPS_LEVELS[_perf_tier]
 
 
