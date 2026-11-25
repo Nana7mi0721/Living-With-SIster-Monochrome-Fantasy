@@ -10,9 +10,9 @@
 
 ### 0.1 时点
 
-- 工作目录 `E:\Study\github program\imoto life`，HEAD `ac0138d`（M0 closed）。
+- 工作目录 `<repo-root>`，HEAD `ac0138d`（M0 closed）。
 - 数据源 `work/all/`：23 个 `.wolf` 全部解包后的产物（4,085 个文件 / 1,528,662,617 B）。
-- 对照组：真实安装目录 `E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy`（117 个文件 / 2,174,964,407 B）。
+- 对照组：零售安装目录（`WOLF_GAME_DIR`，117 个文件 / 2,174,964,407 B）。
 - 字节用 `os.path.getsize` 实测（不是 du 的簇大小）；像素用 PIL 打开后 `im.size` 相乘。
 - 任何 crate 改动后请重跑 §0.2 的命令；本文档数字的保质期等同于 `work/all/` 的内容。
 

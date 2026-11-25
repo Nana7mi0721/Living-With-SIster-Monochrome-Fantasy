@@ -13,7 +13,7 @@
 | **忽略规则** | [.gitignore](../../.gitignore) | 排除 `/godot/mobile_data/`、`/dist/`、`/work/`、`*.apk`、`*.ipa`、`*.keystore`、`*.jks` |
 | **环境体检** | [tools/check_mobile_env.sh](../../tools/check_mobile_env.sh)<br>[tools/mobile/env_check.py](../../tools/mobile/env_check.py) | 探测 Godot 4.7.2 Mono 模板、.NET SDK、JDK、Android SDK、本地媒体与调试签名 |
 | **Android Staging & 校验** | [tools/mobile/android_data.py](../../tools/mobile/android_data.py) | `plan` / `stage` / `verify-apk`：紧凑 JSON、项目 schema 与 `media.pak` 转专用 blob；媒体条目在 APK 内强制 `ZIP_STORED` |
-| **Android 打包** | [tools/package_android.sh](../../tools/package_android.sh) | 支持 `--dry-run`、`--slim`、`--media-pak`、`--template`、`--debug`/`--release`、`--keystore`、`--out-dir`、`--force` |
+| **Android 打包** | [tools/package_android.sh](../../tools/package_android.sh) | 支持 `--dry-run`、`--slim`、`--media-pak`、`--template`、`--debug`/`--release`、`--keystore`、`--allow-placeholder`、`--out-dir`、`--force` |
 | **APK 后处理** | [tools/mobile/postprocess_android_apk.py](../../tools/mobile/postprocess_android_apk.py) | 导出后剔除编译期静态库、执行 16 KB 页对齐、以 v2/v3 重签并做布局校验；由打包脚本默认调用 |
 | **静态库剔除** | [tools/mobile/strip_android_static_libs.py](../../tools/mobile/strip_android_static_libs.py) | 删除 `lib/**/*.a`，保留运行时 `.so` 与媒体条目的存储方式 |
 | **iOS IPA 与数据注入** | [tools/package_ios.sh](../../tools/package_ios.sh)<br>[tools/inject_ios_data.sh](../../tools/inject_ios_data.sh)<br>[tools/mobile/ios_inject_data.py](../../tools/mobile/ios_inject_data.py) | macOS + Xcode 构建无签名引擎 IPA；Windows/macOS 通用 Python 注入 `game_data/` 与 `work/all/media.pak` |
@@ -26,15 +26,17 @@
 
 | 项目 | 当前值 |
 | :--- | :--- |
-| APK | `dist/android/0.1.0/Lwsmf-0.1.0-android-arm64.apk` |
+| APK | `dist/android/0.1.0/LWSMF-0.1.0-android-arm64.apk` |
 | 体积 | `656,090,638 B`（约 `625.7 MiB`） |
 | SHA-256 | `39D48C76FF8DA22631E0F90267D086B12F8E23A7E13F3DCF19CDAAD615FF29AB` |
-| 包名 / 版本 | `com.lwsmf.remake` / `0.1.0` |
+| 包名 / 显示名 / 版本 | `com.lwsmf.remake` / `妹相随` / `0.1.0` |
 | SDK / ABI | minSdk `24`、targetSdk `36`、arm64-v8a |
 | 签名 | Debug Keystore，APK Signature Scheme v2 + v3 |
 | 校验 | `ANDROID_APK_VERIFY_OK entries=359`；`zipalign -c -P 16 4` 通过；媒体条目为 `ZIP_STORED` |
 
 该包是**可安装的 Debug 签名测试包**，不是商店发布包，也不包含正式发布签名材料。
+
+Android 与 iOS 应用图标均由 `work/retail_dat/_publish/icon_mobile.jpg` 在打包期通过 `tools/sync_release_icons.py` 派生（Android 自适应前景图使用 62% 安全区居中裁切，见 D-92；无发布源图时在 `--debug`/`--allow-placeholder` 下可生成占位图标）；移动端显示名统一为 `妹相随`，不沿用 Windows 完整标题。
 
 ### 2.1 体积来源与裁剪口径
 
@@ -126,10 +128,10 @@ bash tools/package_android.sh --debug --force \
 
 ```bash
 bash tools/inject_ios_data.sh \
-  "Lwsmf-0.1.0-ios-arm64-unsigned.ipa" \
+  "LWSMF-0.1.0-ios-arm64.ipa" \
   --game-data game_data \
   --work-all work/all \
-  --out "work/out/Lwsmf-0.1.0-ios-arm64-unsigned-full.ipa" \
+  --out "work/out/LWSMF-0.1.0-ios-arm64-full.ipa" \
   --force
 ```
 

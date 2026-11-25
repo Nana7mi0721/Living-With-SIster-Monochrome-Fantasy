@@ -657,7 +657,7 @@ impl App {
         let scaler = renderer.scaler();
         let text_count = self.texts.len();
         window.set_title(&format!(
-            "imoto-life | {}x{} -> x{} | frame {} | {} quad(s){} | {} fps",
+            "lwsmf | {}x{} -> x{} | frame {} | {} quad(s){} | {} fps",
             LOGICAL_W,
             LOGICAL_H,
             scaler.scale,
@@ -672,7 +672,7 @@ impl App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let attributes = Window::default_attributes()
-            .with_title("imoto-life | title screen")
+            .with_title("lwsmf | title screen")
             .with_inner_size(PhysicalSize::new(LOGICAL_W, LOGICAL_H))
             .with_window_icon(window_icon());
         let window = match event_loop.create_window(attributes) {

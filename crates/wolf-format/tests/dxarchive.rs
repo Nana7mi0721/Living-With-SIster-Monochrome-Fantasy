@@ -10,11 +10,15 @@ use std::path::PathBuf;
 use wolf_format::dxarchive::DxArchive;
 use wolf_format::Error;
 
-/// Steam install of "Living With Sister Monochrome Fantasy".
-///
-/// The folder really is spelled "SIster" on disk, so keep the odd casing.
-const DEFAULT_GAME_DIR: &str =
-    r"E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy\Data";
+/// Local unpacked or retail Data folder (used when `WOLF_GAME_DIR` is not set).
+fn default_game_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("work")
+        .join("retail_backup")
+        .join("Data")
+}
 
 /// Data root, resolved the way "wolf-cli" does it (see tests/tileset.rs).
 fn data_root() -> PathBuf {
@@ -42,7 +46,7 @@ fn data_root() -> PathBuf {
 fn game_dir() -> Option<PathBuf> {
     let raw = match std::env::var("WOLF_GAME_DIR") {
         Ok(value) if !value.is_empty() => PathBuf::from(value),
-        _ => PathBuf::from(DEFAULT_GAME_DIR),
+        _ => default_game_dir(),
     };
     if raw.is_dir() {
         Some(raw)
@@ -54,7 +58,10 @@ fn game_dir() -> Option<PathBuf> {
 /// Open one archive from the game folder.
 fn open(name: &str) -> Option<DxArchive> {
     let Some(dir) = game_dir() else {
-        eprintln!("skipping: no game data, set WOLF_GAME_DIR (looked in {DEFAULT_GAME_DIR})");
+        eprintln!(
+            "skipping: no game data, set WOLF_GAME_DIR (looked in {})",
+            default_game_dir().display()
+        );
         return None;
     };
     let path = dir.join(name);
@@ -251,7 +258,10 @@ fn scene_and_word_extract_byte_exactly() {
 #[ignore = "reads every archive in the game folder, including 250 MB ones"]
 fn every_archive_reads() {
     let Some(dir) = game_dir() else {
-        eprintln!("skipping: no game data, set WOLF_GAME_DIR (looked in {DEFAULT_GAME_DIR})");
+        eprintln!(
+            "skipping: no game data, set WOLF_GAME_DIR (looked in {})",
+            default_game_dir().display()
+        );
         return;
     };
     let mut archives = Vec::new();

@@ -204,11 +204,11 @@ fn font_dirs(root: &Path) -> Vec<PathBuf> {
         push(install.clone());
         push(install.join("Data"));
     }
-    let fallback =
-        PathBuf::from("E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy");
+    let fallback = root.join("work/retail_backup");
     push(fallback.clone());
     push(fallback.join("Data"));
     push(root.join("work/alldata"));
+    push(root.join("work/all"));
     push(root.join("work/full"));
     push(root.join("work/full/Data"));
     dirs

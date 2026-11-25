@@ -2,7 +2,7 @@
 """Release payload & repository hygiene audit for LWSMF.
 
 Usage:
-  python tools/release_audit.py --dist dist/Lwsmf-win64
+  python tools/release_audit.py --dist dist/LWSMF-0.1.0-windows-x64
   python tools/release_audit.py --repo-scan
 """
 from __future__ import annotations
@@ -33,6 +33,7 @@ REQUIRED_FILES = [
     "work/all/BasicData/SysDatabase.project",
     "converter/cli.py",
     "converter/convert.bat",
+    "docs/BASELINE.json",
     "README.txt",
     "按键说明.txt",
 ]
@@ -124,7 +125,7 @@ def audit(
     pck_path = dist / "game/Lwsmf.pck"
     if pck_path.is_file():
         pck_bytes = pck_path.read_bytes()
-        for needle in (b"addons/godot_ai", b"res://tests/", b"res://tests_gd/"):
+        for needle in (b"addons/godot_ai", b"res://tests/", b"res://tests_gd/", b"mobile_data/"):
             if needle in pck_bytes:
                 errors.append(f"Lwsmf.pck contains excluded dev content matching {needle.decode('utf-8')}")
 
@@ -277,25 +278,40 @@ def repo_scan(repo_root: Path) -> list[str]:
     )
     include_prefixes = (
         "AGENTS.md",
+        "Cargo.toml",
+        "CHANGELOG.md",
+        "CONTRIBUTING.md",
+        "DISCLAIMER.md",
         "README",
         ".github/",
+        "converter/",
+        "crates/",
+        "docs/ARCHITECTURE.md",
+        "docs/engine/",
+        "docs/godot/",
+        "docs/release/",
         "godot/core_cs/",
         "godot/presentation/",
         "godot/presentation_gd/",
         "godot/scenes/",
+        "godot/tests/",
+        "godot/tests_gd/",
         "godot/export_presets.cfg",
         "godot/project.godot",
         "godot/Lwsmf.csproj",
         "godot/README.md",
+        "oracle/",
         "tools/",
-        "docs/godot/",
     )
     skip_exact = {
         "tools/release_audit.py",
         "docs/godot/PRE_RELEASE_ORCHESTRATOR_AUDIT.md",
         "docs/godot/audit/GEMINI_AUDIT_AND_PLAN_2026-11-14.md",
     }
-    text_exts = {".cs", ".gd", ".py", ".sh", ".ps1", ".cfg", ".godot", ".csproj", ".yml", ".yaml", ".md", ".txt", ".bat", ".tscn"}
+    text_exts = {
+        ".cs", ".gd", ".py", ".sh", ".ps1", ".cfg", ".godot", ".csproj",
+        ".yml", ".yaml", ".md", ".txt", ".bat", ".tscn", ".rs", ".toml", ".json",
+    }
     for line in proc.stdout.splitlines():
         rel = line.strip()
         if not rel or rel in skip_exact:
@@ -311,7 +327,7 @@ def repo_scan(repo_root: Path) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Audit LWSMF release staging or repo privacy hygiene")
-    parser.add_argument("--dist", default="dist/Lwsmf-win64", help="release directory to audit")
+    parser.add_argument("--dist", default="dist/LWSMF-0.1.0-windows-x64", help="release directory to audit")
     parser.add_argument("--repo-scan", action="store_true", help="scan tracked production/tool/core-doc files for leaks")
     parser.add_argument("--asset-audit", action="store_true", help="cross-check game_data/programs.json against work/all/media.pak")
     parser.add_argument("--strict", action="store_true", help="fail non-zero if --asset-audit finds any unreferenced/stub misses")

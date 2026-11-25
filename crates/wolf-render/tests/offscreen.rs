@@ -286,12 +286,16 @@ fn test_font() -> Option<Vec<u8>> {
     if let Some(dir) = std::env::var_os("WOLF_GAME_DIR") {
         candidates.push(std::path::PathBuf::from(dir).join("Lolita.ttf"));
     }
-    for base in ["work/full", "work/alldata", "work/full/Data"] {
+    for base in [
+        "work/full",
+        "work/alldata",
+        "work/full/Data",
+        "work/retail_backup",
+        "work/all",
+    ] {
         candidates.push(root.join(base).join("Fonts").join("Lolita.ttf"));
+        candidates.push(root.join(base).join("Lolita.ttf"));
     }
-    candidates.push(std::path::PathBuf::from(
-        "E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy/Lolita.ttf",
-    ));
     for path in candidates {
         match std::fs::read(&path) {
             Ok(bytes) if !bytes.is_empty() => return Some(bytes),

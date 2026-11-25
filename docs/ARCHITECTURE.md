@@ -39,7 +39,7 @@
 - **做**：运行时从用户自己的 `Data/` 读全部资产（`.wolf` / `.dat` / `.mps` / 字体 / 音视频），不落盘、不重打包。
 - **不做**：不内置任何游戏素材；仓库里**不允许存在需要素材才能编译的代码**（所有资产路径均为运行时输入，缺失时优雅报错并提示 `--game-dir`）。
 - **不做**：不实现 WOLF 编辑器（`.project` 只在读变量名映射时用到）。
-- **交付形态**：`imoto-life.exe`（游戏本体）+ `wolf-cli.exe`（离线工具，差分测试用）。
+- **交付形态**：`Lwsmf` / `wolf-cli`（Rust crate 为开发期 Oracle 与格式参考，Godot 4.7 .NET 为运行时交付物）。
 
 ---
 
@@ -48,7 +48,7 @@
 ### 1.1 目录树
 
 ```
-imoto-life/
+<repo-root>/
 ├─ Cargo.toml                     # [workspace] —— 只放 workspace 级配置
 ├─ rust-toolchain.toml            # 固定 stable + x86_64-pc-windows-msvc
 ├─ .cargo/config.toml             # CN 镜像源（见 §7）
@@ -1538,7 +1538,7 @@ members = ["crates/wolf-format", "crates/wolf-vm", "crates/wolf-save",
 [workspace.package]
 edition = "2021"          # 不用 2024：ecosystem 生态尚未全面适配
 rust-version = "1.87"     # = wgpu 30 的 MSRV（源码 lib.rs 明确写了 1.87）
-license = "MIT OR Apache-2.0"
+publish = false
 
 [workspace.dependencies]
 # ---- 数据层 ----
@@ -1603,7 +1603,7 @@ opt-level = 3           # 依赖（wgpu/naga/cosmic-text）用 O3，自己的代
 | 增量编译 | `incremental = true`（dev），`false` 用于 release | wgpu 全量重建约 3-5 分钟；增量后改一行 VM 代码编译 ~10s |
 | `codegen-units = 1` | 仅 release | dev 下 `codegen-units = 256` 才能有增量。**dev 若设 1，增量编译完全失效** |
 | LTO | release `thin` | `fat` 会把构建时间拉到 5-10 分钟，而我们没有跨 crate 内联的极致需求（VM 的热点在单 crate 内） |
-| 长路径 | 开启 `LongPathsEnabled`（注册表）或把 `CARGO_TARGET_DIR` 设到 `E:\cargo-target` | `E:\Study\github program\imoto life\` 路径已 30+ 字符，加上 `target\release\deps\...` 容易破 260 |
+| 长路径 | 开启 `LongPathsEnabled`（注册表）或把 `CARGO_TARGET_DIR` 设到较短路径 | 深层工作目录加上 `target\release\deps\...` 容易超过 260 字符 |
 | 杀软 | 把 `target/` 与 `CARGO_TARGET_DIR` 加进 Defender 排除 | Defender 实时扫描会把链接阶段的 I/O 拖慢数倍 |
 | `VSCode` + `rust-analyzer` | `rust-analyzer.cargo.features` 打开 `--all-features`，`checkOnSave` 用 `check` 而非 `clippy` | `clippy` 在 wgpu 依赖上会跑很久 |
 | 内存 | 16GB 足够，但 `codegen-units = 1 + lto = fat` 会峰值 8GB+ | 想并行跑 rust-analyzer 时保持 thin |

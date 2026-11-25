@@ -47,8 +47,8 @@
   - 完备支持富文本排版、动态换行、字体缩放与黑边描边样式。
 - **📱 全平台现代化体验与触控优化**
   - 支持 **Windows 桌面**、**Android** 与 **iOS** 移动端原生运行。
-  - 移动端原生触控手势优化：双击空白取消、7 级层级返回、长按快进与虚拟摇杆。
-  - 桌面端原生键鼠交互：**右键 / Esc / 空格** 统一取消，**滚轮** 快速选择与翻页。
+  - 移动端原生触控手势优化：双击空白取消、7 级层级返回、长按快进与存档翻页箭头热区。
+  - 桌面端原生键鼠交互：**右键 / Esc / 空格** 统一取消，**滚轮 / 可点击翻页箭头** 快速选择与存档翻页。
 - **💾 原版存档无缝双向互导**
   - 完备兼容原版 `.sav` 二进制存档文件结构，支持老存档直接载入与跨平台互导。
   - 现代化原子写入快照机制（VM 状态 / 对话日志 / 三轨音频），彻底杜绝坏档。
@@ -139,8 +139,11 @@ Living-With-Sister-Monochrome-Fantasy/
 
 请前往 [Releases 页面](https://github.com/Nana7mi0721/Living-With-Sister-Monochrome-Fantasy/releases) 下载适合您平台的最新版本（当前版本：`M5 Preview`）。
 
-- **Windows 独立便携版**：解压 `LWSMF-Remake-windows-x64.zip` 至任意本地非中文目录。
-- **Android 安装包**：下载 `LWSMF-Remake-android.apk` 安装至设备。
+- **Windows 独立便携版**：解压 `LWSMF-<版本>-windows-x64.zip` 至任意本地非中文目录。
+- **Android 安装包**：下载 `LWSMF-<版本>-android-arm64.apk` 安装至设备。
+- **iOS 包**：下载 `LWSMF-<版本>-ios-arm64.ipa`，按现有无签名/sideload 流程安装。
+
+Windows 版产品名为“妹相随～黑白世界的缤纷冒险～”，Android/iOS 显示名为“妹相随”。
 
 ### 2. 准备游戏数据
 
@@ -149,7 +152,7 @@ Living-With-Sister-Monochrome-Fantasy/
 首次运行前，请确保您已在 Steam 上合法购买并安装正版游戏：
 1. 访问原版游戏安装目录（默认路径：`SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy`）；
 2. 运行工程内置的数据转换脚本提取素材并生成运行时数据包；
-3. 双击 `LWSMF.exe` 即可畅享高帧率、无级缩放的重制版体验。
+3. 双击 `game\Lwsmf.exe` 即可畅享高帧率、无级缩放的重制版体验。
 
 ---
 
@@ -190,10 +193,10 @@ bash tools/godot_check.sh
 
 | 专题领域 | 入口文档 | 核心内容 |
 | :--- | :--- | :--- |
-| **架构决策** | [docs/godot/DECISIONS.md](docs/godot/DECISIONS.md) | D-01 至 D-86 核心拍板决策，定义 C# 内核与 GDScript 分工 |
+| **架构决策** | [docs/godot/DECISIONS.md](docs/godot/DECISIONS.md) | D-01 至 D-93 核心拍板决策，定义 C# 内核与 GDScript 分工 |
 | **执行计划** | [docs/godot/PLAN.md](docs/godot/PLAN.md) | M0 至 M5 路线规划与最终发布验收标准 |
 | **引擎规范** | [docs/engine/README.md](docs/engine/README.md) | WOLF Opcode 指令集规格、格式契约与系统规范 |
-| **审查台账** | [docs/reviews/README.md](docs/reviews/README.md) | 44 篇代码审查、缺陷排查与多平台修复台账 |
+| **审查台账** | [docs/reviews/README.md](docs/reviews/README.md) | 代码审查、全量审计与多平台修复台账 |
 | **资产审计** | [docs/release/ASSET_AUDIT.md](docs/release/ASSET_AUDIT.md) | 2,215 项图片、316 项音频与 Steam 23 个 `.wolf` 数据包审计 |
 | **智能体协作** | [AGENTS.md](AGENTS.md) | 并行研发、文件作用域隔离与门禁规范 |
 

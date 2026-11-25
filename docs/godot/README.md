@@ -11,7 +11,7 @@
 
 | 顺序 | 文档 | 用途 |
 | --- | --- | --- |
-| 1 | [`DECISIONS.md`](DECISIONS.md) | 已拍板决策（D-01..D-53）、`.sav` 边界、技术栈口径 |
+| 1 | [`DECISIONS.md`](DECISIONS.md) | 已拍板决策（D-01..D-93）、`.sav` 边界、技术栈口径 |
 | 2 | [`PLAN.md`](PLAN.md) | M0–M5 总体路线、当前阶段任务与退出标准 |
 | 3 | [`M1_HANDOFF.md`](M1_HANDOFF.md) | **M1 验收交接**：切片运行链、存读档续跑、证据与边界 |
 | 4 | [`M0_HANDOFF.md`](M0_HANDOFF.md) | **M0 验收交接文档**：环境门禁、对账证据、`.sav` 导入、Oracle 对拍 |

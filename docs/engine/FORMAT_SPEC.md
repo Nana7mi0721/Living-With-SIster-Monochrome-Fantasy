@@ -15,7 +15,7 @@
 |---|---|
 | 游戏 | Living With Sister Monochrome Fantasy（妹相随～黑白世界的缤纷冒险～），Steam appid 2429860 |
 | 引擎 | WOLF RPG Editor v3.x（DxLib + DirectX，Data/ 下 26 个 .wolf 归档；★已实测纠正：实际是 **23 个 .wolf** + 4 个 .ttf 字体，见下方注） |
-| 安装目录 | E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy |
+| 安装目录 | `<WOLF_GAME_DIR>`（本地零售版安装目录） |
 | 归档目录 | <安装目录>\Data\（★已实测：**23 个 .wolf**，不是 26；注意没有任何散落的 .dat） |
 | 存档目录 | <安装目录>\Save\（SaveData01..08.sav、System.sav） |
 | 解包参考 | work\full\<ArchiveName>\（已用 UberWolfCli.exe 解包，作为验证基准） |
@@ -1813,8 +1813,7 @@ cargo test -p wolf-format --test dxarchive -- --ignored --nocapture
 #   every_archive_reads：把 Data\ 下 23 个归档全部打开并逐条解出（约 2.5 秒）
 ~~~
 
-游戏目录不存在时测试自动 skip（可用 `WOLF_GAME_DIR` 覆盖路径；本机是
-`E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy\Data`，注意目录名拼写是 SIster）。
+游戏目录不存在时测试自动 skip（可用 `WOLF_GAME_DIR` 覆盖路径，指向零售版的 `Data` 目录）。
 
 **Shift-JIS 名字**：本作有 30 个非 ASCII 名字（FIcon 10、MapChip 11、Picture 2、SE 6、cg 1），
 例如 `82 AD 82 B5 82 E1 82 AD 82 B5 82 E1 2E 70 6E 67` → `くしゃくしゃ.png`。

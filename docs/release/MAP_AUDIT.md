@@ -17,7 +17,7 @@
 
 ### 0.1 时点
 
-- 工作目录 `E:\Study\github program\imoto life`，测量时 HEAD `02d2416`（写入时主干已到 `5df4a7c`，`work/full` 的数据文件未变，所以数字仍然成立）。
+- 工作目录 `<repo-root>`，测量时 HEAD `02d2416`（写入时主干已到 `5df4a7c`，`work/full` 的数据文件未变，所以数字仍然成立）。
 - 数据源 `work/full/`：`MapData` 下 9 个 `.mps`（累计 73 事件 / 134 页 / 37 610 指令槽）。
 - 本审计全部数字与 `docs/BASELINE.json` 的 `map_events` 段一致（73 / 134 / 37610 / 7052 空 / 30558 实）。
 

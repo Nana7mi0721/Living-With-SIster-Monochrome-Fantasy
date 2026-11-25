@@ -696,9 +696,7 @@ m_var2 × { u8 tag; tag < 0xFA ? u8 : u32 }
 
 ## 11. 测试断言表（`crates/wolf-save/tests/save.rs`）
 
-测试用 `WOLF_GAME_DIR` 定位安装目录（默认
-`E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy`，
-注意文件夹名里 `SIster` 的大小写），只 glob `Save/*.sav`（**不要**把 `saveN.jpg` 也算进去）。
+测试用 `WOLF_GAME_DIR` 定位安装目录（未设置时默认回退到工作区下的 `work/retail_backup`），只 glob `Save/*.sav`（**不要**把 `saveN.jpg` 也算进去）。
 目录不存在时 `eprintln!` 跳过而不是失败（存档是受版权保护的游戏数据，不能进仓库）。
 
 | 文件 | 大小 | seeds | cksum | p1 | p2 | p3 | p4 | p5 | vardb | p7 | 事件数 |
@@ -736,7 +734,7 @@ m_var2 × { u8 tag; tag < 0xFA ? u8 : u32 }
 运行：
 
 ```bash
-cd '/e/Study/github program/imoto life'
+cd <repo-root>
 source tools/env.sh
 cargo test -p wolf-save -- --nocapture
 ```

@@ -2163,11 +2163,9 @@ fn report(checks: &[Check]) -> ExitCode {
 
 /// Install directory of the original game.
 ///
-/// `$WOLF_GAME_DIR` wins; the literal default is this machine's Steam library and is
-/// the only hard-coded path in the project (fonts and saves are not in the unpacked
-/// data root, and both are optional inputs).
+/// `$WOLF_GAME_DIR` wins; otherwise falls back to the local `work/retail_backup` staging root.
 fn game_dir() -> PathBuf {
-    const DEFAULT: &str = "E:/SteamLibrary/steamapps/common/Living With SIster Monochrome Fantasy";
+    const DEFAULT: &str = "work/retail_backup";
     match std::env::var("WOLF_GAME_DIR") {
         Ok(dir) if !dir.is_empty() => PathBuf::from(dir),
         _ => PathBuf::from(DEFAULT),
@@ -2176,9 +2174,8 @@ fn game_dir() -> PathBuf {
 
 /// Finds a TTF to draw WOLF text with.
 ///
-/// Search order: `<root>/Fonts`, `<root>`, then `$WOLF_GAME_DIR`, then the documented
-/// Steam install path. A missing font is not fatal - the capture still renders the art
-/// and reports that text was skipped.
+/// Search order: `<root>/Fonts`, `<root>`, then `$WOLF_GAME_DIR` / `work/retail_backup`.
+/// A missing font is not fatal - the capture still renders the art and reports skipped text.
 /// Gives text-picture layout the real glyph advances from the same TTF the renderer
 /// shapes with. Without it anchors 1/3/4 drift by the half-em-vs-real difference.
 pub(crate) fn install_font_metrics(game: &mut Game, root: &Path) {

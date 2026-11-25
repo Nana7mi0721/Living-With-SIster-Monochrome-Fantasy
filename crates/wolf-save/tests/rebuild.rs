@@ -33,22 +33,20 @@ const FILES: &[&str] = &[
 /// work/retail_backup/Save holds the untouched copies checked into the work
 /// tree; WOLF_GAME_DIR/Save is the live install. Both hold the same nine files.
 fn save_dir() -> Option<PathBuf> {
-    let candidates = [
+    let mut candidates = Vec::new();
+    if let Ok(dir) = std::env::var("WOLF_GAME_DIR") {
+        if !dir.is_empty() {
+            candidates.push(PathBuf::from(dir).join("Save"));
+        }
+    }
+    candidates.push(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("..")
             .join("work")
             .join("retail_backup")
             .join("Save"),
-        std::env::var("WOLF_GAME_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                PathBuf::from(
-                    r"E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy",
-                )
-            })
-            .join("Save"),
-    ];
+    );
     for dir in candidates {
         if dir.is_dir() {
             return Some(dir);

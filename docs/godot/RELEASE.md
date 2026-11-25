@@ -2,16 +2,16 @@
 
 > 状态：**现行（标准版与 `--slim` 版均已完成打包与发布审计）**
 >
-> 更新日期：2026-11-24（Asia/Shanghai）
+> 更新日期：2026-11-25（Asia/Shanghai）
 >
 > 适用：Godot 4.7.2 .NET，Windows x64
 >
-> 本文记录发布预设、打包脚本、包体账本、发布审计与验证记录。仓库规范见 [../../AGENTS.md](../../AGENTS.md)，定稿决策见 [DECISIONS.md](DECISIONS.md)（D-53 / D-64 / D-65）。
+> 本文记录发布预设、打包脚本、包体账本、发布审计与验证记录。仓库规范见 [../../AGENTS.md](../../AGENTS.md)，定稿决策见 [DECISIONS.md](DECISIONS.md)（D-53 / D-64 / D-65 / D-92）。
 
 ## 1. 发布策略概览
 
 - 自 D-53 起发布包自带 `game_data/`（紧凑 JSON）与 `work/all/media.pak`（加密归档）及 `BasicData/*.project`，玩家解压即可直接运行 `game\Lwsmf.exe`，无需安装 Python，也无需预先手动转换。
-- 打包脚本：`tools/package_release.sh [--demo] [--slim]`，自动通过环境变量或 `PATH` 探测 `godot` 与 `dotnet`（零本机硬编码路径），先对 `$STAGE` 执行 `release_audit.py`，通过后再交换进入 `dist/` 并生成 `.zip` 与 `dist/SHA256SUMS.txt`。
+- 打包脚本：`tools/package_release.sh [--demo] [--slim] [--allow-placeholder]`，自动通过环境变量或 `PATH` 探测 `godot` 与 `dotnet`（零本机硬编码路径），先对 `$STAGE` 执行 `release_audit.py`，通过后再交换进入 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]/` 并生成同名 `.zip` 与 `dist/SHA256SUMS.txt`；若 `work/retail_dat/_publish/` 缺省（如 `--demo` 或纯离线构建），可传 `--allow-placeholder` 或 `LWSMF_ALLOW_PLACEHOLDER_ICONS=1` 生成占位图标。
 - 发布审计：`tools/release_audit.py --dist <dir>` 与 `tools/release_audit.py --repo-scan`，校验程序集、紧凑 JSON、`media.pak` CRC/资产覆盖、0 `.pdb`、0 `addons/`/`tests/` 渗透以及 0 隐私/本机绝对路径泄露。
 
 ## 2. 工具链与导出模板
@@ -34,7 +34,7 @@ export DOTNET_ROOT="/path/to/dotnet8"
 name="Windows Desktop"
 platform="Windows Desktop"
 export_filter="all_resources"
-exclude_filter="tests/*,tests_gd/*,game_data/*,work/*,build/*,addons/*"
+exclude_filter="tests/*,tests_gd/*,game_data/*,work/*,build/*,addons/*,mobile_data/*,assets/boot/android_*.png,assets/boot/generated/*.png,assets/boot/generated/*.ico"
 export_path="build/release/Lwsmf.exe"
 debug/export_console_wrapper=0
 dotnet/include_scripts_content=false
@@ -45,6 +45,32 @@ dotnet/embed_build_outputs=false
 说明：
 - `addons/*` 排除开发期插件（如 `addons/godot_ai/`），防止打包进 `Lwsmf.pck`。
 - `dotnet/embed_build_outputs=false` 时需随包携带 `game/data_Lwsmf_windows_x86_64/` 运行时目录。
+- Windows 可执行文件使用 `res://assets/boot/generated/icon_pc.ico`，该文件由 `tools/sync_release_icons.py` 在导出前从本地 `_publish/icon_pc.png` 派生；运行时任务栏/角标读取同目录的 `.bin` 原始 ICO 副本。
+
+### 3.1 发行元数据与视觉资源
+
+发布源图位于 ignored 的 `work/retail_dat/_publish/`；打包期派生到 `work/out/release_icons/`，并把 Godot 所需文件临时复制到 `godot/assets/boot/generated/`，导出结束后自动清理：
+
+| 素材 | 用途 |
+| :--- | :--- |
+| `icon_pc.png` | Windows 主程序、快捷方式与安装程序 `.ico` |
+| `icon_pc_dockbar.png` | Windows 任务栏大图标 |
+| `icon_pc_corner.png` | Windows 窗口左上角小图标 |
+| `icon_mobile.jpg` | Android 192/432 图标与 iOS 1024 应用图标 |
+| `setup_poster.png` | Inno Setup 左侧海报；`copy2` 原图字节直通，不裁切、不缩放、不重编码 |
+
+Windows 运行时通过 `WindowIcons.cs` 调用 `WM_SETICON`：任务栏使用 `icon_pc_dockbar.bin`，窗口左上角使用 `icon_pc_corner.bin`。`.bin` 仅是 `.ico` 的逐字节副本，用于绕过 Godot 图片导入管线；两者由打包测试断言完全一致。
+
+Windows 版本资源固定为简体中文语言 `0x0804`，字段如下：
+
+| 字段 | 值 |
+| :--- | :--- |
+| 文件说明 / 产品名称 | `妹相随～黑白世界的缤纷冒险～` |
+| 公司 / 发布者 | `Inusuku` |
+| 版权 | `Copyright (C) 2026 Inusuku. All rights reserved.` |
+| 文件版本 / 产品版本 | 打包脚本的 `--version`，规范化为四段数字 |
+
+移动端应用显示名统一为 `妹相随`。安装器仅使用经典左侧海报，不启用 `WizardBackImageFile` 整窗背景效果；默认安装目录使用完整中文产品名，固定 `AppId` 保持升级/卸载识别稳定。
 
 ## 4. 打包命令与流程
 
@@ -61,14 +87,17 @@ bash tools/package_release.sh --slim
 脚本流程：
 1. 若 `godot/Lwsmf.sln` 不存在，临时创建 solution 并在退出时自动清理。
 2. 执行 `dotnet build godot/Lwsmf.csproj -c Release -v:minimal`。
-3. 执行 Godot `--export-release "Windows Desktop"` 至 `godot/build/release/` 并剔除任何 `.pdb`。
-4. 将 `game_data/{programs,database,map_tiles}.json` 压缩为单行紧凑 JSON 放入 `$STAGE/game_data/`。
-5. 仅复制 `work/all/BasicData/*.project` 与 `work/all/media.pak`（`--slim` 时调用 `tools/pack_media.py --from-pak ... --slim`），跳过 `work/all/save/` 与冗余 `BasicData/*.dat`/`MapChip/`/`MapData/`/`SystemFile/`。
-6. Staging `converter/`（剥离 `__pycache__`、`.pyc` 与 `tests/`）、最新 `README.txt` 与 `按键说明.txt`。
-7. 在替换 `dist/` 之前先对 `$STAGE` 执行 `python tools/release_audit.py --dist "$STAGE"`。
-8. 通过后替换进 `dist/Lwsmf-win64`（或 `dist/Lwsmf-win64-slim`），旧目录备份到 `work/out/dist-backup-*`，随后生成 `.zip` 与 `dist/SHA256SUMS.txt` 并打印体积账本。
+3. 由 `tools/sync_release_icons.py` 派生窗口/任务栏/安装器图标与海报，并写入 Windows 版本元数据。
+4. 执行 Godot `--export-release "Windows Desktop"` 至 `godot/build/release/` 并剔除任何 `.pdb`。
+5. 将 `game_data/{programs,database,map_tiles}.json` 压缩为单行紧凑 JSON 放入 `$STAGE/game_data/`。
+6. 仅复制 `work/all/BasicData/*.project` 与 `work/all/media.pak`（`--slim` 时调用 `tools/pack_media.py --from-pak ... --slim`），跳过 `work/all/save/` 与冗余 `BasicData/*.dat`/`MapChip/`/`MapData/`/`SystemFile/`。
+7. Staging `converter/`（剥离 `__pycache__`、`.pyc` 与 `tests/`）、最新 `README.txt` 与 `按键说明.txt`。
+8. 在替换 `dist/` 之前先对 `$STAGE` 执行 `python tools/release_audit.py --dist "$STAGE"`。
+9. 通过后替换进 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]`，旧目录备份到 `work/out/dist-backup-*`，随后生成同名 `.zip` 与 `dist/SHA256SUMS.txt` 并打印体积账本。
 
 ## 5. 实测包体账本与校验指纹（2026-11-21）
+
+> 表内 `Lwsmf-win64*` 为历史包名；2026-11-25 起统一使用 `LWSMF-<版本>-windows-x64[-slim]`。
 
 | 组成部分 | 基线估算（未优化） | 标准包 `Lwsmf-win64` | Slim 包 `Lwsmf-win64-slim` | 说明 |
 | :--- | ---: | ---: | ---: | :--- |
@@ -104,7 +133,7 @@ python tools/verify_hd_manifest.py
 # 3) 打成独立包（不替换 1× 的 media.pak）
 python tools/pack_media.py --hd-root work/hd --out work/all/media_hd.pak
 
-# 4) 带 HD 层打包发布（输出 dist/Lwsmf-win64-hd）
+# 4) 带 HD 层打包发布（输出 dist/LWSMF-<版本>-windows-x64-hd）
 bash tools/package_release.sh --hd
 ```
 
@@ -126,7 +155,7 @@ bash tools/package_release.sh --hd
 ## 6. 发布审计与移动端配套
 
 ```bash
-python tools/release_audit.py --dist dist/Lwsmf-win64-slim
+python tools/release_audit.py --dist "dist/LWSMF-<版本>-windows-x64-slim"
 python tools/release_audit.py --hd-root work/hd
 python tools/release_audit.py --repo-scan
 bash tools/check_mobile_env.sh --target all

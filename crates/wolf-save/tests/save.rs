@@ -157,11 +157,14 @@ const EXPECTED: &[Expected] = &[
 
 /// The save directory, or None when the game is not installed here.
 fn save_dir() -> Option<PathBuf> {
-    let root = std::env::var("WOLF_GAME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(r"E:\SteamLibrary\steamapps\common\Living With SIster Monochrome Fantasy")
-        });
+    let root = match std::env::var("WOLF_GAME_DIR") {
+        Ok(dir) if !dir.is_empty() => PathBuf::from(dir),
+        _ => Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("work")
+            .join("retail_backup"),
+    };
     let dir = root.join("Save");
     if dir.is_dir() {
         Some(dir)

@@ -3,7 +3,6 @@ name = "wolf-render"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
 publish.workspace = true
 description = "wgpu renderer for the 1024x576 framebuffer"
 

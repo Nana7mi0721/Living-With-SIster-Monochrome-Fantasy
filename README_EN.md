@@ -47,8 +47,8 @@ Powered by **Godot 4.7.2 Mono** with a **.NET 8 C# deterministic Event VM** and 
   - Complete support for rich text tokenization, dynamic wrapping, font scaling, and border outline rendering.
 - **📱 Cross-Platform Modernization & Touch Controls**
   - Native builds for **Windows Desktop**, **Android**, and **iOS**.
-  - Mobile touch UX: Double-tap cancel, 7-level back navigation, long-press fast forward, and touch-adapted menus.
-  - Desktop controls: Unified **Right-Click / Esc / Space** back action, **Mouse Wheel** option preview and save slot scrolling.
+  - Mobile touch UX: Double-tap cancel, 7-level back navigation, long-press fast forward, and save-page arrow hitboxes.
+  - Desktop controls: Unified **Right-Click / Esc / Space** back action, **Mouse Wheel / Clickable Page Arrows** for option preview and save slot paging.
 - **💾 Seamless Bi-directional Save Migration**
   - Full bidirectional compatibility with original `.sav` binary files and variable databases.
   - Atomic persistence snapshot architecture (VM state, dialogue history, 3-track audio) preventing corrupted states.
@@ -103,7 +103,7 @@ Living-With-Sister-Monochrome-Fantasy/
 ├── crates/                  # Rust format parsers & Oracle verification baseline
 ├── docs/                    # Complete technical specifications & audit reports
 │   ├── engine/              # WOLF opcode specifications & low-level contracts
-│   ├── godot/               # Authoritative Godot documentation & D-01..D-86 decisions
+│   ├── godot/               # Authoritative Godot documentation & D-01..D-93 decisions
 │   ├── milestones/          # M1 to M13 milestone progress and delivery logs
 │   ├── plans/               # High-level architecture plans and RFCs
 │   ├── release/             # Asset audit and packaging guides
@@ -184,10 +184,10 @@ For exhaustive technical references, see the **[Global Documentation Map (docs/R
 
 | Category | Document | Description |
 | :--- | :--- | :--- |
-| **Decisions** | [docs/godot/DECISIONS.md](docs/godot/DECISIONS.md) | Authoritative architectural decisions D-01 through D-86 |
+| **Decisions** | [docs/godot/DECISIONS.md](docs/godot/DECISIONS.md) | Authoritative architectural decisions D-01 through D-93 |
 | **Execution Plan** | [docs/godot/PLAN.md](docs/godot/PLAN.md) | M0 to M5 roadmap and release criteria |
 | **Engine Specs** | [docs/engine/README.md](docs/engine/README.md) | WOLF opcode semantics, binary formats, and subsystems |
-| **Review Ledger** | [docs/reviews/README.md](docs/reviews/README.md) | 44 code reviews, bug audit logs, and platform remediation reports |
+| **Review Ledger** | [docs/reviews/README.md](docs/reviews/README.md) | Code reviews, full-project audits, and platform remediation reports |
 | **Asset Audit** | [docs/release/ASSET_AUDIT.md](docs/release/ASSET_AUDIT.md) | Inventory of 2,215 graphics, 316 audio files, and 23 `.wolf` archives |
 | **Agent Standards** | [AGENTS.md](AGENTS.md) | AI workflow, write scope isolation, and delivery gates |
 

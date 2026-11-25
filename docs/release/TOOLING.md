@@ -11,17 +11,17 @@ Rust 1.99.1 + MSVC 18.9 + wgpu/winit/glyphon/kira 全家桶 **已实测可编译
 
 ## 1. 快速进入环境
 
-git-bash（**必须用 msys 路径** `/e/...`，Windows 风格 `E:/...` 在 PATH 里静默失效）：
+git-bash：
 
 ```bash
-source "/e/Study/github program/imoto life/tools/env.sh"
+source tools/env.sh
 # [env] rustc 1.99.1 | rg 15.2.0
 ```
 
 PowerShell：
 
 ```powershell
-. "E:\Study\github program\imoto life\tools\env.ps1"
+. .\tools\env.ps1
 ```
 
 新开的终端（用户 PATH 已持久化，无需 source）：
@@ -31,7 +31,7 @@ PowerShell：
 
 | 组件 | 版本 | 位置 |
 | --- | --- | --- |
-| rustc | **1.99.1** (58cf8f9c3 2026-10-13) | `C:\Users\REISEN\.cargo\bin\rustc.exe` |
+| rustc | **1.99.1** (58cf8f9c3 2026-10-13) | `%USERPROFILE%\.cargo\bin\rustc.exe` |
 | cargo | **1.99.1** (5f94df478 2026-08-27) | 同上 |
 | rustup | 1.29.2 | 同上 |
 | rustfmt | 1.10.0-stable | 同上 |
@@ -155,7 +155,7 @@ OFFSCREEN RENDER OK
    `.tmpXXXXXX` 时被拒（`I/O error: 拒绝访问。 (os error 5)`），重试无效、手建 `binstall.toml` 也无效；
    而同样目录下 bash `echo >`、Python `tempfile`/`O_EXCL` 都正常。**用 `cargo install --locked` 代替**。
 2. **`sccache` 会让 MSVC 链接崩**：`rustc-wrapper = sccache` 后 build script 链接报
-   `LINK : fatal error LNK1104: 无法打开文件"C:\Users\REISEN\AppData\Local\Temp\lnk{GUID}.tmp"`。
+   `LINK : fatal error LNK1104: 无法打开文件"%LOCALAPPDATA%\Temp\lnk{GUID}.tmp"`。
    移除后恢复正常。**本机不要用 sccache**；16 核机器裸编译已经够快（全 wgpu 栈 44s）。
 
 同类现象还有 rustup 自拷贝被拒（`os error 5`，但手 `cp` 成功）——
