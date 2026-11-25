@@ -704,6 +704,12 @@ public partial class SaveImportTest : Node
                     GD.PrintErr($"RETAIL_EXPORT_FAILED: ImportRetailSystemSave failed on retail System.sav: {sysErr}");
                     return false;
                 }
+                if (!harness.Session.ImportRetailSystemSaveTo(retailSysSav, "system2.sav", out string sys2Err)
+                    || !File.Exists(Path.Combine(Path.GetDirectoryName(slot1Path)!, "system2.json")))
+                {
+                    GD.PrintErr($"RETAIL_EXPORT_FAILED: ImportRetailSystemSaveTo(system2.sav) failed: {sys2Err}");
+                    return false;
+                }
             }
 
             if (!harness.Session.ImportRetailSaveToSlot(savPath, 4, out string slotErr))
@@ -724,7 +730,9 @@ public partial class SaveImportTest : Node
             if (!harness.Session.ExportAllToRetailSavDir(outDir, true, out int expCount, out string expErr)
                 || expCount < 2
                 || !File.Exists(Path.Combine(outDir, "SaveData04.sav"))
-                || !File.Exists(Path.Combine(outDir, "System.sav")))
+                || !File.Exists(Path.Combine(outDir, "System.sav"))
+                || (File.Exists(Path.Combine(Path.GetDirectoryName(slot1Path)!, "system2.json"))
+                    && !File.Exists(Path.Combine(outDir, "system2.sav"))))
             {
                 GD.PrintErr($"RETAIL_EXPORT_FAILED: ExportAllToRetailSavDir failed count={expCount} err={expErr}");
                 return false;

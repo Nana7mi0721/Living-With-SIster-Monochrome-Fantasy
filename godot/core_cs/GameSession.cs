@@ -1431,6 +1431,8 @@ public sealed class GameSession
             state.Audio.Add(new SavedAudio { Channel = 1, File = data.BgsFile, Volume = 100, Loop = true, Tempo = 100 });
         }
 
+        SaveMigrator.Normalize(state);
+
         if (!ValidateSaveJson(SaveCodec.ToJson(state), out string validationError))
         {
             error = "converted save failed validation: " + validationError;
@@ -1467,13 +1469,22 @@ public sealed class GameSession
         LegacySaveImporter.ValidateFile(savPath, out error);
 
     /// <summary>Import a retail System.sav file into System.json without mutating the live session.</summary>
-    public bool ImportRetailSystemSave(string savPath, out string error)
+    public bool ImportRetailSystemSave(string savPath, out string error) =>
+        ImportRetailSystemSaveTo(savPath, "System.sav", out error);
+
+    /// <summary>Import a retail System.sav or system2.sav file into its matching JSON target without mutating the live session.</summary>
+    public bool ImportRetailSystemSaveTo(string savPath, string targetFileName, out string error)
     {
         if (string.IsNullOrWhiteSpace(savPath) || !File.Exists(savPath))
         {
             error = "retail system save file not found";
             return false;
         }
+        string cleanLeaf = Path.GetFileName((targetFileName ?? "").Replace('\\', '/'));
+        string saveTarget = cleanLeaf.Equals("system2.sav", StringComparison.OrdinalIgnoreCase)
+            || cleanLeaf.Equals("system2.json", StringComparison.OrdinalIgnoreCase)
+            ? "save/system2.sav"
+            : "Save/System.sav";
 
         LegacySaveImporter.SlotResult parsed;
         try
@@ -1507,7 +1518,7 @@ public sealed class GameSession
             state.CommonSelf.Add(SavedSelf(bank.Key, bank.Value));
         }
 
-        string systemPath = ResolveSaveTarget(new SaveTarget("Save/System.sav"));
+        string systemPath = ResolveSaveTarget(new SaveTarget(saveTarget));
         try
         {
             SaveCodec.Write(systemPath, state);
@@ -1557,23 +1568,26 @@ public sealed class GameSession
     }
 
     /// <summary>Export System.json to a retail WOLF System.sav file atomically.</summary>
-    public bool ExportSystemToRetailSav(string destPath, out string error)
+    public bool ExportSystemToRetailSav(string destPath, out string error) =>
+        ExportSystemTargetToRetailSav("Save/System.sav", destPath, "LWSMF System", out error);
+
+    private bool ExportSystemTargetToRetailSav(string saveTarget, string destPath, string label, out string error)
     {
         if (string.IsNullOrWhiteSpace(destPath))
         {
             error = "destination path is empty";
             return false;
         }
-        string systemPath = ResolveSaveTarget(new SaveTarget("Save/System.sav"));
+        string systemPath = ResolveSaveTarget(new SaveTarget(saveTarget));
         SaveState? state = SaveCodec.Read(systemPath);
         if (state == null)
         {
-            error = "System.json not found or unreadable";
+            error = $"{Path.GetFileName(systemPath)} not found or unreadable";
             return false;
         }
         try
         {
-            byte[] encoded = LegacySaveExporter.ExportSystemState(state, "LWSMF System");
+            byte[] encoded = LegacySaveExporter.ExportSystemState(state, label);
             LegacySaveExporter.WriteAtomic(destPath, encoded);
             error = "";
             return true;
@@ -1627,11 +1641,15 @@ public sealed class GameSession
                 }
             }
 
-            string systemPath = ResolveSaveTarget(new SaveTarget("Save/System.sav"));
-            if (SaveCodec.Exists(systemPath))
+            foreach (var (sysTarget, outLeaf, label) in new[]
             {
-                string outSys = Path.Combine(destDir, "System.sav");
-                if (ExportSystemToRetailSav(outSys, out _))
+                ("Save/System.sav", "System.sav", "LWSMF System"),
+                ("save/system2.sav", "system2.sav", "LWSMF System2")
+            })
+            {
+                string systemPath = ResolveSaveTarget(new SaveTarget(sysTarget));
+                if (SaveCodec.Exists(systemPath)
+                    && ExportSystemTargetToRetailSav(sysTarget, Path.Combine(destDir, outLeaf), label, out _))
                 {
                     exportedCount++;
                 }
@@ -1755,7 +1773,7 @@ public sealed class GameSession
         if (Phase == "failed") return false;
 
         EnsureAutoEvents().PrimeLatched(_vm.Vm);
-        _view.RestorePictures(data.PictureStates);
+        _view.RestorePictures(SaveMigrator.SanitizeRestoredPictures(data.PictureStates));
         _started = true;
         _view.SetStatus($"loaded retail save {slot.File} (map 1 day {_vm.Vm.Vars.Get(WolfIds.VarDay)})");
         UpdateMapHud(false);

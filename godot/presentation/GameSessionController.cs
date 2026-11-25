@@ -169,14 +169,17 @@ public partial class GameSessionController : Node
     }
 
     /// <summary>Import a retail System.sav file into System.json without altering the live session.</summary>
-    public bool ImportRetailSystemSave(string savPath)
+    public bool ImportRetailSystemSave(string savPath) => ImportRetailSystemSaveTo(savPath, "System.sav");
+
+    /// <summary>Import a retail System.sav or system2.sav file into its matching JSON file without altering the live session.</summary>
+    public bool ImportRetailSystemSaveTo(string savPath, string targetFileName)
     {
         if (_session == null)
         {
             LastError = "session not initialized";
             return false;
         }
-        bool ok = _session.ImportRetailSystemSave(savPath, out string error);
+        bool ok = _session.ImportRetailSystemSaveTo(savPath, targetFileName, out string error);
         LastError = ok ? "" : error;
         return ok;
     }

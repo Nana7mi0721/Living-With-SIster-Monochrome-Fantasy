@@ -142,6 +142,29 @@ public static class AutoEventsTest
         Check(stoppedLoaded.Stopped == 1 && restoredVm.FindInstance(77) == null,
             $"restored parallel auto-event must stop when condition turns false (stopped={stoppedLoaded.Stopped})");
 
+        // Loaded parallel event whose condition already held at PrimeLatched must stay suppressed under LoopVisualPainters
+        // until its condition drops false first (matches retail load suppression of stale CE506 / v610=1).
+        var loadEyeVm = new EventVm();
+        var eyeProg = Program.FromSlots(506, "eye-loop", new List<Slot> { Slot.Command(104) });
+        eyeProg.RunCondition = 2;
+        eyeProg.ConditionOperator = 1; // >=
+        eyeProg.ConditionVariable = 2_000_610;
+        eyeProg.ConditionValue = 1;
+        loadEyeVm.RegisterProgram(eyeProg);
+        loadEyeVm.Vars.Set(610, 1);
+        var loadEyeAuto = AutoEvents.FromPrograms(loadEyeVm.Programs.Values);
+        loadEyeAuto.PrimeLatched(loadEyeVm);
+        loadEyeAuto.LoopVisualPainters = true;
+        var postLoadSync = loadEyeAuto.Sync(loadEyeVm);
+        Check(postLoadSync.Started == 0 && !loadEyeAuto.IsRunning(loadEyeVm, 506),
+            "stale loaded condition (v610==1) must remain suppressed under LoopVisualPainters until cleared");
+        loadEyeVm.Vars.Set(610, 0);
+        loadEyeAuto.Sync(loadEyeVm);
+        loadEyeVm.Vars.Set(610, 1);
+        var rearmedSync = loadEyeAuto.Sync(loadEyeVm);
+        Check(rearmedSync.Started == 1 && loadEyeAuto.IsRunning(loadEyeVm, 506),
+            "once condition clears to 0 and returns to 1, CE506 must trigger normally");
+
         Console.WriteLine($"AUTO_EVENTS_TEST_OK count={auto.EventCount} start={opened.Started} resume={replayed.Started} gated={gated.Started}");
     }
 

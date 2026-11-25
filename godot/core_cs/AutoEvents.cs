@@ -50,6 +50,9 @@ public sealed class AutoEvents
     private readonly Dictionary<int, bool> _latched = new();
     private readonly Dictionary<int, int> _running = new();
     private readonly Dictionary<int, int> _starts = new();
+    // Non-allow-listed run_condition==2 events whose condition already held at save load
+    // stay suppressed until their gate variable drops back to false (prevents stale CE506/CE337 replay).
+    private readonly HashSet<int> _suppressedUntilFalse = new();
 
     private AutoEvents(List<AutoEvent> events)
     {
@@ -90,9 +93,15 @@ public sealed class AutoEvents
     {
         if (!Enabled) return;
         RebindRunning(vm);
+        _suppressedUntilFalse.Clear();
         foreach (var ev in _events)
         {
-            _latched[ev.Id] = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
+            bool now = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
+            _latched[ev.Id] = now;
+            if (!ev.ResumeOnLoad && now && !IsEventLive(vm, ev.Id))
+            {
+                _suppressedUntilFalse.Add(ev.Id);
+            }
         }
         Sync(vm);
     }
@@ -122,12 +131,17 @@ public sealed class AutoEvents
         foreach (var ev in _events)
         {
             bool now = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
+            if (!now)
+            {
+                _suppressedUntilFalse.Remove(ev.Id);
+            }
             bool alive = IsEventLive(vm, ev.Id);
             bool before = _latched.TryGetValue(ev.Id, out bool latched) && latched;
+            bool suppressed = _suppressedUntilFalse.Contains(ev.Id);
             bool shouldStart;
             if (LoopVisualPainters)
             {
-                bool replay = ev.ResumeOnLoad || (ev.IsParallel && ev.Id != 38);
+                bool replay = !suppressed && (ev.ResumeOnLoad || (ev.IsParallel && ev.Id != 38));
                 shouldStart = !alive && (replay ? now : (now && !before));
             }
             else

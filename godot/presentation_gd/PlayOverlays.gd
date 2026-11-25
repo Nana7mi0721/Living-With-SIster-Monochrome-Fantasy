@@ -1346,12 +1346,22 @@ static func _is_ignorable_save_archive_entry(entry_name: String) -> bool:
 	]
 
 
+static func _retail_system_target_name(file_name: String) -> String:
+	match file_name.get_file().to_lower():
+		"system.sav", "system.json":
+			return "System.json"
+		"system2.sav", "system2.json":
+			return "system2.json"
+		_:
+			return ""
+
+
 static func is_valid_save_archive_entry(entry_name: String) -> bool:
 	if not _is_safe_save_archive_path(entry_name):
 		return false
 	var parts := entry_name.replace("\\", "/").strip_edges().split("/", false)
 	var file_name := parts[-1].to_lower()
-	if file_name == "quicksave.json" or file_name == "system.json" or file_name == "system.sav":
+	if file_name == "quicksave.json" or not _retail_system_target_name(file_name).is_empty():
 		return true
 	if file_name.begins_with("save_") and file_name.ends_with(".json") and file_name.length() == 12:
 		var digits := file_name.substr(5, 2)
@@ -1605,8 +1615,9 @@ static func inspect_save_zip(zip_path: String, save_dir: String = "", session_ct
 						return {"ok": false, "error": "%s 校验失败：%s" % [leaf, sav_err]}
 		valid_names.append(leaf)
 		var conflict_target := leaf
-		if leaf_lower == "system.sav":
-			conflict_target = "System.json"
+		var sys_target := _retail_system_target_name(leaf_lower)
+		if not sys_target.is_empty():
+			conflict_target = sys_target
 		elif leaf_lower.ends_with(".sav"):
 			var sav_slot := _retail_sav_slot_from_name(leaf_lower)
 			if sav_slot > 0:
@@ -1647,9 +1658,14 @@ static func apply_save_zip(zip_path: String, save_dir: String, backup_dir: Strin
 				return {"ok": false, "error": "暂存原版存档失败：%s" % leaf, "imported": imported, "backup_path": backup_path}
 			var sav_ok := false
 			var sav_err := "当前会话不支持原版 .sav 导入"
-			if leaf_lower == "system.sav":
+			var sys_target := _retail_system_target_name(leaf_lower)
+			if sys_target == "System.json":
 				if session_ctrl != null and session_ctrl.has_method("ImportRetailSystemSave"):
 					sav_ok = bool(session_ctrl.call("ImportRetailSystemSave", tmp_sav))
+					sav_err = str(session_ctrl.get("LastError"))
+			elif not sys_target.is_empty():
+				if session_ctrl != null and session_ctrl.has_method("ImportRetailSystemSaveTo"):
+					sav_ok = bool(session_ctrl.call("ImportRetailSystemSaveTo", tmp_sav, leaf_lower))
 					sav_err = str(session_ctrl.get("LastError"))
 			else:
 				var slot_num := _retail_sav_slot_from_name(leaf_lower)
@@ -2041,7 +2057,8 @@ func _on_transfer_file_selected(path: String) -> void:
 		_pending_orig_leaf = path.get_file().uri_decode().get_file().to_lower()
 		var leaf_lower := _pending_orig_leaf
 		var target_slot := maxi(1, int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1)
-		var target_name := "System.json" if leaf_lower == "system.json" else ("save_%02d.json" % target_slot)
+		var sys_target := _retail_system_target_name(leaf_lower)
+		var target_name := sys_target if not sys_target.is_empty() else ("save_%02d.json" % target_slot)
 		var exists := FileAccess.file_exists(_transfer_save_dir.path_join(target_name))
 		if _transfer_status != null:
 			_transfer_status.text = "已选择 JSON 存档 %s -> %s%s" % [path.get_file(), target_name, "（将覆盖现有文件！）" if exists else ""]
@@ -2051,7 +2068,7 @@ func _on_transfer_file_selected(path: String) -> void:
 			_transfer_cancel_import_btn.visible = true
 		return
 
-	# Retail .sav (SaveDataNN.sav or System.sav)
+	# Retail .sav (SaveDataNN.sav, System.sav or system2.sav)
 	if _transfer_session != null and _transfer_session.has_method("ValidateRetailSave"):
 		var sav_err := str(_transfer_session.call("ValidateRetailSave", resolved_path))
 		if not sav_err.is_empty():
@@ -2063,10 +2080,11 @@ func _on_transfer_file_selected(path: String) -> void:
 	_pending_sav_path = resolved_path
 	_pending_orig_leaf = path.get_file().uri_decode().get_file().to_lower()
 	var orig_leaf := _pending_orig_leaf
-	if orig_leaf == "system.sav":
-		var sys_exists := FileAccess.file_exists(_transfer_save_dir.path_join("System.json"))
+	var sav_sys_target := _retail_system_target_name(orig_leaf)
+	if not sav_sys_target.is_empty():
+		var sys_exists := FileAccess.file_exists(_transfer_save_dir.path_join(sav_sys_target))
 		if _transfer_status != null:
-			_transfer_status.text = "已选择原版系统档 %s -> System.json%s" % [path.get_file(), "（将覆盖现有系统档！）" if sys_exists else ""]
+			_transfer_status.text = "已选择原版系统档 %s -> %s%s" % [path.get_file(), sav_sys_target, "（将覆盖现有系统档！）" if sys_exists else ""]
 	else:
 		var detected_slot := _retail_sav_slot_from_name(orig_leaf)
 		if detected_slot > 0 and _transfer_slot_spin != null:
@@ -2102,17 +2120,23 @@ func _commit_pending_import() -> void:
 		var ok := false
 		var err := "无法调用导入接口"
 		var success_msg := ""
+		var sys_target := _retail_system_target_name(leaf_lower)
 		if kind == "json":
-			var target_name := "System.json" if leaf_lower == "system.json" else ("save_%02d.json" % slot)
+			var target_name := sys_target if not sys_target.is_empty() else ("save_%02d.json" % slot)
 			var raw_bytes := FileAccess.get_file_as_bytes(_pending_sav_path)
 			ok = not raw_bytes.is_empty() and _write_file_atomic(_transfer_save_dir.path_join(target_name), raw_bytes)
 			err = "写入 JSON 存档失败"
 			success_msg = "已将 JSON 存档导入至 %s。" % target_name
-		elif leaf_lower == "system.sav":
+		elif sys_target == "System.json":
 			if _transfer_session != null and _transfer_session.has_method("ImportRetailSystemSave"):
 				ok = bool(_transfer_session.call("ImportRetailSystemSave", _pending_sav_path))
 				err = str(_transfer_session.get("LastError"))
 			success_msg = "已将原版系统档导入至 System.json。"
+		elif not sys_target.is_empty():
+			if _transfer_session != null and _transfer_session.has_method("ImportRetailSystemSaveTo"):
+				ok = bool(_transfer_session.call("ImportRetailSystemSaveTo", _pending_sav_path, leaf_lower))
+				err = str(_transfer_session.get("LastError"))
+			success_msg = "已将原版系统档导入至 %s。" % sys_target
 		else:
 			if _transfer_session != null and _transfer_session.has_method("ImportRetailSaveToSlot"):
 				ok = bool(_transfer_session.call("ImportRetailSaveToSlot", _pending_sav_path, slot))

@@ -884,8 +884,28 @@ public partial class SaveLoadTest : Node
         {
             Check(!iconGuard.Apply(0, Array.Empty<byte>(), Array.Empty<byte>()),
                 "WindowIcons.Apply must reject zero window handle and empty ICO payloads");
+            Check(!iconGuard.Refresh(0),
+                "WindowIcons.Refresh must reject a zero window handle before icons are applied");
             iconGuard.Release();
         }
+
+        // Retail toilet-DLC leaked #-6 eye overlay must be stripped on bedroom saves (no #-8 body),
+        // while preserved when paired with #-8 DLC_data/dlc_imouto01_01.jpg.
+        var leakedEyeSave = new SaveState { MapId = 1005, MapFile = "SampleMapA.mps" };
+        leakedEyeSave.Pictures.Add(new SavedPicture { Number = -7, Action = 0, File = "cg/bg_01_home_d.jpg" });
+        leakedEyeSave.Pictures.Add(new SavedPicture { Number = -6, Action = 0, File = "DLC_data/dlc_imouto01_eye.png", Anchor = 5 });
+        SaveState? cleanedEye = SaveCodec.FromJson(SaveCodec.ToJson(leakedEyeSave));
+        Check(cleanedEye != null && !cleanedEye.Pictures.Any(p => p.Number == -6) && cleanedEye.Pictures.Any(p => p.Number == -7),
+            "SaveMigrator must strip leaked #-6 DLC_data/dlc_imouto01_eye.png when #-8 toilet CG body is absent");
+
+        var pairedToiletPictures = new List<SavedPicture>
+        {
+            new() { Number = -8, Action = 0, File = "DLC_data/dlc_imouto01_01.jpg" },
+            new() { Number = -6, Action = 0, File = "DLC_data/dlc_imouto01_eye.png", Anchor = 5 },
+        };
+        List<SavedPicture> sanitizedPaired = SaveMigrator.SanitizeRestoredPictures(pairedToiletPictures);
+        Check(sanitizedPaired.Any(p => p.Number == -6) && sanitizedPaired.Any(p => p.Number == -8),
+            "SaveMigrator.SanitizeRestoredPictures must preserve #-6 eye overlay when #-8 toilet body is present");
 
         try { Directory.Delete(saveDir, true); }
         catch (IOException) { }

@@ -1099,8 +1099,8 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 		failures.append("is_valid_save_archive_entry must reject path traversal and unsupported filenames")
 	if not PlayOverlays.is_valid_save_archive_entry("save_01.json") or not PlayOverlays.is_valid_save_archive_entry("System.json"):
 		failures.append("is_valid_save_archive_entry must accept valid save_NN.json and System.json")
-	if not PlayOverlays.is_valid_save_archive_entry("SaveData01.sav") or not PlayOverlays.is_valid_save_archive_entry("System.sav"):
-		failures.append("is_valid_save_archive_entry must accept retail SaveDataNN.sav and System.sav")
+	if not PlayOverlays.is_valid_save_archive_entry("SaveData01.sav") or not PlayOverlays.is_valid_save_archive_entry("System.sav") or not PlayOverlays.is_valid_save_archive_entry("Save/system2.sav") or not PlayOverlays.is_valid_save_archive_entry("system2.json"):
+		failures.append("is_valid_save_archive_entry must accept retail SaveDataNN.sav, System.sav, system2.sav and system2.json")
 	var splash_script := load("res://presentation_gd/BootSplashOverlay.gd")
 	if splash_script == null:
 		failures.append("BootSplashOverlay.gd did not load")
@@ -1193,13 +1193,16 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 		zp3.start_file("Save/save_01.json")
 		zp3.write_file("{\"schema\":\"lwsmf.save\",\"schema_version\":2,\"vars\":[0,1]}".to_utf8_buffer())
 		zp3.close_file()
+		zp3.start_file("Save/system2.json")
+		zp3.write_file("{\"schema\":\"lwsmf.save\",\"schema_version\":2,\"vars\":[0,1]}".to_utf8_buffer())
+		zp3.close_file()
 		zp3.close()
 	var steam_insp: Dictionary = PlayOverlays.inspect_save_zip(steam_sidecar_zip, save_dir, root.session)
-	if not bool(steam_insp.get("ok", false)) or steam_insp.get("files", PackedStringArray()).size() != 1:
-		failures.append("inspect_save_zip must allow Steam Save.zip with steam_autocloud.vdf/OS sidecars: %s" % str(steam_insp))
+	if not bool(steam_insp.get("ok", false)) or steam_insp.get("files", PackedStringArray()).size() != 2:
+		failures.append("inspect_save_zip must allow Steam Save.zip with system2.json and steam_autocloud.vdf/OS sidecars: %s" % str(steam_insp))
 	var steam_apply: Dictionary = PlayOverlays.apply_save_zip(steam_sidecar_zip, save_dir, backup_dir, root.session)
-	if not bool(steam_apply.get("ok", false)) or int(steam_apply.get("imported", 0)) != 1 or FileAccess.file_exists(save_dir.path_join("steam_autocloud.vdf")):
-		failures.append("apply_save_zip must import save_01.json and skip steam_autocloud.vdf: %s" % str(steam_apply))
+	if not bool(steam_apply.get("ok", false)) or int(steam_apply.get("imported", 0)) != 2 or FileAccess.file_exists(save_dir.path_join("steam_autocloud.vdf")) or not FileAccess.file_exists(save_dir.path_join("system2.json")):
+		failures.append("apply_save_zip must import save_01.json + system2.json and skip steam_autocloud.vdf: %s" % str(steam_apply))
 
 	var traversal_sidecar_zip := transfer_dir.path_join("traversal_sidecar.zip")
 	var zp4 := ZIPPacker.new()
