@@ -26,7 +26,7 @@ def _kind_of(name: str) -> str:
 
 
 #: `all` 阶段的固定执行顺序；新增阶段时只改这里和 STAGES。
-ALL_STAGES = ("manifest", "programs", "database", "map-tiles", "validate")
+ALL_STAGES = ("programs", "database", "map-tiles", "manifest", "validate")
 
 #: 完整转换实际读取的 BasicData 文件；缺任何一个都在阶段 0 直接报错（exit 2）。
 REQUIRED_BASICDATA = (
@@ -131,7 +131,7 @@ def cmd_manifest(args) -> int:
         }
 
     artifacts = {}
-    for key, name in (("programs", args.programs_name), ("database", args.database_name)):
+    for key, name in (("programs", args.programs_name), ("database", args.database_name), ("map_tiles", args.map_tiles_name)):
         p = os.path.join(args.out, name)
         if os.path.exists(p):
             artifacts[key] = {"path": name, "bytes": os.path.getsize(p), "sha256": _sha(p)}
@@ -154,7 +154,7 @@ def cmd_manifest(args) -> int:
 
 
 def cmd_all(args) -> int:
-    """按 manifest -> programs -> database -> map-tiles -> validate 顺序执行完整转换。"""
+    """按 programs -> database -> map-tiles -> manifest -> validate 顺序执行完整转换。"""
     problem = _preflight_all(args)
     if problem:
         print(f"integrity check failed: {problem}", file=sys.stderr)
@@ -186,7 +186,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="python -m converter")
     sub = ap.add_subparsers(dest="stage", required=True)
     sub.add_parser("all", parents=[common],
-                   help="按 manifest -> programs -> database -> map-tiles -> validate 顺序执行完整转换")
+                   help="按 programs -> database -> map-tiles -> manifest -> validate 顺序执行完整转换")
     sub.add_parser("manifest", parents=[common], help="生成 manifest.json（含 sha256 基准校验）")
     sub.add_parser("programs", parents=[common], help="导出 programs.json")
     sub.add_parser("database", parents=[common], help="导出 database.json")

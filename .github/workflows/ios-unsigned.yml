@@ -32,6 +32,9 @@ jobs:
       - name: Install .NET iOS workload
         run: dotnet workload install ios
 
+      - name: Install Python icon dependencies
+        run: python3 -m pip install --disable-pip-version-check pillow
+
       - name: Download Godot 4.7.2 Mono macOS editor and templates
         run: |
           set -euo pipefail
@@ -68,9 +71,9 @@ jobs:
       - name: Upload engine-only IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lwsmf-${{ github.event.inputs.version }}-ios-arm64-unsigned
+          name: LWSMF-${{ github.event.inputs.version }}-ios-arm64
           path: |
-            dist/ios/${{ github.event.inputs.version }}/Lwsmf-${{ github.event.inputs.version }}-ios-arm64-unsigned.ipa
+            dist/ios/${{ github.event.inputs.version }}/LWSMF-${{ github.event.inputs.version }}-ios-arm64.ipa
             dist/ios/${{ github.event.inputs.version }}/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14

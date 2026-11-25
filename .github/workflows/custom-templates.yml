@@ -102,12 +102,18 @@ jobs:
             --preset-file godot/export_presets.cfg \
             --preset "Windows Desktop" \
             --set "custom_template/release=$(pwd)/dist/templates/windows/windows_release_x86_64.exe"
+          python tools/sync_release_icons.py \
+            --source-dir "$RUNNER_TEMP/missing_publish" \
+            --out-dir "$RUNNER_TEMP/release_icons" \
+            --stage-res godot/assets/boot/generated \
+            --allow-placeholder
+          trap 'rm -rf godot/assets/boot/generated; cp -f "$RUNNER_TEMP/export_presets.bak" godot/export_presets.cfg' EXIT
           dotnet build godot/Lwsmf.csproj -c ExportRelease
           "$GODOT_BIN" --headless --path godot --import --quit || true
           mkdir -p godot/build/release
           "$GODOT_BIN" --headless --path godot --export-release "Windows Desktop"
           test -f godot/build/release/Lwsmf.exe
-          godot/build/release/Lwsmf.exe --headless --quit || true
+          godot/build/release/Lwsmf.exe --headless --quit
 
       - name: Upload Windows custom template
         uses: actions/upload-artifact@v4
@@ -259,6 +265,7 @@ jobs:
 
       - name: Smoke-build unsigned iOS IPA with custom template
         run: |
+          python3 -m pip install --disable-pip-version-check pillow
           bash tools/package_ios.sh \
             --version "0.1.0-custom" \
             --template "$(pwd)/dist/templates/ios/ios.zip" \

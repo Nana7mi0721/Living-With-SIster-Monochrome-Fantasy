@@ -82,7 +82,7 @@ class TestAllStage(unittest.TestCase):
             f"CONVERT_ALL_OK root={self.root} out={self.out} reports={self.reports}",
             stdout,
         )
-        self.assertIn("[1/5] manifest ...", stdout)
+        self.assertIn("[1/5] programs ...", stdout)
         self.assertIn("[5/5] validate OK", stdout)
         self.assertEqual(stderr, "")
 
@@ -92,7 +92,7 @@ class TestAllStage(unittest.TestCase):
             code, stdout, stderr = self._run(self._argv())
 
         self.assertEqual(code, 7)
-        self.assertEqual([call[0] for call in calls], ["manifest", "programs", "database"])
+        self.assertEqual([call[0] for call in calls], ["programs", "database"])
         self.assertNotIn("CONVERT_ALL_OK", stdout)
         self.assertIn("database FAILED (exit 7)", stderr)
         self.assertNotIn("map-tiles", stderr)
@@ -103,7 +103,7 @@ class TestAllStage(unittest.TestCase):
             code, stdout, stderr = self._run(self._argv())
 
         self.assertEqual(code, 1)
-        self.assertEqual([call[0] for call in calls], ["manifest", "programs"])
+        self.assertEqual([call[0] for call in calls], ["programs"])
         self.assertNotIn("CONVERT_ALL_OK", stdout)
         self.assertIn("programs FAILED (exit -2)", stderr)
 
@@ -171,7 +171,7 @@ class TestAllStage(unittest.TestCase):
         def boom(args) -> int:
             raise RuntimeError("stage exploded")
 
-        with mock.patch.dict(cli.STAGES, {"manifest": boom}):
+        with mock.patch.dict(cli.STAGES, {"programs": boom}):
             with self.assertRaises(RuntimeError):
                 self._run(self._argv())
 

@@ -27,6 +27,7 @@
 | `package_release.sh` | Windows | 执行 Release 编译、嵌入 PCK、清洗临时文件并打包独立分发包 |
 | `package_android.sh` | Android | Android APK 导出构建与素材包嵌入 |
 | `package_ios.sh` | iOS | iOS Xcode 工程导出与无签名包归档流水线 |
+| `sync_release_icons.py` | 全平台 | 从本地 `_publish` 素材派生三端应用图标、Windows 窗口图标与安装器海报；海报原字节直通，不裁切、不重编码 |
 | `brotli_json.py` | 全平台 | 对 `game_data/*.json` 进行无损 Brotli 高压缩预处理（体积缩减 ~80%） |
 | `installer/` | Windows | Inno Setup 安装包脚本模板与构建定义 |
 | `mobile/` | Android / iOS | 移动端环境检测、APK 后处理、静态库剥离（`strip_android_static_libs.py`）工具 |

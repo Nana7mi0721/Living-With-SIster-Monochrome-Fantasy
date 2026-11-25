@@ -43,8 +43,8 @@ PROJECT_FILES = ("CDataBase.project", "DataBase.project", "SysDatabase.project")
 FORBIDDEN_SAVE_RE = re.compile(r"^(savedata.*\.sav|save_\d+\.json|quicksave\.json|system\.json)(\.bak)?$", re.I)
 FORBIDDEN_APK_PREFIXES = (
     "addons/godot_ai/",
-    "res://tests/",
-    "res://tests_gd/",
+    "assets/tests/",
+    "assets/tests_gd/",
     "assets/mobile_data/work/all/save/",
 )
 

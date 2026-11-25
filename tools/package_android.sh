@@ -7,6 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 VERSION="0.1.0"
+APP_LABEL="妹相随"
 SLIM=false
 BROTLI=false
 BUILD_MODE="debug"
@@ -20,6 +21,7 @@ MEDIA_PAK_OPT=""
 OUT_DIR=""
 DRY_RUN=false
 FORCE=false
+ALLOW_PLACEHOLDER=false
 
 GODOT_BIN="${GODOT_BIN:-${GODOT:-$(command -v godot 2>/dev/null || command -v Godot_v4.7.2-stable_mono_win64_console.exe 2>/dev/null || true)}}"
 DOTNET_BIN="${DOTNET_BIN:-${DOTNET:-$(command -v dotnet 2>/dev/null || true)}}"
@@ -44,6 +46,7 @@ Usage: tools/package_android.sh [options]
   --out-dir DIR     output directory (default: dist/android/<ver> or dist/android-slim/<ver>)
   --dry-run         run preflight env check + payload plan only (no APK build)
   --force           replace existing output APK
+  --allow-placeholder  allow placeholder launcher icons if _publish artwork is absent
   -h, --help        show this help
 EOF
 }
@@ -86,6 +89,7 @@ while [ "$#" -gt 0 ]; do
     --out-dir)  need_arg "$@"; OUT_DIR="$2"; shift 2 ;;
     --dry-run)  DRY_RUN=true; shift ;;
     --force)    FORCE=true; shift ;;
+    --allow-placeholder) ALLOW_PLACEHOLDER=true; shift ;;
     -h|--help)  usage; exit 0 ;;
     *) echo "ERROR: unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -126,13 +130,24 @@ fi
 
 SUFFIX=""
 [ "$SLIM" = true ] && SUFFIX="-slim"
-APK_NAME="Lwsmf-${VERSION}-android-arm64${SUFFIX}.apk"
+APK_NAME="LWSMF-${VERSION}-android-arm64${SUFFIX}.apk"
 APK_OUT="$OUT_DIR/$APK_NAME"
+VERSION_CODE="$("$PYTHON_BIN" - "$VERSION" <<'PY'
+import re
+import sys
+
+match = re.match(r"^(\d+)\.(\d+)\.(\d+)", sys.argv[1])
+print(int(match.group(1)) * 10000 + int(match.group(2)) * 100 + int(match.group(3)) if match else 1)
+PY
+)"
 
 STAGE_DIR="$ROOT/godot/mobile_data"
 PRESET_FILE="$ROOT/godot/export_presets.cfg"
 PRESET_BAK="$ROOT/work/out/export_presets.android.$$.cfg"
 SLIM_PAK="$ROOT/work/out/android/media-slim.pak"
+ICON_OUT="$ROOT/work/out/release_icons"
+ICON_STAGE="$ROOT/godot/assets/boot/generated"
+ICON_STAGE_CREATED=false
 SLN="$ROOT/godot/Lwsmf.sln"
 SLN_CREATED=false
 
@@ -142,6 +157,10 @@ cleanup() {
     cp -f "$PRESET_BAK" "$PRESET_FILE"
     rm -f "$PRESET_BAK"
   fi
+  if [ "$ICON_STAGE_CREATED" = true ]; then
+    rm -rf "$ICON_STAGE"
+  fi
+  rm -rf "$ICON_OUT"
   if [ "$SLN_CREATED" = true ]; then
     rm -f "$SLN"
   fi
@@ -199,9 +218,26 @@ STAGE_ARGS=(stage --version "$VERSION" --game-data "$GD_WIN" --work-all "$WA_WIN
 [ "$BROTLI" = true ] && STAGE_ARGS+=(--brotli)
 "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/android_data.py")" "${STAGE_ARGS[@]}"
 
+echo "== preparing Android icons =="
+[ ! -d "$ICON_STAGE" ] && ICON_STAGE_CREATED=true
+PUBLISH_SRC="${LWSMF_PUBLISH_DIR:-$ROOT/work/retail_dat/_publish}"
+ICON_ARGS=(
+  --source-dir "$(to_win_path "$PUBLISH_SRC")"
+  --out-dir "$(to_win_path "$ICON_OUT")"
+  --stage-res "$(to_win_path "$ICON_STAGE")"
+)
+if [ "$ALLOW_PLACEHOLDER" = true ] || [ "${LWSMF_ALLOW_PLACEHOLDER_ICONS:-0}" = "1" ] || { [ "$BUILD_MODE" = "debug" ] && [ ! -d "$PUBLISH_SRC" ]; }; then
+  ICON_ARGS+=(--allow-placeholder)
+fi
+"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/sync_release_icons.py")" "${ICON_ARGS[@]}"
+
 mkdir -p "$ROOT/work/out" "$OUT_DIR"
 cp -f "$PRESET_FILE" "$PRESET_BAK"
-PATCH_SETS=()
+PATCH_SETS=(
+  --set "package/name=$APP_LABEL"
+  --set "version/name=$VERSION"
+  --set "version/code=$VERSION_CODE"
+)
 [ -n "$TEMPLATE_OPT" ] && PATCH_SETS+=(--set "custom_template/${BUILD_MODE}=$(to_win_path "$TEMPLATE_OPT")")
 if [ "$BUILD_MODE" = "debug" ]; then
   SIGN_KS="${KEYSTORE_OPT:-$ROOT/work/out/android/debug.keystore}"
@@ -217,8 +253,8 @@ fi
 
 if [ ! -f "$SLN" ]; then
   "$DOTNET_BIN" new sln --format sln --name Lwsmf --output "$(to_win_path "$ROOT/godot")" >/dev/null
-  "$DOTNET_BIN" sln "$(to_win_path "$SLN")" add "$(to_win_path "$ROOT/godot/Lwsmf.csproj")" >/dev/null
   SLN_CREATED=true
+  "$DOTNET_BIN" sln "$(to_win_path "$SLN")" add "$(to_win_path "$ROOT/godot/Lwsmf.csproj")" >/dev/null
 fi
 
 echo "== exporting Android APK ($BUILD_MODE) =="
@@ -229,6 +265,7 @@ if [ "$BUILD_MODE" = "release" ]; then
   EXPORT_FLAG="--export-release"
 fi
 "$DOTNET_BIN" build "$(to_win_path "$ROOT/godot/Lwsmf.csproj")" -c "$DOTNET_CFG" -p:GodotTargetPlatform=android -v:minimal
+"$GODOT_BIN" --headless --path "$(to_win_path "$ROOT/godot")" --import --quit >/dev/null 2>&1 || true
 "$GODOT_BIN" --headless --path "$(to_win_path "$ROOT/godot")" "$EXPORT_FLAG" "Android" "$(to_win_path "$APK_OUT")"
 
 echo "== verifying exported APK =="

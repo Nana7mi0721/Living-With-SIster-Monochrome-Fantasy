@@ -42,7 +42,7 @@ jobs:
         run: python tools/release_audit.py --repo-scan
 
       - name: Mobile Tools Compile Check
-        run: python -m py_compile tools/mobile/windows_pe.py tools/mobile/android_data.py tools/mobile/env_check.py tools/mobile/export_preset_template.py tools/mobile/ios_inject_data.py tools/mobile/postprocess_android_apk.py tools/mobile/strip_android_static_libs.py tools/mobile/test_mobile_tools.py tools/brotli_json.py tools/templates/custom_2d_mono.py tools/templates/build_custom_template.py tools/verify_hd_manifest.py tools/upscale_assets.py tools/release_audit.py
+        run: python -m py_compile tools/mobile/windows_pe.py tools/mobile/android_data.py tools/mobile/env_check.py tools/mobile/export_preset_template.py tools/mobile/ios_inject_data.py tools/mobile/postprocess_android_apk.py tools/mobile/strip_android_static_libs.py tools/mobile/test_mobile_tools.py tools/audit_cross_platform_assets.py tools/brotli_json.py tools/pack_media.py tools/sync_boot_assets.py tools/sync_release_icons.py tools/templates/custom_2d_mono.py tools/templates/build_custom_template.py tools/verify_hd_manifest.py tools/upscale_assets.py tools/release_audit.py tools/lint_decisions.py
 
       - name: Mobile Tools CLI Smoke
         run: python tools/mobile/windows_pe.py --help
@@ -58,7 +58,7 @@ jobs:
 
       - name: Release Script Syntax Check
         shell: bash
-        run: bash -n tools/package_release.sh tools/package_android.sh tools/package_ios.sh
+        run: bash -n tools/package_release.sh tools/package_android.sh tools/package_ios.sh tools/godot_check.sh tools/godot_smoke.sh tools/check_oracle.sh
 
   rust-check:
     name: Rust Workspace Check & Oracle Test

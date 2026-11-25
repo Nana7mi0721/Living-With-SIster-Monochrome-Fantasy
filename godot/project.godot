@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="LWSMF Remake"
-config/description="Living With Sister Monochrome Fantasy — Godot 4.7.2 .NET remake (M0 skeleton)"
+config/name="妹相随～黑白世界的缤纷冒险～"
+config/description="妹相随～黑白世界的缤纷冒险～ Godot 4.7.2 .NET 重制版"
 run/main_scene="res://scenes/GameRoot.tscn"
 run/max_fps=60
 config/use_custom_user_dir=true

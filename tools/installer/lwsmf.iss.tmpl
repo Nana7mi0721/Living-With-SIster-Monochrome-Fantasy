@@ -1,4 +1,4 @@
-; Inno Setup LZMA2 installer template for LWSMF Remake (Windows x64).
+; Inno Setup LZMA2 installer template for 妹相随～黑白世界的缤纷冒险～ (Windows x64).
 ; Solid-compresses executables, .NET 8 assemblies, and game_data while keeping
 ; already-packed media archives uncompressed (`Flags: nocompression`).
 
@@ -6,8 +6,10 @@
 AppId={{8F2E4B7C-1D63-4A5E-9C8A-5D90266BF304}
 AppName=@APP_NAME@
 AppVersion=@APP_VERSION@
-DefaultDirName={autopf}\LWSMF Remake
-DefaultGroupName=LWSMF Remake
+AppVerName=@APP_NAME@ @APP_VERSION@
+AppPublisher=Inusuku
+DefaultDirName={autopf}\@APP_NAME@
+DefaultGroupName=@APP_NAME@
 OutputDir=@OUTPUT_DIR@
 OutputBaseFilename=@OUTPUT_BASE_FILENAME@
 Compression=lzma2/ultra64
@@ -17,7 +19,17 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 DisableProgramGroupPage=yes
+WizardStyle=modern
+SetupIconFile=@SETUP_ICON@
+WizardImageFile=@SETUP_POSTER@
+WizardImageStretch=yes
+WizardKeepAspectRatio=yes
 UninstallDisplayIcon={app}\game\Lwsmf.exe
+VersionInfoCompany=Inusuku
+VersionInfoDescription=@APP_NAME@ 安装程序
+VersionInfoCopyright=Copyright (C) 2026 Inusuku. All rights reserved.
+VersionInfoProductName=@APP_NAME@
+VersionInfoProductVersion=@APP_VERSION@
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -29,11 +41,11 @@ Source: "@STAGE_DIR@\work\all\media.pak"; DestDir: "{app}\work\all"; Flags: igno
 Source: "@STAGE_DIR@\work\all\media_hd.pak"; DestDir: "{app}\work\all"; Flags: ignoreversion nocompression skipifsourcedoesntexist
 
 [Icons]
-Name: "{autoprograms}\LWSMF Remake"; Filename: "{app}\game\Lwsmf.exe"
-Name: "{autodesktop}\LWSMF Remake"; Filename: "{app}\game\Lwsmf.exe"; Tasks: desktopicon
+Name: "{autoprograms}\@APP_NAME@"; Filename: "{app}\game\Lwsmf.exe"
+Name: "{autodesktop}\@APP_NAME@"; Filename: "{app}\game\Lwsmf.exe"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Run]
-Filename: "{app}\game\Lwsmf.exe"; Description: "{cm:LaunchProgram,LWSMF Remake}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\game\Lwsmf.exe"; Description: "{cm:LaunchProgram,@APP_NAME@}"; Flags: nowait postinstall skipifsilent

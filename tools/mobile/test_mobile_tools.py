@@ -34,6 +34,7 @@ import postprocess_android_apk  # noqa: E402
 import release_audit  # noqa: E402
 import strip_android_static_libs  # noqa: E402
 import sync_boot_assets  # noqa: E402
+import sync_release_icons  # noqa: E402
 import windows_pe  # noqa: E402
 
 
@@ -597,6 +598,7 @@ class MobileToolsTest(unittest.TestCase):
                 "game/data_Lwsmf_windows_x86_64/Lwsmf.dll",
                 "converter/cli.py",
                 "converter/convert.bat",
+                "docs/BASELINE.json",
                 "README.txt",
                 "按键说明.txt",
             ):
@@ -626,6 +628,15 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("media.pak", iss_tmpl)
         self.assertIn("media_hd.pak", iss_tmpl)
         self.assertIn("nocompression", iss_tmpl)
+        self.assertIn("SetupIconFile=@SETUP_ICON@", iss_tmpl)
+        self.assertIn("WizardImageFile=@SETUP_POSTER@", iss_tmpl)
+        self.assertIn("WizardImageStretch=yes", iss_tmpl)
+        self.assertIn("WizardKeepAspectRatio=yes", iss_tmpl)
+        self.assertNotIn("WizardBackImageFile", iss_tmpl)
+        self.assertIn("AppPublisher=Inusuku", iss_tmpl)
+        self.assertIn("Inusuku. All rights reserved.", iss_tmpl)
+        self.assertIn("DefaultDirName={autopf}\\@APP_NAME@", iss_tmpl)
+        self.assertNotIn("LWSMF Remake", iss_tmpl)
 
         self.assertEqual(release_audit.repo_scan(REPO_ROOT), [])
 
@@ -1097,15 +1108,25 @@ class MobileToolsTest(unittest.TestCase):
             self.assertIn(line, proj_text)
 
         presets = env_check.parse_export_presets(REPO_ROOT / "godot/export_presets.cfg")
-        self.assertEqual(presets["Android"]["launcher_icons/main_192x192"], "res://assets/boot/android_icon_192.png")
+        self.assertEqual(presets["Android"]["launcher_icons/main_192x192"], "res://assets/boot/generated/android_icon_192.png")
         self.assertEqual(
             presets["Android"]["launcher_icons/adaptive_foreground_432x432"],
-            "res://assets/boot/android_adaptive_fg_432.png",
+            "res://assets/boot/generated/android_adaptive_fg_432.png",
         )
         self.assertEqual(
             presets["Android"]["launcher_icons/adaptive_background_432x432"],
-            "res://assets/boot/android_adaptive_bg_432.png",
+            "res://assets/boot/generated/android_adaptive_bg_432.png",
         )
+        self.assertEqual(presets["Android"]["package/name"], "妹相随")
+        self.assertEqual(presets["Windows Desktop"]["application/icon"], "res://assets/boot/generated/icon_pc.ico")
+        self.assertEqual(presets["Windows Desktop"]["application/company_name"], "Inusuku")
+        self.assertEqual(presets["Windows Desktop"]["application/product_name"], "妹相随～黑白世界的缤纷冒险～")
+        self.assertEqual(presets["Windows Desktop"]["application/file_description"], "妹相随～黑白世界的缤纷冒险～")
+        self.assertIn("Inusuku", presets["Windows Desktop"]["application/copyright"])
+        self.assertIn("assets/boot/generated/*.bin", presets["Windows Desktop"]["include_filter"])
+        self.assertEqual(presets["iOS"]["icons/icon_1024x1024"], "res://assets/boot/generated/ios_icon_1024.png")
+        self.assertIn("CFBundleDisplayName", presets["iOS"]["application/additional_plist_content"])
+        self.assertIn("妹相随", presets["iOS"]["application/additional_plist_content"])
         self.assertEqual(presets["iOS"]["entitlements/increased_memory_limit"], "true")
         self.assertEqual(presets["iOS"]["storyboard/use_launch_screen_storyboard"], "true")
         self.assertEqual(presets["iOS"]["storyboard/image_scale_mode"], "1")
@@ -1116,9 +1137,23 @@ class MobileToolsTest(unittest.TestCase):
 
         ios_script = (REPO_ROOT / "tools/package_ios.sh").read_text(encoding="utf-8")
         self.assertIn("SplashImage.imageset", ios_script)
+        self.assertIn("LWSMF-${VERSION}-ios-arm64.ipa", ios_script)
+        self.assertIn("--allow-placeholder", ios_script)
 
         rel_script = (REPO_ROOT / "tools/package_release.sh").read_text(encoding="utf-8")
         self.assertIn("if pck.is_file()", rel_script)
+        self.assertIn("PKG_NAME=\"LWSMF-${VERSION}-windows-x64\"", rel_script)
+        self.assertIn("sync_release_icons.py", rel_script)
+
+        android_script = (REPO_ROOT / "tools/package_android.sh").read_text(encoding="utf-8")
+        self.assertIn("LWSMF-${VERSION}-android-arm64${SUFFIX}.apk", android_script)
+        self.assertIn("APP_LABEL=\"妹相随\"", android_script)
+
+        game_root = (REPO_ROOT / "godot/presentation_gd/GameRoot.gd").read_text(encoding="utf-8")
+        self.assertIn("icon_pc_dockbar.bin", game_root)
+        self.assertIn("icon_pc_corner.bin", game_root)
+        self.assertNotIn("icon_pc_dockbar.ico", game_root)
+        self.assertNotIn("icon_pc_corner.ico", game_root)
 
     def test_sync_boot_assets_from_retail_logo_and_pak(self) -> None:
         import io as _io
@@ -1156,6 +1191,92 @@ class MobileToolsTest(unittest.TestCase):
             )
             self.assertEqual(rc2, 0)
             self.assertEqual(sync_boot_assets.read_png_dimensions(out_loose / "splash_static.png"), (64, 36))
+
+    def test_sync_release_icons_and_installer_artwork(self) -> None:
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            source = t / "publish"
+            source.mkdir()
+            mobile = Image.new("RGB", (64, 64), (24, 26, 32))
+            mobile.save(source / "icon_mobile.jpg", format="JPEG")
+            for name in ("icon_pc.png", "icon_pc_dockbar.png", "icon_pc_corner.png"):
+                img = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+                img.paste((220, 224, 232, 255), (96, 96, 416, 416))
+                img.save(source / name, format="PNG")
+            Image.new("RGB", (164, 314), (80, 120, 180)).save(source / "setup_poster.png", format="PNG")
+
+            out = t / "out"
+            stage = t / "stage"
+            rc = sync_release_icons.main(
+                [
+                    "--source-dir",
+                    str(source),
+                    "--out-dir",
+                    str(out),
+                    "--stage-res",
+                    str(stage),
+                ]
+            )
+            self.assertEqual(rc, 0)
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out / "res/android_icon_192.png"), (192, 192))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out / "res/android_adaptive_fg_432.png"), (432, 432))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out / "res/android_adaptive_bg_432.png"), (432, 432))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out / "res/ios_icon_1024.png"), (1024, 1024))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out / "installer/setup_poster.png"), (164, 314))
+            self.assertEqual(
+                (out / "installer/setup_poster.png").read_bytes(),
+                (source / "setup_poster.png").read_bytes(),
+            )
+            for name in ("icon_pc.ico", "icon_pc_dockbar.ico", "icon_pc_corner.ico"):
+                with Image.open(out / "res" / name) as ico:
+                    self.assertIn((16, 16), ico.info["sizes"])
+                    self.assertIn((256, 256), ico.info["sizes"])
+            self.assertEqual(
+                (stage / "icon_pc_dockbar.ico").read_bytes(),
+                (out / "res/icon_pc_dockbar.ico").read_bytes(),
+            )
+            for name in ("icon_pc_dockbar.bin", "icon_pc_corner.bin"):
+                self.assertEqual(
+                    (stage / name).read_bytes(),
+                    (out / "res" / name).read_bytes(),
+                )
+                self.assertEqual(
+                    (out / "res" / name).read_bytes(),
+                    (out / "res" / name.replace(".bin", ".ico")).read_bytes(),
+                )
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertFalse(manifest["placeholder"])
+
+            placeholder_out = t / "placeholder"
+            rc2 = sync_release_icons.main(
+                [
+                    "--source-dir",
+                    str(t / "missing"),
+                    "--out-dir",
+                    str(placeholder_out),
+                    "--allow-placeholder",
+                ]
+            )
+            self.assertEqual(rc2, 0)
+            manifest2 = json.loads((placeholder_out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertTrue(manifest2["placeholder"])
+
+    def test_verify_apk_rejects_leaked_test_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            gd, wa = _make_fake_payload(t, include_font=True)
+            staged = t / "staged"
+            rc = android_data.main(
+                ["stage", "--version", "0.1.0", "--game-data", str(gd), "--work-all", str(wa), "--dest", str(staged), "--allow-temp"]
+            )
+            self.assertEqual(rc, 0)
+            apk = t / "leaked_tests.apk"
+            _build_valid_apk(apk, staged)
+            with zipfile.ZipFile(apk, "a") as zf:
+                zf.writestr("assets/tests/smoke.tscn", "[gd_scene]\n")
+            self.assertNotEqual(android_data.main(["verify-apk", str(apk)]), 0)
 
 
 if __name__ == "__main__":

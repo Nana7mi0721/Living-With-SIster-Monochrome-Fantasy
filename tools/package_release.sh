@@ -29,19 +29,22 @@ export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_NOLOGO=1
 
 VERSION="0.1.0"
+WINDOWS_APP_NAME="妹相随～黑白世界的缤纷冒险～"
 DEMO=false
 SLIM=false
 HD=false
 BROTLI=false
 INSTALLER=false
+ALLOW_PLACEHOLDER=false
 TEMPLATE_OPT=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --demo) DEMO=true; shift ;;
+    --demo) DEMO=true; ALLOW_PLACEHOLDER=true; shift ;;
     --slim) SLIM=true; shift ;;
     --hd) HD=true; shift ;;
     --brotli) BROTLI=true; shift ;;
     --installer) INSTALLER=true; shift ;;
+    --allow-placeholder) ALLOW_PLACEHOLDER=true; shift ;;
     --version)
       if [ "$#" -lt 2 ]; then
         echo "ERROR: --version requires a value" >&2
@@ -59,22 +62,20 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     *)
-      echo "usage: tools/package_release.sh [--demo] [--slim] [--hd] [--brotli] [--installer] [--version VER] [--template FILE]" >&2
+      echo "usage: tools/package_release.sh [--demo] [--slim] [--hd] [--brotli] [--installer] [--allow-placeholder] [--version VER] [--template FILE]" >&2
       exit 2
       ;;
   esac
 done
 
-PKG_NAME="Lwsmf-win64"
-ZIP_NAME="Lwsmf-win64.zip"
+PKG_NAME="LWSMF-${VERSION}-windows-x64"
 if [ "$SLIM" = true ]; then
-  PKG_NAME="Lwsmf-win64-slim"
-  ZIP_NAME="Lwsmf-win64-slim.zip"
+  PKG_NAME="${PKG_NAME}-slim"
 fi
 if [ "$HD" = true ]; then
   PKG_NAME="$PKG_NAME-hd"
-  ZIP_NAME="${PKG_NAME}.zip"
 fi
+ZIP_NAME="${PKG_NAME}.zip"
 
 OUT="$ROOT/dist/$PKG_NAME"
 ZIP_OUT="$ROOT/dist/$ZIP_NAME"
@@ -87,6 +88,9 @@ SLN="$ROOT/godot/Lwsmf.sln"
 SLN_CREATED=false
 PRESET_FILE="$ROOT/godot/export_presets.cfg"
 PRESET_BAK="$LOG_DIR/export_presets.win.$$.cfg"
+ICON_OUT="$LOG_DIR/release_icons"
+ICON_STAGE="$ROOT/godot/assets/boot/generated"
+ICON_STAGE_CREATED=false
 
 cleanup() {
   if [ -n "${STAGE:-}" ] && [ -d "$STAGE" ]; then
@@ -96,6 +100,10 @@ cleanup() {
     cp -f "$PRESET_BAK" "$PRESET_FILE"
     rm -f "$PRESET_BAK"
   fi
+  if [ "$ICON_STAGE_CREATED" = true ]; then
+    rm -rf "$ICON_STAGE"
+  fi
+  rm -rf "$ICON_OUT"
   if [ "$SLN_CREATED" = true ]; then
     rm -f "$SLN"
   fi
@@ -119,8 +127,8 @@ if [ ! -f "$SLN" ]; then
   echo "== creating temporary solution for Godot .NET export =="
   "$DOTNET_BIN" new sln --format sln --name Lwsmf --output "$ROOT/godot" >/dev/null 2>&1 \
     || "$DOTNET_BIN" new sln --name Lwsmf --output "$ROOT/godot" >/dev/null
-  "$DOTNET_BIN" sln "$SLN" add "$ROOT/godot/Lwsmf.csproj" >/dev/null
   SLN_CREATED=true
+  "$DOTNET_BIN" sln "$SLN" add "$ROOT/godot/Lwsmf.csproj" >/dev/null
 fi
 
 to_win_path() {
@@ -136,20 +144,51 @@ to_win_path() {
 echo "== dotnet build (-c Release) =="
 "$DOTNET_BIN" build "$ROOT/godot/Lwsmf.csproj" -c Release -v:minimal 2>&1 | tee "$BUILD_LOG"
 
+WIN_VERSION="$("$PYTHON_BIN" - "$VERSION" <<'PY'
+import re
+import sys
+
+match = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?", sys.argv[1])
+print(".".join(match.groups(default="0")) if match else "0.0.0.0")
+PY
+)"
+
+echo "== preparing Windows icons and installer artwork =="
+[ ! -d "$ICON_STAGE" ] && ICON_STAGE_CREATED=true
+ICON_ARGS=(
+  --source-dir "$(to_win_path "${LWSMF_PUBLISH_DIR:-$ROOT/work/retail_dat/_publish}")"
+  --out-dir "$(to_win_path "$ICON_OUT")"
+  --stage-res "$(to_win_path "$ICON_STAGE")"
+)
+if [ "$ALLOW_PLACEHOLDER" = true ] || [ "${LWSMF_ALLOW_PLACEHOLDER_ICONS:-0}" = "1" ]; then
+  ICON_ARGS+=(--allow-placeholder)
+fi
+"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/sync_release_icons.py")" "${ICON_ARGS[@]}"
+
+cp -f "$PRESET_FILE" "$PRESET_BAK"
+PATCH_SETS=(
+  --set "application/file_version=$WIN_VERSION"
+  --set "application/product_version=$WIN_VERSION"
+  --set "application/company_name=Inusuku"
+  --set "application/product_name=$WINDOWS_APP_NAME"
+  --set "application/file_description=$WINDOWS_APP_NAME"
+  --set "application/copyright=Copyright (C) 2026 Inusuku. All rights reserved."
+)
 if [ -n "$TEMPLATE_OPT" ]; then
   TEMPLATE_WIN="$(to_win_path "$TEMPLATE_OPT")"
   if [ ! -f "$TEMPLATE_WIN" ] && [ ! -f "$TEMPLATE_OPT" ]; then
     echo "ERROR: custom release template not found: $TEMPLATE_OPT" >&2
     exit 2
   fi
-  cp -f "$PRESET_FILE" "$PRESET_BAK"
-  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/export_preset_template.py")" \
-    --preset-file "$(to_win_path "$PRESET_FILE")" \
-    --preset "Windows Desktop" \
-    --set "custom_template/release=$TEMPLATE_WIN"
+  PATCH_SETS+=(--set "custom_template/release=$TEMPLATE_WIN")
 fi
+"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/export_preset_template.py")" \
+  --preset-file "$(to_win_path "$PRESET_FILE")" \
+  --preset "Windows Desktop" \
+  "${PATCH_SETS[@]}"
 
 echo "== Godot release export =="
+"$GODOT_BIN" --headless --path "$ROOT/godot" --import --quit >/dev/null 2>&1 || true
 rm -rf "$EXPORT_DIR"
 mkdir -p "$EXPORT_DIR"
 "$GODOT_BIN" --headless --path "$ROOT/godot" --export-release "Windows Desktop" 2>&1 | tee "$EXPORT_LOG"
@@ -266,10 +305,14 @@ if [ -d "$ROOT/converter" ]; then
   find "$STAGE/converter" -type f -name '*.pyc' -delete
   rm -rf "$STAGE/converter/tests"
 fi
+if [ -f "$ROOT/docs/BASELINE.json" ]; then
+  mkdir -p "$STAGE/docs"
+  cp -a "$ROOT/docs/BASELINE.json" "$STAGE/docs/BASELINE.json"
+fi
 
 cat > "$STAGE/README.txt" <<'EOF'
-LWSMF Remake - Windows x64 发布包
-=================================
+妹相随～黑白世界的缤纷冒险～ - Windows x64 发布包
+===================================================
 
 本发布包自带重制版程序、已转换的 game_data 与加密媒体包 media.pak，解压即玩，无需安装 Python。
 
@@ -390,7 +433,7 @@ if [ "$INSTALLER" = true ]; then
     done
   fi
   if [ -z "$ISCC_BIN" ] || [ ! -x "$ISCC_BIN" ]; then
-    echo "ERROR: ISCC.exe not found; install Inno Setup 6 or set ISCC_BIN=/path/to/ISCC.exe" >&2
+    echo "ERROR: ISCC.exe not found; install Inno Setup 6.4+ or set ISCC_BIN=/path/to/ISCC.exe" >&2
     exit 2
   fi
   ISCC_DIR="$(dirname "$ISCC_BIN")"
@@ -404,7 +447,15 @@ if [ "$INSTALLER" = true ]; then
   DIST_WIN="$(to_win_path "$ROOT/dist")"
   STAGE_WIN="$(to_win_path "$OUT")"
   SETUP_BASE="${PKG_NAME}-setup"
-  "$PYTHON_BIN" - "$TMPL_WIN" "$ISS_WIN" "LWSMF Remake" "$VERSION" "$STAGE_WIN" "$DIST_WIN" "$SETUP_BASE" "$EXTRA_LANGUAGES" <<'PY'
+  SETUP_ICON_WIN="$(to_win_path "$ICON_OUT/installer/setup_icon.ico")"
+  SETUP_POSTER_WIN="$(to_win_path "$ICON_OUT/installer/setup_poster.png")"
+  for asset in "$ICON_OUT/installer/setup_icon.ico" "$ICON_OUT/installer/setup_poster.png"; do
+    if [ ! -f "$asset" ]; then
+      echo "ERROR: installer artwork missing: $asset" >&2
+      exit 3
+    fi
+  done
+  "$PYTHON_BIN" - "$TMPL_WIN" "$ISS_WIN" "$WINDOWS_APP_NAME" "$VERSION" "$STAGE_WIN" "$DIST_WIN" "$SETUP_BASE" "$EXTRA_LANGUAGES" "$SETUP_ICON_WIN" "$SETUP_POSTER_WIN" <<'PY'
 import sys
 from pathlib import Path
 
@@ -416,6 +467,8 @@ rendered = (
     .replace("@STAGE_DIR@", sys.argv[5].replace("/", "\\"))
     .replace("@OUTPUT_DIR@", sys.argv[6].replace("/", "\\"))
     .replace("@OUTPUT_BASE_FILENAME@", sys.argv[7])
+    .replace("@SETUP_ICON@", sys.argv[9].replace("/", "\\"))
+    .replace("@SETUP_POSTER@", sys.argv[10].replace("/", "\\"))
     .replace("\n@EXTRA_LANGUAGES@\n", f"\n{extra_langs}\n" if extra_langs else "\n")
     .replace("@EXTRA_LANGUAGES@", extra_langs)
 )

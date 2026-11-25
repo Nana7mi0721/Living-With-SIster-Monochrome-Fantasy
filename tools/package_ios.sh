@@ -71,6 +71,24 @@ while [ "$#" -gt 0 ]; do
 done
 
 HOST_OS="$(uname -s 2>/dev/null || echo unknown)"
+if { [ -n "$GAME_DATA_DIR" ] && [ -z "$WORK_ALL_DIR" ]; } || { [ -z "$GAME_DATA_DIR" ] && [ -n "$WORK_ALL_DIR" ]; }; then
+  echo "ERROR: --game-data and --work-all must be specified together" >&2
+  exit 2
+fi
+if [ -z "$FONT_OPT" ] && [ -n "$WORK_ALL_DIR" ]; then
+  if [ -n "${LWSMF_FONT_PATH:-}" ] && [ -f "$LWSMF_FONT_PATH" ]; then
+    FONT_OPT="$LWSMF_FONT_PATH"
+  else
+    for dir in "$WORK_ALL_DIR" "$WORK_ALL_DIR/Data"; do
+      for name in "Lolita.ttf" "LOLITA.TTF" "lolita.ttf"; do
+        if [ -f "$dir/$name" ]; then
+          FONT_OPT="$dir/$name"
+          break 2
+        fi
+      done
+    done
+  fi
+fi
 if [ "$HOST_OS" != "Darwin" ]; then
   echo "ERROR: tools/package_ios.sh requires macOS with Xcode (current host: $HOST_OS)." >&2
   echo "       On Windows, trigger .github/workflows/ios-unsigned.yml for the engine IPA, then run:" >&2
@@ -105,31 +123,60 @@ SLN="$ROOT/godot/Lwsmf.sln"
 SLN_CREATED=false
 PRESET_FILE="$ROOT/godot/export_presets.cfg"
 PRESET_BAK="$OUT_DIR/export_presets.ios.$$.cfg"
+ICON_OUT="$ROOT/work/out/release_icons"
+ICON_STAGE="$ROOT/godot/assets/boot/generated"
+ICON_STAGE_CREATED=false
 cleanup() {
   if [ -f "$PRESET_BAK" ]; then
     cp -f "$PRESET_BAK" "$PRESET_FILE"
     rm -f "$PRESET_BAK"
   fi
+  if [ "$ICON_STAGE_CREATED" = true ]; then
+    rm -rf "$ICON_STAGE"
+  fi
+  rm -rf "$ICON_OUT"
   if [ "$SLN_CREATED" = true ]; then
     rm -f "$SLN"
   fi
 }
 trap cleanup EXIT
 
+VERSION_CODE="$("$PYTHON_BIN" - "$VERSION" <<'PY'
+import re
+import sys
+
+match = re.match(r"^(\d+)\.(\d+)\.(\d+)", sys.argv[1])
+print(int(match.group(1)) * 10000 + int(match.group(2)) * 100 + int(match.group(3)) if match else 1)
+PY
+)"
+
+echo "== preparing iOS icons =="
+[ ! -d "$ICON_STAGE" ] && ICON_STAGE_CREATED=true
+"$PYTHON_BIN" "$ROOT/tools/sync_release_icons.py" \
+  --source-dir "${LWSMF_PUBLISH_DIR:-$ROOT/work/retail_dat/_publish}" \
+  --out-dir "$ICON_OUT" \
+  --stage-res "$ICON_STAGE" \
+  --allow-placeholder
+
+cp -f "$PRESET_FILE" "$PRESET_BAK"
+PATCH_SETS=(
+  --set "application/short_version=$VERSION"
+  --set "application/version=$VERSION_CODE"
+)
 if [ -n "$TEMPLATE_OPT" ]; then
   [ -f "$TEMPLATE_OPT" ] || { echo "ERROR: custom iOS template not found: $TEMPLATE_OPT" >&2; exit 2; }
-  cp -f "$PRESET_FILE" "$PRESET_BAK"
-  "$PYTHON_BIN" "$ROOT/tools/mobile/export_preset_template.py" \
-    --preset-file "$PRESET_FILE" \
-    --preset "iOS" \
-    --set "custom_template/release=$(cd "$(dirname "$TEMPLATE_OPT")" && pwd)/$(basename "$TEMPLATE_OPT")"
+  PATCH_SETS+=(--set "custom_template/release=$(cd "$(dirname "$TEMPLATE_OPT")" && pwd)/$(basename "$TEMPLATE_OPT")")
 fi
+"$PYTHON_BIN" "$ROOT/tools/mobile/export_preset_template.py" \
+  --preset-file "$PRESET_FILE" \
+  --preset "iOS" \
+  "${PATCH_SETS[@]}"
 
 if [ ! -f "$SLN" ]; then
   "$DOTNET_BIN" new sln --format sln --name Lwsmf --output "$ROOT/godot" >/dev/null 2>&1 \
     || "$DOTNET_BIN" new sln --name Lwsmf --output "$ROOT/godot" >/dev/null
-  "$DOTNET_BIN" sln "$SLN" add "$ROOT/godot/Lwsmf.csproj" >/dev/null
   SLN_CREATED=true
+  "$DOTNET_BIN" sln "$SLN" add "$ROOT/godot/Lwsmf.csproj" >/dev/null
 fi
 
 echo "== importing & exporting Godot iOS project =="
@@ -199,14 +246,14 @@ rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR/Payload"
 ditto "$APP_SRC" "$STAGE_DIR/Payload/$(basename "$APP_SRC")"
 
-IPA_NAME="Lwsmf-${VERSION}-ios-arm64-unsigned.ipa"
+IPA_NAME="LWSMF-${VERSION}-ios-arm64.ipa"
 IPA_PATH="$OUT_DIR/$IPA_NAME"
 rm -f "$IPA_PATH"
 (cd "$STAGE_DIR" && ditto -c -k --sequesterRsrc --keepParent "Payload" "$IPA_PATH")
 rm -rf "$STAGE_DIR" "$DERIVED_DATA"
 
 if [ -n "$GAME_DATA_DIR" ] && [ -n "$WORK_ALL_DIR" ]; then
-  INJ_OUT="$OUT_DIR/Lwsmf-${VERSION}-ios-arm64-unsigned-full.ipa"
+  INJ_OUT="$OUT_DIR/LWSMF-${VERSION}-ios-arm64-full.ipa"
   INJ_ARGS=("$IPA_PATH" --game-data "$GAME_DATA_DIR" --work-all "$WORK_ALL_DIR" --out "$INJ_OUT" --force)
   if [ "$SLIM" = true ]; then
     SLIM_PAK="$OUT_DIR/media-slim.pak"
