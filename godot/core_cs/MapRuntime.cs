@@ -302,7 +302,7 @@ public sealed class MapRuntime
             if (state.InstanceId is int runningId)
             {
                 var live = vm.FindInstance(runningId);
-                if (live == null || live.Pc >= live.Program.Len)
+                if (live == null || (live.Pc >= live.Program.Len && live.Wait.Kind == WaitStateKind.None))
                 {
                     if (live != null)
                     {
@@ -318,9 +318,22 @@ public sealed class MapRuntime
             {
                 var live = state.InstanceId is int id ? vm.FindInstance(id) : null;
 
-                // Do not cancel an in-flight autorun coroutine or a child-waiting page
-                // while its own script clears the condition variable before finishing.
-                if (want == null && live != null && (!live.IsParallel || live.Wait.Kind == WaitStateKind.Child || live.JustResumedFromChild)) continue;
+                // Do not cancel an in-flight autorun coroutine while its own script clears
+                // its trigger and falls back to no page or a lower-priority Parallel page
+                // (e.g. battle Ev8 p1..p8 Autorun falling back to p0 Parallel). Transitions
+                // to another Autorun page (e.g. Ev4 p1 -> p0) and higher-priority pages
+                // (want > active) still switch immediately for full retail/Oracle parity.
+                bool fallingToParallel = live != null
+                    && !live.IsParallel
+                    && state.Active is int active
+                    && want is int next
+                    && next < active
+                    && next >= 0 && next < state.Def.Pages.Count
+                    && state.Def.Pages[next].Trigger == MapTrigger.Parallel;
+                bool preserveInFlight = live != null && (
+                    (want == null && (!live.IsParallel || live.Wait.Kind == WaitStateKind.Child || live.JustResumedFromChild))
+                    || fallingToParallel);
+                if (preserveInFlight) continue;
 
                 if (live != null)
                 {

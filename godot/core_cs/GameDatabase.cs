@@ -296,7 +296,7 @@ public sealed class GameDatabase
         return snapshot;
     }
 
-    /// <summary>Replace all runtime op250 overlays with a loaded save's sparse overlay layer.</summary>
+    /// <summary>Replace all runtime op250 overlays with a loaded save's sparse overlay layer, pruning cells matching base data.</summary>
     public void RestoreOverlays(SavedDbOverlays? overlays)
     {
         ClearOverlays();
@@ -304,21 +304,238 @@ public sealed class GameDatabase
         foreach (var rc in overlays.RowCounts)
         {
             if (rc.Container is < 0 or > 2 || rc.Type < 0 || rc.Count < 0) continue;
-            _rowCounts[((DbContainer)rc.Container, rc.Type)] = rc.Count;
+            var container = (DbContainer)rc.Container;
+            if (rc.Count == BaseRowCount(container, rc.Type)) continue;
+            _rowCounts[(container, rc.Type)] = rc.Count;
         }
         foreach (var cell in overlays.Nums)
         {
             if (cell.Container is < 0 or > 2 || cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
-            var key = ((DbContainer)cell.Container, cell.Type, cell.Row, cell.Column);
+            var container = (DbContainer)cell.Container;
+            if (TryTableNum(container, cell.Type, cell.Row, cell.Column, out int baseNum) && baseNum == cell.Value)
+            {
+                continue;
+            }
+            var key = (container, cell.Type, cell.Row, cell.Column);
             _cells[key] = cell.Value;
             _texts.Remove(key);
         }
         foreach (var cell in overlays.Texts)
         {
             if (cell.Container is < 0 or > 2 || cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
-            var key = ((DbContainer)cell.Container, cell.Type, cell.Row, cell.Column);
-            _texts[key] = cell.Value ?? "";
+            var container = (DbContainer)cell.Container;
+            string textVal = cell.Value ?? "";
+            if (TryTableText(container, cell.Type, cell.Row, cell.Column, out string baseText)
+                && string.Equals(baseText, textVal, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            var key = (container, cell.Type, cell.Row, cell.Column);
+            _texts[key] = textVal;
             _cells.Remove(key);
+        }
+    }
+
+    /// <summary>
+    /// Diff a retail VariableDatabase dump against the loaded base CDataBase tables and emit
+    /// only modified row counts and cells, keeping imported save JSON compact (~50 KB vs ~2 MB).
+    /// </summary>
+    public SavedDbOverlays? BuildSparseOverlays(
+        IReadOnlyDictionary<int, int>? rowCounts,
+        IReadOnlyList<LegacySaveImporter.DatabaseCell> numCells,
+        IReadOnlyList<LegacySaveImporter.DatabaseTextCell> textCells)
+    {
+        var overlays = new SavedDbOverlays();
+        if (rowCounts != null)
+        {
+            foreach (var pair in rowCounts)
+            {
+                if (pair.Key < 0 || pair.Value < 0) continue;
+                if (pair.Value == BaseRowCount(DbContainer.CData, pair.Key)) continue;
+                overlays.RowCounts.Add(new SavedDbRowCount
+                {
+                    Container = (int)DbContainer.CData,
+                    Type = pair.Key,
+                    Count = pair.Value
+                });
+            }
+            overlays.RowCounts.Sort((a, b) => a.Type.CompareTo(b.Type));
+        }
+
+        foreach (var cell in numCells)
+        {
+            if (cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
+            if (TryTableNum(DbContainer.CData, cell.Type, cell.Row, cell.Column, out int baseNum))
+            {
+                if (baseNum == cell.Value) continue;
+            }
+            else if (cell.Value == 0)
+            {
+                continue;
+            }
+            overlays.Nums.Add(new SavedDbNumCell
+            {
+                Container = (int)DbContainer.CData,
+                Type = cell.Type,
+                Row = cell.Row,
+                Column = cell.Column,
+                Value = cell.Value
+            });
+        }
+
+        foreach (var cell in textCells)
+        {
+            if (cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
+            string val = cell.Value ?? "";
+            if (TryTableText(DbContainer.CData, cell.Type, cell.Row, cell.Column, out string baseText))
+            {
+                if (string.Equals(baseText, val, StringComparison.Ordinal)) continue;
+            }
+            else if (val.Length == 0)
+            {
+                continue;
+            }
+            overlays.Texts.Add(new SavedDbTextCell
+            {
+                Container = (int)DbContainer.CData,
+                Type = cell.Type,
+                Row = cell.Row,
+                Column = cell.Column,
+                Value = val
+            });
+        }
+
+        if (overlays.RowCounts.Count == 0 && overlays.Nums.Count == 0 && overlays.Texts.Count == 0)
+            return null;
+        return overlays;
+    }
+
+    /// <summary>O(1) dictionary index built once per cached SaveState for op 221 CData probes.</summary>
+    public sealed class OverlayIndex
+    {
+        public Dictionary<(DbContainer, int), int> RowCounts { get; } = new();
+        public Dictionary<(DbContainer, int, int, int), int> Nums { get; } = new();
+        public Dictionary<(DbContainer, int, int, int), string> Texts { get; } = new();
+
+        public static OverlayIndex? Build(SavedDbOverlays? overlays)
+        {
+            if (overlays == null) return null;
+            if ((overlays.RowCounts == null || overlays.RowCounts.Count == 0)
+                && (overlays.Nums == null || overlays.Nums.Count == 0)
+                && (overlays.Texts == null || overlays.Texts.Count == 0))
+            {
+                return null;
+            }
+            var idx = new OverlayIndex();
+            if (overlays.RowCounts != null)
+            {
+                foreach (var rc in overlays.RowCounts)
+                {
+                    if (rc.Container is < 0 or > 2 || rc.Type < 0 || rc.Count < 0) continue;
+                    idx.RowCounts[((DbContainer)rc.Container, rc.Type)] = rc.Count;
+                }
+            }
+            if (overlays.Nums != null)
+            {
+                foreach (var c in overlays.Nums)
+                {
+                    if (c.Container is < 0 or > 2 || c.Type < 0 || c.Row < 0 || c.Column < 0) continue;
+                    idx.Nums[((DbContainer)c.Container, c.Type, c.Row, c.Column)] = c.Value;
+                }
+            }
+            if (overlays.Texts != null)
+            {
+                foreach (var c in overlays.Texts)
+                {
+                    if (c.Container is < 0 or > 2 || c.Type < 0 || c.Row < 0 || c.Column < 0) continue;
+                    idx.Texts[((DbContainer)c.Container, c.Type, c.Row, c.Column)] = c.Value ?? "";
+                }
+            }
+            return idx;
+        }
+    }
+
+    /// <summary>O(1) variant of <see cref="ReadWithOverlay"/> using a pre-indexed <see cref="OverlayIndex"/>.</summary>
+    public DbValue? ReadWithOverlayIndex(DbOp op, OverlayIndex? index)
+    {
+        var container = op.Container;
+        var (dbType, column) = ResolveLabels(container, op.DbType, op.ItemId, op.TypeLabel, op.FieldLabel);
+        int row = op.DataId;
+
+        int overlayRowCount = 0;
+        bool hasOverlayRowCount = index != null && index.RowCounts.TryGetValue((container, dbType), out overlayRowCount);
+        int effectiveRowCount = hasOverlayRowCount ? overlayRowCount : BaseRowCount(container, dbType);
+        if (row == RowCountQuery) return new DbValue(effectiveRowCount);
+        if (column == FirstEmptyColumn)
+        {
+            return new DbValue(FirstEmptyRowCore(
+                container,
+                dbType,
+                effectiveRowCount,
+                (r, c) => index != null && index.Texts.TryGetValue((container, dbType, r, c), out string? ov) ? ov : TableText(container, dbType, r, c),
+                (r, c) => index != null && index.Nums.TryGetValue((container, dbType, r, c), out int ov) ? ov : TableNum(container, dbType, r, c)));
+        }
+        bool wantsText = IsTextDestination(op.Destination);
+        if (column < 0) return EmptyLike(wantsText);
+
+        var key = (container, dbType, row, column);
+        if (!wantsText)
+        {
+            if ((index != null && index.Nums.TryGetValue(key, out int number))
+                || _engineCells.TryGetValue(key, out number))
+            {
+                return new DbValue(number);
+            }
+            if (index != null && index.Texts.TryGetValue(key, out string? overlayText))
+            {
+                return new DbValue(overlayText);
+            }
+            if (_engineTexts.TryGetValue(key, out string? engineText))
+            {
+                return new DbValue(engineText);
+            }
+        }
+        else
+        {
+            if (index != null && index.Texts.TryGetValue(key, out string? overlayText))
+            {
+                return new DbValue(overlayText);
+            }
+            if (_engineTexts.TryGetValue(key, out string? engineText))
+            {
+                return new DbValue(engineText);
+            }
+            if ((index != null && index.Nums.TryGetValue(key, out int number))
+                || _engineCells.TryGetValue(key, out number))
+            {
+                return new DbValue(number);
+            }
+        }
+
+        bool hasTable = _tables.TryGetValue(container, out var tables)
+            && dbType >= 0 && dbType < tables.Count;
+        if (hasTable && row >= 0 && row < effectiveRowCount)
+        {
+            if (TryTableNum(container, dbType, row, column, out int tableNum)) return new DbValue(tableNum);
+            if (TryTableText(container, dbType, row, column, out string tableText)) return new DbValue(tableText);
+        }
+        if (row >= ExtensionRowBase) return EmptyLike(wantsText);
+        if (row >= 0 && hasOverlayRowCount) return EmptyLike(wantsText);
+        int fieldCount = FieldCount(container, dbType);
+        if (fieldCount >= 0 && column >= fieldCount) return EmptyLike(wantsText);
+        return null;
+    }
+
+    /// <summary>Apply retail VariableDatabase row counts differing from the base .dat table.</summary>
+    public void ApplySavedRowCounts(IReadOnlyDictionary<int, int> rowCounts)
+    {
+        foreach (var pair in rowCounts)
+        {
+            if (pair.Key < 0 || pair.Value < 0) continue;
+            if (pair.Value == BaseRowCount(DbContainer.CData, pair.Key))
+                _rowCounts.Remove((DbContainer.CData, pair.Key));
+            else
+                _rowCounts[(DbContainer.CData, pair.Key)] = pair.Value;
         }
     }
 

@@ -511,10 +511,32 @@ public partial class SaveImportTest : Node
             var rawSlot = LegacySaveImporter.ImportFile(sampleSav, 1);
             if (rawSlot.Recovered.DatabaseCells.Count > 0)
             {
-                if (imported.DbOverlays == null || imported.DbOverlays.Nums.Count != rawSlot.Recovered.DatabaseCells.Count)
+                if (imported.DbOverlays == null || imported.DbOverlays.Nums.Count == 0
+                    || imported.DbOverlays.Nums.Count >= rawSlot.Recovered.DatabaseCells.Count)
                 {
-                    GD.PrintErr($"SAVE_TRANSFER_FAILED: expected {rawSlot.Recovered.DatabaseCells.Count} persisted DbOverlays cells, got {imported.DbOverlays?.Nums.Count ?? 0}");
+                    GD.PrintErr($"SAVE_TRANSFER_FAILED: expected sparse diffed DbOverlays (0 < n < {rawSlot.Recovered.DatabaseCells.Count}), got {imported.DbOverlays?.Nums.Count ?? 0}");
                     return false;
+                }
+                // Spot-check that sparse DbOverlays still reproduces every cell value via ReadWithOverlay.
+                if (harness.Vm.DatabaseStore != null)
+                {
+                    var idx = GameDatabase.OverlayIndex.Build(imported.DbOverlays);
+                    foreach (var cell in rawSlot.Recovered.DatabaseCells)
+                    {
+                        var readVal = harness.Vm.DatabaseStore.ReadWithOverlayIndex(new DbOp
+                        {
+                            Container = DbContainer.CData,
+                            Direction = DbDirection.Read,
+                            DbType = cell.Type,
+                            DataId = cell.Row,
+                            ItemId = cell.Column
+                        }, idx);
+                        if (readVal == null || readVal.IsString || readVal.Num != cell.Value)
+                        {
+                            GD.PrintErr($"SAVE_TRANSFER_FAILED: sparse overlay mismatch at [{cell.Type}:{cell.Row}:{cell.Column}] expected {cell.Value}, got {readVal?.Num}");
+                            return false;
+                        }
+                    }
                 }
                 if (!string.IsNullOrEmpty(harness.Session.LastImportNotice))
                 {
@@ -631,7 +653,8 @@ public partial class SaveImportTest : Node
                 MapId = 1005,
                 MapFile = "SampleMapA.mps",
                 Vars = new List<int>(new int[800]),
-                SysVars = [0, 0, 0, 480, 260],
+                StrVars = ["周六", "", "save/system.sav"],
+                SysVars = [0, 0, 0, 480, 260, 0, 0, 0, 20],
                 CommonSelf =
                 [
                     new EventSelfVars
@@ -643,14 +666,22 @@ public partial class SaveImportTest : Node
                 ],
                 Pictures =
                 [
-                    new SavedPicture { Number = 50, Kind = 0, File = "cg/bg_01.png", Anchor = 1, Args = [0, 1, 1, 0, 200, 100, 200, 100, 10, 0, 100, 0] },
-                    new SavedPicture { Number = 51, Kind = 2, Text = styled, Anchor = 0, Args = [0, 320, 64, 0, 255, 20, 30, 100, 0, 0, 100, 0] },
-                    new SavedPicture { Number = 12050, Kind = 0, File = "SystemFile/WindowBase.png", Anchor = 0, Args = [0, 1, 1, 0, 255, 0, 0, 100, 0, 0, 100, 0] }
+                    new SavedPicture
+                    {
+                        Number = 50,
+                        Kind = 0,
+                        File = "cg/bg_01.png",
+                        Anchor = 1,
+                        Args = [0, 2, 2, 3, 200, 100, 200, 100, 0, 0, 0, 0, 0, 0, 0, 0, 75],
+                        Flags = new Dictionary<string, int> { ["blend"] = 1, ["scale_mode"] = 3 }
+                    },
+                    new SavedPicture { Number = 51, Kind = 2, Text = styled, Anchor = 0, Args = [0, 320, 64, 1, 255, 20, 30, 100, 0] },
+                    new SavedPicture { Number = 12050, Kind = 0, File = "SystemFile/WindowBase.png", Anchor = 0, Args = [0, 1, 1, 1, 255, 0, 0, 100, 0] }
                 ],
                 Audio =
                 [
-                    new SavedAudio { Channel = 0, File = "BGM/test.ogg", Volume = 80, Loop = true, Tempo = 100 },
-                    new SavedAudio { Channel = 1, File = "BGM/rain.ogg", Volume = 40, Loop = true, Tempo = 100 }
+                    new SavedAudio { Channel = 0, File = "BGM/test.ogg", Volume = 80, Loop = true, Tempo = 105 },
+                    new SavedAudio { Channel = 1, File = "BGM/rain.ogg", Volume = 40, Loop = true, Tempo = 95 }
                 ],
                 DbOverlays = new SavedDbOverlays
                 {
@@ -661,6 +692,7 @@ public partial class SaveImportTest : Node
             state.Vars[0] = 3;
             state.Vars[160] = 25;
             state.Vars[531] = 4;
+            state.Vars[550] = 22;
             state.Vars[799] = -99;
 
             string savPath = Path.Combine(tempDir, "SaveData01.sav");
@@ -677,13 +709,20 @@ public partial class SaveImportTest : Node
             if (!parsed.ChecksumOk
                 || rec.PlayTime.Frames != 123456
                 || rec.ChoiceAnchor[0] != 480 || rec.ChoiceAnchor[1] != 260
-                || rec.Variables["0"] != 3 || rec.Variables["160"] != 25 || rec.Variables["799"] != -99
+                || rec.SysVars.Length < 9 || rec.SysVars[8] != 20
+                || rec.StringVars.Count != 3 || rec.StringVars[0] != "周六" || rec.StringVars[2] != "save/system.sav"
+                || rec.Variables["0"] != 3 || rec.Variables["160"] != 25 || rec.Variables["550"] != 22 || rec.Variables["799"] != -99
                 || rec.CommonSelfNumbers[12][0] != 777 || rec.CommonSelfNumbers[12][4] != -42
                 || rec.CommonSelfStrings[12][0] != "你好世界" || rec.CommonSelfStrings[12][4] != "tail"
                 || rec.PictureStates.Count != 2
                 || rec.PictureStates[0].File != "cg/bg_01.png"
-                || rec.PictureStates[1].Text != styled
-                || rec.BgmFile != "BGM/test.ogg" || rec.BgsFile != "BGM/rain.ogg"
+                || rec.PictureStates[0].Args.Count < 17 || rec.PictureStates[0].Args[3] != 3 || rec.PictureStates[0].Args[16] != 75
+                || !(rec.PictureStates[0].Flags is { } p0Flags
+                    && p0Flags.TryGetValue("blend", out int p0Blend) && p0Blend == 1
+                    && p0Flags.TryGetValue("scale_mode", out int p0ScaleMode) && p0ScaleMode == 3)
+                || rec.PictureStates[1].Text != styled || rec.PictureStates[1].Args.Count != 9
+                || rec.BgmFile != "BGM/test.ogg" || rec.BgmVolume != 80 || rec.BgmTempo != 105
+                || rec.BgsFile != "BGM/rain.ogg" || rec.BgsVolume != 40 || rec.BgsTempo != 95
                 || !rec.DatabaseCells.Exists(c => c.Type == 2 && c.Row == 1 && c.Column == 0 && c.Value == 9876)
                 || !rec.DatabaseTextCells.Exists(c => c.Type == 2 && c.Row == 1 && c.Column == 1 && c.Value == "自定义名称"))
             {
@@ -720,9 +759,10 @@ public partial class SaveImportTest : Node
             string sysJsonPath = Path.Combine(Path.GetDirectoryName(slot1Path)!, "System.json");
             SaveState? sysAfter = SaveCodec.Read(sysJsonPath);
             if (sysAfter == null || sysAfter.Vars.Count <= 626
-                || sysAfter.Vars[0] != 4 || sysAfter.Vars[546] != 4 || sysAfter.Vars[626] != 4)
+                || sysAfter.Vars[0] != 4 || sysAfter.Vars[546] != 4 || sysAfter.Vars[626] != 4
+                || sysAfter.Vars[550] < 22)
             {
-                GD.PrintErr("RETAIL_EXPORT_FAILED: ImportRetailSaveToSlot did not sync System.json slot markers (Var[0]/546/626)");
+                GD.PrintErr("RETAIL_EXPORT_FAILED: ImportRetailSaveToSlot did not sync System.json slot markers & NG+ var550");
                 return false;
             }
 

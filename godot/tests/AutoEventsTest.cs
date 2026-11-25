@@ -165,6 +165,23 @@ public static class AutoEventsTest
         Check(rearmedSync.Started == 1 && loadEyeAuto.IsRunning(loadEyeVm, 506),
             "once condition clears to 0 and returns to 1, CE506 must trigger normally");
 
+        // Imported retail H-scene saves (no live coroutine stack) must still resume CE335 under LoopVisualPainters,
+        // and live play must not auto-spawn GatedCallOnly CE243 on var350==2 (BattleWiring hands off to CE241).
+        var liveBattleVm = new EventVm();
+        AddLoopProg(liveBattleVm, 335, 2, 2_000_062, 1);
+        AddLoopProg(liveBattleVm, 243, 0, 2_000_350, 2);
+        var liveBattleAuto = AutoEvents.FromPrograms(liveBattleVm.Programs.Values);
+        liveBattleVm.Vars.Set(62, 1);
+        liveBattleAuto.PrimeLatched(liveBattleVm);
+        liveBattleAuto.LoopVisualPainters = true;
+        var hSceneResume = liveBattleAuto.Sync(liveBattleVm);
+        Check(hSceneResume.Started == 1 && liveBattleAuto.IsRunning(liveBattleVm, 335),
+            "imported H-scene save must resume CE335 under LoopVisualPainters");
+        liveBattleVm.Vars.Set(350, 2);
+        var noDup243 = liveBattleAuto.Sync(liveBattleVm);
+        Check(!liveBattleAuto.IsRunning(liveBattleVm, 243) && noDup243.Started == 0,
+            "live play (LoopVisualPainters) must not auto-spawn duplicate CE243 on var350==2");
+
         Console.WriteLine($"AUTO_EVENTS_TEST_OK count={auto.EventCount} start={opened.Started} resume={replayed.Started} gated={gated.Started}");
     }
 

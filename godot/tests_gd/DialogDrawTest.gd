@@ -51,6 +51,19 @@ func _ready() -> void:
 	var normal_tag := TextTokenizer.tokenize("<状態A>")
 	if normal_tag.size() != 1 or normal_tag[0].kind != TextTokenizer.Kind.TEXT:
 		failures.append("non-control angle text must stay literal")
+	var outline_num := TextTokenizer.tokenize("\\f[14]\\E10回合内未分出胜负时")
+	if TextTokenizer.plain_text(outline_num) != "10回合内未分出胜负时":
+		failures.append("\\\\E before digits must stay OUTLINE_ON and not leak literal \\\\E (got %s)" % TextTokenizer.plain_text(outline_num))
+	if TextTokenizer.to_source(outline_num) != "\\f[14]\\E10回合内未分出胜负时":
+		failures.append("\\\\f[14]\\\\E10... must round-trip losslessly")
+	if TextTokenizer.plain_text(TextTokenizer.tokenize("\\E3000G")) != "3000G":
+		failures.append("\\\\E3000G must paint 3000G without literal \\\\E")
+	for word_case in [["\\f[12]\\EHP回复6", "HP回复6"], ["\\ENOW LOADING...", "NOW LOADING..."], ["<C>\\EBADEND", "BADEND"]]:
+		var wt := TextTokenizer.tokenize(word_case[0])
+		if TextTokenizer.plain_text(wt) != word_case[1]:
+			failures.append("%s must not swallow ASCII word after \\\\E (got %s)" % [word_case[0], TextTokenizer.plain_text(wt)])
+		if TextTokenizer.to_source(wt) != word_case[0]:
+			failures.append("%s must round-trip losslessly" % word_case[0])
 	for expected in [TextTokenizer.Kind.OUTLINE_ON, TextTokenizer.Kind.COLOR, TextTokenizer.Kind.FONT_SIZE,
 			TextTokenizer.Kind.VARIABLE, TextTokenizer.Kind.PAUSE,
 			TextTokenizer.Kind.INSTANT, TextTokenizer.Kind.ALIGN_CENTER, TextTokenizer.Kind.ALIGN_LEFT]:

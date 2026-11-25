@@ -907,6 +907,59 @@ public partial class SaveLoadTest : Node
         Check(sanitizedPaired.Any(p => p.Number == -6) && sanitizedPaired.Any(p => p.Number == -8),
             "SaveMigrator.SanitizeRestoredPictures must preserve #-6 eye overlay when #-8 toilet body is present");
 
+        // Retail post-load normalization: coroutine-less SampleMapA saves with v302==1 (manual save) or
+        // v302==0 && v68==1 && v9==1 (AutoSave) normalize v302=2 so SampleMapA Ev3 unlocks bedroom clicks;
+        // native saves carrying live Instances stay untouched.
+        var retailManual = new SaveState { MapId = 1005, MapFile = "SampleMapA.mps", Vars = new List<int>(new int[310]) };
+        retailManual.Vars[302] = 1;
+        SaveMigrator.ApplyRetailPostLoadTriggerIfNeeded(retailManual);
+        Check(retailManual.Vars[302] == 2, "coroutine-less retail manual save (v302==1) must normalize to v302=2");
+
+        var retailAuto = new SaveState { MapId = 1005, MapFile = "SampleMapA.mps", Vars = new List<int>(new int[310]) };
+        retailAuto.Vars[68] = 1;
+        retailAuto.Vars[9] = 1;
+        SaveMigrator.ApplyRetailPostLoadTriggerIfNeeded(retailAuto);
+        Check(retailAuto.Vars[302] == 2, "coroutine-less retail AutoSave (v68==1,v9==1) must normalize to v302=2");
+
+        var nativeWithInst = new SaveState { MapId = 1005, MapFile = "SampleMapA.mps", Vars = new List<int>(new int[310]) };
+        nativeWithInst.Vars[302] = 1;
+        nativeWithInst.Instances.Add(new SavedInstance { Id = 1, EventId = 15, Kind = "map", Page = 0, Pc = 18 });
+        SaveMigrator.ApplyRetailPostLoadTriggerIfNeeded(nativeWithInst);
+        Check(nativeWithInst.Vars[302] == 1, "native save with live Instances must not alter v302");
+
+        // MapRuntime must not abort an in-flight autorun/child-waiting page (such as battle Ev8 p1 calling CE242)
+        // when its own pc=0 clears self[9]=0 and makes lower-priority p0 eligible (want == 0, not null).
+        var battleVm = new EventVm();
+        var childCe = Program.FromSlots(901, "child-ce", new List<Slot>
+        {
+            Slot.Command(180, [2]),
+            Slot.Command(121, [Magic.VarBase + 77, 123, 0, 0x0C]),
+        });
+        battleVm.RegisterProgram(childCe);
+        var page0Prog = Program.FromSlots(8, "p0", new List<Slot> { Slot.Command(104) });
+        var page1Prog = Program.FromSlots(8, "p1", new List<Slot>
+        {
+            Slot.Command(121, [1_100_000, 0, 0, 0x0C]),
+            Slot.Command(210, [500901, 0]),
+        });
+        var ev8Def = new MapEventDef { Id = 8, Name = "battle-click", PageCount = 2 };
+        ev8Def.Pages.Add(new MapEventPage { Page = 0, Trigger = MapTrigger.Parallel, Program = page0Prog });
+        var p1Page = new MapEventPage { Page = 1, Trigger = MapTrigger.Autorun, Program = page1Prog };
+        p1Page.Conditions[0] = new PageCondition { Enabled = true, Operator = 2, Variable = 1_100_000, Value = 1 };
+        ev8Def.Pages.Add(p1Page);
+        var battleMap = new MapDefinition { Id = 1005, File = "SampleMapA.mps", Width = 10, Height = 10 };
+        battleMap.Events.Add(ev8Def);
+        var battleRt = new MapRuntime(battleMap);
+        battleRt.Find(8)!.SelfVars.Set(100, 1);
+        battleRt.StartPending(battleVm);
+        for (int f = 0; f < 6; f++)
+        {
+            battleVm.StepFrame();
+            battleRt.StartPending(battleVm);
+        }
+        Check(battleVm.Vars.Get(77) == 123,
+            $"in-flight autorun page calling child CE must finish even when lower-priority p0 matches (got v77={battleVm.Vars.Get(77)} active={battleRt.Find(8)?.Active} starts={battleRt.Find(8)?.Starts} insts={battleVm.Instances.Count} fault={battleVm.FaultReason})");
+
         try { Directory.Delete(saveDir, true); }
         catch (IOException) { }
 

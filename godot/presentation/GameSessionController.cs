@@ -137,6 +137,7 @@ public partial class GameSessionController : Node
     public bool SaveGame() => _session?.SaveGame() ?? false;
     public bool SaveGameToSlot(int slot, bool refreshUi = true) => _session?.SaveGameToSlot(slot, refreshUi) ?? false;
     public void RefreshSaveUiForSlot(int slot) => _session?.RefreshSaveUiForSlot(slot);
+    public void InvalidateSaveCache() => _session?.InvalidateSaveCache();
     public bool LoadGame() => _session?.LoadGame() ?? false;
     public bool LoadGameFrom(string path) => _session?.LoadGameFrom(path) ?? false;
     public bool LoadGameFromSlot(int slot) => _session?.LoadGameFromSlot(slot) ?? false;
@@ -388,6 +389,20 @@ public partial class GameSessionController : Node
                     {
                         saved.Args.Add(arg.AsInt32());
                     }
+                }
+                if (entry.TryGetValue("flags", out Variant flagsVar) && flagsVar.VariantType == Variant.Type.Dictionary)
+                {
+                    var flagsDict = flagsVar.AsGodotDictionary();
+                    Dictionary<string, int>? parsedFlags = null;
+                    foreach (string key in new[] { "blend", "scale_mode" })
+                    {
+                        if (TryGetInt(flagsDict, key, out int fv) && fv != 0)
+                        {
+                            parsedFlags ??= new Dictionary<string, int>();
+                            parsedFlags[key] = fv;
+                        }
+                    }
+                    saved.Flags = parsedFlags;
                 }
                 result.Add(saved);
             }

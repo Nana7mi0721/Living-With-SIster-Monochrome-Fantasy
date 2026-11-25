@@ -1227,6 +1227,8 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root.overlays.open_save_transfer(save_dir, root.session)
 	if not root.overlays.save_transfer_open():
 		failures.append("open_save_transfer must open SaveTransferModal")
+	if root.overlays._transfer_slot_spin == null or int(root.overlays._transfer_slot_spin.max_value) < 99:
+		failures.append("SaveTransferModal slot spin must allow up to slot 99 for SaveData17+ single-file imports")
 	var transfer_panel := root.overlays._transfer_root.get_child(1) as PanelContainer
 	var title_panel := root.overlays._title_confirm_root.get_child(1) as PanelContainer
 	if transfer_panel == null or title_panel == null:

@@ -171,6 +171,9 @@ public sealed class SavedPicture
     [JsonPropertyName("text")] public string Text { get; set; } = "";
     [JsonPropertyName("args")] public List<int> Args { get; set; } = new();
     [JsonPropertyName("anchor")] public int Anchor { get; set; }
+    [JsonPropertyName("flags")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, int>? Flags { get; set; }
 }
 
 /// <summary>One audio track playing when the slot was written (BGM/BGS/SE).</summary>

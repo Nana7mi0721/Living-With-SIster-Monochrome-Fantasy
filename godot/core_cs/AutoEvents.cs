@@ -46,6 +46,16 @@ public sealed class AutoEvents
         WolfIds.HSceneGauge
     };
 
+    /// <summary>
+    /// Continuous battle and late-night H-scene visual painters exempt from post-load suppression
+    /// when LoopVisualPainters is active (imported retail H-scene saves have no coroutine stack).
+    /// </summary>
+    private static readonly int[] LiveLoadResumePainters =
+    {
+        WolfIds.BattleGauge,
+        334, 335, 338, 352, 355, 356, 357
+    };
+
     private readonly List<AutoEvent> _events;
     private readonly Dictionary<int, bool> _latched = new();
     private readonly Dictionary<int, int> _running = new();
@@ -98,7 +108,8 @@ public sealed class AutoEvents
         {
             bool now = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
             _latched[ev.Id] = now;
-            if (!ev.ResumeOnLoad && now && !IsEventLive(vm, ev.Id))
+            if (!ev.ResumeOnLoad && Array.IndexOf(LiveLoadResumePainters, ev.Id) < 0
+                && now && !IsEventLive(vm, ev.Id))
             {
                 _suppressedUntilFalse.Add(ev.Id);
             }
@@ -141,8 +152,18 @@ public sealed class AutoEvents
             bool shouldStart;
             if (LoopVisualPainters)
             {
-                bool replay = !suppressed && (ev.ResumeOnLoad || (ev.IsParallel && ev.Id != 38));
-                shouldStart = !alive && (replay ? now : (now && !before));
+                // In live manual play, Map1005 Ev8 calls CE242 and CE242 calls CE243 directly;
+                // AutoEvents must not auto-spawn non-parallel GatedCallOnly (242/243) or CE243
+                // duplicates the enemy turn and steals the var350==2 handoff from CE241.
+                if (!ev.IsParallel)
+                {
+                    shouldStart = false;
+                }
+                else
+                {
+                    bool replay = !suppressed && (ev.ResumeOnLoad || ev.Id != 38);
+                    shouldStart = !alive && (replay ? now : (now && !before));
+                }
             }
             else
             {

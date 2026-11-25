@@ -1152,12 +1152,21 @@ public partial class VmController : Node, IHost, IVmSession
         DatabaseStore?.ApplySavedTextCells(cells);
     }
 
+    /// <summary>Apply retail VariableDatabase row counts to the shared database.</summary>
+    public void ApplySavedRowCounts(IReadOnlyDictionary<int, int> rowCounts)
+    {
+        DatabaseStore?.ApplySavedRowCounts(rowCounts);
+    }
+
     public SavedDbOverlays? SnapshotDbOverlays() => DatabaseStore?.SnapshotOverlays();
 
     public void RestoreDbOverlays(SavedDbOverlays? overlays) => DatabaseStore?.RestoreOverlays(overlays);
 
     public DbValue? ReadDatabaseWithOverlay(DbOp op, SavedDbOverlays? overlays) =>
         DatabaseStore?.ReadWithOverlay(op, overlays);
+
+    public DbValue? ReadDatabaseWithOverlayIndex(DbOp op, GameDatabase.OverlayIndex? index) =>
+        DatabaseStore?.ReadWithOverlayIndex(op, index);
 
     /// Start a common event by id. The real starter returns Instance, a project type that
     /// GDScript cannot marshal, so the presentation layer gets a bool.

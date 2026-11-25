@@ -108,6 +108,15 @@ static func tokenize(source: String) -> Array:
 					tokens.append(Token.new(Kind.LETTER_SPACING, "\\" + nxt))
 					i += 2
 				continue
+			if (nxt == "E" or nxt == "N") and (i + 2 >= n or source[i + 2] != "["):
+				# \E (outline on) and \N (outline off) are single-letter codes that may precede
+				# digits (\E10回合, \E3000G) or ASCII words (\EHP, \ENOW LOADING, \EBADEND).
+				_flush(tokens, literal)
+				literal = ""
+				var single_kind := Kind.OUTLINE_ON if nxt == "E" else Kind.OUTLINE_OFF
+				tokens.append(Token.new(single_kind, "\\" + nxt))
+				i += 2
+				continue
 			if _is_ascii_letter(nxt):
 				var j := i + 1
 				while j < n and _is_ascii_letter(source[j]):
@@ -137,11 +146,6 @@ static func tokenize(source: String) -> Array:
 						continue
 					body = source.substr(j + 1, close - j - 1)
 					end = close + 1
-				if name == "E" and end < n and source[end].is_valid_int():
-					# \E followed by a digit is ordinary text (\E3000G in the corpus).
-					literal += "\\E"
-					i += 2
-					continue
 				_flush(tokens, literal)
 				literal = ""
 				tokens.append(_letter_token(name, body, source.substr(i, end - i)))

@@ -65,6 +65,52 @@ public static class SaveMigrator
     }
 
     /// <summary>
+    /// Retail manual saves record var[302] == 1 (Save-UI lock) and retail AutoSaves record
+    /// var[302] == 0 with var[68] == 1 &amp;&amp; var[9] == 1; CE131 pc=261 patches var[302] = 2 before
+    /// loading so SampleMapA Ev3 ("ロード後の処理") clears stale state and restores bedroom clicks.
+    /// Imported retail saves have no coroutine stack to resume Ev15 pc=18, so normalize var[302] = 2.
+    /// </summary>
+    public static bool NeedsRetailPostLoadTrigger(IReadOnlyList<int>? vars)
+    {
+        if (vars == null || vars.Count <= 302) return false;
+        int v302 = vars[302];
+        if (v302 == 1) return true;
+        if (v302 == 0)
+        {
+            int v68 = vars.Count > 68 ? vars[68] : 0;
+            int v9 = vars.Count > 9 ? vars[9] : 0;
+            if (v68 != 0 && v9 != 0) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Apply retail post-load var[302] = 2 trigger to a raw variable array and pre-clear
+    /// var[68]/var[9] (which SampleMapA Ev3 p0 pc=24..25 unconditionally clears when v65 == 0)
+    /// so MapRuntime's multi-autorun dispatch cannot start Ev4 p0 before Ev3 finishes.
+    /// </summary>
+    public static void ApplyRetailPostLoadVars(List<int>? vars)
+    {
+        if (vars == null || !NeedsRetailPostLoadTrigger(vars)) return;
+        vars[302] = 2;
+        int v65 = vars.Count > 65 ? vars[65] : 0;
+        if (v65 == 0)
+        {
+            if (vars.Count > 68) vars[68] = 0;
+            if (vars.Count > 9) vars[9] = 0;
+        }
+    }
+
+    /// <summary>Apply retail post-load var[302] = 2 trigger when loading a coroutine-less SampleMapA save.</summary>
+    public static void ApplyRetailPostLoadTriggerIfNeeded(SaveState state)
+    {
+        bool isSampleMapA = state.MapId == 1005
+            || string.Equals(state.MapFile, "SampleMapA.mps", StringComparison.OrdinalIgnoreCase);
+        if (!isSampleMapA || state.Instances.Count > 0) return;
+        ApplyRetailPostLoadVars(state.Vars);
+    }
+
+    /// <summary>
     /// Normalize a decoded save payload in place so legacy/older-build residues (transient UI
     /// boxes, negative counters, null collections, transient SE audio) are repaired in one place.
     /// </summary>

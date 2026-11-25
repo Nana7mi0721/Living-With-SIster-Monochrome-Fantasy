@@ -76,6 +76,7 @@ var _save_arrow_hover_slot := 0
 var _hotkeys: Dictionary = DEFAULT_HOTKEYS.duplicate()
 var _ios_override: int = -1
 var _last_restart_ok := false
+var _pending_post_import_refresh := false
 
 # Row CE43 last painted; Sys20 mirrors it so a cursor move repaints the title menu.
 var _title_menu_cursor := -1
@@ -233,6 +234,8 @@ func _start_game() -> void:
 	_load_display_settings()
 	_apply_safe_area()
 	_apply_windows_window_icons()
+	_refresh_windows_window_icons.call_deferred(0.25)
+	_refresh_windows_window_icons.call_deferred(1.0)
 	if not _is_headless():
 		DisplayServer.window_set_title(DESKTOP_WINDOW_TITLE if is_desktop_platform() else "妹相随")
 		var win := get_window()
@@ -284,7 +287,8 @@ func _build_overlays() -> void:
 	overlays.save_overwrite_cancelled.connect(func() -> void: _arm_modal_release_guard())
 	overlays.quit_confirmed.connect(_on_quit_confirmed)
 	overlays.quit_cancelled.connect(func() -> void: _arm_modal_release_guard())
-	overlays.save_transfer_closed.connect(func() -> void: _arm_modal_release_guard())
+	overlays.save_transfer_closed.connect(_on_save_transfer_closed)
+	overlays.save_transfer_imported.connect(_on_save_transfer_imported)
 	overlays.save_page_return_title_requested.connect(request_return_to_title)
 	overlays.save_page_transfer_requested.connect(open_save_transfer)
 	overlays.drawer_action_requested.connect(_on_drawer_action)
@@ -343,7 +347,8 @@ func _process(delta: float) -> void:
 		if phase == "failed" and overlays != null:
 			report_fault(_failure_reason())
 		return
-	_accumulator += delta
+	# Cap single-frame delta so an I/O or GC hiccup cannot burn through multi-frame UI animations invisibly.
+	_accumulator = minf(_accumulator + minf(delta, STEP * 2.0), STEP * 3.0)
 	var guard := 0
 	while _accumulator >= STEP and guard < MAX_STEPS_PER_FRAME:
 		_accumulator -= STEP
@@ -1471,6 +1476,17 @@ func _apply_windows_window_icons() -> void:
 		push_warning("Windows taskbar/window icon application failed")
 
 
+func _refresh_windows_window_icons(delay: float) -> void:
+	if _is_headless() or OS.get_name() != "Windows" or _window_icons == null:
+		return
+	await get_tree().create_timer(delay).timeout
+	if not is_inside_tree():
+		return
+	var hwnd := DisplayServer.window_get_native_handle(DisplayServer.WINDOW_HANDLE)
+	if hwnd == 0 or not _window_icons.Refresh(hwnd):
+		return
+
+
 func _load_display_settings() -> void:
 	if _is_headless():
 		return
@@ -2117,7 +2133,32 @@ func can_open_quick_ui() -> bool:
 func open_save_transfer() -> void:
 	if overlays == null or session == null or faulted or phase in ["setup", "bootstrap", "failed"]:
 		return
+	_pending_post_import_refresh = false
 	overlays.open_save_transfer(session.SaveDirectory, session)
+
+
+func _on_save_transfer_imported(_count: int) -> void:
+	_pending_post_import_refresh = true
+	if session != null:
+		session.InvalidateSaveCache()
+	if assets != null:
+		for slot in range(1, 100):
+			assets.invalidate_path("Save/save%d.jpg" % slot)
+
+
+func _on_save_transfer_closed() -> void:
+	_arm_modal_release_guard()
+	if not _pending_post_import_refresh:
+		return
+	_pending_post_import_refresh = false
+	if session == null:
+		return
+	session.InvalidateSaveCache()
+	if _save_load_ui_active():
+		var cur_slot := maxi(1, int(session.GetCommonEventSelf(131, 12)))
+		session.RefreshSaveUiForSlot(cur_slot)
+	elif phase == "title":
+		restart_title()
 
 
 func _trigger_quick_save() -> void:

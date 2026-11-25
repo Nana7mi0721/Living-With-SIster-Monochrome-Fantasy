@@ -157,6 +157,10 @@ public sealed class LegacySaveImporter
         [JsonPropertyName("map")] public MapSummary Map { get; set; } = new();
         [JsonPropertyName("choice_anchor")] public int[] ChoiceAnchor { get; set; } = [512, 240];
         [JsonPropertyName("database_overrides")] public List<int> DatabaseOverrides { get; set; } = [];
+        [JsonIgnore] public int[] SysVars { get; set; } = Array.Empty<int>();
+        [JsonIgnore] public List<string> StringVars { get; set; } = [];
+        [JsonIgnore] public Dictionary<int, Dictionary<int, int[]>> MapEventSelfVars { get; set; } = [];
+        [JsonIgnore] public Dictionary<int, int> DatabaseRowCounts { get; set; } = [];
         [JsonIgnore] public List<DatabaseCell> DatabaseCells { get; set; } = [];
         [JsonIgnore] public List<DatabaseTextCell> DatabaseTextCells { get; set; } = [];
         /// <summary>Event id -> CSelf0..99 numbers (SavePart3 list table).</summary>
@@ -166,7 +170,13 @@ public sealed class LegacySaveImporter
         /// <summary>Complete SavePart5 picture records for a real load (not the summary view).</summary>
         [JsonIgnore] public List<SavedPicture> PictureStates { get; set; } = [];
         [JsonIgnore] public string BgmFile { get; set; } = "";
+        [JsonIgnore] public int BgmVolume { get; set; } = 100;
+        [JsonIgnore] public int BgmTempo { get; set; } = 100;
+        [JsonIgnore] public int BgmLoopPoint { get; set; } = 0;
         [JsonIgnore] public string BgsFile { get; set; } = "";
+        [JsonIgnore] public int BgsVolume { get; set; } = 100;
+        [JsonIgnore] public int BgsTempo { get; set; } = 100;
+        [JsonIgnore] public int BgsLoopPoint { get; set; } = 0;
     }
 
     public sealed class DatabaseCell
@@ -289,7 +299,7 @@ public sealed class LegacySaveImporter
         }
         string chipImage = r.ReadMemDataString(4, "chip_image");
         for (int i = 0; i < 31; i++) r.ReadMemData(4);
-        uint vars2Count = r.ReadU32();
+        int vars2Count = SignedCount(r.ReadU32());
         var switches = new Dictionary<string, bool>();
         for (int i = 0; i < vars2Count; i++)
         {
@@ -300,13 +310,13 @@ public sealed class LegacySaveImporter
             }
         }
 
-        uint objectCount = r.ReadU32();
+        int objectCount = SignedCount(r.ReadU32());
         for (int i = 0; i < objectCount; i++)
         {
             SkipObject(r);
         }
         for (int i = 0; i < 11; i++) r.ReadU32();
-        uint vars3Count = r.ReadU32();
+        int vars3Count = SignedCount(r.ReadU32());
         for (int i = 0; i < vars3Count; i++) r.ReadU32();
 
         // SavePart2
@@ -314,8 +324,10 @@ public sealed class LegacySaveImporter
         uint[] vars3_21 = new uint[19];
         for (int i = 0; i < 19; i++) vars3_21[i] = r.ReadU32();
         uint playTimeFrames = vars3_21[0];
-        int sys3 = (int)vars3_21[9];
-        int sys4 = (int)vars3_21[10];
+        var sysVars = new int[13];
+        for (int i = 0; i < 13; i++) sysVars[i] = unchecked((int)vars3_21[6 + i]);
+        int sys3 = sysVars[WolfIds.SysChoiceAnchorX];
+        int sys4 = sysVars[WolfIds.SysChoiceAnchorY];
 
         for (int i = 0; i < 3; i++) r.ReadU16();
         r.ReadU32();
@@ -329,16 +341,26 @@ public sealed class LegacySaveImporter
 
         // block 100
         r.ReadU32(); r.ReadU32(); r.ReadU8();
-        uint c1 = r.ReadU32(); for (int i = 0; i < c1; i++) r.ReadMemData(4);
-        uint c2 = r.ReadU32(); for (int i = 0; i < c2; i++) r.ReadU32();
+        int c1 = SignedCount(r.ReadU32()); for (int i = 0; i < c1; i++) r.ReadMemData(4);
+        int c2 = SignedCount(r.ReadU32()); for (int i = 0; i < c2; i++) r.ReadU32();
         for (int i = 0; i < 5; i++) r.ReadU32();
         for (int i = 0; i < 6; i++) r.ReadU32();
         r.ReadU16();
         r.ReadMemData(2); r.ReadMemData(2);
         r.ReadU32();
         for (int i = 0; i < 3; i++) r.ReadU32();
-        string bgmPath1 = r.ReadMemDataString(2, "bgm_path1"); for (int i = 0; i < 3; i++) r.ReadU32();
-        string bgmPath2 = r.ReadMemDataString(2, "bgm_path2"); for (int i = 0; i < 3; i++) r.ReadU32();
+        string bgmPath1 = r.ReadMemDataString(2, "bgm_path1");
+        int bgmVol = Math.Clamp(r.ReadI32(), 0, 100);
+        int bgmTempo = r.ReadI32();
+        int bgmLoop = Math.Max(0, r.ReadI32());
+        if (bgmTempo <= 0) bgmTempo = 100;
+        if (bgmVol == 0 && !string.IsNullOrEmpty(bgmPath1)) bgmVol = 100;
+        string bgmPath2 = r.ReadMemDataString(2, "bgm_path2");
+        int bgsVol = Math.Clamp(r.ReadI32(), 0, 100);
+        int bgsTempo = r.ReadI32();
+        int bgsLoop = Math.Max(0, r.ReadI32());
+        if (bgsTempo <= 0) bgsTempo = 100;
+        if (bgsVol == 0 && !string.IsNullOrEmpty(bgmPath2)) bgsVol = 100;
         r.ReadMemData(2); r.ReadMemData(2); r.ReadU8();
         r.ReadU8();
         for (int i = 0; i < 3; i++) r.ReadMemData(2);
@@ -351,26 +373,48 @@ public sealed class LegacySaveImporter
         for (int i = 0; i < 24; i++) r.ReadU32();
         for (int i = 0; i < 4; i++) r.ReadU32();
         r.ReadMemData(4);
-        uint mds2Count = r.ReadU32();
+        int mds2Count = SignedCount(r.ReadU32());
         for (int i = 0; i < mds2Count; i++) r.ReadMemData(4);
 
         // SavePart3
         r.ReadU32();
-        uint groupCount = r.ReadU32();
+        int groupCount = SignedCount(r.ReadU32());
+        var mapEventSelfVars = new Dictionary<int, Dictionary<int, int[]>>();
         for (int i = 0; i < groupCount; i++)
         {
-            uint gc = r.ReadU32();
+            int gc = SignedCount(r.ReadU32());
+            Dictionary<int, int[]>? byEvent = null;
             for (int j = 0; j < gc; j++)
             {
                 byte per = r.ReadU8();
-                for (int k = 0; k < per; k++) r.ReadU32();
+                int[]? words = null;
+                bool any = false;
+                for (int k = 0; k < per; k++)
+                {
+                    int v = r.ReadI32();
+                    if (v != 0)
+                    {
+                        words ??= new int[per];
+                        words[k] = v;
+                        any = true;
+                    }
+                }
+                if (any && words != null)
+                {
+                    byEvent ??= new Dictionary<int, int[]>();
+                    byEvent[j] = words;
+                }
+            }
+            if (byEvent != null)
+            {
+                mapEventSelfVars[i] = byEvent;
             }
         }
-        uint rowCount = r.ReadU32();
+        int rowCount = SignedCount(r.ReadU32());
         var normalVars = new Dictionary<string, int>();
         for (int i = 0; i < rowCount; i++)
         {
-            uint rc = r.ReadU32();
+            int rc = SignedCount(r.ReadU32());
             for (int j = 0; j < rc; j++)
             {
                 int val = r.ReadI32();
@@ -380,9 +424,13 @@ public sealed class LegacySaveImporter
                 }
             }
         }
-        uint mds1Count = r.ReadU32();
-        for (int i = 0; i < mds1Count; i++) r.ReadMemData(4);
-        uint listCount = r.ReadU32();
+        int mds1Count = SignedCount(r.ReadU32());
+        var stringVars = new List<string>(mds1Count);
+        for (int i = 0; i < mds1Count; i++)
+        {
+            stringVars.Add(r.ReadMemDataString(4, $"str_var[{i}]"));
+        }
+        int listCount = SignedCount(r.ReadU32());
         var commonSelfNumbers = new Dictionary<int, int[]>();
         for (int i = 0; i < listCount; i++)
         {
@@ -391,7 +439,7 @@ public sealed class LegacySaveImporter
             for (int j = 0; j < lc; j++) words[j] = r.ReadI32();
             commonSelfNumbers[i] = words;
         }
-        uint slotCount = r.ReadU32();
+        int slotCount = SignedCount(r.ReadU32());
         var commonSelfStrings = new Dictionary<int, string[]>();
         for (int i = 0; i < slotCount; i++)
         {
@@ -403,12 +451,12 @@ public sealed class LegacySaveImporter
 
         // SavePart4
         SkipObject(r);
-        uint p4Count = r.ReadU32();
+        int p4Count = SignedCount(r.ReadU32());
         for (int i = 0; i < p4Count; i++) SkipObject(r);
         r.ReadU8(); r.ReadU8();
-        uint p4Vars2 = r.ReadU32();
+        int p4Vars2 = SignedCount(r.ReadU32());
         for (int i = 0; i < p4Vars2; i++) r.ReadU32();
-        uint p4Vars3 = r.ReadU32();
+        int p4Vars3 = SignedCount(r.ReadU32());
         for (int i = 0; i < p4Vars3; i++) r.ReadU64();
 
         // SavePart5 (Picture table)
@@ -443,10 +491,10 @@ public sealed class LegacySaveImporter
                 for (int k = 0; k < 3; k++) r.ReadU32();
                 for (int k = 0; k < 21; k++) r.ReadU32();
                 for (int k = 0; k < 5; k++) r.ReadU32();
-                uint subCount = r.ReadU32();
+                int subCount = SignedCount(r.ReadU32());
                 for (int subIdx = 0; subIdx < subCount; subIdx++)
                 {
-                    uint slen = r.ReadU32();
+                    int slen = SignedCount(r.ReadU32());
                     for (int w = 0; w < slen; w++) r.ReadU32();
                 }
                 for (int k = 0; k < 7; k++) r.ReadU32();
@@ -459,10 +507,29 @@ public sealed class LegacySaveImporter
                     Name = picName
                 });
 
-                // SavedPicture.Args keeps the PictureStage layout: args[4]=opacity,
-                // args[5]/[6]=x/y, args[7]=scale, args[8]=fade, args[9]=pattern.
-                // SavePart5 vars7_18 uses a different order (x,y,w,h,pattern,opacity,
-                // blend,?,fade,scale,vscale,?).
+                // PictureStage layout: args[1]=w/cols, args[2]=h/rows, args[3]=pattern(1-based),
+                // args[4]=opacity, args[5]=x, args[6]=y, args[7]=scale, args[8]=rotation(0 on load),
+                // args[16]=vscale (only when scale_mode=3). Blend & scale_mode pass through Flags
+                // so args[10] (PIC_FLAG_TONE_MASK) is never corrupted by vscale.
+                // SavePart5 vars7_18 order: (x,y,w,h,pattern,opacity,blend,-1,fade,scale,vscale,0).
+                int scaleX = vars7_18[9];
+                int scaleY = vars7_18[10];
+                int blend = vars7_18[6];
+                bool independentScale = scaleY != 0 && scaleY != scaleX;
+                List<int> picArgs = independentScale
+                    ? [0, vars7_18[2], vars7_18[3], vars7_18[4], vars7_18[5], vars7_18[0], vars7_18[1], scaleX, 0, 0, 0, 0, 0, 0, 0, 0, scaleY]
+                    : [0, vars7_18[2], vars7_18[3], vars7_18[4], vars7_18[5], vars7_18[0], vars7_18[1], scaleX, 0];
+                Dictionary<string, int>? picFlags = null;
+                if (blend != 0)
+                {
+                    picFlags ??= new Dictionary<string, int>();
+                    picFlags["blend"] = blend;
+                }
+                if (independentScale)
+                {
+                    picFlags ??= new Dictionary<string, int>();
+                    picFlags["scale_mode"] = 3;
+                }
                 pictureStates.Add(new SavedPicture
                 {
                     Number = (int)picId,
@@ -471,12 +538,8 @@ public sealed class LegacySaveImporter
                     File = isText == 1 ? "" : picName,
                     Text = isText == 1 ? DecodePictureText(picBytes, warnings, $"picture[{picId}] text", isUtf8) : "",
                     Anchor = anchor,
-                    Args =
-                    [
-                        0, vars7_18[2], vars7_18[3], vars7_18[6],
-                        vars7_18[5], vars7_18[0], vars7_18[1], vars7_18[9],
-                        vars7_18[8], vars7_18[4], vars7_18[10], 0
-                    ]
+                    Args = picArgs,
+                    Flags = picFlags
                 });
             }
         }
@@ -487,6 +550,7 @@ public sealed class LegacySaveImporter
         if ((ulong)typeCount * 8UL > (ulong)r.Remaining)
             throw new InvalidDataException($"VariableDatabase type count {typeCount} exceeds remaining {r.Remaining} bytes");
         var dbOverrides = new List<int>();
+        var dbRowCounts = new Dictionary<int, int>();
         var dbCells = new List<DatabaseCell>();
         var dbTextCells = new List<DatabaseTextCell>();
         for (uint t = 0; t < typeCount; t++)
@@ -507,6 +571,10 @@ public sealed class LegacySaveImporter
             for (int k = 0; k < cfg.Length; k++) cfg[k] = r.ReadU32();
 
             uint typeRowCount = r.ReadU32();
+            if (typeRowCount <= int.MaxValue)
+            {
+                dbRowCounts[(int)t] = (int)typeRowCount;
+            }
             if (cfg.Length == 0)
             {
                 if (typeRowCount > 100_000)
@@ -542,7 +610,7 @@ public sealed class LegacySaveImporter
         byte p7Var1 = r.ReadU8();
         if (p7Var1 == 1)
         {
-            uint p7Count = r.ReadU32();
+            int p7Count = SignedCount(r.ReadU32());
             for (int i = 0; i < p7Count; i++)
             {
                 byte tag = r.ReadU8();
@@ -585,21 +653,33 @@ public sealed class LegacySaveImporter
                     Width = mapWidth,
                     Height = mapHeight,
                     ChipImage = chipImage,
-                    ObjectsCount = (int)objectCount
+                    ObjectsCount = objectCount
                 },
                 ChoiceAnchor = [sys3, sys4],
+                SysVars = sysVars,
+                StringVars = stringVars,
+                MapEventSelfVars = mapEventSelfVars,
                 DatabaseOverrides = dbOverrides,
+                DatabaseRowCounts = dbRowCounts,
                 DatabaseCells = dbCells,
                 DatabaseTextCells = dbTextCells,
                 CommonSelfNumbers = commonSelfNumbers,
                 CommonSelfStrings = commonSelfStrings,
                 PictureStates = pictureStates,
                 BgmFile = bgmPath1,
-                BgsFile = bgmPath2
+                BgmVolume = bgmVol,
+                BgmTempo = bgmTempo,
+                BgmLoopPoint = bgmLoop,
+                BgsFile = bgmPath2,
+                BgsVolume = bgsVol,
+                BgsTempo = bgsTempo,
+                BgsLoopPoint = bgsLoop
             },
             NotRecoverable = NotRecoverableFields
         };
     }
+
+    private static int SignedCount(uint raw) => (int)raw > 0 ? (int)raw : 0;
 
     /// <summary>Validate a retail .sav file without altering live session state.</summary>
     public static bool ValidateFile(string path, out string error)

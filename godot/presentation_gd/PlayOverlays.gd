@@ -18,6 +18,7 @@ signal save_overwrite_cancelled
 signal quit_confirmed
 signal quit_cancelled
 signal save_transfer_closed
+signal save_transfer_imported(count: int)
 signal save_page_return_title_requested
 signal save_page_transfer_requested
 signal drawer_action_requested(action: String)
@@ -1644,10 +1645,23 @@ static func apply_save_zip(zip_path: String, save_dir: String, backup_dir: Strin
 	var reader := ZIPReader.new()
 	if reader.open(zip_path) != OK:
 		return {"ok": false, "error": "无法重开 ZIP 压缩包"}
-	var imported := 0
+	# Import save slots & thumbnails first, then System.sav/system2.sav last so authoritative
+	# retail system variables (NG+ var550, clear unlocks) are never overwritten by slot syncs.
+	var regular_entries: Array[String] = []
+	var system_entries: Array[String] = []
 	for entry_name in reader.get_files():
 		if entry_name.ends_with("/") or _is_ignorable_save_archive_entry(entry_name) or not is_valid_save_archive_entry(entry_name):
 			continue
+		var leaf_lower := entry_name.replace("\\", "/").get_file().to_lower()
+		if not _retail_system_target_name(leaf_lower).is_empty():
+			system_entries.append(entry_name)
+		else:
+			regular_entries.append(entry_name)
+	var ordered_entries: Array[String] = []
+	ordered_entries.append_array(regular_entries)
+	ordered_entries.append_array(system_entries)
+	var imported := 0
+	for entry_name in ordered_entries:
 		var data := reader.read_file(entry_name)
 		var leaf := entry_name.replace("\\", "/").get_file()
 		var leaf_lower := leaf.to_lower()
@@ -1759,7 +1773,7 @@ func _build_save_transfer() -> void:
 	slot_row.add_child(slot_lbl)
 	_transfer_slot_spin = SpinBox.new()
 	_transfer_slot_spin.min_value = 1
-	_transfer_slot_spin.max_value = 16
+	_transfer_slot_spin.max_value = 99
 	_transfer_slot_spin.step = 1
 	_transfer_slot_spin.value = 1
 	_transfer_slot_spin.custom_minimum_size = Vector2(108, 36)
@@ -2110,8 +2124,14 @@ func _commit_pending_import() -> void:
 		var res := apply_save_zip(_pending_import_zip, _transfer_save_dir, backup_dir, _transfer_session)
 		_clear_pending_import()
 		_refresh_transfer_listing()
+		var ok_zip := bool(res.get("ok", false))
+		var zip_count := int(res.get("imported", 0))
+		if ok_zip:
+			if _transfer_session != null and _transfer_session.has_method("InvalidateSaveCache"):
+				_transfer_session.call("InvalidateSaveCache")
+			save_transfer_imported.emit(zip_count)
 		if _transfer_status != null:
-			_transfer_status.text = "导入完成，共写入 %d 个文件。" % int(res.get("imported", 0)) if bool(res.get("ok", false)) else str(res.get("error", "导入失败"))
+			_transfer_status.text = "导入完成，共写入 %d 个文件。" % zip_count if ok_zip else str(res.get("error", "导入失败"))
 		return
 	if not _pending_sav_path.is_empty():
 		var kind := _detect_import_kind(_pending_sav_path)
@@ -2144,5 +2164,9 @@ func _commit_pending_import() -> void:
 			success_msg = "已将原版存档导入至 save_%02d.json。" % slot
 		_clear_pending_import()
 		_refresh_transfer_listing()
+		if ok:
+			if _transfer_session != null and _transfer_session.has_method("InvalidateSaveCache"):
+				_transfer_session.call("InvalidateSaveCache")
+			save_transfer_imported.emit(1)
 		if _transfer_status != null:
 			_transfer_status.text = success_msg if ok else ("存档导入失败：" + err)

@@ -191,6 +191,14 @@ public static class LegacySaveExporter
 
         uint[] vars3_21 = new uint[19];
         vars3_21[0] = state.PlayFrames > 0 ? (uint)Math.Min(state.PlayFrames, uint.MaxValue) : 0u;
+        if (state.SysVars != null)
+        {
+            int sysCopy = Math.Min(state.SysVars.Count, 13);
+            for (int i = 0; i < sysCopy; i++)
+            {
+                vars3_21[6 + i] = unchecked((uint)state.SysVars[i]);
+            }
+        }
         int sys3 = state.SysVars != null && state.SysVars.Count > WolfIds.SysChoiceAnchorX
             ? state.SysVars[WolfIds.SysChoiceAnchorX] : 512;
         int sys4 = state.SysVars != null && state.SysVars.Count > WolfIds.SysChoiceAnchorY
@@ -276,7 +284,12 @@ public static class LegacySaveExporter
             bw.Write(vars != null && i < vars.Count ? vars[i] : 0);
         }
 
-        bw.Write(0u); // mds1Count
+        int strCount = state.StrVars?.Count ?? 0;
+        bw.Write((uint)strCount); // mds1Count
+        for (int i = 0; i < strCount; i++)
+        {
+            WriteMemDataString(bw, state.StrVars![i] ?? "", 4, alwaysNul: true);
+        }
 
         // Index CommonSelf banks by event id.
         var byEvent = new Dictionary<int, EventSelfVars>();
@@ -398,18 +411,22 @@ public static class LegacySaveExporter
 
             int Arg(int idx, int fallback) => pic.Args != null && idx < pic.Args.Count ? pic.Args[idx] : fallback;
             int scale = Arg(7, 100);
-            int vscale = pic.Args != null && pic.Args.Count > 10 && pic.Args[10] != 0 ? pic.Args[10] : scale;
+            int vscale = (pic.Flags != null && pic.Flags.TryGetValue("scale_mode", out int sm) && sm == 3
+                && pic.Args != null && pic.Args.Count > 16 && pic.Args[16] != 0)
+                ? pic.Args[16]
+                : scale;
+            int blend = pic.Flags != null && pic.Flags.TryGetValue("blend", out int b) ? b : 0;
 
             // Reverse mapping of LegacySaveImporter: vars7_18 = (x,y,w,h,pattern,opacity,blend,-1,fade,scale,vscale,0).
             bw.Write(Arg(5, 0));
             bw.Write(Arg(6, 0));
             bw.Write(Math.Max(0, Arg(1, 1)));
             bw.Write(Math.Max(0, Arg(2, 1)));
-            bw.Write(Arg(9, 0));
+            bw.Write(Arg(3, 1));
             bw.Write(Arg(4, 255));
-            bw.Write(Arg(3, 0));
+            bw.Write(blend);
             bw.Write(unchecked((int)uint.MaxValue));
-            bw.Write(Arg(8, 0));
+            bw.Write(0);
             bw.Write(scale);
             bw.Write(vscale);
             bw.Write(0);
