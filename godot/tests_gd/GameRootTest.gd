@@ -1177,6 +1177,50 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	if bool(PlayOverlays.inspect_save_zip(invalid_json_zip, save_dir, root.session).get("ok", false)):
 		failures.append("inspect_save_zip must reject malformed save JSON")
 
+	# Steam Save.zip sidecar files (steam_autocloud.vdf, OS metadata, __MACOSX) must be skipped safely.
+	var steam_sidecar_zip := transfer_dir.path_join("steam_save.zip")
+	var zp3 := ZIPPacker.new()
+	if zp3.open(steam_sidecar_zip) == OK:
+		zp3.start_file("Save/steam_autocloud.vdf")
+		zp3.write_file("\"steam_autocloud\"\n{\n}\n".to_utf8_buffer())
+		zp3.close_file()
+		zp3.start_file("Save/Thumbs.db")
+		zp3.write_file("junk".to_utf8_buffer())
+		zp3.close_file()
+		zp3.start_file("__MACOSX/Save/._save_01.json")
+		zp3.write_file("appledouble".to_utf8_buffer())
+		zp3.close_file()
+		zp3.start_file("Save/save_01.json")
+		zp3.write_file("{\"schema\":\"lwsmf.save\",\"schema_version\":2,\"vars\":[0,1]}".to_utf8_buffer())
+		zp3.close_file()
+		zp3.close()
+	var steam_insp: Dictionary = PlayOverlays.inspect_save_zip(steam_sidecar_zip, save_dir, root.session)
+	if not bool(steam_insp.get("ok", false)) or steam_insp.get("files", PackedStringArray()).size() != 1:
+		failures.append("inspect_save_zip must allow Steam Save.zip with steam_autocloud.vdf/OS sidecars: %s" % str(steam_insp))
+	var steam_apply: Dictionary = PlayOverlays.apply_save_zip(steam_sidecar_zip, save_dir, backup_dir, root.session)
+	if not bool(steam_apply.get("ok", false)) or int(steam_apply.get("imported", 0)) != 1 or FileAccess.file_exists(save_dir.path_join("steam_autocloud.vdf")):
+		failures.append("apply_save_zip must import save_01.json and skip steam_autocloud.vdf: %s" % str(steam_apply))
+
+	var traversal_sidecar_zip := transfer_dir.path_join("traversal_sidecar.zip")
+	var zp4 := ZIPPacker.new()
+	if zp4.open(traversal_sidecar_zip) == OK:
+		zp4.start_file("../steam_autocloud.vdf")
+		zp4.write_file("{}".to_utf8_buffer())
+		zp4.close_file()
+		zp4.close()
+	if bool(PlayOverlays.inspect_save_zip(traversal_sidecar_zip, save_dir, root.session).get("ok", false)):
+		failures.append("inspect_save_zip must still reject path-traversal sidecar entries")
+
+	var only_sidecar_zip := transfer_dir.path_join("only_sidecar.zip")
+	var zp5 := ZIPPacker.new()
+	if zp5.open(only_sidecar_zip) == OK:
+		zp5.start_file("Save/steam_autocloud.vdf")
+		zp5.write_file("{}".to_utf8_buffer())
+		zp5.close_file()
+		zp5.close()
+	if bool(PlayOverlays.inspect_save_zip(only_sidecar_zip, save_dir, root.session).get("ok", false)):
+		failures.append("inspect_save_zip must reject archives with only metadata sidecars and no save files")
+
 	root.overlays.open_save_transfer(save_dir, root.session)
 	if not root.overlays.save_transfer_open():
 		failures.append("open_save_transfer must open SaveTransferModal")

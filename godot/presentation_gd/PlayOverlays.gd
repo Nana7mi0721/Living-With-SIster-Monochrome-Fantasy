@@ -1313,7 +1313,7 @@ func toggle_drawer() -> void:
 
 # ---- Cross-Platform Save Transfer (.zip / .sav) --------------------------
 
-static func is_valid_save_archive_entry(entry_name: String) -> bool:
+static func _is_safe_save_archive_path(entry_name: String) -> bool:
 	var norm := entry_name.replace("\\", "/").strip_edges()
 	if norm.is_empty() or norm.begins_with("/") or norm.ends_with("/"):
 		return false
@@ -1325,6 +1325,31 @@ static func is_valid_save_archive_entry(entry_name: String) -> bool:
 	for part in parts:
 		if part.is_empty() or part == "." or part == "..":
 			return false
+	return true
+
+
+static func _is_ignorable_save_archive_entry(entry_name: String) -> bool:
+	if not _is_safe_save_archive_path(entry_name):
+		return false
+	var parts := entry_name.replace("\\", "/").strip_edges().split("/", false)
+	if parts[0].to_lower() == "__macosx":
+		return true
+	var file_name := parts[-1].to_lower()
+	if file_name.begins_with("._"):
+		return true
+	return file_name in [
+		"steam_autocloud.vdf",
+		"remotecache.vdf",
+		".ds_store",
+		"thumbs.db",
+		"desktop.ini",
+	]
+
+
+static func is_valid_save_archive_entry(entry_name: String) -> bool:
+	if not _is_safe_save_archive_path(entry_name):
+		return false
+	var parts := entry_name.replace("\\", "/").strip_edges().split("/", false)
 	var file_name := parts[-1].to_lower()
 	if file_name == "quicksave.json" or file_name == "system.json" or file_name == "system.sav":
 		return true
@@ -1541,7 +1566,7 @@ static func inspect_save_zip(zip_path: String, save_dir: String = "", session_ct
 	var conflicts := PackedStringArray()
 	var total_uncompressed := 0
 	for entry_name in entries:
-		if entry_name.ends_with("/"):
+		if entry_name.ends_with("/") or _is_ignorable_save_archive_entry(entry_name):
 			continue
 		if not is_valid_save_archive_entry(entry_name):
 			reader.close()
@@ -1610,7 +1635,7 @@ static func apply_save_zip(zip_path: String, save_dir: String, backup_dir: Strin
 		return {"ok": false, "error": "无法重开 ZIP 压缩包"}
 	var imported := 0
 	for entry_name in reader.get_files():
-		if entry_name.ends_with("/") or not is_valid_save_archive_entry(entry_name):
+		if entry_name.ends_with("/") or _is_ignorable_save_archive_entry(entry_name) or not is_valid_save_archive_entry(entry_name):
 			continue
 		var data := reader.read_file(entry_name)
 		var leaf := entry_name.replace("\\", "/").get_file()
