@@ -178,6 +178,7 @@ var _polled_hit_slots: Dictionary = {}
 var _last_polled_hit_slots: Dictionary = {}
 var _hit_match_this_frame := false
 var _last_frame_hit_match := false
+var _save_arrow_hover_slot := 0
 var _shapes := _PictureShapes.new()
 var _effects := _PictureEffects.new()
 
@@ -801,6 +802,26 @@ func picture_rect(number: int) -> Rect2:
 	return _hit_rect(number)
 
 
+func is_picture_visible(number: int) -> bool:
+	if not _cmds.has(number):
+		return false
+	var st: Dictionary = _states.get(number, {})
+	if bool(st.get("hidden", false)) or bool(st.get("erase_after", false)):
+		return false
+	var rect := _hit_rect(number)
+	return rect.size.x > 0.0 and rect.size.y > 0.0
+
+
+func set_save_arrow_hover(slot: int) -> void:
+	var normalized := slot if (slot == 12004 or slot == 12005) else 0
+	if _save_arrow_hover_slot == normalized:
+		return
+	_save_arrow_hover_slot = normalized
+	for arrow_slot in [12004, 12005]:
+		if _pictures.has(arrow_slot):
+			_render_picture(arrow_slot)
+
+
 func _arg(args: Array, index: int, fallback: int) -> int:
 	return int(args[index]) if index < args.size() else fallback
 
@@ -953,6 +974,8 @@ func _build_picture(number: int, file: String, text: String, args: Array, anchor
 
 	var size: Vector2
 	if is_window:
+		if (number == 12004 or number == 12005) and str(sys_spec.get("shape", "")) == "TRI":
+			holder.set_meta("save_page_arrow", true)
 		var win_child := _shapes.build_window_node(sys_spec, texture, args, assets, resolved_file)
 		size = win_child.get_meta("window_size", win_child.size)
 		holder.add_child(win_child)
@@ -1490,8 +1513,15 @@ func _render_picture(number: int) -> void:
 	node.position = position
 	node.pivot_offset = size * 0.5
 	node.scale = Vector2(-1.0 if scale_x_pct < 0 else 1.0, -1.0 if scale_y_pct < 0 else 1.0)
-	var blend := int(pose.get("blend", 0))
+	var is_save_arrow := bool(node.get_meta("save_page_arrow", false)) or ((number == 12004 or number == 12005) and str(_cmds.get(number, {}).get("file", "")).strip_edges().to_upper() in ["<TRI-LEFT>", "<TRI-RIGHT>"])
+	# Save-page arrows draw under ADD blend over light backgrounds and wash out; force normal alpha mix.
+	var blend := 0 if is_save_arrow else int(pose.get("blend", 0))
 	var tint := _effects.tone_color(state)
+	if is_save_arrow and _save_arrow_hover_slot == number:
+		node.scale *= 1.15
+		tint.r = minf(1.0, tint.r * 1.22)
+		tint.g = minf(1.0, tint.g * 1.22)
+		tint.b = minf(1.0, tint.b * 1.22)
 	tint.a = clampf(float(pose.get("opacity", 255)) / 255.0, 0.0, 1.0)
 	node.modulate = tint
 	_apply_pattern_cell(node, state)
@@ -1544,7 +1574,7 @@ func picture_count() -> int:
 	return _pictures.size()
 
 
-## Format active slots for diagnostics (F6 dump + tests) and optionally save user://picture_dump.txt.
+## Format active slots for diagnostics (F10 dump + tests) and optionally save user://picture_dump.txt.
 func dump_pictures(write_file: bool = true) -> String:
 	var numbers: Array = _cmds.keys()
 	numbers.sort()
@@ -1638,6 +1668,7 @@ func clear_pictures() -> void:
 	_last_polled_hit_slots.clear()
 	_hit_match_this_frame = false
 	_last_frame_hit_match = false
+	_save_arrow_hover_slot = 0
 
 
 func picture_text(number: int) -> String:

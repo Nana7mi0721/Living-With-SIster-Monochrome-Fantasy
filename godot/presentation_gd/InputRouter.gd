@@ -23,6 +23,7 @@ const TOUCH_TWO_FINGER_SWIPE_MIN_DY := 56.0
 const TOUCH_SWIPE_MIN_DX := 56.0
 const TOUCH_WHEEL_STEP_PX := 48.0
 const TOUCH_PULSE_TTL_FRAMES := 3
+const WHEEL_PULSE_TTL_FRAMES := 12
 
 # Host mask bits, mirrored from core_cs/KeyCodes.cs so the VM can read them directly.
 const MASK_OK := 1
@@ -69,6 +70,8 @@ var _right_click_latch := false
 var _middle_click_latch := false
 var _touch_ok_ttl := 0
 var _touch_cancel_ttl := 0
+var _wheel_pulse_dir := 0
+var _wheel_pulse_ttl := 0
 ## A newly entered event must not consume the click/key that opened it.
 var _action_entry_suppressed := false
 var _touches: Dictionary = {}
@@ -121,6 +124,21 @@ func consume_touch_ok() -> void:
 func consume_touch_cancel() -> void:
 	_right_click_latch = false
 	_touch_cancel_ttl = 0
+
+
+func trigger_wheel_pulse(page_direction: int, ttl_frames: int = WHEEL_PULSE_TTL_FRAMES) -> void:
+	if page_direction == 0:
+		_wheel_pulse_dir = 0
+		_wheel_pulse_ttl = 0
+		return
+	# CE131 mask=771 maps +1 (wheel up) to previous page and -1 (wheel down) to next page.
+	_wheel_pulse_dir = 1 if page_direction < 0 else -1
+	_wheel_pulse_ttl = maxi(1, ttl_frames)
+
+
+func consume_wheel_pulse() -> void:
+	_wheel_pulse_dir = 0
+	_wheel_pulse_ttl = 0
 
 
 func has_active_touches() -> bool:
@@ -494,7 +512,9 @@ static func _any_pressed(keys: Array) -> bool:
 
 ## Signed wheel notch, +1 up and -1 down, for mask 771 polls.
 func wheel_notch() -> int:
-	return _wheel_dir
+	if _wheel_dir != 0:
+		return _wheel_dir
+	return _wheel_pulse_dir if _wheel_pulse_ttl > 0 else 0
 
 
 ## Button state for one frame: true when physically held or clicked within this tick.
@@ -581,6 +601,9 @@ func clear_frame_latches() -> void:
 	_middle_click_latch = false
 	_touch_ok_ttl = maxi(0, _touch_ok_ttl - 1)
 	_touch_cancel_ttl = maxi(0, _touch_cancel_ttl - 1)
+	_wheel_pulse_ttl = maxi(0, _wheel_pulse_ttl - 1)
+	if _wheel_pulse_ttl == 0:
+		_wheel_pulse_dir = 0
 	release_action_suppression_if_free()
 
 
@@ -600,5 +623,7 @@ func clear_pointer_latches() -> void:
 	_middle_click_latch = false
 	_touch_ok_ttl = 0
 	_touch_cancel_ttl = 0
+	_wheel_pulse_dir = 0
+	_wheel_pulse_ttl = 0
 	clear_touch_state()
 	clear_suppression()

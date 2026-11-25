@@ -57,6 +57,8 @@ public interface IVmSession
     DbValue? ReadDatabaseWithOverlay(DbOp op, SavedDbOverlays? overlays) => Database(op);
     /// <summary>Apply the 250 retail database overlay cells captured by the importer.</summary>
     void ApplySavedCells(IReadOnlyList<LegacySaveImporter.DatabaseCell> cells);
+    /// <summary>Apply the 250 retail database text overlay cells captured by the importer.</summary>
+    void ApplySavedTextCells(IReadOnlyList<LegacySaveImporter.DatabaseTextCell> cells);
     /// <summary>220/221/222 hook: the session owns the slot files, the VM only asks.</summary>
     Func<SaveOp, int?>? SaveLoadHandler { get; set; }
 }
@@ -1742,6 +1744,7 @@ public sealed class GameSession
         }
 
         _vm.ApplySavedCells(data.DatabaseCells);
+        _vm.ApplySavedTextCells(data.DatabaseTextCells);
         _view.ClearPictures();
         EnterMap(1, null, null, skipEventId: 0);
         if (_vm.Faulted)

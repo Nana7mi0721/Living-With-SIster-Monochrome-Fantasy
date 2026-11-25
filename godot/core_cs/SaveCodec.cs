@@ -398,6 +398,7 @@ public static class SaveCodec
         if (!ValidBanks(state.SelfVars) || !ValidBanks(state.CommonSelf)) return false;
         if (state.Instances.Count > MaxInstances) return false;
         if (state.MapEvents.Count > MaxInstances) return false;
+        if (state.PlayFrames > int.MaxValue) return false;
         if (state.MapFile.Length > 260 || state.SavedAt.Length > 64) return false;
         if (!IsSafeAssetPath(state.MapFile)) return false;
 
@@ -487,15 +488,15 @@ public static class SaveCodec
             if (state.DbOverlays.Nums.Count > 100_000 || state.DbOverlays.Texts.Count > 100_000) return false;
             foreach (var rc in state.DbOverlays.RowCounts)
             {
-                if (rc == null || rc.Container is < 0 or > 2 || rc.Type < 0 || rc.Count < 0) return false;
+                if (rc == null || rc.Container is < 0 or > 2 || rc.Type is < 0 or > 4096 || rc.Count is < 0 or > 100_000) return false;
             }
             foreach (var cell in state.DbOverlays.Nums)
             {
-                if (cell == null || cell.Container is < 0 or > 2 || cell.Type < 0 || cell.Row < 0 || cell.Column < 0) return false;
+                if (cell == null || cell.Container is < 0 or > 2 || cell.Type is < 0 or > 4096 || cell.Row is < 0 or > 100_000 || cell.Column is < 0 or > 4096) return false;
             }
             foreach (var cell in state.DbOverlays.Texts)
             {
-                if (cell == null || cell.Container is < 0 or > 2 || cell.Type < 0 || cell.Row < 0 || cell.Column < 0) return false;
+                if (cell == null || cell.Container is < 0 or > 2 || cell.Type is < 0 or > 4096 || cell.Row is < 0 or > 100_000 || cell.Column is < 0 or > 4096) return false;
                 if (cell.Value == null || cell.Value.Length > MaxDialogue) return false;
             }
         }
@@ -507,6 +508,7 @@ public static class SaveCodec
     private static bool IsSafeAssetPath(string path)
     {
         if (string.IsNullOrEmpty(path)) return true;
+        if (path.IndexOf('\0') >= 0) return false;
         if (path[0] == '/' || path[0] == '\\') return false;
         if (path.Contains(':')) return false;
         foreach (string segment in path.Split('/', '\\'))

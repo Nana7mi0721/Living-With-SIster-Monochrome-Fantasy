@@ -62,7 +62,6 @@ static func tokenize(source: String) -> Array:
 	while i < n:
 		var ch := source[i]
 		if ch == "\\":
-			var start := i
 			if i + 1 >= n:
 				literal += "\\"
 				i += 1

@@ -447,7 +447,13 @@ public static class LegacySaveExporter
 
         foreach (var cell in overlays.Nums)
         {
-            if (cell.Container != (int)DbContainer.CData || cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
+            if (cell.Container != (int)DbContainer.CData
+                || cell.Type is < 0 or > 4096
+                || cell.Row is < 0 or > 100_000
+                || cell.Column is < 0 or > 4096)
+            {
+                continue;
+            }
             if (!numsByType.TryGetValue(cell.Type, out var map))
             {
                 map = new Dictionary<(int, int), int>();
@@ -458,7 +464,13 @@ public static class LegacySaveExporter
         }
         foreach (var cell in overlays.Texts)
         {
-            if (cell.Container != (int)DbContainer.CData || cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
+            if (cell.Container != (int)DbContainer.CData
+                || cell.Type is < 0 or > 4096
+                || cell.Row is < 0 or > 100_000
+                || cell.Column is < 0 or > 4096)
+            {
+                continue;
+            }
             if (!textsByType.TryGetValue(cell.Type, out var map))
             {
                 map = new Dictionary<(int, int), string>();
@@ -469,7 +481,12 @@ public static class LegacySaveExporter
         }
         foreach (var rc in overlays.RowCounts)
         {
-            if (rc.Container != (int)DbContainer.CData || rc.Type < 0 || rc.Count < 0) continue;
+            if (rc.Container != (int)DbContainer.CData
+                || rc.Type is < 0 or > 4096
+                || rc.Count is < 0 or > 100_000)
+            {
+                continue;
+            }
             rowCountsByType[rc.Type] = rc.Count;
             if (rc.Type > maxType) maxType = rc.Type;
         }

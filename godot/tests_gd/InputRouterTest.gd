@@ -540,6 +540,48 @@ func _ready() -> void:
 	_router.mobile_double_tap_cancel_enabled = false
 	_router.reset_double_tap_state()
 
+	# 27. Save-page arrow wheel pulse TTL + PictureStage triangle visibility / alpha blend.
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+	_router.trigger_wheel_pulse(-1, 2)
+	if _router.wheel_notch() != 1:
+		failures.append("trigger_wheel_pulse(-1) must map to +1 (wheel up / prev page), got %d" % _router.wheel_notch())
+	if (_router.held_mask(true) & (InputRouter.MASK_UP | InputRouter.MASK_DOWN)) != 0:
+		failures.append("trigger_wheel_pulse must not set directional cursor bits in held_mask")
+	_router.trigger_wheel_pulse(1, 2)
+	if _router.wheel_notch() != -1:
+		failures.append("trigger_wheel_pulse(1) must map to -1 (wheel down / next page), got %d" % _router.wheel_notch())
+	_router.consume_wheel_pulse()
+	if _router.wheel_notch() != 0:
+		failures.append("consume_wheel_pulse() must clear pending wheel_notch")
+	_router.trigger_wheel_pulse(-1, 2)
+	_router.clear_frame_latches()
+	if _router.wheel_notch() != 1:
+		failures.append("wheel pulse with ttl=2 must survive 1 clear_frame_latches()")
+	_router.clear_frame_latches()
+	if _router.wheel_notch() != 0:
+		failures.append("wheel pulse with ttl=2 must expire after 2 clear_frame_latches()")
+
+	var arrow_stage := PictureStage.new(null)
+	add_child(arrow_stage)
+	arrow_stage.draw_picture(12004, 0, "<TRI-LEFT>", "", [0, 16, 20, 0, 255, 8, 130, 100, 0, 0, 8, 0, 0, 50, 50, 100], 0, 3, [], {"blend": 1})
+	arrow_stage.draw_picture(12005, 0, "<TRI-RIGHT>", "", [0, 16, 20, 0, 255, 312, 130, 100, 0, 0, 8, 0, 0, 50, 50, 100], 0, 3, [], {"blend": 1})
+	if not arrow_stage.is_picture_visible(12004) or not arrow_stage.is_picture_visible(12005):
+		failures.append("drawn 12004/12005 save-page triangles must report is_picture_visible=true")
+	var node_12005: Control = arrow_stage._pictures.get(12005, null)
+	if node_12005 == null or node_12005.material != null:
+		failures.append("save-page arrow 12005 must override additive blend with normal alpha blend (material == null)")
+	arrow_stage.set_save_arrow_hover(12005)
+	if node_12005.scale.x <= 1.05:
+		failures.append("hovering 12005 must enlarge arrow node cleanly (got %s)" % str(node_12005.scale))
+	arrow_stage.set_save_arrow_hover(0)
+	if not is_equal_approx(node_12005.scale.x, 1.0):
+		failures.append("clearing save arrow hover must restore default scale (got %s)" % str(node_12005.scale))
+	arrow_stage.draw_picture(12004, 2, "", "", [0], 0, 3)
+	if arrow_stage.is_picture_visible(12004):
+		failures.append("erased 12004 save-page arrow must report is_picture_visible=false")
+	arrow_stage.queue_free()
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

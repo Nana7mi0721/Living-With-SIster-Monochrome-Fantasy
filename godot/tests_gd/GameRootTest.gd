@@ -747,6 +747,65 @@ func _ready() -> void:
 		var bar_rect: Rect2 = title_root.overlays.save_page_bar_rect()
 		if bar_rect.size.x <= 0.0 or bar_rect.position.y < 300.0 or bar_rect.end.y > 358.0 or bar_rect.end.x >= 976.0:
 			failures.append("SavePageBar must sit between notice box (y<=300) and preview (y>=358) clear of arrow 12005: %s" % str(bar_rect))
+		var _click_save_pos := func(pos: Vector2) -> void:
+			var l_dn := InputEventMouseButton.new()
+			l_dn.button_index = MOUSE_BUTTON_LEFT
+			l_dn.pressed = true
+			l_dn.position = pos
+			title_root.router.handle_event(l_dn)
+			title_root._process(title_root.STEP)
+			var l_up := InputEventMouseButton.new()
+			l_up.button_index = MOUSE_BUTTON_LEFT
+			l_up.pressed = false
+			l_up.position = pos
+			title_root.router.handle_event(l_up)
+			for _k in range(15):
+				title_root._process(title_root.STEP)
+		while int(title_root.session.GetCommonEventSelf(131, 11)) > 0 and title_root.stage.is_picture_visible(12004):
+			_click_save_pos.call(title_root.stage.picture_rect(12004).get_center())
+		if int(title_root.session.GetCommonEventSelf(131, 11)) != 0:
+			failures.append("expected Save/Load UI to reach page 0 (got %d)" % int(title_root.session.GetCommonEventSelf(131, 11)))
+		if title_root.stage.is_picture_visible(12004) or not title_root.stage.is_picture_visible(12005):
+			failures.append("on save page 0, 12004 must be hidden and 12005 must be visible")
+		var pic_12005: Control = title_root.stage._pictures.get(12005, null)
+		if pic_12005 == null or pic_12005.material != null:
+			failures.append("save page arrow 12005 must render with normal alpha blend (material == null)")
+		_click_save_pos.call(title_root.stage.picture_rect(12005).get_center())
+		if int(title_root.session.GetCommonEventSelf(131, 11)) != 1 or title_root.overlays.save_confirm_open():
+			failures.append("clicking right arrow 12005 must advance to page 1 without opening save confirm (page=%d)" % int(title_root.session.GetCommonEventSelf(131, 11)))
+		if not title_root.stage.is_picture_visible(12004) or not title_root.stage.is_picture_visible(12005):
+			failures.append("on save page 1, both 12004 and 12005 arrows must be visible")
+		_click_save_pos.call(title_root.stage.picture_rect(12004).get_center())
+		if int(title_root.session.GetCommonEventSelf(131, 11)) != 0 or title_root.stage.is_picture_visible(12004):
+			failures.append("clicking left arrow 12004 must return to page 0 and hide 12004 (page=%d)" % int(title_root.session.GetCommonEventSelf(131, 11)))
+		# Touch tap on expanded 44x64 hitbox corner of 12005 must flip page in touch mode too.
+		var touch_arrow_pt: Vector2 = title_root.stage.picture_rect(12005).end - Vector2(3.0, 3.0)
+		var t_dn := InputEventScreenTouch.new()
+		t_dn.index = 0
+		t_dn.pressed = true
+		t_dn.position = touch_arrow_pt
+		title_root.router.handle_event(t_dn)
+		title_root._process(title_root.STEP)
+		var t_up := InputEventScreenTouch.new()
+		t_up.index = 0
+		t_up.pressed = false
+		t_up.position = touch_arrow_pt
+		title_root.router.handle_event(t_up)
+		for _k in range(15):
+			title_root._process(title_root.STEP)
+		if int(title_root.session.GetCommonEventSelf(131, 11)) != 1 or not title_root._save_load_ui_active():
+			failures.append("touch tapping expanded arrow 12005 hitbox must flip to page 1 without exiting save UI (page=%d)" % int(title_root.session.GetCommonEventSelf(131, 11)))
+		# Advance to last page and verify right arrow hides cleanly, then step back one page.
+		var guard_hops := 0
+		while title_root.stage.is_picture_visible(12005) and guard_hops < 10:
+			_click_save_pos.call(title_root.stage.picture_rect(12005).get_center())
+			guard_hops += 1
+		var last_page: int = int(title_root.session.GetCommonEventSelf(131, 11))
+		if last_page < 1 or title_root.stage.is_picture_visible(12005) or not title_root.stage.is_picture_visible(12004):
+			failures.append("reaching last save page must hide 12005 and keep 12004 visible (page=%d)" % last_page)
+		_click_save_pos.call(title_root.stage.picture_rect(12004).get_center())
+		if int(title_root.session.GetCommonEventSelf(131, 11)) != last_page - 1 or not title_root.stage.is_picture_visible(12005):
+			failures.append("clicking 12004 from last page must step back and restore 12005")
 		var before_f3 := str(title_root.stage._cmds.get(3, {}).get("file", ""))
 		var w_down := InputEventMouseButton.new()
 		w_down.button_index = MOUSE_BUTTON_WHEEL_DOWN
@@ -1134,7 +1193,7 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root._modal_release_guard = false
 	_remove_test_tree(transfer_dir)
 
-	# 7. Touch drawer tab visibility/position across title, map, and save UI (Special 1 + P0-3).
+	# 7. Touch drawer tab visibility/position across title, map, and save UI.
 	root.vm.StopAll()
 	root.vm.ApplyInputPermission(0x0ff)
 	root.stage.clear_pictures()
@@ -1339,6 +1398,17 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root.overlays.close_backlog()
 	root.stage.clear_pictures()
 	root._modal_release_guard = false
+
+	# Verify BootSplashOverlay resolves MediaPakReader.Read cleanly instead of non-existent ReadBytes.
+	var pak_reader_script := load("res://presentation/MediaPakReader.cs")
+	var pak_reader = pak_reader_script.new()
+	if not pak_reader.has_method("Read"):
+		failures.append("MediaPakReader must expose Read(name) for BootSplashOverlay")
+	var splash := BootSplashOverlay.new()
+	var missing_tex: Dictionary = splash._load_logo_pair(PackedStringArray(["user://definitely_missing_media.pak"]))
+	if bool(missing_tex.get("ok", true)):
+		failures.append("BootSplashOverlay._load_logo_pair must return ok=false when media.pak is missing")
+	splash.free()
 
 	root.queue_free()
 

@@ -459,7 +459,7 @@ public partial class SaveLoadTest : Node
             Address = 2_000_300,
         }) == 7, "221 must resolve save/system.sav case-insensitively to System.json");
 
-        // 222/221 must also persist StrVar and SysVar > 12 (P1-9).
+        // 222/221 also persists StrVar and SysVar above index 12.
         session.HandleSaveLoad(new SaveOp
         {
             Opcode = 222,
@@ -871,6 +871,21 @@ public partial class SaveLoadTest : Node
         harnessTitle.Session.HandleSaveLoad(new SaveOp { Opcode = 220, Mode = 0, File = new SaveTarget(1), Owner = 435 });
         Check(!File.Exists(titleSavePath) && harnessTitle.View.Status == "[AutoSave] slot=1 fail",
             $"opcode 220 autosave must refuse during failed phase (got '{harnessTitle.View.Status}')");
+
+        // SaveCodec hardening: PlayFrames > int.MaxValue, NUL path, and DbOverlays bounds.
+        Check(SaveCodec.FromJson("{\"schema\":\"lwsmf.save\",\"schema_version\":2,\"play_frames\":2147483648}") == null,
+            "SaveCodec must reject play_frames > int.MaxValue");
+        Check(SaveCodec.FromJson("{\"schema\":\"lwsmf.save\",\"schema_version\":2,\"map_file\":\"bad\\u0000.mps\"}") == null,
+            "SaveCodec must reject NUL byte in map_file");
+        Check(SaveCodec.FromJson("{\"schema\":\"lwsmf.save\",\"schema_version\":2,\"db_overlays\":{\"nums\":[{\"c\":0,\"t\":0,\"r\":100001,\"k\":0,\"v\":1}]}}") == null,
+            "SaveCodec must reject out-of-bounds db_overlays cell coordinates");
+
+        using (var iconGuard = new WindowIcons())
+        {
+            Check(!iconGuard.Apply(0, Array.Empty<byte>(), Array.Empty<byte>()),
+                "WindowIcons.Apply must reject zero window handle and empty ICO payloads");
+            iconGuard.Release();
+        }
 
         try { Directory.Delete(saveDir, true); }
         catch (IOException) { }

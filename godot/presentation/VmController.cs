@@ -121,6 +121,7 @@ public partial class VmController : Node, IHost, IVmSession
     private int _rightPressTtl;
     private bool _okConsumedThisFrame;
     private bool _cancelConsumedThisFrame;
+    private bool _wheelConsumedThisFrame;
     private bool _middlePressed;
     private bool _middlePressPending;
     private bool _middlePressFrame;
@@ -957,6 +958,7 @@ public partial class VmController : Node, IHost, IVmSession
         _rightPressTtl = 0;
         _okConsumedThisFrame = false;
         _cancelConsumedThisFrame = false;
+        _wheelConsumedThisFrame = false;
         _middlePressed = false;
         _middlePressPending = false;
         _middlePressFrame = false;
@@ -972,6 +974,7 @@ public partial class VmController : Node, IHost, IVmSession
     {
         _okConsumedThisFrame = false;
         _cancelConsumedThisFrame = false;
+        _wheelConsumedThisFrame = false;
         if (_pointerPressPending)
         {
             _pointerPressFrame = true;
@@ -1034,7 +1037,11 @@ public partial class VmController : Node, IHost, IVmSession
     /// </summary>
     public int KeyCodeForPoll(uint mask, uint held, uint autoKeys, int wheelNotch)
     {
-        if (mask == 771 && wheelNotch != 0) return wheelNotch;
+        if (mask == 771 && wheelNotch != 0)
+        {
+            _wheelConsumedThisFrame = true;
+            return wheelNotch;
+        }
         uint accepted = KeyCodes.AcceptedHostMask(mask);
         uint filtered = held & accepted;
         // Device polls (((mask >> 8) & 0x0F) != 0, e.g. 771) reject scripted autoKeys;
@@ -1089,6 +1096,13 @@ public partial class VmController : Node, IHost, IVmSession
         return seen;
     }
 
+    public bool ConsumeWheelObserved()
+    {
+        bool seen = _wheelConsumedThisFrame;
+        _wheelConsumedThisFrame = false;
+        return seen;
+    }
+
     /// End every running script; GDScript cannot reach the EventVm property (Vm).
     public void StopAll()
     {
@@ -1130,6 +1144,12 @@ public partial class VmController : Node, IHost, IVmSession
     public void ApplySavedCells(IReadOnlyList<LegacySaveImporter.DatabaseCell> cells)
     {
         DatabaseStore?.ApplySavedCells(cells);
+    }
+
+    /// <summary>Apply retail SavePart3 text overlay cells to the shared database.</summary>
+    public void ApplySavedTextCells(IReadOnlyList<LegacySaveImporter.DatabaseTextCell> cells)
+    {
+        DatabaseStore?.ApplySavedTextCells(cells);
     }
 
     public SavedDbOverlays? SnapshotDbOverlays() => DatabaseStore?.SnapshotOverlays();
@@ -1186,7 +1206,7 @@ public partial class VmController : Node, IHost, IVmSession
             string saveSubRel = Path.Combine(segments.GetRange(1, segments.Count - 1).ToArray());
             if (ExistsWithinRoot(SaveDirectory, saveSubRel)) return true;
             if (ExistsWithinRoot(SaveDirectory, relPath)) return true;
-            if (ExistsInSaveDirectoryCaseInsensitive(SaveDirectory, segments[^1])) return true;
+            if (segments.Count == 2 && ExistsInSaveDirectoryCaseInsensitive(SaveDirectory, segments[1])) return true;
         }
 
         string pkgRoot = AppPaths.PackageRoot();

@@ -174,9 +174,11 @@ static func _load_logo_pair_from_pak() -> Dictionary:
 		var reader = _MediaPakReaderScript.new()
 		if reader == null or not reader.Open(pak_path):
 			continue
-		var base_bytes: PackedByteArray = reader.ReadBytes(BASE_LOGO_REL)
-		var prog_bytes: PackedByteArray = reader.ReadBytes(PROGRESS_LOGO_REL)
+		var raw_base: Variant = reader.Read(BASE_LOGO_REL)
+		var raw_prog: Variant = reader.Read(PROGRESS_LOGO_REL)
 		reader.Close()
+		var base_bytes: PackedByteArray = raw_base if raw_base is PackedByteArray else PackedByteArray()
+		var prog_bytes: PackedByteArray = raw_prog if raw_prog is PackedByteArray else PackedByteArray()
 		var base_tex := decode_image_texture(base_bytes, "jpg")
 		var prog_tex := decode_image_texture(prog_bytes, "jpg")
 		if base_tex != null or prog_tex != null:

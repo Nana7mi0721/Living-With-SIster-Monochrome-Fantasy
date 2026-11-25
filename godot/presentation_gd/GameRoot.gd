@@ -17,6 +17,9 @@ const SCALE_MODES: Array[String] = ["Integer", "Fit-Nearest", "Fit-Linear"]
 const PERF_FPS_LEVELS: Array[int] = [60, 30, 15]
 const PERF_FPS_LABELS: Array[String] = ["高 (60 fps)", "中 (30 fps)", "低 (15 fps)"]
 const BASE_WINDOW_SIZE := Vector2i(1024, 576)
+const DESKTOP_WINDOW_TITLE := "妹相随～黑白世界的缤纷冒险～"
+const WINDOW_DOCKBAR_ICON := "res://assets/boot/generated/icon_pc_dockbar.bin"
+const WINDOW_CORNER_ICON := "res://assets/boot/generated/icon_pc_corner.bin"
 const DISPLAY_SETTINGS_PATH := "user://display_settings.cfg"
 const HOTKEYS_SETTINGS_PATH := "user://hotkeys.cfg"
 const DEFAULT_HOTKEYS: Dictionary = {
@@ -68,6 +71,8 @@ var _show_title_fps := false
 var _title_fps_timer := 0.0
 var _last_safe_area := Rect2i()
 var _safe_area_poll_timer := 0.0
+var _window_icons: WindowIcons
+var _save_arrow_hover_slot := 0
 var _hotkeys: Dictionary = DEFAULT_HOTKEYS.duplicate()
 var _ios_override: int = -1
 var _last_restart_ok := false
@@ -227,7 +232,9 @@ func _start_game() -> void:
 	_load_hotkeys()
 	_load_display_settings()
 	_apply_safe_area()
+	_apply_windows_window_icons()
 	if not _is_headless():
+		DisplayServer.window_set_title(DESKTOP_WINDOW_TITLE if is_desktop_platform() else "妹相随")
 		var win := get_window()
 		if win != null and not win.size_changed.is_connected(_on_window_size_changed):
 			win.size_changed.connect(_on_window_size_changed)
@@ -299,8 +306,12 @@ func _on_mobile_data_bootstrap_completed(ok: bool) -> void:
 
 
 func _exit_tree() -> void:
+	if _window_icons != null:
+		_window_icons.Release()
 	if not _is_headless():
 		OS.low_processor_usage_mode = false
+		if is_desktop_platform():
+			DisplayServer.cursor_set_shape(DisplayServer.CURSOR_ARROW)
 
 
 func _can_use_low_processor_mode() -> bool:
@@ -498,6 +509,8 @@ func advance_frame() -> void:
 		router.consume_touch_ok()
 	if vm.ConsumeCancelObserved():
 		router.consume_touch_cancel()
+	if vm.ConsumeWheelObserved() or not _save_load_ui_active():
+		router.consume_wheel_pulse()
 	router.clear_frame_latches()
 	_action_input_pending = false
 
@@ -1121,6 +1134,7 @@ func _reset_presentation_transient_state() -> void:
 	if router != null:
 		router.clear_suppression()
 	_sync_screen_tint()
+	_sync_save_arrow_hover(false)
 
 
 ## A successful load invalidates every transient overlay and screen state from the pre-load frame.
@@ -1224,29 +1238,29 @@ func _unhandled_input(event: InputEvent) -> void:
 		_show_toast("已导出诊断快照 user://diagnostic_snapshot.txt")
 		get_viewport().set_input_as_handled()
 		return
-	if key.keycode == int(_hotkeys.get("backlog", KEY_F9)):
-		if title_confirm_open():
-			get_viewport().set_input_as_handled()
-			return
-		if backlog_open():
-			close_backlog()
-		else:
-			open_backlog()
-		get_viewport().set_input_as_handled()
-		return
-	if key.keycode == int(_hotkeys.get("return_to_title", KEY_F12)):
-		if backlog_open():
-			get_viewport().set_input_as_handled()
-			return
-		request_return_to_title()
-		get_viewport().set_input_as_handled()
-		return
 	if key.keycode == KEY_ESCAPE and _modal_window_open():
 		if overlays != null and overlays.close_topmost_modal():
 			_arm_modal_release_guard()
 		get_viewport().set_input_as_handled()
 		return
+	if key.keycode == int(_hotkeys.get("backlog", KEY_F9)):
+		if _modal_window_open() and not backlog_open():
+			get_viewport().set_input_as_handled()
+			return
+		if backlog_open():
+			if overlays != null and (overlays.title_confirm_open() or overlays.quit_confirm_open() or overlays.save_transfer_open() or overlays.save_confirm_open() or overlays.drawer_open()):
+				get_viewport().set_input_as_handled()
+				return
+			close_backlog()
+		else:
+			open_backlog()
+		get_viewport().set_input_as_handled()
+		return
 	if _modal_window_open():
+		get_viewport().set_input_as_handled()
+		return
+	if key.keycode == int(_hotkeys.get("return_to_title", KEY_F12)):
+		request_return_to_title()
 		get_viewport().set_input_as_handled()
 		return
 	if key.keycode == int(_hotkeys.get("save_transfer", KEY_F8)):
@@ -1424,7 +1438,7 @@ func _save_display_settings() -> void:
 		return
 	var cfg := ConfigFile.new()
 	var win_size := _windowed_size
-	if not _fullscreen:
+	if not _fullscreen and DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_WINDOWED:
 		win_size = DisplayServer.window_get_size()
 	cfg.set_value("display", "scale_mode", _scale_mode_idx)
 	cfg.set_value("display", "fullscreen", _fullscreen)
@@ -1436,6 +1450,25 @@ func _save_display_settings() -> void:
 		cfg.set_value("display", "window_width", win_size.x)
 		cfg.set_value("display", "window_height", win_size.y)
 	cfg.save(DISPLAY_SETTINGS_PATH)
+
+
+func _apply_windows_window_icons() -> void:
+	if _is_headless() or OS.get_name() != "Windows":
+		return
+	if not FileAccess.file_exists(WINDOW_DOCKBAR_ICON) or not FileAccess.file_exists(WINDOW_CORNER_ICON):
+		return
+	var hwnd := DisplayServer.window_get_native_handle(DisplayServer.WINDOW_HANDLE)
+	if hwnd == 0:
+		return
+	if _window_icons == null:
+		_window_icons = WindowIcons.new()
+	var ok: bool = _window_icons.Apply(
+		hwnd,
+		FileAccess.get_file_as_bytes(WINDOW_DOCKBAR_ICON),
+		FileAccess.get_file_as_bytes(WINDOW_CORNER_ICON)
+	)
+	if not ok:
+		push_warning("Windows taskbar/window icon application failed")
 
 
 func _load_display_settings() -> void:
@@ -1482,17 +1515,17 @@ func _display_is_fullscreen() -> bool:
 	)
 
 
-func _center_window(size: Vector2i) -> void:
+func _center_window(win_size: Vector2i) -> void:
 	var usable := DisplayServer.screen_get_usable_rect()
 	if usable.size.x <= 0 or usable.size.y <= 0:
 		return
 	var pos := Vector2i(
-		usable.position.x + maxi(0, (usable.size.x - size.x) / 2),
-		usable.position.y + maxi(0, (usable.size.y - size.y) / 2)
+		usable.position.x + maxi(0, (usable.size.x - win_size.x) / 2),
+		usable.position.y + maxi(0, (usable.size.y - win_size.y) / 2)
 	)
 	DisplayServer.window_set_position(Vector2i(
-		clampi(pos.x, usable.position.x, maxi(usable.position.x, usable.end.x - size.x)),
-		clampi(pos.y, usable.position.y, maxi(usable.position.y, usable.end.y - size.y))))
+		clampi(pos.x, usable.position.x, maxi(usable.position.x, usable.end.x - win_size.x)),
+		clampi(pos.y, usable.position.y, maxi(usable.position.y, usable.end.y - win_size.y))))
 
 
 func _apply_windowed_size(desired: Vector2i) -> void:
@@ -1915,8 +1948,8 @@ func toggle_titlebar_fps() -> bool:
 	_save_display_settings()
 	if not _is_headless():
 		DisplayServer.window_set_title(
-			"LWSMF Remake | Screen:%d VM:%d | %s" % [int(Engine.get_frames_per_second()), target_fps(), PERF_FPS_LABELS[_perf_tier]]
-			if _show_title_fps else "LWSMF Remake"
+			"%s | Screen:%d VM:%d | %s" % [DESKTOP_WINDOW_TITLE, int(Engine.get_frames_per_second()), target_fps(), PERF_FPS_LABELS[_perf_tier]]
+			if _show_title_fps else DESKTOP_WINDOW_TITLE
 		)
 	_show_toast("标题栏帧率显示: %s" % ("开" if _show_title_fps else "关"))
 	return _show_title_fps
@@ -2002,6 +2035,7 @@ static func safe_area_insets(win_size: Vector2i, safe: Rect2i, base: Vector2i, i
 
 func _sync_mobile_and_overlay_state(delta: float) -> void:
 	var save_ui := _save_load_ui_active()
+	_sync_save_arrow_hover(save_ui)
 	if router != null:
 		router.touch_scroll_enabled = (choice != null and choice.is_open) or save_ui or backlog_open()
 		router.sidebar_open_hint = overlays != null and overlays.drawer_open()
@@ -2025,7 +2059,7 @@ func _sync_mobile_and_overlay_state(delta: float) -> void:
 		if _title_fps_timer >= 0.5:
 			_title_fps_timer = 0.0
 			DisplayServer.window_set_title(
-				"LWSMF Remake | Screen:%d VM:%d | %s" % [int(Engine.get_frames_per_second()), target_fps(), PERF_FPS_LABELS[_perf_tier]]
+				"%s | Screen:%d VM:%d | %s" % [DESKTOP_WINDOW_TITLE, int(Engine.get_frames_per_second()), target_fps(), PERF_FPS_LABELS[_perf_tier]]
 			)
 
 
@@ -2135,14 +2169,53 @@ func _save_load_hit_slot(pointer: Vector2) -> int:
 	return -1
 
 
+func _save_load_hit_arrow(pointer: Vector2) -> int:
+	if stage == null:
+		return 0
+	if stage.is_picture_visible(12004) and stage.picture_rect(12004).has_point(pointer):
+		return -1
+	if stage.is_picture_visible(12005) and stage.picture_rect(12005).has_point(pointer):
+		return 1
+	return 0
+
+
+func _sync_save_arrow_hover(save_ui: bool) -> void:
+	var want := 0
+	if save_ui and not _modal_window_open() and router != null and router.mouse_seen and not router.touch_mode:
+		var dir := _save_load_hit_arrow(router.hover_position)
+		want = 12004 if dir < 0 else (12005 if dir > 0 else 0)
+	if _save_arrow_hover_slot == want:
+		return
+	_save_arrow_hover_slot = want
+	if stage != null:
+		stage.set_save_arrow_hover(want)
+	if not _is_headless() and is_desktop_platform():
+		DisplayServer.cursor_set_shape(DisplayServer.CURSOR_POINTING_HAND if want != 0 else DisplayServer.CURSOR_ARROW)
+
+
+func _trigger_save_page_turn(direction: int) -> void:
+	# Clear pointer latches before queuing wheel pulse because clear_pointer_latches() resets it.
+	if router != null:
+		router.clear_pointer_latches()
+		router.clear_click_latch()
+		router.suppress_action_until_release()
+	if vm != null:
+		vm.SetPointerHeld(false)
+	if router == null or session == null or direction == 0:
+		return
+	var cur_page: int = maxi(0, int(session.GetCommonEventSelf(131, 11)))
+	var total_pages: int = int(session.GetCommonEventSelf(131, 26))
+	if total_pages <= 0:
+		total_pages = 8
+	if (direction < 0 and cur_page > 0) or (direction > 0 and cur_page < total_pages - 1):
+		router.trigger_wheel_pulse(direction)
+
+
 func _save_load_hit_interactive(pointer: Vector2) -> bool:
 	if _save_load_hit_slot(pointer) >= 0:
 		return true
-	if stage != null:
-		for arrow_slot in [12004, 12005]:
-			var r := stage.picture_rect(arrow_slot)
-			if r.size.x > 0.0 and r.size.y > 0.0 and r.has_point(pointer):
-				return true
+	if _save_load_hit_arrow(pointer) != 0:
+		return true
 	if overlays != null and overlays.save_page_bar_rect().has_point(pointer):
 		return true
 	return false
@@ -2265,6 +2338,10 @@ func _maybe_handle_save_ui_action(is_pointer: bool) -> bool:
 		return false
 	if is_pointer:
 		if overlays != null and overlays.save_page_bar_rect().has_point(router.hover_position):
+			return true
+		var arrow_dir := _save_load_hit_arrow(router.hover_position)
+		if arrow_dir != 0:
+			_trigger_save_page_turn(arrow_dir)
 			return true
 		if not _save_load_hit_interactive(router.hover_position):
 			if (int(session.BasicAllDeny) & 2) == 0:

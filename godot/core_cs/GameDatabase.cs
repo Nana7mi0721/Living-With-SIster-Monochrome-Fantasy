@@ -430,36 +430,17 @@ public sealed class GameDatabase
         return false;
     }
 
-    private int FirstEmptyRowWithOverlay(DbContainer container, int dbType, int count, SavedDbOverlays? overlays)
-    {
-        if (count <= 0) return 0;
-        int fieldCount = FieldCount(container, dbType);
-        if (fieldCount < 0) return 0;
-        var fields = _tables[container][dbType].Fields;
-        for (int row = 0; row < count; row++)
-        {
-            bool empty = true;
-            for (int column = 0; column < fieldCount; column++)
-            {
-                if (fields[column].IsString)
-                {
-                    string text = TryFindOverlayText(overlays, container, dbType, row, column, out string overlay)
-                        ? overlay
-                        : TableText(container, dbType, row, column);
-                    if (text.Length != 0) { empty = false; break; }
-                }
-                else
-                {
-                    int number = TryFindOverlayNum(overlays, container, dbType, row, column, out int overlay)
-                        ? overlay
-                        : TableNum(container, dbType, row, column);
-                    if (number != 0) { empty = false; break; }
-                }
-            }
-            if (empty) return row;
-        }
-        return count;
-    }
+    private int FirstEmptyRowWithOverlay(DbContainer container, int dbType, int count, SavedDbOverlays? overlays) =>
+        FirstEmptyRowCore(
+            container,
+            dbType,
+            count,
+            (row, column) => TryFindOverlayText(overlays, container, dbType, row, column, out string overlay)
+                ? overlay
+                : TableText(container, dbType, row, column),
+            (row, column) => TryFindOverlayNum(overlays, container, dbType, row, column, out int overlay)
+                ? overlay
+                : TableNum(container, dbType, row, column));
 
     /// <summary>Current row count, including a runtime 250 row-count write.</summary>
     public int RowCount(DbContainer container, int dbType)
@@ -661,12 +642,28 @@ public sealed class GameDatabase
         _texts[(container, dbType, row, column)] = value;
     }
 
-    private int FirstEmptyRow(DbContainer container, int dbType)
+    private int FirstEmptyRow(DbContainer container, int dbType) =>
+        FirstEmptyRowCore(
+            container,
+            dbType,
+            RowCount(container, dbType),
+            (row, column) => _texts.TryGetValue((container, dbType, row, column), out var overlay)
+                ? overlay
+                : TableText(container, dbType, row, column),
+            (row, column) => _cells.TryGetValue((container, dbType, row, column), out var overlay)
+                ? overlay
+                : TableNum(container, dbType, row, column));
+
+    private int FirstEmptyRowCore(
+        DbContainer container,
+        int dbType,
+        int count,
+        Func<int, int, string> readText,
+        Func<int, int, int> readNum)
     {
-        int count = RowCount(container, dbType);
         if (count <= 0) return 0;
         int fieldCount = FieldCount(container, dbType);
-        if (fieldCount < 0) return 0;
+        if (fieldCount <= 0) return 0;
         var fields = _tables[container][dbType].Fields;
         for (int row = 0; row < count; row++)
         {
@@ -675,17 +672,11 @@ public sealed class GameDatabase
             {
                 if (fields[column].IsString)
                 {
-                    string text = _texts.TryGetValue((container, dbType, row, column), out var overlay)
-                        ? overlay
-                        : TableText(container, dbType, row, column);
-                    if (text.Length != 0) { empty = false; break; }
+                    if (readText(row, column).Length != 0) { empty = false; break; }
                 }
                 else
                 {
-                    int number = _cells.TryGetValue((container, dbType, row, column), out var overlay)
-                        ? overlay
-                        : TableNum(container, dbType, row, column);
-                    if (number != 0) { empty = false; break; }
+                    if (readNum(row, column) != 0) { empty = false; break; }
                 }
             }
             if (empty) return row;
@@ -785,6 +776,18 @@ public sealed class GameDatabase
         foreach (var cell in cells)
         {
             if (SetNum(DbContainer.CData, cell.Type, cell.Row, cell.Column, cell.Value)) written++;
+        }
+        return written;
+    }
+
+    /// <summary>Overlay the text cells carried by a save's variable database.</summary>
+    public int ApplySavedTextCells(IEnumerable<LegacySaveImporter.DatabaseTextCell> cells)
+    {
+        int written = 0;
+        foreach (var cell in cells)
+        {
+            SetText(DbContainer.CData, cell.Type, cell.Row, cell.Column, cell.Value);
+            written++;
         }
         return written;
     }

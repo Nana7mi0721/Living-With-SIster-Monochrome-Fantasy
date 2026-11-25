@@ -973,13 +973,11 @@ public sealed class EventVm
                 case 140:
                 {
                     int bits = slot.Params.Length > 0 ? slot.Params[0] : 0;
-                    // intArgs[0] >> 4 is the sound type: 0=BGM, 1=BGS, 2=SE. Testing 0x20
-                    // alone classified the 43 BGS commands as BGM and replaced the music.
+                    // Bits 4..6 select channel: 0=BGM, 1=BGS, 2=SE; 0x20 alone misclassifies BGS as BGM.
                     int soundType = (bits >> 4) & 0x07;
                     if (soundType > 2 && _unknownSoundTypeLogs.Add((inst.EventId, inst.Pc, soundType)))
                     {
-                        // 0/1/2 are BGM/BGS/SE; 3..7 are reserved. Keep the legacy BGM
-                        // fallback but make it visible once per site instead of on every loop.
+                        // 0/1/2 are BGM/BGS/SE; 3..7 are reserved and fall back to BGM once per site.
                         Host.Log($"[EventVm] unknown sound type {soundType} at event {inst.EventId} pc {inst.Pc}; mapped to BGM");
                     }
                     SoundChannel channel = soundType switch
@@ -1146,9 +1144,8 @@ public sealed class EventVm
                     Host.Transition(_transitionKind, _transitionFlags);
                     inst.Wait.WaitForFrames((uint)frames);
                     inst.Pc++;
-                    // exec.rs 3131-3141 returns Signal::Blocked after arming the wait;
-                    // a plain break let the same frame run the instructions that were
-                    // supposed to be hidden behind the fade.
+                    // Blocking immediately after arming the wait prevents post-fade instructions
+                    // from advancing in the same frame.
                     return Signal.Blocked;
                 }
                 case 171:

@@ -1,6 +1,6 @@
 class_name PlayOverlays
 extends Control
-## Front-end overlays extracted from GameRoot: Toast, Fault Modal, F9 Backlog,
+## Front-end overlays attached to GameRoot: Toast, Fault Modal, F9 Backlog,
 ## F12 Return-to-Title Confirm, Save Overwrite Confirm, Quit Confirm, Save Transfer,
 ## Mobile Quick Drawer, and F2/F3 HUDs.
 
@@ -79,6 +79,7 @@ var _transfer_session: Object = null
 var _pending_import_zip := ""
 var _pending_import_is_temp := false
 var _pending_sav_path := ""
+var _pending_orig_leaf := ""
 var _file_dialog: FileDialog
 var _file_dialog_mode := ""
 
@@ -511,11 +512,11 @@ func close_topmost_modal() -> bool:
 	if _title_confirm_open:
 		cancel_title_confirm()
 		return true
-	if _backlog_open:
-		close_backlog()
-		return true
 	if _drawer_open:
 		close_drawer()
+		return true
+	if _backlog_open:
+		close_backlog()
 		return true
 	return false
 
@@ -533,7 +534,7 @@ func apply_safe_area(insets: Dictionary) -> void:
 	_layout_drawer()
 
 
-# ---- D-13 Fault Modal ----------------------------------------------------
+# ---- Fatal Fault Modal -------------------------------------------------
 
 func _build_fault_modal(has_save: bool) -> void:
 	if _fault_root != null:
@@ -1316,7 +1317,7 @@ static func is_valid_save_archive_entry(entry_name: String) -> bool:
 	var norm := entry_name.replace("\\", "/").strip_edges()
 	if norm.is_empty() or norm.begins_with("/") or norm.ends_with("/"):
 		return false
-	if norm.contains("\u0000") or norm.contains(":"):
+	if entry_name.to_utf8_buffer().has(0) or norm.contains(":"):
 		return false
 	var parts := norm.split("/", false)
 	if parts.is_empty():
@@ -1843,6 +1844,7 @@ func _clear_pending_import() -> void:
 	_pending_import_zip = ""
 	_pending_import_is_temp = false
 	_pending_sav_path = ""
+	_pending_orig_leaf = ""
 	if _transfer_confirm_btn != null:
 		_transfer_confirm_btn.visible = false
 	if _transfer_cancel_import_btn != null:
@@ -2011,7 +2013,8 @@ func _on_transfer_file_selected(path: String) -> void:
 					_transfer_status.text = "JSON 存档校验失败：" + jerr
 				return
 		_pending_sav_path = resolved_path
-		var leaf_lower := path.get_file().to_lower()
+		_pending_orig_leaf = path.get_file().uri_decode().get_file().to_lower()
+		var leaf_lower := _pending_orig_leaf
 		var target_slot := maxi(1, int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1)
 		var target_name := "System.json" if leaf_lower == "system.json" else ("save_%02d.json" % target_slot)
 		var exists := FileAccess.file_exists(_transfer_save_dir.path_join(target_name))
@@ -2033,7 +2036,8 @@ func _on_transfer_file_selected(path: String) -> void:
 				_transfer_status.text = "原版 .sav 校验失败：" + sav_err
 			return
 	_pending_sav_path = resolved_path
-	var orig_leaf := path.get_file().to_lower()
+	_pending_orig_leaf = path.get_file().uri_decode().get_file().to_lower()
+	var orig_leaf := _pending_orig_leaf
 	if orig_leaf == "system.sav":
 		var sys_exists := FileAccess.file_exists(_transfer_save_dir.path_join("System.json"))
 		if _transfer_status != null:
@@ -2068,7 +2072,7 @@ func _commit_pending_import() -> void:
 		return
 	if not _pending_sav_path.is_empty():
 		var kind := _detect_import_kind(_pending_sav_path)
-		var leaf_lower := _pending_sav_path.get_file().to_lower()
+		var leaf_lower := _pending_orig_leaf if not _pending_orig_leaf.is_empty() else _pending_sav_path.get_file().to_lower()
 		var slot := maxi(1, int(_transfer_slot_spin.value) if _transfer_slot_spin != null else 1)
 		var ok := false
 		var err := "无法调用导入接口"

@@ -83,6 +83,10 @@ public partial class MapRuntimeTest : Node
         Check(!runtime.EventOccupies(3, 3), "slip-through page does not occupy its tile");
         Check(runtime.CanEnter(3, 3), "slip-through page is walkable");
 
+        runtime.Events[0].Active = -1;
+        Check(!runtime.EventOccupies(3, 3), "negative active page index does not occupy or throw");
+        Check(runtime.CanEnter(3, 3), "negative active page index leaves tile walkable");
+
         Check(!runtime.CanEnter(-1, 0) && !runtime.CanEnter(0, -1), "negative coordinates are blocked");
         Check(!runtime.CanEnter(10, 3) && !runtime.CanEnter(3, 8), "map edges are blocked");
 

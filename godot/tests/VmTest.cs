@@ -1838,6 +1838,7 @@ public static class VmTest
         public void RestoreDialogue(string? message, string[] choices, bool allowCancel = true) { }
         public DbValue? Database(DbOp op) => Db?.Execute(op);
         public void ApplySavedCells(IReadOnlyList<LegacySaveImporter.DatabaseCell> cells) { }
+        public void ApplySavedTextCells(IReadOnlyList<LegacySaveImporter.DatabaseTextCell> cells) { }
         public Func<SaveOp, int?>? SaveLoadHandler { get; set; }
     }
 

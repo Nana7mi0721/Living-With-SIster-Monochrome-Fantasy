@@ -134,7 +134,7 @@ public sealed class MapRuntime
         foreach (var state in Events)
         {
             if (state.Active is not int index) continue;
-            if (index >= state.Def.Pages.Count) continue;
+            if (index < 0 || index >= state.Def.Pages.Count) continue;
             if (state.Def.Pages[index].SkipThrough) continue;
             if (state.Def.X == x && state.Def.Y == y) return true;
         }
@@ -240,7 +240,7 @@ public sealed class MapRuntime
         int n = 0;
         foreach (var state in Events)
         {
-            if (state.Active is int index && index < state.Def.Pages.Count &&
+            if (state.Active is int index && index >= 0 && index < state.Def.Pages.Count &&
                 state.Def.Pages[index].Trigger == trigger)
             {
                 n++;
