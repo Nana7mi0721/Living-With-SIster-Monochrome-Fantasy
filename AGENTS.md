@@ -45,7 +45,12 @@ bash tools/godot_check.sh
 
 # 3. 执行 OpenGL3 渲染回归门禁
 LWsmf_RENDER=1 bash tools/godot_check.sh
+
+# 4. 单独运行某个 Godot 测试场景（带快速失败与进程树清理）
+python tools/run_godot_test.py res://tests_gd/GameRootTest.tscn --timeout 60
 ```
+
+- **测试调用禁令**：严禁 agent 直接裸跑 `godot --headless ...`，也严禁将裸测试丢入后台重定向到 `output.txt` 后轮询等待；单个测试场景必须走 `python tools/run_godot_test.py <scene> --timeout 60`（M13 长回放给 `--timeout 180 --quit-after 0`），全量回归必须走 `bash tools/godot_check.sh`。
 
 > **注意**：旧 Rust 代码（`crates/`）仅作为开发期 Oracle 比对参考，不再作为 Godot 运行时的直接交付物。
 

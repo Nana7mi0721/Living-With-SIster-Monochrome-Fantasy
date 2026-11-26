@@ -13,6 +13,7 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <IsAotCompatible>true</IsAotCompatible>
+    <UseSharedCompilation>false</UseSharedCompilation>
   </PropertyGroup>
 
   <ItemGroup>

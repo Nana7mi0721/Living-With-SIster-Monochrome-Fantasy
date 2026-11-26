@@ -761,8 +761,10 @@ func _ready() -> void:
 			title_root.router.handle_event(l_up)
 			for _k in range(15):
 				title_root._process(title_root.STEP)
-		while int(title_root.session.GetCommonEventSelf(131, 11)) > 0 and title_root.stage.is_picture_visible(12004):
+		var prev_guard := 0
+		while int(title_root.session.GetCommonEventSelf(131, 11)) > 0 and title_root.stage.is_picture_visible(12004) and prev_guard < 16:
 			_click_save_pos.call(title_root.stage.picture_rect(12004).get_center())
+			prev_guard += 1
 		if int(title_root.session.GetCommonEventSelf(131, 11)) != 0:
 			failures.append("expected Save/Load UI to reach page 0 (got %d)" % int(title_root.session.GetCommonEventSelf(131, 11)))
 		if title_root.stage.is_picture_visible(12004) or not title_root.stage.is_picture_visible(12005):
@@ -1519,9 +1521,11 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	if not pak_reader.has_method("Read"):
 		failures.append("MediaPakReader must expose Read(name) for BootSplashOverlay")
 	var splash := BootSplashOverlay.new()
-	var missing_tex: Dictionary = splash._load_logo_pair(PackedStringArray(["user://definitely_missing_media.pak"]))
-	if bool(missing_tex.get("ok", true)):
-		failures.append("BootSplashOverlay._load_logo_pair must return ok=false when media.pak is missing")
+	var logo_pair: Dictionary = BootSplashOverlay.load_logo_pair(null)
+	if not logo_pair.has("base") or not logo_pair.has("progress"):
+		failures.append("BootSplashOverlay.load_logo_pair must return base and progress keys")
+	if BootSplashOverlay.decode_image_texture(PackedByteArray(), "png") != null:
+		failures.append("BootSplashOverlay.decode_image_texture must return null for empty bytes")
 	splash.free()
 
 	root.queue_free()
@@ -1714,7 +1718,9 @@ static func _remove_test_tree(path: String) -> void:
 	dir.include_hidden = true
 	dir.list_dir_begin()
 	var entry := dir.get_next()
-	while entry != "":
+	var entry_guard := 0
+	while entry != "" and entry_guard < 4096:
+		entry_guard += 1
 		if entry != "." and entry != "..":
 			var child := path.path_join(entry)
 			if dir.current_is_dir():

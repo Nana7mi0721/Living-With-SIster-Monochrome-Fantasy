@@ -342,7 +342,9 @@ func drive() -> void:
 	print("[M13] drive start day=%d" % start_day)
 	var daily: Array[String] = []
 	var end := start_day + max_days
-	while int(root.vm.GetVar(160)) < end and int(root.vm.GetVar(366)) != 2 and not stages_seen.has(28):
+	var day_guard := 0
+	while int(root.vm.GetVar(160)) < end and int(root.vm.GetVar(366)) != 2 and not stages_seen.has(28) and day_guard < max_days + 4:
+		day_guard += 1
 		var day := int(root.vm.GetVar(160))
 		var ok := await play_day(day)
 		var v51 := day_peak51 if day_peak51 != -999 else -1

@@ -224,7 +224,9 @@ static func _remove_tree(path: String) -> void:
 	if dir == null:
 		return
 	dir.list_dir_begin()
-	while true:
+	var entry_guard := 0
+	while entry_guard < 4096:
+		entry_guard += 1
 		var name := dir.get_next()
 		if name.is_empty():
 			break

@@ -667,7 +667,9 @@ func _remove_dir_recursive(path: String) -> void:
 		return
 	dir.list_dir_begin()
 	var item := dir.get_next()
-	while not item.is_empty():
+	var entry_guard := 0
+	while not item.is_empty() and entry_guard < 4096:
+		entry_guard += 1
 		if item != "." and item != "..":
 			var child := path.path_join(item)
 			if dir.current_is_dir():

@@ -185,8 +185,8 @@ func _test_mobile_bootstrap(failures: Array[String]) -> void:
 		failures.append("bootstrap with missing manifest must fail")
 	if retry_boot.theme == null or retry_boot.theme.default_font == null:
 		failures.append("MobileDataBootstrap must bind a CJK fallback font theme")
-	if not retry_boot._part_path.is_empty() or not retry_boot._target_path.is_empty():
-		failures.append("failed bootstrap before open must keep _part_path and _target_path empty")
+	if retry_boot._running or retry_boot._retry == null or not retry_boot._retry.visible or retry_boot._status == null or not retry_boot._status.text.begins_with("准备失败："):
+		failures.append("failed bootstrap before manifest copy must stop worker, show retry, and display error status")
 	_write_bytes(retry_src.path_join("game_data/programs.json.blob"), programs)
 	var retry_manifest := {
 		"schema": "lwsmf.mobile_data",
@@ -298,7 +298,9 @@ static func _remove_tree(path: String) -> void:
 	dir.include_hidden = true
 	dir.list_dir_begin()
 	var entry := dir.get_next()
-	while entry != "":
+	var entry_guard := 0
+	while entry != "" and entry_guard < 4096:
+		entry_guard += 1
 		if entry == "." or entry == "..":
 			entry = dir.get_next()
 			continue
