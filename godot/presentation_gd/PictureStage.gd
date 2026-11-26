@@ -665,6 +665,10 @@ func had_hit_match() -> bool:
 	return _hit_match_this_frame or _last_frame_hit_match
 
 
+func had_hit_match_this_frame() -> bool:
+	return _hit_match_this_frame
+
+
 func visible_slot_signature() -> PackedInt32Array:
 	var slots: PackedInt32Array = []
 	var keys: Array = _cmds.keys()
@@ -1226,13 +1230,27 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 		and int(prev_cmd.get("kind", -1)) == kind \
 		and str(prev_cmd.get("file", "")) == file \
 		and str(prev_cmd.get("text", "")) == text
+	var duration := _transition_duration(args, animate)
 	if not redraws:
-		var fade := clampi(_arg(args, 0, 0), 0, FADE_MAX)
-		if fade > 0:
-			state["fade"] = fade
-			state["fade_from"] = 0
-			state["fade_start"] = 0
-			state["current"]["opacity"] = 0
+		# Graphic swap on an occupied slot (e.g. quest card back -> front flip with
+		# scaleX 0 -> 100) tweens from the previous pose when geometry changes; fresh
+		# slots and same-geometry swaps keep WOLF's alpha fade-in.
+		if not prev.is_empty() and duration > 0 and _pose_geometry_differs(prev.get("current", {}), state["target"]):
+			state["fade"] = 0
+			state["current"] = prev["current"].duplicate()
+			state["transition"] = {
+				"from": prev["current"].duplicate(),
+				"to": state["target"].duplicate(),
+				"duration": duration,
+				"age": 0,
+			}
+		else:
+			var fade := clampi(_arg(args, 0, 0), 0, FADE_MAX)
+			if fade > 0:
+				state["fade"] = fade
+				state["fade_from"] = 0
+				state["fade_start"] = 0
+				state["current"]["opacity"] = 0
 		_states[number] = state
 		_render_picture(number)
 		return
@@ -1248,8 +1266,7 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 	var has_opacity := args.size() > 4 and int(args[4]) != UNCHANGED
 	if not has_opacity:
 		state["target"]["opacity"] = int(prev["current"].get("opacity", 255))
-	var duration := _animate_duration(animate)
-	if duration > 0 and not same_position:
+	if duration > 0 and _pose_differs(prev.get("current", {}), state["target"]):
 		state["current"] = prev["current"].duplicate()
 		state["transition"] = {
 			"from": prev["current"].duplicate(),
@@ -1277,13 +1294,7 @@ func _begin_move(number: int, _file: String, _text: String, args: Array, anchor:
 	if args.size() > 3 and int(args[3]) > 0 and int(args[3]) != UNCHANGED:
 		state["pattern_index"] = int(args[3])
 	state["target"] = target
-	var fade := clampi(_arg(args, 0, 0), 0, FADE_MAX)
-	var fade_from := int(state["current"].get("opacity", 255))
-	if fade > 0:
-		state["fade"] = fade
-		state["fade_from"] = fade_from
-		state["fade_start"] = int(state["age"])
-	var duration := _animate_duration(animate)
+	var duration := _transition_duration(args, animate)
 	var format_flag := _arg(args, 10, 0)
 	if (format_flag & _WolfConst.PIC_FLAG_TONE_MASK) != 0 and not bool(state.get("zero_tone_hidden", false)):
 		var target_tone := _tone_from_args(args)
@@ -1298,7 +1309,8 @@ func _begin_move(number: int, _file: String, _text: String, args: Array, anchor:
 		else:
 			state["tone_transition"] = null
 			state["tone"] = target_tone
-	if duration > 0:
+	if duration > 0 and _pose_differs(state["current"], target):
+		state["fade"] = 0
 		state["transition"] = {
 			"from": state["current"].duplicate(),
 			"to": target.duplicate(),
@@ -1306,10 +1318,9 @@ func _begin_move(number: int, _file: String, _text: String, args: Array, anchor:
 			"age": 0,
 		}
 	else:
+		state["fade"] = 0
 		state["transition"] = null
 		state["current"] = target.duplicate()
-		if fade > 0:
-			state["current"]["opacity"] = fade_from
 	_states[number] = state
 	_render_picture(number)
 
@@ -1371,6 +1382,27 @@ func _animate_duration(animate: Array) -> int:
 	if animate.is_empty():
 		return 0
 	return maxi(0, int(animate[0]))
+
+
+## WOLF stores process time (transition frames) in args[0]; fall back to animate[0] when 0.
+func _transition_duration(args: Array, animate: Array) -> int:
+	var duration := clampi(_arg(args, 0, 0), 0, FADE_MAX)
+	if duration > 0:
+		return duration
+	return _animate_duration(animate)
+
+
+static func _pose_geometry_differs(a: Dictionary, b: Dictionary) -> bool:
+	for key in ["x", "y", "scale", "scale_y"]:
+		if int(a.get(key, 0)) != int(b.get(key, 0)):
+			return true
+	return false
+
+
+static func _pose_differs(a: Dictionary, b: Dictionary) -> bool:
+	if _pose_geometry_differs(a, b):
+		return true
+	return int(a.get("opacity", 255)) != int(b.get("opacity", 255))
 
 
 func _pose_position(pose: Dictionary) -> Vector2i:

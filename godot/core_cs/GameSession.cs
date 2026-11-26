@@ -395,6 +395,9 @@ public sealed class GameSession
         _actionPressed = false;
         _vm.Vm.BlockOnKeyWait = !ScriptedInput;
         _vm.Vm.RelativeCommonCalls = !ScriptedInput;
+        _vm.Vm.CanStepParallelInstance = (!ScriptedInput && _vm.Map != null)
+            ? inst => _vm.Map.IsParallelInstanceValid(inst, _vm.Vm)
+            : null;
         // Rust Game::frame syncs conditional common events before the VM step, so a
         // newly-triggered event starts executing in this same frame.
         var autoEvents = EnsureAutoEvents();

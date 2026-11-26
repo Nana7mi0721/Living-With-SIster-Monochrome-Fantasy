@@ -177,6 +177,44 @@ func _ready() -> void:
 		stage.tick()
 	check(stage.picture_state(1301, 0) == 200, "slide lands on the target x")
 
+	# Quest card fly-in and horizontal flip (CE258/259): args[0] drives redraw slide,
+	# Move scaleX squash (100 -> 0), and texture-swap Draw expand (0 -> 100).
+	stage.draw_picture(1385, 0, "", "card back", [0, 1, 1, 1, 255, 1280, 300, 100, 0], 1, 2)
+	stage.draw_picture(1385, 0, "", "card back", [18, 1, 1, 1, 255, 512, 300, 100, 0], 1, 2)
+	check(stage.picture_state(1385, 0) == 1280, "card fly-in starts at off-screen right x=1280")
+	for _i in 9:
+		stage.tick()
+	var fly_mid_x: int = stage.picture_state(1385, 0)
+	check(absi(fly_mid_x - 896) <= 2, "card fly-in reaches midpoint after 9/18 frames (got %d)" % fly_mid_x)
+	for _i in 9:
+		stage.tick()
+	check(stage.picture_state(1385, 0) == 512, "card fly-in lands at center x=512")
+
+	stage.draw_picture(1385, 1, "", "", [5, 0, 0, 1, 255, 0, 0, 0, 0, 0, 33554432, 0, 0, 100, 100, 100, 100], 0, 0, [0], {"relative": true, "scale_mode": 3})
+	check(int(stage._states[1385]["current"]["scale"]) == 100, "card flip half-1 starts at scaleX=100")
+	for _i in 2:
+		stage.tick()
+	check(int(stage._states[1385]["current"]["scale"]) == 60 and int(stage._states[1385]["current"]["scale_y"]) == 100,
+		"card flip half-1 squashes scaleX to 60 keeping scaleY=100 (got sx=%d sy=%d)" % [
+			int(stage._states[1385]["current"]["scale"]), int(stage._states[1385]["current"]["scale_y"])])
+	for _i in 3:
+		stage.tick()
+	check(int(stage._states[1385]["current"]["scale"]) == 0 and not (stage._pictures[1385] as Control).visible,
+		"card flip half-1 reaches scaleX=0 edge-on after 5 frames")
+
+	stage.draw_picture(1385, 0, "", "card front", [5, 1, 1, 1, 255, 0, 0, 100, 0, 0, 33554432, 0, 0, 100, 100, 100, 100], 1, 2, [0], {"relative": true, "scale_mode": 3})
+	check(int(stage._states[1385]["current"]["scale"]) == 0 and int(stage._states[1385]["current"]["opacity"]) == 255,
+		"card flip half-2 texture swap starts at scaleX=0 with full opacity")
+	for _i in 3:
+		stage.tick()
+	check(int(stage._states[1385]["current"]["scale"]) == 60 and int(stage._states[1385]["current"]["scale_y"]) == 100,
+		"card flip half-2 expands scaleX to 60 keeping scaleY=100 (got sx=%d sy=%d)" % [
+			int(stage._states[1385]["current"]["scale"]), int(stage._states[1385]["current"]["scale_y"])])
+	for _i in 2:
+		stage.tick()
+	check(int(stage._states[1385]["current"]["scale"]) == 100 and (stage._pictures[1385] as Control).visible,
+		"card flip half-2 finishes at full scaleX=100")
+
 	# 290: inclusive target range, shift/zoom/flash state, and no-op outside the range.
 	stage.draw_picture(1302, 0, "", "effect probe", [0, 1, 1, 1, 255, 300, 200, 100, 0], 0, 2)
 	check(stage.effect(2, 0, [0, 0, 1302, 1302, 10, 20, 0]), "290 shift accepts a live target")

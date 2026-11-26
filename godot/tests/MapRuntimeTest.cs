@@ -316,5 +316,48 @@ public partial class MapRuntimeTest : Node
         vm.StepFrame();
         vm.StepFrame();
         Check(vm.Vars.Get(61) == 42, "in-flight autorun must finish trailing instructions after WAIT");
+
+        // A queued parallel map event whose page condition becomes false earlier in the same
+        // frame (e.g. CE242 setting var[350]=1 before trailing Map1005 Ev7 p0 runs) must be
+        // skipped so it cannot redraw erased battle skill buttons.
+        var battleMap = new MapDefinition { Id = 12, File = "BattleGuard.mps", Name = "battle", Width = 8, Height = 8 };
+        var hoverDef = new MapEventDef { Id = 7, Name = "ev7", X = 1, Y = 1, PageCount = 1 };
+        hoverDef.Pages.Add(new MapEventPage
+        {
+            Page = 0,
+            Trigger = MapTrigger.Parallel,
+            Program = Program.FromSlots(7, "ev7", new List<Slot>
+            {
+                Slot.Command(121, [2_000_351, 99, 0, 0x0000]),
+                Slot.Command(172)
+            }),
+            Conditions = new[]
+            {
+                new PageCondition { Enabled = true, Operator = 2, Variable = Magic.VarBase + 350, Value = 0 },
+                new PageCondition(),
+                new PageCondition(),
+                new PageCondition()
+            }
+        });
+        battleMap.Events.Add(hoverDef);
+        var battleVm = new EventVm();
+        var battleRuntime = new MapRuntime(battleMap);
+        battleVm.Vars.Set(350, 0);
+        battleVm.Vars.Set(351, 0);
+        var cmdProg = Program.FromSlots(242, "ce242", new List<Slot>
+        {
+            Slot.Command(121, [2_000_350, 1, 0, 0x0000]),
+            Slot.Command(180, [2]),
+            Slot.Command(172)
+        });
+        battleVm.CreateInstance(cmdProg);
+        Check(battleRuntime.StartPending(battleVm) == 1, "parallel Ev7 must start when var[350] == 0");
+        battleVm.CanStepParallelInstance = inst => battleRuntime.IsParallelInstanceValid(inst, battleVm);
+        battleVm.StepFrame();
+        Check(battleVm.Vars.Get(350) == 1, "earlier command event must set var[350] = 1");
+        Check(battleVm.Vars.Get(351) == 0, "stale parallel map event must skip stepping once its page condition turned false");
+        battleRuntime.StartPending(battleVm);
+        Check(battleRuntime.Events[0].Active == null && battleRuntime.Events[0].InstanceId == null,
+            "StartPending must deactivate invalidated parallel map event at end of frame");
     }
 }

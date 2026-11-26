@@ -844,11 +844,13 @@ public partial class VmController : Node, IHost, IVmSession
     {
         bool firstPressObservation = field == 7 && _pointerPressFrame && !_pointerPressSeen;
         if (firstPressObservation) _pointerPressSeen = true;
-        if (field == 7 && (_pointerPressFrame || _pointerPressed)) _okConsumedThisFrame = true;
+        // Consume touch OK/Cancel pulses only after held (1) is observed so picture menus
+        // polling EngineState(7/8) == 1 (CE245/CE251/CE310/CE346) see 2 -> 1 -> 0.
+        if (field == 7 && _pointerPressed && !_pointerPressFrame) _okConsumedThisFrame = true;
         if (field == 8)
         {
             if (_rightPressFrame && !_rightPressSeen) _rightPressSeen = true;
-            if (_rightPressFrame || _rightPressed) _cancelConsumedThisFrame = true;
+            if (_rightPressed && !_rightPressFrame) _cancelConsumedThisFrame = true;
         }
         int? result = field switch
         {

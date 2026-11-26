@@ -1426,6 +1426,70 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	if int(tap_counts["cancels"]) != 1 or int(tap_counts["actions"]) != 5 or (root.router.held_mask() & InputRouter.MASK_CANCEL) == 0 or (root.router.held_mask() & InputRouter.MASK_OK) != 0:
 		failures.append("second blank tap after confirmed no-op frame must trigger cancel without action")
 
+	# Moving off a hovered picture-menu button (e.g. CE245 erasing hover preview 1220 on tap 1)
+	# must still allow empirical blank-space double-tap cancel.
+	root.router.reset_double_tap_state()
+	root.stage.draw_picture(1220, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 760, 260, 100, 0], 1, 0)
+	root.stage.picture_state(1200, 8, Vector2(512, 260)) # previous-frame button hover hit
+	root.advance_frame()
+	root.router.clock_msec_override = 3500
+	touch_down.call(blank_pt)
+	touch_up.call(blank_pt)
+	# Simulate CE245 polling button 1200 (miss at blank_pt) and erasing hover preview 1220.
+	root.stage.picture_state(1200, 8, blank_pt)
+	root.stage.draw_picture(1220, 2, "", "", [0], 1, 0)
+	root.advance_frame()
+	root.stage.picture_state(1200, 8, blank_pt)
+	root.router.clock_msec_override = 3650
+	touch_down.call(blank_pt + Vector2(3, 2))
+	touch_up.call(blank_pt + Vector2(3, 2))
+	if int(tap_counts["cancels"]) != 2:
+		failures.append("blank double-tap after clearing picture-menu hover preview must trigger cancel (cancels=%d)" % int(tap_counts["cancels"]))
+	tap_counts["cancels"] = 1
+	tap_counts["actions"] = 5
+
+	# Hold-to-confirm live integration: holding Enter / 1-finger touch fast-forwards MessageWindow
+	# lines, disables low-processor sleep while holding, and halts cleanly on ChoiceWindow.
+	root.router.clear_pointer_latches()
+	root.router.clear_frame_latches()
+	root._modal_release_guard = false
+	root.auto_advance = false
+	root.session.SetScriptedInput(false)
+	root._on_message("Hold fast-forward line 1", -1)
+	root.message.revealed = 0.0
+	root.message.finished = false
+	var hold_touch_down := InputEventScreenTouch.new()
+	hold_touch_down.index = 0
+	hold_touch_down.position = Vector2(420, 320)
+	hold_touch_down.pressed = true
+	root.router.handle_event(hold_touch_down)
+	if not root.router.is_confirm_hold_candidate():
+		failures.append("steady 1-finger touch must report is_confirm_hold_candidate=true")
+	var hold_steps := 0
+	while root.message.is_open() and hold_steps < 40:
+		root.advance_frame()
+		hold_steps += 1
+	if root.message.is_open():
+		failures.append("holding 1-finger touch must reveal and dismiss open MessageWindow within 40 frames")
+	if not root.modal_release_guard():
+		failures.append("dismissing MessageWindow via touch hold must keep modal_release_guard armed until finger lifts")
+	root._on_choices(["A", "B"], 0)
+	for _cf in range(10):
+		root.advance_frame()
+	if not root.choice.is_open:
+		failures.append("holding touch across MessageWindow -> ChoiceWindow must stop without selecting a choice")
+	var hold_touch_up := InputEventScreenTouch.new()
+	hold_touch_up.index = 0
+	hold_touch_up.position = Vector2(420, 320)
+	hold_touch_up.pressed = false
+	root.router.handle_event(hold_touch_up)
+	if not root.choice.is_open:
+		failures.append("lifting finger after touch hold must not confirm or cancel newly opened ChoiceWindow")
+	root.choice.close()
+	root._modal_release_guard = false
+	root.router.clear_pointer_latches()
+	root.router.clear_frame_latches()
+
 	# BasicAllDeny bit 2 must prevent blank double-tap cancel.
 	root.vm.ApplyInputPermission(0x202)
 	root.router.clock_msec_override = 4000

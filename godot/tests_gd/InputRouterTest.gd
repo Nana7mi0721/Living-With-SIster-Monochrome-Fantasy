@@ -582,6 +582,118 @@ func _ready() -> void:
 		failures.append("erased 12004 save-page arrow must report is_picture_visible=false")
 	arrow_stage.queue_free()
 
+	# 28. Touch OK/Cancel pulses deliver EngineState(7/8) 2 -> 1 -> 0 so picture menus
+	#     polling held==1 (CE245/CE251/CE310) confirm and cancel reliably on mobile.
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+	bridge.ResetPointer()
+	_tap_once(Vector2(500, 260))
+	bridge.SetPointerPressed(_router.left_frame_pressed())
+	bridge.BeginFrameInput()
+	var es7_f1: int = bridge.EngineStateBridge(7)
+	var obs_ok_f1: bool = bridge.ConsumeOkObserved()
+	_router.clear_frame_latches()
+	if es7_f1 != 2 or obs_ok_f1 or not _router.left_frame_pressed():
+		failures.append("touch tap frame 1 must return EngineState(7)=2 without consuming held pulse (val=%d obs=%s left=%s)" % [es7_f1, str(obs_ok_f1), str(_router.left_frame_pressed())])
+	bridge.SetPointerPressed(_router.left_frame_pressed())
+	bridge.BeginFrameInput()
+	var es7_f2: int = bridge.EngineStateBridge(7)
+	var obs_ok_f2: bool = bridge.ConsumeOkObserved()
+	if obs_ok_f2:
+		_router.consume_touch_ok()
+	_router.clear_frame_latches()
+	if es7_f2 != 1 or not obs_ok_f2 or _router.left_frame_pressed():
+		failures.append("touch tap frame 2 must return EngineState(7)=1 and consume pulse (val=%d obs=%s left=%s)" % [es7_f2, str(obs_ok_f2), str(_router.left_frame_pressed())])
+	bridge.SetPointerPressed(_router.left_frame_pressed())
+	bridge.BeginFrameInput()
+	if bridge.EngineStateBridge(7) != 0:
+		failures.append("touch tap frame 3 must return EngineState(7)=0 after consumption")
+
+	_router.trigger_cancel_pulse("touch")
+	bridge.SetPointerRightPressed(_router.right_frame_pressed())
+	bridge.BeginFrameInput()
+	var es8_f1: int = bridge.EngineStateBridge(8)
+	var obs_cancel_f1: bool = bridge.ConsumeCancelObserved()
+	_router.clear_frame_latches()
+	if es8_f1 != 2 or obs_cancel_f1 or not _router.right_frame_pressed():
+		failures.append("touch cancel frame 1 must return EngineState(8)=2 without consuming held pulse (val=%d obs=%s)" % [es8_f1, str(obs_cancel_f1)])
+	bridge.SetPointerRightPressed(_router.right_frame_pressed())
+	bridge.BeginFrameInput()
+	var es8_f2: int = bridge.EngineStateBridge(8)
+	var obs_cancel_f2: bool = bridge.ConsumeCancelObserved()
+	if obs_cancel_f2:
+		_router.consume_touch_cancel()
+	_router.clear_frame_latches()
+	if es8_f2 != 1 or not obs_cancel_f2 or _router.right_frame_pressed():
+		failures.append("touch cancel frame 2 must return EngineState(8)=1 and consume pulse (val=%d obs=%s)" % [es8_f2, str(obs_cancel_f2)])
+
+	# 29. PC (Enter / LMB) and Mobile (1-finger touch) hold-to-confirm fast-forward state machine.
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+	_router.handle_event(_key(KEY_ENTER))
+	var key_ticks: Array[int] = []
+	for f in range(1, 29):
+		if _router.step_confirm_hold(true, false):
+			key_ticks.append(f)
+	if key_ticks != [21, 24, 27]:
+		failures.append("Enter hold must fire on frames [21, 24, 27] (got %s)" % str(key_ticks))
+	if _router.step_confirm_hold(true, true):
+		failures.append("stop_barrier must immediately halt confirm hold")
+	if _router.step_confirm_hold(true, false):
+		failures.append("confirm hold must remain blocked after stop_barrier until physical release")
+	var enter_up := _key(KEY_ENTER)
+	enter_up.pressed = false
+	_router.handle_event(enter_up)
+	_router.step_confirm_hold(false, false)
+
+	_router.handle_event(_mouse(MOUSE_BUTTON_LEFT))
+	_router.clear_pointer_latches(true)
+	var lmb_ticks: Array[int] = []
+	for f in range(1, 26):
+		if _router.step_confirm_hold(true, false):
+			lmb_ticks.append(f)
+	if lmb_ticks != [21, 24]:
+		failures.append("LMB hold must survive clear_pointer_latches(true) and fire on [21, 24] (got %s)" % str(lmb_ticks))
+	var lmb_up := _mouse(MOUSE_BUTTON_LEFT)
+	lmb_up.pressed = false
+	_router.handle_event(lmb_up)
+	_router.step_confirm_hold(false, false)
+
+	_router.mobile_double_tap_cancel_enabled = true
+	_router.blank_space_predicate = func(_p: Vector2) -> bool: return true
+	var hold_actions_before := _action
+	var hold_cancels_before := _cancel
+	_router.handle_event(_touch(0, Vector2(400, 300), true))
+	var touch_ticks: Array[int] = []
+	for f in range(1, 26):
+		if _router.step_confirm_hold(true, false):
+			touch_ticks.append(f)
+	if touch_ticks != [21, 24] or not _router.is_touch_hold_active():
+		failures.append("mobile 1-finger touch hold must fire on [21, 24] and activate touch_hold (got %s active=%s)" % [str(touch_ticks), str(_router.is_touch_hold_active())])
+	_router.handle_event(_touch(0, Vector2(400, 300), false))
+	if _action != hold_actions_before or _cancel != hold_cancels_before:
+		failures.append("releasing an active mobile touch hold must not emit tap action or double-tap cancel")
+
+	# Non-dialogue long press on blank space must NOT engage hold and must keep tap/double-tap intact.
+	_router.clock_msec_override = 9000
+	_router.handle_event(_touch(0, Vector2(400, 300), true))
+	var non_dlg_fired := false
+	for _f in range(30):
+		if _router.step_confirm_hold(false, false):
+			non_dlg_fired = true
+	if non_dlg_fired or _router.is_touch_hold_active():
+		failures.append("touch hold outside dialogue must never activate")
+	_router.handle_event(_touch(0, Vector2(400, 300), false))
+	_router.clock_msec_override = 9150
+	_tap_once(Vector2(405, 300))
+	if _cancel != hold_cancels_before + 1:
+		failures.append("blank-space double-tap cancel must stay intact when dialogue_eligible=false")
+	_router.clock_msec_override = -1
+	_router.blank_space_predicate = Callable()
+	_router.mobile_double_tap_cancel_enabled = false
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

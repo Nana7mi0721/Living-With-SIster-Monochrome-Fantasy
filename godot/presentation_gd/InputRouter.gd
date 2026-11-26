@@ -22,8 +22,11 @@ const TOUCH_TWO_FINGER_MAX_DIST := 36.0
 const TOUCH_TWO_FINGER_SWIPE_MIN_DY := 56.0
 const TOUCH_SWIPE_MIN_DX := 56.0
 const TOUCH_WHEEL_STEP_PX := 48.0
-const TOUCH_PULSE_TTL_FRAMES := 3
+const TOUCH_PULSE_TTL_FRAMES := 4
 const WHEEL_PULSE_TTL_FRAMES := 12
+const CONFIRM_HOLD_DELAY_FRAMES := 21
+const CONFIRM_HOLD_REPEAT_FRAMES := 3
+const TOUCH_HOLD_CANCEL_DIST := 32.0
 
 # Host mask bits, mirrored from core_cs/KeyCodes.cs so the VM can read them directly.
 const MASK_OK := 1
@@ -84,6 +87,14 @@ var _touch_scroll_accum := 0.0
 var _last_blank_tap_ms := -1
 var _last_blank_tap_pos := Vector2.ZERO
 var _last_blank_tap_empirical := false
+## Dedicated hold-to-advance state for dialogue fast-forward (decoupled from VM edge latches).
+var _hold_action_keys: Dictionary = {}
+var _hold_mouse_left := false
+var _touch_hold_active := false
+var _confirm_hold_frames := 0
+var _confirm_hold_cooldown := 0
+var _confirm_hold_engaged := false
+var _confirm_hold_blocked := false
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -167,6 +178,86 @@ func clear_touch_state() -> void:
 	_touch_swipe_locked = false
 	_touch_scroll_locked = false
 	_touch_scroll_accum = 0.0
+	_touch_hold_active = false
+
+
+func clear_confirm_hold() -> void:
+	_hold_action_keys.clear()
+	_hold_mouse_left = false
+	_touch_hold_active = false
+	_confirm_hold_frames = 0
+	_confirm_hold_cooldown = 0
+	_confirm_hold_engaged = false
+	_confirm_hold_blocked = false
+
+
+func is_confirm_hold_candidate() -> bool:
+	if _hold_mouse_left or not _hold_action_keys.is_empty():
+		return true
+	return _is_touch_hold_steady()
+
+
+func is_confirm_hold_pointer_held() -> bool:
+	return _hold_mouse_left or _touch_hold_active or not _touches.is_empty()
+
+
+func is_touch_hold_active() -> bool:
+	return _touch_hold_active
+
+
+func _is_touch_hold_steady() -> bool:
+	if sidebar_open_hint or _touches.size() != 1 or _touch_max_fingers != 1:
+		return false
+	if _touch_hold_active:
+		return _touch_peak_dist < TOUCH_HOLD_CANCEL_DIST
+	return not _touch_gesture_consumed and _touch_peak_dist < TOUCH_TAP_MAX_DIST
+
+
+## Step fixed-rate (60Hz) hold-to-confirm for dialogue fast-forward on PC and mobile.
+## Returns true on frames where the open MessageWindow should advance.
+func step_confirm_hold(dialogue_eligible: bool, stop_barrier: bool) -> bool:
+	_reconcile_pointer_buttons()
+	var pc_held := _hold_mouse_left or not _hold_action_keys.is_empty()
+	var touch_steady := _is_touch_hold_steady()
+	if not pc_held and not touch_steady:
+		_confirm_hold_frames = 0
+		_confirm_hold_cooldown = 0
+		_confirm_hold_engaged = false
+		_confirm_hold_blocked = false
+		_touch_hold_active = false
+		return false
+	if stop_barrier:
+		_confirm_hold_blocked = true
+		_confirm_hold_engaged = false
+		_confirm_hold_frames = 0
+		_confirm_hold_cooldown = 0
+		_touch_hold_active = false
+		return false
+	if _confirm_hold_blocked:
+		return false
+	if not _confirm_hold_engaged:
+		if not dialogue_eligible:
+			_confirm_hold_frames = 0
+			return false
+		_confirm_hold_frames += 1
+		if _confirm_hold_frames >= CONFIRM_HOLD_DELAY_FRAMES:
+			_confirm_hold_engaged = true
+			_confirm_hold_cooldown = CONFIRM_HOLD_REPEAT_FRAMES
+			if touch_steady and not pc_held:
+				_touch_hold_active = true
+				_touch_gesture_consumed = true
+				last_input_source = "touch"
+				reset_double_tap_state()
+			return true
+		return false
+	if not dialogue_eligible:
+		_confirm_hold_cooldown = 0
+		return false
+	_confirm_hold_cooldown -= 1
+	if _confirm_hold_cooldown <= 0:
+		_confirm_hold_cooldown = CONFIRM_HOLD_REPEAT_FRAMES
+		return true
+	return false
 
 
 func _set_touch_mode(active: bool) -> void:
@@ -213,6 +304,7 @@ func handle_event(event: InputEvent) -> bool:
 			match mb.button_index:
 				MOUSE_BUTTON_LEFT:
 					pointer_pressed = false
+					_hold_mouse_left = false
 					if _action_entry_suppressed:
 						_click_latch = false
 						release_action_suppression_if_free()
@@ -233,6 +325,7 @@ func handle_event(event: InputEvent) -> bool:
 		match mb.button_index:
 			MOUSE_BUTTON_LEFT:
 				pointer_pressed = true
+				_hold_mouse_left = true
 				_click_latch = true
 				action_pressed.emit()
 			MOUSE_BUTTON_RIGHT:
@@ -255,6 +348,7 @@ func handle_event(event: InputEvent) -> bool:
 		return true
 
 	if event is InputEventKey and not event.pressed:
+		_hold_action_keys.erase(event.keycode)
 		key_event.emit(event.keycode, false)
 		if _action_entry_suppressed and event.keycode in ACTION_KEYS:
 			_click_latch = false
@@ -268,6 +362,7 @@ func handle_event(event: InputEvent) -> bool:
 		last_input_source = "keyboard"
 		key_event.emit(event.keycode, true)
 		if event.keycode in ACTION_KEYS:
+			_hold_action_keys[event.keycode] = true
 			action_pressed.emit()
 			return true
 		if event.keycode in CANCEL_KEYS:
@@ -295,6 +390,7 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 	var clamped := st.position.clamp(Vector2.ZERO, LOGICAL_RECT.size)
 	if ui_touch_consumer.is_valid() and bool(ui_touch_consumer.call(clamped)):
 		clear_touch_state()
+		clear_confirm_hold()
 		reset_double_tap_state()
 		return false
 	if st.pressed:
@@ -312,8 +408,10 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 			_touch_swipe_locked = false
 			_touch_scroll_locked = false
 			_touch_scroll_accum = 0.0
+			_touch_hold_active = false
 		else:
 			_touch_max_fingers = maxi(_touch_max_fingers, _touches.size())
+			_touch_hold_active = false
 			reset_double_tap_state()
 		if _touches.size() == 1:
 			hover_position = clamped
@@ -392,6 +490,7 @@ func _handle_screen_drag(sd: InputEventScreenDrag) -> bool:
 	var clamped := sd.position.clamp(Vector2.ZERO, LOGICAL_RECT.size)
 	if ui_touch_consumer.is_valid() and bool(ui_touch_consumer.call(clamped)):
 		clear_touch_state()
+		clear_confirm_hold()
 		reset_double_tap_state()
 		return false
 	if not _touches.has(sd.index):
@@ -407,6 +506,9 @@ func _handle_screen_drag(sd: InputEventScreenDrag) -> bool:
 	_touch_peak_dist = maxf(_touch_peak_dist, max_dist)
 	if _touches.size() > 1 or max_dist >= TOUCH_TAP_MAX_DIST:
 		reset_double_tap_state()
+	if _touch_hold_active and _touch_peak_dist >= TOUCH_HOLD_CANCEL_DIST:
+		_touch_hold_active = false
+		_confirm_hold_blocked = true
 
 	# Two-finger vertical swipe opens/closes quick drawer without conflicting with Android left-edge back.
 	if _touches.size() == 2 and not _touch_swipe_locked and not _touch_gesture_consumed:
@@ -560,6 +662,10 @@ func _reconcile_pointer_buttons(force_physical_check: bool = false) -> void:
 		return
 	if pointer_pressed and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		pointer_pressed = false
+	if _hold_mouse_left and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_hold_mouse_left = false
+	if not _hold_action_keys.is_empty() and not _any_pressed(ACTION_KEYS):
+		_hold_action_keys.clear()
 	if right_pressed and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		right_pressed = false
 	if middle_pressed and not Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
@@ -576,7 +682,7 @@ func reconcile_pointer_buttons(force_physical_check: bool = false) -> void:
 
 func action_input_held() -> bool:
 	_reconcile_pointer_buttons()
-	if pointer_pressed or _click_latch:
+	if pointer_pressed or _click_latch or _touch_ok_ttl > 0:
 		return true
 	if scripted_key_mask >= 0:
 		return (scripted_key_mask & MASK_OK) != 0
@@ -614,7 +720,7 @@ func clear_suppression() -> void:
 
 
 ## Clear mouse button held state, touch gesture state, and click latches (keeps wheel state untouched).
-func clear_pointer_latches() -> void:
+func clear_pointer_latches(preserve_confirm_hold: bool = false) -> void:
 	pointer_pressed = false
 	right_pressed = false
 	middle_pressed = false
@@ -625,5 +731,7 @@ func clear_pointer_latches() -> void:
 	_touch_cancel_ttl = 0
 	_wheel_pulse_dir = 0
 	_wheel_pulse_ttl = 0
-	clear_touch_state()
+	if not preserve_confirm_hold:
+		clear_touch_state()
+		clear_confirm_hold()
 	clear_suppression()

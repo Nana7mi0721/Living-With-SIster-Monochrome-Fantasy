@@ -293,6 +293,19 @@ public sealed class MapRuntime
         return state.SelfVars;
     }
 
+    /// <summary>Returns false when a queued parallel map instance's page condition no longer holds.</summary>
+    public bool IsParallelInstanceValid(Instance inst, EventVm vm)
+    {
+        foreach (var state in Events)
+        {
+            if (state.InstanceId == inst.Id)
+            {
+                return state.Runs && SelectPage(state, vm) == state.Active;
+            }
+        }
+        return true;
+    }
+
     /// <summary>map_runtime.rs:1224 — reap finished pages, swap pages, start automatic pages.</summary>
     public int StartPending(EventVm vm)
     {

@@ -37,6 +37,8 @@ public sealed class EventVm
     public bool BlockOnKeyWait { get; set; }
     /// <summary>When true, 600xxx common-event call targets resolve relative to the caller (raw - 600100).</summary>
     public bool RelativeCommonCalls { get; set; }
+    /// <summary>Optional guard queried before stepping a parallel instance at Pc == 0.</summary>
+    public Func<Instance, bool>? CanStepParallelInstance { get; set; }
     /// <summary>Transition sub-phase reported alongside TransitionRequested (0=store, 1=freeze, 2=fadeout).</summary>
     public int TransitionPhase { get; private set; }
     /// <summary>Auto-input mask requested by opcode 125, in WOLF editor key layout.</summary>
@@ -1790,6 +1792,10 @@ public sealed class EventVm
             var inst = Instances[index];
             if (inst.IsRunnable)
             {
+                if (inst.IsParallel && inst.Pc == 0 && CanStepParallelInstance != null && !CanStepParallelInstance(inst))
+                {
+                    return true;
+                }
                 if (!inst.IsParallel && _enteredInstanceIds.Add(inst.Id))
                 {
                     Host.EventEntered(inst.EventId, !inst.ParentId.HasValue);

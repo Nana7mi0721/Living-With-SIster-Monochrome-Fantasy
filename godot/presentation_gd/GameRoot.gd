@@ -333,6 +333,8 @@ func _can_use_low_processor_mode() -> bool:
 		return false
 	if stage != null and stage.has_active_animations():
 		return false
+	if router != null and router.is_confirm_hold_candidate():
+		return false
 	return true
 
 
@@ -465,6 +467,14 @@ func advance_frame() -> void:
 		return
 	if auto_advance and message.is_open() and not message.choice_attached():
 		message.confirm()
+	elif not auto_advance and not session.ScriptedInput and router != null:
+		var dialogue_eligible := not faulted and not _modal_window_open() \
+			and message.is_open() and not message.choice_attached() and not choice.is_open
+		var stop_barrier := faulted or _modal_window_open() or choice.is_open \
+			or _save_load_ui_active() \
+			or (not dialogue_eligible and (phase == "title" or session.GetForegroundStackSignature().is_empty()))
+		if router.step_confirm_hold(dialogue_eligible, stop_barrier):
+			_advance_held_message()
 	# Pointer starts at (-1,-1) before any mouse event so slots cannot hover at (0,0).
 	var pointer := router.hover_position if router.mouse_seen else Vector2(-1, -1)
 	vm.SetPointer(pointer.x, pointer.y)
@@ -573,11 +583,11 @@ func _on_action() -> void:
 		message.confirm()
 		if pointer:
 			if was_finished:
-				_arm_modal_release_guard()
+				_arm_modal_release_guard(false)
 			else:
 				# Clear same-frame click latches so finishing typewriter reveal does not bleed
-				# to parallel 123/124 polls, without blocking rapid next-page clicks.
-				router.clear_pointer_latches()
+				# to parallel 123/124 polls, while keeping hold-to-advance alive.
+				router.clear_pointer_latches(true)
 		elif was_finished:
 			_action_input_pending = true
 			_suppress_confirmed_action_until_release()
@@ -589,6 +599,22 @@ func _on_action() -> void:
 		return
 	_action_input_pending = true
 	session.PressActionKey()
+
+
+func _advance_held_message() -> void:
+	if message == null or not message.is_open() or message.choice_attached():
+		return
+	var was_finished := message.finished
+	var pointer := router != null and router.is_pointer_input()
+	message.confirm()
+	if pointer:
+		if was_finished:
+			_arm_modal_release_guard(false)
+		elif router != null:
+			router.clear_pointer_latches(true)
+	elif was_finished:
+		_action_input_pending = true
+		_suppress_confirmed_action_until_release()
 
 
 func _on_cancel() -> void:
@@ -663,6 +689,8 @@ func _on_choice_chosen(index: int) -> void:
 		session.SetTitleMenuVisible(false)
 	if not was_open:
 		return
+	if router != null:
+		router.clear_confirm_hold()
 	_suppress_confirmed_action_until_release()
 	if index < 0:
 		session.CancelChoice()
@@ -1138,6 +1166,7 @@ func _reset_presentation_transient_state() -> void:
 		stage.reset_screen_tint()
 	if router != null:
 		router.clear_suppression()
+		router.clear_confirm_hold()
 	_sync_screen_tint()
 	_sync_save_arrow_hover(false)
 
@@ -1705,10 +1734,10 @@ func modal_release_guard() -> bool:
 	return _modal_release_guard
 
 
-func _arm_modal_release_guard() -> void:
+func _arm_modal_release_guard(reset_confirm_hold: bool = true) -> void:
 	_modal_release_guard = true
 	if router != null:
-		router.clear_pointer_latches()
+		router.clear_pointer_latches(not reset_confirm_hold)
 		router.clear_frame_latches()
 
 
@@ -1723,7 +1752,7 @@ func _release_modal_guard_if_free() -> void:
 		return
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
 		return
-	if router != null and (router.pointer_pressed or router.right_pressed or router.middle_pressed):
+	if router != null and (router.pointer_pressed or router.right_pressed or router.middle_pressed or router.is_confirm_hold_pointer_held()):
 		return
 	for key in [KEY_ESCAPE, KEY_X, KEY_BACKSPACE, KEY_Z, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:
 		if Input.is_key_pressed(key):
@@ -2283,21 +2312,41 @@ func _mark_empirical_tap_dirty() -> void:
 		_empirical_tap_dirty = true
 
 
+static func _is_strict_nonempty_slot_subset(candidate: PackedInt32Array, baseline: PackedInt32Array) -> bool:
+	if candidate.is_empty() or candidate.size() >= baseline.size():
+		return false
+	for slot in candidate:
+		if not baseline.has(slot):
+			return false
+	return true
+
+
 func _update_empirical_tap_after_frame() -> void:
 	if not _empirical_tap_active:
 		return
 	_empirical_tap_frames += 1
 	if _empirical_tap_dirty:
 		return
-	if stage != null and stage.had_hit_match():
+	if stage != null and stage.had_hit_match_this_frame():
 		_empirical_tap_dirty = true
 	elif phase != _empirical_tap_phase:
 		_empirical_tap_dirty = true
 	elif session != null and (session.MapId != _empirical_tap_map_id or session.GetForegroundStackSignature() != _empirical_tap_instances):
 		_empirical_tap_dirty = true
-	elif _empirical_tap_frames <= 2 and stage != null and stage.foreground_slot_signature() != _empirical_tap_slots:
-		_empirical_tap_dirty = true
-	elif _modal_window_open() or (overlays != null and overlays.drawer_open()) or _save_load_ui_active():
+	elif _empirical_tap_frames <= 2 and stage != null:
+		var cur_slots := stage.foreground_slot_signature()
+		if cur_slots != _empirical_tap_slots:
+			# Moving off a hovered picture-menu button (e.g. CE245/251/310) erases its
+			# hover-preview slots while keeping interactive hit polls active; accept the
+			# shrunken baseline instead of rejecting blank-space double-tap.
+			if _empirical_tap_frames == 1 and stage.has_active_hit_polls() \
+					and _is_strict_nonempty_slot_subset(cur_slots, _empirical_tap_slots):
+				_empirical_tap_slots = cur_slots
+			else:
+				_empirical_tap_dirty = true
+	if _empirical_tap_dirty:
+		return
+	if _modal_window_open() or (overlays != null and overlays.drawer_open()) or _save_load_ui_active():
 		_empirical_tap_dirty = true
 	elif message != null and message.is_open():
 		_empirical_tap_dirty = true
@@ -2360,7 +2409,7 @@ func is_empirical_blank_double_tap(point: Vector2) -> bool:
 		return false
 	if not _empirical_screen_supports_blank_cancel():
 		return false
-	if stage != null and (stage.has_interactive_hit(point) or stage.had_hit_match()):
+	if stage != null and (stage.has_interactive_hit(point) or stage.had_hit_match_this_frame()):
 		return false
 	if phase != _empirical_tap_phase:
 		return false
@@ -2472,6 +2521,11 @@ func handle_back_request() -> String:
 	if choice != null and choice.is_open and phase != "title":
 		if not choice.allow_cancel:
 			return "choice_cancel_blocked"
+		if router != null:
+			router.trigger_cancel_pulse("touch")
+		return "submenu_cancel"
+	if session != null and phase != "title" and (int(session.BasicAllDeny) & 2) == 0 \
+			and (session.HasEvent(245) or session.HasEvent(251) or session.HasEvent(310)):
 		if router != null:
 			router.trigger_cancel_pulse("touch")
 		return "submenu_cancel"
