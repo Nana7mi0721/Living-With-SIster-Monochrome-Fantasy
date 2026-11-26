@@ -70,7 +70,10 @@ func window_rect() -> Rect2:
 	var center := position_hint
 	if is_equal_approx(center.x, DEFAULT_POSITION_SENTINEL):
 		center.x = 512.0
-	if is_equal_approx(center.y, DEFAULT_POSITION_SENTINEL):
+	if override_rects.is_empty():
+		# Align standard choice windows vertically with the 1024x576 horizontal midline (y = 288).
+		center.y = 288.0
+	elif is_equal_approx(center.y, DEFAULT_POSITION_SENTINEL):
 		center.y = 288.0
 	var top_left := center - win_size * 0.5
 	var max_x := maxf(24.0, 1000.0 - win_size.x)

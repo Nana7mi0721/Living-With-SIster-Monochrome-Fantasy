@@ -927,6 +927,7 @@ func _ready() -> void:
 	item_root.queue_free()
 
 	_test_ux_and_multiplatform(script, failures)
+	_test_mobile_4issues_regression(script, failures)
 
 	if failures.is_empty():
 		print("GAME_ROOT_TEST_OK")
@@ -1524,6 +1525,186 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	splash.free()
 
 	root.queue_free()
+
+
+func _test_mobile_4issues_regression(script, failures: Array[String]) -> void:
+	var mob = script.new()
+	add_child(mob)
+	mob.session.SetScriptedInput(true)
+	var boot_guard := 0
+	while (mob.phase != "bedroom" or not mob.session.GetForegroundStackSignature().is_empty()) and boot_guard < 1200:
+		mob.advance_frame()
+		boot_guard += 1
+	if mob.phase != "bedroom" or not mob.session.GetForegroundStackSignature().is_empty():
+		failures.append("MOB regression setup failed to settle bedroom (phase=%s inst=%s)" % [mob.phase, mob.session.DescribeInstances()])
+		mob.queue_free()
+		return
+	mob.session.SetScriptedInput(false)
+	mob.router.mobile_double_tap_cancel_enabled = true
+
+	# MOB-01: Long press outside dialogue/choice/modal sustains MASK_OK and EngineState(7)==1 without release tap.
+	var mob01_actions := [0]
+	var mob01_cb := func() -> void: mob01_actions[0] = int(mob01_actions[0]) + 1
+	mob.router.action_pressed.connect(mob01_cb)
+	var hold_pos := Vector2(720, 260)
+	var h_down := InputEventScreenTouch.new()
+	h_down.index = 0
+	h_down.position = hold_pos
+	h_down.pressed = true
+	mob.router.handle_event(h_down)
+	for _f in range(InputRouter.TOUCH_POINTER_HOLD_DELAY_FRAMES):
+		mob.advance_frame()
+	if not mob.router.is_touch_pointer_held() or (mob.router.held_mask() & InputRouter.MASK_OK) == 0:
+		failures.append("MOB-01: steady in-game touch hold must activate touch_pointer_held and MASK_OK (held=%s frames=%d touches=%d msg=%s choice=%s modal=%s saveui=%s)" % [str(mob.router.is_touch_pointer_held()), mob.router._touch_pointer_hold_frames, mob.router._touches.size(), str(mob.message.is_open()), str(mob.choice.is_open), str(mob._modal_window_open()), str(mob._save_load_ui_active())])
+	mob.advance_frame()
+	if not mob.router.is_touch_pointer_held() or (mob.router.held_mask() & InputRouter.MASK_OK) == 0:
+		failures.append("MOB-01: ConsumeOkObserved on frame 2 must not clear sustained touch_pointer_held")
+	var h_up := InputEventScreenTouch.new()
+	h_up.index = 0
+	h_up.position = hold_pos
+	h_up.pressed = false
+	mob.router.handle_event(h_up)
+	mob.advance_frame()
+	mob.router.action_pressed.disconnect(mob01_cb)
+	if mob.router.is_touch_pointer_held() or int(mob01_actions[0]) != 0:
+		failures.append("MOB-01: releasing long press must clear held state without firing extra tap (actions=%d)" % int(mob01_actions[0]))
+
+	# MOB-02 + MOB-03 + MOB-04: Night bedroom -> sister pic120 -> CE245 -> sleep -> ChoiceWindow
+	# -> double-tap cancel -> message dismiss -> no modal_release_guard lock, no pic120 A->none->B flash,
+	# and standard ChoiceWindow vertically centered at y=288.
+	mob.vm.SetVar(69, 1)
+	mob.vm.SetVar(4, 19)
+	mob.vm.SetVar(5, 30)
+	mob.vm.SetVar(20, 100)
+	mob.vm.SetVar(160, 2)
+	mob.vm.SetVar(295, 0)
+	mob.vm.SetVar(298, 0)
+	mob.vm.SetVar(9, 0)
+	mob.vm.SetVar(68, 0)
+	mob.vm.SetVar(25, 0)
+	mob.vm.SetVar(26, 0)
+	mob.vm.SetVar(302, 0)
+	mob.vm.SetVar(167, 0)
+	mob.vm.SetVar(439, 0)
+	mob.vm.SetVar(464, 0)
+	mob.vm.SetVar(62, 0)
+	mob.vm.StartEvent(325)
+	for _i in range(30):
+		mob.advance_frame()
+	if not mob.stage.is_picture_visible(120):
+		failures.append("MOB-02/03 setup: CE325 must draw sister pic120 in night bedroom")
+		mob.queue_free()
+		return
+
+	var tap_at := func(pos: Vector2, ms: int) -> void:
+		mob.router.clock_msec_override = ms
+		var td := InputEventScreenTouch.new()
+		td.index = 0
+		td.position = pos
+		td.pressed = true
+		mob.router.handle_event(td)
+		mob.advance_frame()
+		var tu := InputEventScreenTouch.new()
+		tu.index = 0
+		tu.position = pos
+		tu.pressed = false
+		mob.router.handle_event(tu)
+		mob.advance_frame()
+
+	# Repeat twice to verify repeated sleep-cancel never soft-locks sister interaction.
+	var clk := 10000
+	for attempt in range(2):
+		var sis_pt: Vector2 = mob.stage.picture_rect(120).get_center()
+		clk += 500
+		tap_at.call(sis_pt, clk)
+		var g := 0
+		while not mob.stage.is_picture_visible(1212) and g < 300:
+			if mob.message.is_open():
+				clk += 100
+				tap_at.call(Vector2(512, 480), clk)
+			else:
+				mob.advance_frame()
+			g += 1
+		if not mob.stage.is_picture_visible(1212):
+			failures.append("MOB-02 attempt %d: tapping sister pic120 did not open CE245 night menu (rect120=%s inst=%s msg=%s v68=%d v20=%d v160=%d)" % [attempt, str(mob.stage.picture_rect(120)), mob.session.DescribeInstances(), mob.message.full_text, mob.vm.GetVar(68), mob.vm.GetVar(20), mob.vm.GetVar(160)])
+			break
+		clk += 500
+		tap_at.call(mob.stage.picture_rect(1212).get_center(), clk)
+		g = 0
+		while not mob.choice.is_open and g < 120:
+			if mob.message.is_open():
+				clk += 100
+				tap_at.call(Vector2(512, 480), clk)
+			else:
+				mob.advance_frame()
+			g += 1
+		if not mob.choice.is_open:
+			failures.append("MOB-02 attempt %d: tapping sleep button did not open confirmation ChoiceWindow" % attempt)
+			break
+		if not is_equal_approx(mob.choice.window_rect().get_center().y, 288.0):
+			failures.append("MOB-04: sleep confirmation ChoiceWindow must center at y=288 (got %s)" % str(mob.choice.window_rect()))
+
+		# Double-tap blank space outside ChoiceWindow to cancel sleep.
+		var blank_cancel_pt := Vector2(20, 550)
+		clk += 500
+		tap_at.call(blank_cancel_pt, clk)
+		clk += 120
+		tap_at.call(blank_cancel_pt + Vector2(3, 2), clk)
+		if mob.choice.is_open:
+			failures.append("MOB-02 attempt %d: blank double-tap must cancel sleep ChoiceWindow" % attempt)
+			break
+
+		# Advance through CE328 cancel message & return to bedroom; watch pic120 visibility/position transitions.
+		var pic120_events: Array[String] = []
+		var prev_sig := ""
+		g = 0
+		while (mob.session.HasEvent(245) or mob.session.HasEvent(327) or mob.session.HasEvent(328) or mob.session.HasEvent(325) or mob.vm.GetVar(68) != 0) and g < 180:
+			if mob.message.is_open():
+				clk += 400
+				tap_at.call(Vector2(512, 480), clk)
+			else:
+				mob.advance_frame()
+			var vis: bool = mob.stage.is_picture_visible(120)
+			var cmd: Dictionary = mob.stage._cmds.get(120, {})
+			var sig: String = "%s:%s:%s" % [str(vis), str(cmd.get("file", "")), str(mob.stage.picture_rect(120).position)] if vis else "hidden"
+			if sig != prev_sig:
+				if not (prev_sig == "" and sig == "hidden"):
+					pic120_events.append(sig)
+				prev_sig = sig
+			g += 1
+
+		# Expect pic120 to transition at most once into visible state (never A -> hidden -> B).
+		var visible_segments := 0
+		for ev_sig in pic120_events:
+			if ev_sig != "hidden":
+				visible_segments += 1
+		if visible_segments != 1 or not mob.stage.is_picture_visible(120):
+			failures.append("MOB-03 attempt %d: cancelling sleep must draw pic120 once without A->hidden->B flicker (transitions=%s)" % [attempt, str(pic120_events)])
+
+		mob.advance_frame()
+		if mob.modal_release_guard():
+			failures.append("MOB-02 attempt %d: _modal_release_guard must release in touch mode once fingers lift" % attempt)
+		if mob.vm.GetVar(68) != 0 or mob.vm.GetVar(9) != 0:
+			failures.append("MOB-02 attempt %d: var68/var9 must reset to 0 after sleep cancel (v68=%d v9=%d)" % [attempt, mob.vm.GetVar(68), mob.vm.GetVar(9)])
+
+	# Final verification: tapping sister pic120 after repeated sleep cancels still opens CE245.
+	if mob.stage.is_picture_visible(120):
+		clk += 500
+		tap_at.call(mob.stage.picture_rect(120).get_center(), clk)
+		var g2 := 0
+		while not mob.stage.is_picture_visible(1212) and g2 < 120:
+			if mob.message.is_open():
+				clk += 100
+				tap_at.call(Vector2(512, 480), clk)
+			else:
+				mob.advance_frame()
+			g2 += 1
+		if not mob.stage.is_picture_visible(1212):
+			failures.append("MOB-02: clicking sister pic120 after sleep double-tap cancel failed to reopen CE245")
+
+	mob.router.clock_msec_override = -1
+	mob.router.mobile_double_tap_cancel_enabled = mob.router._default_mobile_double_tap_enabled()
+	mob.queue_free()
 
 
 static func _remove_test_tree(path: String) -> void:

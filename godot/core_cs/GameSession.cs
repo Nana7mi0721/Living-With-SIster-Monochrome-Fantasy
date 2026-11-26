@@ -189,6 +189,7 @@ public sealed class GameSession
     // boundary the same way teleports are (crates/wolf-game/src/game.rs save_requests).
     private string? _pendingGameLoad;
     private readonly Queue<string> _pendingSystemLoads = new();
+    private bool _ev4HasBedroomRefresh;
 
     public GameSession(IVmSession vm, IGameSessionView view, string dataPath, string savePath)
     {
@@ -201,6 +202,8 @@ public sealed class GameSession
         _vm.SaveLoadHandler = HandleSaveLoad;
         _vm.Vm.BlockOnKeyWait = true;
         _vm.Vm.RelativeCommonCalls = true;
+        _vm.Vm.ShouldSkipCall = ShouldSkipRedundantBedroomRefresh;
+        _vm.Vm.OnInstanceFinished = OnVmInstanceFinished;
     }
 
     private void ErasePictureSpan(int first, int last)
@@ -439,6 +442,10 @@ public sealed class GameSession
         {
             NotifyMessageClosed();
         }
+        if (_ev4HasBedroomRefresh && !HasActiveMapEvent(4))
+        {
+            _ev4HasBedroomRefresh = false;
+        }
         UpdateMapHud(false);
         if (_vm.Vm.ReturnToTitleRequested)
         {
@@ -494,6 +501,7 @@ public sealed class GameSession
 
     public void ShowMessage(string text, int face)
     {
+        _ev4HasBedroomRefresh = false;
         _messageOpen = true;
         _view.ShowMessage(text, face);
     }
@@ -513,6 +521,7 @@ public sealed class GameSession
 
     public void ShowChoices(string[] options)
     {
+        _ev4HasBedroomRefresh = false;
         _hasChoices = true;
         ChoiceAllowsCancel = _vm.ChoiceAllowsCancel;
         _lastChoices = options;
@@ -2014,8 +2023,62 @@ public sealed class GameSession
         _pendingGameLoad = null;
         _pendingSystemLoads.Clear();
         _teleports.Clear();
+        _ev4HasBedroomRefresh = false;
         _view.HideMessage();
         _view.HideChoices();
+    }
+
+    private bool HasActiveMapEvent(int eventId)
+    {
+        foreach (Instance inst in _vm.Vm.Instances)
+        {
+            if (inst.EventId == eventId && inst.Program.SelfBase != Program.CommonSelfBase)
+                return true;
+        }
+        return false;
+    }
+
+    // CE328/CE245 exit branches call CE325 right before returning to SampleMapA ev4 pc340,
+    // which unconditionally calls CE325 a second time after Wait(15) and flashes pic 120.
+    private bool ShouldSkipRedundantBedroomRefresh(Instance caller, int targetEventId)
+    {
+        if (ScriptedInput || _map?.Id != 1005)
+            return false;
+        if (caller.Program.SelfBase != Program.CommonSelfBase && caller.EventId == 4)
+        {
+            if (targetEventId == 245 && caller.Pc == 335)
+            {
+                _ev4HasBedroomRefresh = false;
+                return false;
+            }
+            if (targetEventId == 325 && caller.Pc == 340 && _ev4HasBedroomRefresh)
+            {
+                _ev4HasBedroomRefresh = false;
+                return true;
+            }
+        }
+        else if (_ev4HasBedroomRefresh && targetEventId is not (325 or 232 or 218))
+        {
+            _ev4HasBedroomRefresh = false;
+        }
+        return false;
+    }
+
+    private void OnVmInstanceFinished(Instance inst)
+    {
+        if (ScriptedInput || _map?.Id != 1005)
+            return;
+        if (inst.Program.SelfBase != Program.CommonSelfBase || inst.EventId != 325)
+            return;
+        foreach (Instance other in _vm.Vm.Instances)
+        {
+            if (other.EventId == 4 && other.Program.SelfBase != Program.CommonSelfBase
+                && other.Pc == 336 && other.Wait.Kind == WaitStateKind.Child)
+            {
+                _ev4HasBedroomRefresh = true;
+                return;
+            }
+        }
     }
 
     private void StartNewGameNow()

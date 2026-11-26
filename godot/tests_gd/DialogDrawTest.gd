@@ -358,8 +358,12 @@ func _ready() -> void:
 		failures.append("row pitch should be %.1f" % expected_pitch)
 	choice.open(PackedStringArray(["A", "B"]), Vector2(512, 220), true, 0)
 	var explicit_choice := choice.window_rect()
-	if not explicit_choice.get_center().is_equal_approx(Vector2(512.0, 220.0)):
-		failures.append("an explicit Sys3/Sys4 pair must center the choice window on that point (got %s)" % str(explicit_choice))
+	if not explicit_choice.get_center().is_equal_approx(Vector2(512.0, 288.0)):
+		failures.append("standard choice window must align vertically with screen midline y=288 (got %s)" % str(explicit_choice))
+	choice.open(PackedStringArray(["A", "B"]), Vector2(260, 220), true, 0)
+	var left_choice := choice.window_rect()
+	if not left_choice.get_center().is_equal_approx(Vector2(260.0, 288.0)):
+		failures.append("standard choice window must preserve Sys3 X while centering Y at 288 (got %s)" % str(left_choice))
 	choice.open(PackedStringArray(["A", "B"]), Vector2(-1, -1), true, 0)
 	var centered_choice := choice.window_rect()
 	if not is_equal_approx(centered_choice.position.x, 512.0 - centered_choice.size.x * 0.5) \

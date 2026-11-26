@@ -39,6 +39,10 @@ public sealed class EventVm
     public bool RelativeCommonCalls { get; set; }
     /// <summary>Optional guard queried before stepping a parallel instance at Pc == 0.</summary>
     public Func<Instance, bool>? CanStepParallelInstance { get; set; }
+    /// <summary>Optional hook returning true to skip a 210 CallCommonEvent invocation.</summary>
+    public Func<Instance, int, bool>? ShouldSkipCall { get; set; }
+    /// <summary>Optional hook invoked when a child/common coroutine finishes and is reaped.</summary>
+    public Action<Instance>? OnInstanceFinished { get; set; }
     /// <summary>Transition sub-phase reported alongside TransitionRequested (0=store, 1=freeze, 2=fadeout).</summary>
     public int TransitionPhase { get; private set; }
     /// <summary>Auto-input mask requested by opcode 125, in WOLF editor key layout.</summary>
@@ -1194,6 +1198,11 @@ public sealed class EventVm
                         inst.Pc++;
                         break;
                     }
+                    if (ShouldSkipCall != null && ShouldSkipCall(inst, targetEvent.Value))
+                    {
+                        inst.Pc++;
+                        break;
+                    }
 
                     var (childArgs, childStrings, returnTo) = DecodeCallArguments(slot, inst);
 
@@ -1855,6 +1864,7 @@ public sealed class EventVm
                 PersistCommonSelf(inst);
                 _freshInstanceIds.Remove(inst.Id);
                 _enteredInstanceIds.Remove(inst.Id);
+                OnInstanceFinished?.Invoke(inst);
 
                 // Wake parent
                 if (inst.ParentId.HasValue)

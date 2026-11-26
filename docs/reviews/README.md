@@ -8,6 +8,8 @@
 
 | 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
 | :--- | :---: | :--- | :--- |
+| [lwsmf_mobile_4issues_remediation_2026_11_26.md](lwsmf_mobile_4issues_remediation_2026_11_26.md) | 2026-11-26 | **移动端四项交互问题核查与修复闭环报告** | 实证核查并闭环修复 MOB-01..04（长按学技能、`emulate_mouse_from_touch` 守卫卡死、重复 `CE325` 立绘闪烁、一般选项框垂直居中），双模式 38 项门禁全绿 |
+| [lwsmf_mobile_4issues_diagnosis_and_fix_plan.md](lwsmf_mobile_4issues_diagnosis_and_fix_plan.md) | 2026-11-26 | **LWSMF 移动端四项交互问题定位与修复方案** | 定位移动端长按学技能失效、睡觉取消偶发无反应、取消互动立绘位置跳变与一般选项框偏高 4 项问题 |
 | [full_project_audit_2026_11_25.md](full_project_audit_2026_11_25.md) | 2026-11-25 | **Godot Debug 启动修复、存档可点击翻页箭头与全项目审计闭环报告** | 修复 `_window_icons`/NUL/`MediaPakReader.Read` 阻塞；落地 `12004`/`12005` 翻页箭头点击/触控/悬停交互；完成 C#/GDScript/打包/CI/Rust 隐私与合规审计，双模式 38 项门禁全绿（见 D-93） |
 | [deep_audit_8e0a98d1_remediation_2026_11_24.md](deep_audit_8e0a98d1_remediation_2026_11_24.md) | 2026-11-24 | **`8e0a98d1` 三端深度审查与架构级修复闭环报告** | 全部 5 P0、12 P1–P3 与专项 1–3 收口落地；AOT 零反射构建、双模式 38 项门禁、Rust `wolf-save` 字节校验与工具链单测全绿（见 D-88..D-90） |
 | [deep_audit_8e0a98d1_and_arch_fix_plan_2026_11_24.md](deep_audit_8e0a98d1_and_arch_fix_plan_2026_11_24.md) | 2026-11-24 | **LWSMF Remake（`8e0a98d1`）三端全面静态代码审查与架构级修复方案** | 定位 5 P0、12 P1–P3 及菜单定位、原版 `.sav` 双向导出、三端 Boot Splash 替换 3 项专项方案与 6 条防回归红线 |

@@ -475,6 +475,10 @@ func advance_frame() -> void:
 			or (not dialogue_eligible and (phase == "title" or session.GetForegroundStackSignature().is_empty()))
 		if router.step_confirm_hold(dialogue_eligible, stop_barrier):
 			_advance_held_message()
+		var pointer_hold_eligible := not faulted and not _modal_window_open() \
+			and not choice.is_open and not message.is_open() and not _save_load_ui_active() \
+			and phase != "title"
+		router.step_touch_pointer_hold(pointer_hold_eligible)
 	# Pointer starts at (-1,-1) before any mouse event so slots cannot hover at (0,0).
 	var pointer := router.hover_position if router.mouse_seen else Vector2(-1, -1)
 	vm.SetPointer(pointer.x, pointer.y)
@@ -1746,12 +1750,14 @@ func _arm_modal_release_guard(reset_confirm_hold: bool = true) -> void:
 func _release_modal_guard_if_free() -> void:
 	if not _modal_release_guard:
 		return
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		return
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
-		return
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
-		return
+	var in_touch_mode := router != null and router.touch_mode
+	if not in_touch_mode:
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			return
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+			return
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
+			return
 	if router != null and (router.pointer_pressed or router.right_pressed or router.middle_pressed or router.is_confirm_hold_pointer_held()):
 		return
 	for key in [KEY_ESCAPE, KEY_X, KEY_BACKSPACE, KEY_Z, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:

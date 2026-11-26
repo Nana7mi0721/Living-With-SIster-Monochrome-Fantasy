@@ -98,6 +98,8 @@ Godot 4.7.2 Mono 架构、视口呈现与运行时交互规范：
 系统性代码审查（Code Review）、跨仓库审计与缺陷追踪记录：
 
 - [reviews/README.md](reviews/README.md) — 代码审查台账总览索引
+- [reviews/lwsmf_mobile_4issues_remediation_2026_11_26.md](reviews/lwsmf_mobile_4issues_remediation_2026_11_26.md) — **现行·闭环**：移动端四项交互问题（MOB-01..04）根因核查、代码修复与双模式门禁闭环报告
+- [reviews/lwsmf_mobile_4issues_diagnosis_and_fix_plan.md](reviews/lwsmf_mobile_4issues_diagnosis_and_fix_plan.md) — **现行·台账**：移动端长按学技能、睡觉取消无反应、立绘闪烁与选项框居中问题定位方案
 - [reviews/full_project_audit_2026_11_25.md](reviews/full_project_audit_2026_11_25.md) — **现行·闭环**：Godot Debug 修复、`12004`/`12005` 存档翻页箭头与全项目审计闭环报告（见 D-93）
 - [reviews/deep_audit_8e0a98d1_remediation_2026_11_24.md](reviews/deep_audit_8e0a98d1_remediation_2026_11_24.md) — **现行·闭环**：`8e0a98d1` 三端深度审查 5 P0 / 12 P1–P3 与 3 项专项修复闭环报告（见 D-88..D-90）
 - [reviews/deep_audit_8e0a98d1_and_arch_fix_plan_2026_11_24.md](reviews/deep_audit_8e0a98d1_and_arch_fix_plan_2026_11_24.md) — **现行·台账**：`8e0a98d1` 三端全面静态代码审查与架构级修复方案（5 P0 / 12 P1–P3 / 专项 1–3）

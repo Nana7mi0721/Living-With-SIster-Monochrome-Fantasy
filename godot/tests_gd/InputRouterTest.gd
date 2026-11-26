@@ -694,6 +694,57 @@ func _ready() -> void:
 	_router.clear_pointer_latches()
 	_router.clear_frame_latches()
 
+	# 30. Touch pointer hold (non-dialogue long press, e.g. skill learn gauge) holds OK continuously
+	#     across EngineState(7) == 2 -> 1 -> 1 -> 0 and suppresses the release tap.
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+	bridge.ResetPointer()
+	var ptr_hold_actions := _action
+	_router.handle_event(_touch(0, Vector2(640, 280), true))
+	for _f in range(InputRouter.TOUCH_POINTER_HOLD_DELAY_FRAMES - 1):
+		_router.step_touch_pointer_hold(true)
+	if _router.is_touch_pointer_held() or (_router.held_mask() & InputRouter.MASK_OK) != 0:
+		failures.append("touch pointer hold must not engage before TOUCH_POINTER_HOLD_DELAY_FRAMES")
+	_router.step_touch_pointer_hold(true)
+	if not _router.is_touch_pointer_held() or (_router.held_mask() & InputRouter.MASK_OK) == 0 or not _router.left_frame_pressed():
+		failures.append("touch pointer hold must engage at delay threshold and drive MASK_OK + left_frame_pressed")
+	bridge.SetPointerPressed(_router.left_frame_pressed())
+	bridge.BeginFrameInput()
+	var hold_es7_1: int = bridge.EngineStateBridge(7)
+	var hold_obs_1: bool = bridge.ConsumeOkObserved()
+	_router.clear_frame_latches()
+	bridge.SetPointerPressed(_router.left_frame_pressed())
+	bridge.BeginFrameInput()
+	var hold_es7_2: int = bridge.EngineStateBridge(7)
+	var hold_obs_2: bool = bridge.ConsumeOkObserved()
+	if hold_obs_2:
+		_router.consume_touch_ok()
+	_router.clear_frame_latches()
+	_router.step_touch_pointer_hold(true)
+	bridge.SetPointerPressed(_router.left_frame_pressed())
+	bridge.BeginFrameInput()
+	var hold_es7_3: int = bridge.EngineStateBridge(7)
+	if hold_es7_1 != 2 or hold_obs_1 or hold_es7_2 != 1 or not hold_obs_2 or hold_es7_3 != 1 or not _router.is_touch_pointer_held():
+		failures.append("touch pointer hold must sustain EngineState(7) 2->1->1 across ConsumeOkObserved (got %d,%d,%d)" % [hold_es7_1, hold_es7_2, hold_es7_3])
+	_router.handle_event(_touch(0, Vector2(640, 280), false))
+	_router.step_touch_pointer_hold(true)
+	_router.clear_frame_latches()
+	bridge.SetPointerPressed(_router.left_frame_pressed())
+	bridge.BeginFrameInput()
+	if _router.is_touch_pointer_held() or (_router.held_mask() & InputRouter.MASK_OK) != 0 or bridge.EngineStateBridge(7) != 0 or _action != ptr_hold_actions:
+		failures.append("releasing touch pointer hold must stop MASK_OK/EngineState(7) without firing a release tap")
+
+	# Drag >= TOUCH_HOLD_CANCEL_DIST must cancel an active touch pointer hold.
+	_router.handle_event(_touch(0, Vector2(640, 280), true))
+	for _f in range(InputRouter.TOUCH_POINTER_HOLD_DELAY_FRAMES):
+		_router.step_touch_pointer_hold(true)
+	_router.handle_event(_drag(0, Vector2(640 + InputRouter.TOUCH_HOLD_CANCEL_DIST + 4.0, 280)))
+	if _router.is_touch_pointer_held():
+		failures.append("dragging past TOUCH_HOLD_CANCEL_DIST must cancel touch pointer hold")
+	_router.handle_event(_touch(0, Vector2(640 + InputRouter.TOUCH_HOLD_CANCEL_DIST + 4.0, 280), false))
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

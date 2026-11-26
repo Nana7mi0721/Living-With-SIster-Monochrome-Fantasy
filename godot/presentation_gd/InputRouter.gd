@@ -26,6 +26,7 @@ const TOUCH_PULSE_TTL_FRAMES := 4
 const WHEEL_PULSE_TTL_FRAMES := 12
 const CONFIRM_HOLD_DELAY_FRAMES := 21
 const CONFIRM_HOLD_REPEAT_FRAMES := 3
+const TOUCH_POINTER_HOLD_DELAY_FRAMES := 12
 const TOUCH_HOLD_CANCEL_DIST := 32.0
 
 # Host mask bits, mirrored from core_cs/KeyCodes.cs so the VM can read them directly.
@@ -95,6 +96,8 @@ var _confirm_hold_frames := 0
 var _confirm_hold_cooldown := 0
 var _confirm_hold_engaged := false
 var _confirm_hold_blocked := false
+var _touch_pointer_hold_frames := 0
+var _touch_pointer_held := false
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -120,6 +123,8 @@ func trigger_cancel_pulse(source: String = "touch") -> void:
 	_click_latch = false
 	_touch_ok_ttl = 0
 	pointer_pressed = false
+	_touch_pointer_hold_frames = 0
+	_touch_pointer_held = false
 	last_input_source = source
 	_right_click_latch = true
 	if source == "touch":
@@ -179,6 +184,8 @@ func clear_touch_state() -> void:
 	_touch_scroll_locked = false
 	_touch_scroll_accum = 0.0
 	_touch_hold_active = false
+	_touch_pointer_hold_frames = 0
+	_touch_pointer_held = false
 
 
 func clear_confirm_hold() -> void:
@@ -205,12 +212,33 @@ func is_touch_hold_active() -> bool:
 	return _touch_hold_active
 
 
+func is_touch_pointer_held() -> bool:
+	return _touch_pointer_held
+
+
 func _is_touch_hold_steady() -> bool:
 	if sidebar_open_hint or _touches.size() != 1 or _touch_max_fingers != 1:
 		return false
-	if _touch_hold_active:
+	if _touch_hold_active or _touch_pointer_held:
 		return _touch_peak_dist < TOUCH_HOLD_CANCEL_DIST
 	return not _touch_gesture_consumed and _touch_peak_dist < TOUCH_TAP_MAX_DIST
+
+
+## Promote a steady single-finger press outside dialogue/choice/modal UIs to sustained OK hold
+## (e.g. holding a skill icon to fill its learn gauge), suppressing the release tap once active.
+func step_touch_pointer_hold(eligible: bool) -> void:
+	if not eligible or not _is_touch_hold_steady() or _touch_hold_active:
+		_touch_pointer_hold_frames = 0
+		_touch_pointer_held = false
+		return
+	if _touch_pointer_held:
+		return
+	_touch_pointer_hold_frames += 1
+	if _touch_pointer_hold_frames >= TOUCH_POINTER_HOLD_DELAY_FRAMES:
+		_touch_pointer_held = true
+		_touch_gesture_consumed = true
+		last_input_source = "touch"
+		reset_double_tap_state()
 
 
 ## Step fixed-rate (60Hz) hold-to-confirm for dialogue fast-forward on PC and mobile.
@@ -261,6 +289,9 @@ func step_confirm_hold(dialogue_eligible: bool, stop_barrier: bool) -> bool:
 
 
 func _set_touch_mode(active: bool) -> void:
+	if not active:
+		_touch_pointer_hold_frames = 0
+		_touch_pointer_held = false
 	if touch_mode == active:
 		return
 	touch_mode = active
@@ -506,8 +537,10 @@ func _handle_screen_drag(sd: InputEventScreenDrag) -> bool:
 	_touch_peak_dist = maxf(_touch_peak_dist, max_dist)
 	if _touches.size() > 1 or max_dist >= TOUCH_TAP_MAX_DIST:
 		reset_double_tap_state()
-	if _touch_hold_active and _touch_peak_dist >= TOUCH_HOLD_CANCEL_DIST:
+	if (_touch_hold_active or _touch_pointer_held) and _touch_peak_dist >= TOUCH_HOLD_CANCEL_DIST:
 		_touch_hold_active = false
+		_touch_pointer_held = false
+		_touch_pointer_hold_frames = 0
 		_confirm_hold_blocked = true
 
 	# Two-finger vertical swipe opens/closes quick drawer without conflicting with Android left-edge back.
@@ -575,7 +608,7 @@ func held_mask(allow_mouse: bool = true) -> int:
 	var mask := scripted_key_mask if scripted_key_mask >= 0 else _physical_mask()
 	mask |= _wheel_bits
 	if allow_mouse:
-		if pointer_pressed or _click_latch or _touch_ok_ttl > 0:
+		if pointer_pressed or _touch_pointer_held or _click_latch or _touch_ok_ttl > 0:
 			mask |= MASK_OK
 		if right_pressed or _right_click_latch or _touch_cancel_ttl > 0:
 			mask |= MASK_CANCEL
@@ -622,7 +655,7 @@ func wheel_notch() -> int:
 ## Button state for one frame: true when physically held or clicked within this tick.
 func left_frame_pressed() -> bool:
 	_reconcile_pointer_buttons()
-	return not _action_entry_suppressed and (pointer_pressed or _click_latch or _touch_ok_ttl > 0)
+	return not _action_entry_suppressed and (pointer_pressed or _touch_pointer_held or _click_latch or _touch_ok_ttl > 0)
 
 
 func right_frame_pressed() -> bool:
@@ -674,7 +707,7 @@ func _reconcile_pointer_buttons(force_physical_check: bool = false) -> void:
 
 func reconcile_pointer_buttons(force_physical_check: bool = false) -> void:
 	_reconcile_pointer_buttons(force_physical_check)
-	if _action_entry_suppressed and not _click_latch and not pointer_pressed:
+	if _action_entry_suppressed and not _click_latch and not pointer_pressed and not _touch_pointer_held:
 		var key_held := (scripted_key_mask & MASK_OK) != 0 if scripted_key_mask >= 0 else _any_pressed(ACTION_KEYS)
 		if not key_held:
 			_action_entry_suppressed = false
@@ -682,7 +715,7 @@ func reconcile_pointer_buttons(force_physical_check: bool = false) -> void:
 
 func action_input_held() -> bool:
 	_reconcile_pointer_buttons()
-	if pointer_pressed or _click_latch or _touch_ok_ttl > 0:
+	if pointer_pressed or _touch_pointer_held or _click_latch or _touch_ok_ttl > 0:
 		return true
 	if scripted_key_mask >= 0:
 		return (scripted_key_mask & MASK_OK) != 0
