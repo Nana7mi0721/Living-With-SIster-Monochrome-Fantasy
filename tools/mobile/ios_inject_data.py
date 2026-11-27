@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
+import plistlib
 import re
 import shutil
 import stat
@@ -33,6 +35,83 @@ PROJECT_FILES = ("CDataBase.project", "DataBase.project", "SysDatabase.project")
 STORED_EXTENSIONS = {".ipa", ".zip", ".pak", ".br", ".ogg", ".mp3", ".wav", ".webp", ".png", ".jpg", ".jpeg"}
 FONT_PAK_NAMES = {"lolita.ttf", "data/lolita.ttf"}
 STREAM_CHUNK_BYTES = 1024 * 1024
+IOS_ICON_SPECS: tuple[tuple[str, int], ...] = (
+    ("AppIcon20x20@2x.png", 40),
+    ("AppIcon20x20@3x.png", 60),
+    ("AppIcon20x20@2x~ipad.png", 40),
+    ("AppIcon29x29@2x.png", 58),
+    ("AppIcon29x29@3x.png", 87),
+    ("AppIcon29x29@2x~ipad.png", 58),
+    ("AppIcon40x40@2x.png", 80),
+    ("AppIcon40x40@3x.png", 120),
+    ("AppIcon40x40@2x~ipad.png", 80),
+    ("AppIcon60x60@2x.png", 120),
+    ("AppIcon60x60@3x.png", 180),
+    ("AppIcon76x76@2x~ipad.png", 152),
+    ("AppIcon83.5x83.5@2x~ipad.png", 167),
+    ("AppIcon1024x1024.png", 1024),
+)
+IOS_IPHONE_ICON_FILES = ["AppIcon60x60", "AppIcon40x40", "AppIcon29x29", "AppIcon20x20"]
+IOS_IPAD_ICON_FILES = ["AppIcon60x60", "AppIcon76x76", "AppIcon83.5x83.5", "AppIcon40x40", "AppIcon29x29", "AppIcon20x20"]
+
+
+def render_ios_app_icons(icon_path: Path) -> dict[str, bytes]:
+    """Generate opaque RGB PNG AppIcon variants from a source image (center-cropped square)."""
+    src = icon_path.resolve()
+    if not src.is_file() or src.stat().st_size <= 0:
+        fail(f"iOS icon source not found or empty: {icon_path}")
+    try:
+        from PIL import Image
+    except ImportError:
+        fail("Pillow is required for --icon (pip install pillow)")
+
+    resampling = getattr(Image, "Resampling", Image).LANCZOS
+    with Image.open(src) as raw:
+        rgba = raw.convert("RGBA")
+        side = min(rgba.width, rgba.height)
+        left = (rgba.width - side) // 2
+        top = (rgba.height - side) // 2
+        cropped = rgba.crop((left, top, left + side, top + side))
+        # iOS forbids alpha channels in AppIcon PNGs; flatten over white background.
+        bg = Image.new("RGBA", cropped.size, (255, 255, 255, 255))
+        bg.alpha_composite(cropped)
+        square_rgb = bg.convert("RGB")
+
+    rendered: dict[str, bytes] = {}
+    for filename, dim in IOS_ICON_SPECS:
+        buf = io.BytesIO()
+        square_rgb.resize((dim, dim), resampling).save(buf, format="PNG", optimize=True)
+        rendered[filename] = buf.getvalue()
+    return rendered
+
+
+def patch_info_plist_for_loose_icons(raw_plist: bytes) -> bytes:
+    """Point CFBundleIcons/CFBundleIcons~ipad at loose AppIcon*.png files instead of Assets.car."""
+    fmt = plistlib.FMT_BINARY if raw_plist.startswith(b"bplist") else plistlib.FMT_XML
+    data = plistlib.loads(raw_plist)
+    if not isinstance(data, dict):
+        fail("Info.plist root is not a dictionary")
+
+    # Remove CFBundleIconName so SpringBoard loads our injected loose PNGs instead of the CI
+    # placeholder inside Assets.car, while keeping Assets.car intact for LaunchScreen SplashImage.
+    data.pop("CFBundleIconName", None)
+    for key, icon_files in (
+        ("CFBundleIcons", IOS_IPHONE_ICON_FILES),
+        ("CFBundleIcons~ipad", IOS_IPAD_ICON_FILES),
+    ):
+        section = data.get(key)
+        if not isinstance(section, dict):
+            section = {}
+        primary = section.get("CFBundlePrimaryIcon")
+        if not isinstance(primary, dict):
+            primary = {}
+        primary.pop("CFBundleIconName", None)
+        primary["CFBundleIconFiles"] = list(icon_files)
+        primary["UIPrerenderedIcon"] = True
+        section["CFBundlePrimaryIcon"] = primary
+        data[key] = section
+
+    return plistlib.dumps(data, fmt=fmt)
 
 
 def fail(message: str) -> None:
@@ -204,6 +283,7 @@ def inject(
     use_brotli: bool = False,
     allow_missing_font: bool = False,
     use_lossless: bool = False,
+    icon_path: Path | None = None,
 ) -> Path:
     if use_lossless and media_pak_override is not None:
         fail("--lossless and --media-pak are mutually exclusive")
@@ -216,6 +296,10 @@ def inject(
         fail("output IPA must differ from input IPA")
     if destination.exists() and not force and not dry_run:
         fail(f"output already exists (pass --force): {destination}")
+
+    rendered_icons: dict[str, bytes] = {}
+    if icon_path is not None:
+        rendered_icons = render_ios_app_icons(icon_path)
 
     lossless_tmp: Path | None = None
     effective_media_pak = media_pak_override
@@ -252,10 +336,10 @@ def inject(
             )
 
             if dry_run:
-                total = sum(_payload_size(v[0]) for v in payload_files.values())
+                total = sum(_payload_size(v[0]) for v in payload_files.values()) + sum(len(b) for b in rendered_icons.values())
                 print(
                     f"IOS_INJECT_DRY_RUN app={app_prefix} files={len(payload_files)} "
-                    f"payload_bytes={total} lossless={use_lossless} out={destination}"
+                    f"icons={len(rendered_icons)} payload_bytes={total} lossless={use_lossless} out={destination}"
                 )
                 return destination
 
@@ -265,6 +349,8 @@ def inject(
                 temp.unlink()
 
             replace_prefixes = (f"{app_prefix}/game_data", f"{app_prefix}/work")
+            info_plist_arc = f"{app_prefix}/Info.plist"
+            patched_plist = False
             seen: set[str] = set()
             try:
                 with zipfile.ZipFile(temp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as out_zip:
@@ -272,18 +358,35 @@ def inject(
                         norm = name.rstrip("/")
                         if any(norm == p or norm.startswith(p + "/") for p in replace_prefixes):
                             continue
+                        if rendered_icons:
+                            rel_in_app = norm[len(app_prefix) + 1 :] if norm.startswith(app_prefix + "/") else ""
+                            if "/" not in rel_in_app and rel_in_app.startswith("AppIcon") and rel_in_app.lower().endswith(".png"):
+                                continue
                         if name in seen:
                             fail(f"duplicate archive member in input IPA: {name}")
                         seen.add(name)
                         cloned = clone_zipinfo(info)
                         if info.is_dir():
                             out_zip.writestr(cloned, b"")
+                        elif rendered_icons and norm == info_plist_arc:
+                            raw_plist = archive.read(info)
+                            out_zip.writestr(cloned, patch_info_plist_for_loose_icons(raw_plist))
+                            patched_plist = True
                         else:
                             use_zip64 = info.file_size >= zipfile.ZIP64_LIMIT
                             with archive.open(info, "r") as src_stream, out_zip.open(cloned, "w", force_zip64=use_zip64) as dst_stream:
                                 shutil.copyfileobj(src_stream, dst_stream, length=STREAM_CHUNK_BYTES)
 
                     now_ts = datetime.now().timestamp()
+                    if rendered_icons:
+                        if not patched_plist:
+                            fail(f"input IPA is missing {info_plist_arc}; cannot patch CFBundleIcons for --icon")
+                        icon_mtime = icon_path.stat().st_mtime if icon_path is not None else now_ts
+                        for icon_name, icon_bytes in sorted(rendered_icons.items()):
+                            arcname = f"{app_prefix}/{icon_name}"
+                            zinfo = data_zipinfo(arcname, False, icon_mtime, stat.S_IFREG | 0o644)
+                            out_zip.writestr(zinfo, icon_bytes)
+
                     for d in sorted(payload_dirs, key=str.lower):
                         out_zip.writestr(data_zipinfo(d, True, now_ts, stat.S_IFDIR | 0o755), b"")
                     for arcname in sorted(payload_files, key=str.lower):
@@ -301,9 +404,23 @@ def inject(
                     if app_prefix_from_names(check_names) != app_prefix:
                         fail("output IPA bundle mismatch")
                     prog_req = f"{app_prefix}/game_data/programs.json" + (".br" if use_brotli else "")
-                    for req in (prog_req, f"{app_prefix}/work/all/media.pak"):
+                    req_list = [prog_req, f"{app_prefix}/work/all/media.pak"]
+                    if rendered_icons:
+                        req_list.extend(
+                            [
+                                f"{app_prefix}/AppIcon60x60@2x.png",
+                                f"{app_prefix}/AppIcon60x60@3x.png",
+                                f"{app_prefix}/AppIcon1024x1024.png",
+                            ]
+                        )
+                    for req in req_list:
                         if req not in check_names:
                             fail(f"output IPA missing injected entry: {req}")
+                    if rendered_icons:
+                        plist_out = plistlib.loads(check_zip.read(info_plist_arc))
+                        primary = (plist_out.get("CFBundleIcons") or {}).get("CFBundlePrimaryIcon") or {}
+                        if "CFBundleIconName" in primary or "AppIcon60x60" not in (primary.get("CFBundleIconFiles") or []):
+                            fail("output IPA Info.plist failed CFBundleIcons verification")
                     bad = check_zip.testzip()
                     if bad is not None:
                         fail(f"output IPA CRC check failed at: {bad}")
@@ -317,7 +434,8 @@ def inject(
             shutil.rmtree(lossless_tmp, ignore_errors=True)
 
     sha = sha256_file(destination)
-    print(f"IOS_INJECT_OK out={destination} sha256={sha}")
+    icon_note = f" icons={len(rendered_icons)}" if rendered_icons else ""
+    print(f"IOS_INJECT_OK out={destination}{icon_note} sha256={sha}")
     return destination
 
 
@@ -328,6 +446,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--work-all", type=Path, default=Path("work/all"))
     parser.add_argument("--media-pak", type=Path, default=None)
     parser.add_argument("--lossless", action="store_true", help="Repack media.pak with pixel-exact lossless WebP + SystemFile overlay")
+    parser.add_argument("--icon", type=Path, default=None, help="Replace IPA AppIcon PNGs + Info.plist using local icon_mobile.jpg")
     parser.add_argument("--font", type=Path, default=None)
     parser.add_argument("--allow-missing-font", action="store_true", help="Allow IPA injection without Lolita.ttf")
     parser.add_argument("--out", type=Path, default=None)
@@ -353,6 +472,7 @@ def main(argv: list[str] | None = None) -> int:
         use_brotli=args.brotli,
         allow_missing_font=args.allow_missing_font,
         use_lossless=args.lossless,
+        icon_path=args.icon,
     )
     return 0
 

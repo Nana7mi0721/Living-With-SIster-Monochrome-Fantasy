@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import plistlib
 import shutil
 import stat
 import struct
@@ -29,6 +30,7 @@ import audit_cross_platform_assets  # noqa: E402
 import brotli_json  # noqa: E402
 import env_check  # noqa: E402
 import export_preset_template  # noqa: E402
+import github_ios_ci  # noqa: E402
 import ios_inject_data  # noqa: E402
 import pack_media  # noqa: E402
 import postprocess_android_apk  # noqa: E402
@@ -1510,7 +1512,8 @@ class MobileToolsTest(unittest.TestCase):
             win_tpl = t / "windows_release_x86_64.exe"
             and_tpl = t / "android_release.apk"
             ipa_in = t / "LWSMF-0.2.0-ios-arm64.ipa"
-            for f in (win_tpl, and_tpl, ipa_in):
+            ios_icon = t / "icon_mobile.jpg"
+            for f in (win_tpl, and_tpl, ipa_in, ios_icon):
                 f.write_bytes(b"stub")
 
             fake_env = {
@@ -1531,6 +1534,7 @@ class MobileToolsTest(unittest.TestCase):
                 "publish_dir": t / "_publish",
                 "publish_present": list(release_tui.PUBLISH_FILES),
                 "publish_missing": [],
+                "ios_icon_path": ios_icon,
                 "media_pak": {"exists": True, "bytes": 1024, "entries": 10, "has_mapchip": False, "error": ""},
                 "game_data_ok": True,
                 "projects_ok": True,
@@ -1539,6 +1543,9 @@ class MobileToolsTest(unittest.TestCase):
                 "loose_media_ready": True,
                 "pillow_ok": True,
                 "ios_engine_ipas": [ipa_in],
+                "github_repo": "owner/repo",
+                "github_branch": "master",
+                "github_token_sources": ["git-credential"],
             }
             cfg.ios_engine_ipa = str(ipa_in)
 
@@ -1561,12 +1568,16 @@ class MobileToolsTest(unittest.TestCase):
 
             ios_cmd, _, ios_warns = release_tui.build_platform_plan("ios", cfg, fake_env, REPO_ROOT)
             self.assertIn("--lossless", ios_cmd)
+            self.assertIn("--icon", ios_cmd)
             self.assertIn("--brotli", ios_cmd)
             self.assertIn("--font", ios_cmd)
             self.assertEqual(ios_warns, [])
             self.assertEqual(release_tui.validate_target_readiness("windows", cfg, fake_env), [])
             self.assertEqual(release_tui.validate_target_readiness("android", cfg, fake_env), [])
             self.assertEqual(release_tui.validate_target_readiness("ios", cfg, fake_env), [])
+            no_icon_env = dict(fake_env)
+            no_icon_env["ios_icon_path"] = None
+            self.assertTrue(any("icon_mobile.jpg" in b for b in release_tui.validate_target_readiness("ios", cfg, no_icon_env)))
 
             official_cfg = release_tui.ReleaseConfig(
                 version="0.2.0",
@@ -1680,6 +1691,111 @@ class MobileToolsTest(unittest.TestCase):
                 zf.writestr("res/mipmap-xxxhdpi-v4/icon_background.webp", dark_buf.getvalue())
             bad_issues, _ = release_tui.verify_android_apk_icons(bad_apk)
             self.assertTrue(any("too dark" in msg for msg in bad_issues))
+
+    def test_ios_icon_injection_and_github_ci_helpers(self) -> None:
+        import urllib.request
+        from io import BytesIO
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            gd, wa = _make_fake_payload(t, include_font=True)
+            (wa / "Lolita.ttf").write_bytes(b"FAKE-TTF")
+
+            icon_src = t / "icon_mobile.jpg"
+            Image.new("RGB", (600, 400), (210, 140, 90)).save(icon_src, format="JPEG", quality=95)
+
+            orig_plist = {
+                "CFBundleIdentifier": "com.lwsmf.remake",
+                "CFBundleDisplayName": "妹相随",
+                "CFBundleIconName": "AppIcon",
+                "CFBundleIcons": {
+                    "CFBundlePrimaryIcon": {
+                        "CFBundleIconName": "AppIcon",
+                        "CFBundleIconFiles": ["AppIcon60x60"],
+                    }
+                },
+                "CFBundleIcons~ipad": {
+                    "CFBundlePrimaryIcon": {
+                        "CFBundleIconName": "AppIcon",
+                        "CFBundleIconFiles": ["AppIcon60x60", "AppIcon76x76"],
+                    }
+                },
+            }
+            in_ipa = t / "LWSMF-0.1.0-ios-arm64.ipa"
+            with zipfile.ZipFile(in_ipa, "w") as zf:
+                zf.writestr("Payload/Lwsmf.app/Info.plist", plistlib.dumps(orig_plist, fmt=plistlib.FMT_BINARY))
+                zf.writestr("Payload/Lwsmf.app/Assets.car", b"CAR-SPLASH-DATA")
+                zf.writestr("Payload/Lwsmf.app/AppIcon60x60@2x.png", b"old-placeholder")
+
+            out_ipa = t / "LWSMF-0.1.0-ios-arm64-full.ipa"
+            rc = ios_inject_data.main(
+                [
+                    str(in_ipa),
+                    "--game-data",
+                    str(gd),
+                    "--work-all",
+                    str(wa),
+                    "--font",
+                    str(wa / "Lolita.ttf"),
+                    "--icon",
+                    str(icon_src),
+                    "--brotli",
+                    "--out",
+                    str(out_ipa),
+                    "--force",
+                ]
+            )
+            self.assertEqual(rc, 0)
+
+            with zipfile.ZipFile(out_ipa, "r") as zf:
+                # Assets.car must remain untouched so LaunchScreen SplashImage keeps working.
+                self.assertEqual(zf.read("Payload/Lwsmf.app/Assets.car"), b"CAR-SPLASH-DATA")
+                raw_plist = zf.read("Payload/Lwsmf.app/Info.plist")
+                self.assertTrue(raw_plist.startswith(b"bplist"))
+                patched = plistlib.loads(raw_plist)
+                self.assertNotIn("CFBundleIconName", patched)
+                self.assertNotIn("CFBundleIconName", patched["CFBundleIcons"]["CFBundlePrimaryIcon"])
+                self.assertNotIn("CFBundleIconName", patched["CFBundleIcons~ipad"]["CFBundlePrimaryIcon"])
+                self.assertIn("AppIcon60x60", patched["CFBundleIcons"]["CFBundlePrimaryIcon"]["CFBundleIconFiles"])
+                self.assertIn("AppIcon76x76", patched["CFBundleIcons~ipad"]["CFBundlePrimaryIcon"]["CFBundleIconFiles"])
+                with Image.open(BytesIO(zf.read("Payload/Lwsmf.app/AppIcon1024x1024.png"))) as icon_1024:
+                    self.assertEqual(icon_1024.size, (1024, 1024))
+                    self.assertEqual(icon_1024.mode, "RGB")
+
+            issues, meta = release_tui.verify_ios_ipa_icons(out_ipa)
+            self.assertEqual(issues, [])
+            self.assertEqual(meta["icon_count"], len(ios_inject_data.IOS_ICON_SPECS))
+            self.assertTrue(meta["brotli_json"])
+
+            # GitHub Actions helper tests (pure offline).
+            self.assertEqual(
+                github_ios_ci.parse_github_repo_from_remote("https://github.com/org/repo.git"),
+                "org/repo",
+            )
+            self.assertEqual(
+                github_ios_ci.parse_github_repo_from_remote("git@github.com:org/repo.git"),
+                "org/repo",
+            )
+            art_zip = t / "artifact.zip"
+            with zipfile.ZipFile(art_zip, "w") as zf:
+                zf.write(in_ipa, "LWSMF-0.1.0-ios-arm64.ipa")
+                zf.writestr("SHA256SUMS.txt", "abc  LWSMF-0.1.0-ios-arm64.ipa\n")
+            extracted = github_ios_ci.extract_ipa_from_artifact_zip(art_zip, t / "ci_out")
+            self.assertEqual(extracted.name, "LWSMF-0.1.0-ios-arm64.ipa")
+            self.assertTrue((t / "ci_out/SHA256SUMS.txt").is_file())
+
+            handler = github_ios_ci._NoAuthCrossHostRedirectHandler()
+            req = urllib.request.Request(
+                "https://api.github.com/repos/org/repo/actions/artifacts/1/zip",
+                headers={"Authorization": "Bearer secret", "Accept": "application/vnd.github+json"},
+            )
+            redir_cross = handler.redirect_request(req, None, 302, "Found", {}, "https://pipelines.actions.githubusercontent.com/blob")
+            self.assertIsNotNone(redir_cross)
+            self.assertFalse(redir_cross.has_header("Authorization"))
+            redir_same = handler.redirect_request(req, None, 307, "Redirect", {}, "https://api.github.com/repos/org/newrepo")
+            self.assertIsNotNone(redir_same)
+            self.assertTrue(redir_same.has_header("Authorization"))
 
 
 if __name__ == "__main__":

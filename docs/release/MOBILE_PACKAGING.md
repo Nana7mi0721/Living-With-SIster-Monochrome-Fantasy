@@ -127,17 +127,28 @@ Android 目标固定为 `net9.0`，构建需使用 .NET 9+ SDK；`package_androi
 
 ## 5. iOS 构建简述
 
-在 GitHub Actions 手动触发 `.github/workflows/ios-unsigned.yml`，下载 engine-only unsigned IPA，然后通过统一工具注入真无损媒体与 Brotli 数据：
+推荐直接通过 `tools/release_tui.py`（菜单 `[4]` 或 CLI 参数）一键完成 GitHub Actions 触发/拉取、真无损媒体与 Brotli 数据注入以及本地正式 `icon_mobile.jpg` 图标替换（不会将本地商业图标上传至仓库或 CI）：
+
+```bash
+# 一键触发 ios-unsigned.yml、等待完成并拉取引擎壳，随后注入真无损媒体 + Brotli + 正式 icon_mobile.jpg 并验真
+python tools/release_tui.py --ios-ci-trigger --build ios --verify --yes
+
+# 若云端已有成功的 ios-unsigned.yml 产物，直接拉取最新引擎壳并注入
+python tools/release_tui.py --ios-ci-fetch --build ios --verify --yes
+```
+
+也可单独手动注入本地引擎壳：
 
 ```bash
 bash tools/inject_ios_data.sh \
   "LWSMF-0.1.0-ios-arm64.ipa" \
   --game-data game_data \
   --work-all work/all \
+  --icon work/all/_publish/icon_mobile.jpg \
   --lossless \
   --brotli \
   --out "dist/ios/0.1.0/LWSMF-0.1.0-ios-arm64-full.ipa" \
   --force
 ```
 
-也可直接在 `tools/release_tui.py` 中配置引擎壳 `.ipa` 路径并一键完成三端导出与校验。使用 Sideloadly 或个人 Apple ID 签名安装。iOS 仍未纳入本次本地交付验证。
+`--icon` 会在注入期从本地 `icon_mobile.jpg` 生成 14 种无 Alpha 通道的 `AppIcon*.png`（涵盖 iPhone `@2x/@3x`、iPad 与 `1024×1024`），并修补 `Info.plist`（移除 `CFBundleIconName`、写入 `CFBundleIconFiles`），使 iOS 加载本地正式图标同时保持 `Assets.car` 中的自定义启动页不变。使用 Sideloadly 或个人 Apple ID 签名安装。

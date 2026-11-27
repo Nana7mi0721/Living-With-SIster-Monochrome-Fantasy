@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 import os
+import plistlib
 import re
 import shlex
 import shutil
@@ -31,6 +32,7 @@ for _p in (str(TOOLS_DIR), str(MOBILE_DIR)):
         sys.path.insert(0, _p)
 
 import env_check  # noqa: E402
+import github_ios_ci  # noqa: E402
 import pack_media  # noqa: E402
 
 try:
@@ -397,6 +399,10 @@ def collect_environment(repo_root: Path) -> dict[str, Any]:
     except ImportError:
         pillow_ok = False
 
+    ios_icon_path = publish_dir / "icon_mobile.jpg"
+    gh_repo, gh_branch = github_ios_ci.detect_git_repo_and_branch(repo_root)
+    gh_token_sources = [label for _, label in github_ios_ci.iter_github_token_candidates(repo_root)]
+
     return {
         "git": inspect_git_info(repo_root),
         "bash": find_bash_bin(),
@@ -416,6 +422,7 @@ def collect_environment(repo_root: Path) -> dict[str, Any]:
         "publish_dir": publish_dir,
         "publish_present": publish_present,
         "publish_missing": publish_missing,
+        "ios_icon_path": ios_icon_path if ios_icon_path.is_file() else None,
         "media_pak": media_info,
         "game_data_ok": gd_ok,
         "projects_ok": proj_ok,
@@ -424,6 +431,9 @@ def collect_environment(repo_root: Path) -> dict[str, Any]:
         "loose_media_ready": loose_media_ready,
         "pillow_ok": pillow_ok,
         "ios_engine_ipas": discover_ios_engine_ipas(repo_root),
+        "github_repo": gh_repo,
+        "github_branch": gh_branch,
+        "github_token_sources": gh_token_sources,
     }
 
 
@@ -563,12 +573,16 @@ def build_platform_plan(
         ]
         if cfg.media_mode == "lossless":
             args.append("--lossless")
+        if env_info.get("ios_icon_path"):
+            args.extend(["--icon", str(env_info["ios_icon_path"])])
+        elif not cfg.allow_placeholder_icons:
+            warnings.append("缺失 icon_mobile.jpg，iOS 将保留云端占位图标")
         if env_info.get("font_path"):
             args.extend(["--font", str(env_info["font_path"])])
         if cfg.brotli:
             args.append("--brotli")
         if ipa_path is None or not ipa_path.is_file():
-            warnings.append("尚未指定 macOS CI 产出的无签名引擎壳 .ipa，需先通过 GitHub Actions (ios-unsigned.yml) 获取")
+            warnings.append("尚未指定 macOS CI 产出的无签名引擎壳 .ipa，可通过本小程序一键触发或拉取 ios-unsigned.yml")
         return args, extra_env, warnings
 
     raise ValueError(f"unsupported target: {target}")
@@ -617,7 +631,9 @@ def validate_target_readiness(
     elif target == "ios":
         ipa_path = Path(cfg.ios_engine_ipa) if cfg.ios_engine_ipa else None
         if ipa_path is None or not ipa_path.is_file():
-            blockers.append("未提供 macOS CI 生成的 iOS 无签名引擎壳 .ipa 文件")
+            blockers.append("未提供 macOS CI 生成的 iOS 无签名引擎壳 .ipa 文件（可用 --ios-ci-fetch / --ios-ci-trigger 自动获取）")
+        if not env_info.get("ios_icon_path") and not cfg.allow_placeholder_icons:
+            blockers.append("缺失 work/all/_publish/icon_mobile.jpg（iOS 正式应用图标必需）")
     return blockers
 
 
@@ -725,10 +741,16 @@ class UI:
         status_table.add_row("发行图标/海报 (_publish)", badge(pub_ok, warn=cfg.allow_placeholder_icons), pub_detail)
 
         ios_ipa = cfg.ios_engine_ipa or (str(env_info["ios_engine_ipas"][0]) if env_info["ios_engine_ipas"] else "")
+        gh_sources = env_info.get("github_token_sources") or []
+        gh_note = (
+            f"CI 鉴权={' / '.join(gh_sources)}"
+            if gh_sources
+            else "CI 未鉴权（菜单 [4] 可配置 PAT）"
+        )
         status_table.add_row(
             "iOS 引擎壳 (.ipa)",
             badge(bool(ios_ipa and Path(ios_ipa).is_file()), warn=True),
-            ios_ipa or "未配置（通过 GitHub Actions ios-unsigned.yml 获取后本地注入）",
+            f"{ios_ipa or '本地未下载（菜单 [4] 可一键触发/拉取 ios-unsigned.yml）'}  |  {gh_note}",
         )
         self.console.print(status_table)
 
@@ -751,7 +773,7 @@ class UI:
             ("1", "一键三端标准发包（Windows + Android + iOS 数据注入）", "bold green"),
             ("2", "仅导出 Windows x64（便携 ZIP + 可选 Inno Setup 安装程序）", "cyan"),
             ("3", "仅导出 Android arm64 APK（自动剥离静态库 + 16KB 对齐 + v2/v3 签名）", "cyan"),
-            ("4", "iOS arm64 数据注入（向 macOS CI 引擎壳 IPA 注入真无损媒体与数据）", "cyan"),
+            ("4", "iOS arm64 打包（一键触发/拉取 GitHub Actions 引擎壳 + 真无损数据与正式图标注入）", "cyan"),
             ("5", "修改发包配置（版本号 / 无损或直通 / Brotli / Setup / 模板 / 签名 / 占位图标）", "yellow"),
             ("6", "从零按活体清单剪枝并重建真无损 work/all/media.pak", "magenta"),
             ("7", "环境与素材深度体检（env_check + 隐私扫描 + _publish 文件清单）", "white"),
@@ -866,12 +888,132 @@ def edit_config_interactive(cfg: ReleaseConfig, env_info: dict[str, Any], ui: UI
         save_config(cfg)
 
 
+def acquire_ios_ipa_via_ci(
+    repo_root: Path,
+    cfg: ReleaseConfig,
+    ui: UI,
+    *,
+    mode: str,
+    ref: str = "",
+) -> Path | None:
+    """Invoke tools/mobile/github_ios_ci.py to fetch or trigger+wait+download ios-unsigned.yml IPA."""
+    cmd = [
+        sys.executable,
+        str(repo_root / "tools/mobile/github_ios_ci.py"),
+        "--trigger" if mode == "trigger" else "--fetch-latest",
+        "--version",
+        cfg.version,
+    ]
+    if ref:
+        cmd.extend(["--ref", ref])
+    label = (
+        f"GitHub Actions 触发并等待 ios-unsigned.yml ({cfg.version})"
+        if mode == "trigger"
+        else f"GitHub Actions 拉取最新 ios-unsigned.yml 引擎壳 ({cfg.version})"
+    )
+    ui.print(Rule(f"执行: {label}") if HAS_RICH else f"\n=== 执行: {label} ===")
+    ui.print(f"[dim]$ {format_cmd(cmd)}[/dim]" if HAS_RICH else f"$ {format_cmd(cmd)}")
+    env = os.environ.copy()
+    env.setdefault("PYTHONUTF8", "1")
+    t0 = time.monotonic()
+    ipa_path: Path | None = None
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(repo_root),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        stripped = line.rstrip("\r\n")
+        print(stripped, flush=True)
+        m = re.match(r"^IOS_CI_IPA_OK\s+path=(.+?)\s+run_id=", stripped)
+        if m:
+            ipa_path = Path(m.group(1).strip())
+    rc = proc.wait()
+    elapsed = time.monotonic() - t0
+    if rc == 0 and ipa_path is not None and ipa_path.is_file():
+        ui.print(
+            f"[bold green]✓ 已获取 iOS 引擎壳: {ipa_path} ({elapsed:.1f}s)[/bold green]"
+            if HAS_RICH
+            else f"OK: {ipa_path} ({elapsed:.1f}s)"
+        )
+        return ipa_path
+    ui.print(
+        f"[bold red]✗ 获取 iOS 引擎壳失败 (exit={rc}, {elapsed:.1f}s)[/bold red]"
+        if HAS_RICH
+        else f"FAIL: GitHub Actions iOS CI (exit={rc})"
+    )
+    return None
+
+
+def resolve_ios_engine_ipa_interactive(
+    cfg: ReleaseConfig,
+    env_info: dict[str, Any],
+    repo_root: Path,
+    ui: UI,
+    *,
+    allow_skip: bool,
+) -> str:
+    """Interactive selector for obtaining or reusing the iOS engine-only IPA."""
+    existing = cfg.ios_engine_ipa if (cfg.ios_engine_ipa and Path(cfg.ios_engine_ipa).is_file()) else ""
+    if not existing and env_info["ios_engine_ipas"]:
+        existing = str(env_info["ios_engine_ipas"][0])
+    default_branch = env_info.get("github_branch") or "master"
+
+    while True:
+        ui.print(Rule("iOS 引擎壳 (.ipa) 来源选择") if HAS_RICH else "\n--- iOS 引擎壳来源选择 ---")
+        ui.print(f"  [1] 从 GitHub Actions 拉取最近一次成功的 ios-unsigned.yml 引擎壳")
+        ui.print(f"  [2] 立即触发 GitHub Actions ios-unsigned.yml（分支: {default_branch}，等待构建并下载）")
+        ui.print(f"  [3] 使用本地已有引擎壳 .ipa（当前: {existing or '无'}）")
+        ui.print(f"  [4] 配置/更新 GitHub Token（仅保存到忽略目录 work/out/github_token.txt）")
+        ui.print(f"  [0] {'跳过 iOS，继续其余平台' if allow_skip else '取消返回主菜单'}")
+        default_pick = "3" if existing else "1"
+        pick = prompt_text("请选择 iOS 引擎壳获取方式", default_pick)
+
+        if pick == "0":
+            return ""
+        if pick == "1":
+            got = acquire_ios_ipa_via_ci(repo_root, cfg, ui, mode="fetch")
+            if got:
+                cfg.ios_engine_ipa = str(got)
+                save_config(cfg)
+                return str(got)
+        elif pick == "2":
+            ref = prompt_text("触发分支或 Tag", default_branch)
+            got = acquire_ios_ipa_via_ci(repo_root, cfg, ui, mode="trigger", ref=ref)
+            if got:
+                cfg.ios_engine_ipa = str(got)
+                save_config(cfg)
+                return str(got)
+        elif pick == "3":
+            entered = prompt_text("输入本地引擎壳 .ipa 路径", existing)
+            if entered and Path(entered).is_file():
+                cfg.ios_engine_ipa = entered
+                save_config(cfg)
+                return entered
+            ui.print(f"[yellow]文件不存在: {entered}[/yellow]" if HAS_RICH else f"File not found: {entered}")
+        elif pick == "4":
+            pat = prompt_text("粘贴 GitHub PAT（需 actions:read+write 与 contents:read，留空取消）", "")
+            if pat:
+                saved = github_ios_ci.save_local_github_token(repo_root, pat)
+                ui.print(f"[green]✓ Token 已保存至 {saved}（已 .gitignore，不入库）[/green]" if HAS_RICH else f"Saved token to {saved}")
+        else:
+            ui.print(f"[yellow]无效选项: {pick}[/yellow]" if HAS_RICH else f"Invalid choice: {pick}")
+
+
 def execute_targets(
     targets: list[str],
     cfg: ReleaseConfig,
     repo_root: Path,
     ui: UI,
     auto_yes: bool = False,
+    *,
+    prompt_ios_source: bool = False,
 ) -> int:
     env_info = collect_environment(repo_root)
     run_cfg = dataclasses.replace(cfg)
@@ -896,23 +1038,26 @@ def execute_targets(
                 ui.print("已取消本次构建。")
                 return 1
 
-    # Interactive prompt for iOS IPA path if missing.
-    if "ios" in targets and (not run_cfg.ios_engine_ipa or not Path(run_cfg.ios_engine_ipa).is_file()):
-        ui.print(
-            "[yellow]iOS 说明：Windows 无法运行 Xcode。请先在 GitHub Actions 手动触发 `.github/workflows/ios-unsigned.yml` "
-            "下载无签名引擎壳 `LWSMF-<版本>-ios-arm64.ipa`，再在此输入其本地路径完成数据注入。[/yellow]"
-            if HAS_RICH
-            else "iOS requires engine-only IPA from GitHub Actions (.github/workflows/ios-unsigned.yml)."
+    # Interactive GitHub Actions CI / local IPA selection for iOS.
+    ios_missing = "ios" in targets and (not run_cfg.ios_engine_ipa or not Path(run_cfg.ios_engine_ipa).is_file())
+    if "ios" in targets and not auto_yes and (ios_missing or prompt_ios_source):
+        selected_ipa = resolve_ios_engine_ipa_interactive(
+            run_cfg,
+            env_info,
+            repo_root,
+            ui,
+            allow_skip=len(targets) > 1,
         )
-        if not auto_yes:
-            entered = prompt_text("输入已下载的引擎壳 .ipa 路径（直接回车跳过 iOS）", "")
-            if entered and Path(entered).is_file():
-                run_cfg.ios_engine_ipa = entered
-                cfg.ios_engine_ipa = entered
-                save_config(cfg)
-            elif len(targets) > 1:
-                ui.print("[yellow]已跳过 iOS 数据注入，继续其余平台。[/yellow]" if HAS_RICH else "Skipping iOS.")
-                targets = [t for t in targets if t != "ios"]
+        if selected_ipa:
+            run_cfg.ios_engine_ipa = selected_ipa
+            cfg.ios_engine_ipa = selected_ipa
+            save_config(cfg)
+            env_info = collect_environment(repo_root)
+        elif len(targets) > 1:
+            ui.print("[yellow]已跳过 iOS，继续其余平台。[/yellow]" if HAS_RICH else "Skipping iOS.")
+            targets = [t for t in targets if t != "ios"]
+        else:
+            return 0
 
     if not targets:
         return 1
@@ -1103,6 +1248,66 @@ def run_windows_setup_smoke(setup_exe: Path, expected_pak: Path, repo_root: Path
             shutil.rmtree(smoke_dir, ignore_errors=True)
 
 
+def verify_ios_ipa_icons(ipa_path: Path) -> tuple[list[str], dict[str, Any]]:
+    """Verify injected loose AppIcon PNGs and Info.plist CFBundleIcons inside an iOS IPA."""
+    issues: list[str] = []
+    meta: dict[str, Any] = {
+        "app_prefix": "",
+        "icon_count": 0,
+        "has_icon_name": False,
+        "brotli_json": False,
+    }
+    if not ipa_path.is_file():
+        return [f"IPA not found: {ipa_path}"], meta
+
+    with zipfile.ZipFile(ipa_path, "r") as zf:
+        names = zf.namelist()
+        apps = sorted({n.split("/")[1] for n in names if n.startswith("Payload/") and len(n.split("/")) >= 2 and n.split("/")[1].endswith(".app")})
+        if not apps:
+            return ["IPA missing Payload/*.app bundle"], meta
+        app_prefix = f"Payload/{apps[0]}"
+        meta["app_prefix"] = app_prefix
+        meta["brotli_json"] = f"{app_prefix}/game_data/programs.json.br" in names
+
+        plist_arc = f"{app_prefix}/Info.plist"
+        if plist_arc not in names:
+            issues.append(f"IPA missing {plist_arc}")
+        else:
+            plist_data = plistlib.loads(zf.read(plist_arc))
+            for key, req_base in (("CFBundleIcons", "AppIcon60x60"), ("CFBundleIcons~ipad", "AppIcon76x76")):
+                primary = (plist_data.get(key) or {}).get("CFBundlePrimaryIcon") or {}
+                if "CFBundleIconName" in primary:
+                    meta["has_icon_name"] = True
+                    issues.append(f"Info.plist {key} still sets CFBundleIconName (iOS would load placeholder from Assets.car)")
+                if req_base not in (primary.get("CFBundleIconFiles") or []):
+                    issues.append(f"Info.plist {key}.CFBundleIconFiles missing {req_base}")
+
+        required_icons = {
+            "AppIcon60x60@2x.png": (120, 120),
+            "AppIcon60x60@3x.png": (180, 180),
+            "AppIcon76x76@2x~ipad.png": (152, 152),
+            "AppIcon1024x1024.png": (1024, 1024),
+        }
+        icon_entries = [n for n in names if n.startswith(f"{app_prefix}/AppIcon") and n.lower().endswith(".png")]
+        meta["icon_count"] = len(icon_entries)
+        try:
+            from PIL import Image
+        except ImportError:
+            Image = None  # type: ignore[assignment]
+        for fname, exp_size in required_icons.items():
+            arc = f"{app_prefix}/{fname}"
+            if arc not in names:
+                issues.append(f"IPA missing formal icon PNG: {fname}")
+                continue
+            if Image is not None:
+                with Image.open(io.BytesIO(zf.read(arc))) as im:
+                    if im.size != exp_size:
+                        issues.append(f"iOS icon {fname} size {im.size} != {exp_size}")
+                    if im.mode != "RGB":
+                        issues.append(f"iOS icon {fname} mode {im.mode} != RGB (Apple forbids alpha)")
+    return issues, meta
+
+
 def verify_dist_artifacts(repo_root: Path, cfg: ReleaseConfig, ui: UI, smoke_setup: bool = False) -> int:
     """Run unified post-build verification across existing dist/ artifacts."""
     cfg = cfg.normalized()
@@ -1173,11 +1378,22 @@ def verify_dist_artifacts(repo_root: Path, cfg: ReleaseConfig, ui: UI, smoke_set
             bad = zf.testzip()
             names = zf.namelist()
             has_pak = any(n.endswith("/work/all/media.pak") for n in names)
-            if bad is not None or not has_pak:
+        ios_icon_issues, ios_meta = verify_ios_ipa_icons(ios_ipa)
+        if bad is not None or not has_pak:
+            rc_all = 1
+            ui.print(f"[bold red]✗ iOS IPA 校验失败: bad={bad} has_pak={has_pak}[/bold red]" if HAS_RICH else f"FAIL iOS IPA: bad={bad}")
+        else:
+            ui.print(
+                f"  iOS IPA 详情: {fmt_mb(ios_ipa.stat().st_size)} | "
+                f"Brotli={'开启' if ios_meta['brotli_json'] else '未开启'} | "
+                f"正式 AppIcon PNG={ios_meta['icon_count']} 个"
+            )
+            if ios_icon_issues:
                 rc_all = 1
-                ui.print(f"[bold red]✗ iOS IPA 校验失败: bad={bad} has_pak={has_pak}[/bold red]" if HAS_RICH else f"FAIL iOS IPA: bad={bad}")
+                for issue in ios_icon_issues:
+                    ui.print(f"[bold red]✗ iOS 图标验真失败: {issue}[/bold red]" if HAS_RICH else f"FAIL iOS icon: {issue}")
             else:
-                ui.print(f"[bold green]✓ iOS IPA ZIP CRC 与媒体包校验通过 ({fmt_mb(ios_ipa.stat().st_size)})[/bold green]" if HAS_RICH else "OK: iOS IPA verified")
+                ui.print("[bold green]✓ iOS IPA ZIP CRC、媒体包与正式 AppIcon 验真通过[/bold green]" if HAS_RICH else "OK: iOS IPA verified")
 
     if not checked_any:
         ui.print("[yellow]未在 dist/ 中找到当前版本号的导出产物。[/yellow]" if HAS_RICH else "No dist artifacts found for current version.")
@@ -1234,7 +1450,7 @@ def interactive_loop(repo_root: Path) -> int:
         elif choice == "3":
             execute_targets(["android"], cfg, repo_root, ui)
         elif choice == "4":
-            execute_targets(["ios"], cfg, repo_root, ui)
+            execute_targets(["ios"], cfg, repo_root, ui, prompt_ios_source=True)
         elif choice == "5":
             cfg = edit_config_interactive(cfg, env_info, ui)
             continue
@@ -1290,6 +1506,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--official-templates", action="store_true", help="强制使用官方模板而非定制 2D Mono 模板")
     parser.add_argument("--hd", action="store_true", help="附加 2× HD 媒体包（Windows）")
     parser.add_argument("--ios-ipa", default="", help="指定无签名 iOS 引擎壳 .ipa 路径")
+    parser.add_argument("--ios-ci-fetch", action="store_true", help="从 GitHub Actions 拉取最近一次成功的 ios-unsigned.yml 引擎壳")
+    parser.add_argument("--ios-ci-trigger", action="store_true", help="触发 GitHub Actions ios-unsigned.yml 并等待拉取引擎壳")
+    parser.add_argument("--ios-ci-ref", default="", help="配合 --ios-ci-trigger 使用的分支/Tag（默认当前分支）")
     parser.add_argument("--allow-placeholder", action="store_true", help="允许在缺失 _publish 时使用占位图标")
     parser.add_argument("--yes", action="store_true", help="跳过交互确认直接执行")
     return parser.parse_args(argv)
@@ -1319,6 +1538,10 @@ def main(argv: list[str] | None = None) -> int:
         cfg.allow_placeholder_icons = True
     cfg = cfg.normalized()
 
+    if args.ios_ci_fetch and args.ios_ci_trigger:
+        print("ERROR: --ios-ci-fetch and --ios-ci-trigger are mutually exclusive", file=sys.stderr)
+        return 2
+
     if args.check:
         env_info = collect_environment(REPO_ROOT)
         ui.render_dashboard(cfg, env_info)
@@ -1328,6 +1551,16 @@ def main(argv: list[str] | None = None) -> int:
         cmd = build_rebuild_media_command(REPO_ROOT, cfg.media_mode)
         rc, _ = run_streaming_command(cmd, {}, REPO_ROOT, "重建剪枝真无损 media.pak", ui)
         return rc
+
+    if args.ios_ci_fetch or args.ios_ci_trigger:
+        mode = "trigger" if args.ios_ci_trigger else "fetch"
+        got_ipa = acquire_ios_ipa_via_ci(REPO_ROOT, cfg, ui, mode=mode, ref=args.ios_ci_ref)
+        if not got_ipa:
+            return 1
+        cfg.ios_engine_ipa = str(got_ipa)
+        save_config(cfg)
+        if not args.build and not args.plan and not args.verify:
+            return 0
 
     if args.verify and not args.build and not args.plan:
         return verify_dist_artifacts(REPO_ROOT, cfg, ui, smoke_setup=args.smoke_setup)
