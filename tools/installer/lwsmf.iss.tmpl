@@ -56,6 +56,8 @@ Filename: "{app}\game\Lwsmf.exe"; Description: "{cm:LaunchProgram,@APP_NAME@}"; 
 
 [Code]
 const
+  WelcomePosterWidth = @WELCOME_POSTER_WIDTH@;
+  WelcomePosterHeight = @WELCOME_POSTER_HEIGHT@;
   FinishPosterWidth = @FINISH_POSTER_WIDTH@;
   FinishPosterHeight = @FINISH_POSTER_HEIGHT@;
 
@@ -82,11 +84,11 @@ var
 begin
   TextAreaHeight := ScaleY(64);
   BannerWidth := WizardForm.WelcomePage.Width;
-  BannerHeight := (BannerWidth * 9 + 8) div 16;
+  BannerHeight := (BannerWidth * WelcomePosterHeight + (WelcomePosterWidth div 2)) div WelcomePosterWidth;
   if BannerHeight > WizardForm.WelcomePage.Height - TextAreaHeight then
   begin
     BannerHeight := WizardForm.WelcomePage.Height - TextAreaHeight;
-    BannerWidth := (BannerHeight * 16) div 9;
+    BannerWidth := (BannerHeight * WelcomePosterWidth + (WelcomePosterHeight div 2)) div WelcomePosterHeight;
   end;
   BannerLeft := (WizardForm.WelcomePage.Width - BannerWidth) div 2;
 

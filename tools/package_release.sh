@@ -179,10 +179,10 @@ PRESET_FILE="$ROOT/godot/export_presets.cfg"
 PRESET_BAK="$LOG_DIR/export_presets.win.$$.cfg"
 PROJECT_FILE="$ROOT/godot/project.godot"
 PROJECT_BAK="$LOG_DIR/project.win.$$.godot"
-ICON_OUT="$LOG_DIR/release_icons"
+ICON_OUT="$LOG_DIR/release_icons.win.$$"
 ICON_STAGE="$ROOT/godot/assets/boot/generated"
 ICON_STAGE_CREATED=false
-MEDIA_OVERLAY="$LOG_DIR/media_overlay"
+MEDIA_OVERLAY="$LOG_DIR/media_overlay.win.$$"
 
 cleanup() {
   if [ -n "${STAGE:-}" ] && [ -d "$STAGE" ]; then
@@ -656,6 +656,8 @@ from PIL import Image
 
 tmpl = Path(sys.argv[1]).read_text(encoding="utf-8")
 extra_langs = sys.argv[8]
+with Image.open(sys.argv[10]) as welcome_image:
+    welcome_width, welcome_height = welcome_image.size
 with Image.open(sys.argv[11]) as finish_image:
     finish_width, finish_height = finish_image.size
 rendered = (
@@ -668,6 +670,8 @@ rendered = (
     .replace("@SETUP_WELCOME@", sys.argv[10].replace("/", "\\"))
     .replace("@SETUP_FINISH@", sys.argv[11].replace("/", "\\"))
     .replace("@SETUP_SMALL@", sys.argv[12].replace("/", "\\"))
+    .replace("@WELCOME_POSTER_WIDTH@", str(welcome_width))
+    .replace("@WELCOME_POSTER_HEIGHT@", str(welcome_height))
     .replace("@FINISH_POSTER_WIDTH@", str(finish_width))
     .replace("@FINISH_POSTER_HEIGHT@", str(finish_height))
     .replace("\n@EXTRA_LANGUAGES@\n", f"\n{extra_langs}\n" if extra_langs else "\n")

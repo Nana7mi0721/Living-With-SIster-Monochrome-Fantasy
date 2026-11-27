@@ -36,6 +36,7 @@ import pack_media  # noqa: E402
 import postprocess_android_apk  # noqa: E402
 import release_audit  # noqa: E402
 import release_tui  # noqa: E402
+import run_godot_test  # noqa: E402
 import strip_android_static_libs  # noqa: E402
 import sync_boot_assets  # noqa: E402
 import sync_release_icons  # noqa: E402
@@ -636,6 +637,8 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("WizardImageFile=@SETUP_FINISH@", iss_tmpl)
         self.assertIn('Source: "@SETUP_WELCOME@"', iss_tmpl)
         self.assertIn("PngImage.LoadFromFile", iss_tmpl)
+        self.assertIn("WelcomePosterWidth = @WELCOME_POSTER_WIDTH@", iss_tmpl)
+        self.assertIn("WelcomePosterHeight = @WELCOME_POSTER_HEIGHT@", iss_tmpl)
         self.assertIn("FinishPosterWidth = @FINISH_POSTER_WIDTH@", iss_tmpl)
         self.assertIn("FinishPosterHeight = @FINISH_POSTER_HEIGHT@", iss_tmpl)
         self.assertIn("WizardSmallImageFile=@SETUP_SMALL@", iss_tmpl)
@@ -687,6 +690,8 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("setup_welcome.png", packaging)
         self.assertIn("setup_finish.png", packaging)
         self.assertIn("@SETUP_FINISH@", packaging)
+        self.assertIn("@WELCOME_POSTER_WIDTH@", packaging)
+        self.assertIn("@WELCOME_POSTER_HEIGHT@", packaging)
         self.assertIn("@FINISH_POSTER_WIDTH@", packaging)
         self.assertIn("timeout 60", packaging)
         self.assertIn("package_release_import.log", packaging)
@@ -1796,6 +1801,188 @@ class MobileToolsTest(unittest.TestCase):
             redir_same = handler.redirect_request(req, None, 307, "Redirect", {}, "https://api.github.com/repos/org/newrepo")
             self.assertIsNotNone(redir_same)
             self.assertTrue(redir_same.has_header("Authorization"))
+
+    def test_release_tui_secret_hygiene_and_hd_verify_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            cfg_file = t / "release_tui_config.json"
+            cfg = release_tui.ReleaseConfig(
+                version="0.3.0",
+                android_mode="release",
+                android_keystore=str(t / "release.keystore"),
+                android_ks_user="releasekey",
+                android_ks_pass="super-secret-ks",
+                android_key_pass="super-secret-key",
+                include_hd=True,
+            )
+            release_tui.save_config(cfg, cfg_file)
+            saved_text = cfg_file.read_text(encoding="utf-8")
+            saved_json = json.loads(saved_text)
+            self.assertNotIn("android_ks_pass", saved_json)
+            self.assertNotIn("android_key_pass", saved_json)
+            self.assertNotIn("super-secret-ks", saved_text)
+            self.assertNotIn("super-secret-key", saved_text)
+
+            # Even if a config file contains legacy plaintext password keys, load_config ignores them.
+            cfg_file.write_text(
+                json.dumps(
+                    {
+                        "version": "0.3.0",
+                        "android_mode": "release",
+                        "android_ks_pass": "leaked-pass",
+                        "android_key_pass": "leaked-key",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("LWSMF_ANDROID_KS_PASS", None)
+                os.environ.pop("LWSMF_ANDROID_KEY_PASS", None)
+                loaded = release_tui.load_config(cfg_file)
+                self.assertEqual(loaded.android_ks_pass, "")
+                self.assertEqual(loaded.android_key_pass, "")
+
+            with mock.patch.dict(
+                os.environ,
+                {"LWSMF_ANDROID_KS_PASS": "env-ks", "LWSMF_ANDROID_KEY_PASS": "env-key"},
+                clear=False,
+            ):
+                loaded_env = release_tui.load_config(cfg_file)
+                self.assertEqual(loaded_env.android_ks_pass, "env-ks")
+                self.assertEqual(loaded_env.android_key_pass, "env-key")
+
+            # format_cmd redacts space-separated and equals-separated secret flags.
+            cmd = [
+                "bash",
+                "tools/package_android.sh",
+                "--ks-user",
+                "releasekey",
+                "--ks-pass",
+                "super-secret-ks",
+                "--key-pass=super-secret-key",
+                "--token",
+                "ghp_secret_value",
+                "--token=ghp_inline_secret",
+            ]
+            rendered = release_tui.format_cmd(cmd)
+            self.assertNotIn("super-secret-ks", rendered)
+            self.assertNotIn("super-secret-key", rendered)
+            self.assertNotIn("ghp_secret_value", rendered)
+            self.assertNotIn("ghp_inline_secret", rendered)
+            self.assertIn("--ks-pass ***", rendered)
+            self.assertIn("--key-pass=***", rendered)
+            self.assertIn("--token ***", rendered)
+            self.assertIn("--token=***", rendered)
+            self.assertIn("--ks-user releasekey", rendered)
+
+            # windows_dist_paths respects include_hd for --verify lookups.
+            hd_dir, hd_setup = release_tui.windows_dist_paths(t, cfg)
+            self.assertEqual(hd_dir, t / "dist/LWSMF-0.3.0-windows-x64-hd")
+            self.assertEqual(hd_setup, t / "dist/LWSMF-0.3.0-windows-x64-hd-setup.exe")
+            std_cfg = release_tui.ReleaseConfig(version="0.3.0", include_hd=False)
+            std_dir, std_setup = release_tui.windows_dist_paths(t, std_cfg)
+            self.assertEqual(std_dir, t / "dist/LWSMF-0.3.0-windows-x64")
+            self.assertEqual(std_setup, t / "dist/LWSMF-0.3.0-windows-x64-setup.exe")
+
+    def test_github_ios_ci_token_permissions_and_fallback_warning(self) -> None:
+        import io as _io
+
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            # Token write creates file and on Unix enforces 0o600 permissions.
+            saved = github_ios_ci.save_local_github_token(t, "ghp_test_token")
+            self.assertEqual(saved.read_text(encoding="utf-8"), "ghp_test_token\n")
+            if os.name != "nt":
+                self.assertEqual(stat.S_IMODE(saved.stat().st_mode), 0o600)
+            else:
+                # Verify Unix permission code path explicitly on Windows hosts.
+                with (
+                    mock.patch.object(github_ios_ci.os, "name", "posix"),
+                    mock.patch.object(github_ios_ci.os, "chmod") as mock_chmod,
+                ):
+                    github_ios_ci.save_local_github_token(t, "ghp_posix_token")
+                    mock_chmod.assert_called_once_with(saved, 0o600)
+
+            # Version mismatch fallback prints an explicit WARN to stderr.
+            fake_client = mock.Mock()
+            fake_client.repo = "org/repo"
+            fake_client.list_workflow_runs.return_value = [{"id": 42, "conclusion": "success"}]
+            fake_client.list_run_artifacts.return_value = [
+                {"name": "LWSMF-0.1.0-ios-arm64", "archive_download_url": "https://example/art.zip", "size_in_bytes": 100}
+            ]
+            expected_ipa = t / "LWSMF-0.1.0-ios-arm64.ipa"
+            stderr_buf = _io.StringIO()
+            with (
+                mock.patch.object(github_ios_ci, "download_run_ipa", return_value=expected_ipa),
+                mock.patch.object(sys, "stderr", stderr_buf),
+            ):
+                ipa, run_id = github_ios_ci.fetch_latest_ios_ipa(fake_client, "0.2.0", t)
+            self.assertEqual((ipa, run_id), (expected_ipa, 42))
+            self.assertIn("WARN:", stderr_buf.getvalue())
+            self.assertIn("LWSMF-0.2.0-ios-arm64", stderr_buf.getvalue())
+            self.assertIn("LWSMF-0.1.0-ios-arm64", stderr_buf.getvalue())
+
+    def test_run_godot_test_detects_fatal_in_drained_tail_output(self) -> None:
+        self.assertIsNotNone(run_godot_test.match_fatal_line("SCRIPT ERROR: Nil base"))
+        self.assertIsNone(run_godot_test.match_fatal_line("ALL_TESTS_OK"))
+
+        # Even when a process exits 0 immediately after emitting a fatal line, _stream_run fails.
+        rc, lines, reason = run_godot_test._stream_run(
+            [sys.executable, "-c", "print('boot ok'); print('SCRIPT ERROR: late boom')"],
+            env=os.environ.copy(),
+            timeout_sec=10.0,
+            error_grace_sec=0.2,
+            detect_fatal=True,
+        )
+        self.assertEqual(rc, 1)
+        self.assertIsNotNone(reason)
+        self.assertIn("SCRIPT ERROR", reason or "")
+        self.assertIn("SCRIPT ERROR: late boom", lines)
+
+    def test_pack_media_lossless_errors_without_pillow(self) -> None:
+        import builtins
+
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            assets = t / "assets"
+            (assets / "Picture").mkdir(parents=True)
+            (assets / "Picture/a.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+            out_pak = t / "out.pak"
+
+            real_import = builtins.__import__
+
+            def block_pil(name: str, *args: object, **kwargs: object) -> object:
+                if name == "PIL" or name.startswith("PIL."):
+                    raise ImportError("No module named 'PIL'")
+                return real_import(name, *args, **kwargs)
+
+            with mock.patch.object(builtins, "__import__", side_effect=block_pil):
+                rc = pack_media.main(["--root", str(assets), "--out", str(out_pak), "--lossless", "--jobs", "1"])
+            self.assertEqual(rc, 2)
+            self.assertFalse(out_pak.exists())
+
+    def test_packaging_isolation_and_ci_workflow_guards(self) -> None:
+        and_script = (REPO_ROOT / "tools/package_android.sh").read_text(encoding="utf-8")
+        ios_script = (REPO_ROOT / "tools/package_ios.sh").read_text(encoding="utf-8")
+        win_script = (REPO_ROOT / "tools/package_release.sh").read_text(encoding="utf-8")
+        self.assertIn("release_icons.android.$$", and_script)
+        self.assertIn("release_icons.ios.$$", ios_script)
+        self.assertIn("release_icons.win.$$", win_script)
+        self.assertIn('rm -f "$SLN" "$ROOT/godot/Lwsmf.slnx"', ios_script)
+        self.assertIn("ALLOW_PLACEHOLDER=false", ios_script)
+
+        ios_wf = (REPO_ROOT / ".github/workflows/ios-unsigned.yml").read_text(encoding="utf-8")
+        self.assertIn("--allow-placeholder", ios_wf)
+
+        tpl_wf = (REPO_ROOT / ".github/workflows/custom-templates.yml").read_text(encoding="utf-8")
+        self.assertIn("scons pillow", tpl_wf)
+        self.assertIn('VENV_DIR="$RUNNER_TEMP/pyvenv"', tpl_wf)
+        self.assertIn('echo "PYTHON_BIN=$VENV_DIR/bin/python" >> "$GITHUB_ENV"', tpl_wf)
+        self.assertIn("--allow-placeholder", tpl_wf)
+
+        ci_wf = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        for target in ("tools/release_tui.py", "tools/mobile/github_ios_ci.py", "tools/run_godot_test.py"):
+            self.assertIn(target, ci_wf)
 
 
 if __name__ == "__main__":

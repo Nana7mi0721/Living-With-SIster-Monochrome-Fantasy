@@ -23,6 +23,7 @@ PYTHON_BIN="${PYTHON_BIN:-${PYTHON:-$(command -v python3 2>/dev/null || command 
 UNSIGNED=1
 DRY_RUN=false
 FORCE=false
+ALLOW_PLACEHOLDER=false
 
 usage() {
   cat <<'EOF'
@@ -43,6 +44,7 @@ Usage: tools/package_ios.sh [options]
   --unsigned         build unsigned .app -> .ipa (default & required)
   --dry-run          check macOS toolchain & preset without exporting
   --force            replace existing output directory under dist/ios or work/out
+  --allow-placeholder  allow placeholder launcher icons if _publish artwork is absent
   -h, --help         show this help
 EOF
 }
@@ -71,6 +73,7 @@ while [ "$#" -gt 0 ]; do
     --unsigned)  UNSIGNED=1; shift ;;
     --dry-run)   DRY_RUN=true; shift ;;
     --force)     FORCE=true; shift ;;
+    --allow-placeholder) ALLOW_PLACEHOLDER=true; shift ;;
     -h|--help)   usage; exit 0 ;;
     *) echo "ERROR: unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -146,7 +149,7 @@ SLN="$ROOT/godot/Lwsmf.sln"
 SLN_CREATED=false
 PRESET_FILE="$ROOT/godot/export_presets.cfg"
 PRESET_BAK="$OUT_DIR/export_presets.ios.$$.cfg"
-ICON_OUT="$ROOT/work/out/release_icons"
+ICON_OUT="$ROOT/work/out/release_icons.ios.$$"
 ICON_STAGE="$ROOT/godot/assets/boot/generated"
 ICON_STAGE_CREATED=false
 cleanup() {
@@ -159,7 +162,7 @@ cleanup() {
   fi
   rm -rf "$ICON_OUT"
   if [ "$SLN_CREATED" = true ]; then
-    rm -f "$SLN"
+    rm -f "$SLN" "$ROOT/godot/Lwsmf.slnx"
   fi
 }
 trap cleanup EXIT
@@ -175,11 +178,15 @@ PY
 
 echo "== preparing iOS icons =="
 [ ! -d "$ICON_STAGE" ] && ICON_STAGE_CREATED=true
-"$PYTHON_BIN" "$ROOT/tools/sync_release_icons.py" \
-  --source-dir "${LWSMF_PUBLISH_DIR:-$ROOT/work/all/_publish}" \
-  --out-dir "$ICON_OUT" \
-  --stage-res "$ICON_STAGE" \
-  --allow-placeholder
+ICON_ARGS=(
+  --source-dir "${LWSMF_PUBLISH_DIR:-$ROOT/work/all/_publish}"
+  --out-dir "$ICON_OUT"
+  --stage-res "$ICON_STAGE"
+)
+if [ "$ALLOW_PLACEHOLDER" = true ] || [ "${LWSMF_ALLOW_PLACEHOLDER_ICONS:-0}" = "1" ]; then
+  ICON_ARGS+=(--allow-placeholder)
+fi
+"$PYTHON_BIN" "$ROOT/tools/sync_release_icons.py" "${ICON_ARGS[@]}"
 
 cp -f "$PRESET_FILE" "$PRESET_BAK"
 PATCH_SETS=(

@@ -3,10 +3,11 @@
 
 Uses Python standard library HTTP requests so it works on Windows without requiring `gh` CLI.
 Authentication is resolved in order:
-  1. Explicit --token / GITHUB_TOKEN / GH_TOKEN environment variables
+  1. Explicit `--token` CLI argument
   2. Ignored local token file `work/out/github_token.txt` (if present)
-  3. `gh auth token` (when GitHub CLI is installed and logged in)
-  4. `git credential fill` for https://github.com (Windows Credential Manager / Git helper)
+  3. `GITHUB_TOKEN` / `GH_TOKEN` environment variables
+  4. `gh auth token` (when GitHub CLI is installed and logged in)
+  5. `git credential fill` for https://github.com (Windows Credential Manager / Git helper)
 """
 from __future__ import annotations
 
@@ -189,7 +190,14 @@ def select_working_client(
 def save_local_github_token(repo_root: Path, token: str) -> Path:
     path = repo_root / "work/out/github_token.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(token.strip() + "\n", encoding="utf-8")
+    content = token.strip() + "\n"
+    if os.name != "nt":
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        os.chmod(path, 0o600)
+    else:
+        path.write_text(content, encoding="utf-8")
     return path
 
 
@@ -389,6 +397,7 @@ def fetch_latest_ios_ipa(
     runs = client.list_workflow_runs(workflow, status="completed", per_page=20)
     expected = f"LWSMF-{version}-ios-arm64"
     fallback_run_id: int | None = None
+    fallback_art_name = ""
 
     for run in runs:
         if run.get("conclusion") != "success":
@@ -402,8 +411,16 @@ def fetch_latest_ios_ipa(
             return ipa, run_id
         if fallback_run_id is None:
             fallback_run_id = run_id
+            chosen = _select_ipa_artifact(arts, version)
+            fallback_art_name = str(chosen.get("name") or "") if chosen else ""
 
     if fallback_run_id is not None:
+        print(
+            f"WARN: no artifact matched expected version {expected!r}; "
+            f"falling back to run #{fallback_run_id} ({fallback_art_name or 'latest artifact'})",
+            file=sys.stderr,
+            flush=True,
+        )
         ipa = download_run_ipa(client, fallback_run_id, version, out_dir)
         return ipa, fallback_run_id
 

@@ -8,6 +8,7 @@
 
 | 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
 | :--- | :---: | :--- | :--- |
+| [review_dfc5e89c_conflict_free_fix_plan_2026_11_28.md](review_dfc5e89c_conflict_free_fix_plan_2026_11_28.md) | 2026-11-28 | **Commit `dfc5e89c` 增量 Review 与无冲突修复方案** | 逐条核实并无冲突收口 7 P1 / 10 P2 / 5 P3（启动遮罩输入/帧阻塞、存档 ZIP 大小写规范化、旧档 `mds1Count` OOM 守卫、`Sys24` 损坏档回退、`WindowIcons` 句柄安全、CI Pillow/venv、密钥脱敏、`ChoiceWindow` 底部防撞与描边、`_slots_in_span`、热键迁移、`MapEventSelfVars` 回写等），补齐三端单测并通过门禁校验 |
 | [asset_animation_audit_2026_11_27.md](asset_animation_audit_2026_11_27.md) | 2026-11-27 | **原版素材出现／消失动画审计与 `150 Picture` 语义修复** | 从零售字节码、官方手册、`Game.exe` 反汇编与解析器确认 `Show/Move/Erase/Delay Reset`、`Process Time`、`Delay`、`Angle` 语义；修复按 picture ID 的延迟队列、范围取消、占用槽 Show 与旋转，`PICTURE_STATE_TEST_OK checks=236`，并记录 CE270 消息路径等残余（见 D-102/D-104） |
 | [godot_8_issues_conflict_free_fix_report.md](godot_8_issues_conflict_free_fix_report.md) | 2026-11-27 | **8 项边缘问题根因重构方案（G-01..G-08）** | 收敛为 `TextStyleEngine`、`TouchSession` 状态机、`AssetDB` 内存策略、`Instance.SelfBankPolicy`/`CoreRuntimeConfig` 与只读 `SaveAuditReport` 五项架构重构，已分批落地并通过全量双模式与 Oracle 校验（见 D-99） |
 | [lwsmf_mobile_4issues_remediation_2026_11_26.md](lwsmf_mobile_4issues_remediation_2026_11_26.md) | 2026-11-26 | **移动端四项交互问题核查与修复闭环报告** | 实证核查并闭环修复 MOB-01..04（长按学技能、`emulate_mouse_from_touch` 守卫卡死、重复 `CE325` 立绘闪烁、一般选项框垂直居中），双模式 38 项门禁全绿 |

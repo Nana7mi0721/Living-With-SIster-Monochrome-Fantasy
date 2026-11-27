@@ -312,8 +312,8 @@ def _lossless_entry(rel: str, raw: bytes) -> tuple[str, bytes, str]:
         return rel, raw, "kept"
     try:
         from PIL import Image
-    except ImportError:
-        return rel, raw, "kept"
+    except ImportError as exc:
+        raise RuntimeError("Pillow is required for --lossless mode (pip install pillow)") from exc
 
     try:
         with Image.open(io.BytesIO(raw)) as img:
@@ -488,6 +488,13 @@ def main(argv: list[str] | None = None) -> int:
 
     orig_total = sum(len(d) for _, d in raw_items)
     stats = {"webp": 0, "webp_lossless": 0, "ogg": 0, "kept": 0}
+
+    if args.lossless:
+        try:
+            import PIL.Image  # noqa: F401
+        except ImportError:
+            print("PACK_MEDIA_ERROR --lossless requires Pillow (pip install pillow)", file=sys.stderr)
+            return 2
 
     if args.slim or args.lossless:
         ffmpeg_bin = shutil.which("ffmpeg")

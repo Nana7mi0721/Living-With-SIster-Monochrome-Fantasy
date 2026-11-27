@@ -153,6 +153,14 @@ def _kill_process_tree(proc: subprocess.Popen[str]) -> None:
         proc.wait(timeout=2.0)
 
 
+def match_fatal_line(line: str) -> str | None:
+    """Return a formatted fatal reason when line matches FATAL_LINE_PATTERNS."""
+    for pat in FATAL_LINE_PATTERNS:
+        if pat.search(line):
+            return f"fatal error matched ({pat.pattern}): {line}"
+    return None
+
+
 def _stream_run(
     cmd: list[str],
     *,
@@ -222,13 +230,14 @@ def _stream_run(
 
         lines.append(item)
         if detect_fatal and fatal_reason is None:
-            for pat in FATAL_LINE_PATTERNS:
-                if pat.search(item):
-                    fatal_reason = f"fatal error matched ({pat.pattern}): {item}"
-                    fatal_at = time.monotonic()
-                    break
+            matched = match_fatal_line(item)
+            if matched is not None:
+                fatal_reason = matched
+                fatal_at = time.monotonic()
 
     thread.join(timeout=1.5)
+    if proc.stdout is not None:
+        proc.stdout.close()
     while True:
         try:
             extra = line_q.get_nowait()
@@ -236,6 +245,10 @@ def _stream_run(
             break
         if extra is not None:
             lines.append(extra)
+            if detect_fatal and fatal_reason is None:
+                matched = match_fatal_line(extra)
+                if matched is not None:
+                    fatal_reason = matched
 
     rc = proc.wait()
     if timed_out:

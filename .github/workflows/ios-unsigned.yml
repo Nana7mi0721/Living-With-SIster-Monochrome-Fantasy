@@ -72,6 +72,7 @@ jobs:
           bash tools/package_ios.sh \
             --version "$PACKAGE_VERSION" \
             --unsigned \
+            --allow-placeholder \
             --force
 
       - name: Upload engine-only IPA artifact

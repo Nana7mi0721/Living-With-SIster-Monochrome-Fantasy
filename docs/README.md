@@ -98,6 +98,7 @@ Godot 4.7.2 Mono 架构、视口呈现与运行时交互规范：
 系统性代码审查（Code Review）、跨仓库审计与缺陷追踪记录：
 
 - [reviews/README.md](reviews/README.md) — 代码审查台账总览索引
+- [reviews/review_dfc5e89c_conflict_free_fix_plan_2026_11_28.md](reviews/review_dfc5e89c_conflict_free_fix_plan_2026_11_28.md) — **现行·闭环**：`dfc5e89c` 增量 Review 与 7 P1 / 10 P2 / 5 P3 无冲突修复方案（已全项核实落地）
 - [reviews/asset_animation_audit_2026_11_27.md](reviews/asset_animation_audit_2026_11_27.md) — **现行·闭环 + 残余**：原版素材出现／消失动画全量审计、`150 Picture` 延迟与旋转语义修复、CE270 消息路径缺口记录（见 D-102/D-104）
 - [reviews/godot_8_issues_conflict_free_fix_report.md](reviews/godot_8_issues_conflict_free_fix_report.md) — **现行·闭环**：8 项边缘问题（G-01..G-08）收敛为 5 项结构性根因重构方案与落地决策（见 D-99）
 - [reviews/lwsmf_mobile_4issues_remediation_2026_11_26.md](reviews/lwsmf_mobile_4issues_remediation_2026_11_26.md) — **现行·闭环**：移动端四项交互问题（MOB-01..04）根因核查、代码修复与双模式门禁闭环报告

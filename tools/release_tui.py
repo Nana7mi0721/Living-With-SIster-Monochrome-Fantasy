@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import getpass
 import hashlib
 import io
 import json
@@ -59,6 +60,8 @@ PUBLISH_FILES = (
 )
 VALID_MEDIA_MODES = ("lossless", "copy")
 VALID_ANDROID_MODES = ("debug", "release")
+SECRET_CONFIG_FIELDS = frozenset({"android_ks_pass", "android_key_pass"})
+SENSITIVE_CLI_FLAGS = frozenset({"--ks-pass", "--key-pass", "--token"})
 
 
 @dataclass
@@ -72,7 +75,7 @@ class ReleaseConfig:
     android_mode: str = "debug"
     android_keystore: str = ""
     android_ks_user: str = "androiddebugkey"
-    android_ks_pass: str = "android"
+    android_ks_pass: str = ""
     android_key_pass: str = ""
     ios_engine_ipa: str = ""
     allow_placeholder_icons: bool = False
@@ -99,23 +102,32 @@ class ReleaseConfig:
 
 
 def load_config(path: Path = CONFIG_PATH) -> ReleaseConfig:
+    env_ks_pass = os.environ.get("LWSMF_ANDROID_KS_PASS", "")
+    env_key_pass = os.environ.get("LWSMF_ANDROID_KEY_PASS", "")
     if not path.is_file():
-        return ReleaseConfig()
+        return ReleaseConfig(android_ks_pass=env_ks_pass, android_key_pass=env_key_pass).normalized()
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
-            return ReleaseConfig()
-        valid_fields = {f.name for f in dataclasses.fields(ReleaseConfig)}
-        filtered = {k: v for k, v in raw.items() if k in valid_fields}
+            return ReleaseConfig(android_ks_pass=env_ks_pass, android_key_pass=env_key_pass).normalized()
+        allowed_fields = {f.name for f in dataclasses.fields(ReleaseConfig)} - SECRET_CONFIG_FIELDS
+        filtered = {k: v for k, v in raw.items() if k in allowed_fields}
+        filtered["android_ks_pass"] = env_ks_pass
+        filtered["android_key_pass"] = env_key_pass
         return ReleaseConfig(**filtered).normalized()
     except (OSError, ValueError, TypeError):
-        return ReleaseConfig()
+        return ReleaseConfig(android_ks_pass=env_ks_pass, android_key_pass=env_key_pass).normalized()
 
 
 def save_config(cfg: ReleaseConfig, path: Path = CONFIG_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        k: v
+        for k, v in dataclasses.asdict(cfg.normalized()).items()
+        if k not in SECRET_CONFIG_FIELDS
+    }
     path.write_text(
-        json.dumps(dataclasses.asdict(cfg.normalized()), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
 
@@ -466,7 +478,24 @@ def build_rebuild_media_command(repo_root: Path, media_mode: str = "lossless") -
 
 
 def format_cmd(cmd: list[str]) -> str:
-    return " ".join(shlex.quote(arg) if (" " in arg or "\t" in arg) else arg for arg in cmd)
+    """Render a CLI command for display while redacting sensitive flag values."""
+    parts: list[str] = []
+    redact_next = False
+    for arg in cmd:
+        if redact_next:
+            parts.append("***")
+            redact_next = False
+            continue
+        if arg in SENSITIVE_CLI_FLAGS:
+            parts.append(arg)
+            redact_next = True
+            continue
+        matched_prefix = next((flag for flag in SENSITIVE_CLI_FLAGS if arg.startswith(flag + "=")), None)
+        if matched_prefix is not None:
+            parts.append(f"{matched_prefix}=***")
+            continue
+        parts.append(shlex.quote(arg) if (" " in arg or "\t" in arg) else arg)
+    return " ".join(parts)
 
 
 def build_platform_plan(
@@ -534,9 +563,13 @@ def build_platform_plan(
             args.append("--release")
             if cfg.android_keystore:
                 args.extend(["--keystore", to_bash_path(cfg.android_keystore)])
-            args.extend(["--ks-user", cfg.android_ks_user, "--ks-pass", cfg.android_ks_pass])
-            if cfg.android_key_pass:
-                args.extend(["--key-pass", cfg.android_key_pass])
+            args.extend(["--ks-user", cfg.android_ks_user])
+            ks_pass = cfg.android_ks_pass or os.environ.get("LWSMF_ANDROID_KS_PASS", "")
+            key_pass = cfg.android_key_pass or os.environ.get("LWSMF_ANDROID_KEY_PASS", "")
+            if ks_pass:
+                args.extend(["--ks-pass", ks_pass])
+            if key_pass:
+                args.extend(["--key-pass", key_pass])
         else:
             args.append("--debug")
 
@@ -628,6 +661,8 @@ def validate_target_readiness(
             blockers.append("未检测到 Android SDK (platform-tools & build-tools)")
         if cfg.android_mode == "release" and (not cfg.android_keystore or not Path(cfg.android_keystore).is_file()):
             blockers.append("Android Release 模式需要有效的 --keystore 文件路径")
+        if cfg.android_mode == "release" and not (cfg.android_ks_pass or os.environ.get("LWSMF_ANDROID_KS_PASS", "")):
+            blockers.append("Android Release 模式需要 Keystore 密码（设置 LWSMF_ANDROID_KS_PASS 或交互输入）")
     elif target == "ios":
         ipa_path = Path(cfg.ios_engine_ipa) if cfg.ios_engine_ipa else None
         if ipa_path is None or not ipa_path.is_file():
@@ -823,6 +858,13 @@ def prompt_text(label: str, default: str = "") -> str:
     return ans if ans else default
 
 
+def prompt_secret(label: str) -> str:
+    try:
+        return getpass.getpass(f"{label}: ").strip()
+    except EOFError:
+        return ""
+
+
 def prompt_yes_no(label: str, default: bool = True) -> bool:
     hint = "Y/n" if default else "y/N"
     try:
@@ -874,8 +916,12 @@ def edit_config_interactive(cfg: ReleaseConfig, env_info: dict[str, Any], ui: UI
             if cfg.android_mode == "release":
                 cfg.android_keystore = prompt_text("Release Keystore 路径 (.jks/.keystore)", cfg.android_keystore)
                 cfg.android_ks_user = prompt_text("Keystore Alias", cfg.android_ks_user)
-                cfg.android_ks_pass = prompt_text("Keystore Password", cfg.android_ks_pass)
-                cfg.android_key_pass = prompt_text("Key Password（留空同 Keystore Password）", cfg.android_key_pass)
+                ks_pass = prompt_secret("Keystore Password（仅存内存不落盘，留空保持当前/环境变量）")
+                if ks_pass:
+                    cfg.android_ks_pass = ks_pass
+                key_pass = prompt_secret("Key Password（仅存内存不落盘，留空同 Keystore Password）")
+                if key_pass:
+                    cfg.android_key_pass = key_pass
         elif choice == "8":
             discovered = env_info.get("ios_engine_ipas") or []
             default_ipa = cfg.ios_engine_ipa or (str(discovered[0]) if discovered else "")
@@ -998,7 +1044,7 @@ def resolve_ios_engine_ipa_interactive(
                 return entered
             ui.print(f"[yellow]文件不存在: {entered}[/yellow]" if HAS_RICH else f"File not found: {entered}")
         elif pick == "4":
-            pat = prompt_text("粘贴 GitHub PAT（需 actions:read+write 与 contents:read，留空取消）", "")
+            pat = prompt_secret("粘贴 GitHub PAT（需 actions:read+write 与 contents:read，留空取消）")
             if pat:
                 saved = github_ios_ci.save_local_github_token(repo_root, pat)
                 ui.print(f"[green]✓ Token 已保存至 {saved}（已 .gitignore，不入库）[/green]" if HAS_RICH else f"Saved token to {saved}")
@@ -1061,6 +1107,13 @@ def execute_targets(
 
     if not targets:
         return 1
+
+    # Prompt for Android release keystore passwords in memory when not supplied via env/session.
+    if "android" in targets and run_cfg.android_mode == "release" and not auto_yes:
+        if not (run_cfg.android_ks_pass or os.environ.get("LWSMF_ANDROID_KS_PASS", "")):
+            run_cfg.android_ks_pass = prompt_secret("请输入 Android Release Keystore Password（仅存内存不落盘）")
+        if run_cfg.android_ks_pass and not (run_cfg.android_key_pass or os.environ.get("LWSMF_ANDROID_KEY_PASS", "")):
+            run_cfg.android_key_pass = prompt_secret("请输入 Key Password（留空同 Keystore Password）")
 
     # Validate blockers and prepare plans.
     plans: list[tuple[str, list[str], dict[str, str]]] = []
@@ -1308,14 +1361,21 @@ def verify_ios_ipa_icons(ipa_path: Path) -> tuple[list[str], dict[str, Any]]:
     return issues, meta
 
 
+def windows_dist_paths(repo_root: Path, cfg: ReleaseConfig) -> tuple[Path, Path]:
+    """Return (dist_dir, setup_exe) matching package_release.sh naming for cfg."""
+    cfg = cfg.normalized()
+    pkg_name = f"LWSMF-{cfg.version}-windows-x64{'-hd' if cfg.include_hd else ''}"
+    dist_root = repo_root / "dist"
+    return dist_root / pkg_name, dist_root / f"{pkg_name}-setup.exe"
+
+
 def verify_dist_artifacts(repo_root: Path, cfg: ReleaseConfig, ui: UI, smoke_setup: bool = False) -> int:
     """Run unified post-build verification across existing dist/ artifacts."""
     cfg = cfg.normalized()
     rc_all = 0
     checked_any = False
 
-    win_dir = repo_root / "dist" / f"LWSMF-{cfg.version}-windows-x64"
-    win_setup = repo_root / "dist" / f"LWSMF-{cfg.version}-windows-x64-setup.exe"
+    win_dir, win_setup = windows_dist_paths(repo_root, cfg)
     if win_dir.is_dir():
         checked_any = True
         rc1, _ = run_streaming_command(

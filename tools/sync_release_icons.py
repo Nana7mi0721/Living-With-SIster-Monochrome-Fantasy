@@ -180,6 +180,8 @@ def sync_release_icons(
     else:
         _save_png(_placeholder((1536, 864), (38, 41, 50, 255)), setup_welcome, "RGBA")
     outputs.append(setup_welcome)
+    with Image.open(setup_welcome) as welcome_image:
+        welcome_size = welcome_image.size
 
     setup_finish = installer_dir / "setup_finish.png"
     if not finish_poster_placeholder:
@@ -219,6 +221,8 @@ def sync_release_icons(
             "setup_finish": finish_poster_placeholder,
         },
         "installer": {
+            "welcome_width": welcome_size[0],
+            "welcome_height": welcome_size[1],
             "finish_width": finish_size[0],
             "finish_height": finish_size[1],
         },
