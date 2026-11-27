@@ -632,13 +632,10 @@ public partial class VmController : Node, IHost, IVmSession
             case PictureAction.Set:
                 _pictures[cmd.Number] = cmd;
                 break;
-            default:
-                // Erase and Hide both drop the tracked slot here; PictureStage owns visual retention.
+            case PictureAction.Erase:
                 if (cmd.HasSpan)
                 {
-                    int? endpoint = cmd.Action == PictureAction.Hide
-                        ? (cmd.Args is { Length: > 0 } ? cmd.Args[0] : null)
-                        : (cmd.Args is { Length: > 3 } ? cmd.Args[3] : null);
+                    int? endpoint = cmd.Args is { Length: > 3 } ? cmd.Args[3] : null;
                     if (endpoint.HasValue)
                     {
                         int lo = Math.Min(cmd.Number, endpoint.Value);
@@ -669,6 +666,10 @@ public partial class VmController : Node, IHost, IVmSession
                 {
                     _pictures.Remove(cmd.Number);
                 }
+                break;
+            case PictureAction.Hide:
+                // Wire 3 is Delay Reset: PictureStage cancels queued commands, but the
+                // slot that is already visible remains untouched.
                 break;
         }
         if (!EmitPictureSignals)

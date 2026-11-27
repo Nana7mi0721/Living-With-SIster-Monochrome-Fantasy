@@ -44,13 +44,23 @@ static func parse_sysgraphic(raw_name: String) -> Dictionary:
 static func _parse_grad_endpoints(inner: String) -> Array[int]:
 	var parts := inner.split("-")
 	if parts.size() == 3 and parts[1].is_valid_int() and parts[2].is_valid_int():
-		return [clampi(parts[1].to_int(), 0, 1000), clampi(parts[2].to_int(), 0, 1000)]
-	return [1000, 0]
+		return [clampi(parts[1].to_int(), 0, 999), clampi(parts[2].to_int(), 0, 999)]
+	return [999, 0]
 
 
-static func _sysgraphic_ramp(from_pm: int, to_pm: int, index: int, span: int) -> int:
-	var val := from_pm if span <= 0 else clampi(from_pm + ((to_pm - from_pm) * index) / span, 0, 1000)
-	return (val * 255 + 500) / 1000
+# WOLF <GRADX/GRADY-RGB1-RGB2> encodes each endpoint as 3 decimal digits (0..9 per channel).
+static func _grad_rgb(code: int) -> Array[int]:
+	var clamped := clampi(code, 0, 999)
+	var r := (clamped / 100) % 10
+	var g := (clamped / 10) % 10
+	var b := clamped % 10
+	return [(r * 255 + 4) / 9, (g * 255 + 4) / 9, (b * 255 + 4) / 9]
+
+
+static func _grad_channel(from_v: int, to_v: int, index: int, span: int) -> int:
+	if span <= 0:
+		return from_v
+	return clampi(int(round(lerpf(float(from_v), float(to_v), float(index) / float(span)))), 0, 255)
 
 
 ## Build and cache a white/alpha procedural Texture2D matching a parsed SysGraphic spec.
@@ -77,21 +87,25 @@ func sysgraphic_texture(spec: Dictionary, w: int, h: int) -> Texture2D:
 		"SQUARE", "LINE":
 			buf[0] = 255; buf[1] = 255; buf[2] = 255; buf[3] = 255
 		"GRADX":
-			var from_x := int(spec.get("from", 1000))
-			var to_x := int(spec.get("to", 0))
+			var from_rgb := _grad_rgb(int(spec.get("from", 999)))
+			var to_rgb := _grad_rgb(int(spec.get("to", 0)))
 			var span_x := cache_w - 1
 			for x in cache_w:
 				var off := x * 4
-				buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
-				buf[off + 3] = _sysgraphic_ramp(from_x, to_x, x, span_x)
+				buf[off] = _grad_channel(from_rgb[0], to_rgb[0], x, span_x)
+				buf[off + 1] = _grad_channel(from_rgb[1], to_rgb[1], x, span_x)
+				buf[off + 2] = _grad_channel(from_rgb[2], to_rgb[2], x, span_x)
+				buf[off + 3] = 255
 		"GRADY":
-			var from_y := int(spec.get("from", 1000))
-			var to_y := int(spec.get("to", 0))
+			var from_rgb_y := _grad_rgb(int(spec.get("from", 999)))
+			var to_rgb_y := _grad_rgb(int(spec.get("to", 0)))
 			var span_y := cache_h - 1
 			for y in cache_h:
 				var off := y * 4
-				buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255
-				buf[off + 3] = _sysgraphic_ramp(from_y, to_y, y, span_y)
+				buf[off] = _grad_channel(from_rgb_y[0], to_rgb_y[0], y, span_y)
+				buf[off + 1] = _grad_channel(from_rgb_y[1], to_rgb_y[1], y, span_y)
+				buf[off + 2] = _grad_channel(from_rgb_y[2], to_rgb_y[2], y, span_y)
+				buf[off + 3] = 255
 		"SQUARE_FRAME":
 			for y in cache_h:
 				for x in cache_w:

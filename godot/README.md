@@ -60,7 +60,7 @@ LWsmf_RENDER=1 bash tools/godot_check.sh   # 带窗口的截图/渲染分支
 "$GODOT" --headless --path godot res://tests/RouteTraceTest.tscn     # ROUTE_TRACE_TEST_OK steps=149247 map=1005
 "$GODOT" --headless --path godot res://tests/Smoke.tscn             # SMOKE_OK + AUTO_EVENTS_TEST_OK + DATABASE_TEST_OK + BATTLE_COMMAND_TEST_OK + BATTLE_WIRING_TEST_OK + BATTLE_TARGET_TEST_OK + BATTLE_SKILL_TARGET_TEST_OK + BATTLE_MENU_BRIDGE_TEST_OK + H_EVENT_GATE_TEST_OK(data_only=1) + unknown-soundType dedupe
 "$GODOT" --headless --path godot res://tests_gd/GameRootTest.tscn    # GAME_ROOT_TEST_OK
-"$GODOT" --headless --path godot res://tests_gd/PictureStateTest.tscn # PICTURE_STATE_TEST_OK checks=123
+"$GODOT" --headless --path godot res://tests_gd/PictureStateTest.tscn # PICTURE_STATE_TEST_OK checks=225
 "$GODOT" --headless --path godot res://tests_gd/DayMenuTest.tscn      # DAY_MENU_TEST_OK checks=13
 "$GODOT" --headless --path godot res://tests_gd/WeekendMenuTest.tscn  # WEEKEND_MENU_TEST_OK checks=9
 "$GODOT" --headless --path godot res://tests_gd/ColdStartDayTest.tscn  # COLD_START_DAY_TEST_OK day=2 hour=8 minute=30

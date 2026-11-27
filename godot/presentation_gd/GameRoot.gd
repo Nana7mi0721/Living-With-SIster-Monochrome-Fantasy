@@ -403,7 +403,7 @@ func _consume_picture_queue(queued: String) -> bool:
 		var number := int(entry.get("number", 0))
 		var action := int(entry.get("action", 0))
 		if is_ios_platform() and phase == "title" and number == 5 and (action == 0 or action == 1):
-			action = 3
+			action = 2
 		var file := str(entry.get("file", ""))
 		var text := str(entry.get("text", ""))
 		var anchor := int(entry.get("anchor", 0))
@@ -975,7 +975,7 @@ func _choice_position() -> Vector2:
 func _attach_title_menu() -> void:
 	var slots := [3, 4] if is_ios_platform() else [3, 4, 5]
 	if is_ios_platform() and stage != null:
-		stage.draw_picture(5, 3, "", "", [], 0, -1)
+		stage.draw_picture(5, 2, "", "", [], 0, -1)
 	var rects: Array = []
 	for slot in slots:
 		var rect := stage.picture_rect(slot)
@@ -995,7 +995,7 @@ func _sync_title_menu() -> void:
 		return
 	var slots := [3, 4] if is_ios_platform() else [3, 4, 5]
 	if is_ios_platform() and stage != null:
-		stage.draw_picture(5, 3, "", "", [], 0, -1)
+		stage.draw_picture(5, 2, "", "", [], 0, -1)
 	var rects: Array = []
 	for slot in slots:
 		var rect := stage.picture_rect(slot)

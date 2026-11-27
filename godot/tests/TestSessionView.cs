@@ -137,14 +137,16 @@ public sealed class TestSessionView : IGameSessionView
 
     public IReadOnlyList<SavedAudio> SnapshotAudio() => Audio.ToList();
 
-    /// <summary>Same slot semantics as the retired screen: draw replaces, erase drops.</summary>
+    /// <summary>Draw replaces, Erase drops, and wire action 3 is Delay Reset (no slot change).</summary>
     public void DrawPicture(PictureCmd cmd)
     {
-        if (cmd.Action is PictureAction.Erase or PictureAction.Hide)
+        if (cmd.Action == PictureAction.Erase)
         {
             Pictures.RemoveAll(p => p.Number == cmd.Number);
             return;
         }
+        if (cmd.Action == PictureAction.Hide)
+            return;
 
         SavedPicture saved = Pictures.FirstOrDefault(p => p.Number == cmd.Number) ?? new SavedPicture { Number = cmd.Number };
         saved.Kind = cmd.Kind;

@@ -10,7 +10,7 @@ extends Control
 ## wash out time, money, or save-menu text.
 ##
 ## Pictures are keyed by their WOLF slot number. Draw replaces the slot, Move updates it,
-## and Erase/Hide frees or hides it.
+## Erase frees it, and action 3 resets delayed actions without touching the visible slot.
 
 const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
 const _PictureShapes := preload("res://presentation_gd/PictureShapes.gd")
@@ -45,25 +45,28 @@ const BAND_ORDER: Array[int] = [
 const SCREEN_SIZE := Vector2(1024, 576)
 const UNCHANGED := -1000000
 const FADE_MAX := 600
-const GAUGE_GLYPHS := "■□◆◇●○"
+const GAUGE_GLYPHS := "■□◆◇●○★☆"
 
 var assets: AssetDB
 ## z_index -> band Control, in BAND_ORDER order.
 var layers: Dictionary = {}
 var _screen_tint_overlay: ColorRect
+## In-flight 150 commands waiting out WOLF's Delay field. Each entry keeps the original
+## draw/track mode so activation stays byte-for-byte faithful to the interpreter's command.
+var _pending_pictures: Array = []
 
 
 static func _contains_gauge_glyph(text: String) -> bool:
-	for g in ["■", "□", "◆", "◇", "●", "○"]:
+	for g in ["■", "□", "◆", "◇", "●", "○", "★", "☆"]:
 		if text.contains(g):
 			return true
 	return false
 
 
-# Square gauge glyphs (■/□) use exact px advance so 10-cell meters and multi-slot
-# overlays never drift across fonts; diamond/circle pairs match their wider glyph advance.
+# Square (■/□) and star (★/☆) gauge glyphs use exact px advance so multi-slot
+# overlays (H-scene meters, battle AP stars) never drift across fonts.
 static func _gauge_cell_step(draw_font: Font, glyph: String, px: int) -> float:
-	if glyph == "■" or glyph == "□":
+	if glyph == "■" or glyph == "□" or glyph == "★" or glyph == "☆":
 		return float(px)
 	var pair_a := glyph
 	var pair_b := glyph
@@ -309,12 +312,17 @@ static func picture_number(node: Node) -> int:
 	return 0
 
 
-func draw_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int = 0, kind: int = -1, animate: Array = [], flags: Dictionary = {}) -> Control:
+func draw_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int = 0, kind: int = -1, animate: Array = [], flags: Dictionary = {}, defer_delay: bool = true) -> Control:
+	if action == 3:
+		_reset_delayed_pictures(number, args, flags)
+		return null
+	if defer_delay:
+		var delay := _picture_delay(action, args)
+		if delay > 0:
+			_queue_delayed_picture(number, action, file, text, args, anchor, kind, animate, flags, false, delay)
+			return null
 	if action == 2:
 		_start_erase(number, args, flags)
-		return null
-	if action == 3:
-		_hide_picture(number, args, flags)
 		return null
 	if kind < 0:
 		kind = 2 if file.is_empty() and not text.is_empty() else 0
@@ -450,6 +458,9 @@ func _resolved_move_args(slot: int, base_args: Array) -> Array:
 	out[5] = int(target.get("x", out[5]))
 	out[6] = int(target.get("y", out[6]))
 	out[7] = int(target.get("scale", out[7]))
+	while out.size() < 9:
+		out.append(0)
+	out[8] = int(target.get("angle", out[8]))
 	var sy := int(target.get("scale_y", out[7]))
 	if out.size() > 16 or sy != int(out[7]):
 		while out.size() <= 16:
@@ -875,12 +886,17 @@ func _hit_rect(number: int) -> Rect2:
 
 
 ## Queue/track mode: maintain slot state and hit boxes without instantiating Control nodes.
-func track_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array = [], flags: Dictionary = {}) -> void:
+func track_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array = [], flags: Dictionary = {}, defer_delay: bool = true) -> void:
+	if action == 3:
+		_reset_delayed_pictures(number, args, flags)
+		return
+	if defer_delay:
+		var delay := _picture_delay(action, args)
+		if delay > 0:
+			_queue_delayed_picture(number, action, file, text, args, anchor, kind, animate, flags, true, delay)
+			return
 	if action == 2:
 		_start_erase(number, args, flags)
-		return
-	if action == 3:
-		_hide_picture(number, args, flags)
 		return
 	if action == 1:
 		for slot in _move_slots(number, args, flags):
@@ -1024,6 +1040,8 @@ func _apply_picture_geometry(holder: Control, number: int, _file: String, args: 
 	var scale_percent := 100 if raw_scale == UNCHANGED else UiSkin.unit(raw_scale)
 	var raw_scale_y := _arg(args, 16, 100)
 	var scale_y_percent := 100 if raw_scale_y == UNCHANGED else raw_scale_y
+	var raw_angle := _arg(args, 8, 0)
+	var angle_tenths := 0 if raw_angle == UNCHANGED else raw_angle
 	if int(eff_flags.get("scale_mode", 0)) != 3:
 		scale_y_percent = scale_percent
 	var base_size := known_size
@@ -1037,6 +1055,7 @@ func _apply_picture_geometry(holder: Control, number: int, _file: String, args: 
 	holder.modulate = Color(1, 1, 1, clampf(opacity, 0, 255) / 255.0)
 	holder.pivot_offset = final_size * 0.5
 	holder.scale = Vector2(-1.0 if scale_percent < 0 else 1.0, -1.0 if scale_y_percent < 0 else 1.0)
+	holder.rotation = deg_to_rad(float(angle_tenths) / 10.0)
 
 
 func _pose_from_args(args: Array, anchor: int, flags: Dictionary = {}) -> Dictionary:
@@ -1055,6 +1074,9 @@ func _pose_from_args(args: Array, anchor: int, flags: Dictionary = {}) -> Dictio
 	var scale_y := _arg(args, 16, 100)
 	if scale_y == UNCHANGED:
 		scale_y = 100
+	var angle := _arg(args, 8, 0)
+	if angle == UNCHANGED:
+		angle = 0
 	# Blend comes from opcode-150 head bits 17..19 via flags["blend"], never from args[8] (rotation).
 	var raw_blend := int(flags.get("blend", -1))
 	var blend := 0 if (raw_blend < 0 or raw_blend == 15) else (raw_blend & 0xF)
@@ -1064,6 +1086,7 @@ func _pose_from_args(args: Array, anchor: int, flags: Dictionary = {}) -> Dictio
 		"y": UiSkin.unit(y),
 		"scale": scale,
 		"scale_y": scale_y,
+		"angle": angle,
 		"blend": blend,
 		"anchor": anchor,
 	}
@@ -1089,7 +1112,7 @@ func _apply_relative_pose(target: Dictionary, base: Dictionary, args: Array) -> 
 
 
 func _merge_unchanged(target: Dictionary, current: Dictionary, args: Array, flags: Dictionary = {}) -> void:
-	for entry in [[4, "opacity"], [5, "x"], [6, "y"], [7, "scale"], [16, "scale_y"]]:
+	for entry in [[4, "opacity"], [5, "x"], [6, "y"], [7, "scale"], [8, "angle"], [16, "scale_y"]]:
 		var index: int = entry[0]
 		var key: String = entry[1]
 		if index >= args.size() or int(args[index]) == UNCHANGED:
@@ -1163,74 +1186,70 @@ func _new_state(args: Array, anchor: int, base: Vector2, flags: Dictionary = {},
 	}
 
 
-## Draw replaces the slot. Same graphic & position preserves animation phases; same graphic
-## at a different place slides from the previous pose.
+## Show on a free slot fades in from transparent over Process Time. On an occupied slot WOLF
+## defines Show as Move; the transition starts transparent, and only a same-graphic redraw
+## keeps the slot's persistent effects.
 func _begin_draw(number: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array, flags: Dictionary = {}, previous: Dictionary = {}) -> void:
 	var prev: Dictionary = previous if not previous.is_empty() else _states.get(number, {})
 	var prev_cmd: Dictionary = _cmds.get(number, {})
 	var base: Vector2 = _base_sizes.get(number, Vector2.ZERO)
 	var raster_window := (kind == 3 or kind == 4) and not file.strip_edges().begins_with("<")
 	var state := _new_state(args, anchor, base, flags, raster_window)
-	if not prev.is_empty():
-		var prev_cur: Dictionary = prev.get("current", {})
-		var independent_scale := int(flags.get("scale_mode", 0)) == 3
-		for entry in [[4, "opacity"], [5, "x"], [6, "y"], [7, "scale"], [16, "scale_y"]]:
-			var index: int = entry[0]
-			var key: String = entry[1]
-			var is_unchanged := index < args.size() and int(args[index]) == UNCHANGED
-			var inherit_scale_y := index == 16 and not independent_scale and args.size() > 7 and int(args[7]) == UNCHANGED
-			if is_unchanged or inherit_scale_y:
-				state["target"][key] = prev_cur.get(key, state["target"][key])
-		if bool(flags.get("relative", false)):
-			_apply_relative_pose(state["target"], prev_cur, args)
-		_apply_scale_mode(state["target"], args, flags)
-		state["current"] = state["target"].duplicate()
-	if bool(flags.get("keep_shift", false)) and not prev.is_empty():
-		state["shift"] = (prev.get("shift", [0, 0]) as Array).duplicate()
-	var redraws := not prev.is_empty() and not prev_cmd.is_empty() \
-		and int(prev_cmd.get("kind", -1)) == kind \
-		and str(prev_cmd.get("file", "")) == file \
-		and str(prev_cmd.get("text", "")) == text
-	var duration := _transition_duration(args, animate)
-	if not redraws:
-		# Graphic swap on an occupied slot (e.g. quest card back -> front flip with
-		# scaleX 0 -> 100) tweens from the previous pose when geometry changes; fresh
-		# slots and same-geometry swaps keep WOLF's alpha fade-in.
-		if not prev.is_empty() and duration > 0 and _pose_geometry_differs(prev.get("current", {}), state["target"]):
-			state["fade"] = 0
-			state["current"] = prev["current"].duplicate()
-			state["transition"] = {
-				"from": prev["current"].duplicate(),
-				"to": state["target"].duplicate(),
-				"duration": duration,
-				"age": 0,
-			}
-		else:
-			var fade := clampi(_arg(args, 0, 0), 0, FADE_MAX)
-			if fade > 0:
-				state["fade"] = fade
-				state["fade_from"] = 0
-				state["fade_start"] = 0
-				state["current"]["opacity"] = 0
+	var duration := _transition_duration(args)
+	if prev.is_empty():
+		if duration > 0:
+			state["fade"] = duration
+			state["fade_from"] = 0
+			state["fade_start"] = 0
+			state["current"]["opacity"] = 0
 		_states[number] = state
 		_render_picture(number)
 		return
-	var same_position := _pose_position(prev.get("target", {})) == _pose_position(state["target"])
-	if same_position:
+
+	var prev_cur: Dictionary = prev.get("current", {})
+	var independent_scale := int(flags.get("scale_mode", 0)) == 3
+	for entry in [[4, "opacity"], [5, "x"], [6, "y"], [7, "scale"], [8, "angle"], [16, "scale_y"]]:
+		var index: int = entry[0]
+		var key: String = entry[1]
+		var is_unchanged := index < args.size() and int(args[index]) == UNCHANGED
+		var inherit_scale_y := index == 16 and not independent_scale and args.size() > 7 and int(args[7]) == UNCHANGED
+		if is_unchanged or inherit_scale_y:
+			state["target"][key] = prev_cur.get(key, state["target"][key])
+	if bool(flags.get("relative", false)):
+		_apply_relative_pose(state["target"], prev_cur, args)
+	_apply_scale_mode(state["target"], args, flags)
+	var raw_blend := int(flags.get("blend", -1))
+	if raw_blend < 0 or raw_blend == 15:
+		state["target"]["blend"] = int(prev_cur.get("blend", 0))
+	if bool(flags.get("keep_shift", false)):
+		state["shift"] = (prev.get("shift", [0, 0]) as Array).duplicate()
+
+	# A Show is Move semantics only while it addresses the same graphic. Replacing the
+	# image is a fresh picture, so another asset must not inherit flash/shake state.
+	var same_graphic := not prev_cmd.is_empty() \
+		and int(prev_cmd.get("kind", -1)) == kind \
+		and str(prev_cmd.get("file", "")) == file \
+		and str(prev_cmd.get("text", "")) == text
+	if same_graphic:
 		state["color_corr"] = prev.get("color_corr", [0, 0, 0]).duplicate()
 		state["effects"] = _clone_effects(prev.get("effects", []))
 		state["shake"] = null if prev.get("shake", null) == null else prev["shake"].duplicate()
 		state["zoom"] = null if prev.get("zoom", null) == null else prev["zoom"].duplicate()
 		state["breath"] = null if prev.get("breath", null) == null else prev["breath"].duplicate()
 		state["pattern"] = null if prev.get("pattern", null) == null else prev["pattern"].duplicate()
+		if (_arg(args, 10, 0) & _WolfConst.PIC_FLAG_TONE_MASK) == 0:
+			state["tone"] = (prev.get("tone", [100, 100, 100]) as Array).duplicate()
 	state["fade"] = 0
 	var has_opacity := args.size() > 4 and int(args[4]) != UNCHANGED
 	if not has_opacity:
-		state["target"]["opacity"] = int(prev["current"].get("opacity", 255))
-	if duration > 0 and _pose_differs(prev.get("current", {}), state["target"]):
-		state["current"] = prev["current"].duplicate()
+		state["target"]["opacity"] = int(prev_cur.get("opacity", 255))
+	var show_from: Dictionary = prev_cur.duplicate()
+	if duration > 0:
+		show_from["opacity"] = 0
+	state["current"] = show_from
+	if duration > 0 and _pose_differs(show_from, state["target"]):
 		state["transition"] = {
-			"from": prev["current"].duplicate(),
+			"from": show_from.duplicate(),
 			"to": state["target"].duplicate(),
 			"duration": duration,
 			"age": 0,
@@ -1255,7 +1274,7 @@ func _begin_move(number: int, _file: String, _text: String, args: Array, anchor:
 	if args.size() > 3 and int(args[3]) > 0 and int(args[3]) != UNCHANGED:
 		state["pattern_index"] = int(args[3])
 	state["target"] = target
-	var duration := _transition_duration(args, animate)
+	var duration := _transition_duration(args)
 	var format_flag := _arg(args, 10, 0)
 	if (format_flag & _WolfConst.PIC_FLAG_TONE_MASK) != 0 and not bool(state.get("zero_tone_hidden", false)):
 		var target_tone := _tone_from_args(args)
@@ -1325,36 +1344,104 @@ func _start_erase_one(number: int, args: Array) -> void:
 	_render_picture(number)
 
 
-func _hide_picture(number: int, args: Array = [], flags: Dictionary = {}) -> void:
-	var span := _arg(args, 0, number) if bool(flags.get("has_span", false)) and not args.is_empty() else number
-	for slot in _slots_in_span(mini(number, span), maxi(number, span)):
-		var state: Dictionary = _states.get(slot, {})
-		if state.is_empty() and _cmds.has(slot):
-			var cmd: Dictionary = _cmds[slot]
-			state = _new_state(cmd.get("args", []), int(cmd.get("anchor", 0)), _base_sizes.get(slot, Vector2.ZERO), cmd.get("flags", {}))
-		if state.is_empty():
+## Delay is the tail field at args[11] for Show/Move and args[1] for Erase. It is
+## separate from Process Time at args[0]; conflating them shifts every scripted beat.
+func _picture_delay(action: int, args: Array) -> int:
+	var delay := 0
+	if action == 0 or action == 1:
+		delay = _arg(args, 11, 0) if args.size() > 11 else 0
+	elif action == 2:
+		delay = _arg(args, 1, 0) if args.size() > 1 else 0
+	return maxi(0, delay)
+
+
+func _queue_delayed_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array, flags: Dictionary, track_mode: bool, delay: int) -> void:
+	_pending_pictures.append({
+		"number": number,
+		"action": action,
+		"file": file,
+		"text": text,
+		"args": args.duplicate(),
+		"anchor": anchor,
+		"kind": kind,
+		"animate": animate.duplicate(),
+		"flags": flags.duplicate(),
+		"track": track_mode,
+		# The command's own frame already rendered before tick(); one extra guard frame
+		# makes Delay=N land on the N-th following command frame.
+		"remaining": delay + 1,
+	})
+
+
+## WOLF action 3 cancels queued actions that have not started yet. It never erases,
+## hides, or otherwise mutates the picture that is currently on screen.
+func _reset_delayed_pictures(number: int, args: Array, flags: Dictionary = {}) -> void:
+	var endpoint := number
+	if bool(flags.get("has_span", false)) and not args.is_empty():
+		endpoint = _arg(args, 0, number)
+	var lo := mini(number, endpoint)
+	var hi := maxi(number, endpoint)
+	var kept: Array = []
+	for entry in _pending_pictures:
+		if _pending_overlaps(entry, lo, hi):
 			continue
-		state["hidden"] = true
-		_states[slot] = state
-		_render_picture(slot)
+		kept.append(entry)
+	_pending_pictures = kept
 
 
-func _animate_duration(animate: Array) -> int:
-	if animate.is_empty():
-		return 0
-	return maxi(0, int(animate[0]))
+func _pending_overlaps(entry: Dictionary, lo: int, hi: int) -> bool:
+	var action := int(entry.get("action", -1))
+	var number := int(entry.get("number", 0))
+	var args: Array = entry.get("args", [])
+	var has_span := bool((entry.get("flags", {}) as Dictionary).get("has_span", false))
+	var endpoint := number
+	if has_span:
+		if action == 0 or action == 1:
+			endpoint = _arg(args, 12, number)
+		elif action == 2:
+			endpoint = _arg(args, 3, number)
+	var entry_lo := mini(number, endpoint)
+	var entry_hi := maxi(number, endpoint)
+	return entry_lo <= hi and lo <= entry_hi
 
 
-## WOLF stores process time (transition frames) in args[0]; fall back to animate[0] when 0.
-func _transition_duration(args: Array, animate: Array) -> int:
-	var duration := clampi(_arg(args, 0, 0), 0, FADE_MAX)
-	if duration > 0:
-		return duration
-	return _animate_duration(animate)
+func _activate_delayed_pictures() -> void:
+	if _pending_pictures.is_empty():
+		return
+	var due: Array = []
+	var kept: Array = []
+	for entry in _pending_pictures:
+		var remaining := int(entry.get("remaining", 0)) - 1
+		entry["remaining"] = remaining
+		if remaining <= 0:
+			due.append(entry)
+		else:
+			kept.append(entry)
+	_pending_pictures = kept
+	for entry in due:
+		var action := int(entry.get("action", 0))
+		var number := int(entry.get("number", 0))
+		var file := str(entry.get("file", ""))
+		var text := str(entry.get("text", ""))
+		var args: Array = entry.get("args", [])
+		var anchor := int(entry.get("anchor", 0))
+		var kind := int(entry.get("kind", -1))
+		var animate: Array = entry.get("animate", [])
+		var flags: Dictionary = entry.get("flags", {})
+		if bool(entry.get("track", false)):
+			track_picture(number, action, file, text, args, anchor, kind, animate, flags, false)
+		else:
+			draw_picture(number, action, file, text, args, anchor, kind, animate, flags, false)
+
+
+## WOLF Process Time is the only transition duration. animate[0] is the Delay field,
+## so it must never be used as a fallback duration.
+func _transition_duration(args: Array) -> int:
+	return clampi(_arg(args, 0, 0), 0, FADE_MAX)
 
 
 static func _pose_geometry_differs(a: Dictionary, b: Dictionary) -> bool:
-	for key in ["x", "y", "scale", "scale_y"]:
+	for key in ["x", "y", "scale", "scale_y", "angle"]:
 		if int(a.get(key, 0)) != int(b.get(key, 0)):
 			return true
 	return false
@@ -1372,6 +1459,7 @@ func _pose_position(pose: Dictionary) -> Vector2i:
 
 ## Advance every animating slot once per frame.
 func tick() -> void:
+	_activate_delayed_pictures()
 	for number in _states.keys():
 		if not _states.has(number):
 			continue
@@ -1382,6 +1470,8 @@ func tick() -> void:
 
 func has_active_animations() -> bool:
 	if _tint_elapsed < _tint_duration:
+		return true
+	if not _pending_pictures.is_empty():
 		return true
 	for state in _states.values():
 		if state is Dictionary and _state_animating(state):
@@ -1459,7 +1549,7 @@ func _advance_picture(number: int) -> void:
 func _lerp_pose(from: Dictionary, to: Dictionary, age: int, duration: int) -> Dictionary:
 	var out: Dictionary = {}
 	for key in to.keys():
-		if key in ["x", "y", "scale", "scale_y", "opacity"]:
+		if key in ["x", "y", "scale", "scale_y", "angle", "opacity"]:
 			out[key] = int(round(lerpf(float(from.get(key, to[key])), float(to[key]), float(age) / float(duration))))
 		else:
 			out[key] = to[key]
@@ -1506,6 +1596,7 @@ func _render_picture(number: int) -> void:
 	node.position = position
 	node.pivot_offset = size * 0.5
 	node.scale = Vector2(-1.0 if scale_x_pct < 0 else 1.0, -1.0 if scale_y_pct < 0 else 1.0)
+	node.rotation = deg_to_rad(float(pose.get("angle", 0)) / 10.0)
 	var is_save_arrow := bool(node.get_meta("save_page_arrow", false)) or ((number == 12004 or number == 12005) and str(_cmds.get(number, {}).get("file", "")).strip_edges().to_upper() in ["<TRI-LEFT>", "<TRI-RIGHT>"])
 	# Save-page arrows draw under ADD blend over light backgrounds and wash out; force normal alpha mix.
 	var blend := 0 if is_save_arrow else int(pose.get("blend", 0))
@@ -1657,6 +1748,7 @@ func clear_pictures() -> void:
 	_cmds.clear()
 	_base_sizes.clear()
 	_states.clear()
+	_pending_pictures.clear()
 	_polled_hit_slots.clear()
 	_last_polled_hit_slots.clear()
 	_hit_match_this_frame = false
@@ -1731,7 +1823,7 @@ func restore_pictures(entries: Array) -> void:
 		var restored_flags: Dictionary = cmd.get("flags", {}) if cmd.get("flags", null) is Dictionary else {}
 		draw_picture(number, 0, str(cmd.get("file", "")),
 			str(cmd.get("text", "")), restored_args, int(cmd.get("anchor", 0)), int(cmd.get("kind", -1)),
-			cmd.get("animate", []), restored_flags)
+			cmd.get("animate", []), restored_flags, false)
 		if _states.has(number):
 			var st: Dictionary = _states[number]
 			var changed := false

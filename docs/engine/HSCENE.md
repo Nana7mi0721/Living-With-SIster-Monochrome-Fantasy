@@ -616,7 +616,7 @@ cargo run -q -p wolf-cli -- capture --root work/all \
 | 文档 | 关系 |
 |---|---|
 | `docs/M1_CLOSURE.md` | 标题画面的闭包方法（210 偏移解码）在这里被复用 |
-| `docs/M2_SLICE.md` | `150` 的四个语义修正（擦除是区间 / 动作 3 = 隐藏 / 移动保留锚点 / 文本图 `\f[n]`）全部适用于本章 |
+| `docs/M2_SLICE.md` | `150` 的四个语义修正（擦除是区间 / 动作 3 = Delay Reset / 移动保留锚点 / 文本图 `\f[n]`）全部适用于本章 |
 | `docs/OPCODE_124.md` | §3.6 的 field 8/9 语义出处 |
 | `docs/OPCODE_290.md` | §3.7 的 type 表出处 |
 | `docs/SAVE_SPEC.md` | §2.5 的 `vars7_18` 字段布局出处 |

@@ -165,9 +165,9 @@ func _ready() -> void:
 		stage.tick()
 	check(absf(fade_holder.modulate.a - 1.0) < 0.01, "fade ends at the target opacity")
 
-	# 150 move with the animate tail slides from the old pose to the target.
+	# 150 Process Time slides from the old pose to the target.
 	stage.draw_picture(1301, 0, "", "slide probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
-	stage.draw_picture(1301, 0, "", "slide probe", [0, 1, 1, 1, 255, 200, 100, 100, 0], 0, 2, [10])
+	stage.draw_picture(1301, 0, "", "slide probe", [10, 1, 1, 1, 255, 200, 100, 100, 0], 0, 2)
 	check(stage.picture_state(1301, 0) == 100, "slide starts from the previous x")
 	for _i in 5:
 		stage.tick()
@@ -203,8 +203,8 @@ func _ready() -> void:
 		"card flip half-1 reaches scaleX=0 edge-on after 5 frames")
 
 	stage.draw_picture(1385, 0, "", "card front", [5, 1, 1, 1, 255, 0, 0, 100, 0, 0, 33554432, 0, 0, 100, 100, 100, 100], 1, 2, [0], {"relative": true, "scale_mode": 3})
-	check(int(stage._states[1385]["current"]["scale"]) == 0 and int(stage._states[1385]["current"]["opacity"]) == 255,
-		"card flip half-2 texture swap starts at scaleX=0 with full opacity")
+	check(int(stage._states[1385]["current"]["scale"]) == 0 and int(stage._states[1385]["current"]["opacity"]) == 0,
+		"card flip half-2 texture swap starts at scaleX=0 and transparent")
 	for _i in 3:
 		stage.tick()
 	check(int(stage._states[1385]["current"]["scale"]) == 60 and int(stage._states[1385]["current"]["scale_y"]) == 100,
@@ -212,8 +212,10 @@ func _ready() -> void:
 			int(stage._states[1385]["current"]["scale"]), int(stage._states[1385]["current"]["scale_y"])])
 	for _i in 2:
 		stage.tick()
-	check(int(stage._states[1385]["current"]["scale"]) == 100 and (stage._pictures[1385] as Control).visible,
-		"card flip half-2 finishes at full scaleX=100")
+	check(int(stage._states[1385]["current"]["scale"]) == 100 \
+			and int(stage._states[1385]["current"]["opacity"]) == 255 \
+			and (stage._pictures[1385] as Control).visible,
+		"card flip half-2 finishes at full scaleX=100 and opacity")
 
 	# 290: inclusive target range, shift/zoom/flash state, and no-op outside the range.
 	stage.draw_picture(1302, 0, "", "effect probe", [0, 1, 1, 1, 255, 300, 200, 100, 0], 0, 2)
@@ -234,7 +236,7 @@ func _ready() -> void:
 	# 150 erase range: the far endpoint rides in the long form's ERASE_SPAN argument.
 	for slot in [1310, 1311, 1312, 1313]:
 		stage.draw_picture(slot, 0, "", "erase probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
-	stage.draw_picture(1310, 2, "", "", [10, 1, 1, 1313], 0, 2, [], {"has_span": true})
+	stage.draw_picture(1310, 2, "", "", [10, 0, 0, 1313], 0, 2, [], {"has_span": true})
 	for slot in [1310, 1311, 1312, 1313]:
 		check(stage._states.has(slot) and bool(stage._states[slot].get("erase_after", false)),
 			"150 erase span marks slot %d for removal" % slot)
@@ -243,29 +245,99 @@ func _ready() -> void:
 	for slot in [1310, 1311, 1312, 1313]:
 		check(not stage._cmds.has(slot), "150 erase span removes slot %d" % slot)
 
-	# 150 hide range: the far endpoint is the first argument after the command number.
+	# 150 action 3 is Delay Reset: it cancels pending range actions and leaves every
+	# visible slot in the range exactly where it is.
 	for slot in [1320, 1321, 1322]:
-		stage.draw_picture(slot, 0, "", "hide probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+		stage.draw_picture(slot, 0, "", "delay probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	var delayed_move_args := [5, 1, 1, 1, 255, 400, 100, 100, 0, 0, 0x01000000, 4]
+	stage.draw_picture(1320, 1, "", "", delayed_move_args, 0, 2)
+	stage.draw_picture(1321, 1, "", "", delayed_move_args, 0, 2)
+	check(stage._pending_pictures.size() == 2, "150 delay queues pending Move commands")
 	stage.draw_picture(1320, 3, "", "", [1322], 0, 2, [], {"has_span": true})
+	check(stage._pending_pictures.is_empty(), "150 Delay Reset span cancels pending commands")
 	for slot in [1320, 1321, 1322]:
-		check(stage._states.has(slot) and bool(stage._states[slot]["hidden"]),
-			"150 hide span hides slot %d" % slot)
+		check(stage._cmds.has(slot) and stage.picture_state(slot, 0) == 100,
+			"150 Delay Reset leaves visible slot %d untouched" % slot)
+	for _i in 10:
+		stage.tick()
+	for slot in [1320, 1321, 1322]:
+		check(stage._cmds.has(slot) and stage.picture_state(slot, 0) == 100,
+			"cancelled delayed Move never moves slot %d" % slot)
 
-	# Without head bit 0x0100_0000 an erase/hide argument is not a range endpoint.
+	# Delay waits before the Process Time transition starts. A delayed Move keeps the
+	# old pose for both delay frames, then interpolates over args[0] rather than delay.
+	stage.draw_picture(1323, 0, "", "delay move", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1323, 1, "", "", [5, 1, 1, 1, 255, 300, 100, 100, 0, 0, 0x01000000, 2], 0, 2)
+	check(stage.picture_state(1323, 0) == 100, "delayed Move does not jump on its command frame")
+	for _i in 2:
+		stage.tick()
+	check(stage.picture_state(1323, 0) == 100, "delayed Move waits for both Delay frames")
+	stage.tick()
+	var delay_mid_x: int = stage.picture_state(1323, 0)
+	check(delay_mid_x > 100 and delay_mid_x < 300,
+		"delayed Move begins a Process Time tween after Delay (got %d)" % delay_mid_x)
+	for _i in 4:
+		stage.tick()
+	check(stage.picture_state(1323, 0) == 300, "delayed Move lands after Process Time frames")
+
+	# Erase uses the short-form args[1] delay and args[0] fade duration.
+	stage.draw_picture(1325, 0, "", "delayed erase", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1325, 2, "", "", [4, 2])
+	check(stage._cmds.has(1325) and stage._pending_pictures.size() == 1,
+		"delayed Erase waits instead of removing its slot immediately")
+	for _i in 2:
+		stage.tick()
+	check(stage._cmds.has(1325) and not bool(stage._states[1325].get("erase_after", false)),
+		"delayed Erase keeps the picture through its Delay frames")
+	stage.tick()
+	check(bool(stage._states[1325].get("erase_after", false)),
+		"delayed Erase starts its fade after Delay")
+	for _i in 4:
+		stage.tick()
+	check(not stage._cmds.has(1325), "delayed Erase removes the slot after its fade")
+
+	# A single-slot Delay Reset cancels only the matching slot's queued action.
+	stage.draw_picture(1326, 0, "", "single reset", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1327, 0, "", "single reset neighbour", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1326, 1, "", "", [5, 1, 1, 1, 255, 300, 100, 100, 0, 0, 0x01000000, 3], 0, 2)
+	stage.draw_picture(1327, 1, "", "", [5, 1, 1, 1, 255, 300, 100, 100, 0, 0, 0x01000000, 3], 0, 2)
+	stage.draw_picture(1326, 3, "", "", [])
+	check(stage._pending_pictures.size() == 1 and int(stage._pending_pictures[0]["number"]) == 1327,
+		"single-slot Delay Reset cancels only its own pending action")
+	for _i in 10:
+		stage.tick()
+	check(stage.picture_state(1326, 0) == 100 and stage.picture_state(1327, 0) == 300,
+		"single-slot Delay Reset leaves the cancelled slot put and lets its neighbour run")
+
+	# Delay Reset does not rewind a Process Time transition that already started.
+	stage.draw_picture(1328, 0, "", "started delay", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1328, 1, "", "", [6, 1, 1, 1, 255, 500, 100, 100, 0, 0, 0x01000000, 2], 0, 2)
+	for _i in 3:
+		stage.tick()
+	var started_x: int = stage.picture_state(1328, 0)
+	check(started_x > 100 and started_x < 500, "delayed Move has started its Process Time tween")
+	stage.draw_picture(1328, 3, "", "", [])
+	for _i in 6:
+		stage.tick()
+	check(stage.picture_state(1328, 0) == 500,
+		"Delay Reset leaves an already-started Process Time tween running")
+
+	# Without head bit 0x0100_0000 an erase argument is not a range endpoint.
 	stage.draw_picture(1314, 0, "", "no span probe", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
 	stage.draw_picture(1315, 0, "", "no span neighbour", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
-	stage.draw_picture(1314, 2, "", "", [0, 1, 1, 1315])
+	stage.draw_picture(1314, 2, "", "", [0, 0, 0, 1315])
 	check(not stage._cmds.has(1314), "erase without HasSpan removes only its slot")
 	check(stage._cmds.has(1315), "erase without HasSpan leaves the neighbour alone")
 
-	# R14-P2-01: track mode must compare the OLD command before storing the new one.
+	# A Show on an occupied slot is Move semantics: the image may change, but the slot's
+	# live pose and persistent 290 effects stay attached.
 	stage.track_picture(1380, 0, "", "track a", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
 	stage.effect(0, 5, [0, 5, 1380, 1380, 100, 100, 100])
-	stage.track_picture(1380, 0, "", "track b", [10, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
-	check((stage._states[1380]["effects"] as Array).is_empty(),
-		"track mode does not inherit effects when the graphic changes")
-	check(float(stage._states[1380]["current"]["opacity"]) < 1.0,
-		"track mode fades in a fresh graphic instead of treating it as a redraw")
+	stage.track_picture(1380, 0, "", "track a", [10, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	check((stage._states[1380]["effects"] as Array).size() == 1,
+		"track mode keeps persistent effects on a same-graphic Show")
+	check(float(stage._states[1380]["current"]["opacity"]) == 0.0,
+		"a same-graphic Show with Process Time starts from transparent")
 
 	# 150 move honours the UNCHANGED sentinel: x/y stay, only scale and opacity change.
 	stage.draw_picture(1330, 0, "", "unchanged probe", [0, 1, 1, 1, 255, 100, 120, 200, 0], 0, 2)
@@ -301,6 +373,43 @@ func _ready() -> void:
 	stage.draw_picture(1370, 0, "", "flag base", [0, 1, 1, 1, 255, 100, 120, 100, 0], 0, 2)
 	check(stage._states[1370]["shift"] == [0, 0], "a draw without keep_shift drops the shift")
 
+	# Show to an occupied slot is Move, including persistent effects and live opacity.
+	stage.draw_picture(1387, 0, "SystemFile/WindowBase.png", "",
+		[0, 1, 1, 1, 128, 100, 100, 100, 0], 0, 0)
+	stage.effect(1, 0, [0, 0, 1387, 1387, 10, 20, 30])
+	stage.draw_picture(1387, 0, "SystemFile/WindowBase.png", "",
+		[5, 1, 1, 1, PictureStage.UNCHANGED, 200, 100, 100, 0], 0, 0)
+	var swapped_state: Dictionary = stage._states[1387]
+	check(swapped_state["color_corr"] == [10, 20, 30],
+		"Show on an occupied slot keeps 290 colour correction")
+	check(int(swapped_state["current"]["opacity"]) == 0,
+		"Show on an occupied slot starts from transparent")
+	check(int(swapped_state["current"]["x"]) == UiSkin.unit(100) and swapped_state["transition"] != null,
+		"Show on an occupied slot slides from the live pose")
+	for _i in 5:
+		stage.tick()
+	check(stage.picture_state(1387, 0) == UiSkin.unit(200),
+		"Show on an occupied slot lands on its Process Time target")
+	check(int(stage._states[1387]["current"]["opacity"]) == 128,
+		"Show on an occupied slot fades to its requested opacity")
+
+	# Angle is encoded in 0.1-degree units and transitions with Process Time.
+	var angle_holder: Control = stage.draw_picture(1303, 0, "", "angle probe",
+		[0, 1, 1, 1, 255, 100, 100, 100, 1250], 0, 2)
+	check(angle_holder != null and is_equal_approx(angle_holder.rotation, deg_to_rad(125.0)),
+		"150 Angle=1250 rotates the picture by 125 degrees")
+	check(angle_holder != null and angle_holder.pivot_offset.is_equal_approx(angle_holder.size * 0.5),
+		"picture rotation pivots around the image centre")
+	stage.draw_picture(1303, 1, "", "", [10, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	for _i in 5:
+		stage.tick()
+	check(angle_holder != null and absf(rad_to_deg(angle_holder.rotation) - 62.5) <= 0.2,
+		"150 Process Time interpolates Angle halfway (got %.2f degrees)" % rad_to_deg(angle_holder.rotation))
+	for _i in 5:
+		stage.tick()
+	check(angle_holder != null and absf(angle_holder.rotation) < 0.001,
+		"150 Process Time lands on the target angle")
+
 	# relative X/Y are offsets from the slot's current screen pose.
 	stage.draw_picture(1371, 0, "", "relative base", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
 	stage.draw_picture(1371, 0, "", "relative next", [0, 1, 1, 1, 255, 50, 20, 100, 0], 0, 2, [], {"relative": true})
@@ -331,8 +440,9 @@ func _ready() -> void:
 	check(int(stage._states[1341]["current"]["opacity"]) == 255, "fresh graphic starts fully opaque")
 
 	# Hidden slots never hover, even under the pointer.
-	check(stage.picture_state(1320, 8, Vector2(UiSkin.unit(100), UiSkin.unit(100))) == 0,
-		"hidden picture does not hover")
+	stage.draw_picture(1320, 2, "", "", [0])
+	check(stage.picture_state(1320, 8, Vector2(UiSkin.unit(100), UiSkin.unit(100))) == -1,
+		"erased picture does not hover")
 
 	# 290 shift moves the reported origin and the hit box.
 	var shifted_x := int(stage._states[1302]["current"]["x"]) + 10
@@ -474,6 +584,54 @@ func _ready() -> void:
 	var circle_empty: Dictionary = stage._measure_text("\\f[20]○○○")
 	check(is_equal_approx((circle_filled["size"] as Vector2).x, (circle_empty["size"] as Vector2).x),
 		"filled and empty circle gauge runs must measure equal width")
+	var star_empty: Dictionary = stage._measure_text("\\f[16]☆☆☆☆☆☆☆☆☆")
+	var star_filled: Dictionary = stage._measure_text("\\f[16]★★★★★★★★★")
+	check(is_equal_approx((star_empty["size"] as Vector2).x, 146.0) and is_equal_approx((star_filled["size"] as Vector2).x, 146.0),
+		"9-star battle AP gauge at px=16 must step by exact 16px per cell (total 144 + 2 padding)")
+
+	# <GRADX/GRADY-RGB1-RGB2> SysGraphics must paint opaque 3-digit 0..9 RGB gradients (not white alpha ramps).
+	var shapes := PictureShapes.new()
+	var grad_good_tex := shapes.sysgraphic_texture(PictureShapes.parse_sysgraphic("<GRADX-444-000>"), 215, 4)
+	check(grad_good_tex != null, "<GRADX-444-000> generates a texture")
+	if grad_good_tex != null:
+		var gi := grad_good_tex.get_image()
+		var p_left := gi.get_pixel(0, 0)
+		var p_right := gi.get_pixel(gi.get_width() - 1, 0)
+		check(absi(p_left.r8 - 113) <= 1 and absi(p_left.g8 - 113) <= 1 and absi(p_left.b8 - 113) <= 1 and p_left.a8 == 255,
+			"<GRADX-444-000> left edge is opaque RGB(113,113,113) (got %d,%d,%d,%d)" % [p_left.r8, p_left.g8, p_left.b8, p_left.a8])
+		check(p_right.r8 == 0 and p_right.g8 == 0 and p_right.b8 == 0 and p_right.a8 == 255,
+			"<GRADX-444-000> right edge is opaque black (got %d,%d,%d,%d)" % [p_right.r8, p_right.g8, p_right.b8, p_right.a8])
+	var grad_bad_tex := shapes.sysgraphic_texture(PictureShapes.parse_sysgraphic("<GRADX-000-444>"), 215, 4)
+	if grad_bad_tex != null:
+		var bi := grad_bad_tex.get_image()
+		var b_left := bi.get_pixel(0, 0)
+		var b_right := bi.get_pixel(bi.get_width() - 1, 0)
+		check(b_left.r8 == 0 and b_left.g8 == 0 and b_left.b8 == 0 and b_left.a8 == 255 \
+				and absi(b_right.r8 - 113) <= 1 and b_right.a8 == 255,
+			"<GRADX-000-444> ramps opaque black to RGB(113,113,113)")
+	var grad_hp_tex := shapes.sysgraphic_texture(PictureShapes.parse_sysgraphic("<GRADX-999-274>"), 64, 4)
+	if grad_hp_tex != null:
+		var hi := grad_hp_tex.get_image()
+		var h_left := hi.get_pixel(0, 0)
+		var h_right := hi.get_pixel(hi.get_width() - 1, 0)
+		check(h_left.r8 == 255 and h_left.g8 == 255 and h_left.b8 == 255 and h_left.a8 == 255 \
+				and absi(h_right.r8 - 57) <= 1 and absi(h_right.g8 - 198) <= 1 and absi(h_right.b8 - 113) <= 1 and h_right.a8 == 255,
+			"<GRADX-999-274> ramps opaque white to green (57,198,113)")
+	var grad_bg_tex := shapes.sysgraphic_texture(PictureShapes.parse_sysgraphic("<GRADY-779-111>"), 16, 32)
+	if grad_bg_tex != null:
+		var yi := grad_bg_tex.get_image()
+		var y_top := yi.get_pixel(0, 0)
+		var y_bot := yi.get_pixel(0, yi.get_height() - 1)
+		check(absi(y_top.r8 - 198) <= 1 and absi(y_top.g8 - 198) <= 1 and y_top.b8 == 255 and y_top.a8 == 255 \
+				and absi(y_bot.r8 - 28) <= 1 and absi(y_bot.g8 - 28) <= 1 and absi(y_bot.b8 - 28) <= 1 and y_bot.a8 == 255,
+			"<GRADY-779-111> ramps opaque pale blue (198,198,255) to dark gray (28,28,28)")
+	var grad_bare_tex := shapes.sysgraphic_texture(PictureShapes.parse_sysgraphic("<GRADX>"), 16, 4)
+	if grad_bare_tex != null:
+		var bare_img := grad_bare_tex.get_image()
+		var bare_l := bare_img.get_pixel(0, 0)
+		var bare_r := bare_img.get_pixel(bare_img.get_width() - 1, 0)
+		check(bare_l.r8 == 255 and bare_l.a8 == 255 and bare_r.r8 == 0 and bare_r.a8 == 255,
+			"bare <GRADX> defaults to opaque white -> black")
 
 	# Text pictures share TextStyleEngine alignment/outline rules without altering block_w or 1x1 hit boxes.
 	var ref_wide: Dictionary = stage._measure_text("WWWWWWWWWW")
@@ -519,7 +677,7 @@ func _ready() -> void:
 	check(not stage.has_active_animations(), "completed fade must clear active animation state")
 	stage.clear_pictures()
 
-	# Hit-poll tracking (op124 field 8): survives 1 frame rotation, clears on 2nd rotation / hide / erase / clear_pictures.
+	# Hit-poll tracking (op124 field 8): survives 1 frame rotation, clears on 2nd rotation / erase / clear_pictures.
 	stage.draw_picture(1400, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 300, 200, 100, 0], 1, 0)
 	check(not stage.has_interactive_hit(Vector2(300, 200)), "unpolled slot does not register interactive hit")
 	check(stage.picture_state(1400, 8, Vector2(0, 0)) == 0, "polling slot 1400 outside rect still records slot")
@@ -530,8 +688,8 @@ func _ready() -> void:
 	stage.rotate_hit_polls()
 	check(not stage.has_interactive_hit(Vector2(300, 200)), "polled slot expires after second rotation without re-poll")
 	stage.picture_state(1400, 8, Vector2(300, 200))
-	stage.draw_picture(1400, 3, "", "", [])
-	check(not stage.has_interactive_hit(Vector2(300, 200)), "hidden slot clears interactive hit")
+	stage.draw_picture(1400, 2, "", "", [])
+	check(not stage.has_interactive_hit(Vector2(300, 200)), "erased slot clears interactive hit")
 	stage.draw_picture(1401, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 400, 200, 100, 0], 1, 0)
 	stage.picture_state(1401, 8, Vector2(400, 200))
 	check(stage.has_interactive_hit(Vector2(400, 200)), "polled slot 1401 registers hit before erase")

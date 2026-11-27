@@ -792,11 +792,13 @@ internal sealed class M4RouteHost : IHost
 
     private void Track(PictureCmd cmd)
     {
-        if (cmd.Action is PictureAction.Erase or PictureAction.Hide)
+        if (cmd.Action == PictureAction.Erase)
         {
             _pictures.Remove(cmd.Number);
             return;
         }
+        if (cmd.Action == PictureAction.Hide)
+            return;
         if (cmd.Action == PictureAction.Move)
         {
             if (!_pictures.TryGetValue(cmd.Number, out var prev)) return;

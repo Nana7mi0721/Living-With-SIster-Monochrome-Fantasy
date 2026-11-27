@@ -35,7 +35,7 @@ graph LR
 | 文档 | 状态 | 内容与定位 |
 | :--- | :---: | :--- |
 | [godot/README.md](godot/README.md) | **现行 · 先读** | **Godot 重制阶段唯一规范入口**：环境基线、当前完成状态与维护约定 |
-| [godot/DECISIONS.md](godot/DECISIONS.md) | **现行 · 权威** | **定稿架构决策（D-01..D-99）**：确定采用纯 C# 确定性事件内核 + GDScript 呈现层 |
+| [godot/DECISIONS.md](godot/DECISIONS.md) | **现行 · 权威** | **定稿架构决策（D-01..D-102）**：确定采用纯 C# 确定性事件内核 + GDScript 呈现层 |
 | [godot/PLAN.md](godot/PLAN.md) | **现行 · 权威** | Godot 阶段总体演进路线与 M0–M5 各阶段退出标准 |
 | [BASELINE.json](BASELINE.json) | **现行 · 权威** | 自动化测试与一致性校验基线（包含 Game.dat 字段、公共事件、地图事件统计） |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | **现行 · 权威** | 全局架构设计方案（数据转换管线、运行时状态机、渲染层级） |
@@ -60,7 +60,7 @@ graph LR
 Godot 4.7.2 Mono 架构、视口呈现与运行时交互规范：
 
 - [godot/README.md](godot/README.md) — Godot 重制阶段权威入口与环境基线
-- [godot/DECISIONS.md](godot/DECISIONS.md) — 拍板决策集合（D-01..D-99：确定采用纯 C# 确定性事件内核 + GDScript 呈现层）
+- [godot/DECISIONS.md](godot/DECISIONS.md) — 拍板决策集合（D-01..D-102：确定采用纯 C# 确定性事件内核 + GDScript 呈现层）
 - [godot/PLAN.md](godot/PLAN.md) — Godot 阶段总体演进路线与 M0–M5 各阶段退出标准
 - [godot/DATA_CONTRACT.md](godot/DATA_CONTRACT.md) — 离线转换数据契约（`programs.json`、`database.json`、`manifest.json`）
 - [godot/M0_HANDOFF.md](godot/M0_HANDOFF.md) — M0 验收交接：环境门限、数据对账与 Oracle 对拍机制
@@ -98,6 +98,7 @@ Godot 4.7.2 Mono 架构、视口呈现与运行时交互规范：
 系统性代码审查（Code Review）、跨仓库审计与缺陷追踪记录：
 
 - [reviews/README.md](reviews/README.md) — 代码审查台账总览索引
+- [reviews/asset_animation_audit_2026_11_27.md](reviews/asset_animation_audit_2026_11_27.md) — **现行·闭环 + 残余**：原版素材出现／消失动画全量审计、`150 Picture` 延迟与旋转语义修复、CE63 消息窗缺口记录（见 D-102）
 - [reviews/godot_8_issues_conflict_free_fix_report.md](reviews/godot_8_issues_conflict_free_fix_report.md) — **现行·闭环**：8 项边缘问题（G-01..G-08）收敛为 5 项结构性根因重构方案与落地决策（见 D-99）
 - [reviews/lwsmf_mobile_4issues_remediation_2026_11_26.md](reviews/lwsmf_mobile_4issues_remediation_2026_11_26.md) — **现行·闭环**：移动端四项交互问题（MOB-01..04）根因核查、代码修复与双模式门禁闭环报告
 - [reviews/lwsmf_mobile_4issues_diagnosis_and_fix_plan.md](reviews/lwsmf_mobile_4issues_diagnosis_and_fix_plan.md) — **现行·台账**：移动端长按学技能、睡觉取消无反应、立绘闪烁与选项框居中问题定位方案

@@ -821,20 +821,27 @@ func _ready() -> void:
 			title_root._process(title_root.STEP)
 		if str(title_root.stage._cmds.get(3, {}).get("file", "")) != before_f3 or title_root.choice.is_open:
 			failures.append("mouse wheel inside Save/Load UI must not switch title menu options")
-		var r_down := InputEventMouseButton.new()
-		r_down.button_index = MOUSE_BUTTON_RIGHT
-		r_down.pressed = true
-		r_down.position = Vector2(512, 288)
-		title_root.router.handle_event(r_down)
-		for _i in range(6):
+		var cancel_guard := 0
+		while title_root._save_load_ui_active() and cancel_guard < 8:
+			var r_down := InputEventMouseButton.new()
+			r_down.button_index = MOUSE_BUTTON_RIGHT
+			r_down.pressed = true
+			r_down.position = Vector2(512, 288)
+			title_root.router.handle_event(r_down)
+			for _i in range(4):
+				title_root._process(title_root.STEP)
+			var r_up := InputEventMouseButton.new()
+			r_up.button_index = MOUSE_BUTTON_RIGHT
+			r_up.pressed = false
+			r_up.position = Vector2(512, 288)
+			title_root.router.handle_event(r_up)
+			for _i in range(12):
+				title_root._process(title_root.STEP)
+			cancel_guard += 1
+		for _i in range(120):
 			title_root._process(title_root.STEP)
-		var r_up := InputEventMouseButton.new()
-		r_up.button_index = MOUSE_BUTTON_RIGHT
-		r_up.pressed = false
-		r_up.position = Vector2(512, 288)
-		title_root.router.handle_event(r_up)
-		for _i in range(30):
-			title_root._process(title_root.STEP)
+			if title_root.choice.is_open and title_root.stage.picture_rect(12000).size.x <= 0.0:
+				break
 		if not title_root.choice.is_open or title_root.stage.picture_rect(12000).size.x > 0.0:
 			failures.append("canceling Save/Load UI must return to an interactive title menu (choice_open=%s slot12000=%s)" % [str(title_root.choice.is_open), str(title_root.stage.picture_rect(12000))])
 	title_root.queue_free()
@@ -979,8 +986,7 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root._on_choices(["开始", "读取", "退出"], 2)
 	if root.choice.override_rects.size() != 2 or root.choice.selected > 1:
 		failures.append("iOS title menu must hide Quit option and clamp override_rects to 2")
-	var slot5_state: Dictionary = root.stage._states.get(5, {})
-	if not bool(slot5_state.get("hidden", false)):
+	if root.stage._cmds.has(5):
 		failures.append("iOS title menu must hide picture slot 5")
 	root.choice.close()
 	root.set_ios_override(0)
