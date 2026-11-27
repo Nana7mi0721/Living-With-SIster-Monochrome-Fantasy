@@ -292,6 +292,8 @@ def setup_debug_keystore(repo_root: Path) -> tuple[bool, str]:
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     if proc.returncode != 0 or not ks_path.is_file():

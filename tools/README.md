@@ -24,11 +24,12 @@
 
 | 脚本/目录 | 目标平台 | 说明 |
 | :--- | :--- | :--- |
-| `package_release.sh` | Windows | 执行 Release 编译、嵌入 PCK、清洗临时文件并打包独立分发包 |
-| `pack_media.py` | 全平台 | 从现有 `media.pak` 重打媒体归档；`--lossless` 对 PNG/BMP 做像素级无损 WebP 压缩，`--extra-root` 仅补缺失路径 |
+| `release_tui.py`<br>`release_packager.bat` | 全平台 | **交互式三端无损发包控制台（TUI/CLI）**：自动探测工具链/Inno Setup/定制模板/`_publish` 素材，以真无损压缩作为标准发包基线，支持一键三端导出、按平台导出、iOS 本地数据注入与活体清单重建 `media.pak` |
+| `package_release.sh` | Windows | 执行 Release 编译、嵌入 PCK、清洗临时文件并打包独立分发包（支持 `--lossless`、`--media-pak`、`--brotli`、`--installer`） |
+| `pack_media.py` | 全平台 | 从解包目录或现有 `media.pak` 打包媒体归档；`--prune-game-data` 按活体清单剔除死资产，`--lossless` 对 PNG/BMP 做像素级无损 WebP 压缩，`--extra-root` 仅补缺失路径 |
 | `fix_integrity_level.ps1` | Windows | 将工作区或指定路径的 NTFS 完整性级别从 Low 重置为 Medium；`-GrantCurrentUser` 用于普通权限修复 |
-| `package_android.sh` | Android | Android APK 导出构建与素材包嵌入 |
-| `package_ios.sh` | iOS | iOS Xcode 工程导出与无签名包归档流水线 |
+| `package_android.sh` | Android | Android APK 导出构建与素材包嵌入（支持 `--lossless`、`--media-pak`、`--brotli`、`--template`） |
+| `package_ios.sh` | iOS | iOS Xcode 工程导出与无签名包归档流水线（支持 `--lossless`、`--brotli`、`--template`） |
 | `sync_release_icons.py` | 全平台 | 从本地 `_publish` 素材派生三端应用图标、Windows 窗口图标与安装器素材；Android 自适应前景使用 72% 居中布局并提供浅色背景，避免启动器黑边；`sisfan_promo.png` 原字节派生为欢迎页海报，`TitleGraphic6.jpg` 同尺寸转存为完成页 PNG，另生成 `55×55` 白底小图标 |
 | `brotli_json.py` | 全平台 | 对 `game_data/*.json` 进行无损 Brotli 高压缩预处理（体积缩减 ~80%） |
 | `installer/` | Windows | Inno Setup 安装包脚本模板与构建定义 |

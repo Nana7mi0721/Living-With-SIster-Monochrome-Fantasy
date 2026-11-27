@@ -11,7 +11,8 @@
 ## 1. 发布策略概览
 
 - 自 D-53 起发布包自带 `game_data/`（紧凑 JSON）与 `work/all/media.pak`（加密归档）及 `BasicData/*.project`，玩家解压即可直接运行 `game\Lwsmf.exe`，无需安装 Python，也无需预先手动转换。
-- 打包脚本：`tools/package_release.sh [--demo] [--slim|--lossless] [--hd] [--brotli] [--installer] [--allow-placeholder]`，自动通过环境变量或 `PATH` 探测 `godot`、`dotnet` 与 Inno Setup（零本机硬编码路径），先对 `$STAGE` 执行 `release_audit.py`，通过后再交换进入 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]/` 并生成同名 `.zip` 与 `dist/SHA256SUMS.txt`；`--installer` 另行产出同名 `-setup.exe` 并把 SHA-256 追加进清单。若 `work/retail_dat/_publish/` 缺省（如 `--demo` 或纯离线构建），可传 `--allow-placeholder` 或 `LWSMF_ALLOW_PLACEHOLDER_ICONS=1` 生成占位图标。
+- 打包脚本：`tools/package_release.sh [--demo] [--slim|--lossless] [--media-pak FILE] [--hd] [--brotli] [--installer] [--allow-placeholder]`，自动通过环境变量或 `PATH` 探测 `godot`、`dotnet` 与 Inno Setup（零本机硬编码路径），先对 `$STAGE` 执行 `release_audit.py`，通过后再交换进入 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]/` 并生成同名 `.zip` 与 `dist/SHA256SUMS.txt`；`--installer` 另行产出同名 `-setup.exe` 并把 SHA-256 追加进清单。若 `work/retail_dat/_publish/` 缺省（如 `--demo` 或纯离线构建），可传 `--allow-placeholder` 或 `LWSMF_ALLOW_PLACEHOLDER_ICONS=1` 生成占位图标。
+- 交互式发包界面：`python tools/release_tui.py`（或 Windows 直接双击 `tools/release_packager.bat`），默认以**真无损压缩（`--lossless` + `--brotli`）**作为三端标准版本（不包含有损 slim 档），支持交互切换版本号、导出平台、定制模板、Inno Setup 与 iOS 数据注入。
 - 发布审计：`tools/release_audit.py --dist <dir>` 与 `tools/release_audit.py --repo-scan`，校验程序集、紧凑 JSON、`media.pak` CRC/资产覆盖、0 `.pdb`、0 `addons/`/`tests/` 渗透以及 0 隐私/本机绝对路径泄露。
 
 ## 2. 工具链与导出模板

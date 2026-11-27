@@ -18,14 +18,16 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import io
+import json
 import os
+import re
 import shutil
 import struct
 import subprocess
 import sys
 import tempfile
 import zlib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 MAGIC = b"WOLFMPK1"
 VERSION = 1
@@ -58,6 +60,97 @@ MEDIA_EXTENSIONS = {
     ".ttf",
     ".otf",
 }
+
+TEXTURE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".webp")
+AUDIO_EXTENSIONS = (".ogg", ".mp3", ".wav")
+REF_MEDIA_EXTENSIONS = set(TEXTURE_EXTENSIONS) | set(AUDIO_EXTENSIONS)
+WOLF_CTRL_RE = re.compile(
+    r"\\(?:cself|self|cdb|udb|sdb|sys|font|space|sp|ax|ay|mx|my|at|[vscfmi-])\[",
+    re.I,
+)
+
+
+def _norm_asset_key(raw: str) -> str:
+    key = raw.strip().replace("\\", "/").lower()
+    while key.startswith("./") or key.startswith("../"):
+        key = key[2:] if key.startswith("./") else key[3:]
+    return key.lstrip("/")
+
+
+def _load_game_data_json(path: Path) -> object:
+    br_path = Path(str(path) + ".br")
+    chosen = path if path.is_file() else (br_path if br_path.is_file() else None)
+    if chosen is None:
+        raise FileNotFoundError(f"missing game_data artifact: {path} (or {br_path})")
+    if chosen.suffix.lower() == ".br":
+        tools_dir = Path(__file__).resolve().parent
+        if str(tools_dir) not in sys.path:
+            sys.path.insert(0, str(tools_dir))
+        import brotli_json
+
+        return json.loads(brotli_json.decompress_bytes(chosen.read_bytes()).decode("utf-8"))
+    return json.loads(chosen.read_text(encoding="utf-8"))
+
+
+def _extract_media_refs(node: object, sink: set[str]) -> None:
+    if isinstance(node, dict):
+        for value in node.values():
+            _extract_media_refs(value, sink)
+    elif isinstance(node, list):
+        for item in node:
+            _extract_media_refs(item, sink)
+    elif isinstance(node, str):
+        raw = node.strip()
+        norm = _norm_asset_key(raw)
+        if not norm or norm.startswith("<") or norm.startswith("save/") or "%" in raw or WOLF_CTRL_RE.search(raw):
+            return
+        if PurePosixPath(norm).suffix in REF_MEDIA_EXTENSIONS:
+            sink.add(raw.replace("\\", "/"))
+
+
+def _resolve_live_key(key: str, available: set[str]) -> str | None:
+    if key in available:
+        return key
+    pp = PurePosixPath(key)
+    suffix = pp.suffix
+    stem = pp.with_suffix("").as_posix()
+    exts = TEXTURE_EXTENSIONS if suffix in TEXTURE_EXTENSIONS else AUDIO_EXTENSIONS if suffix in AUDIO_EXTENSIONS else ()
+    for ext in exts:
+        cand = stem + ext
+        if cand in available:
+            return cand
+    if suffix in TEXTURE_EXTENSIONS and key.startswith("picture/word_effect"):
+        alias = "hword/" + pp.name
+        if alias in available:
+            return alias
+        alias_stem = PurePosixPath(alias).with_suffix("").as_posix()
+        for ext in TEXTURE_EXTENSIONS:
+            cand = alias_stem + ext
+            if cand in available:
+                return cand
+    return None
+
+
+def collect_live_asset_keys(game_data_dir: Path, available_keys: set[str]) -> set[str]:
+    """Compute the live media whitelist from game_data JSONs plus SystemFile/*."""
+    refs: set[str] = set()
+    for fname in ("programs.json", "database.json", "map_tiles.json"):
+        _extract_media_refs(_load_game_data_json(game_data_dir / fname), refs)
+    manifest_path = game_data_dir / "manifest.json"
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for item in manifest.get("assets") or []:
+            if isinstance(item, dict):
+                logical = item.get("logical") or item.get("path") or item.get("source") or ""
+                if isinstance(logical, str) and logical.strip():
+                    refs.add(logical)
+
+    live: set[str] = {k for k in available_keys if k.startswith("systemfile/")}
+    for ref in refs:
+        hit = _resolve_live_key(_norm_asset_key(ref), available_keys)
+        if hit is not None:
+            live.add(hit)
+    return live
 
 
 def _stream_block(block: int) -> bytes:
@@ -214,6 +307,9 @@ def _lossless_entry(rel: str, raw: bytes) -> tuple[str, bytes, str]:
     ext = os.path.splitext(rel.lower())[1]
     if ext not in (".png", ".bmp"):
         return rel, raw, "kept"
+    # Skip redundant re-encoding when repacking an existing lossless media.pak.
+    if len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return rel, raw, "kept"
     try:
         from PIL import Image
     except ImportError:
@@ -327,6 +423,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Overlay missing media files from a loose directory; existing base paths take precedence",
     )
+    parser.add_argument(
+        "--prune-game-data",
+        type=Path,
+        default=None,
+        help="Prune unreferenced dead assets using game_data/{programs,database,map_tiles,manifest}.json (keeps SystemFile/*)",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--slim", action="store_true", help="Mixed-fidelity WebP/OGG slimming & skip MapChip")
     mode.add_argument(
@@ -339,8 +441,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--jobs", type=int, default=max(1, min(8, os.cpu_count() or 4)), help="Worker threads for --slim")
     args = parser.parse_args(argv)
 
-    if args.hd_root and (args.slim or args.lossless or args.extra_root):
-        print("PACK_MEDIA_ERROR --slim/--lossless/--extra-root cannot be combined with --hd-root", file=sys.stderr)
+    if args.hd_root and (args.slim or args.lossless or args.extra_root or args.prune_game_data):
+        print("PACK_MEDIA_ERROR --slim/--lossless/--extra-root/--prune-game-data cannot be combined with --hd-root", file=sys.stderr)
         return 2
 
     if args.hd_root:
@@ -368,6 +470,18 @@ def main(argv: list[str] | None = None) -> int:
             raw_items.append((rel, path.read_bytes()))
             existing.add(low)
             extra_added += 1
+
+    pruned_count = 0
+    if args.prune_game_data:
+        available = {rel.replace("\\", "/").lstrip("/").lower() for rel, _ in raw_items}
+        live_keys = collect_live_asset_keys(args.prune_game_data, available)
+        before_count = len(raw_items)
+        raw_items = [
+            (rel, data)
+            for rel, data in raw_items
+            if rel.replace("\\", "/").lstrip("/").lower() in live_keys
+        ]
+        pruned_count = before_count - len(raw_items)
 
     if (args.slim or args.lossless) and not args.keep_mapchip:
         raw_items = [(rel, data) for rel, data in raw_items if not rel.lower().startswith("mapchip/")]
@@ -399,7 +513,8 @@ def main(argv: list[str] | None = None) -> int:
     pak_size = args.out.stat().st_size
     pack_mode = "lossless" if args.lossless else ("slim" if args.slim else "copy")
     print(
-        f"PACK_MEDIA_OK entries={count} mode={pack_mode} slim={args.slim} lossless={args.lossless} extra={extra_added} "
+        f"PACK_MEDIA_OK entries={count} mode={pack_mode} slim={args.slim} lossless={args.lossless} "
+        f"extra={extra_added} pruned={pruned_count} "
         f"orig_bytes={orig_total} packed_bytes={packed_raw} pak_bytes={pak_size} "
         f"webp={stats['webp']} webp_lossless={stats['webp_lossless']} "
         f"ogg={stats['ogg']} kept={stats['kept']}"

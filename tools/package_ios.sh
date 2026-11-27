@@ -12,6 +12,7 @@ OUT_DIR=""
 GAME_DATA_DIR=""
 WORK_ALL_DIR=""
 SLIM=false
+LOSSLESS=false
 BROTLI=false
 FONT_OPT=""
 TEMPLATE_OPT=""
@@ -30,6 +31,7 @@ Usage: tools/package_ios.sh [options]
   --out-dir DIR      output directory (default: dist/ios/<version>)
   --game-data DIR    optional game_data directory to inject after build
   --work-all DIR     optional work/all directory (requires --game-data)
+  --lossless         repack media.pak with pixel-exact lossless WebP when injecting data
   --slim             repack media.pak with WebP slimming when injecting data
   --brotli           compress large game_data JSONs as .json.br when injecting data
   --font FILE        optional Lolita.ttf to place at <app>/work/all/Lolita.ttf
@@ -56,6 +58,7 @@ while [ "$#" -gt 0 ]; do
     --out-dir)   need_arg "$@"; OUT_DIR="$2"; shift 2 ;;
     --game-data) need_arg "$@"; GAME_DATA_DIR="$2"; shift 2 ;;
     --work-all)  need_arg "$@"; WORK_ALL_DIR="$2"; shift 2 ;;
+    --lossless)  LOSSLESS=true; shift ;;
     --slim)      SLIM=true; shift ;;
     --brotli)    BROTLI=true; shift ;;
     --font)      need_arg "$@"; FONT_OPT="$2"; shift 2 ;;
@@ -255,7 +258,15 @@ rm -rf "$STAGE_DIR" "$DERIVED_DATA"
 if [ -n "$GAME_DATA_DIR" ] && [ -n "$WORK_ALL_DIR" ]; then
   INJ_OUT="$OUT_DIR/LWSMF-${VERSION}-ios-arm64-full.ipa"
   INJ_ARGS=("$IPA_PATH" --game-data "$GAME_DATA_DIR" --work-all "$WORK_ALL_DIR" --out "$INJ_OUT" --force)
-  if [ "$SLIM" = true ]; then
+  if [ "$LOSSLESS" = true ] && [ "$SLIM" = true ]; then
+    echo "ERROR: --lossless and --slim are mutually exclusive" >&2
+    exit 2
+  fi
+  if [ "$LOSSLESS" = true ]; then
+    LOSSLESS_PAK="$OUT_DIR/media-lossless.pak"
+    "$PYTHON_BIN" "$ROOT/tools/pack_media.py" --from-pak "$WORK_ALL_DIR/media.pak" --out "$LOSSLESS_PAK" --lossless
+    INJ_ARGS+=(--media-pak "$LOSSLESS_PAK")
+  elif [ "$SLIM" = true ]; then
     SLIM_PAK="$OUT_DIR/media-slim.pak"
     "$PYTHON_BIN" "$ROOT/tools/pack_media.py" --from-pak "$WORK_ALL_DIR/media.pak" --out "$SLIM_PAK" --slim
     INJ_ARGS+=(--media-pak "$SLIM_PAK")
@@ -263,7 +274,7 @@ if [ -n "$GAME_DATA_DIR" ] && [ -n "$WORK_ALL_DIR" ]; then
   [ -n "$FONT_OPT" ] && INJ_ARGS+=(--font "$FONT_OPT")
   [ "$BROTLI" = true ] && INJ_ARGS+=(--brotli)
   "$PYTHON_BIN" "$ROOT/tools/mobile/ios_inject_data.py" "${INJ_ARGS[@]}"
-  rm -f "$OUT_DIR/media-slim.pak"
+  rm -f "$OUT_DIR/media-slim.pak" "$OUT_DIR/media-lossless.pak"
 fi
 
 (cd "$OUT_DIR" && shasum -a 256 *.ipa > SHA256SUMS.txt)

@@ -9,6 +9,7 @@ cd "$ROOT"
 VERSION="0.1.0"
 APP_LABEL="妹相随"
 SLIM=false
+LOSSLESS=false
 BROTLI=false
 BUILD_MODE="debug"
 KEYSTORE_OPT=""
@@ -32,6 +33,7 @@ usage() {
 Usage: tools/package_android.sh [options]
 
   --version V       package version (default: 0.1.0)
+  --lossless        repack media.pak with pixel-exact lossless WebP (standard release name)
   --slim            repack media.pak with WebP slimming before APK staging
   --brotli          compress large game_data JSONs as .json.br
   --media-pak FILE  use a prebuilt (for example pruned) media.pak
@@ -75,6 +77,7 @@ to_win_path() {
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --version)  need_arg "$@"; VERSION="$2"; shift 2 ;;
+    --lossless) LOSSLESS=true; shift ;;
     --slim)     SLIM=true; shift ;;
     --brotli)   BROTLI=true; shift ;;
     --debug)    BUILD_MODE="debug"; shift ;;
@@ -96,8 +99,12 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$PYTHON_BIN" ] || { echo "ERROR: python not found" >&2; exit 2; }
-if [ "$SLIM" = true ] && [ -n "$MEDIA_PAK_OPT" ]; then
-  echo "ERROR: --slim and --media-pak are mutually exclusive" >&2
+if [ "$SLIM" = true ] && [ "$LOSSLESS" = true ]; then
+  echo "ERROR: --slim and --lossless are mutually exclusive" >&2
+  exit 2
+fi
+if { [ "$SLIM" = true ] || [ "$LOSSLESS" = true ]; } && [ -n "$MEDIA_PAK_OPT" ]; then
+  echo "ERROR: --slim/--lossless and --media-pak are mutually exclusive" >&2
   exit 2
 fi
 if [ -n "$MEDIA_PAK_OPT" ] && [ ! -f "$(to_win_path "$MEDIA_PAK_OPT")" ]; then
@@ -145,6 +152,8 @@ STAGE_DIR="$ROOT/godot/mobile_data"
 PRESET_FILE="$ROOT/godot/export_presets.cfg"
 PRESET_BAK="$ROOT/work/out/export_presets.android.$$.cfg"
 SLIM_PAK="$ROOT/work/out/android/media-slim.pak"
+LOSSLESS_PAK="$ROOT/work/out/android/media-lossless.pak"
+MEDIA_OVERLAY="$ROOT/work/out/android/media_overlay"
 ICON_OUT="$ROOT/work/out/release_icons"
 ICON_STAGE="$ROOT/godot/assets/boot/generated"
 ICON_STAGE_CREATED=false
@@ -160,7 +169,7 @@ cleanup() {
   if [ "$ICON_STAGE_CREATED" = true ]; then
     rm -rf "$ICON_STAGE"
   fi
-  rm -rf "$ICON_OUT"
+  rm -rf "$ICON_OUT" "$MEDIA_OVERLAY"
   if [ "$SLN_CREATED" = true ]; then
     rm -f "$SLN" "$ROOT/godot/Lwsmf.slnx"
   fi
@@ -202,7 +211,19 @@ if [ -e "$APK_OUT" ] && [ "$FORCE" != true ]; then
 fi
 
 PAK_ARG=()
-if [ "$SLIM" = true ]; then
+if [ "$LOSSLESS" = true ]; then
+  echo "== building true-lossless media.pak for Android =="
+  mkdir -p "$(dirname "$LOSSLESS_PAK")" "$MEDIA_OVERLAY/SystemFile"
+  if [ -d "$ROOT/work/all/SystemFile" ]; then
+    cp -a "$ROOT/work/all/SystemFile/." "$MEDIA_OVERLAY/SystemFile/"
+  fi
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" \
+    --from-pak "$WA_WIN/media.pak" \
+    --out "$(to_win_path "$LOSSLESS_PAK")" \
+    --lossless \
+    --extra-root "$(to_win_path "$MEDIA_OVERLAY")"
+  PAK_ARG=(--media-pak "$(to_win_path "$LOSSLESS_PAK")")
+elif [ "$SLIM" = true ]; then
   echo "== building slim media.pak for Android =="
   mkdir -p "$(dirname "$SLIM_PAK")"
   "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" --from-pak "$WA_WIN/media.pak" --out "$(to_win_path "$SLIM_PAK")" --slim

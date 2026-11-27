@@ -40,6 +40,7 @@ BROTLI=false
 INSTALLER=false
 ALLOW_PLACEHOLDER=false
 TEMPLATE_OPT=""
+MEDIA_PAK_OPT=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --demo) DEMO=true; ALLOW_PLACEHOLDER=true; shift ;;
@@ -65,8 +66,16 @@ while [ "$#" -gt 0 ]; do
       TEMPLATE_OPT="$2"
       shift 2
       ;;
+    --media-pak)
+      if [ "$#" -lt 2 ]; then
+        echo "ERROR: --media-pak requires a file path" >&2
+        exit 2
+      fi
+      MEDIA_PAK_OPT="$2"
+      shift 2
+      ;;
     *)
-      echo "usage: tools/package_release.sh [--demo] [--slim|--lossless] [--hd] [--brotli] [--installer] [--allow-placeholder] [--version VER] [--template FILE]" >&2
+      echo "usage: tools/package_release.sh [--demo] [--slim|--lossless] [--media-pak FILE] [--hd] [--brotli] [--installer] [--allow-placeholder] [--version VER] [--template FILE]" >&2
       exit 2
       ;;
   esac
@@ -74,6 +83,14 @@ done
 
 if [ "$SLIM" = true ] && [ "$LOSSLESS" = true ]; then
   echo "ERROR: --slim and --lossless are mutually exclusive" >&2
+  exit 2
+fi
+if [ -n "$MEDIA_PAK_OPT" ] && { [ "$SLIM" = true ] || [ "$LOSSLESS" = true ]; }; then
+  echo "ERROR: --media-pak cannot be combined with --slim or --lossless" >&2
+  exit 2
+fi
+if [ -n "$MEDIA_PAK_OPT" ] && [ ! -f "$MEDIA_PAK_OPT" ]; then
+  echo "ERROR: media.pak not found: $MEDIA_PAK_OPT" >&2
   exit 2
 fi
 
@@ -343,7 +360,10 @@ if [ -d "$ROOT/work/all/SystemFile" ]; then
 fi
 MEDIA_EXTRA_ARGS=(--extra-root "$(to_win_path "$MEDIA_OVERLAY")")
 
-if [ "$LOSSLESS" = true ]; then
+if [ -n "$MEDIA_PAK_OPT" ]; then
+  echo "== copying prebuilt media.pak ($MEDIA_PAK_OPT) =="
+  cp -a "$MEDIA_PAK_OPT" "$STAGE/work/all/media.pak"
+elif [ "$LOSSLESS" = true ]; then
   echo "== building true-lossless media.pak =="
   "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" \
     --from-pak "$(to_win_path "$ROOT/work/all/media.pak")" \

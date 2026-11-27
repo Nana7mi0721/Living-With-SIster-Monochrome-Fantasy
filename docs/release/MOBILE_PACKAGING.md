@@ -13,7 +13,8 @@
 | **忽略规则** | [.gitignore](../../.gitignore) | 排除 `/godot/mobile_data/`、`/dist/`、`/work/`、`*.apk`、`*.ipa`、`*.keystore`、`*.jks` |
 | **环境体检** | [tools/check_mobile_env.sh](../../tools/check_mobile_env.sh)<br>[tools/mobile/env_check.py](../../tools/mobile/env_check.py) | 探测 Godot 4.7.2 Mono 模板、.NET SDK、JDK、Android SDK、本地媒体与调试签名 |
 | **Android Staging & 校验** | [tools/mobile/android_data.py](../../tools/mobile/android_data.py) | `plan` / `stage` / `verify-apk`：紧凑 JSON、项目 schema 与 `media.pak` 转专用 blob；媒体条目在 APK 内强制 `ZIP_STORED` |
-| **Android 打包** | [tools/package_android.sh](../../tools/package_android.sh) | 支持 `--dry-run`、`--slim`、`--media-pak`、`--template`、`--debug`/`--release`、`--keystore`、`--allow-placeholder`、`--out-dir`、`--force` |
+| **交互式发包 TUI** | [tools/release_tui.py](../../tools/release_tui.py)<br>[tools/release_packager.bat](../../tools/release_packager.bat) | Windows/Android/iOS 三端统一交互式控制台，以真无损媒体包作为标准版，自动探测工具链与定制模板 |
+| **Android 打包** | [tools/package_android.sh](../../tools/package_android.sh) | 支持 `--dry-run`、`--lossless`、`--slim`、`--media-pak`、`--brotli`、`--template`、`--debug`/`--release`、`--keystore`、`--allow-placeholder`、`--out-dir`、`--force` |
 | **APK 后处理** | [tools/mobile/postprocess_android_apk.py](../../tools/mobile/postprocess_android_apk.py) | 导出后剔除编译期静态库、执行 16 KB 页对齐、以 v2/v3 重签并做布局校验；由打包脚本默认调用 |
 | **静态库剔除** | [tools/mobile/strip_android_static_libs.py](../../tools/mobile/strip_android_static_libs.py) | 删除 `lib/**/*.a`，保留运行时 `.so` 与媒体条目的存储方式 |
 | **iOS IPA 与数据注入** | [tools/package_ios.sh](../../tools/package_ios.sh)<br>[tools/inject_ios_data.sh](../../tools/inject_ios_data.sh)<br>[tools/mobile/ios_inject_data.py](../../tools/mobile/ios_inject_data.py) | macOS + Xcode 构建无签名引擎 IPA；Windows/macOS 通用 Python 注入 `game_data/` 与 `work/all/media.pak` |

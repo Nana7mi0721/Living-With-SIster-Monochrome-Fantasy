@@ -32,6 +32,7 @@ import ios_inject_data  # noqa: E402
 import pack_media  # noqa: E402
 import postprocess_android_apk  # noqa: E402
 import release_audit  # noqa: E402
+import release_tui  # noqa: E402
 import strip_android_static_libs  # noqa: E402
 import sync_boot_assets  # noqa: E402
 import sync_release_icons  # noqa: E402
@@ -1416,6 +1417,138 @@ class MobileToolsTest(unittest.TestCase):
             with zipfile.ZipFile(apk, "a") as zf:
                 zf.writestr("assets/tests/smoke.tscn", "[gd_scene]\n")
             self.assertNotEqual(android_data.main(["verify-apk", str(apk)]), 0)
+
+    def test_pack_media_prune_game_data_and_lossless_idempotent(self) -> None:
+        from io import BytesIO
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            gd = t / "game_data"
+            wa = t / "work/all"
+            gd.mkdir(parents=True)
+            (wa / "Picture").mkdir(parents=True)
+            (wa / "EnemyGraphic").mkdir(parents=True)
+            (wa / "SystemFile").mkdir(parents=True)
+            (wa / "MapChip").mkdir(parents=True)
+
+            live_img = Image.new("RGBA", (128, 128), (12, 34, 56, 255))
+            live_img.save(wa / "Picture/live.png", format="PNG")
+            Image.new("RGB", (64, 64), (99, 0, 0)).save(wa / "EnemyGraphic/dead.png", format="PNG")
+            Image.new("RGB", (32, 32), (10, 20, 30)).save(wa / "SystemFile/ui.png", format="PNG")
+            Image.new("RGB", (32, 32), (40, 50, 60)).save(wa / "MapChip/tile.png", format="PNG")
+
+            (gd / "programs.json").write_text(
+                json.dumps({"common_events": [{"slots": [{"op": 150, "strings": ["Picture/live.png"]}]}]}),
+                encoding="utf-8",
+            )
+            (gd / "database.json").write_text(json.dumps({}), encoding="utf-8")
+            (gd / "map_tiles.json").write_text(json.dumps({}), encoding="utf-8")
+            (gd / "manifest.json").write_text(json.dumps({"assets": []}), encoding="utf-8")
+
+            pak1 = t / "pruned.pak"
+            rc1 = pack_media.main(
+                [
+                    "--root",
+                    str(wa),
+                    "--prune-game-data",
+                    str(gd),
+                    "--lossless",
+                    "--out",
+                    str(pak1),
+                    "--jobs",
+                    "1",
+                ]
+            )
+            self.assertEqual(rc1, 0)
+            entries1 = dict(pack_media.read_pak_entries(pak1))
+            self.assertIn("Picture/live.png", entries1)
+            self.assertIn("SystemFile/ui.png", entries1)
+            self.assertNotIn("EnemyGraphic/dead.png", entries1)
+            self.assertNotIn("MapChip/tile.png", entries1)
+            with Image.open(BytesIO(entries1["Picture/live.png"])) as dec:
+                self.assertEqual(dec.convert("RGBA").tobytes(), live_img.tobytes())
+
+            # Repacking an already-lossless pak stays byte-identical on WebP entries.
+            pak2 = t / "repacked.pak"
+            rc2 = pack_media.main(["--from-pak", str(pak1), "--lossless", "--out", str(pak2), "--jobs", "1"])
+            self.assertEqual(rc2, 0)
+            self.assertEqual(dict(pack_media.read_pak_entries(pak2)), entries1)
+
+    def test_release_tui_config_and_platform_plans(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            cfg_file = t / "cfg.json"
+            cfg = release_tui.ReleaseConfig(version="0.2.0", media_mode="lossless", brotli=True, win_installer=True)
+            release_tui.save_config(cfg, cfg_file)
+            loaded = release_tui.load_config(cfg_file)
+            self.assertEqual(loaded.version, "0.2.0")
+            self.assertEqual(loaded.media_mode, "lossless")
+
+            # Invalid media_mode falls back to lossless (never lossy slim).
+            cfg_file.write_text(json.dumps({"version": "0.1.0", "media_mode": "slim"}), encoding="utf-8")
+            sanitized = release_tui.load_config(cfg_file)
+            self.assertEqual(sanitized.media_mode, "lossless")
+
+            win_tpl = t / "windows_release_x86_64.exe"
+            and_tpl = t / "android_release.apk"
+            ipa_in = t / "LWSMF-0.2.0-ios-arm64.ipa"
+            for f in (win_tpl, and_tpl, ipa_in):
+                f.write_bytes(b"stub")
+
+            fake_env = {
+                "bash": "bash",
+                "godot": "/fake/godot",
+                "templates_dir": t,
+                "dotnet_win": "/fake/dotnet8",
+                "dotnet_win_vers": ["8.0.428"],
+                "dotnet_android": "/fake/dotnet9",
+                "dotnet_android_vers": ["9.0.321"],
+                "java": "/fake/java",
+                "keytool": "/fake/keytool",
+                "android_sdk": "/fake/sdk",
+                "debug_keystore": True,
+                "iscc": t / "ISCC.exe",
+                "chinese_isl": t / "ChineseSimplified.isl",
+                "custom_templates": {"windows": win_tpl, "android": and_tpl, "ios": None},
+                "publish_dir": t / "_publish",
+                "publish_present": list(release_tui.PUBLISH_FILES),
+                "publish_missing": [],
+                "media_pak": {"exists": True, "bytes": 1024, "entries": 10, "has_mapchip": False, "error": ""},
+                "game_data_ok": True,
+                "projects_ok": True,
+                "font_path": t / "Lolita.ttf",
+                "hd_ready": False,
+                "loose_media_ready": True,
+                "pillow_ok": True,
+                "ios_engine_ipas": [ipa_in],
+            }
+            cfg.ios_engine_ipa = str(ipa_in)
+
+            win_cmd, win_env, win_warns = release_tui.build_platform_plan("windows", cfg, fake_env, REPO_ROOT)
+            self.assertIn("--lossless", win_cmd)
+            self.assertIn("--brotli", win_cmd)
+            self.assertIn("--installer", win_cmd)
+            self.assertIn("--template", win_cmd)
+            self.assertNotIn("--slim", win_cmd)
+            self.assertEqual(win_warns, [])
+            self.assertEqual(win_env["DOTNET_BIN"], "/fake/dotnet8")
+
+            and_cmd, and_env, and_warns = release_tui.build_platform_plan("android", cfg, fake_env, REPO_ROOT)
+            self.assertIn("--lossless", and_cmd)
+            self.assertIn("--brotli", and_cmd)
+            self.assertIn("--template", and_cmd)
+            self.assertNotIn("--slim", and_cmd)
+            self.assertEqual(and_warns, [])
+            self.assertEqual(and_env["ANDROID_DOTNET"], "/fake/dotnet9")
+
+            ios_cmd, _, ios_warns = release_tui.build_platform_plan("ios", cfg, fake_env, REPO_ROOT)
+            self.assertIn("--brotli", ios_cmd)
+            self.assertIn("--font", ios_cmd)
+            self.assertEqual(ios_warns, [])
+            self.assertEqual(release_tui.validate_target_readiness("windows", cfg, fake_env), [])
+            self.assertEqual(release_tui.validate_target_readiness("android", cfg, fake_env), [])
+            self.assertEqual(release_tui.validate_target_readiness("ios", cfg, fake_env), [])
 
 
 if __name__ == "__main__":
