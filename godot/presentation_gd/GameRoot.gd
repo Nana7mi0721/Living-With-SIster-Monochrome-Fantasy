@@ -404,6 +404,7 @@ func _consume_picture_queue(queued: String) -> bool:
 		var action := int(entry.get("action", 0))
 		if is_ios_platform() and phase == "title" and number == 5 and (action == 0 or action == 1):
 			action = 2
+			args = [0]
 		var file := str(entry.get("file", ""))
 		var text := str(entry.get("text", ""))
 		var anchor := int(entry.get("anchor", 0))

@@ -296,6 +296,28 @@ func _ready() -> void:
 		stage.tick()
 	check(not stage._cmds.has(1325), "delayed Erase removes the slot after its fade")
 
+	# A delayed range Erase queues one action per ID; both slots keep their image
+	# through the Delay and then fade independently.
+	for slot in [1334, 1335]:
+		stage.draw_picture(slot, 0, "", "delayed range erase", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1334, 2, "", "", [4, 2, 0, 1335], 0, 2, [], {"has_span": true})
+	check(stage._pending_pictures.size() == 2,
+		"delayed range Erase queues one pending action per picture ID")
+	for _i in 2:
+		stage.tick()
+	check(stage._cmds.has(1334) and stage._cmds.has(1335)
+			and not bool(stage._states[1334].get("erase_after", false))
+			and not bool(stage._states[1335].get("erase_after", false)),
+		"delayed range Erase keeps both pictures through their Delay")
+	stage.tick()
+	check(bool(stage._states[1334].get("erase_after", false))
+			and bool(stage._states[1335].get("erase_after", false)),
+		"delayed range Erase starts both fades when it activates")
+	for _i in 5:
+		stage.tick()
+	check(not stage._cmds.has(1334) and not stage._cmds.has(1335),
+		"delayed range Erase releases both slots after the fade")
+
 	# A single-slot Delay Reset cancels only the matching slot's queued action.
 	stage.draw_picture(1326, 0, "", "single reset", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
 	stage.draw_picture(1327, 0, "", "single reset neighbour", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
@@ -308,6 +330,37 @@ func _ready() -> void:
 		stage.tick()
 	check(stage.picture_state(1326, 0) == 100 and stage.picture_state(1327, 0) == 300,
 		"single-slot Delay Reset leaves the cancelled slot put and lets its neighbour run")
+
+	# A delayed range Move is queued per picture ID. Resetting the middle ID must not
+	# cancel the two neighbours, matching the manual's "picture number" scope.
+	for slot in [1329, 1330, 1331]:
+		stage.draw_picture(slot, 0, "", "range delay reset", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1329, 1, "", "", [5, 0, 0, 1, 255, 300, 100, 100, 0, 0, 0x01000000, 4, 1331],
+		0, 2, [], {"has_span": true})
+	check(stage._pending_pictures.size() == 3,
+		"delayed range Move queues one pending action per picture ID")
+	stage.draw_picture(1330, 3, "", "", [])
+	check(stage._pending_pictures.size() == 2,
+		"single-slot reset during a delayed range Move cancels only the matching ID")
+	for _i in 10:
+		stage.tick()
+	check(stage.picture_state(1329, 0) == 300 and stage.picture_state(1331, 0) == 300,
+		"the unaffected range-Move neighbours still reach their target")
+	check(stage.picture_state(1330, 0) == 100,
+		"the reset range-Move target stays at its old position")
+
+	# The WOLF tips page documents that Erase with Delay=0 clears every delayed
+	# command previously queued for that picture ID, even when Process Time > 0.
+	stage.draw_picture(1332, 0, "", "erase resets delay queue", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
+	stage.draw_picture(1332, 1, "", "", [5, 0, 0, 1, 255, 300, 100, 100, 0, 0, 0x01000000, 5],
+		0, 2)
+	check(stage._pending_pictures.size() == 1, "delayed Move is pending before the Erase")
+	stage.draw_picture(1332, 2, "", "", [4, 0])
+	check(stage._pending_pictures.is_empty(),
+		"zero-delay Erase clears the slot's pending delayed commands")
+	for _i in 6:
+		stage.tick()
+	check(not stage._cmds.has(1332), "zero-delay Erase still fades and releases the slot")
 
 	# Delay Reset does not rewind a Process Time transition that already started.
 	stage.draw_picture(1328, 0, "", "started delay", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)

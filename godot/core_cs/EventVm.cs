@@ -1067,9 +1067,7 @@ public sealed class EventVm
                         0 => PictureAction.Draw,
                         1 => PictureAction.Move,
                         2 => PictureAction.Erase,
-                        // Retail WOLF calls wire 3 "Delay Reset"; the legacy enum name
-                        // is retained so existing trace fixtures stay byte-compatible.
-                        3 => PictureAction.Hide,
+                        3 => PictureAction.DelayReset,
                         _ => PictureAction.Set
                     };
 

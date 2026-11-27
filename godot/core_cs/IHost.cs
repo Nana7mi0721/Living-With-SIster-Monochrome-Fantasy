@@ -9,7 +9,7 @@ public enum PictureAction
     Move = 1,
     Erase = 2,
     /// <summary>Wire value 3: cancel not-yet-started delayed picture commands.</summary>
-    Hide = 3,
+    DelayReset = 3,
     Set = 4
 }
 

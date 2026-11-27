@@ -145,7 +145,7 @@ public sealed class TestSessionView : IGameSessionView
             Pictures.RemoveAll(p => p.Number == cmd.Number);
             return;
         }
-        if (cmd.Action == PictureAction.Hide)
+        if (cmd.Action == PictureAction.DelayReset)
             return;
 
         SavedPicture saved = Pictures.FirstOrDefault(p => p.Number == cmd.Number) ?? new SavedPicture { Number = cmd.Number };

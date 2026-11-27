@@ -342,7 +342,7 @@ internal sealed class RouteHost : IHost
             PictureAction.Draw => "draw",
             PictureAction.Move => "move",
             PictureAction.Erase => "erase",
-            PictureAction.Hide => "hide",
+            PictureAction.DelayReset => "hide",
             _ => "set"
         };
         PendingEffects.Add(new JsonObject
@@ -434,7 +434,7 @@ internal sealed class RouteHost : IHost
             _pictures.Remove(cmd.Number);
             return;
         }
-        if (cmd.Action == PictureAction.Hide)
+        if (cmd.Action == PictureAction.DelayReset)
             return;
         if (cmd.Action == PictureAction.Move)
         {

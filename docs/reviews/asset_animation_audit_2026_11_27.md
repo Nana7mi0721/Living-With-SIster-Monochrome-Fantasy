@@ -9,8 +9,8 @@
 1. **主根因不是素材缺失，而是 `150` 的三个时间字段被混用**：旧实现把 `Process Time` 当成可回退到 `animate[0]` 的动画时长，又把动作 `3` 当成“隐藏/删除槽位”，并且完全没有执行 Show/Move/Erase 的 `Delay`。这三处会让大量素材提前、延后或永久消失。
 2. **动作 `3` 的官方名称是 `Delay Reset`**，只取消尚未开始的延迟动作，不改变当前已显示的图片。旧实现会隐藏并删除槽位，造成打开菜单、切场景时素材被误删。
 3. **Show 对已占用槽位等同 Move**，`Process Time >= 1` 时从透明开始；同一个 graphic 的 Show 保留槽位效果，换成另一张 graphic 则是新图，不继承旧图的闪光/抖动状态。
-4. 本轮已补齐 Show/Move/Erase 的延迟队列、范围 Delay Reset、Erase 的短格式 Delay、占用槽 Show 的 Move 语义，以及 `Angle` 的渲染与 `Process Time` 插值。
-5. **仍有一个高优先级结构缺口**：CE63 的消息窗／头像时间线由 `150` 图片槽驱动，但当前 Godot 使用原生 `MessageWindow` 自行开关和布局；原版的窗口滑入、避让和头像移动尚未接到图片槽。其余残余见第 8 节。
+4. 本轮已补齐 Show/Move/Erase 的延迟队列、范围命令逐 picture ID 入队、范围 Delay Reset、Erase 的短格式 Delay、`Delay=0` Erase 的队列清理、占用槽 Show 的 Move 语义，以及 `Angle` 的渲染与 `Process Time` 插值。
+5. **仍有一个高优先级结构缺口**：本作实际消息路径是 CE270（`run_condition=3`），不是 CE63 的窗口分支；当前 Godot 仍由自绘 `MessageWindow` 开关面板，CE270 的 640 宽动态气泡、脸图与立绘图片槽尚未接通。其余残余见第 8 节。
 
 ## 2. 调查方法
 
@@ -34,6 +34,16 @@
 
 - `wolfrpg-map-parser` 把动作 `3` 解析为 `DelayReset`，并分别提供 Show/Move 的延迟字段与 Erase 的延迟字段。
 - 仓库内旧 Rust `crates/wolf-game/src/picture.rs` 只作为历史 Oracle；其“Draw 重建整个槽位”等简化不作为原版行为依据。
+
+### 2.4 原版 `Game.exe` 反汇编补证（2026-11-27）
+
+对本机 WOLF RPG Editor 3.738 的零售 `Game.exe` 使用 Ghidra 定位图片命令处理函数：
+
+- `FUN_00a1e150` 的动作 `3` 分支（`00a202af` 附近）会清空图片槽的延迟命令队列。
+- 同一函数的动作 `2` 分支只执行擦除或把延迟擦除入队，未发现“延迟 Erase 激活时清空后续队列”的代码。
+- `FUN_009946d0` 在 Delay `< 1` 时立即执行，否则把命令压入队列；`FUN_00994e40` 每帧把剩余值 `< 1` 的项出队执行，否则减去帧步长。
+
+因此，“动作 3 清空队列”和“Erase 删除当前图片”是两个独立语义；WOLF Tips 对 `Delay=0` Erase 的重置说明作为上层行为证据保留。
 
 ## 3. `150` 字段与动作语义
 
@@ -74,6 +84,10 @@
 - 范围：`[head | 0x01000000, picture, endpoint]`
 
 `HasSpan` 只在 head bit `0x01000000` 存在时成立。当前实现支持取消单个槽位和闭区间内的待触发 Show/Move/Erase；已经开始播放的 `Process Time` 过渡不会被倒回。
+
+队列归属按 picture ID 拆分：一条范围 Move/Show/Erase 会为范围内每个 ID 各保存一条 pending，因此单槽 Delay Reset 只取消该 ID，不会误伤邻居。`Delay=0` 的 Erase 会清除该 ID 先前排队的 Show/Move/Erase；延迟 Erase 本身按队列顺序执行，不回溯取消排在它之后的命令。
+
+**帧边界说明**：`PictureStage` 使用 `remaining = delay + 1`，因为命令阶段先于同帧的 `stage.tick()`；这保证 `Delay=N` 不会在命令帧立刻触发。原版队列使用“剩余值 `<1` 才执行、否则减去帧步长”的循环，但尚未通过逐帧运行时采样锁定 `N` 与 `N+1` 的精确边界，因此该 `+1` 目前是依据帧序的实现约定，不冒充手册原文。
 
 ## 4. 全量统计
 
@@ -135,16 +149,13 @@ Free Transform 标志在全部 `150` 中为 **0** 条，本作零售数据未使
 - `pc228`：瞬间 Show。
 - `pc233`：`Show Process Time=self86`，淡入。
 
-### 5.2 CE63：消息窗时间线
+### 5.2 CE63 / CE270：实际消息路径
 
-- `pc90`：Show 窗口皮肤，`Process Time=5`。
-- `pc93`：Move，`Process Time=5`、Delay 0。
-- `pc94`：同一目标 Move，`Process Time=5`、Delay 3。
-- `pc101`：Delay Reset，不删除窗口。
-- `pc102/103`：Move，`Process Time=4`、Delay 0/2。
-- `pc160–162`：Move，`Process Time=5`、Delay 0/3/5。
+- CE63 `pc70` 检查 `Sys12`，`pc74` 把 `Sys0` 写入 self49，`pc78` 再以 `self49 >= 1` 决定是否显示窗口。本作 CE264 的调用点首个字符串实参为空，CE267 回退使 `Sys0=0`，因此 CE63 的 `pc90` 窗口 Show、`pc93/94` 错峰 Move 与 `pc215` 擦除分支在零售流程中不可达。
+- 实际对话由 CE270（`run_condition=3`）绘制：`pc86` 检查 `Sys12`，`pc92/95/96` 读取系统字符串 25，`pc419/422` 分配 640 宽文本槽，`pc521` 画脸，`pc559/574` 画立绘，`pc1422/1427` 显示窗口，`pc1730/1734` 画正文，`pc1885/1889` 画名字。
+- 关闭时 `pc2597` 发出 Delay Reset，`pc2598` Erase，`pc2605` 再 Delay Reset，随后逐个移动/擦除子件。
 
-这些指令的设计意图是同一帧发出多条错峰动作；旧实现忽略 Delay，三条 Move 会同时抢到终态。
+因此不应照 CE63 的 960×168 窗口去猜滑入动画；当前缺口是 CE270 的图片槽时间线没有接入自绘消息框。
 
 ### 5.3 CE64 / CE85：错峰展开与滑动
 
@@ -161,9 +172,10 @@ Free Transform 标志在全部 `150` 中为 **0** 条，本作零售数据未使
 
 ### 6.1 `godot/presentation_gd/PictureStage.gd`
 
-- 新增全局待触发队列 `_pending_pictures`：Show/Move/Erase 的 Delay 到期后才按原始命令重放。
+- 新增按 picture ID 归属的待触发队列 `_pending_pictures`：范围 Show/Move/Erase 逐 ID 入队，Delay 到期后才按原始命令重放。
 - 动作 `3` 改为 `_reset_delayed_pictures()`：按单槽或闭区间取消 pending，不隐藏当前图层。
 - Show/Move 读取 `args[11]` 的 Delay，Erase 读取 `args[1]` 的 Delay。
+- `Delay=0` 的 Erase 清除该槽位先前排队的 Show/Move/Erase；延迟 Erase 激活时不清空后续命令。
 - `_transition_duration()` 只读取 `args[0]`，移除把 `animate[0]`（实际是 Delay）当后备时长的错误。
 - 占用槽 Show 使用 Move 语义；`Process Time >= 1` 时 alpha 从 0 开始，同一 graphic 保留 290 效果，换成另一张 graphic 时不继承旧图的闪光/抖动。
 - `Angle=args[8]` 进入姿态、插值与 `Control.rotation`；旋转中心为图片中心。
@@ -173,12 +185,12 @@ Free Transform 标志在全部 `150` 中为 **0** 条，本作零售数据未使
 ### 6.2 `godot/presentation/VmController.cs`
 
 - 只有 `PictureAction.Erase` 从 `_pictures` 移除槽位。
-- `PictureAction.Hide`（线值 3）不再删除 slot，只交给 `PictureStage` 执行 Delay Reset。
+- `PictureAction.DelayReset`（线值 3）不再删除 slot，只交给 `PictureStage` 执行 Delay Reset。
 - Erase 范围终点固定读取 `Args[3]`；Delay Reset 不再误读 Erase 字段。
 
 ### 6.3 `godot/core_cs/EventVm.cs` / `IHost.cs`
 
-- 保留 `PictureAction.Hide` 枚举名以兼容轨迹夹具，但注释明确其 wire 语义为 Delay Reset。
+- 枚举名由 `PictureAction.Hide` 改为 `PictureAction.DelayReset`；轨迹录制仍输出 `"hide"` 以兼容既有 fixture。
 - `HasSpan` 说明改为 Erase / Delay Reset 的范围终点。
 
 ### 6.4 标题菜单与测试夹具
@@ -198,31 +210,32 @@ Free Transform 标志在全部 `150` 中为 **0** 条，本作零售数据未使
 | 项目 | 结果 |
 |---|---|
 | `dotnet build godot/Lwsmf.csproj -c Release` | 0 警告 / 0 错误 |
-| `python tools/run_godot_test.py res://tests_gd/PictureStateTest.tscn --timeout 90` | `PICTURE_STATE_TEST_OK checks=225` |
+| `python tools/run_godot_test.py res://tests_gd/PictureStateTest.tscn --timeout 90` | `PICTURE_STATE_TEST_OK checks=236` |
 | `bash tools/godot_check.sh` | 36/38 通过。仅 `Smoke`（`headless fixture must run four command rounds, got 3`）与 `M13 slot 1`（180s 超时，`stage=10 has305=false v492=1`）失败；两者均指向本机 `work/retail_backup/Save/SaveData01.sav` 被真实进度覆盖（387,265 B，测试基线 366,146 B），非本轮改动引入 |
 | `LWsmf_RENDER=1 bash tools/godot_check.sh` | 36/38 通过，失败项同上；`DialogDrawTest`、`PictureRoundtripTest`、`SaveImportTest`、`GameRootTest` 全部通过。此前 `SaveImport`/`GameRoot` 的渲染失败已消除 |
 | Rust Oracle 路线 | `149,655/149,655` 与 `989,439/989,439` 步 100% 一致 |
 
 ## 8. 残余缺口
 
-### P1：CE63 消息窗与头像未由图片槽驱动
+### P1：CE270 消息窗与头像未由图片槽驱动
 
-当前 `MessageWindow.open()/close()` 直接切换自绘面板可见性；CE63 的 `150` 窗口 Show/Move/Delay 时间线仍在 `PictureStage` 中执行，但没有驱动原生消息窗。结果是：
+当前 `MessageWindow.open()/close()` 直接切换自绘面板可见性；CE270 的 640 宽动态气泡、脸图与立绘 `150` 图片槽没有被调度。具体缺口：
 
-- 窗口从屏下 96 px 滑入、向上避让等动作缺失；
-- 头像与窗口之间的相对位移缺失；
-- 原生消息框与图片槽可能重复绘制或层级不一致。
+- `AutoEvents` 只调度 `run_condition==2`，CE270 的 `run_condition==3` 不会启动；
+- `101` 只调用 `Host.ShowMessage`，没有写入 CE270 需要的 `Sys12` 与系统字符串 25；
+- `9900025` 这类系统字符串目前按普通系统变量解析会越界，CE270 即使启动也读不到正文；
+- 当前自绘气泡约为 712 宽，不是 CE270 的 640 宽动态布局。
 
-这是后续最值得优先补的结构性动画缺口。
+这是后续最值得优先补的结构性动画缺口。CE63 的窗口分支在本作不可达，不应作为实现依据。
 
-### P2：负数图片号的层级
+### 已核实：负数图片号的层级
 
 官方手册规定：
 
 - `-1..-99,999`：在地图之上、事件之下；
 - `<= -100,000`：在地图之下、背景之上。
 
-当前 `PictureStage` 将所有场景图片放在同一 `LAYER_SCENE_PICTURE`。零售剧情大量使用全屏正数图片，短期不一定暴露，但 H 场景与地图背景层仍可能出现层序偏差。
+全部零售 `150` 中没有 `<= -100,000` 的槽位；`-1..-99,999` 与正数槽位在当前项目共用的 `LAYER_SCENE_PICTURE` 上，且本项目没有真实事件角色层，因此当前内容没有可观测的层级差异。若后续加入地图事件角色层再重新评估。
 
 ### P2：Free Transform
 
@@ -246,5 +259,7 @@ Free Transform 标志在全部 `150` 中为 **0** 条，本作零售数据未使
 - `45993864592`：Homebrew Python PEP 668；由 `7e4016f` 改用 venv 修复。
 - `45995107834`：iOS SplashImage 原字节校验误判；由 `6b88aa1` 改为像素级校验修复。
 - `CI` #57（run `45996401545`）与 `iOS Unsigned IPA` #3（run `45996796593`）在 `6b88aa1` 上均为成功。
+- `CI` #58（run `46012905723`）在 `959da1f` 上成功；#60（run `46016008972`）在 `3e5df4e` 上成功。
+- `CI` #59（run `46014749642`）曾在 `4f403be` 上失败，随后由 `3e5df4e` 修复并由 #60 覆盖；旧失败 run 的邮件可能延迟到达。
 
-如果邮箱仍收到失败通知，优先检查是否为旧 run 的延迟通知；新提交后的状态应以新 run 为准。
+如果邮箱仍收到失败通知，优先检查是否为旧 run 的延迟通知；新提交后的状态应以新 run 为准。本轮提交前必须再核对新 push 的 CI，而不是只引用历史成功记录。

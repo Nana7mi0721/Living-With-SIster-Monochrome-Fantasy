@@ -93,8 +93,9 @@ cargo test -q -p wolf-game
   A correct fix needs an event-id keyed self-variable bank applied when events start, which
   is a VM/Game architecture change, not a serializer fix. Left as a gap.
 * **Hidden pictures.** SavePart5 has no hidden bit in this build (`var2/var3` are always 0,
-  and `picture_to_record` writes neither), so a `150 Hide` slot reloads visible. There is no
-  retail evidence for which unused word could carry the flag, so none was invented.
+  and `picture_to_record` writes neither), so a hidden slot reloads visible. Wire action 3 is
+  `Delay Reset` rather than a hide flag, so there is no hidden-state word to recover here;
+  none was invented.
 * **Map/object state.** Part1 exists in a full save but `Game` does not model a map snapshot;
   part1 is template-carried and ignored on load. Tile map, leader placement, switches and
   event positions rebuild only when a map is started, so a load lands on an empty runtime.

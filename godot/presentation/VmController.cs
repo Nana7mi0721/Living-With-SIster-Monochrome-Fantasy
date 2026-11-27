@@ -667,7 +667,7 @@ public partial class VmController : Node, IHost, IVmSession
                     _pictures.Remove(cmd.Number);
                 }
                 break;
-            case PictureAction.Hide:
+            case PictureAction.DelayReset:
                 // Wire 3 is Delay Reset: PictureStage cancels queued commands, but the
                 // slot that is already visible remains untouched.
                 break;

@@ -708,7 +708,7 @@ internal sealed class M4RouteHost : IHost
             PictureAction.Draw => "draw",
             PictureAction.Move => "move",
             PictureAction.Erase => "erase",
-            PictureAction.Hide => "hide",
+            PictureAction.DelayReset => "hide",
             _ => "set"
         };
         _eff.Clear();
@@ -797,7 +797,7 @@ internal sealed class M4RouteHost : IHost
             _pictures.Remove(cmd.Number);
             return;
         }
-        if (cmd.Action == PictureAction.Hide)
+        if (cmd.Action == PictureAction.DelayReset)
             return;
         if (cmd.Action == PictureAction.Move)
         {

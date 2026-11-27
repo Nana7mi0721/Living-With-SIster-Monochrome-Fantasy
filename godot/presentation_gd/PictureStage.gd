@@ -322,6 +322,12 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 			_queue_delayed_picture(number, action, file, text, args, anchor, kind, animate, flags, false, delay)
 			return null
 	if action == 2:
+		# WOLF's tips document the zero-delay case: erasing a picture immediately
+		# discards every delayed command previously queued for that picture ID.
+		# A delayed Erase is itself a queued command and must not retroactively
+		# cancel commands queued behind it.
+		if _picture_delay(action, args) == 0:
+			_reset_pending_for_picture_range(number, _picture_endpoint(number, action, args, flags))
 		_start_erase(number, args, flags)
 		return null
 	if kind < 0:
@@ -896,6 +902,8 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 			_queue_delayed_picture(number, action, file, text, args, anchor, kind, animate, flags, true, delay)
 			return
 	if action == 2:
+		if _picture_delay(action, args) == 0:
+			_reset_pending_for_picture_range(number, _picture_endpoint(number, action, args, flags))
 		_start_erase(number, args, flags)
 		return
 	if action == 1:
@@ -1355,54 +1363,57 @@ func _picture_delay(action: int, args: Array) -> int:
 	return maxi(0, delay)
 
 
+func _picture_endpoint(number: int, action: int, args: Array, flags: Dictionary = {}) -> int:
+	if not bool(flags.get("has_span", false)):
+		return number
+	if action == 0 or action == 1:
+		return _arg(args, 12, number)
+	if action == 2:
+		return _arg(args, 3, number)
+	return number
+
+
 func _queue_delayed_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array, flags: Dictionary, track_mode: bool, delay: int) -> void:
-	_pending_pictures.append({
-		"number": number,
-		"action": action,
-		"file": file,
-		"text": text,
-		"args": args.duplicate(),
-		"anchor": anchor,
-		"kind": kind,
-		"animate": animate.duplicate(),
-		"flags": flags.duplicate(),
-		"track": track_mode,
-		# The command's own frame already rendered before tick(); one extra guard frame
-		# makes Delay=N land on the N-th following command frame.
-		"remaining": delay + 1,
-	})
+	var endpoint := _picture_endpoint(number, action, args, flags)
+	var target_flags := flags.duplicate()
+	target_flags["has_span"] = false
+	# Queue ownership is per picture slot, matching Delay Reset's picture-ID scope.
+	# A single-slot reset must not cancel a delayed range command for its neighbours.
+	for slot in _slots_in_span(mini(number, endpoint), maxi(number, endpoint)):
+		_pending_pictures.append({
+			"number": slot,
+			"action": action,
+			"file": file,
+			"text": text,
+			"args": args.duplicate(),
+			"anchor": anchor,
+			"kind": kind,
+			"animate": animate.duplicate(),
+			"flags": target_flags.duplicate(),
+			"track": track_mode,
+			# The command's own frame already ran before tick(); Delay=N therefore
+			# starts on the N-th following tick.
+			"remaining": delay + 1,
+		})
 
 
 ## WOLF action 3 cancels queued actions that have not started yet. It never erases,
 ## hides, or otherwise mutates the picture that is currently on screen.
 func _reset_delayed_pictures(number: int, args: Array, flags: Dictionary = {}) -> void:
-	var endpoint := number
-	if bool(flags.get("has_span", false)) and not args.is_empty():
-		endpoint = _arg(args, 0, number)
+	var endpoint := _arg(args, 0, number) if bool(flags.get("has_span", false)) and not args.is_empty() else number
+	_reset_pending_for_picture_range(number, endpoint)
+
+
+func _reset_pending_for_picture_range(number: int, endpoint: int) -> void:
 	var lo := mini(number, endpoint)
 	var hi := maxi(number, endpoint)
 	var kept: Array = []
 	for entry in _pending_pictures:
-		if _pending_overlaps(entry, lo, hi):
+		var slot := int(entry.get("number", 0))
+		if slot >= lo and slot <= hi:
 			continue
 		kept.append(entry)
 	_pending_pictures = kept
-
-
-func _pending_overlaps(entry: Dictionary, lo: int, hi: int) -> bool:
-	var action := int(entry.get("action", -1))
-	var number := int(entry.get("number", 0))
-	var args: Array = entry.get("args", [])
-	var has_span := bool((entry.get("flags", {}) as Dictionary).get("has_span", false))
-	var endpoint := number
-	if has_span:
-		if action == 0 or action == 1:
-			endpoint = _arg(args, 12, number)
-		elif action == 2:
-			endpoint = _arg(args, 3, number)
-	var entry_lo := mini(number, endpoint)
-	var entry_hi := maxi(number, endpoint)
-	return entry_lo <= hi and lo <= entry_hi
 
 
 func _activate_delayed_pictures() -> void:

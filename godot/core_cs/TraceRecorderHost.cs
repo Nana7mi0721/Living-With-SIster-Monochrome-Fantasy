@@ -44,7 +44,7 @@ public sealed class TraceRecorderHost : IHost
             PictureAction.Draw => "draw",
             PictureAction.Move => "move",
             PictureAction.Erase => "erase",
-            PictureAction.Hide => "hide",
+            PictureAction.DelayReset => "hide", // Legacy wire name in trace fixtures.
             _ => "set"
         };
 
