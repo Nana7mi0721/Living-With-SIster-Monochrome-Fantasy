@@ -229,15 +229,38 @@ if not pngs:
 if not expected_src.is_file():
     print(f"ERROR: custom splash source missing: {expected_src}", file=sys.stderr)
     raise SystemExit(1)
+
 expected_sha = hashlib.sha256(expected_src.read_bytes()).hexdigest()
 matched = [p.name for p in pngs if hashlib.sha256(p.read_bytes()).hexdigest() == expected_sha]
+
 if not matched:
-    print(
-        f"ERROR: SplashImage.imageset PNGs ({', '.join(p.name for p in pngs)}) do not match "
-        f"{expected_src.name}; Godot default splash may have leaked.",
-        file=sys.stderr,
-    )
-    raise SystemExit(1)
+    # Godot's iOS exporter re-encodes splash PNGs through libpng, changing file bytes while preserving pixels.
+    from PIL import Image, ImageChops
+
+    resampling = getattr(Image, "Resampling", Image).LANCZOS
+    with Image.open(expected_src) as src_im:
+        src_rgb = src_im.convert("RGB")
+        details = []
+        for p in pngs:
+            with Image.open(p) as out_im:
+                out_rgb = out_im.convert("RGB")
+                ref = src_rgb if out_rgb.size == src_rgb.size else src_rgb.resize(out_rgb.size, resampling)
+                diff = ImageChops.difference(out_rgb, ref)
+                hist = diff.histogram()
+                # Mean absolute channel diff across all pixels (0 = pixel-exact).
+                total_vals = out_rgb.size[0] * out_rgb.size[1] * 3
+                mean_diff = sum((i % 256) * count for i, count in enumerate(hist)) / max(1, total_vals)
+                details.append(f"{p.name}({out_rgb.size[0]}x{out_rgb.size[1]},mad={mean_diff:.2f})")
+                if mean_diff <= 4.0:
+                    matched.append(p.name)
+    if not matched:
+        print(
+            f"ERROR: SplashImage.imageset PNGs ({', '.join(details)}) do not match "
+            f"{expected_src.name} ({src_rgb.size[0]}x{src_rgb.size[1]}); Godot default splash may have leaked.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
 print(f"IOS_SPLASH_VERIFY_OK imageset={imageset} matched={','.join(matched)}")
 PY
 
@@ -255,6 +278,8 @@ xcodebuild \
   -derivedDataPath "$DERIVED_DATA" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGN_IDENTITY="" \
+  DEVELOPMENT_TEAM="" \
   STRIP_INSTALLED_PRODUCT=YES \
   DEPLOYMENT_POSTPROCESSING=YES \
   COPY_PHASE_STRIP=YES \
