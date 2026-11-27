@@ -37,6 +37,8 @@ public sealed class EventVm
     public bool BlockOnKeyWait { get; set; }
     /// <summary>When true, 600xxx common-event call targets resolve relative to the caller (raw - 600100).</summary>
     public bool RelativeCommonCalls { get; set; }
+    /// <summary>When true, parents woken by a zero-wait 210 child finish resume in the same frame.</summary>
+    public bool ResumeOnChildReturn { get; set; }
     /// <summary>Optional guard queried before stepping a parallel instance at Pc == 0.</summary>
     public Func<Instance, bool>? CanStepParallelInstance { get; set; }
     /// <summary>Optional hook returning true to skip a 210 CallCommonEvent invocation.</summary>
@@ -127,6 +129,7 @@ public sealed class EventVm
     public bool ReturnToTitleRequested { get; set; }
     private readonly Dictionary<string, int> _titleToId = new(StringComparer.Ordinal);
     private readonly HashSet<int> _enteredInstanceIds = new();
+    private readonly HashSet<int> _budgetExhausted = new();
 
     // Transition setting installed by opcode 160 and consumed by 161/162
     // (Rust crates/wolf-vm/src/exec.rs:910-937).
@@ -1064,9 +1067,7 @@ public sealed class EventVm
                         0 => PictureAction.Draw,
                         1 => PictureAction.Move,
                         2 => PictureAction.Erase,
-                        // Retail WOLF calls wire 3 "Delay Reset"; the legacy enum name
-                        // is retained so existing trace fixtures stay byte-compatible.
-                        3 => PictureAction.Hide,
+                        3 => PictureAction.DelayReset,
                         _ => PictureAction.Set
                     };
 
@@ -1564,8 +1565,24 @@ public sealed class EventVm
         }
         PollWaits();
         int budget = 200_000;
-        RunInstances(ref budget);
-        ReapFinished();
+        if (!ResumeOnChildReturn)
+        {
+            RunInstances(ref budget);
+            ReapFinished();
+        }
+        else
+        {
+            if (_budgetExhausted.Count > 0) _budgetExhausted.Clear();
+            for (int pass = 0; pass < 16 && budget > 0; pass++)
+            {
+                RunInstances(ref budget, _budgetExhausted);
+                int woken = ReapFinished();
+                if (woken == 0 || ReturnToTitleRequested || EndGameRequested)
+                {
+                    break;
+                }
+            }
+        }
         // 125 auto input lives for up to two frames, and each coroutine may
         // consume it once per injection (exec.rs step_frame).
         if (_autoKeysTtl > 0)
@@ -1787,7 +1804,7 @@ public sealed class EventVm
     internal int AutoKeysDeliveredCount => _autoKeysDelivered.Count;
     public const int PerInstanceFrameBudget = 50_000;
 
-    public void RunInstances(ref int budget)
+    public void RunInstances(ref int budget, HashSet<int>? budgetExhausted = null)
     {
         if (Instances.Count == 0)
         {
@@ -1814,6 +1831,10 @@ public sealed class EventVm
             var inst = Instances[index];
             if (inst.IsRunnable)
             {
+                if (budgetExhausted != null && budgetExhausted.Contains(inst.Id))
+                {
+                    return true;
+                }
                 if (inst.IsParallel && inst.Pc == 0 && CanStepParallelInstance != null && !CanStepParallelInstance(inst))
                 {
                     return true;
@@ -1829,6 +1850,7 @@ public sealed class EventVm
                 totalBudget -= consumed;
                 if (rem <= 0 && consumed >= PerInstanceFrameBudget && inst.IsRunnable)
                 {
+                    budgetExhausted?.Add(inst.Id);
                     Host.Log($"Event {inst.EventId} (pc={inst.Pc}) hit per-instance frame budget ({PerInstanceFrameBudget})");
                 }
             }
@@ -1852,8 +1874,9 @@ public sealed class EventVm
         }
     }
 
-    public void ReapFinished()
+    public int ReapFinished()
     {
+        int woken = 0;
         for (int i = Instances.Count - 1; i >= 0; i--)
         {
             var inst = Instances[i];
@@ -1886,12 +1909,14 @@ public sealed class EventVm
                     {
                         parent.Wait.Clear();
                         parent.JustResumedFromChild = true;
+                        woken++;
                     }
                 }
 
                 Instances.RemoveAt(i);
             }
         }
+        return woken;
     }
 
     private int ResolveStringTarget(int raw, int mode, Instance inst)

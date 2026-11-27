@@ -53,8 +53,16 @@ public sealed class AutoEvents
     private static readonly int[] LiveLoadResumePainters =
     {
         WolfIds.BattleGauge,
-        334, 335, 338, 352, 355, 356, 357
+        334, 335, 338, 348, 349, 350, 351, 352, 353, 355, 356, 357, 367, 413, 414
     };
+
+    private static bool IsLiveLoadResumeExempt(EventVm vm, int eventId)
+    {
+        if (Array.IndexOf(LiveLoadResumePainters, eventId) >= 0) return true;
+        // CE404 (cowgirl differential motion) gates on var[137]==6, which can remain 6 after
+        // leaving H-scene; resume on load only while var[62]>=1 confirms an active H-scene.
+        return eventId == 404 && vm.Vars.Get(62) >= 1;
+    }
 
     private readonly List<AutoEvent> _events;
     private readonly Dictionary<int, bool> _latched = new();
@@ -108,7 +116,7 @@ public sealed class AutoEvents
         {
             bool now = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
             _latched[ev.Id] = now;
-            if (!ev.ResumeOnLoad && Array.IndexOf(LiveLoadResumePainters, ev.Id) < 0
+            if (!ev.ResumeOnLoad && !IsLiveLoadResumeExempt(vm, ev.Id)
                 && now && !IsEventLive(vm, ev.Id))
             {
                 _suppressedUntilFalse.Add(ev.Id);

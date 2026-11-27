@@ -479,7 +479,11 @@ public sealed class LegacySaveImporter
                 }
                 var vars7_18 = new int[12];
                 for (int k = 0; k < 12; k++) vars7_18[k] = r.ReadI32();
-                for (int k = 0; k < 6; k++) r.ReadU32();
+                // SavePart5_1.vals1[0..2]: RGB tone delta in [-255..+255] around neutral 100.
+                int toneDeltaR = r.ReadI32();
+                int toneDeltaG = r.ReadI32();
+                int toneDeltaB = r.ReadI32();
+                for (int k = 3; k < 6; k++) r.ReadU32();
                 for (int k = 0; k < 18; k++) r.ReadU32();
                 r.ReadU8(); r.ReadU8(); r.ReadU8();
                 for (int k = 0; k < 4; k++) r.ReadU32();
@@ -509,15 +513,20 @@ public sealed class LegacySaveImporter
 
                 // PictureStage layout: args[1]=w/cols, args[2]=h/rows, args[3]=pattern(1-based),
                 // args[4]=opacity, args[5]=x, args[6]=y, args[7]=scale, args[8]=rotation(0 on load),
-                // args[16]=vscale (only when scale_mode=3). Blend & scale_mode pass through Flags
-                // so args[10] (PIC_FLAG_TONE_MASK) is never corrupted by vscale.
+                // args[10]=PIC_FLAG_TONE_MASK (0x02000000 when tone is non-neutral),
+                // args[13..15]=RGB tone (0..200, 100 neutral), args[16]=vscale (only when scale_mode=3).
                 // SavePart5 vars7_18 order: (x,y,w,h,pattern,opacity,blend,-1,fade,scale,vscale,0).
                 int scaleX = vars7_18[9];
                 int scaleY = vars7_18[10];
                 int blend = vars7_18[6];
                 bool independentScale = scaleY != 0 && scaleY != scaleX;
-                List<int> picArgs = independentScale
-                    ? [0, vars7_18[2], vars7_18[3], vars7_18[4], vars7_18[5], vars7_18[0], vars7_18[1], scaleX, 0, 0, 0, 0, 0, 0, 0, 0, scaleY]
+                int toneR = Math.Clamp((int)Math.Round(100.0 + toneDeltaR * 100.0 / 255.0, MidpointRounding.AwayFromZero), 0, 200);
+                int toneG = Math.Clamp((int)Math.Round(100.0 + toneDeltaG * 100.0 / 255.0, MidpointRounding.AwayFromZero), 0, 200);
+                int toneB = Math.Clamp((int)Math.Round(100.0 + toneDeltaB * 100.0 / 255.0, MidpointRounding.AwayFromZero), 0, 200);
+                bool hasTone = toneDeltaR != 0 || toneDeltaG != 0 || toneDeltaB != 0;
+                int toneFlags = hasTone ? 0x0200_0000 : 0;
+                List<int> picArgs = (independentScale || hasTone)
+                    ? [0, vars7_18[2], vars7_18[3], vars7_18[4], vars7_18[5], vars7_18[0], vars7_18[1], scaleX, 0, 0, toneFlags, 0, 0, toneR, toneG, toneB, independentScale ? scaleY : scaleX]
                     : [0, vars7_18[2], vars7_18[3], vars7_18[4], vars7_18[5], vars7_18[0], vars7_18[1], scaleX, 0];
                 Dictionary<string, int>? picFlags = null;
                 if (blend != 0)

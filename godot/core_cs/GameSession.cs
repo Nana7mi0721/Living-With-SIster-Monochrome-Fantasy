@@ -202,6 +202,7 @@ public sealed class GameSession
         _vm.SaveLoadHandler = HandleSaveLoad;
         _vm.Vm.BlockOnKeyWait = true;
         _vm.Vm.RelativeCommonCalls = true;
+        _vm.Vm.ResumeOnChildReturn = true;
         _vm.Vm.ShouldSkipCall = ShouldSkipRedundantBedroomRefresh;
         _vm.Vm.OnInstanceFinished = OnVmInstanceFinished;
     }
@@ -281,6 +282,7 @@ public sealed class GameSession
             _scriptedInput = value;
             _vm.Vm.BlockOnKeyWait = !value;
             _vm.Vm.RelativeCommonCalls = !value;
+            _vm.Vm.ResumeOnChildReturn = !value;
         }
     }
     public bool AutoPickChoice { get; set; } = true;
@@ -400,6 +402,7 @@ public sealed class GameSession
         _actionPressed = false;
         _vm.Vm.BlockOnKeyWait = !ScriptedInput;
         _vm.Vm.RelativeCommonCalls = !ScriptedInput;
+        _vm.Vm.ResumeOnChildReturn = !ScriptedInput;
         _vm.Vm.CanStepParallelInstance = (!ScriptedInput && _vm.Map != null)
             ? inst => _vm.Map.IsParallelInstanceValid(inst, _vm.Vm)
             : null;

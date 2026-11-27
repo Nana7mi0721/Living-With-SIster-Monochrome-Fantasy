@@ -695,7 +695,7 @@ public partial class SaveImportTest : Node
                         Kind = 0,
                         File = "cg/bg_01.png",
                         Anchor = 1,
-                        Args = [0, 2, 2, 3, 200, 100, 200, 100, 0, 0, 0, 0, 0, 0, 0, 0, 75],
+                        Args = [0, 2, 2, 3, 200, 100, 200, 100, 0, 0, 0x0200_0000, 0, 0, 50, 25, 140, 75],
                         Flags = new Dictionary<string, int> { ["blend"] = 1, ["scale_mode"] = 3 }
                     },
                     new SavedPicture { Number = 51, Kind = 2, Text = styled, Anchor = 0, Args = [0, 320, 64, 1, 255, 20, 30, 100, 0] },
@@ -740,6 +740,10 @@ public partial class SaveImportTest : Node
                 || rec.PictureStates.Count != 2
                 || rec.PictureStates[0].File != "cg/bg_01.png"
                 || rec.PictureStates[0].Args.Count < 17 || rec.PictureStates[0].Args[3] != 3 || rec.PictureStates[0].Args[16] != 75
+                || (rec.PictureStates[0].Args[10] & 0x0200_0000) == 0
+                || rec.PictureStates[0].Args[13] != 50
+                || rec.PictureStates[0].Args[14] != 25
+                || rec.PictureStates[0].Args[15] != 140
                 || !(rec.PictureStates[0].Flags is { } p0Flags
                     && p0Flags.TryGetValue("blend", out int p0Blend) && p0Blend == 1
                     && p0Flags.TryGetValue("scale_mode", out int p0ScaleMode) && p0ScaleMode == 3)
@@ -806,6 +810,72 @@ public partial class SaveImportTest : Node
             {
                 GD.PrintErr($"RETAIL_EXPORT_FAILED: batch exported .sav failed validation: {e1} / {e2}");
                 return false;
+            }
+
+            // 5. Retail H-scene save regression: picture RGB tone restore, steady face state without
+            // 1-frame intermediate flicker on chained CE333 calls, and H-scene motion CE auto-resume.
+            string hSave08 = Path.Combine(saveDir, "SaveData08.sav");
+            if (File.Exists(hSave08))
+            {
+                var imp08 = LegacySaveImporter.ImportFile(hSave08, 8);
+                var pic1992 = imp08.Recovered.PictureStates.Find(p => p.Number == 1992);
+                var pic1994 = imp08.Recovered.PictureStates.Find(p => p.Number == 1994);
+                if (pic1992 == null || pic1992.Args.Count < 16 || (pic1992.Args[10] & 0x0200_0000) == 0
+                    || pic1992.Args[13] != 50 || pic1992.Args[14] != 50 || pic1992.Args[15] != 50
+                    || pic1994 == null || pic1994.Args.Count < 16 || (pic1994.Args[10] & 0x0200_0000) == 0
+                    || pic1994.Args[13] != 25 || pic1994.Args[14] != 25 || pic1994.Args[15] != 25)
+                {
+                    string d1992 = pic1992 == null ? "null" : string.Join(",", pic1992.Args);
+                    string d1994 = pic1994 == null ? "null" : string.Join(",", pic1994.Args);
+                    GD.PrintErr($"RETAIL_EXPORT_FAILED: SaveData08 H-scene gauge track/frame tone mismatch: 1992=[{d1992}] 1994=[{d1994}]");
+                    return false;
+                }
+
+                string hSlotPath = Path.Combine(tempDir, "hscene_saves", "save_01.json");
+                Directory.CreateDirectory(Path.GetDirectoryName(hSlotPath)!);
+                var hHarness = new SessionHarness(this, dataPath, hSlotPath);
+                hHarness.Session.ScriptedInput = false;
+                if (!hHarness.Session.LoadRetailSave(hSave08, 0))
+                {
+                    GD.PrintErr("RETAIL_EXPORT_FAILED: LoadRetailSave failed on SaveData08.sav");
+                    return false;
+                }
+                int expectedFaceState = hHarness.Vm.Vm.Vars.Get(241);
+                for (int f = 0; f < 80; f++)
+                {
+                    hHarness.Session.AdvanceFrame();
+                    int actualFaceState = hHarness.Vm.Vm.Vars.Get(241);
+                    if (actualFaceState != expectedFaceState)
+                    {
+                        GD.PrintErr($"RETAIL_EXPORT_FAILED: SaveData08 face state var[241] flickered on frame {f}: expected {expectedFaceState}, got {actualFaceState}");
+                        return false;
+                    }
+                }
+                if (hHarness.Session.AutoEventStarts(334) < 1)
+                {
+                    GD.PrintErr("RETAIL_EXPORT_FAILED: SaveData08 did not auto-resume CE334 blink painter");
+                    return false;
+                }
+            }
+
+            string hSave12 = Path.Combine(saveDir, "SaveData12.sav");
+            if (File.Exists(hSave12))
+            {
+                string hSlot12 = Path.Combine(tempDir, "hscene_saves12", "save_01.json");
+                Directory.CreateDirectory(Path.GetDirectoryName(hSlot12)!);
+                var hHarness12 = new SessionHarness(this, dataPath, hSlot12);
+                hHarness12.Session.ScriptedInput = false;
+                if (!hHarness12.Session.LoadRetailSave(hSave12, 0))
+                {
+                    GD.PrintErr("RETAIL_EXPORT_FAILED: LoadRetailSave failed on SaveData12.sav");
+                    return false;
+                }
+                for (int f = 0; f < 10; f++) hHarness12.Session.AdvanceFrame();
+                if (hHarness12.Session.AutoEventStarts(348) < 1 || hHarness12.Session.AutoEventStarts(353) < 1)
+                {
+                    GD.PrintErr($"RETAIL_EXPORT_FAILED: SaveData12 did not auto-resume CE348/CE353 (starts 348={hHarness12.Session.AutoEventStarts(348)} 353={hHarness12.Session.AutoEventStarts(353)})");
+                    return false;
+                }
             }
 
             // Optional external probe output for Rust wolf-save cross-check when LWsmf_EXPORT_PROBE is set.

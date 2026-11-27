@@ -182,6 +182,35 @@ public static class AutoEventsTest
         Check(!liveBattleAuto.IsRunning(liveBattleVm, 243) && noDup243.Started == 0,
             "live play (LoopVisualPainters) must not auto-spawn duplicate CE243 on var350==2");
 
+        // Imported retail H-scene saves must also resume continuous motion/blink painters (CE348/CE413),
+        // and CE404 only when var[62]>=1 confirms an active H-scene (never on bedroom saves with stale var[137]==6).
+        var hMotionVm = new EventVm();
+        AddLoopProg(hMotionVm, 348, 2, 2_000_099, 1);
+        AddLoopProg(hMotionVm, 413, 2, 2_000_137, 6);
+        AddLoopProg(hMotionVm, 404, 2, 2_000_137, 6);
+        var hMotionAuto = AutoEvents.FromPrograms(hMotionVm.Programs.Values);
+        hMotionVm.Vars.Set(99, 1);
+        hMotionVm.Vars.Set(137, 6);
+        hMotionVm.Vars.Set(62, 0);
+        hMotionAuto.PrimeLatched(hMotionVm);
+        hMotionAuto.LoopVisualPainters = true;
+        hMotionAuto.Sync(hMotionVm);
+        Check(hMotionAuto.IsRunning(hMotionVm, 348) && hMotionAuto.IsRunning(hMotionVm, 413),
+            "imported H-scene save must resume CE348 and CE413 under LoopVisualPainters");
+        Check(!hMotionAuto.IsRunning(hMotionVm, 404),
+            "CE404 must stay suppressed on non-H-scene load when var[62]==0 even if var[137]==6");
+
+        var hCowgirlVm = new EventVm();
+        AddLoopProg(hCowgirlVm, 404, 2, 2_000_137, 6);
+        var hCowgirlAuto = AutoEvents.FromPrograms(hCowgirlVm.Programs.Values);
+        hCowgirlVm.Vars.Set(137, 6);
+        hCowgirlVm.Vars.Set(62, 1);
+        hCowgirlAuto.PrimeLatched(hCowgirlVm);
+        hCowgirlAuto.LoopVisualPainters = true;
+        hCowgirlAuto.Sync(hCowgirlVm);
+        Check(hCowgirlAuto.IsRunning(hCowgirlVm, 404),
+            "imported H-scene save with var[62]>=1 and var[137]==6 must resume CE404");
+
         Console.WriteLine($"AUTO_EVENTS_TEST_OK count={auto.EventCount} start={opened.Started} resume={replayed.Started} gated={gated.Started}");
     }
 

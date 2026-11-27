@@ -29,6 +29,7 @@ public static class VmTest
         TestOpcode111ConditionAndEscape();
         TestOpcode180WaitFrames();
         TestOpcode210CallChildAndReturn();
+        TestOpcode210ResumeOnChildReturn();
         TestOpcode179CountedLoopAndBreak();
         TestOpcode212LabelJump();
         TestCommonSelfPersistsAcrossCalls();
@@ -2037,6 +2038,43 @@ public static class VmTest
             ProgramLoader.ClearCache();
             try { System.IO.Directory.Delete(tmpDir, true); } catch (System.IO.IOException) { }
         }
+    }
+
+    private static void TestOpcode210ResumeOnChildReturn()
+    {
+        Console.WriteLine("  Testing Opcode 210 same-frame child return (ResumeOnChildReturn)...");
+        var childA = Program.FromSlots(91, "ChildA", new List<Slot>
+        {
+            Slot.Command(121, [2_000_000, 1, 0, 0x0004])
+        });
+        var childB = Program.FromSlots(92, "ChildB", new List<Slot>
+        {
+            Slot.Command(121, [2_000_000, 2, 0, 0x0004])
+        });
+        var parent = Program.FromSlots(90, "Parent", new List<Slot>
+        {
+            Slot.Command(210, [500091, 0]),
+            Slot.Command(210, [500092, 0]),
+            Slot.Command(121, [2_000_001, 9, 0, 0x0004])
+        });
+
+        var oracleVm = new EventVm();
+        oracleVm.RegisterProgram(childA);
+        oracleVm.RegisterProgram(childB);
+        oracleVm.RegisterProgram(parent);
+        oracleVm.CreateInstance(90);
+        oracleVm.StepFrame();
+        if (oracleVm.Vars.Get(0) != 1 || oracleVm.Vars.Get(1) != 0)
+            throw new Exception($"Oracle mode (ResumeOnChildReturn=false) expected var0=1,var1=0 after 1 frame, got var0={oracleVm.Vars.Get(0)},var1={oracleVm.Vars.Get(1)}");
+
+        var liveVm = new EventVm { ResumeOnChildReturn = true };
+        liveVm.RegisterProgram(childA);
+        liveVm.RegisterProgram(childB);
+        liveVm.RegisterProgram(parent);
+        liveVm.CreateInstance(90);
+        liveVm.StepFrame();
+        if (liveVm.Vars.Get(0) != 2 || liveVm.Vars.Get(1) != 9 || liveVm.Instances.Count != 0)
+            throw new Exception($"Live mode (ResumeOnChildReturn=true) expected var0=2,var1=9,instances=0 after 1 frame, got var0={liveVm.Vars.Get(0)},var1={liveVm.Vars.Get(1)},instances={liveVm.Instances.Count}");
     }
 
     private sealed class DelegateDbHost(Func<DbOp, DbValue?> handler) : NullHost

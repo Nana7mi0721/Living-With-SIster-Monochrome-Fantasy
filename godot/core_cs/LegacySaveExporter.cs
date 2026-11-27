@@ -431,7 +431,16 @@ public static class LegacySaveExporter
             bw.Write(vscale);
             bw.Write(0);
 
-            for (int k = 0; k < 6; k++) bw.Write(0u);  // vals1
+            bool hasTone = (Arg(10, 0) & 0x0200_0000) != 0 && pic.Args != null && pic.Args.Count > 15;
+            int toneDeltaR = hasTone ? Math.Clamp((int)Math.Round((Math.Clamp(Arg(13, 100), 0, 200) - 100) * 255.0 / 100.0, MidpointRounding.AwayFromZero), -255, 255) : 0;
+            int toneDeltaG = hasTone ? Math.Clamp((int)Math.Round((Math.Clamp(Arg(14, 100), 0, 200) - 100) * 255.0 / 100.0, MidpointRounding.AwayFromZero), -255, 255) : 0;
+            int toneDeltaB = hasTone ? Math.Clamp((int)Math.Round((Math.Clamp(Arg(15, 100), 0, 200) - 100) * 255.0 / 100.0, MidpointRounding.AwayFromZero), -255, 255) : 0;
+            bw.Write(toneDeltaR);
+            bw.Write(toneDeltaG);
+            bw.Write(toneDeltaB);
+            bw.Write(toneDeltaR);
+            bw.Write(toneDeltaG);
+            bw.Write(toneDeltaB);
             for (int k = 0; k < 18; k++) bw.Write(0u); // vars19_36
             bw.Write((byte)0); bw.Write((byte)0); bw.Write((byte)0); // var37..39
             for (int k = 0; k < 4; k++) bw.Write(0u);  // vals2
