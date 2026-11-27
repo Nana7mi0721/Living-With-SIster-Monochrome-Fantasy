@@ -66,6 +66,7 @@ var
   WelcomeTitle: TNewStaticText;
   WelcomeHint: TNewStaticText;
   ImageSlotWidth: Integer;
+  ImageSlotHeight: Integer;
 
 function ShouldCreateDesktopIcon(): Boolean;
 begin
@@ -110,27 +111,36 @@ procedure LayoutFinishPage();
 var
   PosterHeight: Integer;
   PosterWidth: Integer;
+  SlotHeight: Integer;
 begin
   PosterWidth := ImageSlotWidth;
+  SlotHeight := WizardForm.FinishedPage.Height;
+  if SlotHeight <= 0 then
+    SlotHeight := ImageSlotHeight;
   PosterHeight := (PosterWidth * FinishPosterHeight) div FinishPosterWidth;
-  if PosterHeight > WizardForm.FinishedPage.Height then
+  if PosterHeight > SlotHeight then
   begin
-    PosterHeight := WizardForm.FinishedPage.Height;
+    PosterHeight := SlotHeight;
     PosterWidth := (PosterHeight * FinishPosterWidth) div FinishPosterHeight;
   end;
-  WizardForm.WizardBitmapImage.Left := (ImageSlotWidth - PosterWidth) div 2;
-  WizardForm.WizardBitmapImage.Top := 0;
-  WizardForm.WizardBitmapImage.Width := PosterWidth;
-  WizardForm.WizardBitmapImage.Height := PosterHeight;
-  WizardForm.WizardBitmapImage.Stretch := True;
+  WizardForm.WizardBitmapImage2.Left := (ImageSlotWidth - PosterWidth) div 2;
+  WizardForm.WizardBitmapImage2.Top := (SlotHeight - PosterHeight) div 2;
+  WizardForm.WizardBitmapImage2.Width := PosterWidth;
+  WizardForm.WizardBitmapImage2.Height := PosterHeight;
+  WizardForm.WizardBitmapImage2.Stretch := True;
+  WizardForm.WizardBitmapImage2.Center := True;
 end;
 
 procedure InitializeWizard();
 begin
   WizardForm.WelcomeLabel1.Visible := False;
   WizardForm.WelcomeLabel2.Visible := False;
-  ImageSlotWidth := WizardForm.WizardBitmapImage.Width;
+  ImageSlotWidth := WizardForm.WizardBitmapImage2.Width;
+  ImageSlotHeight := WizardForm.WizardBitmapImage2.Height;
   WizardForm.WizardBitmapImage.Visible := False;
+  WizardForm.WizardBitmapImage.Anchors := [];
+  WizardForm.WizardBitmapImage2.Visible := False;
+  WizardForm.WizardBitmapImage2.Anchors := [];
 
   ExtractTemporaryFile('setup_welcome.png');
   WelcomeBanner := TBitmapImage.Create(WizardForm);
@@ -183,18 +193,21 @@ begin
   if CurPageID = wpWelcome then
   begin
     WizardForm.WizardBitmapImage.Visible := False;
+    WizardForm.WizardBitmapImage2.Visible := False;
     WelcomeBanner.Visible := True;
     LayoutWelcomePage();
   end
   else if CurPageID = wpFinished then
   begin
     WelcomeBanner.Visible := False;
-    WizardForm.WizardBitmapImage.Visible := True;
     LayoutFinishPage();
+    WizardForm.WizardBitmapImage.Visible := False;
+    WizardForm.WizardBitmapImage2.Visible := True;
   end
   else
   begin
     WelcomeBanner.Visible := False;
     WizardForm.WizardBitmapImage.Visible := False;
+    WizardForm.WizardBitmapImage2.Visible := False;
   end;
 end;

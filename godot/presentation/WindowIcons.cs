@@ -11,6 +11,17 @@ public partial class WindowIcons : RefCounted
     private const int IconSmall2 = 2;
     private const int SmCxSmIcon = 49;
     private const int SmCySmIcon = 50;
+    private const int GclpHicon = -14;
+    private const int GclpHiconSm = -34;
+    private const uint GaRoot = 2;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
+    private const uint SwpFrameChanged = 0x0020;
+    private const uint RdwInvalidate = 0x0001;
+    private const uint RdwErase = 0x0004;
+    private const uint RdwFrame = 0x0400;
     private const uint IconResourceVersion = 0x00030000;
 
     private IntPtr _smallIcon;
@@ -52,9 +63,7 @@ public partial class WindowIcons : RefCounted
             return false;
         }
 
-        SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall), small);
-        SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall2), taskbar);
-        SendMessage(hwnd, WmSetIcon, new IntPtr(IconBig), big);
+        ApplyIcons(hwnd, small, taskbar, big);
         _smallIcon = small;
         _taskbarIcon = taskbar;
         _bigIcon = big;
@@ -76,10 +85,56 @@ public partial class WindowIcons : RefCounted
         if (!IsWindow(hwnd))
             return false;
 
-        SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall), _smallIcon);
-        SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall2), _taskbarIcon);
-        SendMessage(hwnd, WmSetIcon, new IntPtr(IconBig), _bigIcon);
+        ApplyIcons(hwnd, _smallIcon, _taskbarIcon, _bigIcon);
         return true;
+    }
+
+    private static void ApplyIcons(IntPtr hwnd, IntPtr small, IntPtr taskbar, IntPtr big)
+    {
+        IntPtr root = RootWindow(hwnd);
+        SetClassIcon(hwnd, big, taskbar);
+        if (root != hwnd)
+            SetClassIcon(root, big, taskbar);
+
+        SendIcons(hwnd, small, taskbar, big);
+        if (root != hwnd)
+            SendIcons(root, small, taskbar, big);
+
+        RefreshWindow(root);
+        if (root != hwnd)
+            RefreshWindow(hwnd);
+    }
+
+    private static IntPtr RootWindow(IntPtr hwnd)
+    {
+        IntPtr root = GetAncestor(hwnd, GaRoot);
+        return root == IntPtr.Zero ? hwnd : root;
+    }
+
+    private static void SetClassIcon(IntPtr hwnd, IntPtr big, IntPtr small)
+    {
+        SetClassLongPtr(hwnd, GclpHicon, big);
+        SetClassLongPtr(hwnd, GclpHiconSm, small);
+    }
+
+    private static void SendIcons(IntPtr hwnd, IntPtr small, IntPtr taskbar, IntPtr big)
+    {
+        SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall), small);
+        SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall2), taskbar);
+        SendMessage(hwnd, WmSetIcon, new IntPtr(IconBig), big);
+    }
+
+    private static void RefreshWindow(IntPtr hwnd)
+    {
+        SetWindowPos(
+            hwnd,
+            IntPtr.Zero,
+            0,
+            0,
+            0,
+            0,
+            SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
+        RedrawWindow(hwnd, IntPtr.Zero, IntPtr.Zero, RdwInvalidate | RdwErase | RdwFrame);
     }
 
     public void Release()
@@ -168,6 +223,25 @@ public partial class WindowIcons : RefCounted
 
     [DllImport("user32.dll", EntryPoint = "SendMessageW", SetLastError = true)]
     private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr window, uint flags);
+
+    [DllImport("user32.dll", EntryPoint = "SetClassLongPtrW", SetLastError = true)]
+    private static extern IntPtr SetClassLongPtr(IntPtr window, int index, IntPtr newValue);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(
+        IntPtr window,
+        IntPtr insertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        uint flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool RedrawWindow(IntPtr window, IntPtr updateRect, IntPtr updateRegion, uint flags);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyIcon(IntPtr icon);

@@ -10,11 +10,12 @@
 - **Windows 快捷键按功能重排**：`F4` 窗口倍增、`Shift+F4` 缩放过滤、`F5` 帧率切换、`Shift+F5` 标题栏 FPS、`F6/F7/F8` 存/读/导入导出、`F9/F10` 回顾/诊断、`F11` 全屏↔最小窗口；`W` 保持移动/回顾滚动，不绑定帧率。
 - **发布包内置按键说明**：Windows 包新增 `按键说明.txt`，并由发布审计强制校验。
 - **多端发行资源与发行信息**：Windows 主程序/安装器、任务栏、窗口角标与 Android/iOS 应用图标改由本地 `_publish` 素材派生；移动端显示名为 `妹相随`，Windows 产品名为 `妹相随～黑白世界的缤纷冒险～`，发布者与版权方为 `Inusuku`。
-- **Windows 首次启动任务栏图标修复**：`ICON_SMALL` 使用窗口角标、`ICON_SMALL2` 使用任务栏图标、`ICON_BIG` 使用大图标，并在窗口注册后补发两次图标消息，消除 Explorer 缓存 Godot 默认图标的问题。
+- **Windows 首次启动任务栏图标修复**：`ICON_SMALL` 使用窗口角标、`ICON_SMALL2` 使用任务栏图标、`ICON_BIG` 使用大图标；除 `WM_SETICON` 外同步写入 `GCLP_HICON/GCLP_HICONSM` 窗口类图标，并在窗口注册后补发图标消息，消除 Explorer 缓存或类图标回退显示 Godot 通用图标的问题。
 - **Android 自适应图标铺满修复**：前景由 `62%` 提升到 `72%`，覆盖系统可见区；背景由纯黑改为从源图四角派生的浅色，消除启动器图标黑边。新版 Debug APK `573,075,046 B`，SHA-256 `36c917ec102c37213efd7df3f595e0267ee61731d81e816d6cfc545cb42fd15c`，前景不透明区 `60..371`、背景 `#E8E8E6`。
 - **统一发布包名**：三端输出统一为 `LWSMF-<版本>-<系统>-<指令集>[-slim]`；Windows 安装器使用完整中文产品名，向导素材不裁切、不启用整窗背景。
-- **Windows 真无损安装包**：新增 `pack_media.py --lossless`（PNG/BMP 转像素级无损 WebP，JPG/MP3/OGG/WAV 原字节保留）与 `package_release.sh --lossless --brotli --installer`；使用原版 1× 媒体，正式输出 `LWSMF-0.1.0-windows-x64-setup.exe`（`583,384,556 B`，SHA-256 `4c0b3c6bdd86a5cf79d5fd668bf8e72bd75133ce3e58169c8cd72aca9e97ae25`），不带 `-slim` 后缀。
+- **Windows 真无损安装包**：新增 `pack_media.py --lossless`（PNG/BMP 转像素级无损 WebP，JPG/MP3/OGG/WAV 原字节保留）与 `package_release.sh --lossless --brotli --installer`；使用原版 1× 媒体，不带 `-slim` 后缀。上一轮指纹为 `583,384,556 B` / `4c0b3c6bdd86a5cf79d5fd668bf8e72bd75133ce3e58169c8cd72aca9e97ae25`，后续因完成页/图标修复重建，最终指纹见下一条。
 - **发行素材重接与紧凑安装向导**：母版目录改为 `work/all/_publish`，使用 `icon_pc_dock.png`、`setup_welcome.png` 与 `setup_finish.png`；欢迎页和完成页原字节直通，完成页按 `1807×2348` 实际比例布局而非固定 1:2。流程固定为欢迎页→目标位置→安装进度→完成页，仅简体中文、始终显示自定义路径页，并补上 Godot 预导入超时保护。`TitleGraphic.jpg` 已从 `media.pak` 原字节恢复；Git Bash `/setintegritylevel` 路径转换修复保留。
+- **完成页比例与任务栏类图标修复重建**：安装器 `LayoutFinishPage()` 改回完成页真实控件 `WizardBitmapImage2`，清空默认锚点后按 `setup_finish.png` 的 `1807×2348` 比例居中；150% DPI 实测槽位 `320×613`、海报 `320×415`。正式包重建为 Windows 目录 `722,232,528 B`、ZIP `600,994,281 B`（SHA-256 `0ccbcc020b748583f25496eb6462e848f90c39b3ee5d746f4e76d358b8ea59da`）、Setup `583,393,280 B`（SHA-256 `44b7d76a7bfeaf30cea010bb0966431395795507207ae3bfbd537230acfcd301`）；静默安装/卸载烟测通过。
 
 ---
 

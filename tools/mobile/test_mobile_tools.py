@@ -646,6 +646,16 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("LayoutFinishPage", iss_tmpl)
         self.assertIn("PosterHeight := (PosterWidth * FinishPosterHeight) div FinishPosterWidth", iss_tmpl)
         self.assertNotIn("PosterWidth := PosterHeight div 2", iss_tmpl)
+        finish_layout = iss_tmpl.split("procedure LayoutFinishPage();", 1)[1].split(
+            "procedure InitializeWizard();", 1
+        )[0]
+        self.assertIn("WizardBitmapImage2.Left", finish_layout)
+        self.assertIn("WizardBitmapImage2.Top", finish_layout)
+        self.assertIn("WizardBitmapImage2.Width", finish_layout)
+        self.assertIn("WizardBitmapImage2.Height", finish_layout)
+        self.assertNotIn("WizardBitmapImage.Left", finish_layout)
+        self.assertIn("WizardForm.WizardBitmapImage2.Anchors := []", iss_tmpl)
+        self.assertIn("WizardForm.WizardBitmapImage2.Visible := True", iss_tmpl)
         self.assertNotIn("WizardBackImageFile", iss_tmpl)
         self.assertIn("WizardStyle=modern", iss_tmpl)
         self.assertIn("WizardSizePercent=100,115", iss_tmpl)
@@ -1218,6 +1228,9 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("WmSetIcon, new IntPtr(IconSmall2)", window_icons)
         self.assertIn("_taskbarIcon", window_icons)
         self.assertIn("CreateIcon(dockbarIco, smallWidth, smallHeight)", window_icons)
+        self.assertIn("SetClassLongPtr", window_icons)
+        self.assertIn("GclpHiconSm", window_icons)
+        self.assertIn("GetAncestor(hwnd, GaRoot)", window_icons)
         self.assertIn("_refresh_windows_window_icons.call_deferred", game_root)
 
     def test_sync_boot_assets_from_retail_logo_and_pak(self) -> None:

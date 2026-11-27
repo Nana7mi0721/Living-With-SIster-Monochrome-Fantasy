@@ -6,7 +6,7 @@
 >
 > 适用：Godot 4.7.2 .NET，Windows x64
 >
-> 本文记录发布预设、打包脚本、包体账本、发布审计与验证记录。仓库规范见 [../../AGENTS.md](../../AGENTS.md)，定稿决策见 [DECISIONS.md](DECISIONS.md)（D-53 / D-64 / D-65 / D-92 / D-94 / D-95 / D-96 / D-97 / D-100）。
+> 本文记录发布预设、打包脚本、包体账本、发布审计与验证记录。仓库规范见 [../../AGENTS.md](../../AGENTS.md)，定稿决策见 [DECISIONS.md](DECISIONS.md)（D-53 / D-64 / D-65 / D-92 / D-94 / D-95 / D-96 / D-97 / D-100 / D-101）。
 
 ## 1. 发布策略概览
 
@@ -62,7 +62,7 @@ dotnet/embed_build_outputs=false
 | `setup_finish.png` | 完整 `1807×2348` 竖版海报；`copy2` 原字节直通，用于完成页并按源图比例布局 |
 | `setup_small.png` | 内页右上角 `55×55` 白底应用图标；构建期由 `icon_pc.png` 派生 |
 
-Windows 运行时通过 `WindowIcons.cs` 调用 `WM_SETICON`：任务栏使用 `icon_pc_dockbar.bin`，窗口左上角使用 `icon_pc_corner.bin`。`.bin` 仅是 `.ico` 的逐字节副本，用于绕过 Godot 图片导入管线；两者由打包测试断言完全一致。
+Windows 运行时通过 `WindowIcons.cs` 同时调用 `WM_SETICON` 与窗口类图标 API：任务栏使用 `icon_pc_dockbar.bin`，窗口左上角使用 `icon_pc_corner.bin`；窗口类大/小图标也指向任务栏图，覆盖 Explorer 的类图标回退路径。`.bin` 仅是 `.ico` 的逐字节副本，用于绕过 Godot 图片导入管线；两者由打包测试断言完全一致。
 
 Windows 版本资源固定为简体中文语言 `0x0804`，字段如下：
 
@@ -73,7 +73,7 @@ Windows 版本资源固定为简体中文语言 `0x0804`，字段如下：
 | 版权 | `Copyright (C) 2026 Inusuku. All rights reserved.` |
 | 文件版本 / 产品版本 | 打包脚本的 `--version`，规范化为四段数字 |
 
-移动端应用显示名统一为 `妹相随`。安装器仅声明简体中文语言并设置 `ShowLanguageDialog=no`，不再显示语言选择框。现行紧凑向导使用 `WizardStyle=modern`、`DisableWelcomePage=no`、`DisableReadyPage=yes`，流程为欢迎页→目标位置→进度→完成；欢迎页由独立 `TBitmapImage` 在顶部按 `16:9` 完整显示 `setup_welcome.png`，完成页由原生 `WizardBitmapImage` 显示 `setup_finish.png`，构建期把源 PNG 的真实宽高注入 Inno 脚本并等比适配，不裁切、不拉伸，内页右上角使用 `setup_small.png`，不启用 `WizardBackImageFile` 整窗背景效果。`DisableDirPage=no` 始终显示自定义安装路径页。默认安装目录使用完整中文产品名，固定 `AppId` 保持升级/卸载识别稳定。
+移动端应用显示名统一为 `妹相随`。安装器仅声明简体中文语言并设置 `ShowLanguageDialog=no`，不再显示语言选择框。现行紧凑向导使用 `WizardStyle=modern`、`DisableWelcomePage=no`、`DisableReadyPage=yes`，流程为欢迎页→目标位置→进度→完成；欢迎页由独立 `TBitmapImage` 在顶部按 `16:9` 完整显示 `setup_welcome.png`，完成页由原生 `WizardBitmapImage2` 显示 `setup_finish.png`，构建期把源 PNG 的真实宽高注入 Inno 脚本并等比适配，不裁切、不拉伸，内页右上角使用 `setup_small.png`，不启用 `WizardBackImageFile` 整窗背景效果。`DisableDirPage=no` 始终显示自定义安装路径页。默认安装目录使用完整中文产品名，固定 `AppId` 保持升级/卸载识别稳定。
 
 ## 4. 打包命令与流程
 
@@ -214,11 +214,30 @@ bash tools/package_release.sh --lossless --brotli --installer --version 0.1.0
   - `game/Lwsmf.exe` SHA-256：`b63afe67cba00c0ecbfa8b6ad4d3ffa1bc5d4bce65a38919eb7f5578e419455b`
   - `work/all/media.pak` SHA-256：`58400bdb22143dddff42f7b1586cfedf54c777555c556d49d21d63de06cedb30`
   - `LWSMF-0.1.0-android-arm64.apk` SHA-256：`36c917ec102c37213efd7df3f595e0267ee61731d81e816d6cfc545cb42fd15c`
-- **安装器布局**：构建期从 `setup_finish.png` 读取 `1807×2348` 并注入 `FinishPosterWidth/FinishPosterHeight`；`LayoutFinishPage()` 以槽宽计算等比高度，超过页面高度时再等比缩到页面内，全程不裁切、不拉伸。欢迎页和完成页文件均以 `copy2` 原字节直通。
+- **安装器布局**：构建期从 `setup_finish.png` 读取 `1807×2348` 并注入 `FinishPosterWidth/FinishPosterHeight`；欢迎页和完成页文件均以 `copy2` 原字节直通。本轮完成页实际仍由未布局的 `WizardBitmapImage2` 显示，比例问题已由 5.5 修正。
 - **Windows 烟测**：Setup 退出码 `0`，静默安装后 `game/Lwsmf.exe`、`按键说明.txt` 与 `work/all/media.pak` 均存在，媒体包 SHA-256 与清单一致；静默卸载退出码 `0`，安装目录、桌面快捷方式和开始菜单项均已清理。
 - **Android 图标**：`mipmap-xxxhdpi-v4/icon_foreground.webp` 的不透明区为 `60..371`（311/432，72%），背景为 `#E8E8E6`；中央 `288×288` 可见区被完全覆盖，无启动器黑边。APK 校验为 `ANDROID_APK_VERIFY_OK entries=384`。
 - **回归边界**：29 项移动/发布工具单测、决策表 lint、隐私审计和 C# Release 编译通过。完整 38 步 Godot 门禁受本机 `work/retail_backup/Save/SaveData01.sav` 被真实游戏进度覆盖影响（`387,265 B`，测试基线为 `366,146 B`），`Smoke` 战斗夹具与 M13 两项无法作为有效回归；这与本轮发行素材和安装器改动无关。
 - **资源恢复**：`work/all/SystemGraphic/TitleGraphic.jpg` 已从 `work/all/media.pak` 原字节恢复，`358,497 B`、`1024×576`、SHA-256 `33d1a4299e0fb2544967b34769f8e71871333110918084564eb1dd6c257dc6ba`。
+
+### 5.5 完成页比例与任务栏类图标修复重建（2026-11-27）
+
+| 指标 | 实测值 |
+| :--- | ---: |
+| Windows 发布目录 | **722,232,528 B**（218 个文件） |
+| Windows ZIP | **600,994,281 B** |
+| Windows Setup | **583,393,280 B** |
+| 完成页槽位 / 海报 | `320×613` / `320×415`（150% DPI） |
+| 媒体包 | `517,980,992 B`，SHA-256 未变 |
+
+- **完成页根因**：模板此前误改欢迎页的 `WizardBitmapImage`，完成页实际使用的 `WizardBitmapImage2` 仍保留 `164:314` 默认锚点，被 Inno 的 `AnchorOuterPage` 强制拉伸。现改为在 `InitializeWizard()` 清空两张大图的 `Anchors`，在 `CurPageChanged(wpFinished)` 对 `WizardBitmapImage2` 按 `1807×2348` 源图比例居中布局后再显示。实测槽位 `320×613`、海报 `320×415`，无裁切、无拉伸。
+- **任务栏根因**：用户截图中的通用图标与 Godot 窗口类默认图标一致，说明 Explorer 走了 `GCLP_HICON/GCLP_HICONSM` 回退，而旧实现只写 `WM_SETICON`。现同时设置根窗口类图标并刷新，实测类大图标 `256×256`、类小图标 `24×24` 均为 `icon_pc_dockbar`。
+- **正式指纹**：
+  - `LWSMF-0.1.0-windows-x64.zip` SHA-256：`0ccbcc020b748583f25496eb6462e848f90c39b3ee5d746f4e76d358b8ea59da`
+  - `LWSMF-0.1.0-windows-x64-setup.exe` SHA-256：`44b7d76a7bfeaf30cea010bb0966431395795507207ae3bfbd537230acfcd301`
+  - `game/Lwsmf.exe` SHA-256：`b63afe67cba00c0ecbfa8b6ad4d3ffa1bc5d4bce65a38919eb7f5578e419455b`
+  - `work/all/media.pak` SHA-256：`58400bdb22143dddff42f7b1586cfedf54c777555c556d49d21d63de06cedb30`
+- **烟测**：正式 Setup 静默安装退出码 `0`，`game/Lwsmf.exe`、`按键说明.txt` 与 `work/all/media.pak` 均落盘，媒体包哈希一致；静默卸载退出码 `0`，安装目录、开始菜单与桌面快捷方式均清理。29 项发布工具单测、Inno 6.7.4 实际编译与 C# Release 0 警告/0 错误通过。完整 Godot 门禁仍有 2 项与本轮无关的既有失败：`Smoke` 战斗夹具仅跑 3 回合、M13 slot 1 超时。
 
 ## 6. 发布审计与移动端配套
 
