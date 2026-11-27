@@ -40,8 +40,7 @@ public sealed class WolfRng
     /// </summary>
     public static WolfRng FromEnvironment()
     {
-        var live = Environment.GetEnvironmentVariable("WOLF_LIVE_RNG");
-        if (string.IsNullOrEmpty(live) || live == "0")
+        if (!CoreRuntimeConfig.LiveRng)
             return new WolfRng();
         // Opcode randomness drains the event stream rather than _state; Keep _state on
         // its retail default and seed only the event cursor from the clock.

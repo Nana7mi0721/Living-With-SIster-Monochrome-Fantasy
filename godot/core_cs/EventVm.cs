@@ -126,7 +126,6 @@ public sealed class EventVm
     public bool EndGameRequested { get; set; }
     public bool ReturnToTitleRequested { get; set; }
     private readonly Dictionary<string, int> _titleToId = new(StringComparer.Ordinal);
-    private readonly HashSet<int> _freshInstanceIds = new();
     private readonly HashSet<int> _enteredInstanceIds = new();
 
     // Transition setting installed by opcode 160 and consumed by 161/162
@@ -188,7 +187,8 @@ public sealed class EventVm
         if (inst.Id >= _nextInstanceId) _nextInstanceId = inst.Id + 1;
     }
 
-    public Instance? CreateInstance(Program program, int? parentId = null, int? returnTo = null)
+    public Instance? CreateInstance(Program program, int? parentId = null, int? returnTo = null,
+        SelfBankPolicy selfPolicy = SelfBankPolicy.PersistentAll)
     {
         if (Instances.Count >= MaxInstances)
         {
@@ -203,9 +203,12 @@ public sealed class EventVm
             EventId = program.Id,
             Program = program,
             Pc = 0,
-            ReturnTo = returnTo
+            ReturnTo = returnTo,
+            SelfPolicy = selfPolicy
         };
-        if (program.SelfBase == Program.CommonSelfBase && CommonSelf.TryGetValue(program.Id, out var bank))
+        if (selfPolicy != SelfBankPolicy.Ephemeral
+            && program.SelfBase == Program.CommonSelfBase
+            && CommonSelf.TryGetValue(program.Id, out var bank))
         {
             inst.Self.CopyFrom(bank);
         }
@@ -213,7 +216,8 @@ public sealed class EventVm
         return inst;
     }
 
-    public Instance? CreateInstance(int eventId, int? parentId = null, int? returnTo = null)
+    public Instance? CreateInstance(int eventId, int? parentId = null, int? returnTo = null,
+        SelfBankPolicy selfPolicy = SelfBankPolicy.PersistentAll)
     {
         var prog = GetProgram(eventId);
         if (prog == null)
@@ -222,7 +226,7 @@ public sealed class EventVm
             Host.Log($"unknown common event id {eventId}; call dropped");
             return null;
         }
-        return CreateInstance(prog, parentId, returnTo);
+        return CreateInstance(prog, parentId, returnTo, selfPolicy);
     }
 
     /// <summary>
@@ -230,14 +234,8 @@ public sealed class EventVm
     /// (exec.rs start_event_fresh). CE241/CE242 have no script-issued 210 call, so their
     /// per-invocation state must not leak through the common-event store.
     /// </summary>
-    public Instance? CreateFreshInstance(int eventId, int? parentId = null, int? returnTo = null)
-    {
-        var instance = CreateInstance(eventId, parentId, returnTo);
-        if (instance == null) return null;
-        instance.Self.Restore(null, null);
-        _freshInstanceIds.Add(instance.Id);
-        return instance;
-    }
+    public Instance? CreateFreshInstance(int eventId, int? parentId = null, int? returnTo = null) =>
+        CreateInstance(eventId, parentId, returnTo, SelfBankPolicy.Ephemeral);
 
     /// <summary>Start a common event with 211-style call arguments bound before its first slot.</summary>
     public Instance? StartEventWithArgs(int eventId, int[] args, string[] strings, bool parallel = false)
@@ -297,14 +295,31 @@ public sealed class EventVm
     }
 
     /// <summary>
-    /// exec.rs store_common_self: a finished/stopped common event folds its bank
-    /// back so the next invocation starts from the final values. A running
-    /// instance never sees another instance's writes.
+    /// exec.rs store_common_self: fold a finished/stopped common event's bank back
+    /// according to its <see cref="SelfBankPolicy"/>. A running instance never sees
+    /// another instance's writes.
     /// </summary>
-    private void PersistCommonSelf(Instance inst)
+    private void PersistCommonSelf(Instance inst, bool isForcedStop)
     {
-        if (_freshInstanceIds.Contains(inst.Id)) return;
         if (inst.Program.SelfBase != Program.CommonSelfBase) return;
+        if (inst.SelfPolicy == SelfBankPolicy.Ephemeral) return;
+        if (isForcedStop && inst.SelfPolicy == SelfBankPolicy.PersistentOnFinishOnly) return;
+        if (CoreRuntimeConfig.TraceAutoEvents)
+        {
+            for (int i = 0; i < Instances.Count; i++)
+            {
+                var other = Instances[i];
+                if (other.Id != inst.Id
+                    && other.EventId == inst.EventId
+                    && other.Program.SelfBase == Program.CommonSelfBase
+                    && other.SelfPolicy != SelfBankPolicy.Ephemeral)
+                {
+                    Console.Error.WriteLine(
+                        $"[EventVm] concurrent CommonSelf write on event {inst.EventId}: persisting instance {inst.Id} while instance {other.Id} is still active");
+                    break;
+                }
+            }
+        }
         CommonSelf[inst.EventId] = inst.Self.Clone();
     }
 
@@ -1430,7 +1445,6 @@ public sealed class EventVm
                 case 174:
                     ReturnToTitleRequested = true;
                     ResetTransitionState();
-                    _freshInstanceIds.Clear();
                     _enteredInstanceIds.Clear();
                     _autoKeysDelivered.Clear();
                     _runCursor = 0;
@@ -1440,7 +1454,6 @@ public sealed class EventVm
                     EndGameRequested = true;
                     Host.EndGame();
                     ResetTransitionState();
-                    _freshInstanceIds.Clear();
                     _enteredInstanceIds.Clear();
                     _autoKeysDelivered.Clear();
                     _runCursor = 0;
@@ -1675,13 +1688,12 @@ public sealed class EventVm
 
         foreach (var other in Instances)
         {
-            if (doomed.Contains(other.Id)) PersistCommonSelf(other);
+            if (doomed.Contains(other.Id)) PersistCommonSelf(other, isForcedStop: true);
         }
         foreach (var other in Instances)
         {
             if (doomed.Contains(other.Id))
             {
-                _freshInstanceIds.Remove(other.Id);
                 _enteredInstanceIds.Remove(other.Id);
                 _autoKeysDelivered.Remove(other.Id);
             }
@@ -1701,7 +1713,6 @@ public sealed class EventVm
         ReturnToTitleRequested = false;
         ResetTransitionState();
         _runCursor = 0;
-        _freshInstanceIds.Clear();
         _enteredInstanceIds.Clear();
         _autoKeysDelivered.Clear();
         Instances.Clear();
@@ -1861,8 +1872,7 @@ public sealed class EventVm
                 }
 
                 // exec.rs reap_finished: capture the bank before dropping it.
-                PersistCommonSelf(inst);
-                _freshInstanceIds.Remove(inst.Id);
+                PersistCommonSelf(inst, isForcedStop: false);
                 _enteredInstanceIds.Remove(inst.Id);
                 OnInstanceFinished?.Invoke(inst);
 

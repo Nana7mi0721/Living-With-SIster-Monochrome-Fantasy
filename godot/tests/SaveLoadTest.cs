@@ -927,6 +927,88 @@ public partial class SaveLoadTest : Node
         SaveMigrator.ApplyRetailPostLoadTriggerIfNeeded(nativeWithInst);
         Check(nativeWithInst.Vars[302] == 1, "native save with live Instances must not alter v302");
 
+        // SaveAuditReport: captures schema migration, stripped transient artifacts, post-load trigger,
+        // encoding warnings, and read-only suspicious locks without mutating any game variables.
+        var auditedState = new SaveState
+        {
+            SchemaVersion = 1,
+            MapId = 1005,
+            MapFile = "SampleMapA.mps",
+            Vars = new List<int>(new int[600]),
+        };
+        auditedState.Vars[302] = 1;
+        auditedState.Vars[545] = 3;
+        auditedState.Vars[439] = 1;
+        auditedState.Vars[464] = 2;
+        auditedState.Vars[60] = 1;
+        auditedState.Vars[127] = 4;
+        auditedState.Pictures.Add(new SavedPicture { Number = 12050, Action = 0, File = "SystemFile/WindowBase.png" });
+        auditedState.Pictures.Add(new SavedPicture { Number = 15001, Action = 0, File = "SystemFile/WindowBase.png" });
+        auditedState.Pictures.Add(new SavedPicture { Number = -6, Action = 0, File = "DLC_data/dlc_imouto01_eye.png" });
+        auditedState.Pictures.Add(new SavedPicture { Number = -7, Action = 0, File = "cg/bg_01_home_d.jpg" });
+        auditedState.Audio.Add(new SavedAudio { Channel = 2, File = "SE/cancel1.mp3", Volume = 80 });
+        auditedState.Audio.Add(new SavedAudio { Channel = 0, File = "BGM/title.ogg", Volume = 70, Loop = true });
+
+        var audit = new SaveAuditReport { SourceKind = SaveAuditSource.NativeMain };
+        audit.EncodingWarnings.Add("str_var[0] at 0x0010: invalid UTF-8, replacement applied");
+        SaveMigrator.Normalize(auditedState, audit);
+        SaveMigrator.ApplyRetailPostLoadTriggerIfNeeded(auditedState, audit);
+        Check(audit.MigratedFromSchema == 1, $"audit must record schema 1 migration (got {audit.MigratedFromSchema})");
+        Check(audit.StrippedTransientPictures == 2, $"audit must count 2 stripped transient pics (got {audit.StrippedTransientPictures})");
+        Check(audit.StrippedLeakedToiletEye, "audit must record leaked toilet eye stripping");
+        Check(audit.StrippedTransientSe == 1, $"audit must count 1 stripped SE track (got {audit.StrippedTransientSe})");
+        Check(audit.RetailPostLoadTriggerApplied, "audit must record retail post-load trigger application");
+        Check(audit.EncodingWarnings.Count == 1, "audit must preserve encoding warnings");
+        Check(audit.SuspiciousLocks.Count == 4, $"audit must detect all 4 suspicious locks (got {audit.SuspiciousLocks.Count})");
+        Check(auditedState.Vars[545] == 3 && auditedState.Vars[439] == 1 && auditedState.Vars[464] == 2
+              && auditedState.Vars[60] == 1 && auditedState.Vars[127] == 4,
+            "SaveAuditReport suspicious lock inspection must stay strictly read-only and never mutate game vars");
+        string auditSummary = audit.FormatSummary();
+        Check(auditSummary.Contains("source=NativeMain") && auditSummary.Contains("schema=1->2")
+              && auditSummary.Contains("stripped_pics=2") && auditSummary.Contains("stripped_eye=true")
+              && auditSummary.Contains("stripped_se=1") && auditSummary.Contains("post_load_trigger=true")
+              && auditSummary.Contains("encoding_warnings=1") && auditSummary.Contains("var[545]=3")
+              && auditSummary.Contains("var[439]=1") && auditSummary.Contains("var[464]=2")
+              && auditSummary.Contains("var[60]=1,var[127]=4"),
+            $"FormatSummary missing expected fields: {auditSummary}");
+
+        // Night-raid lock requires both var[60]!=0 and var[127]!=0; var[60]!=0 alone must not flag.
+        var nightOnly = new List<int>(new int[600]);
+        nightOnly[60] = 1;
+        var nightAudit = new SaveAuditReport();
+        SaveMigrator.InspectSuspiciousLocks(nightOnly, nightAudit);
+        Check(nightAudit.SuspiciousLocks.Count == 0 && nightOnly[60] == 1,
+            "var[60]!=0 without var[127]!=0 must not flag night_raid_lock");
+
+        // End-to-end GameSession.LoadGameFrom updates LastSaveAudit for both NativeMain and NativeBackupFallback.
+        var sessionAuditSave = session.BuildSaveState();
+        Check(sessionAuditSave != null, "save state must build for session SaveAudit probe");
+        if (sessionAuditSave != null)
+        {
+            while (sessionAuditSave.Vars.Count <= 545) sessionAuditSave.Vars.Add(0);
+            sessionAuditSave.Vars[545] = 9;
+            sessionAuditSave.Pictures.Add(new SavedPicture { Number = 12010, Action = 0, File = "SystemFile/WindowBase.png" });
+            sessionAuditSave.Audio.Add(new SavedAudio { Channel = 2, File = "SE/click.mp3", Volume = 80 });
+            string auditSlotPath = Path.Combine(saveDir, "save_audit.json");
+            SaveCodec.Write(auditSlotPath, sessionAuditSave);
+            Check(session.LoadGameFrom(auditSlotPath), "LoadGameFrom must succeed on audit slot");
+            Check(session.LastSaveAudit != null
+                  && session.LastSaveAudit.SourceKind == SaveAuditSource.NativeMain
+                  && session.LastSaveAudit.StrippedTransientPictures == 1
+                  && session.LastSaveAudit.StrippedTransientSe == 1
+                  && session.LastSaveAudit.SuspiciousLocks.Any(l => l.Contains("var[545]=9")),
+                $"LoadGameFrom must populate LastSaveAudit (got {session.LastSaveAudit?.FormatSummary() ?? "null"})");
+            Check(vm.Vm.Vars.Get(545) == 9, "LoadGameFrom must not mutate var[545] during lock inspection");
+
+            // Corrupt main with valid .bak -> LastSaveAudit reports NativeBackupFallback.
+            SaveCodec.Write(auditSlotPath, sessionAuditSave);
+            File.WriteAllText(auditSlotPath, "{ broken");
+            Check(session.LoadGameFrom(auditSlotPath), "LoadGameFrom must recover audit slot from .bak");
+            Check(session.LastSaveAudit != null
+                  && session.LastSaveAudit.SourceKind == SaveAuditSource.NativeBackupFallback,
+                $"backup fallback must report NativeBackupFallback (got {session.LastSaveAudit?.SourceKind})");
+        }
+
         // MapRuntime must not abort an in-flight autorun/child-waiting page (such as battle Ev8 p1 calling CE242)
         // when its own pc=0 clears self[9]=0 and makes lower-priority p0 eligible (want == 0, not null).
         var battleVm = new EventVm();

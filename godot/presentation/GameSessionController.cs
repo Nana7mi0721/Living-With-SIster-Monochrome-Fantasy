@@ -56,6 +56,8 @@ public partial class GameSessionController : Node
     public string DescribeEvent(int eventId) => _session?.DescribeEvent(eventId) ?? "missing";
     public string DescribeInstances() => _session?.DescribeInstances() ?? "";
     public string GetForegroundStackSignature() => _session?.GetForegroundStackSignature() ?? "";
+    /// <summary>Read-only one-line audit summary for the latest save load or retail import, or "none".</summary>
+    public string GetLastSaveAuditSummary() => _session?.LastSaveAudit?.FormatSummary() ?? "none";
     public string LastImportNotice => _session?.LastImportNotice ?? "";
     public uint MovementDeny => _session?.MovementDeny ?? 0;
     public uint BasicAllDeny => _session?.BasicAllDeny ?? 0;

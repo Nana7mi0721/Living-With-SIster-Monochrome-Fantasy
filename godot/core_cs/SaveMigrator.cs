@@ -50,15 +50,24 @@ public static class SaveMigrator
     }
 
     /// <summary>Filter transient overlay slots and leaked retail toilet-eye (#-6) frames before display.</summary>
-    public static List<SavedPicture> SanitizeRestoredPictures(IReadOnlyList<SavedPicture> pictures)
+    public static List<SavedPicture> SanitizeRestoredPictures(IReadOnlyList<SavedPicture> pictures, SaveAuditReport? report = null)
     {
         bool stripEye = ShouldStripLeakedToiletEye(pictures);
         var result = new List<SavedPicture>(pictures.Count);
         for (int i = 0; i < pictures.Count; i++)
         {
             var pic = pictures[i];
-            if (pic == null || IsTransientUiPicture(pic.Number)) continue;
-            if (stripEye && IsLeakedToiletEyePicture(pic)) continue;
+            if (pic == null) continue;
+            if (IsTransientUiPicture(pic.Number))
+            {
+                if (report != null) report.StrippedTransientPictures++;
+                continue;
+            }
+            if (stripEye && IsLeakedToiletEyePicture(pic))
+            {
+                if (report != null) report.StrippedLeakedToiletEye = true;
+                continue;
+            }
             result.Add(pic);
         }
         return result;
@@ -89,7 +98,7 @@ public static class SaveMigrator
     /// var[68]/var[9] (which SampleMapA Ev3 p0 pc=24..25 unconditionally clears when v65 == 0)
     /// so MapRuntime's multi-autorun dispatch cannot start Ev4 p0 before Ev3 finishes.
     /// </summary>
-    public static void ApplyRetailPostLoadVars(List<int>? vars)
+    public static void ApplyRetailPostLoadVars(List<int>? vars, SaveAuditReport? report = null)
     {
         if (vars == null || !NeedsRetailPostLoadTrigger(vars)) return;
         vars[302] = 2;
@@ -99,31 +108,61 @@ public static class SaveMigrator
             if (vars.Count > 68) vars[68] = 0;
             if (vars.Count > 9) vars[9] = 0;
         }
+        if (report != null) report.RetailPostLoadTriggerApplied = true;
     }
 
     /// <summary>Apply retail post-load var[302] = 2 trigger when loading a coroutine-less SampleMapA save.</summary>
-    public static void ApplyRetailPostLoadTriggerIfNeeded(SaveState state)
+    public static void ApplyRetailPostLoadTriggerIfNeeded(SaveState state, SaveAuditReport? report = null)
     {
         bool isSampleMapA = state.MapId == 1005
             || string.Equals(state.MapFile, "SampleMapA.mps", StringComparison.OrdinalIgnoreCase);
         if (!isSampleMapA || state.Instances.Count > 0) return;
-        ApplyRetailPostLoadVars(state.Vars);
+        ApplyRetailPostLoadVars(state.Vars, report);
+    }
+
+    /// <summary>
+    /// Read-only diagnostic scan for residual lock variables from third-party/damaged saves.
+    /// Never mutates <paramref name="vars"/> so retail state semantics stay intact.
+    /// </summary>
+    public static void InspectSuspiciousLocks(IReadOnlyList<int>? vars, SaveAuditReport? report)
+    {
+        if (report == null) return;
+        report.SuspiciousLocks.Clear();
+        if (vars == null || vars.Count == 0) return;
+
+        int Get(int index) => index >= 0 && index < vars.Count ? vars[index] : 0;
+
+        int v545 = Get(545);
+        if (v545 != 0) report.SuspiciousLocks.Add($"var[545]={v545}(other_action_lock)");
+
+        int v439 = Get(439);
+        if (v439 != 0) report.SuspiciousLocks.Add($"var[439]={v439}(encyclopedia_lock)");
+
+        int v464 = Get(464);
+        if (v464 != 0) report.SuspiciousLocks.Add($"var[464]={v464}(ui_lock)");
+
+        int v60 = Get(60);
+        int v127 = Get(127);
+        if (v60 != 0 && v127 != 0) report.SuspiciousLocks.Add($"var[60]={v60},var[127]={v127}(night_raid_lock)");
     }
 
     /// <summary>
     /// Normalize a decoded save payload in place so legacy/older-build residues (transient UI
     /// boxes, negative counters, null collections, transient SE audio) are repaired in one place.
     /// </summary>
-    public static SaveState Normalize(SaveState state)
+    public static SaveState Normalize(SaveState state, SaveAuditReport? report = null)
     {
+        int originalSchema = state.SchemaVersion;
         if (state.SchemaVersion < 1)
         {
             state.SchemaVersion = SaveState.SchemaVersionNumber;
+            if (report != null) report.MigratedFromSchema = originalSchema;
         }
-        if (state.SchemaVersion == 1)
+        else if (state.SchemaVersion == 1)
         {
             state.SchemaVersion = SaveState.SchemaVersionNumber;
             state.DbOverlays ??= new SavedDbOverlays();
+            if (report != null) report.MigratedFromSchema = originalSchema;
         }
         if (state.PlayFrames < 0) state.PlayFrames = 0;
         if (state.MapId < 0) state.MapId = 0;
@@ -145,12 +184,25 @@ public static class SaveMigrator
             state.DbOverlays.Texts ??= new List<SavedDbTextCell>();
         }
 
-        state.Pictures.RemoveAll(p => p != null && IsTransientUiPicture(p.Number));
+        int strippedPics = state.Pictures.RemoveAll(p => p != null && IsTransientUiPicture(p.Number));
+        if (report != null && strippedPics > 0)
+        {
+            report.StrippedTransientPictures += strippedPics;
+        }
         if (ShouldStripLeakedToiletEye(state.Pictures))
         {
-            state.Pictures.RemoveAll(IsLeakedToiletEyePicture);
+            int strippedEye = state.Pictures.RemoveAll(IsLeakedToiletEyePicture);
+            if (report != null && strippedEye > 0)
+            {
+                report.StrippedLeakedToiletEye = true;
+            }
         }
-        state.Audio.RemoveAll(a => a != null && a.Channel == 2); // CHANNEL_SE is transient.
+        int strippedSe = state.Audio.RemoveAll(a => a != null && a.Channel == 2); // CHANNEL_SE is transient.
+        if (report != null && strippedSe > 0)
+        {
+            report.StrippedTransientSe += strippedSe;
+        }
+        InspectSuspiciousLocks(state.Vars, report);
         return state;
     }
 }

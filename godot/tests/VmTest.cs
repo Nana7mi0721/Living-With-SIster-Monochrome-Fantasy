@@ -32,6 +32,7 @@ public static class VmTest
         TestOpcode179CountedLoopAndBreak();
         TestOpcode212LabelJump();
         TestCommonSelfPersistsAcrossCalls();
+        TestSelfBankPolicies();
         TestUnknownEventRejected();
         TestUnhandledOpcodeDiagnostic();
         TestOpcode210UnknownTargetDropsCall();
@@ -533,6 +534,70 @@ public static class VmTest
         vm.StepFrame();
         if (vm.CommonSelf[60].Get(600) != 2)
             throw new Exception($"CommonSelf: expected 2 after second call, got {vm.CommonSelf[60].Get(600)}");
+    }
+
+    private static void TestSelfBankPolicies()
+    {
+        Console.WriteLine("  Testing SelfBankPolicy (PersistentAll, PersistentOnFinishOnly, Ephemeral)...");
+        // Event writes CSelf0 = 42, waits 5 frames, then writes CSelf0 = 99 and finishes.
+        var slots = new List<Slot>
+        {
+            Slot.Command(121, [1_600_000, 42, 0, 0x0000]),
+            Slot.Command(180, [5]),
+            Slot.Command(121, [1_600_000, 99, 0, 0x0000]),
+            Slot.Command(172),
+        };
+        var prog = Program.FromSlots(61, "PolicyEvent", slots);
+        var vm = new EventVm();
+        vm.RegisterProgram(prog);
+
+        // 1. PersistentAll (default): StopInstance persists partial write (Rust Oracle parity), normal finish persists final write.
+        var pAllStop = vm.CreateInstance(61)!;
+        if (pAllStop.SelfPolicy != SelfBankPolicy.PersistentAll)
+            throw new Exception($"default SelfPolicy expected PersistentAll, got {pAllStop.SelfPolicy}");
+        vm.StepFrame();
+        vm.StopInstance(pAllStop.Id);
+        if (!vm.CommonSelf.TryGetValue(61, out var bank) || bank.Get(600) != 42)
+            throw new Exception($"PersistentAll StopInstance must persist partial CSelf0=42, got {(vm.CommonSelf.TryGetValue(61, out var b1) ? b1.Get(600) : -1)}");
+
+        var pAllFinish = vm.CreateInstance(61)!;
+        if (pAllFinish.Self.Get(600) != 42)
+            throw new Exception($"PersistentAll must inherit prior CommonSelf 42, got {pAllFinish.Self.Get(600)}");
+        for (int f = 0; f < 8; f++) vm.StepFrame();
+        if (vm.CommonSelf[61].Get(600) != 99)
+            throw new Exception($"PersistentAll normal finish must persist CSelf0=99, got {vm.CommonSelf[61].Get(600)}");
+
+        // 2. PersistentOnFinishOnly: StopInstance discards partial write; normal finish writes back.
+        vm.CommonSelf[61].Set(600, 7);
+        var pFinishStop = vm.CreateInstance(61, selfPolicy: SelfBankPolicy.PersistentOnFinishOnly)!;
+        if (pFinishStop.Self.Get(600) != 7)
+            throw new Exception($"PersistentOnFinishOnly must inherit CommonSelf 7, got {pFinishStop.Self.Get(600)}");
+        vm.StepFrame();
+        vm.StopInstance(pFinishStop.Id);
+        if (vm.CommonSelf[61].Get(600) != 7)
+            throw new Exception($"PersistentOnFinishOnly StopInstance must discard partial write (expected 7, got {vm.CommonSelf[61].Get(600)})");
+
+        vm.CreateInstance(61, selfPolicy: SelfBankPolicy.PersistentOnFinishOnly);
+        for (int f = 0; f < 8; f++) vm.StepFrame();
+        if (vm.CommonSelf[61].Get(600) != 99)
+            throw new Exception($"PersistentOnFinishOnly normal finish must persist CSelf0=99, got {vm.CommonSelf[61].Get(600)}");
+
+        // 3. Ephemeral (CreateFreshInstance): starts blank and never writes back on finish or StopInstance.
+        vm.CommonSelf[61].Set(600, 55);
+        var freshStop = vm.CreateFreshInstance(61)!;
+        if (freshStop.SelfPolicy != SelfBankPolicy.Ephemeral || freshStop.Self.Get(600) != 0)
+            throw new Exception($"CreateFreshInstance must use Ephemeral blank self bank, got policy={freshStop.SelfPolicy} cself0={freshStop.Self.Get(600)}");
+        vm.StepFrame();
+        vm.StopInstance(freshStop.Id);
+        if (vm.CommonSelf[61].Get(600) != 55)
+            throw new Exception($"Ephemeral StopInstance must not overwrite CommonSelf (expected 55, got {vm.CommonSelf[61].Get(600)})");
+
+        var freshFinish = vm.CreateFreshInstance(61)!;
+        if (freshFinish.Self.Get(600) != 0)
+            throw new Exception($"second Ephemeral instance must start blank, got {freshFinish.Self.Get(600)}");
+        for (int f = 0; f < 8; f++) vm.StepFrame();
+        if (vm.CommonSelf[61].Get(600) != 55)
+            throw new Exception($"Ephemeral normal finish must not overwrite CommonSelf (expected 55, got {vm.CommonSelf[61].Get(600)})");
     }
 
     private static void TestUnknownEventRejected()

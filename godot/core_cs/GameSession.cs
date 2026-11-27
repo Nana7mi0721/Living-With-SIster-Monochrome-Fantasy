@@ -289,6 +289,8 @@ public sealed class GameSession
     public SaveSlotSource LoadedFrom { get; private set; } = SaveSlotSource.None;
     public bool LoadedFromBackup => LoadedFrom == SaveSlotSource.Backup;
     public string LoadedFromName => SaveCodec.SourceName(LoadedFrom);
+    /// <summary>Read-only diagnostic audit captured on the most recent successful load or retail import.</summary>
+    public SaveAuditReport? LastSaveAudit { get; private set; }
 
     /// <summary>Record a fatal data error without starting the VM.</summary>
     public void Fail(string reason)
@@ -926,8 +928,14 @@ public sealed class GameSession
             return false;
         }
 
+        SaveAuditReport audit = read.Audit ?? new SaveAuditReport
+        {
+            SourceKind = read.Source == SaveSlotSource.Backup
+                ? SaveAuditSource.NativeBackupFallback
+                : SaveAuditSource.NativeMain
+        };
         SaveState? rollback = CanSaveMapState() && !_vm.Faulted ? BuildSaveState() : null;
-        if (!ApplyLoadedState(state))
+        if (!ApplyLoadedState(state, audit))
         {
             if (rollback != null && RestoreAfterFailedLoad(rollback))
             {
@@ -941,6 +949,7 @@ public sealed class GameSession
         }
 
         LoadedFrom = read.Source;
+        LastSaveAudit = audit;
         // EnterMap -> ShowMap clears the layer, so the saved slots are replayed after it.
         _view.RestorePictures(state.Pictures.Where(p => !IsSaveUiPicture(p.Number)).ToList());
         // Audio last: the map load above may start its own track, and the slot wins.
@@ -1278,7 +1287,7 @@ public sealed class GameSession
     }
 
     /// <summary>Apply a slot that already passed the codec gates and the map-file check.</summary>
-    private bool ApplyLoadedState(SaveState state)
+    private bool ApplyLoadedState(SaveState state, SaveAuditReport? audit = null)
     {
         _vm.StopAll();
         ResetTransientSessionState();
@@ -1290,7 +1299,8 @@ public sealed class GameSession
         _leaderX = state.LeaderX;
         _leaderY = state.LeaderY;
         _facing = state.Facing;
-        SaveMigrator.ApplyRetailPostLoadTriggerIfNeeded(state);
+        SaveMigrator.ApplyRetailPostLoadTriggerIfNeeded(state, audit);
+        SaveMigrator.InspectSuspiciousLocks(state.Vars, audit);
         _vm.Vm.Vars.Restore(state.Vars, state.StrVars, state.SysVars, state.SysStrVars);
         _vm.Vm.Rng.RestoreState(state.RngState, state.RngEventState, state.RngEventSeed, state.RngDraws);
         _vm.RestoreDbOverlays(state.DbOverlays);
@@ -1327,7 +1337,7 @@ public sealed class GameSession
     private bool RestoreAfterFailedLoad(SaveState snapshot)
     {
         _vm.ResetDiagnostics();
-        return ApplyLoadedState(snapshot);
+        return ApplyLoadedState(snapshot, audit: null);
     }
 
     /// <summary>Resolve a SystemDB map row or artifact id into its MapDefinition.</summary>
@@ -1458,21 +1468,27 @@ public sealed class GameSession
         // while keeping new-game setup event 0 disabled so load never resets the day.
         ApplyRetailMapEventSelfVars(state, data);
 
+        var audit = new SaveAuditReport { SourceKind = SaveAuditSource.RetailImport };
+        audit.EncodingWarnings.AddRange(imported.EncodingWarnings);
+
         var picByNum = new Dictionary<int, SavedPicture>();
         foreach (SavedPicture pic in data.PictureStates)
         {
-            if (!IsSaveUiPicture(pic.Number))
+            if (IsSaveUiPicture(pic.Number))
             {
-                picByNum[pic.Number] = pic;
+                audit.StrippedTransientPictures++;
+                continue;
             }
+            picByNum[pic.Number] = pic;
         }
         state.Pictures.AddRange(picByNum.Values.Take(SaveCodec.MaxPictures));
 
         state.DbOverlays = BuildRetailDbOverlays(data);
         AddRetailAudio(state.Audio, data);
 
-        SaveMigrator.Normalize(state);
-        SaveMigrator.ApplyRetailPostLoadTriggerIfNeeded(state);
+        SaveMigrator.Normalize(state, audit);
+        SaveMigrator.ApplyRetailPostLoadTriggerIfNeeded(state, audit);
+        SaveMigrator.InspectSuspiciousLocks(state.Vars, audit);
 
         if (!ValidateSaveJson(SaveCodec.ToJson(state), out string validationError))
         {
@@ -1508,6 +1524,7 @@ public sealed class GameSession
             return false;
         }
 
+        LastSaveAudit = audit;
         error = "";
         return true;
     }
@@ -1783,8 +1800,12 @@ public sealed class GameSession
         _leaderY = 0;
         _facing = 2;
 
+        var audit = new SaveAuditReport { SourceKind = SaveAuditSource.RetailImport };
+        audit.EncodingWarnings.AddRange(slot.EncodingWarnings);
+
         List<int> numbers = BuildRetailVarsList(data);
-        SaveMigrator.ApplyRetailPostLoadVars(numbers);
+        SaveMigrator.ApplyRetailPostLoadVars(numbers, audit);
+        SaveMigrator.InspectSuspiciousLocks(numbers, audit);
         List<int> sysVars = BuildRetailSysVarsList(data);
         _vm.Vm.Vars.Restore(numbers, data.StringVars, sysVars, null);
 
@@ -1808,11 +1829,12 @@ public sealed class GameSession
         if (Phase == "failed") return false;
 
         EnsureAutoEvents().PrimeLatched(_vm.Vm);
-        _view.RestorePictures(SaveMigrator.SanitizeRestoredPictures(data.PictureStates));
+        _view.RestorePictures(SaveMigrator.SanitizeRestoredPictures(data.PictureStates, audit));
         var retailAudio = new List<SavedAudio>();
         AddRetailAudio(retailAudio, data);
         if (retailAudio.Count > 0) _view.RestoreAudio(retailAudio);
         _view.OnLoadCompleted();
+        LastSaveAudit = audit;
         _started = true;
         _view.SetStatus($"loaded retail save {slot.File} (map 1 day {_vm.Vm.Vars.Get(WolfIds.VarDay)})");
         UpdateMapHud(false);

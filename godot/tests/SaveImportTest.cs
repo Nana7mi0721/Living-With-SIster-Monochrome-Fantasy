@@ -482,6 +482,12 @@ public partial class SaveImportTest : Node
                 GD.PrintErr($"SAVE_TRANSFER_FAILED: ImportRetailSaveToSlot failed: {importErr}");
                 return false;
             }
+            if (harness.Session.LastSaveAudit == null
+                || harness.Session.LastSaveAudit.SourceKind != SaveAuditSource.RetailImport)
+            {
+                GD.PrintErr($"SAVE_TRANSFER_FAILED: ImportRetailSaveToSlot must record RetailImport SaveAudit (got {harness.Session.LastSaveAudit?.SourceKind})");
+                return false;
+            }
 
             if (harness.Session.Phase != beforePhase
                 || harness.Session.Frames != beforeFrames
@@ -567,9 +573,20 @@ public partial class SaveImportTest : Node
                 GD.PrintErr("SAVE_TRANSFER_FAILED: controller.ValidateSaveJson accepted malformed JSON");
                 return false;
             }
+            if (controller.GetLastSaveAuditSummary() != "none")
+            {
+                GD.PrintErr($"SAVE_TRANSFER_FAILED: fresh controller GetLastSaveAuditSummary expected 'none', got '{controller.GetLastSaveAuditSummary()}'");
+                return false;
+            }
             if (!controller.ImportRetailSaveToSlot(sampleSav, 3) || controller.LastError.Length != 0)
             {
                 GD.PrintErr($"SAVE_TRANSFER_FAILED: controller.ImportRetailSaveToSlot failed: {controller.LastError}");
+                return false;
+            }
+            string ctrlAuditSummary = controller.GetLastSaveAuditSummary();
+            if (!ctrlAuditSummary.StartsWith("source=RetailImport", StringComparison.Ordinal))
+            {
+                GD.PrintErr($"SAVE_TRANSFER_FAILED: controller GetLastSaveAuditSummary mismatch: '{ctrlAuditSummary}'");
                 return false;
             }
             if (!File.Exists(Path.Combine(transferDir, "save_03.json")))
@@ -597,6 +614,12 @@ public partial class SaveImportTest : Node
                 || harness.View.HasMessage || harness.View.HasChoices)
             {
                 GD.PrintErr("SAVE_TRANSFER_FAILED: LoadRetailSave did not clear stale choice/popup state");
+                return false;
+            }
+            if (harness.Session.LastSaveAudit == null
+                || harness.Session.LastSaveAudit.SourceKind != SaveAuditSource.RetailImport)
+            {
+                GD.PrintErr($"SAVE_TRANSFER_FAILED: LoadRetailSave must populate RetailImport SaveAudit (got {harness.Session.LastSaveAudit?.SourceKind})");
                 return false;
             }
         }

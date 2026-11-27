@@ -279,13 +279,20 @@ public enum SaveSlotSource
 public readonly struct SaveReadResult
 {
     public SaveReadResult(SaveState? state, SaveSlotSource source)
+        : this(state, source, null)
+    {
+    }
+
+    public SaveReadResult(SaveState? state, SaveSlotSource source, SaveAuditReport? audit)
     {
         State = state;
         Source = source;
+        Audit = audit;
     }
 
     public SaveState? State { get; }
     public SaveSlotSource Source { get; }
+    public SaveAuditReport? Audit { get; }
     public bool Ok => State != null;
     public string SourceName => SaveCodec.SourceName(Source);
 }
@@ -309,7 +316,7 @@ public static class SaveCodec
     public static string ToJson(SaveState state) =>
         JsonSerializer.Serialize(state, LwsmfJsonContext.SaveIndented.SaveState);
 
-    public static SaveState? FromJson(string json)
+    public static SaveState? FromJson(string json, SaveAuditReport? report = null)
     {
         if (string.IsNullOrEmpty(json)) return null;
         try
@@ -320,7 +327,7 @@ public static class SaveCodec
             if (state.Schema != SaveState.SchemaName) return null;
             if (state.SchemaVersion > SaveState.SchemaVersionNumber) return null;
             Normalize(state);
-            SaveMigrator.Normalize(state);
+            SaveMigrator.Normalize(state, report);
             if (state.SchemaVersion < 1 || state.SchemaVersion > SaveState.SchemaVersionNumber) return null;
             return Validate(state) ? state : null;
         }
@@ -614,12 +621,14 @@ public static class SaveCodec
     /// </summary>
     public static SaveReadResult ReadWithSource(string path)
     {
-        SaveState? main = ReadOne(path);
-        if (main != null) return new SaveReadResult(main, SaveSlotSource.Main);
-        SaveState? backup = ReadOne(path + ".bak");
+        var mainAudit = new SaveAuditReport { SourceKind = SaveAuditSource.NativeMain };
+        SaveState? main = ReadOne(path, mainAudit);
+        if (main != null) return new SaveReadResult(main, SaveSlotSource.Main, mainAudit);
+        var backupAudit = new SaveAuditReport { SourceKind = SaveAuditSource.NativeBackupFallback };
+        SaveState? backup = ReadOne(path + ".bak", backupAudit);
         return backup != null
-            ? new SaveReadResult(backup, SaveSlotSource.Backup)
-            : new SaveReadResult(null, SaveSlotSource.None);
+            ? new SaveReadResult(backup, SaveSlotSource.Backup, backupAudit)
+            : new SaveReadResult(null, SaveSlotSource.None, null);
     }
 
     public static SaveState? Read(string path) => ReadWithSource(path).State;
@@ -638,10 +647,10 @@ public static class SaveCodec
         return File.Exists(path) || File.Exists(path + ".bak");
     }
 
-    private static SaveState? ReadOne(string path)
+    private static SaveState? ReadOne(string path, SaveAuditReport? report = null)
     {
         string? text = TryReadText(path);
-        return text == null ? null : FromJson(text);
+        return text == null ? null : FromJson(text, report);
     }
 
     private static string? TryReadText(string path)
@@ -672,12 +681,12 @@ public static class SaveCodec
 
     public static byte[] ToBytes(SaveState state) => new UTF8Encoding(false).GetBytes(ToJson(state));
 
-    public static SaveState? FromBytes(byte[]? bytes)
+    public static SaveState? FromBytes(byte[]? bytes, SaveAuditReport? report = null)
     {
         if (bytes == null || bytes.Length == 0 || bytes.Length > MaxSaveBytes) return null;
         try
         {
-            return FromJson(StrictUtf8.GetString(bytes));
+            return FromJson(StrictUtf8.GetString(bytes), report);
         }
         catch (DecoderFallbackException)
         {

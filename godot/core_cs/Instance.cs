@@ -72,6 +72,16 @@ public sealed class LoopCtx
     public long Remaining { get; set; }
 }
 
+public enum SelfBankPolicy
+{
+    /// <summary>WOLF / Rust Oracle default: fold CommonSelf back on both normal finish and StopInstance.</summary>
+    PersistentAll = 0,
+    /// <summary>Fold CommonSelf back only on normal completion; discard partial writes if killed by StopInstance.</summary>
+    PersistentOnFinishOnly = 1,
+    /// <summary>One-shot synthetic call: start with a blank self bank and never write back to CommonSelf.</summary>
+    Ephemeral = 2,
+}
+
 public sealed class Instance
 {
     public int Id { get; init; }
@@ -83,6 +93,9 @@ public sealed class Instance
     public WaitState Wait { get; } = new();
     public List<LoopCtx> Loops { get; } = new();
     public int? ReturnTo { get; set; }
+
+    /// <summary>Controls whether and when this instance folds its self bank back into EventVm.CommonSelf.</summary>
+    public SelfBankPolicy SelfPolicy { get; init; } = SelfBankPolicy.PersistentAll;
 
     /// <summary>Map page instances outlive their program until MapRuntime copies the self bank.</summary>
     public bool RetainAfterFinish { get; set; }

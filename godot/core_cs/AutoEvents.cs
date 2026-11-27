@@ -242,16 +242,16 @@ public sealed class AutoEvents
     /// <summary>Number of fresh starts recorded for one event by this scheduler instance.</summary>
     public int StartsFor(int eventId) => _starts.TryGetValue(eventId, out int count) ? count : 0;
 
-    private static bool Trace => Environment.GetEnvironmentVariable("LWsmf_TRACE_AUTO") == "1";
-
     private static void TraceStart(int eventId, int instanceId)
     {
-        if (Trace) Console.Error.WriteLine($"[AutoEvents] start event {eventId} instance {instanceId}");
+        if (CoreRuntimeConfig.TraceAutoEvents)
+            Console.Error.WriteLine($"[AutoEvents] start event {eventId} instance {instanceId}");
     }
 
     private static void TraceStop(int eventId, int instanceId)
     {
-        if (Trace) Console.Error.WriteLine($"[AutoEvents] stop event {eventId} instance {instanceId}");
+        if (CoreRuntimeConfig.TraceAutoEvents)
+            Console.Error.WriteLine($"[AutoEvents] stop event {eventId} instance {instanceId}");
     }
 
     private static bool IsEventLive(EventVm vm, int eventId)
