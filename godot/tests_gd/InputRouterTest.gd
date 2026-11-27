@@ -745,6 +745,127 @@ func _ready() -> void:
 	_router.clear_pointer_latches()
 	_router.clear_frame_latches()
 
+	# 31. Same-index re-entry after dropped touch_up self-heals single tap and pointer hold cleanly.
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+	_router.clock_msec_override = 1000
+	var reentry_actions := _action
+	var reentry_cancels := _cancel
+	_router.handle_event(_touch(0, Vector2(300, 200), true))
+	# Simulate OS swallowing touch_up(0), then finger 0 pressing again at a new position.
+	_router.clock_msec_override = 1200
+	_router.handle_event(_touch(0, Vector2(420, 260), true))
+	if _router.active_touch_count() != 1 or _router.touch_phase() != InputRouter.TouchSession.Phase.TRACKING:
+		failures.append("same-index re-entry must self-heal to 1 active touch in TRACKING (count=%d phase=%d)" % [_router.active_touch_count(), _router.touch_phase()])
+	_router.handle_event(_touch(0, Vector2(420, 260), false))
+	if _action != reentry_actions + 1 or _cancel != reentry_cancels or _router.touch_phase() != InputRouter.TouchSession.Phase.IDLE:
+		failures.append("same-index re-entry release must fire single tap without phantom 2-finger cancel (actions=%d cancels=%d phase=%d)" % [_action - reentry_actions, _cancel - reentry_cancels, _router.touch_phase()])
+	_router.consume_touch_ok()
+	_router.clear_frame_latches()
+
+	# Dropped touch_up during POINTER_HOLD recovers cleanly on same-index re-entry and can hold again.
+	reentry_actions = _action
+	_router.clock_msec_override = 2000
+	_router.handle_event(_touch(0, Vector2(640, 280), true))
+	for _f in range(InputRouter.TOUCH_POINTER_HOLD_DELAY_FRAMES):
+		_router.step_touch_pointer_hold(true)
+	if not _router.is_touch_pointer_held() or _router.touch_phase() != InputRouter.TouchSession.Phase.POINTER_HOLD:
+		failures.append("test setup must enter POINTER_HOLD before simulated dropped touch_up")
+	_router.clock_msec_override = 2400
+	_router.handle_event(_touch(0, Vector2(650, 290), true))
+	if _router.is_touch_pointer_held() or _router.active_touch_count() != 1 or _router.touch_phase() != InputRouter.TouchSession.Phase.TRACKING:
+		failures.append("same-index re-entry after dropped POINTER_HOLD must reset to fresh TRACKING (held=%s count=%d phase=%d)" % [str(_router.is_touch_pointer_held()), _router.active_touch_count(), _router.touch_phase()])
+	for _f in range(InputRouter.TOUCH_POINTER_HOLD_DELAY_FRAMES):
+		_router.step_touch_pointer_hold(true)
+	if not _router.is_touch_pointer_held() or (_router.held_mask() & InputRouter.MASK_OK) == 0:
+		failures.append("fresh hold after same-index re-entry must reach POINTER_HOLD cleanly")
+	_router.handle_event(_touch(0, Vector2(650, 290), false))
+	if _router.is_touch_pointer_held() or _router.touch_phase() != InputRouter.TouchSession.Phase.IDLE or _action != reentry_actions:
+		failures.append("releasing recovered POINTER_HOLD must return to IDLE without extra tap")
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+
+	# 32. Stationary POINTER_HOLD and CONFIRM_HOLD lasting >20s are never evicted or reset.
+	_router.clock_msec_override = 10000
+	_router.handle_event(_touch(0, Vector2(640, 280), true))
+	for _f in range(InputRouter.TOUCH_POINTER_HOLD_DELAY_FRAMES):
+		_router.step_touch_pointer_hold(true)
+	_router.clock_msec_override = 35000 # 25s stationary without drag updates
+	for _f in range(5):
+		_router.step_touch_pointer_hold(true)
+	if not _router.is_touch_pointer_held() or _router.touch_phase() != InputRouter.TouchSession.Phase.POINTER_HOLD or _router.active_touch_count() != 1 or not _router.left_frame_pressed():
+		failures.append("stationary POINTER_HOLD >20s must never be evicted or reset (held=%s phase=%d count=%d)" % [str(_router.is_touch_pointer_held()), _router.touch_phase(), _router.active_touch_count()])
+	# Even when a second finger presses during a >20s POINTER_HOLD, the stationary hold finger is not orphan-swept.
+	var hold20_actions := _action
+	_router.handle_event(_touch(1, Vector2(200, 200), true))
+	if _router.active_touch_count() != 2 or _router.touch_phase() != InputRouter.TouchSession.Phase.CONSUMED:
+		failures.append("second finger press during >20s POINTER_HOLD must keep both points and transition to CONSUMED (count=%d phase=%d)" % [_router.active_touch_count(), _router.touch_phase()])
+	_router.handle_event(_touch(1, Vector2(200, 200), false))
+	_router.handle_event(_touch(0, Vector2(640, 280), false))
+	if _action != hold20_actions or _router.touch_phase() != InputRouter.TouchSession.Phase.IDLE:
+		failures.append("releasing fingers after interrupted >20s POINTER_HOLD must return to IDLE without phantom tap")
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+
+	_router.clock_msec_override = 40000
+	_router.handle_event(_touch(0, Vector2(400, 300), true))
+	for _f in range(InputRouter.CONFIRM_HOLD_DELAY_FRAMES):
+		_router.step_confirm_hold(true, false)
+	_router.clock_msec_override = 65000 # 25s stationary CONFIRM_HOLD
+	var hold20_advances := 0
+	for _f in range(InputRouter.CONFIRM_HOLD_REPEAT_FRAMES * 2):
+		if _router.step_confirm_hold(true, false):
+			hold20_advances += 1
+	if not _router.is_touch_hold_active() or _router.touch_phase() != InputRouter.TouchSession.Phase.CONFIRM_HOLD or hold20_advances != 2:
+		failures.append("stationary CONFIRM_HOLD >20s must stay active and keep advancing dialogue (active=%s phase=%d adv=%d)" % [str(_router.is_touch_hold_active()), _router.touch_phase(), hold20_advances])
+	_router.handle_event(_touch(0, Vector2(400, 300), false))
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+
+	# 33. Stale non-hold orphan finger (>15s) is swept on new press; fresh finger (<=15s) is kept;
+	#     FOCUS_OUT and APPLICATION_PAUSED atomically reset TouchSession.
+	var sweep_actions := _action
+	var sweep_cancels := _cancel
+	_router.clock_msec_override = 100000
+	_router.handle_event(_touch(0, Vector2(200, 200), true))
+	_router.clock_msec_override = 100000 + InputRouter.TOUCH_ORPHAN_TIMEOUT_MS + 1000
+	_router.handle_event(_touch(1, Vector2(500, 280), true))
+	if _router.active_touch_count() != 1 or _router.touch_phase() != InputRouter.TouchSession.Phase.TRACKING:
+		failures.append("abandoned non-hold finger >15s must be swept when new finger presses (count=%d phase=%d)" % [_router.active_touch_count(), _router.touch_phase()])
+	_router.handle_event(_touch(1, Vector2(500, 280), false))
+	if _action != sweep_actions + 1 or _cancel != sweep_cancels:
+		failures.append("after orphan sweep, new single finger must emit tap action without 2-finger cancel (actions=%d cancels=%d)" % [_action - sweep_actions, _cancel - sweep_cancels])
+	_router.consume_touch_ok()
+	_router.clear_frame_latches()
+
+	sweep_cancels = _cancel
+	_router.clock_msec_override = 130000
+	_router.handle_event(_touch(0, Vector2(200, 200), true))
+	_router.clock_msec_override = 130000 + InputRouter.TOUCH_ORPHAN_TIMEOUT_MS # exact boundary is not stale
+	_router.handle_event(_touch(1, Vector2(260, 220), true))
+	if _router.active_touch_count() != 2:
+		failures.append("non-stale finger at exact 15s boundary must not be swept (count=%d)" % _router.active_touch_count())
+	_router.handle_event(_touch(0, Vector2(200, 200), false))
+	_router.handle_event(_touch(1, Vector2(260, 220), false))
+	if _cancel != sweep_cancels + 1:
+		failures.append("2-finger tap with non-stale first finger must still emit cancel_pressed")
+	_router.consume_touch_cancel()
+	_router.clear_frame_latches()
+
+	_router.handle_event(_touch(0, Vector2(640, 280), true))
+	for _f in range(InputRouter.TOUCH_POINTER_HOLD_DELAY_FRAMES):
+		_router.step_touch_pointer_hold(true)
+	_router.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	if _router.has_active_touches() or _router.is_touch_pointer_held() or _router.touch_phase() != InputRouter.TouchSession.Phase.IDLE:
+		failures.append("NOTIFICATION_APPLICATION_PAUSED must atomically reset TouchSession to IDLE")
+	_router.handle_event(_touch(0, Vector2(640, 280), true))
+	_router.notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	if _router.has_active_touches() or _router.touch_phase() != InputRouter.TouchSession.Phase.IDLE:
+		failures.append("NOTIFICATION_APPLICATION_FOCUS_OUT must atomically reset TouchSession to IDLE")
+	_router.clock_msec_override = -1
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

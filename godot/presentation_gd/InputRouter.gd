@@ -28,6 +28,143 @@ const CONFIRM_HOLD_DELAY_FRAMES := 21
 const CONFIRM_HOLD_REPEAT_FRAMES := 3
 const TOUCH_POINTER_HOLD_DELAY_FRAMES := 12
 const TOUCH_HOLD_CANCEL_DIST := 32.0
+const TOUCH_ORPHAN_TIMEOUT_MS := 15000
+
+
+class TouchPoint extends RefCounted:
+	var start: Vector2
+	var pos: Vector2
+	var prev_pos: Vector2
+	var max_dist: float
+	var started_ms: int
+	var updated_ms: int
+
+	func _init(p_pos: Vector2, p_now_ms: int) -> void:
+		start = p_pos
+		pos = p_pos
+		prev_pos = p_pos
+		max_dist = 0.0
+		started_ms = p_now_ms
+		updated_ms = p_now_ms
+
+	func update(p_pos: Vector2, p_now_ms: int) -> float:
+		prev_pos = pos
+		pos = p_pos
+		updated_ms = p_now_ms
+		var dist := start.distance_to(p_pos)
+		if dist > max_dist:
+			max_dist = dist
+		return max_dist
+
+
+class TouchSession extends RefCounted:
+	enum Phase {
+		IDLE,
+		TRACKING,
+		DRAGGING,
+		POINTER_HOLD,
+		CONFIRM_HOLD,
+		CONSUMED,
+	}
+
+	var phase: Phase = Phase.IDLE
+	var points: Dictionary = {}
+	var max_fingers := 0
+	var peak_dist := 0.0
+	var scroll_accum := 0.0
+	var pointer_hold_frames := 0
+
+	func reset() -> void:
+		phase = Phase.IDLE
+		points.clear()
+		max_fingers = 0
+		peak_dist = 0.0
+		scroll_accum = 0.0
+		pointer_hold_frames = 0
+
+	func is_hold_phase() -> bool:
+		return phase == Phase.POINTER_HOLD or phase == Phase.CONFIRM_HOLD
+
+	func is_pointer_held() -> bool:
+		return phase == Phase.POINTER_HOLD
+
+	func is_confirm_held() -> bool:
+		return phase == Phase.CONFIRM_HOLD
+
+	func has_active_points() -> bool:
+		return not points.is_empty()
+
+	## Register a finger press with same-index re-entry self-heal and non-hold orphan eviction.
+	## Active POINTER_HOLD and CONFIRM_HOLD phases never evict stationary points on timeout.
+	func press_point(index: int, pos: Vector2, now_ms: int, orphan_timeout_ms: int) -> bool:
+		if points.has(index):
+			points.erase(index)
+			if points.is_empty():
+				reset()
+		if not points.is_empty() and not is_hold_phase():
+			var stale_indices: Array = []
+			for existing_idx in points.keys():
+				var pt: TouchPoint = points[existing_idx]
+				if now_ms - pt.updated_ms > orphan_timeout_ms:
+					stale_indices.append(existing_idx)
+			for stale_idx in stale_indices:
+				points.erase(stale_idx)
+			if points.is_empty():
+				reset()
+		var first_finger := points.is_empty()
+		points[index] = TouchPoint.new(pos, now_ms)
+		if first_finger:
+			phase = Phase.TRACKING
+			max_fingers = 1
+			peak_dist = 0.0
+			scroll_accum = 0.0
+			pointer_hold_frames = 0
+		else:
+			max_fingers = maxi(max_fingers, points.size())
+			if is_hold_phase():
+				phase = Phase.CONSUMED
+				pointer_hold_frames = 0
+		return first_finger
+
+	func update_point(index: int, pos: Vector2, now_ms: int) -> TouchPoint:
+		if not points.has(index):
+			return null
+		var pt: TouchPoint = points[index]
+		var max_d := pt.update(pos, now_ms)
+		if max_d > peak_dist:
+			peak_dist = max_d
+		return pt
+
+	func release_point(index: int, pos: Vector2, now_ms: int) -> bool:
+		if not points.has(index):
+			return false
+		var pt: TouchPoint = points[index]
+		var max_d := pt.update(pos, now_ms)
+		if max_d > peak_dist:
+			peak_dist = max_d
+		points.erase(index)
+		return true
+
+	func is_hold_steady(sidebar_open: bool, tap_max_dist: float, hold_cancel_dist: float) -> bool:
+		if sidebar_open or points.size() != 1 or max_fingers != 1:
+			return false
+		if is_hold_phase():
+			return peak_dist < hold_cancel_dist
+		return phase == Phase.TRACKING and peak_dist < tap_max_dist
+
+	func cancel_pointer_hold() -> void:
+		pointer_hold_frames = 0
+		if phase == Phase.POINTER_HOLD:
+			phase = Phase.CONSUMED if not points.is_empty() else Phase.IDLE
+
+	func cancel_confirm_hold() -> void:
+		if phase == Phase.CONFIRM_HOLD:
+			phase = Phase.CONSUMED if not points.is_empty() else Phase.IDLE
+
+	func cancel_active_hold() -> void:
+		pointer_hold_frames = 0
+		if is_hold_phase():
+			phase = Phase.CONSUMED if not points.is_empty() else Phase.IDLE
 
 # Host mask bits, mirrored from core_cs/KeyCodes.cs so the VM can read them directly.
 const MASK_OK := 1
@@ -78,26 +215,24 @@ var _wheel_pulse_dir := 0
 var _wheel_pulse_ttl := 0
 ## A newly entered event must not consume the click/key that opened it.
 var _action_entry_suppressed := false
-var _touches: Dictionary = {}
-var _touch_max_fingers := 0
-var _touch_peak_dist := 0.0
-var _touch_gesture_consumed := false
-var _touch_swipe_locked := false
-var _touch_scroll_locked := false
-var _touch_scroll_accum := 0.0
+var _touch_session := TouchSession.new()
 var _last_blank_tap_ms := -1
 var _last_blank_tap_pos := Vector2.ZERO
 var _last_blank_tap_empirical := false
 ## Dedicated hold-to-advance state for dialogue fast-forward (decoupled from VM edge latches).
 var _hold_action_keys: Dictionary = {}
 var _hold_mouse_left := false
-var _touch_hold_active := false
 var _confirm_hold_frames := 0
 var _confirm_hold_cooldown := 0
 var _confirm_hold_engaged := false
 var _confirm_hold_blocked := false
-var _touch_pointer_hold_frames := 0
-var _touch_pointer_held := false
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED \
+			or what == NOTIFICATION_APPLICATION_FOCUS_OUT \
+			or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		clear_touch_state()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -123,8 +258,7 @@ func trigger_cancel_pulse(source: String = "touch") -> void:
 	_click_latch = false
 	_touch_ok_ttl = 0
 	pointer_pressed = false
-	_touch_pointer_hold_frames = 0
-	_touch_pointer_held = false
+	_touch_session.cancel_pointer_hold()
 	last_input_source = source
 	_right_click_latch = true
 	if source == "touch":
@@ -158,7 +292,15 @@ func consume_wheel_pulse() -> void:
 
 
 func has_active_touches() -> bool:
-	return not _touches.is_empty()
+	return _touch_session.has_active_points()
+
+
+func active_touch_count() -> int:
+	return _touch_session.points.size()
+
+
+func touch_phase() -> TouchSession.Phase:
+	return _touch_session.phase
 
 
 static func _default_mobile_double_tap_enabled() -> bool:
@@ -176,22 +318,13 @@ func reset_double_tap_state() -> void:
 
 
 func clear_touch_state() -> void:
-	_touches.clear()
-	_touch_max_fingers = 0
-	_touch_peak_dist = 0.0
-	_touch_gesture_consumed = false
-	_touch_swipe_locked = false
-	_touch_scroll_locked = false
-	_touch_scroll_accum = 0.0
-	_touch_hold_active = false
-	_touch_pointer_hold_frames = 0
-	_touch_pointer_held = false
+	_touch_session.reset()
 
 
 func clear_confirm_hold() -> void:
 	_hold_action_keys.clear()
 	_hold_mouse_left = false
-	_touch_hold_active = false
+	_touch_session.cancel_confirm_hold()
 	_confirm_hold_frames = 0
 	_confirm_hold_cooldown = 0
 	_confirm_hold_engaged = false
@@ -205,38 +338,32 @@ func is_confirm_hold_candidate() -> bool:
 
 
 func is_confirm_hold_pointer_held() -> bool:
-	return _hold_mouse_left or _touch_hold_active or not _touches.is_empty()
+	return _hold_mouse_left or _touch_session.is_confirm_held() or _touch_session.has_active_points()
 
 
 func is_touch_hold_active() -> bool:
-	return _touch_hold_active
+	return _touch_session.is_confirm_held()
 
 
 func is_touch_pointer_held() -> bool:
-	return _touch_pointer_held
+	return _touch_session.is_pointer_held()
 
 
 func _is_touch_hold_steady() -> bool:
-	if sidebar_open_hint or _touches.size() != 1 or _touch_max_fingers != 1:
-		return false
-	if _touch_hold_active or _touch_pointer_held:
-		return _touch_peak_dist < TOUCH_HOLD_CANCEL_DIST
-	return not _touch_gesture_consumed and _touch_peak_dist < TOUCH_TAP_MAX_DIST
+	return _touch_session.is_hold_steady(sidebar_open_hint, TOUCH_TAP_MAX_DIST, TOUCH_HOLD_CANCEL_DIST)
 
 
 ## Promote a steady single-finger press outside dialogue/choice/modal UIs to sustained OK hold
 ## (e.g. holding a skill icon to fill its learn gauge), suppressing the release tap once active.
 func step_touch_pointer_hold(eligible: bool) -> void:
-	if not eligible or not _is_touch_hold_steady() or _touch_hold_active:
-		_touch_pointer_hold_frames = 0
-		_touch_pointer_held = false
+	if not eligible or not _is_touch_hold_steady() or _touch_session.is_confirm_held():
+		_touch_session.cancel_pointer_hold()
 		return
-	if _touch_pointer_held:
+	if _touch_session.is_pointer_held():
 		return
-	_touch_pointer_hold_frames += 1
-	if _touch_pointer_hold_frames >= TOUCH_POINTER_HOLD_DELAY_FRAMES:
-		_touch_pointer_held = true
-		_touch_gesture_consumed = true
+	_touch_session.pointer_hold_frames += 1
+	if _touch_session.pointer_hold_frames >= TOUCH_POINTER_HOLD_DELAY_FRAMES:
+		_touch_session.phase = TouchSession.Phase.POINTER_HOLD
 		last_input_source = "touch"
 		reset_double_tap_state()
 
@@ -252,14 +379,14 @@ func step_confirm_hold(dialogue_eligible: bool, stop_barrier: bool) -> bool:
 		_confirm_hold_cooldown = 0
 		_confirm_hold_engaged = false
 		_confirm_hold_blocked = false
-		_touch_hold_active = false
+		_touch_session.cancel_confirm_hold()
 		return false
 	if stop_barrier:
 		_confirm_hold_blocked = true
 		_confirm_hold_engaged = false
 		_confirm_hold_frames = 0
 		_confirm_hold_cooldown = 0
-		_touch_hold_active = false
+		_touch_session.cancel_confirm_hold()
 		return false
 	if _confirm_hold_blocked:
 		return false
@@ -272,8 +399,7 @@ func step_confirm_hold(dialogue_eligible: bool, stop_barrier: bool) -> bool:
 			_confirm_hold_engaged = true
 			_confirm_hold_cooldown = CONFIRM_HOLD_REPEAT_FRAMES
 			if touch_steady and not pc_held:
-				_touch_hold_active = true
-				_touch_gesture_consumed = true
+				_touch_session.phase = TouchSession.Phase.CONFIRM_HOLD
 				last_input_source = "touch"
 				reset_double_tap_state()
 			return true
@@ -290,8 +416,7 @@ func step_confirm_hold(dialogue_eligible: bool, stop_barrier: bool) -> bool:
 
 func _set_touch_mode(active: bool) -> void:
 	if not active:
-		_touch_pointer_hold_frames = 0
-		_touch_pointer_held = false
+		_touch_session.cancel_pointer_hold()
 	if touch_mode == active:
 		return
 	touch_mode = active
@@ -424,27 +549,18 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 		clear_confirm_hold()
 		reset_double_tap_state()
 		return false
+	var now_ms := _now_msec()
 	if st.pressed:
-		var first_finger := _touches.is_empty()
-		_touches[st.index] = {
-			"start": clamped,
-			"pos": clamped,
-			"prev_pos": clamped,
-			"max_dist": 0.0,
-		}
+		var first_finger := _touch_session.press_point(st.index, clamped, now_ms, TOUCH_ORPHAN_TIMEOUT_MS)
 		if first_finger:
-			_touch_max_fingers = 1
-			_touch_peak_dist = 0.0
-			_touch_gesture_consumed = false
-			_touch_swipe_locked = false
-			_touch_scroll_locked = false
-			_touch_scroll_accum = 0.0
-			_touch_hold_active = false
+			if not _hold_mouse_left and _hold_action_keys.is_empty():
+				_confirm_hold_frames = 0
+				_confirm_hold_cooldown = 0
+				_confirm_hold_engaged = false
+				_confirm_hold_blocked = false
 		else:
-			_touch_max_fingers = maxi(_touch_max_fingers, _touches.size())
-			_touch_hold_active = false
 			reset_double_tap_state()
-		if _touches.size() == 1:
+		if _touch_session.points.size() == 1:
 			hover_position = clamped
 			mouse_seen = true
 		last_input_source = "touch"
@@ -452,20 +568,14 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 		# while InputRouter tracks the touch sequence for swipe-left / two-finger swipe-up close.
 		return not sidebar_open_hint
 
-	if _touches.has(st.index):
-		var entry: Dictionary = _touches[st.index]
-		var start_pos: Vector2 = entry["start"]
-		var dist := start_pos.distance_to(clamped)
-		_touch_peak_dist = maxf(_touch_peak_dist, maxf(float(entry["max_dist"]), dist))
-		_touches.erase(st.index)
-	if _touches.is_empty():
+	_touch_session.release_point(st.index, clamped, now_ms)
+	if not _touch_session.has_active_points():
 		if sidebar_open_hint:
 			reset_double_tap_state()
 			clear_touch_state()
 			return false
-		if not _touch_gesture_consumed:
-			if _touch_max_fingers == 1 and _touch_peak_dist < TOUCH_TAP_MAX_DIST:
-				var now_ms: int = _now_msec()
+		if _touch_session.phase == TouchSession.Phase.TRACKING:
+			if _touch_session.max_fingers == 1 and _touch_session.peak_dist < TOUCH_TAP_MAX_DIST:
 				var is_det_blank: bool = mobile_double_tap_cancel_enabled and blank_space_predicate.is_valid() and bool(blank_space_predicate.call(clamped))
 				if is_det_blank:
 					if _last_blank_tap_ms >= 0 and not _last_blank_tap_empirical and (now_ms - _last_blank_tap_ms) <= TOUCH_DOUBLE_TAP_MAX_MS and clamped.distance_to(_last_blank_tap_pos) <= TOUCH_DOUBLE_TAP_MAX_DIST:
@@ -502,7 +612,7 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 					_click_latch = true
 					_touch_ok_ttl = TOUCH_PULSE_TTL_FRAMES
 					action_pressed.emit()
-			elif _touch_max_fingers == 2 and _touch_peak_dist < TOUCH_TWO_FINGER_MAX_DIST:
+			elif _touch_session.max_fingers == 2 and _touch_session.peak_dist < TOUCH_TWO_FINGER_MAX_DIST:
 				reset_double_tap_state()
 				last_input_source = "touch"
 				_right_click_latch = true
@@ -524,73 +634,60 @@ func _handle_screen_drag(sd: InputEventScreenDrag) -> bool:
 		clear_confirm_hold()
 		reset_double_tap_state()
 		return false
-	if not _touches.has(sd.index):
+	var pt: TouchPoint = _touch_session.update_point(sd.index, clamped, _now_msec())
+	if pt == null:
 		return true
-	var entry: Dictionary = _touches[sd.index]
-	var start_pos: Vector2 = entry["start"]
-	var prev_pos: Vector2 = entry["prev_pos"]
-	var dist := start_pos.distance_to(clamped)
-	var max_dist := maxf(float(entry["max_dist"]), dist)
-	entry["pos"] = clamped
-	entry["prev_pos"] = clamped
-	entry["max_dist"] = max_dist
-	_touch_peak_dist = maxf(_touch_peak_dist, max_dist)
-	if _touches.size() > 1 or max_dist >= TOUCH_TAP_MAX_DIST:
+	if _touch_session.points.size() > 1 or pt.max_dist >= TOUCH_TAP_MAX_DIST:
 		reset_double_tap_state()
-	if (_touch_hold_active or _touch_pointer_held) and _touch_peak_dist >= TOUCH_HOLD_CANCEL_DIST:
-		_touch_hold_active = false
-		_touch_pointer_held = false
-		_touch_pointer_hold_frames = 0
+	if _touch_session.is_hold_phase() and _touch_session.peak_dist >= TOUCH_HOLD_CANCEL_DIST:
+		_touch_session.cancel_active_hold()
 		_confirm_hold_blocked = true
 
 	# Two-finger vertical swipe opens/closes quick drawer without conflicting with Android left-edge back.
-	if _touches.size() == 2 and not _touch_swipe_locked and not _touch_gesture_consumed:
-		var entries: Array = _touches.values()
-		var d0: Vector2 = (entries[0]["pos"] as Vector2) - (entries[0]["start"] as Vector2)
-		var d1: Vector2 = (entries[1]["pos"] as Vector2) - (entries[1]["start"] as Vector2)
+	if _touch_session.points.size() == 2 and _touch_session.phase == TouchSession.Phase.TRACKING:
+		var entries: Array = _touch_session.points.values()
+		var p0: TouchPoint = entries[0]
+		var p1: TouchPoint = entries[1]
+		var d0: Vector2 = p0.pos - p0.start
+		var d1: Vector2 = p1.pos - p1.start
 		if d0.y >= TOUCH_TWO_FINGER_SWIPE_MIN_DY and d1.y >= TOUCH_TWO_FINGER_SWIPE_MIN_DY \
 				and absf(d0.y) > absf(d0.x) * 1.25 and absf(d1.y) > absf(d1.x) * 1.25:
-			_touch_gesture_consumed = true
-			_touch_swipe_locked = true
+			_touch_session.phase = TouchSession.Phase.CONSUMED
 			reset_double_tap_state()
 			touch_sidebar_swipe.emit(true)
 			return true
 		if sidebar_open_hint and d0.y <= -TOUCH_TWO_FINGER_SWIPE_MIN_DY and d1.y <= -TOUCH_TWO_FINGER_SWIPE_MIN_DY \
 				and absf(d0.y) > absf(d0.x) * 1.25 and absf(d1.y) > absf(d1.x) * 1.25:
-			_touch_gesture_consumed = true
-			_touch_swipe_locked = true
+			_touch_session.phase = TouchSession.Phase.CONSUMED
 			reset_double_tap_state()
 			touch_sidebar_swipe.emit(false)
 			return true
 
-	if _touches.size() == 1 and not _touch_swipe_locked:
-		if not _touch_gesture_consumed:
+	if _touch_session.points.size() == 1 and _touch_session.phase != TouchSession.Phase.CONSUMED:
+		if _touch_session.phase == TouchSession.Phase.TRACKING:
 			hover_position = clamped
 			mouse_seen = true
 			last_input_source = "touch"
-		var dx := clamped.x - start_pos.x
-		var dy := clamped.y - start_pos.y
-		if not _touch_scroll_locked:
+			var dx := clamped.x - pt.start.x
+			var dy := clamped.y - pt.start.y
 			if sidebar_open_hint and dx <= -TOUCH_SWIPE_MIN_DX and absf(dx) > absf(dy) * 1.25:
-				_touch_gesture_consumed = true
-				_touch_swipe_locked = true
+				_touch_session.phase = TouchSession.Phase.CONSUMED
 				reset_double_tap_state()
 				touch_sidebar_swipe.emit(false)
 				return true
-		if touch_scroll_enabled:
-			var step_dy := clamped.y - prev_pos.y
-			_touch_scroll_accum += step_dy
-			if absf(_touch_scroll_accum) >= TOUCH_WHEEL_STEP_PX:
-				_touch_gesture_consumed = true
-				_touch_scroll_locked = true
+		if touch_scroll_enabled and (_touch_session.phase == TouchSession.Phase.TRACKING or _touch_session.phase == TouchSession.Phase.DRAGGING):
+			var step_dy := pt.pos.y - pt.prev_pos.y
+			_touch_session.scroll_accum += step_dy
+			if absf(_touch_session.scroll_accum) >= TOUCH_WHEEL_STEP_PX:
+				_touch_session.phase = TouchSession.Phase.DRAGGING
 				reset_double_tap_state()
-				while _touch_scroll_accum <= -TOUCH_WHEEL_STEP_PX:
-					_touch_scroll_accum += TOUCH_WHEEL_STEP_PX
+				while _touch_session.scroll_accum <= -TOUCH_WHEEL_STEP_PX:
+					_touch_session.scroll_accum += TOUCH_WHEEL_STEP_PX
 					_wheel_bits |= MASK_DOWN
 					_wheel_dir = clampi(_wheel_dir - 1, -12, 12)
 					wheel_pressed.emit(1)
-				while _touch_scroll_accum >= TOUCH_WHEEL_STEP_PX:
-					_touch_scroll_accum -= TOUCH_WHEEL_STEP_PX
+				while _touch_session.scroll_accum >= TOUCH_WHEEL_STEP_PX:
+					_touch_session.scroll_accum -= TOUCH_WHEEL_STEP_PX
 					_wheel_bits |= MASK_UP
 					_wheel_dir = clampi(_wheel_dir + 1, -12, 12)
 					wheel_pressed.emit(-1)
@@ -608,7 +705,7 @@ func held_mask(allow_mouse: bool = true) -> int:
 	var mask := scripted_key_mask if scripted_key_mask >= 0 else _physical_mask()
 	mask |= _wheel_bits
 	if allow_mouse:
-		if pointer_pressed or _touch_pointer_held or _click_latch or _touch_ok_ttl > 0:
+		if pointer_pressed or _touch_session.is_pointer_held() or _click_latch or _touch_ok_ttl > 0:
 			mask |= MASK_OK
 		if right_pressed or _right_click_latch or _touch_cancel_ttl > 0:
 			mask |= MASK_CANCEL
@@ -655,7 +752,7 @@ func wheel_notch() -> int:
 ## Button state for one frame: true when physically held or clicked within this tick.
 func left_frame_pressed() -> bool:
 	_reconcile_pointer_buttons()
-	return not _action_entry_suppressed and (pointer_pressed or _touch_pointer_held or _click_latch or _touch_ok_ttl > 0)
+	return not _action_entry_suppressed and (pointer_pressed or _touch_session.is_pointer_held() or _click_latch or _touch_ok_ttl > 0)
 
 
 func right_frame_pressed() -> bool:
@@ -707,7 +804,7 @@ func _reconcile_pointer_buttons(force_physical_check: bool = false) -> void:
 
 func reconcile_pointer_buttons(force_physical_check: bool = false) -> void:
 	_reconcile_pointer_buttons(force_physical_check)
-	if _action_entry_suppressed and not _click_latch and not pointer_pressed and not _touch_pointer_held:
+	if _action_entry_suppressed and not _click_latch and not pointer_pressed and not _touch_session.is_pointer_held():
 		var key_held := (scripted_key_mask & MASK_OK) != 0 if scripted_key_mask >= 0 else _any_pressed(ACTION_KEYS)
 		if not key_held:
 			_action_entry_suppressed = false
@@ -715,7 +812,7 @@ func reconcile_pointer_buttons(force_physical_check: bool = false) -> void:
 
 func action_input_held() -> bool:
 	_reconcile_pointer_buttons()
-	if pointer_pressed or _touch_pointer_held or _click_latch or _touch_ok_ttl > 0:
+	if pointer_pressed or _touch_session.is_pointer_held() or _click_latch or _touch_ok_ttl > 0:
 		return true
 	if scripted_key_mask >= 0:
 		return (scripted_key_mask & MASK_OK) != 0
