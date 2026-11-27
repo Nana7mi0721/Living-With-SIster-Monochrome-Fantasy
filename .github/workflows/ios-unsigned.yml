@@ -33,7 +33,13 @@ jobs:
         run: dotnet workload install ios
 
       - name: Install Python icon dependencies
-        run: python3 -m pip install --disable-pip-version-check pillow
+        run: |
+          set -euo pipefail
+          VENV_DIR="$RUNNER_TEMP/pyvenv"
+          python3 -m venv "$VENV_DIR"
+          "$VENV_DIR/bin/python" -m pip install --disable-pip-version-check pillow
+          echo "PYTHON_BIN=$VENV_DIR/bin/python" >> "$GITHUB_ENV"
+          echo "$VENV_DIR/bin" >> "$GITHUB_PATH"
 
       - name: Download Godot 4.7.2 Mono macOS editor and templates
         run: |

@@ -281,6 +281,21 @@ class GitHubActionsClient:
         if status not in (200, 201, 204):
             raise GitHubCIError(f"Unexpected status dispatching {workflow}: HTTP {status}")
 
+    def describe_failed_steps(self, run_id: int) -> list[str]:
+        try:
+            _, data = self.request_json("GET", f"/repos/{self.repo}/actions/runs/{run_id}/jobs")
+        except GitHubCIError:
+            return []
+        lines: list[str] = []
+        for job in data.get("jobs") or []:
+            if not isinstance(job, dict):
+                continue
+            jname = str(job.get("name") or "job")
+            for st in job.get("steps") or []:
+                if isinstance(st, dict) and st.get("conclusion") == "failure":
+                    lines.append(f"{jname} / step #{st.get('number')}: {st.get('name')}")
+        return lines
+
     def list_run_artifacts(self, run_id: int) -> list[dict[str, Any]]:
         _, data = self.request_json("GET", f"/repos/{self.repo}/actions/runs/{run_id}/artifacts")
         arts = data.get("artifacts") if isinstance(data, dict) else []
@@ -357,7 +372,7 @@ def download_run_ipa(
         raise GitHubCIError(f"Artifact {chosen.get('name')} has no archive_download_url")
 
     size_mb = int(chosen.get("size_in_bytes") or 0) / (1024 * 1024)
-    print(f"Downloading artifact {chosen.get('name')} ({size_mb:.2f} MiB) from run #{run_id}...")
+    print(f"Downloading artifact {chosen.get('name')} ({size_mb:.2f} MiB) from run #{run_id}...", flush=True)
     with tempfile.TemporaryDirectory(prefix="lwsmf-gh-art-") as tmp:
         art_zip = Path(tmp) / "artifact.zip"
         client.download_file(dl_url, art_zip)
@@ -410,7 +425,7 @@ def trigger_and_download_ios_ipa(
     client.canonicalize_repo()
     existing_ids = {int(r["id"]) for r in client.list_workflow_runs(workflow, event="workflow_dispatch", per_page=10)}
     started_utc = datetime.now(timezone.utc)
-    print(f"Dispatching {workflow} on {client.repo}@{ref} (version={version})...")
+    print(f"Dispatching {workflow} on {client.repo}@{ref} (version={version})...", flush=True)
     client.dispatch_workflow(workflow, ref, version)
 
     run_id: int | None = None
@@ -428,11 +443,11 @@ def trigger_and_download_ios_ipa(
                 if (created - started_utc).total_seconds() >= -30:
                     run_id = rid
                     run_url = str(r.get("html_url") or "")
-                    print(f"Workflow run started: #{run_id}  {run_url}")
+                    print(f"Workflow run started: #{run_id}  {run_url}", flush=True)
                     break
             if run_id is None:
                 elapsed = int(time.monotonic() - t0)
-                print(f"  waiting for GitHub Actions run to register... ({elapsed}s)")
+                print(f"  waiting for GitHub Actions run to register... ({elapsed}s)", flush=True)
                 continue
 
         current = next((r for r in runs if int(r["id"]) == run_id), None)
@@ -441,10 +456,12 @@ def trigger_and_download_ios_ipa(
         status = str(current.get("status") or "unknown")
         conclusion = str(current.get("conclusion") or "")
         elapsed = int(time.monotonic() - t0)
-        print(f"  run #{run_id}: status={status} conclusion={conclusion or '-'} ({elapsed}s)")
+        print(f"  run #{run_id}: status={status} conclusion={conclusion or '-'} ({elapsed}s)", flush=True)
         if status == "completed":
             if conclusion != "success":
-                raise GitHubCIError(f"Workflow run #{run_id} finished with conclusion={conclusion}: {run_url}")
+                failed_steps = client.describe_failed_steps(run_id)
+                step_note = f" | failed step(s): {'; '.join(failed_steps)}" if failed_steps else ""
+                raise GitHubCIError(f"Workflow run #{run_id} finished with conclusion={conclusion}{step_note}: {run_url}")
             ipa = download_run_ipa(client, run_id, version, out_dir)
             return ipa, run_id
 
