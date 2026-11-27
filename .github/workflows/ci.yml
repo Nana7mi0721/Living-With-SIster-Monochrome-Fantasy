@@ -47,11 +47,11 @@ jobs:
       - name: Mobile Tools CLI Smoke
         run: python tools/mobile/windows_pe.py --help
 
+      - name: Install Python Tool Dependencies
+        run: python -m pip install --disable-pip-version-check pillow numpy
+
       - name: Mobile Packaging Tools Unit Tests
         run: python tools/mobile/test_mobile_tools.py
-
-      - name: Install HD Tool Dependencies
-        run: python -m pip install --disable-pip-version-check pillow numpy
 
       - name: HD Pipeline Tools Unit Tests
         run: python tools/test_hd_tools.py
