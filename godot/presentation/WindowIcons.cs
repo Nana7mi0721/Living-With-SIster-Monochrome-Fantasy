@@ -8,11 +8,13 @@ public partial class WindowIcons : RefCounted
     private const uint WmSetIcon = 0x0080;
     private const int IconSmall = 0;
     private const int IconBig = 1;
+    private const int IconSmall2 = 2;
     private const int SmCxSmIcon = 49;
     private const int SmCySmIcon = 50;
     private const uint IconResourceVersion = 0x00030000;
 
     private IntPtr _smallIcon;
+    private IntPtr _taskbarIcon;
     private IntPtr _bigIcon;
 
     public bool Apply(long windowHandle, byte[] dockbarIco, byte[] cornerIco)
@@ -24,6 +26,7 @@ public partial class WindowIcons : RefCounted
             || dockbarIco.Length == 0
             || cornerIco.Length == 0
             || _smallIcon != IntPtr.Zero
+            || _taskbarIcon != IntPtr.Zero
             || _bigIcon != IntPtr.Zero)
         {
             return false;
@@ -36,20 +39,46 @@ public partial class WindowIcons : RefCounted
         int smallWidth = Math.Max(16, GetSystemMetrics(SmCxSmIcon));
         int smallHeight = Math.Max(16, GetSystemMetrics(SmCySmIcon));
         IntPtr small = CreateIcon(cornerIco, smallWidth, smallHeight);
+        IntPtr taskbar = CreateIcon(dockbarIco, smallWidth, smallHeight);
         IntPtr big = CreateIcon(dockbarIco, 0, 0);
-        if (small == IntPtr.Zero || big == IntPtr.Zero)
+        if (small == IntPtr.Zero || taskbar == IntPtr.Zero || big == IntPtr.Zero)
         {
             if (small != IntPtr.Zero)
                 DestroyIcon(small);
+            if (taskbar != IntPtr.Zero)
+                DestroyIcon(taskbar);
             if (big != IntPtr.Zero)
                 DestroyIcon(big);
             return false;
         }
 
         SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall), small);
+        SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall2), taskbar);
         SendMessage(hwnd, WmSetIcon, new IntPtr(IconBig), big);
         _smallIcon = small;
+        _taskbarIcon = taskbar;
         _bigIcon = big;
+        return true;
+    }
+
+    public bool Refresh(long windowHandle)
+    {
+        if (!OperatingSystem.IsWindows()
+            || windowHandle == 0
+            || _smallIcon == IntPtr.Zero
+            || _taskbarIcon == IntPtr.Zero
+            || _bigIcon == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        IntPtr hwnd = new(windowHandle);
+        if (!IsWindow(hwnd))
+            return false;
+
+        SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall), _smallIcon);
+        SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall2), _taskbarIcon);
+        SendMessage(hwnd, WmSetIcon, new IntPtr(IconBig), _bigIcon);
         return true;
     }
 
@@ -59,10 +88,13 @@ public partial class WindowIcons : RefCounted
         {
             if (_smallIcon != IntPtr.Zero)
                 DestroyIcon(_smallIcon);
+            if (_taskbarIcon != IntPtr.Zero)
+                DestroyIcon(_taskbarIcon);
             if (_bigIcon != IntPtr.Zero)
                 DestroyIcon(_bigIcon);
         }
         _smallIcon = IntPtr.Zero;
+        _taskbarIcon = IntPtr.Zero;
         _bigIcon = IntPtr.Zero;
     }
 

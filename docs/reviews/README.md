@@ -8,6 +8,7 @@
 
 | 文档 | 审查日期 | 范围与主题 | 关键结论与状态 |
 | :--- | :---: | :--- | :--- |
+| [godot_8_issues_conflict_free_fix_report.md](godot_8_issues_conflict_free_fix_report.md) | 2026-11-27 | **8 项边缘问题根因重构方案（G-01..G-08）** | 收敛为 `TextStyleEngine`、`TouchSession` 状态机、`AssetDB` 内存策略、`Instance.SelfBankPolicy`/`CoreRuntimeConfig` 与只读 `SaveAuditReport` 五项架构重构，已分批落地并通过全量双模式与 Oracle 校验（见 D-99） |
 | [lwsmf_mobile_4issues_remediation_2026_11_26.md](lwsmf_mobile_4issues_remediation_2026_11_26.md) | 2026-11-26 | **移动端四项交互问题核查与修复闭环报告** | 实证核查并闭环修复 MOB-01..04（长按学技能、`emulate_mouse_from_touch` 守卫卡死、重复 `CE325` 立绘闪烁、一般选项框垂直居中），双模式 38 项门禁全绿 |
 | [lwsmf_mobile_4issues_diagnosis_and_fix_plan.md](lwsmf_mobile_4issues_diagnosis_and_fix_plan.md) | 2026-11-26 | **LWSMF 移动端四项交互问题定位与修复方案** | 定位移动端长按学技能失效、睡觉取消偶发无反应、取消互动立绘位置跳变与一般选项框偏高 4 项问题 |
 | [full_project_audit_2026_11_25.md](full_project_audit_2026_11_25.md) | 2026-11-25 | **Godot Debug 启动修复、存档可点击翻页箭头与全项目审计闭环报告** | 修复 `_window_icons`/NUL/`MediaPakReader.Read` 阻塞；落地 `12004`/`12005` 翻页箭头点击/触控/悬停交互；完成 C#/GDScript/打包/CI/Rust 隐私与合规审计，双模式 38 项门禁全绿（见 D-93） |
