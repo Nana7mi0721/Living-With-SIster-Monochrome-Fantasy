@@ -629,14 +629,51 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("media_hd.pak", iss_tmpl)
         self.assertIn("nocompression", iss_tmpl)
         self.assertIn("SetupIconFile=@SETUP_ICON@", iss_tmpl)
-        self.assertIn("WizardImageFile=@SETUP_POSTER@", iss_tmpl)
+        self.assertIn("WizardImageFile=@FINISH_POSTER@", iss_tmpl)
+        self.assertIn('Source: "@SETUP_PROMO@"', iss_tmpl)
+        self.assertIn("PngImage.LoadFromFile", iss_tmpl)
+        self.assertIn("WizardSmallImageFile=@SETUP_SMALL@", iss_tmpl)
         self.assertIn("WizardImageStretch=yes", iss_tmpl)
-        self.assertIn("WizardKeepAspectRatio=yes", iss_tmpl)
+        self.assertIn("WizardImageBackColor=clWhite", iss_tmpl)
+        self.assertNotIn("WizardKeepAspectRatio=yes", iss_tmpl)
+        self.assertIn("WelcomeBanner.Width := BannerWidth", iss_tmpl)
+        self.assertIn("LayoutWelcomePage", iss_tmpl)
+        self.assertIn("TextAreaHeight := ScaleY(64)", iss_tmpl)
+        self.assertIn("WelcomeTitle.Font.Style := [fsBold]", iss_tmpl)
+        self.assertIn("LayoutFinishPage", iss_tmpl)
+        self.assertIn("PosterWidth := PosterHeight div 2", iss_tmpl)
         self.assertNotIn("WizardBackImageFile", iss_tmpl)
+        self.assertIn("WizardStyle=modern", iss_tmpl)
+        self.assertIn("WizardSizePercent=100,115", iss_tmpl)
+        self.assertIn("DisableWelcomePage=no", iss_tmpl)
+        self.assertIn("DisableReadyPage=yes", iss_tmpl)
+        self.assertIn("DisableDirPage=no", iss_tmpl)
+        self.assertIn("ShowLanguageDialog=no", iss_tmpl)
+        self.assertIn("AppendDefaultDirName=yes", iss_tmpl)
+        self.assertIn("DesktopIconCheck := TNewCheckBox.Create", iss_tmpl)
+        self.assertIn("Check: ShouldCreateDesktopIcon", iss_tmpl)
+        self.assertNotIn("[Tasks]", iss_tmpl)
         self.assertIn("AppPublisher=Inusuku", iss_tmpl)
         self.assertIn("Inusuku. All rights reserved.", iss_tmpl)
         self.assertIn("DefaultDirName={autopf}\\@APP_NAME@", iss_tmpl)
         self.assertNotIn("LWSMF Remake", iss_tmpl)
+        self.assertNotIn('Name: "english"', iss_tmpl)
+        self.assertIn("@EXTRA_LANGUAGES@", iss_tmpl)
+
+        packaging = (REPO_ROOT / "tools/package_release.sh").read_text(encoding="utf-8")
+        self.assertIn("normalize_integrity", packaging)
+        self.assertIn("/setintegritylevel M", packaging)
+        self.assertIn("MSYS2_ARG_CONV_EXCL='*' icacls.exe", packaging)
+        self.assertIn("for _ in 1 2 3", packaging)
+        self.assertIn("ChineseSimplified.isl not found", packaging)
+        self.assertIn("setup_small.png", packaging)
+        self.assertIn("setup_promo.png", packaging)
+        self.assertIn("setup_finish_poster.png", packaging)
+        self.assertIn("@FINISH_POSTER@", packaging)
+        self.assertIn("@SETUP_SMALL@", packaging)
+        integrity_tool = (REPO_ROOT / "tools/fix_integrity_level.ps1").read_text(encoding="utf-8")
+        self.assertIn("/setintegritylevel M", integrity_tool)
+        self.assertIn("for ($attempt = 1; $attempt -le 3; $attempt++)", integrity_tool)
 
         self.assertEqual(release_audit.repo_scan(REPO_ROOT), [])
 
@@ -1124,6 +1161,8 @@ class MobileToolsTest(unittest.TestCase):
         self.assertEqual(presets["Windows Desktop"]["application/file_description"], "妹相随～黑白世界的缤纷冒险～")
         self.assertIn("Inusuku", presets["Windows Desktop"]["application/copyright"])
         self.assertIn("assets/boot/generated/*.bin", presets["Windows Desktop"]["include_filter"])
+        self.assertIn("assets/boot/generated/icon_pc_taskbar.png", presets["Windows Desktop"]["include_filter"])
+        self.assertNotIn("assets/boot/generated/*.png", presets["Windows Desktop"]["exclude_filter"])
         self.assertEqual(presets["iOS"]["icons/icon_1024x1024"], "res://assets/boot/generated/ios_icon_1024.png")
         self.assertIn("CFBundleDisplayName", presets["iOS"]["application/additional_plist_content"])
         self.assertIn("妹相随", presets["iOS"]["application/additional_plist_content"])
@@ -1144,16 +1183,35 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("if pck.is_file()", rel_script)
         self.assertIn("PKG_NAME=\"LWSMF-${VERSION}-windows-x64\"", rel_script)
         self.assertIn("sync_release_icons.py", rel_script)
+        self.assertIn("--lossless", rel_script)
+        self.assertIn("building true-lossless media.pak", rel_script)
+        self.assertIn("--extra-root", rel_script)
+        self.assertIn("work/out/inno/ChineseSimplified.isl", rel_script)
+        self.assertIn("icon_pc_taskbar.png", rel_script)
+        self.assertIn("PROJECT_BAK", rel_script)
+        self.assertIn('config/icon="res://assets/boot/generated/icon_pc_taskbar.png"', rel_script)
 
         android_script = (REPO_ROOT / "tools/package_android.sh").read_text(encoding="utf-8")
         self.assertIn("LWSMF-${VERSION}-android-arm64${SUFFIX}.apk", android_script)
         self.assertIn("APP_LABEL=\"妹相随\"", android_script)
+        self.assertIn("new sln --format sln", android_script)
+        self.assertIn('|| "$DOTNET_BIN" new sln', android_script)
+        self.assertIn("timeout 30", android_script)
+        self.assertIn("ANDROID_DOTNET", android_script)
+        self.assertIn('export DOTNET="$DOTNET_BIN"', android_script)
+        self.assertIn("ANDROID_DOTNET_ROOT", android_script)
 
         game_root = (REPO_ROOT / "godot/presentation_gd/GameRoot.gd").read_text(encoding="utf-8")
         self.assertIn("icon_pc_dockbar.bin", game_root)
         self.assertIn("icon_pc_corner.bin", game_root)
         self.assertNotIn("icon_pc_dockbar.ico", game_root)
         self.assertNotIn("icon_pc_corner.ico", game_root)
+        window_icons = (REPO_ROOT / "godot/presentation/WindowIcons.cs").read_text(encoding="utf-8")
+        self.assertIn("IconSmall2", window_icons)
+        self.assertIn("WmSetIcon, new IntPtr(IconSmall2)", window_icons)
+        self.assertIn("_taskbarIcon", window_icons)
+        self.assertIn("CreateIcon(dockbarIco, smallWidth, smallHeight)", window_icons)
+        self.assertIn("_refresh_windows_window_icons.call_deferred", game_root)
 
     def test_sync_boot_assets_from_retail_logo_and_pak(self) -> None:
         import io as _io
@@ -1206,6 +1264,8 @@ class MobileToolsTest(unittest.TestCase):
                 img.paste((220, 224, 232, 255), (96, 96, 416, 416))
                 img.save(source / name, format="PNG")
             Image.new("RGB", (164, 314), (80, 120, 180)).save(source / "setup_poster.png", format="PNG")
+            Image.new("RGB", (1536, 864), (80, 120, 180)).save(source / "sisfan_promo.png", format="PNG")
+            Image.new("RGB", (520, 1041), (80, 120, 180)).save(source / "TitleGraphic6.jpg", format="JPEG")
 
             out = t / "out"
             stage = t / "stage"
@@ -1224,11 +1284,35 @@ class MobileToolsTest(unittest.TestCase):
             self.assertEqual(sync_boot_assets.read_png_dimensions(out / "res/android_adaptive_fg_432.png"), (432, 432))
             self.assertEqual(sync_boot_assets.read_png_dimensions(out / "res/android_adaptive_bg_432.png"), (432, 432))
             self.assertEqual(sync_boot_assets.read_png_dimensions(out / "res/ios_icon_1024.png"), (1024, 1024))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out / "res/icon_pc_taskbar.png"), (256, 256))
+            with Image.open(out / "res/android_adaptive_fg_432.png") as fg:
+                bbox = fg.getchannel("A").getbbox()
+                self.assertLessEqual(bbox[0], 72)
+                self.assertLessEqual(bbox[1], 72)
+                self.assertGreaterEqual(bbox[2], 360)
+                self.assertGreaterEqual(bbox[3], 360)
+            with Image.open(out / "res/android_adaptive_bg_432.png") as bg:
+                self.assertGreaterEqual(min(bg.convert("RGB").getpixel((0, 0))), 220)
             self.assertEqual(sync_boot_assets.read_png_dimensions(out / "installer/setup_poster.png"), (164, 314))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out / "installer/setup_promo.png"), (1536, 864))
+            with Image.open(out / "installer/setup_finish_poster.png") as finish_poster:
+                self.assertEqual(finish_poster.size, (520, 1041))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out / "installer/setup_small.png"), (55, 55))
             self.assertEqual(
                 (out / "installer/setup_poster.png").read_bytes(),
                 (source / "setup_poster.png").read_bytes(),
             )
+            with Image.open(out / "installer/setup_small.png") as small:
+                self.assertEqual(small.convert("RGBA").getpixel((0, 0)), (255, 255, 255, 255))
+            self.assertEqual(
+                (out / "installer/setup_promo.png").read_bytes(),
+                (source / "sisfan_promo.png").read_bytes(),
+            )
+            with Image.open(source / "TitleGraphic6.jpg") as finish_source, Image.open(
+                out / "installer/setup_finish_poster.png"
+            ) as finish_poster:
+                self.assertEqual(finish_poster.convert("RGB").tobytes(), finish_source.convert("RGB").tobytes())
+            self.assertFalse((out / "installer/setup_finish_poster.jpg").exists())
             for name in ("icon_pc.ico", "icon_pc_dockbar.ico", "icon_pc_corner.ico"):
                 with Image.open(out / "res" / name) as ico:
                     self.assertIn((16, 16), ico.info["sizes"])
@@ -1236,6 +1320,10 @@ class MobileToolsTest(unittest.TestCase):
             self.assertEqual(
                 (stage / "icon_pc_dockbar.ico").read_bytes(),
                 (out / "res/icon_pc_dockbar.ico").read_bytes(),
+            )
+            self.assertEqual(
+                (stage / "icon_pc_taskbar.png").read_bytes(),
+                (out / "res/icon_pc_taskbar.png").read_bytes(),
             )
             for name in ("icon_pc_dockbar.bin", "icon_pc_corner.bin"):
                 self.assertEqual(
@@ -1262,6 +1350,57 @@ class MobileToolsTest(unittest.TestCase):
             self.assertEqual(rc2, 0)
             manifest2 = json.loads((placeholder_out / "manifest.json").read_text(encoding="utf-8"))
             self.assertTrue(manifest2["placeholder"])
+
+    def test_pack_media_lossless_mode_preserves_pixels(self) -> None:
+        from io import BytesIO
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "assets"
+            (root / "Picture").mkdir(parents=True)
+            (root / "MapChip").mkdir(parents=True)
+            extra = Path(tmp) / "extra"
+            (extra / "SystemFile").mkdir(parents=True)
+            (extra / "Picture").mkdir(parents=True)
+
+            source = Image.new("RGBA", (512, 512), (7, 11, 13, 0))
+            for y in range(512):
+                for x in range(512):
+                    if (x - 256) ** 2 + (y - 256) ** 2 < 220**2:
+                        source.putpixel((x, y), ((x * 3) % 256, (y * 5) % 256, (x + y) % 256, 255))
+            source.save(root / "Picture/hero.png", format="PNG")
+
+            jpg_bytes = BytesIO()
+            Image.new("RGB", (64, 64), (80, 120, 180)).save(jpg_bytes, format="JPEG", quality=90)
+            (root / "Picture/background.jpg").write_bytes(jpg_bytes.getvalue())
+            Image.new("RGB", (32, 32), (20, 30, 40)).save(root / "MapChip/unused.png", format="PNG")
+            Image.new("RGB", (16, 16), (40, 50, 60)).save(extra / "SystemFile/extra.png", format="PNG")
+            Image.new("RGB", (16, 16), (250, 10, 20)).save(extra / "Picture/hero.png", format="PNG")
+
+            pak = Path(tmp) / "media-lossless.pak"
+            rc = pack_media.main(
+                [
+                    "--root",
+                    str(root),
+                    "--extra-root",
+                    str(extra),
+                    "--out",
+                    str(pak),
+                    "--lossless",
+                    "--jobs",
+                    "1",
+                ]
+            )
+            self.assertEqual(rc, 0)
+
+            entries = dict(pack_media.read_pak_entries(pak))
+            self.assertNotIn("MapChip/unused.png", entries)
+            self.assertEqual(entries["Picture/background.jpg"], jpg_bytes.getvalue())
+            self.assertEqual(entries["Picture/hero.png"][:4], b"RIFF")
+            self.assertEqual(entries["Picture/hero.png"][8:12], b"WEBP")
+            self.assertIn("SystemFile/extra.png", entries)
+            with Image.open(BytesIO(entries["Picture/hero.png"])) as decoded:
+                self.assertEqual(decoded.convert("RGBA").tobytes(), source.tobytes())
 
     def test_verify_apk_rejects_leaked_test_assets(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

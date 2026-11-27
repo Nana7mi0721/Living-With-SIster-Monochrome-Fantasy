@@ -9,6 +9,7 @@ AppVersion=@APP_VERSION@
 AppVerName=@APP_NAME@ @APP_VERSION@
 AppPublisher=Inusuku
 DefaultDirName={autopf}\@APP_NAME@
+AppendDefaultDirName=yes
 DefaultGroupName=@APP_NAME@
 OutputDir=@OUTPUT_DIR@
 OutputBaseFilename=@OUTPUT_BASE_FILENAME@
@@ -18,12 +19,18 @@ LZMADictionarySize=65536
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
-DisableProgramGroupPage=yes
 WizardStyle=modern
+WizardSizePercent=100,115
+DisableWelcomePage=no
+DisableDirPage=no
+DisableReadyPage=yes
+DisableProgramGroupPage=yes
+ShowLanguageDialog=no
 SetupIconFile=@SETUP_ICON@
-WizardImageFile=@SETUP_POSTER@
+WizardImageFile=@FINISH_POSTER@
+WizardSmallImageFile=@SETUP_SMALL@
+WizardImageBackColor=clWhite
 WizardImageStretch=yes
-WizardKeepAspectRatio=yes
 UninstallDisplayIcon={app}\game\Lwsmf.exe
 VersionInfoCompany=Inusuku
 VersionInfoDescription=@APP_NAME@ 安装程序
@@ -32,20 +39,155 @@ VersionInfoProductName=@APP_NAME@
 VersionInfoProductVersion=@APP_VERSION@
 
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
 @EXTRA_LANGUAGES@
 
 [Files]
 Source: "@STAGE_DIR@\*"; DestDir: "{app}"; Excludes: "work\all\media.pak,work\all\media_hd.pak"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "@STAGE_DIR@\work\all\media.pak"; DestDir: "{app}\work\all"; Flags: ignoreversion nocompression
 Source: "@STAGE_DIR@\work\all\media_hd.pak"; DestDir: "{app}\work\all"; Flags: ignoreversion nocompression skipifsourcedoesntexist
+Source: "@SETUP_PROMO@"; DestDir: "{tmp}"; DestName: "setup_promo.png"; Flags: dontcopy
 
 [Icons]
-Name: "{autoprograms}\@APP_NAME@"; Filename: "{app}\game\Lwsmf.exe"
-Name: "{autodesktop}\@APP_NAME@"; Filename: "{app}\game\Lwsmf.exe"; Tasks: desktopicon
-
-[Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "{autoprograms}\@APP_NAME@"; Filename: "{app}\game\Lwsmf.exe"; WorkingDir: "{app}\game"
+Name: "{autodesktop}\@APP_NAME@"; Filename: "{app}\game\Lwsmf.exe"; WorkingDir: "{app}\game"; Check: ShouldCreateDesktopIcon
 
 [Run]
-Filename: "{app}\game\Lwsmf.exe"; Description: "{cm:LaunchProgram,@APP_NAME@}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\game\Lwsmf.exe"; Description: "{cm:LaunchProgram,@APP_NAME@}"; WorkingDir: "{app}\game"; Flags: nowait postinstall skipifsilent
+
+[Code]
+var
+  DesktopIconCheck: TNewCheckBox;
+  InstallNoteLabel: TNewStaticText;
+  WelcomeBanner: TBitmapImage;
+  WelcomeTitle: TNewStaticText;
+  WelcomeHint: TNewStaticText;
+  ImageSlotWidth: Integer;
+
+function ShouldCreateDesktopIcon(): Boolean;
+begin
+  Result := Assigned(DesktopIconCheck) and DesktopIconCheck.Checked;
+end;
+
+procedure LayoutWelcomePage();
+var
+  BannerWidth: Integer;
+  BannerHeight: Integer;
+  BannerLeft: Integer;
+  TextAreaHeight: Integer;
+begin
+  TextAreaHeight := ScaleY(64);
+  BannerWidth := WizardForm.WelcomePage.Width;
+  BannerHeight := (BannerWidth * 9 + 8) div 16;
+  if BannerHeight > WizardForm.WelcomePage.Height - TextAreaHeight then
+  begin
+    BannerHeight := WizardForm.WelcomePage.Height - TextAreaHeight;
+    BannerWidth := (BannerHeight * 16) div 9;
+  end;
+  BannerLeft := (WizardForm.WelcomePage.Width - BannerWidth) div 2;
+
+  WelcomeBanner.Left := BannerLeft;
+  WelcomeBanner.Top := 0;
+  WelcomeBanner.Width := BannerWidth;
+  WelcomeBanner.Height := BannerHeight;
+  WelcomeBanner.Stretch := True;
+
+  WelcomeTitle.Left := ScaleX(18);
+  WelcomeTitle.Top := BannerHeight + ScaleY(8);
+  WelcomeTitle.Width := WizardForm.WelcomePage.Width - ScaleX(36);
+  WelcomeTitle.Height := ScaleY(26);
+
+  WelcomeHint.Left := ScaleX(18);
+  WelcomeHint.Top := WelcomeTitle.Top + WelcomeTitle.Height + ScaleY(2);
+  WelcomeHint.Width := WizardForm.WelcomePage.Width - ScaleX(36);
+  WelcomeHint.Height := ScaleY(22);
+end;
+
+procedure LayoutFinishPage();
+var
+  PosterHeight: Integer;
+  PosterWidth: Integer;
+begin
+  PosterHeight := ImageSlotWidth * 2;
+  if PosterHeight > WizardForm.FinishedPage.Height then
+    PosterHeight := WizardForm.FinishedPage.Height;
+  PosterWidth := PosterHeight div 2;
+  WizardForm.WizardBitmapImage.Left := (ImageSlotWidth - PosterWidth) div 2;
+  WizardForm.WizardBitmapImage.Top := 0;
+  WizardForm.WizardBitmapImage.Width := PosterWidth;
+  WizardForm.WizardBitmapImage.Height := PosterHeight;
+  WizardForm.WizardBitmapImage.Stretch := True;
+end;
+
+procedure InitializeWizard();
+begin
+  WizardForm.WelcomeLabel1.Visible := False;
+  WizardForm.WelcomeLabel2.Visible := False;
+  ImageSlotWidth := WizardForm.WizardBitmapImage.Width;
+  WizardForm.WizardBitmapImage.Visible := False;
+
+  ExtractTemporaryFile('setup_promo.png');
+  WelcomeBanner := TBitmapImage.Create(WizardForm);
+  WelcomeBanner.Parent := WizardForm.WelcomePage;
+  WelcomeBanner.PngImage.LoadFromFile(ExpandConstant('{tmp}\setup_promo.png'));
+  WelcomeBanner.Visible := False;
+
+  WelcomeTitle := TNewStaticText.Create(WizardForm);
+  WelcomeTitle.Parent := WizardForm.WelcomePage;
+  WelcomeTitle.AutoSize := False;
+  WelcomeTitle.WordWrap := False;
+  WelcomeTitle.Font.Size := 11;
+  WelcomeTitle.Font.Style := [fsBold];
+  WelcomeTitle.Caption := '欢迎安装 @APP_NAME@ @APP_VERSION@';
+
+  WelcomeHint := TNewStaticText.Create(WizardForm);
+  WelcomeHint.Parent := WizardForm.WelcomePage;
+  WelcomeHint.AutoSize := False;
+  WelcomeHint.WordWrap := False;
+  WelcomeHint.Font.Size := 9;
+  WelcomeHint.Caption := '点击“下一步”继续，或点击“取消”退出安装程序。';
+  LayoutWelcomePage();
+
+  DesktopIconCheck := TNewCheckBox.Create(WizardForm);
+  DesktopIconCheck.Parent := WizardForm.SelectDirPage;
+  DesktopIconCheck.Left := WizardForm.DirEdit.Left;
+  DesktopIconCheck.Top := WizardForm.DirEdit.Top + WizardForm.DirEdit.Height + ScaleY(24);
+  DesktopIconCheck.Height := ScaleY(24);
+  DesktopIconCheck.Width := WizardForm.SelectDirPage.Width - DesktopIconCheck.Left - ScaleX(16);
+  DesktopIconCheck.Caption := '创建桌面快捷方式';
+  DesktopIconCheck.Checked := True;
+
+  InstallNoteLabel := TNewStaticText.Create(WizardForm);
+  InstallNoteLabel.Parent := WizardForm.SelectDirPage;
+  InstallNoteLabel.Left := WizardForm.DirEdit.Left;
+  InstallNoteLabel.Top := DesktopIconCheck.Top + DesktopIconCheck.Height + ScaleY(10);
+  InstallNoteLabel.Width := WizardForm.SelectDirPage.Width - InstallNoteLabel.Left - ScaleX(16);
+  InstallNoteLabel.Height := ScaleY(52);
+  InstallNoteLabel.AutoSize := False;
+  InstallNoteLabel.WordWrap := True;
+  InstallNoteLabel.Font.Size := 8;
+  InstallNoteLabel.Caption :=
+    '安装说明：覆盖安装或卸载不会删除玩家存档。' + #13#10 +
+    '常用快捷键：F4 窗口尺寸、F11 全屏、F5 帧率、F6/F7 快速存取档。' + #13#10 +
+    '完整键位见安装目录下的“按键说明.txt”。';
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpWelcome then
+  begin
+    WizardForm.WizardBitmapImage.Visible := False;
+    WelcomeBanner.Visible := True;
+    LayoutWelcomePage();
+  end
+  else if CurPageID = wpFinished then
+  begin
+    WelcomeBanner.Visible := False;
+    WizardForm.WizardBitmapImage.Visible := True;
+    LayoutFinishPage();
+  end
+  else
+  begin
+    WelcomeBanner.Visible := False;
+    WizardForm.WizardBitmapImage.Visible := False;
+  end;
+end;

@@ -1,17 +1,17 @@
 # Godot 重制版 Windows x64 发布说明
 
-> 状态：**现行（标准版与 `--slim` 版均已完成打包与发布审计）**
+> 状态：**现行（标准版、真无损安装包与 `--slim` 版均已完成打包与发布审计）**
 >
 > 更新日期：2026-11-25（Asia/Shanghai）
 >
 > 适用：Godot 4.7.2 .NET，Windows x64
 >
-> 本文记录发布预设、打包脚本、包体账本、发布审计与验证记录。仓库规范见 [../../AGENTS.md](../../AGENTS.md)，定稿决策见 [DECISIONS.md](DECISIONS.md)（D-53 / D-64 / D-65 / D-92）。
+> 本文记录发布预设、打包脚本、包体账本、发布审计与验证记录。仓库规范见 [../../AGENTS.md](../../AGENTS.md)，定稿决策见 [DECISIONS.md](DECISIONS.md)（D-53 / D-64 / D-65 / D-92 / D-94 / D-95 / D-96 / D-97）。
 
 ## 1. 发布策略概览
 
 - 自 D-53 起发布包自带 `game_data/`（紧凑 JSON）与 `work/all/media.pak`（加密归档）及 `BasicData/*.project`，玩家解压即可直接运行 `game\Lwsmf.exe`，无需安装 Python，也无需预先手动转换。
-- 打包脚本：`tools/package_release.sh [--demo] [--slim] [--allow-placeholder]`，自动通过环境变量或 `PATH` 探测 `godot` 与 `dotnet`（零本机硬编码路径），先对 `$STAGE` 执行 `release_audit.py`，通过后再交换进入 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]/` 并生成同名 `.zip` 与 `dist/SHA256SUMS.txt`；若 `work/retail_dat/_publish/` 缺省（如 `--demo` 或纯离线构建），可传 `--allow-placeholder` 或 `LWSMF_ALLOW_PLACEHOLDER_ICONS=1` 生成占位图标。
+- 打包脚本：`tools/package_release.sh [--demo] [--slim|--lossless] [--hd] [--brotli] [--installer] [--allow-placeholder]`，自动通过环境变量或 `PATH` 探测 `godot`、`dotnet` 与 Inno Setup（零本机硬编码路径），先对 `$STAGE` 执行 `release_audit.py`，通过后再交换进入 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]/` 并生成同名 `.zip` 与 `dist/SHA256SUMS.txt`；`--installer` 另行产出同名 `-setup.exe` 并把 SHA-256 追加进清单。若 `work/retail_dat/_publish/` 缺省（如 `--demo` 或纯离线构建），可传 `--allow-placeholder` 或 `LWSMF_ALLOW_PLACEHOLDER_ICONS=1` 生成占位图标。
 - 发布审计：`tools/release_audit.py --dist <dir>` 与 `tools/release_audit.py --repo-scan`，校验程序集、紧凑 JSON、`media.pak` CRC/资产覆盖、0 `.pdb`、0 `addons/`/`tests/` 渗透以及 0 隐私/本机绝对路径泄露。
 
 ## 2. 工具链与导出模板
@@ -57,7 +57,9 @@ dotnet/embed_build_outputs=false
 | `icon_pc_dockbar.png` | Windows 任务栏大图标 |
 | `icon_pc_corner.png` | Windows 窗口左上角小图标 |
 | `icon_mobile.jpg` | Android 192/432 图标与 iOS 1024 应用图标 |
-| `setup_poster.png` | Inno Setup 左侧海报；`copy2` 原图字节直通，不裁切、不缩放、不重编码 |
+| `setup_poster.png` | 海报母版原字节副本；`copy2` 直通，不裁切、不覆盖 |
+| `setup_promo.png` | 完整 `1536×864` 横版海报；由 `sisfan_promo.png` 原字节直通，用于欢迎页顶部横幅 |
+| `setup_small.png` | 内页右上角 `55×55` 白底应用图标 |
 
 Windows 运行时通过 `WindowIcons.cs` 调用 `WM_SETICON`：任务栏使用 `icon_pc_dockbar.bin`，窗口左上角使用 `icon_pc_corner.bin`。`.bin` 仅是 `.ico` 的逐字节副本，用于绕过 Godot 图片导入管线；两者由打包测试断言完全一致。
 
@@ -70,7 +72,7 @@ Windows 版本资源固定为简体中文语言 `0x0804`，字段如下：
 | 版权 | `Copyright (C) 2026 Inusuku. All rights reserved.` |
 | 文件版本 / 产品版本 | 打包脚本的 `--version`，规范化为四段数字 |
 
-移动端应用显示名统一为 `妹相随`。安装器仅使用经典左侧海报，不启用 `WizardBackImageFile` 整窗背景效果；默认安装目录使用完整中文产品名，固定 `AppId` 保持升级/卸载识别稳定。
+移动端应用显示名统一为 `妹相随`。安装器仅声明简体中文语言并设置 `ShowLanguageDialog=no`，不再显示语言选择框。现行紧凑向导使用 `WizardStyle=modern`、`DisableWelcomePage=no`、`DisableReadyPage=yes`，流程为欢迎页→目标位置→进度→完成；欢迎页由独立 `TBitmapImage` 在顶部按 `16:9` 完整显示 `setup_promo.png`（`sisfan_promo.png` 原字节），完成页由原生 `WizardBitmapImage` 显示 `TitleGraphic6.jpg` 同尺寸转存的 PNG 并保持 `1:2`，内页右上角使用 `setup_small.png`，不启用 `WizardBackImageFile` 整窗背景效果。`DisableDirPage=no` 始终显示自定义安装路径页。默认安装目录使用完整中文产品名，固定 `AppId` 保持升级/卸载识别稳定。
 
 ## 4. 打包命令与流程
 
@@ -82,6 +84,9 @@ bash tools/package_release.sh
 
 # Slim 瘦身包（media.pak 内 PNG/JPG 按 >=5% 收益转 WebP、剔除未使用的 MapChip/）
 bash tools/package_release.sh --slim
+
+# 真无损瘦身安装包（原版 1× 媒体；PNG/BMP 仅做像素级无损 WebP，剔除未使用的 MapChip/；输出名不带 -slim）
+bash tools/package_release.sh --lossless --brotli --installer
 ```
 
 脚本流程：
@@ -90,10 +95,12 @@ bash tools/package_release.sh --slim
 3. 由 `tools/sync_release_icons.py` 派生窗口/任务栏/安装器图标与海报，并写入 Windows 版本元数据。
 4. 执行 Godot `--export-release "Windows Desktop"` 至 `godot/build/release/` 并剔除任何 `.pdb`。
 5. 将 `game_data/{programs,database,map_tiles}.json` 压缩为单行紧凑 JSON 放入 `$STAGE/game_data/`。
-6. 仅复制 `work/all/BasicData/*.project` 与 `work/all/media.pak`（`--slim` 时调用 `tools/pack_media.py --from-pak ... --slim`），跳过 `work/all/save/` 与冗余 `BasicData/*.dat`/`MapChip/`/`MapData/`/`SystemFile/`。
+6. 仅复制 `work/all/BasicData/*.project` 与 `work/all/media.pak`；`--lossless` 调用 `tools/pack_media.py --from-pak ... --lossless --extra-root ...`，`--slim` 调用 `--slim --extra-root ...`，并用 `work/all/SystemFile/` 补齐清单缺失项（只补缺失、不覆盖基包条目），跳过 `work/all/save/` 与冗余 `BasicData/*.dat`/`MapChip/`/`MapData/`/`SystemFile/`。
 7. Staging `converter/`（剥离 `__pycache__`、`.pyc` 与 `tests/`）、最新 `README.txt` 与 `按键说明.txt`。
 8. 在替换 `dist/` 之前先对 `$STAGE` 执行 `python tools/release_audit.py --dist "$STAGE"`。
 9. 通过后替换进 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]`，旧目录备份到 `work/out/dist-backup-*`，随后生成同名 `.zip` 与 `dist/SHA256SUMS.txt` 并打印体积账本。
+10. `--installer` 时以 `tools/installer/lwsmf.iss.tmpl` 生成仅简体中文、欢迎页完整横版海报、目录与快捷方式合并的 Inno Setup LZMA2 安装包；自动探测 `ChineseSimplified.isl`（缺失即失败）并输出 `LWSMF-<版本>-windows-x64[-slim][-hd]-setup.exe`，随后把 Setup SHA-256 追加进 `dist/SHA256SUMS.txt`。
+11. 最后执行 `normalize_integrity`：若工作区被外部代理设为 `Low Mandatory Level`，对 `dist/` 递归恢复为 `Medium`；普通令牌无 `WRITE_OWNER` 时先补当前用户 FullControl。可单独运行 `tools/fix_integrity_level.ps1` 修复工作区。
 
 ## 5. 实测包体账本与校验指纹（2026-11-21）
 
@@ -152,9 +159,47 @@ bash tools/package_release.sh --hd
 
 > 上表为 2026-11-21 基线；自 2026-11-24 起，发布包根目录还会包含 `按键说明.txt`。
 
+### 5.2 真无损媒体包与 Windows Setup（2026-11-25）
+
+```bash
+bash tools/package_release.sh --lossless --brotli --installer --version 0.1.0
+```
+
+| 指标 | 实测值 | 说明 |
+| :--- | ---: | :--- |
+| 媒体来源 | 原版 1× `work/retail_dat` | 未使用 2× 超分资源 |
+| `media.pak` | **517,980,992 B** | 2,666 条；1,688 张无损 WebP + 978 条原字节 + 10 条打包期补齐 |
+| 发布目录 | **722,181,164 B** | 218 个文件 |
+| ZIP 归档 | **600,957,997 B** | `LWSMF-0.1.0-windows-x64.zip` |
+| Setup | **580,595,989 B** | Inno Setup 6.7.4 / LZMA2，仅简体中文、紧凑向导、自定义路径页 |
+
+- **无损约束**：仅 PNG/BMP 生成 `lossless=True, quality=100, method=6, exact=True` 的 WebP 候选，编码后重新解码并逐像素比对；只有体积更小且像素完全一致才替换；JPG/MP3/OGG/WAV 保持原字节。发布名不带 `-slim`，避免与有损瘦身包混淆。
+- **打包与审计**：`PACK_MEDIA_OK entries=2666 mode=lossless slim=False lossless=True extra=10`、`RELEASE_AUDIT_OK files=218 bytes=722181164 pak_entries=2666 assets=172`。`program_asset_missing=139` 为零售源本身缺失的静态引用，非本轮打包新增，不阻断发布。
+- **安装器交互核验**：用 UI Automation 与 Win32 控件树确认首屏为欢迎页、第二步为“选择目标位置”，无语言选择页、任务页与准备安装页；目录页勾选框、安装说明和磁盘空间提示不重叠。150% DPI 下欢迎页可用区 `828×613`，横幅 `828×466`（16:9），标题与提示分别位于 `y=479`、`y=525`；完成页图片 `306×613`（1:2）。
+- **窗口图标核验**：冷启动后任务栏按钮为 `icon_pc_dockbar` 女生头像，标题栏左上角为 `icon_pc_corner` Q 版角标；窗口注册后 0.25 s / 1.0 s 的两次图标消息补发消除了 Explorer 首次缓存 Godot 默认图标的竞态。
+- **校验指纹**：
+  - `LWSMF-0.1.0-windows-x64.zip` SHA-256：`9cc25901d2e69789b3cdbe35676843b5458894640b5ea30718ec0e2fe5bd3ec5`
+  - `LWSMF-0.1.0-windows-x64-setup.exe` SHA-256：`363e4ee6f373829d46141289091b67dacf9361651584bffdbc17a590e50e19fd`
+  - `game/Lwsmf.exe` SHA-256：`fe0b8ac6ba78334bb78c31d4f347caf7fcce3905e4232c25710a2b45e04661ee`
+  - `work/all/media.pak` SHA-256：`58400bdb22143dddff42f7b1586cfedf54c777555c556d49d21d63de06cedb30`
+
+### 5.3 紧凑向导正式交付（2026-11-25）
+
+| 指标 | 实测值 |
+| :--- | ---: |
+| 正式 Setup | **580,595,989 B** |
+| SHA-256 | `363e4ee6f373829d46141289091b67dacf9361651584bffdbc17a590e50e19fd` |
+| 欢迎页海报 | `sisfan_promo.png`（`1536×864`）原字节直通，顶部 16:9 完整展示，不裁切 |
+| 完成页海报 | `TitleGraphic6.jpg`（`520×1041`）同尺寸转存为 PNG，页面按 1:2 展示，不裁切 |
+| 页面顺序 | 欢迎页 → 选择目标位置 → 安装进度 → 完成页 |
+
+- **JPEG 约束**：Inno Setup 6.7.4 的 `WizardImageFile` 不接受该 JPEG，直接引用会在启动时弹出“Bitmap image is not valid.”；构建期从源 JPG 解码并同尺寸转存 PNG，源文件字节保持不变。
+- **烟测**：正式 Setup 静默安装至工作区临时目录，`game/Lwsmf.exe`、`work/all/media.pak` 与 `按键说明.txt` 均落盘，媒体包 SHA-256 与发布目录一致；开始菜单、桌面快捷方式、HKCU 卸载项均创建成功，静默卸载后全部清理。冷启动任务栏与标题栏图标已截图核验，测试包与临时探针已删除。
+
 ## 6. 发布审计与移动端配套
 
 ```bash
+python tools/release_audit.py --dist "dist/LWSMF-<版本>-windows-x64"
 python tools/release_audit.py --dist "dist/LWSMF-<版本>-windows-x64-slim"
 python tools/release_audit.py --hd-root work/hd
 python tools/release_audit.py --repo-scan

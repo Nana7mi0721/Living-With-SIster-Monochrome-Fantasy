@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and stage the self-contained Windows x64 release package (`--slim` / `--demo`).
+# Build and stage the self-contained Windows x64 release package (`--slim` / `--lossless` / `--demo`).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,11 +27,14 @@ export DOTNET_ROOT="${DOTNET_ROOT:-$(dirname "$DOTNET_BIN")}"
 export PATH="$(dirname "$DOTNET_BIN"):$PATH"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_NOLOGO=1
+export UseSharedCompilation=false
+export MSBUILDDISABLENODEREUSE=1
 
 VERSION="0.1.0"
 WINDOWS_APP_NAME="妹相随～黑白世界的缤纷冒险～"
 DEMO=false
 SLIM=false
+LOSSLESS=false
 HD=false
 BROTLI=false
 INSTALLER=false
@@ -41,6 +44,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --demo) DEMO=true; ALLOW_PLACEHOLDER=true; shift ;;
     --slim) SLIM=true; shift ;;
+    --lossless) LOSSLESS=true; shift ;;
     --hd) HD=true; shift ;;
     --brotli) BROTLI=true; shift ;;
     --installer) INSTALLER=true; shift ;;
@@ -62,11 +66,16 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     *)
-      echo "usage: tools/package_release.sh [--demo] [--slim] [--hd] [--brotli] [--installer] [--allow-placeholder] [--version VER] [--template FILE]" >&2
+      echo "usage: tools/package_release.sh [--demo] [--slim|--lossless] [--hd] [--brotli] [--installer] [--allow-placeholder] [--version VER] [--template FILE]" >&2
       exit 2
       ;;
   esac
 done
+
+if [ "$SLIM" = true ] && [ "$LOSSLESS" = true ]; then
+  echo "ERROR: --slim and --lossless are mutually exclusive" >&2
+  exit 2
+fi
 
 PKG_NAME="LWSMF-${VERSION}-windows-x64"
 if [ "$SLIM" = true ]; then
@@ -88,9 +97,12 @@ SLN="$ROOT/godot/Lwsmf.sln"
 SLN_CREATED=false
 PRESET_FILE="$ROOT/godot/export_presets.cfg"
 PRESET_BAK="$LOG_DIR/export_presets.win.$$.cfg"
+PROJECT_FILE="$ROOT/godot/project.godot"
+PROJECT_BAK="$LOG_DIR/project.win.$$.godot"
 ICON_OUT="$LOG_DIR/release_icons"
 ICON_STAGE="$ROOT/godot/assets/boot/generated"
 ICON_STAGE_CREATED=false
+MEDIA_OVERLAY="$LOG_DIR/media_overlay"
 
 cleanup() {
   if [ -n "${STAGE:-}" ] && [ -d "$STAGE" ]; then
@@ -100,12 +112,16 @@ cleanup() {
     cp -f "$PRESET_BAK" "$PRESET_FILE"
     rm -f "$PRESET_BAK"
   fi
+  if [ -f "$PROJECT_BAK" ]; then
+    cp -f "$PROJECT_BAK" "$PROJECT_FILE"
+    rm -f "$PROJECT_BAK"
+  fi
   if [ "$ICON_STAGE_CREATED" = true ]; then
     rm -rf "$ICON_STAGE"
   fi
-  rm -rf "$ICON_OUT"
+  rm -rf "$ICON_OUT" "$MEDIA_OVERLAY"
   if [ "$SLN_CREATED" = true ]; then
-    rm -f "$SLN"
+    rm -f "$SLN" "$ROOT/godot/Lwsmf.slnx"
   fi
 }
 trap cleanup EXIT
@@ -141,6 +157,33 @@ to_win_path() {
   fi
 }
 
+normalize_integrity() {
+  local target="$1"
+  [ -e "$target" ] || return 0
+  command -v icacls.exe >/dev/null 2>&1 || return 0
+  local win_target
+  win_target="$(to_win_path "$target")"
+  for _ in 1 2 3; do
+    if MSYS2_ARG_CONV_EXCL='*' icacls.exe "$win_target" /setintegritylevel M /T >/dev/null 2>&1; then
+      echo "INTEGRITY_OK $target"
+      return 0
+    fi
+    sleep 1
+  done
+  local user="${USERNAME:-${USER:-}}"
+  if [ -n "$user" ]; then
+    MSYS2_ARG_CONV_EXCL='*' icacls.exe "$win_target" /grant "${user}:(OI)(CI)F" >/dev/null 2>&1 || true
+  fi
+  for _ in 1 2 3; do
+    if MSYS2_ARG_CONV_EXCL='*' icacls.exe "$win_target" /setintegritylevel M /T >/dev/null 2>&1; then
+      echo "INTEGRITY_OK $target"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "WARN: unable to normalize NTFS integrity level for $target" >&2
+}
+
 echo "== dotnet build (-c Release) =="
 "$DOTNET_BIN" build "$ROOT/godot/Lwsmf.csproj" -c Release -v:minimal 2>&1 | tee "$BUILD_LOG"
 
@@ -164,6 +207,22 @@ if [ "$ALLOW_PLACEHOLDER" = true ] || [ "${LWSMF_ALLOW_PLACEHOLDER_ICONS:-0}" = 
   ICON_ARGS+=(--allow-placeholder)
 fi
 "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/sync_release_icons.py")" "${ICON_ARGS[@]}"
+
+cp -f "$PROJECT_FILE" "$PROJECT_BAK"
+"$PYTHON_BIN" - "$(to_win_path "$PROJECT_FILE")" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+text = re.sub(r"(?m)^config/icon=.*\r?\n", "", text)
+line = 'config/icon="res://assets/boot/generated/icon_pc_taskbar.png"\n'
+if "[application]\n" not in text:
+    raise SystemExit("project.godot is missing [application]")
+text = text.replace("[application]\n", "[application]\n\n" + line, 1)
+path.write_text(text, encoding="utf-8")
+PY
 
 cp -f "$PRESET_FILE" "$PRESET_BAK"
 PATCH_SETS=(
@@ -277,14 +336,32 @@ PY
   fi
 fi
 
-if [ "$SLIM" = true ]; then
+rm -rf "$MEDIA_OVERLAY"
+mkdir -p "$MEDIA_OVERLAY/SystemFile"
+if [ -d "$ROOT/work/all/SystemFile" ]; then
+  cp -a "$ROOT/work/all/SystemFile/." "$MEDIA_OVERLAY/SystemFile/"
+fi
+MEDIA_EXTRA_ARGS=(--extra-root "$(to_win_path "$MEDIA_OVERLAY")")
+
+if [ "$LOSSLESS" = true ]; then
+  echo "== building true-lossless media.pak =="
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" \
+    --from-pak "$(to_win_path "$ROOT/work/all/media.pak")" \
+    --out "$(to_win_path "$STAGE/work/all/media.pak")" \
+    --lossless \
+    "${MEDIA_EXTRA_ARGS[@]}"
+elif [ "$SLIM" = true ]; then
   echo "== slimming media.pak =="
   "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" \
     --from-pak "$(to_win_path "$ROOT/work/all/media.pak")" \
     --out "$(to_win_path "$STAGE/work/all/media.pak")" \
-    --slim
+    --slim \
+    "${MEDIA_EXTRA_ARGS[@]}"
 else
-  cp -a "$ROOT/work/all/media.pak" "$STAGE/work/all/media.pak"
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" \
+    --from-pak "$(to_win_path "$ROOT/work/all/media.pak")" \
+    --out "$(to_win_path "$STAGE/work/all/media.pak")" \
+    "${MEDIA_EXTRA_ARGS[@]}"
 fi
 
 if [ "$HD" = true ]; then
@@ -419,12 +496,27 @@ PY
 
 if [ "$INSTALLER" = true ]; then
   echo "== building Windows Inno Setup LZMA2 installer =="
-  ISCC_BIN="${ISCC_BIN:-$(command -v ISCC.exe 2>/dev/null || command -v iscc 2>/dev/null || true)}"
+  ISCC_BIN="${ISCC_BIN:-}"
+  if [ -z "$ISCC_BIN" ]; then
+    for candidate in "$ROOT"/work/out/inno/tool-*/ISCC.exe; do
+      if [ -x "$candidate" ]; then
+        ISCC_BIN="$candidate"
+        break
+      fi
+    done
+  fi
+  if [ -z "$ISCC_BIN" ]; then
+    ISCC_BIN="$(command -v ISCC.exe 2>/dev/null || command -v iscc 2>/dev/null || true)"
+  fi
   if [ -z "$ISCC_BIN" ]; then
     for candidate in \
       "${LOCALAPPDATA:-}/Programs/Inno Setup 6/ISCC.exe" \
+      "${LOCALAPPDATA:-}/InnoSetup6/ISCC.exe" \
+      "${LOCALAPPDATA:-}/Inno Setup 6/ISCC.exe" \
       "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
-      "/c/Program Files/Inno Setup 6/ISCC.exe"
+      "/c/Program Files/Inno Setup 6/ISCC.exe" \
+      "/c/Program Files (x86)/Inno Setup 7/ISCC.exe" \
+      "/c/Program Files/Inno Setup 7/ISCC.exe"
     do
       if [ -n "$candidate" ] && [ -x "$candidate" ]; then
         ISCC_BIN="$candidate"
@@ -438,9 +530,24 @@ if [ "$INSTALLER" = true ]; then
   fi
   ISCC_DIR="$(dirname "$ISCC_BIN")"
   EXTRA_LANGUAGES=""
-  if [ -f "$ISCC_DIR/Languages/ChineseSimplified.isl" ] || [ -f "$ISCC_DIR/ChineseSimplified.isl" ]; then
-    EXTRA_LANGUAGES='Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"'
+  CHINESE_ISL=""
+  for candidate in \
+    "${LWSMF_INNO_CHINESE_ISL:-}" \
+    "$ISCC_DIR/Languages/ChineseSimplified.isl" \
+    "$ISCC_DIR/ChineseSimplified.isl" \
+    "$ROOT/work/out/inno/ChineseSimplified.isl"
+  do
+    if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+      CHINESE_ISL="$candidate"
+      break
+    fi
+  done
+  if [ -z "$CHINESE_ISL" ]; then
+    echo "ERROR: ChineseSimplified.isl not found; place it in work/out/inno/ChineseSimplified.isl or set LWSMF_INNO_CHINESE_ISL." >&2
+    exit 2
   fi
+  CHINESE_ISL_WIN="$(to_win_path "$CHINESE_ISL")"
+  EXTRA_LANGUAGES="Name: \"chinesesimplified\"; MessagesFile: \"$CHINESE_ISL_WIN\""
   ISS_PATH="$LOG_DIR/lwsmf-${PKG_NAME}.iss"
   TMPL_WIN="$(to_win_path "$ROOT/tools/installer/lwsmf.iss.tmpl")"
   ISS_WIN="$(to_win_path "$ISS_PATH")"
@@ -448,14 +555,21 @@ if [ "$INSTALLER" = true ]; then
   STAGE_WIN="$(to_win_path "$OUT")"
   SETUP_BASE="${PKG_NAME}-setup"
   SETUP_ICON_WIN="$(to_win_path "$ICON_OUT/installer/setup_icon.ico")"
-  SETUP_POSTER_WIN="$(to_win_path "$ICON_OUT/installer/setup_poster.png")"
-  for asset in "$ICON_OUT/installer/setup_icon.ico" "$ICON_OUT/installer/setup_poster.png"; do
+  SETUP_PROMO_WIN="$(to_win_path "$ICON_OUT/installer/setup_promo.png")"
+  SETUP_FINISH_POSTER_WIN="$(to_win_path "$ICON_OUT/installer/setup_finish_poster.png")"
+  SETUP_SMALL_WIN="$(to_win_path "$ICON_OUT/installer/setup_small.png")"
+  for asset in \
+    "$ICON_OUT/installer/setup_icon.ico" \
+    "$ICON_OUT/installer/setup_promo.png" \
+    "$ICON_OUT/installer/setup_finish_poster.png" \
+    "$ICON_OUT/installer/setup_small.png"
+  do
     if [ ! -f "$asset" ]; then
       echo "ERROR: installer artwork missing: $asset" >&2
       exit 3
     fi
   done
-  "$PYTHON_BIN" - "$TMPL_WIN" "$ISS_WIN" "$WINDOWS_APP_NAME" "$VERSION" "$STAGE_WIN" "$DIST_WIN" "$SETUP_BASE" "$EXTRA_LANGUAGES" "$SETUP_ICON_WIN" "$SETUP_POSTER_WIN" <<'PY'
+  "$PYTHON_BIN" - "$TMPL_WIN" "$ISS_WIN" "$WINDOWS_APP_NAME" "$VERSION" "$STAGE_WIN" "$DIST_WIN" "$SETUP_BASE" "$EXTRA_LANGUAGES" "$SETUP_ICON_WIN" "$SETUP_PROMO_WIN" "$SETUP_FINISH_POSTER_WIN" "$SETUP_SMALL_WIN" <<'PY'
 import sys
 from pathlib import Path
 
@@ -468,14 +582,39 @@ rendered = (
     .replace("@OUTPUT_DIR@", sys.argv[6].replace("/", "\\"))
     .replace("@OUTPUT_BASE_FILENAME@", sys.argv[7])
     .replace("@SETUP_ICON@", sys.argv[9].replace("/", "\\"))
-    .replace("@SETUP_POSTER@", sys.argv[10].replace("/", "\\"))
+    .replace("@SETUP_PROMO@", sys.argv[10].replace("/", "\\"))
+    .replace("@FINISH_POSTER@", sys.argv[11].replace("/", "\\"))
+    .replace("@SETUP_SMALL@", sys.argv[12].replace("/", "\\"))
     .replace("\n@EXTRA_LANGUAGES@\n", f"\n{extra_langs}\n" if extra_langs else "\n")
     .replace("@EXTRA_LANGUAGES@", extra_langs)
 )
 Path(sys.argv[2]).write_text(rendered, encoding="utf-8")
 PY
+  ISCC_WIN="$(to_win_path "$ISCC_BIN")"
+  WORK_OUT_WIN="$(to_win_path "$ROOT/work/out")"
+  if [[ "$ISCC_WIN" == "$WORK_OUT_WIN"* ]]; then
+    normalize_integrity "$(dirname "$ISCC_BIN")"
+  fi
   "$ISCC_BIN" "$ISS_WIN"
   echo "INSTALLER_OK exe=$ROOT/dist/${SETUP_BASE}.exe"
+  if [ -f "$ROOT/dist/${SETUP_BASE}.exe" ]; then
+    SETUP_SHA="$("$PYTHON_BIN" - "$ROOT/dist/${SETUP_BASE}.exe" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+
+h = hashlib.sha256()
+with Path(sys.argv[1]).open("rb") as handle:
+    for chunk in iter(lambda: handle.read(1 << 20), b""):
+        h.update(chunk)
+print(h.hexdigest())
+PY
+)"
+    printf '%s  %s\n' "$SETUP_SHA" "${SETUP_BASE}.exe" >> "$ROOT/dist/SHA256SUMS.txt"
+  fi
 fi
+
+echo "== normalizing NTFS integrity level =="
+normalize_integrity "$ROOT/dist"
 
 echo "RELEASE_PACKAGE_OK dist=$OUT zip=$ZIP_OUT"

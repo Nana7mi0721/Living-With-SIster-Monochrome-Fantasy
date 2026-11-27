@@ -27,16 +27,18 @@
 | 项目 | 当前值 |
 | :--- | :--- |
 | APK | `dist/android/0.1.0/LWSMF-0.1.0-android-arm64.apk` |
-| 体积 | `656,090,638 B`（约 `625.7 MiB`） |
-| SHA-256 | `39D48C76FF8DA22631E0F90267D086B12F8E23A7E13F3DCF19CDAAD615FF29AB` |
+| 体积 | `663,768,337 B`（约 `633.0 MiB`） |
+| SHA-256 | `5C938763A15C6284F36DE4D4740DFBE5F4FF17DE5232FFF10A20D9B0C4A7E7D2` |
 | 包名 / 显示名 / 版本 | `com.lwsmf.remake` / `妹相随` / `0.1.0` |
 | SDK / ABI | minSdk `24`、targetSdk `36`、arm64-v8a |
 | 签名 | Debug Keystore，APK Signature Scheme v2 + v3 |
-| 校验 | `ANDROID_APK_VERIFY_OK entries=359`；`zipalign -c -P 16 4` 通过；媒体条目为 `ZIP_STORED` |
+| 校验 | `ANDROID_APK_VERIFY_OK entries=380`；`zipalign -c -P 16 4` 通过；媒体条目为 `ZIP_STORED` |
 
 该包是**可安装的 Debug 签名测试包**，不是商店发布包，也不包含正式发布签名材料。
 
-Android 与 iOS 应用图标均由 `work/retail_dat/_publish/icon_mobile.jpg` 在打包期通过 `tools/sync_release_icons.py` 派生（Android 自适应前景图使用 62% 安全区居中裁切，见 D-92；无发布源图时在 `--debug`/`--allow-placeholder` 下可生成占位图标）；移动端显示名统一为 `妹相随`，不沿用 Windows 完整标题。
+Android 与 iOS 应用图标均由 `work/retail_dat/_publish/icon_mobile.jpg` 在打包期通过 `tools/sync_release_icons.py` 派生（Android 自适应前景图使用 72% 居中布局以覆盖系统可见区，背景取源图四角均色并限制在浅色范围，见 D-98；无发布源图时在 `--debug`/`--allow-placeholder` 下可生成占位图标）；移动端显示名统一为 `妹相随`，不沿用 Windows 完整标题。
+
+旧 APK 的 `mipmap-xxxhdpi-v4/icon_foreground.webp` 不透明区仅 `268/432`（`62%`），且 `icon_background.webp` 为纯黑，系统可见区会露出黑色环带。修正后前景不透明区为 `311/432`（`72%`），背景为 `#E2E2E2`；中央 `288×288` 可见区被前景完全覆盖，APK 内资源与模拟启动器圆角遮罩均已核验。
 
 ### 2.1 体积来源与裁剪口径
 
@@ -108,6 +110,8 @@ bash tools/package_android.sh --debug --force \
 ```
 
 脚本顺序为：导出 APK → 原始载荷校验 → 剔除 `lib/**/*.a` → 16 KB 对齐 → v2/v3 重签 → 最终载荷校验 → 写入 `SHA256SUMS.txt`。
+
+Android 目标固定为 `net9.0`，构建需使用 .NET 9+ SDK；`package_android.sh` 不继承桌面端 `local.env.sh` 的 .NET 8 `DOTNET`，默认从 `PATH` 选择 SDK，也可用 `DOTNET_BIN` 或 `ANDROID_DOTNET` 显式指定。
 
 若使用官方 Mono 模板，省略 `--template`；若需要临时 WebP 瘦身，使用 `--slim`，不要与 `--media-pak` 同时指定。
 

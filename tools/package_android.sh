@@ -24,7 +24,7 @@ FORCE=false
 ALLOW_PLACEHOLDER=false
 
 GODOT_BIN="${GODOT_BIN:-${GODOT:-$(command -v godot 2>/dev/null || command -v Godot_v4.7.2-stable_mono_win64_console.exe 2>/dev/null || true)}}"
-DOTNET_BIN="${DOTNET_BIN:-${DOTNET:-$(command -v dotnet 2>/dev/null || true)}}"
+DOTNET_BIN="${DOTNET_BIN:-${ANDROID_DOTNET:-$(command -v dotnet 2>/dev/null || true)}}"
 PYTHON_BIN="${PYTHON_BIN:-${PYTHON:-$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)}}"
 
 usage() {
@@ -162,7 +162,7 @@ cleanup() {
   fi
   rm -rf "$ICON_OUT"
   if [ "$SLN_CREATED" = true ]; then
-    rm -f "$SLN"
+    rm -f "$SLN" "$ROOT/godot/Lwsmf.slnx"
   fi
 }
 trap cleanup EXIT
@@ -192,8 +192,8 @@ fi
 
 [ -n "$GODOT_BIN" ] && [ -x "$GODOT_BIN" ] || { echo "ERROR: Godot 4.7.2 Mono console binary not found" >&2; exit 2; }
 [ -n "$DOTNET_BIN" ] && [ -x "$DOTNET_BIN" ] || { echo "ERROR: .NET 9 SDK binary not found (set DOTNET_BIN)" >&2; exit 2; }
-export DOTNET="${DOTNET:-$DOTNET_BIN}"
-export DOTNET_ROOT="${DOTNET_ROOT:-$(dirname "$DOTNET_BIN")}"
+export DOTNET="$DOTNET_BIN"
+export DOTNET_ROOT="${ANDROID_DOTNET_ROOT:-$(to_win_path "$(dirname "$DOTNET_BIN")")}"
 export PATH="$(dirname "$DOTNET_BIN"):$PATH"
 
 if [ -e "$APK_OUT" ] && [ "$FORCE" != true ]; then
@@ -252,7 +252,8 @@ if [ "${#PATCH_SETS[@]}" -gt 0 ]; then
 fi
 
 if [ ! -f "$SLN" ]; then
-  "$DOTNET_BIN" new sln --format sln --name Lwsmf --output "$(to_win_path "$ROOT/godot")" >/dev/null
+  "$DOTNET_BIN" new sln --format sln --name Lwsmf --output "$(to_win_path "$ROOT/godot")" >/dev/null 2>&1 \
+    || "$DOTNET_BIN" new sln --name Lwsmf --output "$(to_win_path "$ROOT/godot")" >/dev/null
   SLN_CREATED=true
   "$DOTNET_BIN" sln "$(to_win_path "$SLN")" add "$(to_win_path "$ROOT/godot/Lwsmf.csproj")" >/dev/null
 fi
@@ -265,7 +266,11 @@ if [ "$BUILD_MODE" = "release" ]; then
   EXPORT_FLAG="--export-release"
 fi
 "$DOTNET_BIN" build "$(to_win_path "$ROOT/godot/Lwsmf.csproj")" -c "$DOTNET_CFG" -p:GodotTargetPlatform=android -v:minimal
-"$GODOT_BIN" --headless --path "$(to_win_path "$ROOT/godot")" --import --quit >/dev/null 2>&1 || true
+if command -v timeout >/dev/null 2>&1; then
+  timeout 30 "$GODOT_BIN" --headless --path "$(to_win_path "$ROOT/godot")" --import --quit >/dev/null 2>&1 || true
+else
+  "$GODOT_BIN" --headless --path "$(to_win_path "$ROOT/godot")" --import --quit >/dev/null 2>&1 || true
+fi
 "$GODOT_BIN" --headless --path "$(to_win_path "$ROOT/godot")" "$EXPORT_FLAG" "Android" "$(to_win_path "$APK_OUT")"
 
 echo "== verifying exported APK =="

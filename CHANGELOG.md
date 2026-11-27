@@ -10,7 +10,11 @@
 - **Windows 快捷键按功能重排**：`F4` 窗口倍增、`Shift+F4` 缩放过滤、`F5` 帧率切换、`Shift+F5` 标题栏 FPS、`F6/F7/F8` 存/读/导入导出、`F9/F10` 回顾/诊断、`F11` 全屏↔最小窗口；`W` 保持移动/回顾滚动，不绑定帧率。
 - **发布包内置按键说明**：Windows 包新增 `按键说明.txt`，并由发布审计强制校验。
 - **多端发行资源与发行信息**：Windows 主程序/安装器、任务栏、窗口角标与 Android/iOS 应用图标改由本地 `_publish` 素材派生；移动端显示名为 `妹相随`，Windows 产品名为 `妹相随～黑白世界的缤纷冒险～`，发布者与版权方为 `Inusuku`。
-- **统一发布包名**：三端输出统一为 `LWSMF-<版本>-<系统>-<指令集>[-slim]`；Windows 安装器使用完整中文产品名与经典左侧原始海报，海报不裁切、不重编码、不启用背景效果。
+- **Windows 首次启动任务栏图标修复**：`ICON_SMALL` 使用窗口角标、`ICON_SMALL2` 使用任务栏图标、`ICON_BIG` 使用大图标，并在窗口注册后补发两次图标消息，消除 Explorer 缓存 Godot 默认图标的问题。
+- **Android 自适应图标铺满修复**：前景由 `62%` 提升到 `72%`，覆盖系统可见区；背景由纯黑改为从源图四角派生的浅色，消除启动器图标黑边。重出 Debug APK `663,768,337 B`，SHA-256 `5c938763a15c6284f36de4d4740dfbe5f4ff17de5232fff10a20d9b0c4a7e7d2`。
+- **统一发布包名**：三端输出统一为 `LWSMF-<版本>-<系统>-<指令集>[-slim]`；Windows 安装器使用完整中文产品名，向导素材不裁切、不启用整窗背景。
+- **Windows 真无损安装包**：新增 `pack_media.py --lossless`（PNG/BMP 转像素级无损 WebP，JPG/MP3/OGG/WAV 原字节保留）与 `package_release.sh --lossless --brotli --installer`；使用原版 1× 媒体，正式输出 `LWSMF-0.1.0-windows-x64-setup.exe`（`580,595,989 B`，SHA-256 `363e4ee6f373829d46141289091b67dacf9361651584bffdbc17a590e50e19fd`），不带 `-slim` 后缀。
+- **紧凑安装向导与 NTFS 完整性修复**：流程固定为欢迎页→目标位置→安装进度→完成页，目录页合并桌面快捷方式与安装提示，删除附加任务页和准备安装页；欢迎页完整展示 `1536×864` 的 `sisfan_promo.png`，完成页使用 `TitleGraphic6.jpg` 同尺寸转存的 PNG 并保持 1:2。安装器仅保留简体中文，始终显示自定义路径页。修复 Git Bash 将 `/setintegritylevel` 误转为路径导致 `normalize_integrity` 失效的问题，并保留 `tools/fix_integrity_level.ps1` 作为独立修复入口。
 
 ---
 

@@ -10,8 +10,8 @@ Byte-exact wire format matching `godot/presentation/MediaPakReader.cs`:
   uint32 crc32, utf8 path) per entry, XORed from indexOffset.
 
 Supports both a loose retail asset directory (`--root`) and repacking an
-existing `media.pak` (`--from-pak`), with optional `--slim` WebP/lossless
-re-encoding via Pillow (and optional OGG/WAV transcoding if ffmpeg is on PATH).
+existing `media.pak` (`--from-pak`), with optional `--slim` mixed-fidelity
+WebP/OGG conversion or `--lossless` pixel-exact WebP repacking.
 """
 from __future__ import annotations
 
@@ -209,6 +209,47 @@ def _slim_entry(rel: str, raw: bytes, quality_effects: int, ffmpeg_bin: str | No
     return rel, raw, "kept"
 
 
+def _lossless_entry(rel: str, raw: bytes) -> tuple[str, bytes, str]:
+    """Repack PNG/BMP to pixel-exact lossless WebP when it is smaller."""
+    ext = os.path.splitext(rel.lower())[1]
+    if ext not in (".png", ".bmp"):
+        return rel, raw, "kept"
+    try:
+        from PIL import Image
+    except ImportError:
+        return rel, raw, "kept"
+
+    try:
+        with Image.open(io.BytesIO(raw)) as img:
+            if getattr(img, "n_frames", 1) != 1 or img.mode in ("I", "I;16", "I;16B", "I;16L", "F"):
+                return rel, raw, "kept"
+            has_alpha = "A" in img.getbands() or "transparency" in img.info
+            mode = "RGBA" if has_alpha else "RGB"
+            source = img.convert(mode)
+            expected_pixels = source.tobytes()
+            out = io.BytesIO()
+            save_args = {
+                "format": "WEBP",
+                "lossless": True,
+                "quality": 100,
+                "method": 6,
+                "exact": True,
+            }
+            icc_profile = img.info.get("icc_profile")
+            if icc_profile:
+                save_args["icc_profile"] = icc_profile
+            source.save(out, **save_args)
+            candidate = out.getvalue()
+            if len(candidate) >= len(raw):
+                return rel, raw, "kept"
+        with Image.open(io.BytesIO(candidate)) as check:
+            if check.convert(mode).tobytes() != expected_pixels:
+                return rel, raw, "kept"
+        return rel, candidate, "webp_lossless"
+    except Exception:
+        return rel, raw, "kept"
+
+
 def write_pak(entries: list[tuple[str, bytes]], out_path: Path) -> tuple[int, int]:
     """Write entries into a valid WOLFMPK1 archive atomically via a temp sibling."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -274,20 +315,32 @@ def write_pak(entries: list[tuple[str, bytes]], out_path: Path) -> tuple[int, in
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build WOLFMPK1 media.pak with optional --slim WebP compression")
+    parser = argparse.ArgumentParser(description="Build WOLFMPK1 media.pak with optional slim or lossless image repacking")
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--root", type=Path, help="Loose asset root directory")
     src.add_argument("--from-pak", type=Path, help="Existing WOLFMPK1 pack to repack")
     src.add_argument("--hd-root", type=Path, help="2x art root (hd_manifest.json + images) for a standalone HD pack")
     parser.add_argument("--out", type=Path, required=True, help="Output media.pak path")
-    parser.add_argument("--slim", action="store_true", help="Lossless/near-lossless WebP image slimming & skip MapChip")
-    parser.add_argument("--keep-mapchip", action="store_true", help="Retain MapChip/ entries under --slim")
+    parser.add_argument(
+        "--extra-root",
+        type=Path,
+        default=None,
+        help="Overlay missing media files from a loose directory; existing base paths take precedence",
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--slim", action="store_true", help="Mixed-fidelity WebP/OGG slimming & skip MapChip")
+    mode.add_argument(
+        "--lossless",
+        action="store_true",
+        help="Pixel-exact lossless WebP repack for PNG/BMP; JPG/audio stay byte-identical & skip MapChip",
+    )
+    parser.add_argument("--keep-mapchip", action="store_true", help="Retain MapChip/ entries under --slim or --lossless")
     parser.add_argument("--effects-quality", type=int, default=90, help="WebP quality for BattleEffect/* under --slim")
     parser.add_argument("--jobs", type=int, default=max(1, min(8, os.cpu_count() or 4)), help="Worker threads for --slim")
     args = parser.parse_args(argv)
 
-    if args.hd_root and args.slim:
-        print("PACK_MEDIA_ERROR --slim cannot be combined with --hd-root", file=sys.stderr)
+    if args.hd_root and (args.slim or args.lossless or args.extra_root):
+        print("PACK_MEDIA_ERROR --slim/--lossless/--extra-root cannot be combined with --hd-root", file=sys.stderr)
         return 2
 
     if args.hd_root:
@@ -305,24 +358,35 @@ def main(argv: list[str] | None = None) -> int:
     else:
         raw_items = [(rel, path.read_bytes()) for rel, path in collect_loose_entries(args.root)]
 
-    if args.slim and not args.keep_mapchip:
+    extra_added = 0
+    if args.extra_root:
+        existing = {rel.lower() for rel, _ in raw_items}
+        for rel, path in collect_loose_entries(args.extra_root):
+            low = rel.lower()
+            if low in existing:
+                continue
+            raw_items.append((rel, path.read_bytes()))
+            existing.add(low)
+            extra_added += 1
+
+    if (args.slim or args.lossless) and not args.keep_mapchip:
         raw_items = [(rel, data) for rel, data in raw_items if not rel.lower().startswith("mapchip/")]
 
     orig_total = sum(len(d) for _, d in raw_items)
-    stats = {"webp": 0, "ogg": 0, "kept": 0}
+    stats = {"webp": 0, "webp_lossless": 0, "ogg": 0, "kept": 0}
 
-    if args.slim:
+    if args.slim or args.lossless:
         ffmpeg_bin = shutil.which("ffmpeg")
+        worker = (
+            (lambda item: _slim_entry(item[0], item[1], args.effects_quality, ffmpeg_bin))
+            if args.slim
+            else (lambda item: _lossless_entry(item[0], item[1]))
+        )
         if args.jobs > 1:
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
-                results = list(
-                    pool.map(
-                        lambda item: _slim_entry(item[0], item[1], args.effects_quality, ffmpeg_bin),
-                        raw_items,
-                    )
-                )
+                results = list(pool.map(worker, raw_items))
         else:
-            results = [_slim_entry(r, d, args.effects_quality, ffmpeg_bin) for r, d in raw_items]
+            results = [worker(item) for item in raw_items]
         final_items: list[tuple[str, bytes]] = []
         for rel, data, kind in results:
             final_items.append((rel, data))
@@ -333,10 +397,12 @@ def main(argv: list[str] | None = None) -> int:
 
     count, packed_raw = write_pak(final_items, args.out)
     pak_size = args.out.stat().st_size
+    pack_mode = "lossless" if args.lossless else ("slim" if args.slim else "copy")
     print(
-        f"PACK_MEDIA_OK entries={count} slim={args.slim} "
+        f"PACK_MEDIA_OK entries={count} mode={pack_mode} slim={args.slim} lossless={args.lossless} extra={extra_added} "
         f"orig_bytes={orig_total} packed_bytes={packed_raw} pak_bytes={pak_size} "
-        f"webp={stats['webp']} ogg={stats['ogg']} kept={stats['kept']}"
+        f"webp={stats['webp']} webp_lossless={stats['webp_lossless']} "
+        f"ogg={stats['ogg']} kept={stats['kept']}"
     )
     return 0
 

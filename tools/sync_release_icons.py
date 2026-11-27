@@ -109,6 +109,14 @@ def sync_release_icons(
     poster_placeholder = not poster_path.is_file()
     if poster_placeholder and not allow_placeholder:
         raise FileNotFoundError(f"publish source image not found: {poster_path}")
+    promo_path = source_dir / "sisfan_promo.png"
+    promo_placeholder = not promo_path.is_file()
+    if promo_placeholder and not allow_placeholder:
+        raise FileNotFoundError(f"publish source image not found: {promo_path}")
+    finish_poster_path = source_dir / "TitleGraphic6.jpg"
+    finish_poster_placeholder = not finish_poster_path.is_file()
+    if finish_poster_placeholder and not allow_placeholder:
+        raise FileNotFoundError(f"publish source image not found: {finish_poster_path}")
 
     mobile_square = _center_square(mobile)
     outputs: list[Path] = []
@@ -119,7 +127,7 @@ def sync_release_icons(
 
     android_fg = res_dir / "android_adaptive_fg_432.png"
     fg_canvas = Image.new("RGBA", (432, 432), (0, 0, 0, 0))
-    safe_side = int(round(432 * 0.62))
+    safe_side = int(round(432 * 0.72))
     safe_fg = mobile_square.convert("RGBA").resize((safe_side, safe_side), _resampling())
     offset = (432 - safe_side) // 2
     fg_canvas.paste(safe_fg, (offset, offset), safe_fg)
@@ -127,7 +135,17 @@ def sync_release_icons(
     outputs.append(android_fg)
 
     android_bg = res_dir / "android_adaptive_bg_432.png"
-    _save_png(Image.new("RGBA", (432, 432), (0, 0, 0, 255)), android_bg, "RGB")
+    corners = (
+        mobile_square.getpixel((0, 0)),
+        mobile_square.getpixel((mobile_square.width - 1, 0)),
+        mobile_square.getpixel((0, mobile_square.height - 1)),
+        mobile_square.getpixel((mobile_square.width - 1, mobile_square.height - 1)),
+    )
+    bg_rgb = tuple(
+        max(220, sum(pixel[channel] for pixel in corners) // len(corners))
+        for channel in range(3)
+    )
+    _save_png(Image.new("RGBA", (432, 432), (*bg_rgb, 255)), android_bg, "RGB")
     outputs.append(android_bg)
 
     ios_icon = res_dir / "ios_icon_1024.png"
@@ -141,6 +159,11 @@ def sync_release_icons(
     dockbar_icon = res_dir / "icon_pc_dockbar.ico"
     _save_ico(dockbar, dockbar_icon)
     outputs.append(dockbar_icon)
+
+    taskbar_icon = res_dir / "icon_pc_taskbar.png"
+    taskbar_source = _center_square(dockbar.convert("RGBA")).resize((256, 256), _resampling())
+    _save_png(taskbar_source, taskbar_icon, "RGBA")
+    outputs.append(taskbar_icon)
 
     corner_icon = res_dir / "icon_pc_corner.ico"
     _save_ico(corner, corner_icon)
@@ -162,15 +185,51 @@ def sync_release_icons(
         _save_png(_placeholder((164, 314), (38, 41, 50, 255)), setup_poster, "RGBA")
     outputs.append(setup_poster)
 
-    placeholder_used = any((mobile_placeholder, pc_placeholder, dockbar_placeholder, corner_placeholder, poster_placeholder))
+    setup_promo = installer_dir / "setup_promo.png"
+    if not promo_placeholder:
+        shutil.copy2(promo_path, setup_promo)
+    else:
+        _save_png(_placeholder((1536, 864), (38, 41, 50, 255)), setup_promo, "RGBA")
+    outputs.append(setup_promo)
+
+    setup_finish_poster = installer_dir / "setup_finish_poster.png"
+    if not finish_poster_placeholder:
+        with Image.open(finish_poster_path) as finish_source:
+            finish_source.convert("RGB").save(setup_finish_poster, format="PNG", optimize=True)
+    else:
+        finish_placeholder = _placeholder((520, 1041), (38, 41, 50, 255)).convert("RGB")
+        _save_png(finish_placeholder, setup_finish_poster, "RGB")
+    outputs.append(setup_finish_poster)
+
+    setup_small = installer_dir / "setup_small.png"
+    small_canvas = Image.new("RGBA", (55, 55), (255, 255, 255, 255))
+    small_icon = _center_square(pc.convert("RGBA")).resize((47, 47), _resampling())
+    small_canvas.alpha_composite(small_icon, (4, 4))
+    _save_png(small_canvas, setup_small, "RGBA")
+    outputs.append(setup_small)
+
+    placeholder_used = any(
+        (
+            mobile_placeholder,
+            pc_placeholder,
+            dockbar_placeholder,
+            corner_placeholder,
+            poster_placeholder,
+            promo_placeholder,
+            finish_poster_placeholder,
+        )
+    )
     manifest = {
         "placeholder": placeholder_used,
         "sources": {
             "icon_mobile": mobile_placeholder,
             "icon_pc": pc_placeholder,
             "icon_pc_dockbar": dockbar_placeholder,
+            "icon_pc_taskbar": dockbar_placeholder,
             "icon_pc_corner": corner_placeholder,
             "setup_poster": poster_placeholder,
+            "sisfan_promo": promo_placeholder,
+            "title_graphic6": finish_poster_placeholder,
         },
         "files": {path.relative_to(out_dir).as_posix(): _sha256(path) for path in outputs},
     }
