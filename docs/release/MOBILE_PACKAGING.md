@@ -98,23 +98,21 @@ cd platform/android/java
 
 ### 3.3 构建可安装 APK
 
-当前工作区已将 `work/all/media.pak` 替换为剪枝后的 1× 媒体包。完整构建命令：
+当前工作区已将 `work/all/media.pak` 替换为按活体清单剪枝后的 1× 真无损媒体包。推荐使用统一的交互式入口 `python tools/release_tui.py`（或双击 `tools/release_packager.bat`），也可直接运行底层脚本（两者共享同一套工具链与定制模板探测逻辑）：
 
 ```bash
-export GODOT_BIN="/path/to/Godot_v4.7.2-stable_mono_win64_console.exe"
-export DOTNET_BIN="/path/to/dotnet"
+# 方式一：统一 CLI/TUI（默认真无损 + Brotli + 自动探测定制 2D Mono 模板）
+python tools/release_tui.py --build android --verify --yes
 
-bash tools/package_android.sh --debug --force \
-  --media-pak work/all/media.pak \
-  --template work/out/android-mono-template/android_monoRelease.apk \
-  --out-dir dist/android/0.1.0
+# 方式二：直接调用底层脚本（自动探测 local.env.sh 的 Godot、.NET 9+ 与 work/out/templates/android/android_release.apk）
+bash tools/package_android.sh --debug --lossless --brotli --force --version 0.1.0
 ```
 
 脚本顺序为：导出 APK → 原始载荷校验 → 剔除 `lib/**/*.a` → 16 KB 对齐 → v2/v3 重签 → 最终载荷校验 → 写入 `SHA256SUMS.txt`。
 
-Android 目标固定为 `net9.0`，构建需使用 .NET 9+ SDK；`package_android.sh` 不继承桌面端 `local.env.sh` 的 .NET 8 `DOTNET`，默认从 `PATH` 选择 SDK，也可用 `DOTNET_BIN` 或 `ANDROID_DOTNET` 显式指定。
+Android 目标固定为 `net9.0`，构建需使用 .NET 9+ SDK；`package_android.sh` 不继承桌面端 `local.env.sh` 的 .NET 8 `DOTNET`，自动探测同级目录或 `PATH` 中的 .NET 9+ SDK，也可用 `DOTNET_BIN` 或 `ANDROID_DOTNET` 显式指定。
 
-若使用官方 Mono 模板，省略 `--template`；若需要临时 WebP 瘦身，使用 `--slim`，不要与 `--media-pak` 同时指定。
+若需强制使用官方 Mono 模板而非本地定制模板，传入 `--official-template`（或 `LWSMF_OFFICIAL_TEMPLATE=1`）；若需要显式指定模板文件，传入 `--template <path>`。
 
 ---
 
@@ -129,15 +127,17 @@ Android 目标固定为 `net9.0`，构建需使用 .NET 9+ SDK；`package_androi
 
 ## 5. iOS 构建简述
 
-在 GitHub Actions 手动触发 `.github/workflows/ios-unsigned.yml`，下载 engine-only unsigned IPA，然后注入数据：
+在 GitHub Actions 手动触发 `.github/workflows/ios-unsigned.yml`，下载 engine-only unsigned IPA，然后通过统一工具注入真无损媒体与 Brotli 数据：
 
 ```bash
 bash tools/inject_ios_data.sh \
   "LWSMF-0.1.0-ios-arm64.ipa" \
   --game-data game_data \
   --work-all work/all \
-  --out "work/out/LWSMF-0.1.0-ios-arm64-full.ipa" \
+  --lossless \
+  --brotli \
+  --out "dist/ios/0.1.0/LWSMF-0.1.0-ios-arm64-full.ipa" \
   --force
 ```
 
-使用 Sideloadly 或个人 Apple ID 签名安装。iOS 仍未纳入本次 Android 交付验证。
+也可直接在 `tools/release_tui.py` 中配置引擎壳 `.ipa` 路径并一键完成三端导出与校验。使用 Sideloadly 或个人 Apple ID 签名安装。iOS 仍未纳入本次本地交付验证。

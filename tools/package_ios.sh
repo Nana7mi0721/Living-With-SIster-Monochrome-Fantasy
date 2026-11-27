@@ -16,6 +16,7 @@ LOSSLESS=false
 BROTLI=false
 FONT_OPT=""
 TEMPLATE_OPT=""
+OFFICIAL_TEMPLATE=false
 GODOT_BIN="${GODOT_BIN:-${GODOT:-$(command -v godot 2>/dev/null || command -v Godot 2>/dev/null || true)}}"
 DOTNET_BIN="${DOTNET_BIN:-${DOTNET:-$(command -v dotnet 2>/dev/null || true)}}"
 PYTHON_BIN="${PYTHON_BIN:-${PYTHON:-$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)}}"
@@ -35,7 +36,8 @@ Usage: tools/package_ios.sh [options]
   --slim             repack media.pak with WebP slimming when injecting data
   --brotli           compress large game_data JSONs as .json.br when injecting data
   --font FILE        optional Lolita.ttf to place at <app>/work/all/Lolita.ttf
-  --template FILE    optional custom iOS ios.zip export template
+  --template FILE    optional custom iOS ios.zip export template (auto-detected if present)
+  --official-template  force Godot's official iOS template even if a custom template exists
   --godot PATH       Godot 4.7.2 Mono executable
   --dotnet PATH      dotnet 8 executable
   --unsigned         build unsigned .app -> .ipa (default & required)
@@ -63,6 +65,7 @@ while [ "$#" -gt 0 ]; do
     --brotli)    BROTLI=true; shift ;;
     --font)      need_arg "$@"; FONT_OPT="$2"; shift 2 ;;
     --template)  need_arg "$@"; TEMPLATE_OPT="$2"; shift 2 ;;
+    --official-template) OFFICIAL_TEMPLATE=true; shift ;;
     --godot)     need_arg "$@"; GODOT_BIN="$2"; shift 2 ;;
     --dotnet)    need_arg "$@"; DOTNET_BIN="$2"; shift 2 ;;
     --unsigned)  UNSIGNED=1; shift ;;
@@ -72,6 +75,23 @@ while [ "$#" -gt 0 ]; do
     *) echo "ERROR: unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [ -n "$TEMPLATE_OPT" ] && [ "$OFFICIAL_TEMPLATE" = true ]; then
+  echo "ERROR: --template and --official-template are mutually exclusive" >&2
+  exit 2
+fi
+if [ -z "$TEMPLATE_OPT" ] && [ "$OFFICIAL_TEMPLATE" != true ] && [ "${LWSMF_OFFICIAL_TEMPLATE:-0}" != "1" ]; then
+  for _tpl in \
+    "$ROOT/work/out/templates/ios/ios.zip" \
+    "$ROOT/dist/templates/ios/ios.zip"
+  do
+    if [ -s "$_tpl" ]; then
+      TEMPLATE_OPT="$_tpl"
+      echo "== auto-detected custom iOS template: $TEMPLATE_OPT =="
+      break
+    fi
+  done
+fi
 
 HOST_OS="$(uname -s 2>/dev/null || echo unknown)"
 if { [ -n "$GAME_DATA_DIR" ] && [ -z "$WORK_ALL_DIR" ]; } || { [ -z "$GAME_DATA_DIR" ] && [ -n "$WORK_ALL_DIR" ]; }; then
@@ -263,9 +283,7 @@ if [ -n "$GAME_DATA_DIR" ] && [ -n "$WORK_ALL_DIR" ]; then
     exit 2
   fi
   if [ "$LOSSLESS" = true ]; then
-    LOSSLESS_PAK="$OUT_DIR/media-lossless.pak"
-    "$PYTHON_BIN" "$ROOT/tools/pack_media.py" --from-pak "$WORK_ALL_DIR/media.pak" --out "$LOSSLESS_PAK" --lossless
-    INJ_ARGS+=(--media-pak "$LOSSLESS_PAK")
+    INJ_ARGS+=(--lossless)
   elif [ "$SLIM" = true ]; then
     SLIM_PAK="$OUT_DIR/media-slim.pak"
     "$PYTHON_BIN" "$ROOT/tools/pack_media.py" --from-pak "$WORK_ALL_DIR/media.pak" --out "$SLIM_PAK" --slim

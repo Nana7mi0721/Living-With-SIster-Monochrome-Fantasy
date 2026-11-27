@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import stat
 import struct
@@ -1215,7 +1216,7 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn('|| "$DOTNET_BIN" new sln', android_script)
         self.assertIn("timeout 30", android_script)
         self.assertIn("ANDROID_DOTNET", android_script)
-        self.assertIn('export DOTNET="$DOTNET_BIN"', android_script)
+        self.assertIn('export DOTNET="$(to_win_path "$DOTNET_BIN")"', android_script)
         self.assertIn("ANDROID_DOTNET_ROOT", android_script)
 
         game_root = (REPO_ROOT / "godot/presentation_gd/GameRoot.gd").read_text(encoding="utf-8")
@@ -1559,12 +1560,126 @@ class MobileToolsTest(unittest.TestCase):
             self.assertEqual(and_env["ANDROID_DOTNET"], "/fake/dotnet9")
 
             ios_cmd, _, ios_warns = release_tui.build_platform_plan("ios", cfg, fake_env, REPO_ROOT)
+            self.assertIn("--lossless", ios_cmd)
             self.assertIn("--brotli", ios_cmd)
             self.assertIn("--font", ios_cmd)
             self.assertEqual(ios_warns, [])
             self.assertEqual(release_tui.validate_target_readiness("windows", cfg, fake_env), [])
             self.assertEqual(release_tui.validate_target_readiness("android", cfg, fake_env), [])
             self.assertEqual(release_tui.validate_target_readiness("ios", cfg, fake_env), [])
+
+            official_cfg = release_tui.ReleaseConfig(
+                version="0.2.0",
+                media_mode="copy",
+                brotli=True,
+                win_installer=False,
+                use_custom_templates=False,
+                ios_engine_ipa=str(ipa_in),
+            )
+            win_off_cmd, _, _ = release_tui.build_platform_plan("windows", official_cfg, fake_env, REPO_ROOT)
+            and_off_cmd, _, _ = release_tui.build_platform_plan("android", official_cfg, fake_env, REPO_ROOT)
+            ios_off_cmd, _, _ = release_tui.build_platform_plan("ios", official_cfg, fake_env, REPO_ROOT)
+            self.assertIn("--official-template", win_off_cmd)
+            self.assertNotIn("--template", win_off_cmd)
+            self.assertIn("--official-template", and_off_cmd)
+            self.assertNotIn("--template", and_off_cmd)
+            self.assertNotIn("--lossless", ios_off_cmd)
+
+            # Windows bash path normalization keeps POSIX paths for DOTNET_BIN/GODOT_BIN.
+            if os.name == "nt":
+                win_path_env = dict(fake_env)
+                win_path_env["godot"] = r"C:\Tools\godot\Godot_console.exe"
+                win_path_env["dotnet_win"] = r"C:\Tools\dotnet8\dotnet.exe"
+                win_path_env["dotnet_android"] = r"C:\Tools\dotnet9\dotnet.exe"
+                _, wenv, _ = release_tui.build_platform_plan("windows", cfg, win_path_env, REPO_ROOT)
+                _, aenv, _ = release_tui.build_platform_plan("android", cfg, win_path_env, REPO_ROOT)
+                self.assertEqual(wenv["GODOT_BIN"], "/c/Tools/godot/Godot_console.exe")
+                self.assertEqual(wenv["DOTNET_BIN"], "/c/Tools/dotnet8/dotnet.exe")
+                self.assertEqual(aenv["DOTNET_BIN"], "/c/Tools/dotnet9/dotnet.exe")
+
+            # Unified shell scripts auto-detect custom templates and support --official-template.
+            for rel_sh in ("tools/package_release.sh", "tools/package_android.sh", "tools/package_ios.sh"):
+                script_text = (REPO_ROOT / rel_sh).read_text(encoding="utf-8")
+                self.assertIn("--official-template", script_text)
+                self.assertIn("LWSMF_OFFICIAL_TEMPLATE", script_text)
+
+    def test_ios_inject_lossless_and_android_icon_verify(self) -> None:
+        from io import BytesIO
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            gd, wa = _make_fake_payload(t, include_font=True)
+            # Build a real pak with a PNG + SystemFile overlay to exercise --lossless.
+            src_assets = t / "src_assets"
+            (src_assets / "Picture").mkdir(parents=True)
+            img = Image.new("RGBA", (64, 64), (10, 20, 30, 255))
+            img.save(src_assets / "Picture/cg.png", format="PNG")
+            self.assertEqual(
+                pack_media.main(["--root", str(src_assets), "--out", str(wa / "media.pak"), "--jobs", "1"]),
+                0,
+            )
+            (wa / "SystemFile").mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (16, 16), (200, 100, 50)).save(wa / "SystemFile/ui.png", format="PNG")
+            (wa / "Lolita.ttf").write_bytes(b"FAKE-TTF")
+
+            in_ipa = t / "engine.ipa"
+            with zipfile.ZipFile(in_ipa, "w") as zf:
+                zf.writestr("Payload/Lwsmf.app/Info.plist", b"plist")
+            out_ipa = t / "full.ipa"
+            rc = ios_inject_data.main(
+                [
+                    str(in_ipa),
+                    "--game-data",
+                    str(gd),
+                    "--work-all",
+                    str(wa),
+                    "--font",
+                    str(wa / "Lolita.ttf"),
+                    "--lossless",
+                    "--brotli",
+                    "--out",
+                    str(out_ipa),
+                    "--force",
+                ]
+            )
+            self.assertEqual(rc, 0)
+            with zipfile.ZipFile(out_ipa, "r") as zf:
+                pak_bytes = zf.read("Payload/Lwsmf.app/work/all/media.pak")
+            extracted_pak = t / "extracted.pak"
+            extracted_pak.write_bytes(pak_bytes)
+            entries = dict(pack_media.read_pak_entries(extracted_pak))
+            self.assertIn("SystemFile/ui.png", entries)
+            self.assertEqual(entries["Picture/cg.png"][:4], b"RIFF")
+            with Image.open(BytesIO(entries["Picture/cg.png"])) as dec:
+                self.assertEqual(dec.convert("RGBA").tobytes(), img.tobytes())
+
+            # Android icon verifier accepts valid adaptive icons and catches dark background.
+            good_apk = t / "good.apk"
+            fg_buf = BytesIO()
+            fg_img = Image.new("RGBA", (432, 432), (0, 0, 0, 0))
+            fg_img.paste((220, 220, 220, 255), (60, 60, 372, 372))
+            fg_img.save(fg_buf, format="WEBP", lossless=True)
+            bg_buf = BytesIO()
+            Image.new("RGB", (432, 432), (232, 232, 230)).save(bg_buf, format="WEBP", lossless=True)
+            with zipfile.ZipFile(good_apk, "w") as zf:
+                zf.writestr("lib/arm64-v8a/libgodot_android.so", b"x" * 1024)
+                zf.writestr("assets/mobile_data/game_data/programs.json.br.blob", b"br")
+                zf.writestr("res/mipmap-xxxhdpi-v4/icon_foreground.webp", fg_buf.getvalue())
+                zf.writestr("res/mipmap-xxxhdpi-v4/icon_background.webp", bg_buf.getvalue())
+            issues, meta = release_tui.verify_android_apk_icons(good_apk)
+            self.assertEqual(issues, [])
+            self.assertTrue(meta["brotli_json"])
+            self.assertEqual(meta["bg_hex"], "#E8E8E6")
+
+            bad_apk = t / "bad.apk"
+            dark_buf = BytesIO()
+            Image.new("RGB", (432, 432), (0, 0, 0)).save(dark_buf, format="WEBP", lossless=True)
+            with zipfile.ZipFile(bad_apk, "w") as zf:
+                zf.writestr("res/mipmap-xxxhdpi-v4/icon_foreground.webp", fg_buf.getvalue())
+                zf.writestr("res/mipmap-xxxhdpi-v4/icon_background.webp", dark_buf.getvalue())
+            bad_issues, _ = release_tui.verify_android_apk_icons(bad_apk)
+            self.assertTrue(any("too dark" in msg for msg in bad_issues))
 
 
 if __name__ == "__main__":

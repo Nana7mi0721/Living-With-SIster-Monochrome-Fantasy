@@ -9,13 +9,16 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import hashlib
+import io
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import time
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -452,6 +455,10 @@ def build_rebuild_media_command(repo_root: Path, media_mode: str = "lossless") -
     return cmd
 
 
+def format_cmd(cmd: list[str]) -> str:
+    return " ".join(shlex.quote(arg) if (" " in arg or "\t" in arg) else arg for arg in cmd)
+
+
 def build_platform_plan(
     target: str,
     cfg: ReleaseConfig,
@@ -465,19 +472,21 @@ def build_platform_plan(
     bash = env_info.get("bash") or "bash"
 
     if env_info.get("godot"):
-        extra_env["GODOT_BIN"] = str(env_info["godot"])
-        extra_env["GODOT"] = str(env_info["godot"])
+        godot_bash = to_bash_path(str(env_info["godot"]))
+        extra_env["GODOT_BIN"] = godot_bash
+        extra_env["GODOT"] = godot_bash
 
     if target == "windows":
         if env_info.get("dotnet_win"):
             dn = str(env_info["dotnet_win"])
-            extra_env["DOTNET_BIN"] = dn
+            dn_bash = to_bash_path(dn)
+            extra_env["DOTNET_BIN"] = dn_bash
             extra_env["DOTNET"] = dn
             extra_env["DOTNET_ROOT"] = str(Path(dn).resolve().parent)
         if env_info.get("iscc"):
-            extra_env["ISCC_BIN"] = str(env_info["iscc"])
+            extra_env["ISCC_BIN"] = to_bash_path(env_info["iscc"])
         if env_info.get("chinese_isl"):
-            extra_env["LWSMF_INNO_CHINESE_ISL"] = str(env_info["chinese_isl"])
+            extra_env["LWSMF_INNO_CHINESE_ISL"] = to_bash_path(env_info["chinese_isl"])
 
         args = [bash, "tools/package_release.sh", "--version", cfg.version]
         if cfg.media_mode == "lossless":
@@ -494,7 +503,9 @@ def build_platform_plan(
         win_tpl = env_info["custom_templates"].get("windows") if cfg.use_custom_templates else None
         if win_tpl:
             args.extend(["--template", to_bash_path(win_tpl)])
-        elif cfg.use_custom_templates:
+        elif not cfg.use_custom_templates:
+            args.append("--official-template")
+        else:
             warnings.append("未找到 Windows 定制 2D Mono 模板，将使用官方 Mono 模板")
         if cfg.allow_placeholder_icons:
             args.append("--allow-placeholder")
@@ -503,8 +514,9 @@ def build_platform_plan(
     if target == "android":
         if env_info.get("dotnet_android"):
             dn = str(env_info["dotnet_android"])
-            extra_env["DOTNET_BIN"] = dn
-            extra_env["ANDROID_DOTNET"] = dn
+            dn_bash = to_bash_path(dn)
+            extra_env["DOTNET_BIN"] = dn_bash
+            extra_env["ANDROID_DOTNET"] = dn_bash
             extra_env["ANDROID_DOTNET_ROOT"] = str(Path(dn).resolve().parent)
 
         args = [bash, "tools/package_android.sh", "--version", cfg.version, "--force"]
@@ -525,7 +537,9 @@ def build_platform_plan(
         and_tpl = env_info["custom_templates"].get("android") if cfg.use_custom_templates else None
         if and_tpl:
             args.extend(["--template", to_bash_path(and_tpl)])
-        elif cfg.use_custom_templates:
+        elif not cfg.use_custom_templates:
+            args.append("--official-template")
+        else:
             warnings.append("未找到 Android 定制 2D Mono 模板，将使用官方 Mono 模板")
         if cfg.allow_placeholder_icons:
             args.append("--allow-placeholder")
@@ -547,6 +561,8 @@ def build_platform_plan(
             str(out_ipa),
             "--force",
         ]
+        if cfg.media_mode == "lossless":
+            args.append("--lossless")
         if env_info.get("font_path"):
             args.extend(["--font", str(env_info["font_path"])])
         if cfg.brotli:
@@ -739,7 +755,7 @@ class UI:
             ("5", "修改发包配置（版本号 / 无损或直通 / Brotli / Setup / 模板 / 签名 / 占位图标）", "yellow"),
             ("6", "从零按活体清单剪枝并重建真无损 work/all/media.pak", "magenta"),
             ("7", "环境与素材深度体检（env_check + 隐私扫描 + _publish 文件清单）", "white"),
-            ("8", "查看 dist/ 已导出产物与 SHA-256 校验清单", "white"),
+            ("8", "校验与查看 dist/ 产物（PE/Setup 烟测 + APK 图标/16KB 验真 + SHA-256）", "white"),
             ("9", "修复工作区 NTFS 完整性级别（Medium IL）", "dim"),
             ("0", "退出", "dim"),
         ]
@@ -760,7 +776,8 @@ def run_streaming_command(cmd: list[str], extra_env: dict[str, str], cwd: Path, 
     merged_env.update(extra_env)
     merged_env.setdefault("PYTHONUTF8", "1")
     ui.print(Rule(f"执行: {label}") if HAS_RICH else f"\n=== 执行: {label} ===")
-    ui.print(f"[dim]$ {' '.join(cmd)}[/dim]" if HAS_RICH else f"$ {' '.join(cmd)}")
+    cmd_str = format_cmd(cmd)
+    ui.print(f"[dim]$ {cmd_str}[/dim]" if HAS_RICH else f"$ {cmd_str}")
     t0 = time.monotonic()
     proc = subprocess.run(cmd, cwd=str(cwd), env=merged_env, check=False)
     elapsed = time.monotonic() - t0
@@ -916,7 +933,8 @@ def execute_targets(
 
     ui.print(Rule("构建执行计划") if HAS_RICH else "\n=== 构建执行计划 ===")
     for t, cmd, _ in plans:
-        ui.print(f"  [bold cyan]{t.upper():8s}[/bold cyan] -> {' '.join(cmd)}" if HAS_RICH else f"  {t.upper():8s} -> {' '.join(cmd)}")
+        cmd_str = format_cmd(cmd)
+        ui.print(f"  [bold cyan]{t.upper():8s}[/bold cyan] -> {cmd_str}" if HAS_RICH else f"  {t.upper():8s} -> {cmd_str}")
 
     if not auto_yes and not prompt_yes_no("确认开始执行以上发包任务？", default=True):
         ui.print("已取消。")
@@ -974,6 +992,196 @@ def show_dist_artifacts(repo_root: Path, ui: UI) -> None:
     else:
         for p in filtered[:20]:
             print(f"  {p.relative_to(dist_dir).as_posix():45s} {fmt_mb(p.stat().st_size)}")
+
+
+def verify_android_apk_icons(apk_path: Path) -> tuple[list[str], dict[str, Any]]:
+    """Verify Android adaptive icon bounds/background and inspect template/Brotli metadata."""
+    issues: list[str] = []
+    meta: dict[str, Any] = {
+        "libgodot_bytes": 0,
+        "brotli_json": False,
+        "fg_bbox": None,
+        "bg_hex": "",
+    }
+    if not apk_path.is_file():
+        return [f"APK not found: {apk_path}"], meta
+
+    with zipfile.ZipFile(apk_path, "r") as zf:
+        names = set(zf.namelist())
+        if "lib/arm64-v8a/libgodot_android.so" in names:
+            meta["libgodot_bytes"] = zf.getinfo("lib/arm64-v8a/libgodot_android.so").file_size
+        meta["brotli_json"] = any(n.endswith(".json.br.blob") for n in names)
+
+        fg_name = "res/mipmap-xxxhdpi-v4/icon_foreground.webp"
+        bg_name = "res/mipmap-xxxhdpi-v4/icon_background.webp"
+        if fg_name not in names or bg_name not in names:
+            issues.append(f"missing xxxhdpi adaptive icon resources in APK ({fg_name} / {bg_name})")
+            return issues, meta
+
+        try:
+            from PIL import Image
+        except ImportError:
+            issues.append("Pillow unavailable; skipped Android adaptive icon pixel check")
+            return issues, meta
+
+        with Image.open(io.BytesIO(zf.read(fg_name))) as fg:
+            bbox = fg.convert("RGBA").getchannel("A").getbbox()
+            meta["fg_bbox"] = bbox
+            if bbox is None:
+                issues.append("Android icon_foreground.webp is fully transparent")
+            elif bbox[0] > 72 or bbox[1] > 72 or bbox[2] < 360 or bbox[3] < 360:
+                issues.append(f"Android icon_foreground opaque bbox {bbox} does not cover safe visible zone")
+
+        with Image.open(io.BytesIO(zf.read(bg_name))) as bg:
+            r, g, b = bg.convert("RGB").getpixel((0, 0))
+            meta["bg_hex"] = f"#{r:02X}{g:02X}{b:02X}"
+            if min(r, g, b) < 220:
+                issues.append(f"Android icon_background too dark: {meta['bg_hex']} (< 220)")
+
+    return issues, meta
+
+
+def run_windows_setup_smoke(setup_exe: Path, expected_pak: Path, repo_root: Path, ui: UI) -> int:
+    """Silently install Setup into a temporary directory under work/out, verify files, and uninstall."""
+    if os.name != "nt":
+        ui.print("Windows Setup 静默烟测仅适用于 Windows。")
+        return 0
+    smoke_dir = repo_root / "work/out/setup_smoke_verify"
+    if smoke_dir.exists():
+        shutil.rmtree(smoke_dir, ignore_errors=True)
+    smoke_dir.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        rc, _ = run_streaming_command(
+            [
+                str(setup_exe),
+                "/VERYSILENT",
+                "/SUPPRESSMSGBOXES",
+                "/NORESTART",
+                "/CURRENTUSER",
+                f"/DIR={smoke_dir}",
+            ],
+            {},
+            repo_root,
+            "Windows Setup 静默安装烟测",
+            ui,
+        )
+        if rc != 0:
+            return rc
+
+        required = [
+            smoke_dir / "game/Lwsmf.exe",
+            smoke_dir / "按键说明.txt",
+            smoke_dir / "work/all/media.pak",
+        ]
+        missing = [str(p.relative_to(smoke_dir)) for p in required if not p.is_file() or p.stat().st_size <= 0]
+        if missing:
+            ui.print(f"[bold red]✗ Setup 烟测缺失文件: {', '.join(missing)}[/bold red]" if HAS_RICH else f"FAIL missing: {missing}")
+            return 1
+
+        if expected_pak.is_file():
+            got_sha = sha256_file(smoke_dir / "work/all/media.pak")
+            exp_sha = sha256_file(expected_pak)
+            if got_sha != exp_sha:
+                ui.print(f"[bold red]✗ Setup 落盘 media.pak SHA-256 不一致: {got_sha} != {exp_sha}[/bold red]" if HAS_RICH else "FAIL media.pak sha mismatch")
+                return 1
+            ui.print(f"[green]✓ Setup 静默安装校验通过，media.pak SHA-256 一致 ({got_sha[:16]}...)[/green]" if HAS_RICH else f"OK setup install media.pak={got_sha}")
+
+        unins = smoke_dir / "unins000.exe"
+        if unins.is_file():
+            rc_un, _ = run_streaming_command(
+                [str(unins), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+                {},
+                repo_root,
+                "Windows Setup 静默卸载烟测",
+                ui,
+            )
+            if rc_un != 0:
+                return rc_un
+        return 0
+    finally:
+        if smoke_dir.exists():
+            shutil.rmtree(smoke_dir, ignore_errors=True)
+
+
+def verify_dist_artifacts(repo_root: Path, cfg: ReleaseConfig, ui: UI, smoke_setup: bool = False) -> int:
+    """Run unified post-build verification across existing dist/ artifacts."""
+    cfg = cfg.normalized()
+    rc_all = 0
+    checked_any = False
+
+    win_dir = repo_root / "dist" / f"LWSMF-{cfg.version}-windows-x64"
+    win_setup = repo_root / "dist" / f"LWSMF-{cfg.version}-windows-x64-setup.exe"
+    if win_dir.is_dir():
+        checked_any = True
+        rc1, _ = run_streaming_command(
+            [sys.executable, str(repo_root / "tools/release_audit.py"), "--dist", str(win_dir)],
+            {},
+            repo_root,
+            "Windows 发布包审计 (release_audit --dist)",
+            ui,
+        )
+        if rc1 != 0:
+            rc_all = 1
+        win_exe = win_dir / "game/Lwsmf.exe"
+        if win_exe.is_file():
+            rc2, _ = run_streaming_command(
+                [sys.executable, str(repo_root / "tools/mobile/windows_pe.py"), "--check", str(win_exe)],
+                {},
+                repo_root,
+                "Windows PE 版本语言与校验和验真 (windows_pe --check)",
+                ui,
+            )
+            if rc2 != 0:
+                rc_all = 1
+            tpl_tag = "定制 2D Mono 模板" if win_exe.stat().st_size < 70 * 1024 * 1024 else "官方 Mono 模板"
+            ui.print(f"  Windows Lwsmf.exe: {fmt_mb(win_exe.stat().st_size)} ({tpl_tag})")
+        if smoke_setup and win_setup.is_file():
+            rc_s = run_windows_setup_smoke(win_setup, win_dir / "work/all/media.pak", repo_root, ui)
+            if rc_s != 0:
+                rc_all = 1
+
+    apk_path = repo_root / "dist/android" / cfg.version / f"LWSMF-{cfg.version}-android-arm64.apk"
+    if apk_path.is_file():
+        checked_any = True
+        rc3, _ = run_streaming_command(
+            [sys.executable, str(repo_root / "tools/mobile/android_data.py"), "verify-apk", str(apk_path)],
+            {},
+            repo_root,
+            "Android APK 结构与 16KB 验真 (verify-apk)",
+            ui,
+        )
+        if rc3 != 0:
+            rc_all = 1
+        icon_issues, meta = verify_android_apk_icons(apk_path)
+        so_tag = "定制 2D Mono 模板" if 0 < meta["libgodot_bytes"] < 60 * 1024 * 1024 else "官方 Mono 模板"
+        ui.print(
+            f"  Android APK 详情: libgodot_android.so={fmt_mb(meta['libgodot_bytes'])} ({so_tag}) | "
+            f"Brotli={'开启' if meta['brotli_json'] else '未开启'} | "
+            f"图标前景={meta['fg_bbox']} 背景={meta['bg_hex']}"
+        )
+        if icon_issues:
+            rc_all = 1
+            for issue in icon_issues:
+                ui.print(f"[bold red]✗ Android 图标验真失败: {issue}[/bold red]" if HAS_RICH else f"FAIL: {issue}")
+        else:
+            ui.print("[bold green]✓ Android 自适应图标验真通过（无启动器黑边）[/bold green]" if HAS_RICH else "OK: Android adaptive icon verified")
+
+    ios_ipa = repo_root / "dist/ios" / cfg.version / f"LWSMF-{cfg.version}-ios-arm64-full.ipa"
+    if ios_ipa.is_file():
+        checked_any = True
+        with zipfile.ZipFile(ios_ipa, "r") as zf:
+            bad = zf.testzip()
+            names = zf.namelist()
+            has_pak = any(n.endswith("/work/all/media.pak") for n in names)
+            if bad is not None or not has_pak:
+                rc_all = 1
+                ui.print(f"[bold red]✗ iOS IPA 校验失败: bad={bad} has_pak={has_pak}[/bold red]" if HAS_RICH else f"FAIL iOS IPA: bad={bad}")
+            else:
+                ui.print(f"[bold green]✓ iOS IPA ZIP CRC 与媒体包校验通过 ({fmt_mb(ios_ipa.stat().st_size)})[/bold green]" if HAS_RICH else "OK: iOS IPA verified")
+
+    if not checked_any:
+        ui.print("[yellow]未在 dist/ 中找到当前版本号的导出产物。[/yellow]" if HAS_RICH else "No dist artifacts found for current version.")
+    return rc_all
 
 
 def run_deep_diagnostics(repo_root: Path, ui: UI) -> int:
@@ -1040,6 +1248,9 @@ def interactive_loop(repo_root: Path) -> int:
             run_deep_diagnostics(repo_root, ui)
         elif choice == "8":
             show_dist_artifacts(repo_root, ui)
+            if prompt_yes_no("是否对当前版本 dist/ 产物执行统一验真（release_audit + PE + APK 图标）？", default=True):
+                do_smoke = os.name == "nt" and prompt_yes_no("是否同时执行 Windows Setup 静默安装/卸载烟测？", default=False)
+                verify_dist_artifacts(repo_root, cfg, ui, smoke_setup=do_smoke)
             if os.name == "nt" and (repo_root / "dist").is_dir():
                 if prompt_yes_no("是否在资源管理器打开 dist/ 目录？", default=False):
                     os.startfile(str(repo_root / "dist"))  # type: ignore[attr-defined]
@@ -1068,9 +1279,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--check", action="store_true", help="打印环境与素材状态仪表盘后退出")
     parser.add_argument("--plan", action="store_true", help="仅打印解析后的构建命令，不实际执行")
     parser.add_argument("--build", default="", help="非交互批量构建目标，逗号分隔：windows,android,ios")
+    parser.add_argument("--verify", action="store_true", help="对当前版本 dist/ 产物执行统一验真（PE + audit + APK 图标/16KB）")
+    parser.add_argument("--smoke-setup", action="store_true", help="与 --verify 或 --build 联用：执行 Windows Setup 静默装卸烟测")
     parser.add_argument("--rebuild-media", action="store_true", help="按活体清单剪枝并重建真无损 work/all/media.pak")
     parser.add_argument("--version", default="", help="覆盖版本号（如 0.1.0）")
     parser.add_argument("--media-mode", choices=VALID_MEDIA_MODES, default="", help="媒体模式: lossless 或 copy")
+    parser.add_argument("--android-mode", choices=VALID_ANDROID_MODES, default="", help="Android 签名模式: debug 或 release")
     parser.add_argument("--no-brotli", action="store_true", help="关闭 game_data Brotli 压缩")
     parser.add_argument("--no-installer", action="store_true", help="关闭 Windows Inno Setup 安装包")
     parser.add_argument("--official-templates", action="store_true", help="强制使用官方模板而非定制 2D Mono 模板")
@@ -1089,6 +1303,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg.version = args.version
     if args.media_mode:
         cfg.media_mode = args.media_mode
+    if args.android_mode:
+        cfg.android_mode = args.android_mode
     if args.no_brotli:
         cfg.brotli = False
     if args.no_installer:
@@ -1113,6 +1329,9 @@ def main(argv: list[str] | None = None) -> int:
         rc, _ = run_streaming_command(cmd, {}, REPO_ROOT, "重建剪枝真无损 media.pak", ui)
         return rc
 
+    if args.verify and not args.build and not args.plan:
+        return verify_dist_artifacts(REPO_ROOT, cfg, ui, smoke_setup=args.smoke_setup)
+
     if args.plan or args.build:
         targets = [t.strip().lower() for t in (args.build or "windows,android,ios").split(",") if t.strip()]
         invalid = [t for t in targets if t not in ("windows", "android", "ios")]
@@ -1125,13 +1344,16 @@ def main(argv: list[str] | None = None) -> int:
             for t in targets:
                 cmd, _, warns = build_platform_plan(t, cfg, env_info, REPO_ROOT)
                 blockers = validate_target_readiness(t, cfg, env_info)
-                print(f"PLAN {t}: {' '.join(cmd)}")
+                print(f"PLAN {t}: {format_cmd(cmd)}")
                 for w in warns:
                     print(f"  WARN: {w}")
                 for b in blockers:
                     print(f"  BLOCKER: {b}")
             return 0
-        return execute_targets(targets, cfg, REPO_ROOT, ui, auto_yes=args.yes)
+        rc = execute_targets(targets, cfg, REPO_ROOT, ui, auto_yes=args.yes)
+        if rc == 0 and (args.verify or args.smoke_setup):
+            return verify_dist_artifacts(REPO_ROOT, cfg, ui, smoke_setup=args.smoke_setup)
+        return rc
 
     return interactive_loop(REPO_ROOT)
 

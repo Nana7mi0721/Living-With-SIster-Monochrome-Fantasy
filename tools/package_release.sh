@@ -5,8 +5,53 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-GODOT_BIN="${GODOT_BIN:-${GODOT:-$(command -v godot 2>/dev/null || command -v Godot_v4.7.2-stable_mono_win64_console.exe 2>/dev/null || true)}}"
-DOTNET_BIN="${DOTNET_BIN:-${DOTNET:-$(command -v dotnet 2>/dev/null || true)}}"
+to_posix_path() {
+  local input="$1"
+  if [ -z "$input" ]; then
+    return 0
+  fi
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -u "$input"
+  elif [[ "$input" =~ ^([A-Za-z]):[/\\](.*)$ ]]; then
+    local drive="${BASH_REMATCH[1],,}"
+    local rest="${BASH_REMATCH[2]//\\//}"
+    printf '/%s/%s' "$drive" "$rest"
+  else
+    printf '%s' "${input//\\//}"
+  fi
+}
+
+to_win_path() {
+  local input="$1"
+  if [ -z "$input" ]; then
+    return 0
+  fi
+  if [[ "$input" != /* && ! "$input" =~ ^[A-Za-z]:[/\\] ]]; then
+    input="$ROOT/$input"
+  fi
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$input"
+  elif [[ "$input" =~ ^/([a-zA-Z])/(.*)$ ]]; then
+    printf '%s:/%s' "${BASH_REMATCH[1]^^}" "${BASH_REMATCH[2]}"
+  else
+    printf '%s' "$input"
+  fi
+}
+
+if [ -f "$ROOT/tools/local.env.sh" ]; then
+  _LOCAL_GODOT=""
+  _LOCAL_DOTNET=""
+  eval "$(
+    # shellcheck disable=SC1090
+    source "$ROOT/tools/local.env.sh" >/dev/null 2>&1 || true
+    printf '_LOCAL_GODOT=%q\n_LOCAL_DOTNET=%q\n' "${GODOT:-}" "${DOTNET:-}"
+  )"
+  [ -z "${GODOT_BIN:-}" ] && [ -z "${GODOT:-}" ] && [ -n "$_LOCAL_GODOT" ] && GODOT_BIN="$_LOCAL_GODOT"
+  [ -z "${DOTNET_BIN:-}" ] && [ -z "${DOTNET:-}" ] && [ -n "$_LOCAL_DOTNET" ] && DOTNET_BIN="$_LOCAL_DOTNET"
+fi
+
+GODOT_BIN="$(to_posix_path "${GODOT_BIN:-${GODOT:-$(command -v godot 2>/dev/null || command -v Godot_v4.7.2-stable_mono_win64_console.exe 2>/dev/null || true)}}")"
+DOTNET_BIN="$(to_posix_path "${DOTNET_BIN:-${DOTNET:-$(command -v dotnet 2>/dev/null || true)}}")"
 PYTHON_BIN="${PYTHON_BIN:-${PYTHON:-$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)}}"
 
 if [ -z "$GODOT_BIN" ] || [ ! -x "$GODOT_BIN" ]; then
@@ -22,8 +67,8 @@ if [ -z "$PYTHON_BIN" ] || ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   exit 2
 fi
 
-export DOTNET="${DOTNET:-$DOTNET_BIN}"
-export DOTNET_ROOT="${DOTNET_ROOT:-$(dirname "$DOTNET_BIN")}"
+export DOTNET="$(to_win_path "$DOTNET_BIN")"
+export DOTNET_ROOT="${DOTNET_ROOT:-$(to_win_path "$(dirname "$DOTNET_BIN")")}"
 export PATH="$(dirname "$DOTNET_BIN"):$PATH"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_NOLOGO=1
@@ -40,6 +85,7 @@ BROTLI=false
 INSTALLER=false
 ALLOW_PLACEHOLDER=false
 TEMPLATE_OPT=""
+OFFICIAL_TEMPLATE=false
 MEDIA_PAK_OPT=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -50,6 +96,7 @@ while [ "$#" -gt 0 ]; do
     --brotli) BROTLI=true; shift ;;
     --installer) INSTALLER=true; shift ;;
     --allow-placeholder) ALLOW_PLACEHOLDER=true; shift ;;
+    --official-template) OFFICIAL_TEMPLATE=true; shift ;;
     --version)
       if [ "$#" -lt 2 ]; then
         echo "ERROR: --version requires a value" >&2
@@ -75,7 +122,7 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     *)
-      echo "usage: tools/package_release.sh [--demo] [--slim|--lossless] [--media-pak FILE] [--hd] [--brotli] [--installer] [--allow-placeholder] [--version VER] [--template FILE]" >&2
+      echo "usage: tools/package_release.sh [--demo] [--slim|--lossless] [--media-pak FILE] [--hd] [--brotli] [--installer] [--allow-placeholder] [--version VER] [--template FILE|--official-template]" >&2
       exit 2
       ;;
   esac
@@ -84,6 +131,22 @@ done
 if [ "$SLIM" = true ] && [ "$LOSSLESS" = true ]; then
   echo "ERROR: --slim and --lossless are mutually exclusive" >&2
   exit 2
+fi
+if [ -n "$TEMPLATE_OPT" ] && [ "$OFFICIAL_TEMPLATE" = true ]; then
+  echo "ERROR: --template and --official-template are mutually exclusive" >&2
+  exit 2
+fi
+if [ -z "$TEMPLATE_OPT" ] && [ "$OFFICIAL_TEMPLATE" != true ] && [ "${LWSMF_OFFICIAL_TEMPLATE:-0}" != "1" ]; then
+  for _tpl in \
+    "$ROOT/work/out/templates/windows/windows_release_x86_64.exe" \
+    "$ROOT/dist/templates/windows/windows_release_x86_64.exe"
+  do
+    if [ -s "$_tpl" ]; then
+      TEMPLATE_OPT="$_tpl"
+      echo "== auto-detected custom Windows template: $TEMPLATE_OPT =="
+      break
+    fi
+  done
 fi
 if [ -n "$MEDIA_PAK_OPT" ] && { [ "$SLIM" = true ] || [ "$LOSSLESS" = true ]; }; then
   echo "ERROR: --media-pak cannot be combined with --slim or --lossless" >&2
@@ -163,16 +226,6 @@ if [ ! -f "$SLN" ]; then
   SLN_CREATED=true
   "$DOTNET_BIN" sln "$SLN" add "$ROOT/godot/Lwsmf.csproj" >/dev/null
 fi
-
-to_win_path() {
-  if command -v cygpath >/dev/null 2>&1; then
-    cygpath -m "$1"
-  elif [[ "$1" =~ ^/([a-zA-Z])/(.*)$ ]]; then
-    printf '%s:/%s' "${BASH_REMATCH[1]^^}" "${BASH_REMATCH[2]}"
-  else
-    printf '%s' "$1"
-  fi
-}
 
 normalize_integrity() {
   local target="$1"
@@ -523,7 +576,7 @@ PY
 
 if [ "$INSTALLER" = true ]; then
   echo "== building Windows Inno Setup LZMA2 installer =="
-  ISCC_BIN="${ISCC_BIN:-}"
+  ISCC_BIN="$(to_posix_path "${ISCC_BIN:-}")"
   if [ -z "$ISCC_BIN" ]; then
     for candidate in "$ROOT"/work/out/inno/tool-*/ISCC.exe; do
       if [ -x "$candidate" ]; then
@@ -559,7 +612,7 @@ if [ "$INSTALLER" = true ]; then
   EXTRA_LANGUAGES=""
   CHINESE_ISL=""
   for candidate in \
-    "${LWSMF_INNO_CHINESE_ISL:-}" \
+    "$(to_posix_path "${LWSMF_INNO_CHINESE_ISL:-}")" \
     "$ISCC_DIR/Languages/ChineseSimplified.isl" \
     "$ISCC_DIR/ChineseSimplified.isl" \
     "$ROOT/work/out/inno/ChineseSimplified.isl"

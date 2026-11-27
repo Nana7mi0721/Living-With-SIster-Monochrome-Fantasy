@@ -18,15 +18,93 @@ KS_PASS_OPT="android"
 KEY_PASS_OPT=""
 FONT_OPT=""
 TEMPLATE_OPT=""
+OFFICIAL_TEMPLATE=false
 MEDIA_PAK_OPT=""
 OUT_DIR=""
 DRY_RUN=false
 FORCE=false
 ALLOW_PLACEHOLDER=false
 
-GODOT_BIN="${GODOT_BIN:-${GODOT:-$(command -v godot 2>/dev/null || command -v Godot_v4.7.2-stable_mono_win64_console.exe 2>/dev/null || true)}}"
-DOTNET_BIN="${DOTNET_BIN:-${ANDROID_DOTNET:-$(command -v dotnet 2>/dev/null || true)}}"
+to_posix_path() {
+  local input="$1"
+  if [ -z "$input" ]; then
+    return 0
+  fi
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -u "$input"
+  elif [[ "$input" =~ ^([A-Za-z]):[/\\](.*)$ ]]; then
+    local drive="${BASH_REMATCH[1],,}"
+    local rest="${BASH_REMATCH[2]//\\//}"
+    printf '/%s/%s' "$drive" "$rest"
+  else
+    printf '%s' "${input//\\//}"
+  fi
+}
+
 PYTHON_BIN="${PYTHON_BIN:-${PYTHON:-$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)}}"
+
+_LOCAL_GODOT=""
+_LOCAL_DOTNET=""
+if [ -f "$ROOT/tools/local.env.sh" ]; then
+  eval "$(
+    # shellcheck disable=SC1090
+    source "$ROOT/tools/local.env.sh" >/dev/null 2>&1 || true
+    printf '_LOCAL_GODOT=%q\n_LOCAL_DOTNET=%q\n' "${GODOT:-}" "${DOTNET:-}"
+  )"
+fi
+
+GODOT_BIN="$(to_posix_path "${GODOT_BIN:-${GODOT:-${_LOCAL_GODOT:-$(command -v godot 2>/dev/null || command -v Godot_v4.7.2-stable_mono_win64_console.exe 2>/dev/null || true)}}}")"
+DOTNET_BIN="$(to_posix_path "${DOTNET_BIN:-${ANDROID_DOTNET:-}}")"
+if [ -z "$DOTNET_BIN" ] && [ -n "$PYTHON_BIN" ] && command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  DOTNET_BIN="$(to_posix_path "$("$PYTHON_BIN" - "$ROOT/tools" "$_LOCAL_DOTNET" <<'PY'
+import os, shutil, sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(sys.argv[1]) / "mobile"))
+import env_check
+
+candidates = []
+which_dn = shutil.which("dotnet")
+if which_dn:
+    candidates.append(which_dn)
+local_dn = sys.argv[2].strip()
+if local_dn:
+    if os.name == "nt" and local_dn.startswith("/") and len(local_dn) > 2 and local_dn[2] == "/":
+        local_dn = f"{local_dn[1].upper()}:/{local_dn[3:]}"
+    parent = Path(local_dn).resolve().parent.parent
+    for sibling in ("dotnet9", "dotnet10", "dotnet11"):
+        for exe in ("dotnet.exe", "dotnet"):
+            cand = parent / sibling / exe
+            if cand.is_file():
+                candidates.append(str(cand))
+
+best = ""
+seen = set()
+for raw in candidates:
+    p = Path(raw)
+    if not p.is_file() and os.name == "nt" and not raw.lower().endswith(".exe"):
+        p = Path(raw + ".exe")
+    if not p.is_file():
+        continue
+    key = str(p.resolve()).lower()
+    if key in seen:
+        continue
+    seen.add(key)
+    vers, _ = env_check.dotnet_sdk_versions(str(p))
+    majors = [int(v.split(".", 1)[0]) for v in vers]
+    if 9 in majors:
+        print(str(p))
+        raise SystemExit(0)
+    if any(m >= 9 for m in majors) and not best:
+        best = str(p)
+if best:
+    print(best)
+PY
+  )")"
+fi
+if [ -z "$DOTNET_BIN" ]; then
+  DOTNET_BIN="$(to_posix_path "$(command -v dotnet 2>/dev/null || true)")"
+fi
 
 usage() {
   cat <<'EOF'
@@ -44,7 +122,8 @@ Usage: tools/package_android.sh [options]
   --ks-pass PASS    keystore password (default: android)
   --key-pass PASS   private-key password (default: same as --ks-pass)
   --font FILE       optional Lolita.ttf to bundle into mobile_data
-  --template FILE   optional custom Android APK template
+  --template FILE   optional custom Android APK template (auto-detected if present)
+  --official-template  force Godot's official Android template even if a custom template exists
   --out-dir DIR     output directory (default: dist/android/<ver> or dist/android-slim/<ver>)
   --dry-run         run preflight env check + payload plan only (no APK build)
   --force           replace existing output APK
@@ -62,6 +141,9 @@ need_arg() {
 
 to_win_path() {
   local input="$1"
+  if [ -z "$input" ]; then
+    return 0
+  fi
   if [[ "$input" != /* && ! "$input" =~ ^[A-Za-z]:[/\\] ]]; then
     input="$ROOT/$input"
   fi
@@ -88,6 +170,7 @@ while [ "$#" -gt 0 ]; do
     --key-pass) need_arg "$@"; KEY_PASS_OPT="$2"; shift 2 ;;
     --font)     need_arg "$@"; FONT_OPT="$2"; shift 2 ;;
     --template) need_arg "$@"; TEMPLATE_OPT="$2"; shift 2 ;;
+    --official-template) OFFICIAL_TEMPLATE=true; shift ;;
     --media-pak) need_arg "$@"; MEDIA_PAK_OPT="$2"; shift 2 ;;
     --out-dir)  need_arg "$@"; OUT_DIR="$2"; shift 2 ;;
     --dry-run)  DRY_RUN=true; shift ;;
@@ -102,6 +185,23 @@ done
 if [ "$SLIM" = true ] && [ "$LOSSLESS" = true ]; then
   echo "ERROR: --slim and --lossless are mutually exclusive" >&2
   exit 2
+fi
+if [ -n "$TEMPLATE_OPT" ] && [ "$OFFICIAL_TEMPLATE" = true ]; then
+  echo "ERROR: --template and --official-template are mutually exclusive" >&2
+  exit 2
+fi
+if [ -z "$TEMPLATE_OPT" ] && [ "$OFFICIAL_TEMPLATE" != true ] && [ "${LWSMF_OFFICIAL_TEMPLATE:-0}" != "1" ]; then
+  for _tpl in \
+    "$ROOT/work/out/templates/android/android_release.apk" \
+    "$ROOT/work/out/android-mono-template/android_monoRelease.apk" \
+    "$ROOT/dist/templates/android/android_release.apk"
+  do
+    if [ -s "$_tpl" ]; then
+      TEMPLATE_OPT="$_tpl"
+      echo "== auto-detected custom Android template: $TEMPLATE_OPT =="
+      break
+    fi
+  done
 fi
 if { [ "$SLIM" = true ] || [ "$LOSSLESS" = true ]; } && [ -n "$MEDIA_PAK_OPT" ]; then
   echo "ERROR: --slim/--lossless and --media-pak are mutually exclusive" >&2
@@ -177,7 +277,8 @@ cleanup() {
 trap cleanup EXIT
 
 echo "== Android preflight check =="
-"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/env_check.py")" --target android
+GODOT_BIN="$(to_win_path "$GODOT_BIN")" DOTNET_BIN="$(to_win_path "$DOTNET_BIN")" \
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/env_check.py")" --target android
 
 GD_WIN="$(to_win_path "$ROOT/game_data")"
 WA_WIN="$(to_win_path "$ROOT/work/all")"
@@ -197,11 +298,12 @@ if [ "$DRY_RUN" = true ]; then
 fi
 
 # Strict full-build validation
-"$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/env_check.py")" --target android --strict --setup-debug-keystore
+GODOT_BIN="$(to_win_path "$GODOT_BIN")" DOTNET_BIN="$(to_win_path "$DOTNET_BIN")" \
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/mobile/env_check.py")" --target android --strict --setup-debug-keystore
 
 [ -n "$GODOT_BIN" ] && [ -x "$GODOT_BIN" ] || { echo "ERROR: Godot 4.7.2 Mono console binary not found" >&2; exit 2; }
 [ -n "$DOTNET_BIN" ] && [ -x "$DOTNET_BIN" ] || { echo "ERROR: .NET 9 SDK binary not found (set DOTNET_BIN)" >&2; exit 2; }
-export DOTNET="$DOTNET_BIN"
+export DOTNET="$(to_win_path "$DOTNET_BIN")"
 export DOTNET_ROOT="${ANDROID_DOTNET_ROOT:-$(to_win_path "$(dirname "$DOTNET_BIN")")}"
 export PATH="$(dirname "$DOTNET_BIN"):$PATH"
 

@@ -16,6 +16,7 @@ import shutil
 import stat
 import struct
 import sys
+import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -202,7 +203,10 @@ def inject(
     dry_run: bool = False,
     use_brotli: bool = False,
     allow_missing_font: bool = False,
+    use_lossless: bool = False,
 ) -> Path:
+    if use_lossless and media_pak_override is not None:
+        fail("--lossless and --media-pak are mutually exclusive")
     source = ipa.resolve()
     if not source.is_file() or not zipfile.is_zipfile(source):
         fail(f"input IPA is missing or not a valid ZIP archive: {ipa}")
@@ -213,78 +217,104 @@ def inject(
     if destination.exists() and not force and not dry_run:
         fail(f"output already exists (pass --force): {destination}")
 
-    with zipfile.ZipFile(source, "r") as archive:
-        infos = archive.infolist()
-        names = [safe_member_name(info.filename) for info in infos]
-        app_prefix = app_prefix_from_names(names)
-        payload_files, payload_dirs = collect_payload_files(
-            app_prefix,
-            game_data_dir,
-            work_all_dir,
-            media_pak_override,
-            font,
-            use_brotli=use_brotli,
-            allow_missing_font=allow_missing_font,
-        )
+    lossless_tmp: Path | None = None
+    effective_media_pak = media_pak_override
+    try:
+        if use_lossless and not dry_run:
+            src_pak = (work_all_dir / "media.pak").resolve()
+            if not src_pak.is_file() or src_pak.stat().st_size <= 0:
+                fail(f"missing or empty media.pak: {src_pak}")
+            lossless_tmp = Path(tempfile.mkdtemp(prefix="lwsmf-ios-lossless-"))
+            repacked_pak = lossless_tmp / "media-lossless.pak"
+            pack_args = ["--from-pak", str(src_pak), "--out", str(repacked_pak), "--lossless"]
+            sysfile_dir = work_all_dir / "SystemFile"
+            if sysfile_dir.is_dir():
+                overlay_dir = lossless_tmp / "overlay"
+                shutil.copytree(sysfile_dir, overlay_dir / "SystemFile")
+                pack_args.extend(["--extra-root", str(overlay_dir)])
+            rc = pack_media.main(pack_args)
+            if rc != 0 or not repacked_pak.is_file():
+                fail("failed to build true-lossless media.pak for iOS injection")
+            effective_media_pak = repacked_pak
 
-        if dry_run:
-            total = sum(_payload_size(v[0]) for v in payload_files.values())
-            print(f"IOS_INJECT_DRY_RUN app={app_prefix} files={len(payload_files)} payload_bytes={total} out={destination}")
-            return destination
+        with zipfile.ZipFile(source, "r") as archive:
+            infos = archive.infolist()
+            names = [safe_member_name(info.filename) for info in infos]
+            app_prefix = app_prefix_from_names(names)
+            payload_files, payload_dirs = collect_payload_files(
+                app_prefix,
+                game_data_dir,
+                work_all_dir,
+                effective_media_pak,
+                font,
+                use_brotli=use_brotli,
+                allow_missing_font=allow_missing_font,
+            )
 
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        temp = destination.with_name(destination.name + ".tmp")
-        if temp.exists():
-            temp.unlink()
+            if dry_run:
+                total = sum(_payload_size(v[0]) for v in payload_files.values())
+                print(
+                    f"IOS_INJECT_DRY_RUN app={app_prefix} files={len(payload_files)} "
+                    f"payload_bytes={total} lossless={use_lossless} out={destination}"
+                )
+                return destination
 
-        replace_prefixes = (f"{app_prefix}/game_data", f"{app_prefix}/work")
-        seen: set[str] = set()
-        try:
-            with zipfile.ZipFile(temp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as out_zip:
-                for info, name in zip(infos, names):
-                    norm = name.rstrip("/")
-                    if any(norm == p or norm.startswith(p + "/") for p in replace_prefixes):
-                        continue
-                    if name in seen:
-                        fail(f"duplicate archive member in input IPA: {name}")
-                    seen.add(name)
-                    cloned = clone_zipinfo(info)
-                    if info.is_dir():
-                        out_zip.writestr(cloned, b"")
-                    else:
-                        use_zip64 = info.file_size >= zipfile.ZIP64_LIMIT
-                        with archive.open(info, "r") as src_stream, out_zip.open(cloned, "w", force_zip64=use_zip64) as dst_stream:
-                            shutil.copyfileobj(src_stream, dst_stream, length=STREAM_CHUNK_BYTES)
-
-                now_ts = datetime.now().timestamp()
-                for d in sorted(payload_dirs, key=str.lower):
-                    out_zip.writestr(data_zipinfo(d, True, now_ts, stat.S_IFDIR | 0o755), b"")
-                for arcname in sorted(payload_files, key=str.lower):
-                    payload, mtime, mode = payload_files[arcname]
-                    zinfo = data_zipinfo(arcname, False, mtime, mode)
-                    if isinstance(payload, Path):
-                        use_zip64 = payload.stat().st_size >= zipfile.ZIP64_LIMIT
-                        with payload.open("rb") as src_stream, out_zip.open(zinfo, "w", force_zip64=use_zip64) as dst_stream:
-                            shutil.copyfileobj(src_stream, dst_stream, length=STREAM_CHUNK_BYTES)
-                    else:
-                        out_zip.writestr(zinfo, payload)
-
-            with zipfile.ZipFile(temp, "r") as check_zip:
-                check_names = [safe_member_name(i.filename) for i in check_zip.infolist()]
-                if app_prefix_from_names(check_names) != app_prefix:
-                    fail("output IPA bundle mismatch")
-                prog_req = f"{app_prefix}/game_data/programs.json" + (".br" if use_brotli else "")
-                for req in (prog_req, f"{app_prefix}/work/all/media.pak"):
-                    if req not in check_names:
-                        fail(f"output IPA missing injected entry: {req}")
-                bad = check_zip.testzip()
-                if bad is not None:
-                    fail(f"output IPA CRC check failed at: {bad}")
-
-            os.replace(temp, destination)
-        finally:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temp = destination.with_name(destination.name + ".tmp")
             if temp.exists():
                 temp.unlink()
+
+            replace_prefixes = (f"{app_prefix}/game_data", f"{app_prefix}/work")
+            seen: set[str] = set()
+            try:
+                with zipfile.ZipFile(temp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as out_zip:
+                    for info, name in zip(infos, names):
+                        norm = name.rstrip("/")
+                        if any(norm == p or norm.startswith(p + "/") for p in replace_prefixes):
+                            continue
+                        if name in seen:
+                            fail(f"duplicate archive member in input IPA: {name}")
+                        seen.add(name)
+                        cloned = clone_zipinfo(info)
+                        if info.is_dir():
+                            out_zip.writestr(cloned, b"")
+                        else:
+                            use_zip64 = info.file_size >= zipfile.ZIP64_LIMIT
+                            with archive.open(info, "r") as src_stream, out_zip.open(cloned, "w", force_zip64=use_zip64) as dst_stream:
+                                shutil.copyfileobj(src_stream, dst_stream, length=STREAM_CHUNK_BYTES)
+
+                    now_ts = datetime.now().timestamp()
+                    for d in sorted(payload_dirs, key=str.lower):
+                        out_zip.writestr(data_zipinfo(d, True, now_ts, stat.S_IFDIR | 0o755), b"")
+                    for arcname in sorted(payload_files, key=str.lower):
+                        payload, mtime, mode = payload_files[arcname]
+                        zinfo = data_zipinfo(arcname, False, mtime, mode)
+                        if isinstance(payload, Path):
+                            use_zip64 = payload.stat().st_size >= zipfile.ZIP64_LIMIT
+                            with payload.open("rb") as src_stream, out_zip.open(zinfo, "w", force_zip64=use_zip64) as dst_stream:
+                                shutil.copyfileobj(src_stream, dst_stream, length=STREAM_CHUNK_BYTES)
+                        else:
+                            out_zip.writestr(zinfo, payload)
+
+                with zipfile.ZipFile(temp, "r") as check_zip:
+                    check_names = [safe_member_name(i.filename) for i in check_zip.infolist()]
+                    if app_prefix_from_names(check_names) != app_prefix:
+                        fail("output IPA bundle mismatch")
+                    prog_req = f"{app_prefix}/game_data/programs.json" + (".br" if use_brotli else "")
+                    for req in (prog_req, f"{app_prefix}/work/all/media.pak"):
+                        if req not in check_names:
+                            fail(f"output IPA missing injected entry: {req}")
+                    bad = check_zip.testzip()
+                    if bad is not None:
+                        fail(f"output IPA CRC check failed at: {bad}")
+
+                os.replace(temp, destination)
+            finally:
+                if temp.exists():
+                    temp.unlink()
+    finally:
+        if lossless_tmp is not None and lossless_tmp.exists():
+            shutil.rmtree(lossless_tmp, ignore_errors=True)
 
     sha = sha256_file(destination)
     print(f"IOS_INJECT_OK out={destination} sha256={sha}")
@@ -297,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--game-data", type=Path, default=Path("game_data"))
     parser.add_argument("--work-all", type=Path, default=Path("work/all"))
     parser.add_argument("--media-pak", type=Path, default=None)
+    parser.add_argument("--lossless", action="store_true", help="Repack media.pak with pixel-exact lossless WebP + SystemFile overlay")
     parser.add_argument("--font", type=Path, default=None)
     parser.add_argument("--allow-missing-font", action="store_true", help="Allow IPA injection without Lolita.ttf")
     parser.add_argument("--out", type=Path, default=None)
@@ -321,6 +352,7 @@ def main(argv: list[str] | None = None) -> int:
         args.dry_run,
         use_brotli=args.brotli,
         allow_missing_font=args.allow_missing_font,
+        use_lossless=args.lossless,
     )
     return 0
 
