@@ -30,7 +30,7 @@
 | `fix_integrity_level.ps1` | Windows | 将工作区或指定路径的 NTFS 完整性级别从 Low 重置为 Medium；`-GrantCurrentUser` 用于普通权限修复 |
 | `package_android.sh` | Android | Android APK 导出构建与素材包嵌入（支持 `--lossless`、`--media-pak`、`--brotli`、`--template`） |
 | `package_ios.sh` | iOS | iOS Xcode 工程导出与无签名包归档流水线（支持 `--lossless`、`--brotli`、`--template`） |
-| `sync_release_icons.py` | 全平台 | 从本地 `_publish` 素材派生三端应用图标、Windows 窗口图标与安装器素材；Android 自适应前景使用 72% 居中布局并提供浅色背景，避免启动器黑边；`sisfan_promo.png` 原字节派生为欢迎页海报，`TitleGraphic6.jpg` 同尺寸转存为完成页 PNG，另生成 `55×55` 白底小图标 |
+| `sync_release_icons.py` | 全平台 | 从本地 `_publish` 素材派生三端应用图标、Windows 窗口图标与安装器素材；Android 自适应前景使用 72% 居中布局并提供浅色背景，避免启动器黑边；`setup_welcome.png` 与 `setup_finish.png` 均按原字节直通，完成页真实宽高写入 Inno 模板，另生成 `55×55` 白底小图标 |
 | `brotli_json.py` | 全平台 | 对 `game_data/*.json` 进行无损 Brotli 高压缩预处理（体积缩减 ~80%） |
 | `installer/` | Windows | Inno Setup 安装包脚本模板与构建定义 |
 | `mobile/` | Android / iOS | 移动端环境检测、APK 后处理、静态库剥离（`strip_android_static_libs.py`）工具 |

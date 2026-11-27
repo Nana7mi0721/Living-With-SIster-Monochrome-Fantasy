@@ -27,7 +27,7 @@ DisableReadyPage=yes
 DisableProgramGroupPage=yes
 ShowLanguageDialog=no
 SetupIconFile=@SETUP_ICON@
-WizardImageFile=@FINISH_POSTER@
+WizardImageFile=@SETUP_FINISH@
 WizardSmallImageFile=@SETUP_SMALL@
 WizardImageBackColor=clWhite
 WizardImageStretch=yes
@@ -45,7 +45,7 @@ VersionInfoProductVersion=@APP_VERSION@
 Source: "@STAGE_DIR@\*"; DestDir: "{app}"; Excludes: "work\all\media.pak,work\all\media_hd.pak"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "@STAGE_DIR@\work\all\media.pak"; DestDir: "{app}\work\all"; Flags: ignoreversion nocompression
 Source: "@STAGE_DIR@\work\all\media_hd.pak"; DestDir: "{app}\work\all"; Flags: ignoreversion nocompression skipifsourcedoesntexist
-Source: "@SETUP_PROMO@"; DestDir: "{tmp}"; DestName: "setup_promo.png"; Flags: dontcopy
+Source: "@SETUP_WELCOME@"; DestDir: "{tmp}"; DestName: "setup_welcome.png"; Flags: dontcopy
 
 [Icons]
 Name: "{autoprograms}\@APP_NAME@"; Filename: "{app}\game\Lwsmf.exe"; WorkingDir: "{app}\game"
@@ -55,6 +55,10 @@ Name: "{autodesktop}\@APP_NAME@"; Filename: "{app}\game\Lwsmf.exe"; WorkingDir: 
 Filename: "{app}\game\Lwsmf.exe"; Description: "{cm:LaunchProgram,@APP_NAME@}"; WorkingDir: "{app}\game"; Flags: nowait postinstall skipifsilent
 
 [Code]
+const
+  FinishPosterWidth = @FINISH_POSTER_WIDTH@;
+  FinishPosterHeight = @FINISH_POSTER_HEIGHT@;
+
 var
   DesktopIconCheck: TNewCheckBox;
   InstallNoteLabel: TNewStaticText;
@@ -107,10 +111,13 @@ var
   PosterHeight: Integer;
   PosterWidth: Integer;
 begin
-  PosterHeight := ImageSlotWidth * 2;
+  PosterWidth := ImageSlotWidth;
+  PosterHeight := (PosterWidth * FinishPosterHeight) div FinishPosterWidth;
   if PosterHeight > WizardForm.FinishedPage.Height then
+  begin
     PosterHeight := WizardForm.FinishedPage.Height;
-  PosterWidth := PosterHeight div 2;
+    PosterWidth := (PosterHeight * FinishPosterWidth) div FinishPosterHeight;
+  end;
   WizardForm.WizardBitmapImage.Left := (ImageSlotWidth - PosterWidth) div 2;
   WizardForm.WizardBitmapImage.Top := 0;
   WizardForm.WizardBitmapImage.Width := PosterWidth;
@@ -125,10 +132,10 @@ begin
   ImageSlotWidth := WizardForm.WizardBitmapImage.Width;
   WizardForm.WizardBitmapImage.Visible := False;
 
-  ExtractTemporaryFile('setup_promo.png');
+  ExtractTemporaryFile('setup_welcome.png');
   WelcomeBanner := TBitmapImage.Create(WizardForm);
   WelcomeBanner.Parent := WizardForm.WelcomePage;
-  WelcomeBanner.PngImage.LoadFromFile(ExpandConstant('{tmp}\setup_promo.png'));
+  WelcomeBanner.PngImage.LoadFromFile(ExpandConstant('{tmp}\setup_welcome.png'));
   WelcomeBanner.Visible := False;
 
   WelcomeTitle := TNewStaticText.Create(WizardForm);

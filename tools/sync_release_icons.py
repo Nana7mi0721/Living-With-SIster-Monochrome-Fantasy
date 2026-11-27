@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover - exercised only on incomplete toolchain
     ImageDraw = None
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SOURCE_DIR = REPO_ROOT / "work/retail_dat/_publish"
+DEFAULT_SOURCE_DIR = REPO_ROOT / "work/all/_publish"
 DEFAULT_OUT_DIR = REPO_ROOT / "work/out/release_icons"
 PC_ICON_SIZES = ((16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256))
 
@@ -103,17 +103,13 @@ def sync_release_icons(
 
     mobile, mobile_placeholder = _open_source(source_dir, "icon_mobile.jpg", allow_placeholder)
     pc, pc_placeholder = _open_source(source_dir, "icon_pc.png", allow_placeholder)
-    dockbar, dockbar_placeholder = _open_source(source_dir, "icon_pc_dockbar.png", allow_placeholder)
+    dockbar, dockbar_placeholder = _open_source(source_dir, "icon_pc_dock.png", allow_placeholder)
     corner, corner_placeholder = _open_source(source_dir, "icon_pc_corner.png", allow_placeholder)
-    poster_path = source_dir / "setup_poster.png"
-    poster_placeholder = not poster_path.is_file()
-    if poster_placeholder and not allow_placeholder:
-        raise FileNotFoundError(f"publish source image not found: {poster_path}")
-    promo_path = source_dir / "sisfan_promo.png"
-    promo_placeholder = not promo_path.is_file()
-    if promo_placeholder and not allow_placeholder:
-        raise FileNotFoundError(f"publish source image not found: {promo_path}")
-    finish_poster_path = source_dir / "TitleGraphic6.jpg"
+    welcome_path = source_dir / "setup_welcome.png"
+    welcome_placeholder = not welcome_path.is_file()
+    if welcome_placeholder and not allow_placeholder:
+        raise FileNotFoundError(f"publish source image not found: {welcome_path}")
+    finish_poster_path = source_dir / "setup_finish.png"
     finish_poster_placeholder = not finish_poster_path.is_file()
     if finish_poster_placeholder and not allow_placeholder:
         raise FileNotFoundError(f"publish source image not found: {finish_poster_path}")
@@ -178,28 +174,21 @@ def sync_release_icons(
     shutil.copy2(pc_icon, setup_icon)
     outputs.append(setup_icon)
 
-    setup_poster = installer_dir / "setup_poster.png"
-    if not poster_placeholder:
-        shutil.copy2(poster_path, setup_poster)
+    setup_welcome = installer_dir / "setup_welcome.png"
+    if not welcome_placeholder:
+        shutil.copy2(welcome_path, setup_welcome)
     else:
-        _save_png(_placeholder((164, 314), (38, 41, 50, 255)), setup_poster, "RGBA")
-    outputs.append(setup_poster)
+        _save_png(_placeholder((1536, 864), (38, 41, 50, 255)), setup_welcome, "RGBA")
+    outputs.append(setup_welcome)
 
-    setup_promo = installer_dir / "setup_promo.png"
-    if not promo_placeholder:
-        shutil.copy2(promo_path, setup_promo)
-    else:
-        _save_png(_placeholder((1536, 864), (38, 41, 50, 255)), setup_promo, "RGBA")
-    outputs.append(setup_promo)
-
-    setup_finish_poster = installer_dir / "setup_finish_poster.png"
+    setup_finish = installer_dir / "setup_finish.png"
     if not finish_poster_placeholder:
-        with Image.open(finish_poster_path) as finish_source:
-            finish_source.convert("RGB").save(setup_finish_poster, format="PNG", optimize=True)
+        shutil.copy2(finish_poster_path, setup_finish)
     else:
-        finish_placeholder = _placeholder((520, 1041), (38, 41, 50, 255)).convert("RGB")
-        _save_png(finish_placeholder, setup_finish_poster, "RGB")
-    outputs.append(setup_finish_poster)
+        _save_png(_placeholder((904, 1174), (38, 41, 50, 255)), setup_finish, "RGBA")
+    outputs.append(setup_finish)
+    with Image.open(setup_finish) as finish_image:
+        finish_size = finish_image.size
 
     setup_small = installer_dir / "setup_small.png"
     small_canvas = Image.new("RGBA", (55, 55), (255, 255, 255, 255))
@@ -214,8 +203,7 @@ def sync_release_icons(
             pc_placeholder,
             dockbar_placeholder,
             corner_placeholder,
-            poster_placeholder,
-            promo_placeholder,
+            welcome_placeholder,
             finish_poster_placeholder,
         )
     )
@@ -227,9 +215,12 @@ def sync_release_icons(
             "icon_pc_dockbar": dockbar_placeholder,
             "icon_pc_taskbar": dockbar_placeholder,
             "icon_pc_corner": corner_placeholder,
-            "setup_poster": poster_placeholder,
-            "sisfan_promo": promo_placeholder,
-            "title_graphic6": finish_poster_placeholder,
+            "setup_welcome": welcome_placeholder,
+            "setup_finish": finish_poster_placeholder,
+        },
+        "installer": {
+            "finish_width": finish_size[0],
+            "finish_height": finish_size[1],
         },
         "files": {path.relative_to(out_dir).as_posix(): _sha256(path) for path in outputs},
     }
@@ -254,8 +245,8 @@ def main(argv: list[str] | None = None) -> int:
         "--source-dir",
         type=Path,
         default=Path(os.environ.get("LWSMF_PUBLISH_DIR", DEFAULT_SOURCE_DIR)),
-        help="Directory containing icon_mobile.jpg, icon_pc.png, icon_pc_dockbar.png, "
-        "icon_pc_corner.png and setup_poster.png",
+        help="Directory containing icon_mobile.jpg, icon_pc.png, icon_pc_dock.png, "
+        "icon_pc_corner.png, setup_welcome.png and setup_finish.png",
     )
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--stage-res", type=Path, default=None, help="Temporary res:// staging directory")

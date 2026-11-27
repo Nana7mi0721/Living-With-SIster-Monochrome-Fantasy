@@ -156,7 +156,7 @@ PY
 echo "== preparing iOS icons =="
 [ ! -d "$ICON_STAGE" ] && ICON_STAGE_CREATED=true
 "$PYTHON_BIN" "$ROOT/tools/sync_release_icons.py" \
-  --source-dir "${LWSMF_PUBLISH_DIR:-$ROOT/work/retail_dat/_publish}" \
+  --source-dir "${LWSMF_PUBLISH_DIR:-$ROOT/work/all/_publish}" \
   --out-dir "$ICON_OUT" \
   --stage-res "$ICON_STAGE" \
   --allow-placeholder

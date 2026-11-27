@@ -241,7 +241,7 @@ STAGE_ARGS=(stage --version "$VERSION" --game-data "$GD_WIN" --work-all "$WA_WIN
 
 echo "== preparing Android icons =="
 [ ! -d "$ICON_STAGE" ] && ICON_STAGE_CREATED=true
-PUBLISH_SRC="${LWSMF_PUBLISH_DIR:-$ROOT/work/retail_dat/_publish}"
+PUBLISH_SRC="${LWSMF_PUBLISH_DIR:-$ROOT/work/all/_publish}"
 ICON_ARGS=(
   --source-dir "$(to_win_path "$PUBLISH_SRC")"
   --out-dir "$(to_win_path "$ICON_OUT")"

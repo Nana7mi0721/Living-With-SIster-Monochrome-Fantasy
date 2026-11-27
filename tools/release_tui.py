@@ -47,11 +47,10 @@ CONFIG_PATH = REPO_ROOT / "work/out/release_tui_config.json"
 PUBLISH_FILES = (
     "icon_mobile.jpg",
     "icon_pc.png",
-    "icon_pc_dockbar.png",
+    "icon_pc_dock.png",
     "icon_pc_corner.png",
-    "setup_poster.png",
-    "sisfan_promo.png",
-    "TitleGraphic6.jpg",
+    "setup_welcome.png",
+    "setup_finish.png",
 )
 VALID_MEDIA_MODES = ("lossless", "copy")
 VALID_ANDROID_MODES = ("debug", "release")
@@ -294,7 +293,7 @@ def find_dotnet_by_major(local_env: dict[str, str], min_major: int, exact_major:
 
 
 def inspect_publish_dir(repo_root: Path) -> tuple[Path, list[str], list[str]]:
-    publish_dir = Path(os.environ.get("LWSMF_PUBLISH_DIR", str(repo_root / "work/retail_dat/_publish")))
+    publish_dir = Path(os.environ.get("LWSMF_PUBLISH_DIR", str(repo_root / "work/all/_publish")))
     present: list[str] = []
     missing: list[str] = []
     for name in PUBLISH_FILES:
@@ -703,9 +702,9 @@ class UI:
         pub_miss = env_info["publish_missing"]
         pub_ok = len(pub_miss) == 0
         pub_detail = (
-            f"7/7 完整 ({env_info['publish_dir']})"
+            f"{len(PUBLISH_FILES)}/{len(PUBLISH_FILES)} 完整 ({env_info['publish_dir']})"
             if pub_ok
-            else f"缺少 {len(pub_miss)}/7: {', '.join(pub_miss)}  (目录: {env_info['publish_dir']})"
+            else f"缺少 {len(pub_miss)}/{len(PUBLISH_FILES)}: {', '.join(pub_miss)}  (目录: {env_info['publish_dir']})"
         )
         status_table.add_row("发行图标/海报 (_publish)", badge(pub_ok, warn=cfg.allow_placeholder_icons), pub_detail)
 
@@ -1005,9 +1004,6 @@ def run_deep_diagnostics(repo_root: Path, ui: UI) -> int:
     for name in PUBLISH_FILES:
         mark = "[green]✓[/green]" if name in present else "[red]✗ 缺失[/red]"
         ui.print(f"  {mark if HAS_RICH else ('OK' if name in present else 'MISSING'):10s} {name}")
-    title6_src = repo_root / "work/all/SystemGraphic/TitleGraphic6.jpg"
-    if "TitleGraphic6.jpg" in missing and title6_src.is_file():
-        ui.print(f"  [dim]提示: TitleGraphic6.jpg 可直接从 {title6_src.relative_to(repo_root)} 复制。[/dim]" if HAS_RICH else "")
     return 0 if (rc1 == 0 and rc2 == 0) else 1
 
 

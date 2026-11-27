@@ -630,9 +630,11 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("media_hd.pak", iss_tmpl)
         self.assertIn("nocompression", iss_tmpl)
         self.assertIn("SetupIconFile=@SETUP_ICON@", iss_tmpl)
-        self.assertIn("WizardImageFile=@FINISH_POSTER@", iss_tmpl)
-        self.assertIn('Source: "@SETUP_PROMO@"', iss_tmpl)
+        self.assertIn("WizardImageFile=@SETUP_FINISH@", iss_tmpl)
+        self.assertIn('Source: "@SETUP_WELCOME@"', iss_tmpl)
         self.assertIn("PngImage.LoadFromFile", iss_tmpl)
+        self.assertIn("FinishPosterWidth = @FINISH_POSTER_WIDTH@", iss_tmpl)
+        self.assertIn("FinishPosterHeight = @FINISH_POSTER_HEIGHT@", iss_tmpl)
         self.assertIn("WizardSmallImageFile=@SETUP_SMALL@", iss_tmpl)
         self.assertIn("WizardImageStretch=yes", iss_tmpl)
         self.assertIn("WizardImageBackColor=clWhite", iss_tmpl)
@@ -642,7 +644,8 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("TextAreaHeight := ScaleY(64)", iss_tmpl)
         self.assertIn("WelcomeTitle.Font.Style := [fsBold]", iss_tmpl)
         self.assertIn("LayoutFinishPage", iss_tmpl)
-        self.assertIn("PosterWidth := PosterHeight div 2", iss_tmpl)
+        self.assertIn("PosterHeight := (PosterWidth * FinishPosterHeight) div FinishPosterWidth", iss_tmpl)
+        self.assertNotIn("PosterWidth := PosterHeight div 2", iss_tmpl)
         self.assertNotIn("WizardBackImageFile", iss_tmpl)
         self.assertIn("WizardStyle=modern", iss_tmpl)
         self.assertIn("WizardSizePercent=100,115", iss_tmpl)
@@ -668,9 +671,12 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("for _ in 1 2 3", packaging)
         self.assertIn("ChineseSimplified.isl not found", packaging)
         self.assertIn("setup_small.png", packaging)
-        self.assertIn("setup_promo.png", packaging)
-        self.assertIn("setup_finish_poster.png", packaging)
-        self.assertIn("@FINISH_POSTER@", packaging)
+        self.assertIn("setup_welcome.png", packaging)
+        self.assertIn("setup_finish.png", packaging)
+        self.assertIn("@SETUP_FINISH@", packaging)
+        self.assertIn("@FINISH_POSTER_WIDTH@", packaging)
+        self.assertIn("timeout 60", packaging)
+        self.assertIn("package_release_import.log", packaging)
         self.assertIn("@SETUP_SMALL@", packaging)
         integrity_tool = (REPO_ROOT / "tools/fix_integrity_level.ps1").read_text(encoding="utf-8")
         self.assertIn("/setintegritylevel M", integrity_tool)
@@ -1260,13 +1266,12 @@ class MobileToolsTest(unittest.TestCase):
             source.mkdir()
             mobile = Image.new("RGB", (64, 64), (24, 26, 32))
             mobile.save(source / "icon_mobile.jpg", format="JPEG")
-            for name in ("icon_pc.png", "icon_pc_dockbar.png", "icon_pc_corner.png"):
+            for name in ("icon_pc.png", "icon_pc_dock.png", "icon_pc_corner.png"):
                 img = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
                 img.paste((220, 224, 232, 255), (96, 96, 416, 416))
                 img.save(source / name, format="PNG")
-            Image.new("RGB", (164, 314), (80, 120, 180)).save(source / "setup_poster.png", format="PNG")
-            Image.new("RGB", (1536, 864), (80, 120, 180)).save(source / "sisfan_promo.png", format="PNG")
-            Image.new("RGB", (520, 1041), (80, 120, 180)).save(source / "TitleGraphic6.jpg", format="JPEG")
+            Image.new("RGB", (1536, 864), (80, 120, 180)).save(source / "setup_welcome.png", format="PNG")
+            Image.new("RGBA", (904, 1174), (80, 120, 180, 255)).save(source / "setup_finish.png", format="PNG")
 
             out = t / "out"
             stage = t / "stage"
@@ -1294,26 +1299,22 @@ class MobileToolsTest(unittest.TestCase):
                 self.assertGreaterEqual(bbox[3], 360)
             with Image.open(out / "res/android_adaptive_bg_432.png") as bg:
                 self.assertGreaterEqual(min(bg.convert("RGB").getpixel((0, 0))), 220)
-            self.assertEqual(sync_boot_assets.read_png_dimensions(out / "installer/setup_poster.png"), (164, 314))
-            self.assertEqual(sync_boot_assets.read_png_dimensions(out / "installer/setup_promo.png"), (1536, 864))
-            with Image.open(out / "installer/setup_finish_poster.png") as finish_poster:
-                self.assertEqual(finish_poster.size, (520, 1041))
+            self.assertEqual(sync_boot_assets.read_png_dimensions(out / "installer/setup_welcome.png"), (1536, 864))
+            with Image.open(out / "installer/setup_finish.png") as finish_poster:
+                self.assertEqual(finish_poster.size, (904, 1174))
             self.assertEqual(sync_boot_assets.read_png_dimensions(out / "installer/setup_small.png"), (55, 55))
             self.assertEqual(
-                (out / "installer/setup_poster.png").read_bytes(),
-                (source / "setup_poster.png").read_bytes(),
+                (out / "installer/setup_welcome.png").read_bytes(),
+                (source / "setup_welcome.png").read_bytes(),
             )
+            self.assertEqual(
+                (out / "installer/setup_finish.png").read_bytes(),
+                (source / "setup_finish.png").read_bytes(),
+            )
+            self.assertFalse((out / "installer/setup_poster.png").exists())
+            self.assertFalse((out / "installer/setup_promo.png").exists())
             with Image.open(out / "installer/setup_small.png") as small:
                 self.assertEqual(small.convert("RGBA").getpixel((0, 0)), (255, 255, 255, 255))
-            self.assertEqual(
-                (out / "installer/setup_promo.png").read_bytes(),
-                (source / "sisfan_promo.png").read_bytes(),
-            )
-            with Image.open(source / "TitleGraphic6.jpg") as finish_source, Image.open(
-                out / "installer/setup_finish_poster.png"
-            ) as finish_poster:
-                self.assertEqual(finish_poster.convert("RGB").tobytes(), finish_source.convert("RGB").tobytes())
-            self.assertFalse((out / "installer/setup_finish_poster.jpg").exists())
             for name in ("icon_pc.ico", "icon_pc_dockbar.ico", "icon_pc_corner.ico"):
                 with Image.open(out / "res" / name) as ico:
                     self.assertIn((16, 16), ico.info["sizes"])
@@ -1337,6 +1338,8 @@ class MobileToolsTest(unittest.TestCase):
                 )
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             self.assertFalse(manifest["placeholder"])
+            self.assertEqual(manifest["installer"]["finish_width"], 904)
+            self.assertEqual(manifest["installer"]["finish_height"], 1174)
 
             placeholder_out = t / "placeholder"
             rc2 = sync_release_icons.main(

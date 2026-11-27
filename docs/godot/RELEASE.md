@@ -1,17 +1,17 @@
 # Godot 重制版 Windows x64 发布说明
 
-> 状态：**现行（标准版、真无损安装包与 `--slim` 版均已完成打包与发布审计）**
+> 状态：**现行（2026-11-27 正式 Windows 安装包与 Android Debug 包已完成构建、审计和烟测）**
 >
-> 更新日期：2026-11-25（Asia/Shanghai）
+> 更新日期：2026-11-27（Asia/Shanghai）
 >
 > 适用：Godot 4.7.2 .NET，Windows x64
 >
-> 本文记录发布预设、打包脚本、包体账本、发布审计与验证记录。仓库规范见 [../../AGENTS.md](../../AGENTS.md)，定稿决策见 [DECISIONS.md](DECISIONS.md)（D-53 / D-64 / D-65 / D-92 / D-94 / D-95 / D-96 / D-97）。
+> 本文记录发布预设、打包脚本、包体账本、发布审计与验证记录。仓库规范见 [../../AGENTS.md](../../AGENTS.md)，定稿决策见 [DECISIONS.md](DECISIONS.md)（D-53 / D-64 / D-65 / D-92 / D-94 / D-95 / D-96 / D-97 / D-100）。
 
 ## 1. 发布策略概览
 
 - 自 D-53 起发布包自带 `game_data/`（紧凑 JSON）与 `work/all/media.pak`（加密归档）及 `BasicData/*.project`，玩家解压即可直接运行 `game\Lwsmf.exe`，无需安装 Python，也无需预先手动转换。
-- 打包脚本：`tools/package_release.sh [--demo] [--slim|--lossless] [--media-pak FILE] [--hd] [--brotli] [--installer] [--allow-placeholder]`，自动通过环境变量或 `PATH` 探测 `godot`、`dotnet` 与 Inno Setup（零本机硬编码路径），先对 `$STAGE` 执行 `release_audit.py`，通过后再交换进入 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]/` 并生成同名 `.zip` 与 `dist/SHA256SUMS.txt`；`--installer` 另行产出同名 `-setup.exe` 并把 SHA-256 追加进清单。若 `work/retail_dat/_publish/` 缺省（如 `--demo` 或纯离线构建），可传 `--allow-placeholder` 或 `LWSMF_ALLOW_PLACEHOLDER_ICONS=1` 生成占位图标。
+- 打包脚本：`tools/package_release.sh [--demo] [--slim|--lossless] [--media-pak FILE] [--hd] [--brotli] [--installer] [--allow-placeholder]`，自动通过环境变量或 `PATH` 探测 `godot`、`dotnet` 与 Inno Setup（零本机硬编码路径），先对 `$STAGE` 执行 `release_audit.py`，通过后再交换进入 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]/` 并生成同名 `.zip` 与 `dist/SHA256SUMS.txt`；`--installer` 另行产出同名 `-setup.exe` 并把 SHA-256 追加进清单。若 `work/all/_publish/` 缺省（如 `--demo` 或纯离线构建），可传 `--allow-placeholder` 或 `LWSMF_ALLOW_PLACEHOLDER_ICONS=1` 生成占位图标。
 - 交互式发包界面：`python tools/release_tui.py`（或 Windows 直接双击 `tools/release_packager.bat`），默认以**真无损压缩（`--lossless` + `--brotli`）**作为三端标准版本（不包含有损 slim 档），支持交互切换版本号、导出平台、定制模板、Inno Setup 与 iOS 数据注入。
 - 发布审计：`tools/release_audit.py --dist <dir>` 与 `tools/release_audit.py --repo-scan`，校验程序集、紧凑 JSON、`media.pak` CRC/资产覆盖、0 `.pdb`、0 `addons/`/`tests/` 渗透以及 0 隐私/本机绝对路径泄露。
 
@@ -50,17 +50,17 @@ dotnet/embed_build_outputs=false
 
 ### 3.1 发行元数据与视觉资源
 
-发布源图位于 ignored 的 `work/retail_dat/_publish/`；打包期派生到 `work/out/release_icons/`，并把 Godot 所需文件临时复制到 `godot/assets/boot/generated/`，导出结束后自动清理：
+发布源图位于 ignored 的 `work/all/_publish/`；打包期派生到 `work/out/release_icons/`，并把 Godot 所需文件临时复制到 `godot/assets/boot/generated/`，导出结束后自动清理：
 
 | 素材 | 用途 |
 | :--- | :--- |
 | `icon_pc.png` | Windows 主程序、快捷方式与安装程序 `.ico` |
-| `icon_pc_dockbar.png` | Windows 任务栏大图标 |
+| `icon_pc_dock.png` | Windows 任务栏大图标 |
 | `icon_pc_corner.png` | Windows 窗口左上角小图标 |
 | `icon_mobile.jpg` | Android 192/432 图标与 iOS 1024 应用图标 |
-| `setup_poster.png` | 海报母版原字节副本；`copy2` 直通，不裁切、不覆盖 |
-| `setup_promo.png` | 完整 `1536×864` 横版海报；由 `sisfan_promo.png` 原字节直通，用于欢迎页顶部横幅 |
-| `setup_small.png` | 内页右上角 `55×55` 白底应用图标 |
+| `setup_welcome.png` | 完整 `1536×864` 横版海报；`copy2` 原字节直通，用于欢迎页顶部横幅 |
+| `setup_finish.png` | 完整 `1807×2348` 竖版海报；`copy2` 原字节直通，用于完成页并按源图比例布局 |
+| `setup_small.png` | 内页右上角 `55×55` 白底应用图标；构建期由 `icon_pc.png` 派生 |
 
 Windows 运行时通过 `WindowIcons.cs` 调用 `WM_SETICON`：任务栏使用 `icon_pc_dockbar.bin`，窗口左上角使用 `icon_pc_corner.bin`。`.bin` 仅是 `.ico` 的逐字节副本，用于绕过 Godot 图片导入管线；两者由打包测试断言完全一致。
 
@@ -73,7 +73,7 @@ Windows 版本资源固定为简体中文语言 `0x0804`，字段如下：
 | 版权 | `Copyright (C) 2026 Inusuku. All rights reserved.` |
 | 文件版本 / 产品版本 | 打包脚本的 `--version`，规范化为四段数字 |
 
-移动端应用显示名统一为 `妹相随`。安装器仅声明简体中文语言并设置 `ShowLanguageDialog=no`，不再显示语言选择框。现行紧凑向导使用 `WizardStyle=modern`、`DisableWelcomePage=no`、`DisableReadyPage=yes`，流程为欢迎页→目标位置→进度→完成；欢迎页由独立 `TBitmapImage` 在顶部按 `16:9` 完整显示 `setup_promo.png`（`sisfan_promo.png` 原字节），完成页由原生 `WizardBitmapImage` 显示 `TitleGraphic6.jpg` 同尺寸转存的 PNG 并保持 `1:2`，内页右上角使用 `setup_small.png`，不启用 `WizardBackImageFile` 整窗背景效果。`DisableDirPage=no` 始终显示自定义安装路径页。默认安装目录使用完整中文产品名，固定 `AppId` 保持升级/卸载识别稳定。
+移动端应用显示名统一为 `妹相随`。安装器仅声明简体中文语言并设置 `ShowLanguageDialog=no`，不再显示语言选择框。现行紧凑向导使用 `WizardStyle=modern`、`DisableWelcomePage=no`、`DisableReadyPage=yes`，流程为欢迎页→目标位置→进度→完成；欢迎页由独立 `TBitmapImage` 在顶部按 `16:9` 完整显示 `setup_welcome.png`，完成页由原生 `WizardBitmapImage` 显示 `setup_finish.png`，构建期把源 PNG 的真实宽高注入 Inno 脚本并等比适配，不裁切、不拉伸，内页右上角使用 `setup_small.png`，不启用 `WizardBackImageFile` 整窗背景效果。`DisableDirPage=no` 始终显示自定义安装路径页。默认安装目录使用完整中文产品名，固定 `AppId` 保持升级/卸载识别稳定。
 
 ## 4. 打包命令与流程
 
@@ -196,6 +196,29 @@ bash tools/package_release.sh --lossless --brotli --installer --version 0.1.0
 
 - **JPEG 约束**：Inno Setup 6.7.4 的 `WizardImageFile` 不接受该 JPEG，直接引用会在启动时弹出“Bitmap image is not valid.”；构建期从源 JPG 解码并同尺寸转存 PNG，源文件字节保持不变。
 - **烟测**：正式 Setup 静默安装至工作区临时目录，`game/Lwsmf.exe`、`work/all/media.pak` 与 `按键说明.txt` 均落盘，媒体包 SHA-256 与发布目录一致；开始菜单、桌面快捷方式、HKCU 卸载项均创建成功，静默卸载后全部清理。冷启动任务栏与标题栏图标已截图核验，测试包与临时探针已删除。
+
+### 5.4 新发行素材正式重建（2026-11-27）
+
+| 指标 | 实测值 |
+| :--- | ---: |
+| Windows 发布目录 | **722,231,504 B**（218 个文件） |
+| Windows ZIP | **600,993,724 B** |
+| Windows Setup | **583,384,556 B** |
+| Android Debug APK | **573,075,046 B** |
+| 完成页海报 | `setup_finish.png`（`1807×2348`）原字节直通，按真实宽高比适配 |
+| 欢迎页海报 | `setup_welcome.png`（`1536×864`）原字节直通，顶部 16:9 展示 |
+
+- **发行指纹**：
+  - `LWSMF-0.1.0-windows-x64.zip` SHA-256：`74d00a7fe7e0ef1772a76c1a12f0826d870ad1bfa6c819317fe9f74a8f8d8d97`
+  - `LWSMF-0.1.0-windows-x64-setup.exe` SHA-256：`4c0b3c6bdd86a5cf79d5fd668bf8e72bd75133ce3e58169c8cd72aca9e97ae25`
+  - `game/Lwsmf.exe` SHA-256：`b63afe67cba00c0ecbfa8b6ad4d3ffa1bc5d4bce65a38919eb7f5578e419455b`
+  - `work/all/media.pak` SHA-256：`58400bdb22143dddff42f7b1586cfedf54c777555c556d49d21d63de06cedb30`
+  - `LWSMF-0.1.0-android-arm64.apk` SHA-256：`36c917ec102c37213efd7df3f595e0267ee61731d81e816d6cfc545cb42fd15c`
+- **安装器布局**：构建期从 `setup_finish.png` 读取 `1807×2348` 并注入 `FinishPosterWidth/FinishPosterHeight`；`LayoutFinishPage()` 以槽宽计算等比高度，超过页面高度时再等比缩到页面内，全程不裁切、不拉伸。欢迎页和完成页文件均以 `copy2` 原字节直通。
+- **Windows 烟测**：Setup 退出码 `0`，静默安装后 `game/Lwsmf.exe`、`按键说明.txt` 与 `work/all/media.pak` 均存在，媒体包 SHA-256 与清单一致；静默卸载退出码 `0`，安装目录、桌面快捷方式和开始菜单项均已清理。
+- **Android 图标**：`mipmap-xxxhdpi-v4/icon_foreground.webp` 的不透明区为 `60..371`（311/432，72%），背景为 `#E8E8E6`；中央 `288×288` 可见区被完全覆盖，无启动器黑边。APK 校验为 `ANDROID_APK_VERIFY_OK entries=384`。
+- **回归边界**：29 项移动/发布工具单测、决策表 lint、隐私审计和 C# Release 编译通过。完整 38 步 Godot 门禁受本机 `work/retail_backup/Save/SaveData01.sav` 被真实游戏进度覆盖影响（`387,265 B`，测试基线为 `366,146 B`），`Smoke` 战斗夹具与 M13 两项无法作为有效回归；这与本轮发行素材和安装器改动无关。
+- **资源恢复**：`work/all/SystemGraphic/TitleGraphic.jpg` 已从 `work/all/media.pak` 原字节恢复，`358,497 B`、`1024×576`、SHA-256 `33d1a4299e0fb2544967b34769f8e71871333110918084564eb1dd6c257dc6ba`。
 
 ## 6. 发布审计与移动端配套
 

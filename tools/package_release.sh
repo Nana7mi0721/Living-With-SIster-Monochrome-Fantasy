@@ -216,7 +216,7 @@ PY
 echo "== preparing Windows icons and installer artwork =="
 [ ! -d "$ICON_STAGE" ] && ICON_STAGE_CREATED=true
 ICON_ARGS=(
-  --source-dir "$(to_win_path "${LWSMF_PUBLISH_DIR:-$ROOT/work/retail_dat/_publish}")"
+  --source-dir "$(to_win_path "${LWSMF_PUBLISH_DIR:-$ROOT/work/all/_publish}")"
   --out-dir "$(to_win_path "$ICON_OUT")"
   --stage-res "$(to_win_path "$ICON_STAGE")"
 )
@@ -264,7 +264,14 @@ fi
   "${PATCH_SETS[@]}"
 
 echo "== Godot release export =="
-"$GODOT_BIN" --headless --path "$ROOT/godot" --import --quit >/dev/null 2>&1 || true
+if command -v timeout >/dev/null 2>&1; then
+  timeout 60 "$GODOT_BIN" --headless --path "$ROOT/godot" --import --quit \
+    >"$LOG_DIR/package_release_import.log" 2>&1 \
+    || echo "WARN: Godot import prewarm did not exit cleanly; continuing (log: $LOG_DIR/package_release_import.log)" >&2
+else
+  "$GODOT_BIN" --headless --path "$ROOT/godot" --import --quit \
+    >"$LOG_DIR/package_release_import.log" 2>&1 || true
+fi
 rm -rf "$EXPORT_DIR"
 mkdir -p "$EXPORT_DIR"
 "$GODOT_BIN" --headless --path "$ROOT/godot" --export-release "Windows Desktop" 2>&1 | tee "$EXPORT_LOG"
@@ -575,13 +582,13 @@ if [ "$INSTALLER" = true ]; then
   STAGE_WIN="$(to_win_path "$OUT")"
   SETUP_BASE="${PKG_NAME}-setup"
   SETUP_ICON_WIN="$(to_win_path "$ICON_OUT/installer/setup_icon.ico")"
-  SETUP_PROMO_WIN="$(to_win_path "$ICON_OUT/installer/setup_promo.png")"
-  SETUP_FINISH_POSTER_WIN="$(to_win_path "$ICON_OUT/installer/setup_finish_poster.png")"
+  SETUP_WELCOME_WIN="$(to_win_path "$ICON_OUT/installer/setup_welcome.png")"
+  SETUP_FINISH_WIN="$(to_win_path "$ICON_OUT/installer/setup_finish.png")"
   SETUP_SMALL_WIN="$(to_win_path "$ICON_OUT/installer/setup_small.png")"
   for asset in \
     "$ICON_OUT/installer/setup_icon.ico" \
-    "$ICON_OUT/installer/setup_promo.png" \
-    "$ICON_OUT/installer/setup_finish_poster.png" \
+    "$ICON_OUT/installer/setup_welcome.png" \
+    "$ICON_OUT/installer/setup_finish.png" \
     "$ICON_OUT/installer/setup_small.png"
   do
     if [ ! -f "$asset" ]; then
@@ -589,12 +596,15 @@ if [ "$INSTALLER" = true ]; then
       exit 3
     fi
   done
-  "$PYTHON_BIN" - "$TMPL_WIN" "$ISS_WIN" "$WINDOWS_APP_NAME" "$VERSION" "$STAGE_WIN" "$DIST_WIN" "$SETUP_BASE" "$EXTRA_LANGUAGES" "$SETUP_ICON_WIN" "$SETUP_PROMO_WIN" "$SETUP_FINISH_POSTER_WIN" "$SETUP_SMALL_WIN" <<'PY'
+  "$PYTHON_BIN" - "$TMPL_WIN" "$ISS_WIN" "$WINDOWS_APP_NAME" "$VERSION" "$STAGE_WIN" "$DIST_WIN" "$SETUP_BASE" "$EXTRA_LANGUAGES" "$SETUP_ICON_WIN" "$SETUP_WELCOME_WIN" "$SETUP_FINISH_WIN" "$SETUP_SMALL_WIN" <<'PY'
 import sys
 from pathlib import Path
+from PIL import Image
 
 tmpl = Path(sys.argv[1]).read_text(encoding="utf-8")
 extra_langs = sys.argv[8]
+with Image.open(sys.argv[11]) as finish_image:
+    finish_width, finish_height = finish_image.size
 rendered = (
     tmpl.replace("@APP_NAME@", sys.argv[3])
     .replace("@APP_VERSION@", sys.argv[4])
@@ -602,9 +612,11 @@ rendered = (
     .replace("@OUTPUT_DIR@", sys.argv[6].replace("/", "\\"))
     .replace("@OUTPUT_BASE_FILENAME@", sys.argv[7])
     .replace("@SETUP_ICON@", sys.argv[9].replace("/", "\\"))
-    .replace("@SETUP_PROMO@", sys.argv[10].replace("/", "\\"))
-    .replace("@FINISH_POSTER@", sys.argv[11].replace("/", "\\"))
+    .replace("@SETUP_WELCOME@", sys.argv[10].replace("/", "\\"))
+    .replace("@SETUP_FINISH@", sys.argv[11].replace("/", "\\"))
     .replace("@SETUP_SMALL@", sys.argv[12].replace("/", "\\"))
+    .replace("@FINISH_POSTER_WIDTH@", str(finish_width))
+    .replace("@FINISH_POSTER_HEIGHT@", str(finish_height))
     .replace("\n@EXTRA_LANGUAGES@\n", f"\n{extra_langs}\n" if extra_langs else "\n")
     .replace("@EXTRA_LANGUAGES@", extra_langs)
 )

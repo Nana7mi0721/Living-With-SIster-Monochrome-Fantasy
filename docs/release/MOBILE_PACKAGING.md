@@ -28,18 +28,18 @@
 | 项目 | 当前值 |
 | :--- | :--- |
 | APK | `dist/android/0.1.0/LWSMF-0.1.0-android-arm64.apk` |
-| 体积 | `663,768,337 B`（约 `633.0 MiB`） |
-| SHA-256 | `5C938763A15C6284F36DE4D4740DFBE5F4FF17DE5232FFF10A20D9B0C4A7E7D2` |
+| 体积 | `573,075,046 B`（约 `546.5 MiB`） |
+| SHA-256 | `36C917EC102C37213EFD7DF3F595E0267EE61731D81E816D6CFC545CB42FD15C` |
 | 包名 / 显示名 / 版本 | `com.lwsmf.remake` / `妹相随` / `0.1.0` |
 | SDK / ABI | minSdk `24`、targetSdk `36`、arm64-v8a |
 | 签名 | Debug Keystore，APK Signature Scheme v2 + v3 |
-| 校验 | `ANDROID_APK_VERIFY_OK entries=380`；`zipalign -c -P 16 4` 通过；媒体条目为 `ZIP_STORED` |
+| 校验 | `ANDROID_APK_VERIFY_OK entries=384`；`zipalign -c -P 16 4` 通过；媒体条目为 `ZIP_STORED` |
 
 该包是**可安装的 Debug 签名测试包**，不是商店发布包，也不包含正式发布签名材料。
 
-Android 与 iOS 应用图标均由 `work/retail_dat/_publish/icon_mobile.jpg` 在打包期通过 `tools/sync_release_icons.py` 派生（Android 自适应前景图使用 72% 居中布局以覆盖系统可见区，背景取源图四角均色并限制在浅色范围，见 D-98；无发布源图时在 `--debug`/`--allow-placeholder` 下可生成占位图标）；移动端显示名统一为 `妹相随`，不沿用 Windows 完整标题。
+Android 与 iOS 应用图标均由 `work/all/_publish/icon_mobile.jpg` 在打包期通过 `tools/sync_release_icons.py` 派生（Android 自适应前景图使用 72% 居中布局以覆盖系统可见区，背景取源图四角均色并限制在浅色范围，见 D-98；无发布源图时在 `--debug`/`--allow-placeholder` 下可生成占位图标）；移动端显示名统一为 `妹相随`，不沿用 Windows 完整标题。
 
-旧 APK 的 `mipmap-xxxhdpi-v4/icon_foreground.webp` 不透明区仅 `268/432`（`62%`），且 `icon_background.webp` 为纯黑，系统可见区会露出黑色环带。修正后前景不透明区为 `311/432`（`72%`），背景为 `#E2E2E2`；中央 `288×288` 可见区被前景完全覆盖，APK 内资源与模拟启动器圆角遮罩均已核验。
+旧 APK 的 `mipmap-xxxhdpi-v4/icon_foreground.webp` 不透明区仅 `268/432`（`62%`），且 `icon_background.webp` 为纯黑，系统可见区会露出黑色环带。2026-11-27 重建后前景不透明区为 `60..371`（`311/432`，`72%`），背景为 `#E8E8E6`；中央 `288×288` 可见区被前景完全覆盖，APK 内资源与模拟启动器圆角遮罩均已核验。
 
 ### 2.1 体积来源与裁剪口径
 
