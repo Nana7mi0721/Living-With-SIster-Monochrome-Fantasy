@@ -7,6 +7,8 @@ extends Control
 
 signal chosen(index: int)
 
+const _TextStyleEngine := preload("res://presentation_gd/TextStyleEngine.gd")
+
 const FONT_SIZE := 20
 const LINE_HEIGHT := 27.0
 const TOUCH_LINE_HEIGHT := 36.0
@@ -27,6 +29,7 @@ var allow_cancel := true
 var touch_mode := false
 
 var _hover := -1
+var _last_unexpanded_tokens: Array[String] = []
 
 ## Rects supplied by the owner when rows are drawn as pictures (e.g. title menu slots 3/4/5).
 var override_rects: Array = []
@@ -196,22 +199,26 @@ func label_width(raw: String) -> float:
 
 ## Split an option into drawable runs while honouring inline \f[n] / \f+[n] / \f-[n].
 func _label_runs(raw: String) -> Array:
+	var parsed := _TextStyleEngine.parse_lines(raw, {
+		"default_font_px": FONT_SIZE,
+		"min_font_px": 8,
+		"max_font_px": FONT_SIZE,
+		"default_outline": true,
+		"flatten_newlines": true,
+	})
+	_last_unexpanded_tokens = parsed["unexpanded_tokens"]
+	_TextStyleEngine.warn_unexpanded("ChoiceWindow", raw, _last_unexpanded_tokens)
+	var lines: Array = parsed["lines"]
+	if lines.is_empty():
+		return []
 	var runs: Array = []
-	var size := FONT_SIZE
-	var color := Color.WHITE
-	for token in TextTokenizer.tokenize(raw):
-		match token.kind:
-			TextTokenizer.Kind.TEXT:
-				_append_run(runs, token.text, size, color)
-			TextTokenizer.Kind.NEWLINE:
-				_append_run(runs, " ", size, color)
-			TextTokenizer.Kind.FONT_SIZE:
-				size = FONT_SIZE if token.number <= 0 else clampi(token.number, 8, FONT_SIZE)
-			TextTokenizer.Kind.FONT_SIZE_RELATIVE:
-				size = clampi(size + token.number, 8, FONT_SIZE)
-			TextTokenizer.Kind.COLOR, TextTokenizer.Kind.COLOR_SELF:
-				color = UiSkin.color_for_index(token.number)
+	for chunk in lines[0]["chunks"]:
+		_append_run(runs, String(chunk["text"]), int(chunk["size"]), chunk["color"])
 	return runs
+
+
+func last_unexpanded_tokens() -> Array[String]:
+	return _last_unexpanded_tokens.duplicate()
 
 
 func _append_run(runs: Array, text: String, size: int, color: Color) -> void:

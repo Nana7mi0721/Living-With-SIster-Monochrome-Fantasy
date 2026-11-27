@@ -338,6 +338,9 @@ func _ready() -> void:
 				failures.append("LoadGame must expose the backup source (got %s)" % root.session.LoadedFrom)
 			if root.session.Phase != "bedroom" or root.session.MapId != 1005:
 				failures.append("the backup load must leave a playable bedroom")
+			var backup_diag: String = root.dump_diagnostic_snapshot(false)
+			if not backup_diag.contains("[SaveAudit] source=NativeBackupFallback"):
+				failures.append("diagnostic snapshot [SaveAudit] must report NativeBackupFallback after backup load")
 			if not root.session.SaveGame():
 				failures.append("rewriting a clean main slot after the backup test should succeed")
 			root.session.SetScriptedInput(false)
@@ -923,9 +926,12 @@ func _ready() -> void:
 	if item_root.message.paused or item_root._active_msg_pos_mode != item_root._WolfConst.MSG_POS_BOTTOM or item_root.stage.screen_tint_multiplier() != Color.WHITE:
 		failures.append("transient reset must restore bottom message mode, clear tint, and clear modal pause")
 	var diag: String = item_root.dump_diagnostic_snapshot(false)
-	for section in ["[Font]", "[Assets]", "[VM]", "[Input]", "[PictureDump]", "[RecentLogs]"]:
+	for section in ["[Font]", "[Assets]", "[AssetDB]", "[SaveAudit]", "[VM]", "[Input]", "[PictureDump]", "[RecentLogs]"]:
 		if not diag.contains(section):
 			failures.append("diagnostic snapshot missing %s section" % section)
+	for field in ["used_bytes=", "budget_bytes=", "evictions=", "background_trims="]:
+		if not diag.contains(field):
+			failures.append("diagnostic snapshot [AssetDB] missing %s" % field)
 	item_root.queue_free()
 
 	_test_ux_and_multiplatform(script, failures)
@@ -1032,6 +1038,28 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root._notification(Node.NOTIFICATION_APPLICATION_PAUSED)
 	if root.modal_release_guard() or root._window_focused:
 		failures.append("APPLICATION_PAUSED must clear held latches cleanly")
+
+	# Lifecycle notifications drive AssetDB background trim and OS memory-warning eviction.
+	var prev_policy: AssetDB.MemoryPolicy = root.assets.memory_policy
+	var prev_bg_trims: int = root.assets.background_trims
+	root.assets.clear()
+	root.assets.set_memory_policy(AssetDB.MemoryPolicy.new("android", 8192, 0.25, false))
+	var held_tex := ImageTexture.create_from_image(Image.create(16, 16, false, Image.FORMAT_RGBA8))
+	var extra_tex := ImageTexture.create_from_image(Image.create(16, 16, false, Image.FORMAT_RGBA8))
+	root.assets._store("tex:lifecycle_a.png", held_tex, 2048)
+	root.assets._store("tex:lifecycle_b.png", extra_tex, 2048)
+	root._notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	if root.assets.used_bytes > 2048 or root.assets.background_trims != prev_bg_trims + 1:
+		failures.append("APPLICATION_PAUSED must trim AssetDB to mobile background watermark (used=%d trims=%d)" % [root.assets.used_bytes, root.assets.background_trims])
+	root._notification(Node.NOTIFICATION_OS_MEMORY_WARNING)
+	if root.assets.used_bytes != 0:
+		failures.append("NOTIFICATION_OS_MEMORY_WARNING must trim AssetDB cache to 0 bytes (got %d)" % root.assets.used_bytes)
+	if not is_instance_valid(held_tex) or held_tex.get_width() != 16:
+		failures.append("NOTIFICATION_OS_MEMORY_WARNING must keep externally referenced textures valid")
+	var lifecycle_diag: String = root.dump_diagnostic_snapshot(false)
+	if not lifecycle_diag.contains("[AssetDB] used_bytes=0 budget_bytes=8192") or not lifecycle_diag.contains("background_trims=%d" % root.assets.background_trims):
+		failures.append("diagnostic snapshot [AssetDB] must report live memory_stats after lifecycle trims")
+	root.assets.set_memory_policy(prev_policy)
 
 	# R-P1-1: failed SaveGameToSlot must not overwrite existing slot thumbnail.
 	var fail_thumb_path: String = root.session.SaveDirectory.path_join("save98.jpg")
@@ -1559,7 +1587,7 @@ func _test_mobile_4issues_regression(script, failures: Array[String]) -> void:
 	for _f in range(InputRouter.TOUCH_POINTER_HOLD_DELAY_FRAMES):
 		mob.advance_frame()
 	if not mob.router.is_touch_pointer_held() or (mob.router.held_mask() & InputRouter.MASK_OK) == 0:
-		failures.append("MOB-01: steady in-game touch hold must activate touch_pointer_held and MASK_OK (held=%s frames=%d touches=%d msg=%s choice=%s modal=%s saveui=%s)" % [str(mob.router.is_touch_pointer_held()), mob.router._touch_pointer_hold_frames, mob.router._touches.size(), str(mob.message.is_open()), str(mob.choice.is_open), str(mob._modal_window_open()), str(mob._save_load_ui_active())])
+		failures.append("MOB-01: steady in-game touch hold must activate touch_pointer_held and MASK_OK (held=%s phase=%d touches=%d msg=%s choice=%s modal=%s saveui=%s)" % [str(mob.router.is_touch_pointer_held()), mob.router.touch_phase(), mob.router.active_touch_count(), str(mob.message.is_open()), str(mob.choice.is_open), str(mob._modal_window_open()), str(mob._save_load_ui_active())])
 	mob.advance_frame()
 	if not mob.router.is_touch_pointer_held() or (mob.router.held_mask() & InputRouter.MASK_OK) == 0:
 		failures.append("MOB-01: ConsumeOkObserved on frame 2 must not clear sustained touch_pointer_held")

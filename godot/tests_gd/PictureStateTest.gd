@@ -475,6 +475,40 @@ func _ready() -> void:
 	check(is_equal_approx((circle_filled["size"] as Vector2).x, (circle_empty["size"] as Vector2).x),
 		"filled and empty circle gauge runs must measure equal width")
 
+	# Text pictures share TextStyleEngine alignment/outline rules without altering block_w or 1x1 hit boxes.
+	var ref_wide: Dictionary = stage._measure_text("WWWWWWWWWW")
+	var block_w: float = (ref_wide["size"] as Vector2).x - 2.0
+	var centered_pic: Dictionary = stage._measure_text("WWWWWWWWWW\n<C>ab")
+	var centered_runs: Array = centered_pic["runs"]
+	var ab_w := UiSkin.font().get_string_size("ab", HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	check(is_equal_approx((centered_pic["size"] as Vector2).x, (ref_wide["size"] as Vector2).x),
+		"<C> centering must not alter measured block width")
+	check(centered_runs.size() == 2 and absf((centered_runs[1]["pos"] as Vector2).x - (block_w - ab_w) * 0.5) < 0.5,
+		"PictureStage must center <C> lines within block_w")
+	var reset_pic: Dictionary = stage._measure_text("WWWWWWWWWW\n<C>Mid<L>\nLeftNext")
+	var reset_runs: Array = reset_pic["runs"]
+	check(reset_runs.size() == 3 and (reset_runs[1]["pos"] as Vector2).x > 10.0 and is_equal_approx((reset_runs[2]["pos"] as Vector2).x, 0.0),
+		"PictureStage <C>Mid<L>\\nLeftNext must center Mid and reset LeftNext to left")
+	var split_pic: Dictionary = stage._measure_text("WWWWWWWWWW\nLeft<R>Right")
+	var split_runs: Array = split_pic["runs"]
+	var right_w := UiSkin.font().get_string_size("Right", HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	check(split_runs.size() == 3 and is_equal_approx((split_runs[1]["pos"] as Vector2).x, 0.0) \
+			and absf((split_runs[2]["pos"] as Vector2).x + right_w - block_w) < 0.5,
+		"PictureStage Left<R>Right must keep Left at 0 and flush Right to block_w")
+	var center_split_pic: Dictionary = stage._measure_text("WWWWWWWWWW\n<C>Left<R>Right")
+	var center_split_runs: Array = center_split_pic["runs"]
+	check(center_split_runs.size() == 3 and is_equal_approx((center_split_runs[1]["pos"] as Vector2).x, 0.0) \
+			and absf((center_split_runs[2]["pos"] as Vector2).x + right_w - block_w) < 0.5,
+		"PictureStage inline <R> split must disable <C> offset for that line")
+	var outline_pic: Dictionary = stage._measure_text("plain\\Eon\\Noff")
+	var outline_runs: Array = outline_pic["runs"]
+	check(outline_runs.size() == 3 and not bool(outline_runs[0]["outline"]) \
+			and bool(outline_runs[1]["outline"]) and not bool(outline_runs[2]["outline"]),
+		"PictureStage text must default outline off and honor \\E/\\N toggles")
+	stage.draw_picture(1386, 0, "", "WWWWWWWWWW\n<C>ab", [0, 1, 1, 1, 255, 512, 230, 100, 0], 1, 2)
+	check(stage.picture_state(1386, 8, Vector2(512, 230)) == 1 and stage.picture_state(1386, 8, Vector2(514, 230)) == 0,
+		"<C> text picture must keep its 1x1 hit box")
+
 	stage.clear_pictures()
 	stage.reset_screen_tint()
 	check(not stage.has_active_animations(), "empty stage must report no active animations")

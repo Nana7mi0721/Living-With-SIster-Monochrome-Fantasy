@@ -1028,9 +1028,15 @@ func _notification(what: int) -> void:
 		_clear_held_input()
 		if audio != null:
 			audio.pause_for_background()
+		if assets != null:
+			assets.on_app_paused()
 		if not _is_headless():
 			OS.low_processor_usage_mode = false
 			Engine.max_fps = 5
+		return
+	if what == NOTIFICATION_OS_MEMORY_WARNING:
+		if assets != null:
+			assets.on_low_memory()
 		return
 	if what == NOTIFICATION_APPLICATION_RESUMED:
 		_window_focused = true
@@ -1779,11 +1785,21 @@ func status(line: String, quiet: bool = false) -> void:
 		print("[GameRoot] ", line)
 
 
-## Export unified live diagnostics (font, misses, VM instances, input state, pictures, logs).
+## Export unified live diagnostics (font, assets, save audit, VM instances, input state, pictures, logs).
 func dump_diagnostic_snapshot(write_file: bool = true) -> String:
 	var inst_summary := session.DescribeInstances() if session != null else "none"
 	var miss_count := assets.misses if assets != null else 0
 	var miss_list := ", ".join(assets.miss_paths) if assets != null and not assets.miss_paths.is_empty() else "none"
+	var asset_stats: Dictionary = assets.memory_stats() if assets != null else {}
+	var asset_used := int(asset_stats.get("used_bytes", 0))
+	var asset_budget := int(asset_stats.get("budget_bytes", 0))
+	var asset_evictions := int(asset_stats.get("evictions", 0))
+	var asset_bg_trims := int(asset_stats.get("background_trims", 0))
+	var save_audit := "none"
+	if session != null and session.has_method("GetLastSaveAuditSummary"):
+		var raw_audit := str(session.call("GetLastSaveAuditSummary"))
+		if not raw_audit.is_empty():
+			save_audit = raw_audit
 	var ptr_pos := str(router.hover_position) if router != null else "(0, 0)"
 	var ptr_pressed := str(router.pointer_pressed) if router != null else "false"
 	var right_pressed := str(router.right_pressed) if router != null else "false"
@@ -1795,6 +1811,10 @@ func dump_diagnostic_snapshot(write_file: bool = true) -> String:
 	var report := "\n".join([
 		"[Font] %s" % UiSkin.font_status(),
 		"[Assets] misses=%d paths=[%s]" % [miss_count, miss_list],
+		"[AssetDB] used_bytes=%d budget_bytes=%d evictions=%d background_trims=%d" % [
+			asset_used, asset_budget, asset_evictions, asset_bg_trims
+		],
+		"[SaveAudit] %s" % save_audit,
 		"[VM] phase=%s frames=%d modal=%s leader=%s instances=%s" % [
 			phase, frames, str(_modal_window_open()), leader_text, inst_summary
 		],

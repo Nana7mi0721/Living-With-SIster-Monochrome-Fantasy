@@ -19,6 +19,35 @@ const ANDROID_BUDGET_BYTES := 128 * 1024 * 1024
 # 64 MB keeps texture memory well under Jetsam limits on 3 GB RAM iOS devices.
 const IOS_BUDGET_BYTES := 64 * 1024 * 1024
 const MOBILE_BUDGET_BYTES := ANDROID_BUDGET_BYTES
+const DESKTOP_BACKGROUND_TRIM_RATIO := 1.0
+const MOBILE_BACKGROUND_TRIM_RATIO := 0.25
+
+
+## Platform cache budget and background-trim policy.
+class MemoryPolicy:
+	extends RefCounted
+
+	var platform_name: String
+	var budget_bytes: int
+	var background_trim_ratio: float
+	var hd_enabled: bool
+
+	func _init(
+			p_platform_name: String = "desktop",
+			p_budget_bytes: int = DEFAULT_BUDGET_BYTES,
+			p_background_trim_ratio: float = DESKTOP_BACKGROUND_TRIM_RATIO,
+			p_hd_enabled: bool = true
+		) -> void:
+		platform_name = p_platform_name
+		budget_bytes = maxi(0, p_budget_bytes)
+		background_trim_ratio = clampf(p_background_trim_ratio, 0.0, 1.0)
+		hd_enabled = p_hd_enabled
+
+	func background_target_bytes(current_budget: int = -1) -> int:
+		var effective_budget := budget_bytes if current_budget < 0 else maxi(0, current_budget)
+		if background_trim_ratio >= 1.0:
+			return effective_budget
+		return int(floorf(float(effective_budget) * background_trim_ratio))
 const ANDROID_MEDIA_PAK_RES := "res://mobile_data/work/all/media.pak.blob.cfb"
 const TEXTURE_EXTENSIONS: Array[String] = [".png", ".jpg", ".jpeg", ".bmp", ".webp"]
 ## Bare-basename fallback order. Both the unpacked tree and the pack can store art under
@@ -48,12 +77,14 @@ var root_dir: String
 var save_dir := ""
 ## True when the retail install was missing and the committed stub tree took over.
 var using_fallback := false
+var memory_policy: MemoryPolicy
 var budget_bytes: int = DEFAULT_BUDGET_BYTES
 var hd_enabled := true
 var used_bytes: int = 0
 var hits: int = 0
 var misses: int = 0
 var evictions: int = 0
+var background_trims: int = 0
 var miss_paths: Array[String] = []
 
 var _files: Dictionary = {}                 # lowercase relative path -> absolute path
@@ -89,16 +120,24 @@ var _logged_misses: Dictionary = {}
 var _explicit_root := false
 
 
+static func platform_memory_policy(
+		is_android: bool = OS.has_feature("android"),
+		is_ios: bool = OS.has_feature("ios"),
+		is_mobile: bool = OS.has_feature("mobile")
+	) -> MemoryPolicy:
+	if is_ios:
+		return MemoryPolicy.new("ios", IOS_BUDGET_BYTES, MOBILE_BACKGROUND_TRIM_RATIO, false)
+	if is_android or is_mobile:
+		return MemoryPolicy.new("android", ANDROID_BUDGET_BYTES, MOBILE_BACKGROUND_TRIM_RATIO, false)
+	return MemoryPolicy.new("desktop", DEFAULT_BUDGET_BYTES, DESKTOP_BACKGROUND_TRIM_RATIO, true)
+
+
 static func platform_budget_bytes(
 		is_android: bool = OS.has_feature("android"),
 		is_ios: bool = OS.has_feature("ios"),
 		is_mobile: bool = OS.has_feature("mobile")
 	) -> int:
-	if is_ios:
-		return IOS_BUDGET_BYTES
-	if is_android or is_mobile:
-		return ANDROID_BUDGET_BYTES
-	return DEFAULT_BUDGET_BYTES
+	return platform_memory_policy(is_android, is_ios, is_mobile).budget_bytes
 
 
 static func default_hd_enabled(
@@ -106,17 +145,28 @@ static func default_hd_enabled(
 		is_ios: bool = OS.has_feature("ios"),
 		is_mobile: bool = OS.has_feature("mobile")
 	) -> bool:
-	return not (is_android or is_ios or is_mobile)
+	return platform_memory_policy(is_android, is_ios, is_mobile).hd_enabled
 
 
-func _init(p_root: String = "") -> void:
+func set_memory_policy(policy: MemoryPolicy) -> void:
+	if policy == null:
+		return
+	memory_policy = policy
+	budget_bytes = policy.budget_bytes
+
+
+func _init(p_root: String = "", p_policy: MemoryPolicy = null) -> void:
 	_explicit_root = p_root != ""
 	root_dir = p_root if _explicit_root else default_root()
-	var is_android := OS.has_feature("android")
-	var is_ios := OS.has_feature("ios")
-	var is_mobile := OS.has_feature("mobile")
-	budget_bytes = platform_budget_bytes(is_android, is_ios, is_mobile)
-	hd_enabled = default_hd_enabled(is_android, is_ios, is_mobile)
+	if p_policy != null:
+		memory_policy = p_policy
+	else:
+		var is_android := OS.has_feature("android")
+		var is_ios := OS.has_feature("ios")
+		var is_mobile := OS.has_feature("mobile")
+		memory_policy = platform_memory_policy(is_android, is_ios, is_mobile)
+	budget_bytes = memory_policy.budget_bytes
+	hd_enabled = memory_policy.hd_enabled
 	_index()
 	_open_media_pack()
 	_open_hd_pack()
@@ -770,13 +820,57 @@ func _touch(key: String) -> void:
 	_lru.append(key)
 
 
-func _evict() -> void:
-	while used_bytes > budget_bytes and _lru.size() > 1:
+func _evict_to(target_bytes: int, min_entries: int) -> int:
+	var clamped_target := maxi(0, target_bytes)
+	var evicted := 0
+	while (used_bytes > clamped_target or (clamped_target == 0 and not _lru.is_empty())) and _lru.size() > min_entries:
 		var oldest: String = _lru.pop_front()
-		used_bytes -= int(_sizes.get(oldest, 0))
+		used_bytes = maxi(0, used_bytes - int(_sizes.get(oldest, 0)))
 		_sizes.erase(oldest)
 		_cache.erase(oldest)
 		evictions += 1
+		evicted += 1
+	if _lru.is_empty():
+		used_bytes = 0
+	return evicted
+
+
+func _evict() -> void:
+	_evict_to(budget_bytes, 1)
+
+
+## Evict LRU cache references until used_bytes <= target_bytes.
+## Live scene nodes and active audio streams stay valid through RefCounted ownership.
+func trim_to(target_bytes: int) -> int:
+	return _evict_to(target_bytes, 0)
+
+
+## Trim cache according to the active platform MemoryPolicy when the app enters background.
+func on_app_paused() -> int:
+	if memory_policy == null or memory_policy.background_trim_ratio >= 1.0:
+		return 0
+	var target := memory_policy.background_target_bytes(budget_bytes)
+	var evicted := trim_to(target)
+	if evicted > 0:
+		background_trims += 1
+	return evicted
+
+
+## Drop all cache references under OS memory pressure while keeping live RefCounted users valid.
+func on_low_memory() -> int:
+	return trim_to(0)
+
+
+func memory_stats() -> Dictionary:
+	return {
+		"platform": memory_policy.platform_name if memory_policy != null else "desktop",
+		"used_bytes": used_bytes,
+		"budget_bytes": budget_bytes,
+		"evictions": evictions,
+		"background_trims": background_trims,
+		"background_trim_ratio": memory_policy.background_trim_ratio if memory_policy != null else DESKTOP_BACKGROUND_TRIM_RATIO,
+		"cached_entries": _cache.size(),
+	}
 
 
 func _record_miss(logical: String) -> void:

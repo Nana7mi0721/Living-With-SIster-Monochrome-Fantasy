@@ -15,6 +15,7 @@ extends Control
 const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
 const _PictureShapes := preload("res://presentation_gd/PictureShapes.gd")
 const _PictureEffects := preload("res://presentation_gd/PictureEffects.gd")
+const _TextStyleEngine := preload("res://presentation_gd/TextStyleEngine.gd")
 
 const LAYER_MAP := 0
 const LAYER_SCENE_PICTURE := 10
@@ -484,68 +485,21 @@ func _free_picture(number: int) -> void:
 
 
 ## Strip text-formatting tokens and lay out multi-run spans with per-run font size,
-## SystemDB colour, outline, baseline alignment, <R> right-align, and 1.3x line pitch.
+## SystemDB colour, outline, baseline alignment, <C>/<R> alignment, and 1.3x line pitch.
 func _measure_text(source: String) -> Dictionary:
-	var plain := ""
 	var default_px := 20
-	var font_px := default_px
-	var color_idx := -1
-	var outline := false
-	var lines: Array = []
-	var cur_chunks: Array = []
-	var cur_tail_from := -1
-	var buf := ""
-
-	for token in TextTokenizer.tokenize(source):
-		match token.kind:
-			TextTokenizer.Kind.TEXT:
-				plain += token.text
-				buf += token.text
-			TextTokenizer.Kind.NEWLINE:
-				plain += "\n"
-				if not buf.is_empty():
-					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
-					buf = ""
-				lines.append({"chunks": cur_chunks, "tail_from": cur_tail_from})
-				cur_chunks = []
-				cur_tail_from = -1
-			TextTokenizer.Kind.FONT_SIZE:
-				if not buf.is_empty():
-					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
-					buf = ""
-				font_px = default_px if int(token.number) <= 0 else clampi(int(token.number), 1, 96)
-			TextTokenizer.Kind.FONT_SIZE_RELATIVE:
-				if not buf.is_empty():
-					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
-					buf = ""
-				var next: int = font_px + int(token.number)
-				font_px = default_px if next <= 0 else clampi(next, 1, 96)
-			TextTokenizer.Kind.COLOR, TextTokenizer.Kind.COLOR_SELF:
-				if not buf.is_empty():
-					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
-					buf = ""
-				color_idx = int(token.number)
-			TextTokenizer.Kind.OUTLINE_ON:
-				if not buf.is_empty():
-					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
-					buf = ""
-				outline = true
-			TextTokenizer.Kind.OUTLINE_OFF:
-				if not buf.is_empty():
-					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
-					buf = ""
-				outline = false
-			TextTokenizer.Kind.ALIGN_RIGHT:
-				if not buf.is_empty():
-					cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
-					buf = ""
-				if cur_tail_from < 0:
-					cur_tail_from = cur_chunks.size()
-	if not buf.is_empty():
-		cur_chunks.append({"text": buf, "size": font_px, "color_idx": color_idx, "outline": outline})
-	lines.append({"chunks": cur_chunks, "tail_from": cur_tail_from})
-	if lines.size() > 1 and (lines[lines.size() - 1]["chunks"] as Array).is_empty():
-		lines.pop_back()
+	var parsed := _TextStyleEngine.parse_lines(source, {
+		"default_font_px": default_px,
+		"min_font_px": 1,
+		"max_font_px": 96,
+		"default_outline": false,
+		"allow_right_tail_split": true,
+		"trim_trailing_empty_line": true,
+	})
+	_TextStyleEngine.warn_unexpanded("PictureStage", source, parsed["unexpanded_tokens"])
+	var plain: String = parsed["plain"]
+	var font_px: int = int(parsed["font_size"])
+	var lines: Array = parsed["lines"]
 
 	var draw_font := UiSkin.font()
 	var line_widths: Array[float] = []
@@ -575,7 +529,14 @@ func _measure_text(source: String) -> Dictionary:
 		var max_px: int = line_max_px[li]
 		var max_ascent := draw_font.get_ascent(max_px)
 		var tail_from: int = int(line["tail_from"])
+		var line_align: int = int(line["align"])
+		var line_w: float = line_widths[li]
 		var x_left := 0.0
+		if tail_from < 0:
+			if line_align == HORIZONTAL_ALIGNMENT_CENTER:
+				x_left = maxf(0.0, (block_w - line_w) * 0.5)
+			elif line_align == HORIZONTAL_ALIGNMENT_RIGHT:
+				x_left = maxf(0.0, block_w - line_w)
 		var tail_w := 0.0
 		if tail_from >= 0:
 			for ci in range(tail_from, chunks.size()):

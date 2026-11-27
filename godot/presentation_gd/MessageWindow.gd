@@ -9,6 +9,7 @@ signal reveal_finished
 signal confirm_requested
 
 const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
+const _TextStyleEngine := preload("res://presentation_gd/TextStyleEngine.gd")
 
 const WINDOW_SIZE := Vector2(960, 168)
 const WINDOW_POS := Vector2(64, 408)
@@ -76,7 +77,6 @@ var paused := false
 var _choice_attached := false
 var position_mode: int = _WolfConst.MSG_POS_BOTTOM
 
-var _tokens: Array = []
 var _chars: Array = []        # [{ch, color, x, y, size, line, outline, instant}]
 var _char_speeds: Array[float] = []
 var _lines: int = 0
@@ -157,7 +157,6 @@ func open(text: String, p_face: int = 0) -> void:
 	_pause_timer = 0.0
 	_char_timer = 0.0
 	_last_blink_phase = -1
-	_tokens = TextTokenizer.tokenize(text)
 	_layout()
 	_dispatch_boundary_events(0)
 	_sync_backing_nodes()
@@ -170,7 +169,6 @@ func close() -> void:
 	waiting_for_continue = false
 	finished = false
 	_choice_attached = false
-	_tokens.clear()
 	_chars.clear()
 	_char_speeds.clear()
 	_boundary_events.clear()
@@ -354,89 +352,66 @@ func _layout() -> void:
 	var y := 0.0
 	var right := (CENTER_BOX_X + CENTER_BOX_WIDTH - CENTER_PADDING_X) if is_center else (BUBBLE_X + BUBBLE_WIDTH - BUBBLE_PADDING_X)
 	var bubble_right := (CENTER_BOX_X + CENTER_BOX_WIDTH) if is_center else (BUBBLE_X + BUBBLE_WIDTH)
-	var color := Color.WHITE
-	var glyph_size := base_size
-	var glyph_speed := CENTER_TEXT_SPEED if is_center else TEXT_SPEED
+	var base_speed := CENTER_TEXT_SPEED if is_center else TEXT_SPEED
+	var parsed := _TextStyleEngine.parse_lines(full_text, {
+		"default_font_px": base_size,
+		"min_font_px": 8,
+		"max_font_px": 96,
+		"default_outline": true,
+		"default_speed": base_speed,
+		"pause_seconds": PAUSE_SECONDS,
+		"flatten_newlines": false,
+		"allow_right_tail_split": false,
+	})
+	_TextStyleEngine.warn_unexpanded("MessageWindow", full_text, parsed["unexpanded_tokens"])
+	_boundary_events = parsed["boundary_events"]
+	_instant_index = int(parsed["instant_index"])
+	var parsed_lines: Array = parsed["lines"]
 	var row_size := base_size
-	var align := HORIZONTAL_ALIGNMENT_LEFT
-	var outline := false
-	var instant := false
 	_lines = 1
-	_line_align.append(align)
+	var first_align: int = int(parsed_lines[0]["align"]) if not parsed_lines.is_empty() else HORIZONTAL_ALIGNMENT_LEFT
+	_line_align.append(first_align)
 	var line_widths: Array[float] = [0.0]
 	var line_has_chars := false
-	for token in _tokens:
-		match token.kind:
-			TextTokenizer.Kind.TEXT:
-				for ch in token.text:
-					var width := font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, glyph_size).x
-					var can_hang := _is_forbidden_line_start(ch) and x + width <= bubble_right - 2.0
-					if line_has_chars and x + width > right and not can_hang:
-						x = line_left
-						y += maxf(CENTER_LINE_HEIGHT, float(row_size) + 6.0) if is_center else float(row_size + LINE_GAP)
-						row_size = glyph_size
-						_lines += 1
-						_line_align.append(align)
-						line_widths.append(0.0)
-						line_has_chars = false
-					_chars.append({"ch": ch, "color": color, "x": x, "y": y, "size": glyph_size,
-						"line": _lines - 1, "outline": outline, "instant": instant})
-					_char_speeds.append(glyph_speed)
-					line_has_chars = true
-					var line_width: float = x + width - line_left
-					if line_width > line_widths[_lines - 1]:
-						line_widths[_lines - 1] = line_width
-					row_size = maxi(row_size, glyph_size)
-					x += width
-			TextTokenizer.Kind.NEWLINE:
-				x = line_left
-				y += maxf(CENTER_LINE_HEIGHT, float(row_size) + 6.0) if is_center else float(row_size + LINE_GAP)
-				row_size = glyph_size
-				_lines += 1
-				_line_align.append(align)
-				line_widths.append(0.0)
-				line_has_chars = false
-			TextTokenizer.Kind.COLOR, TextTokenizer.Kind.COLOR_SELF:
-				color = UiSkin.color_for_index(token.number)
-			TextTokenizer.Kind.CDB:
-				pass
-			TextTokenizer.Kind.FONT_SIZE:
-				glyph_size = base_size if token.number <= 0 else clampi(token.number, 8, 96)
-			TextTokenizer.Kind.FONT_SIZE_RELATIVE:
-				glyph_size = clampi(glyph_size + token.number, 8, 96)
-			TextTokenizer.Kind.SPEED:
-				glyph_speed = float(token.number)
-			TextTokenizer.Kind.PAUSE:
-				_boundary_events.append({"index": _chars.size(), "kind": "pause", "value": PAUSE_SECONDS})
-			TextTokenizer.Kind.WAIT:
-				_boundary_events.append({"index": _chars.size(), "kind": "wait", "value": 0.0})
-			TextTokenizer.Kind.VARIABLE:
-				pass
-			TextTokenizer.Kind.LETTER_SPACING:
-				pass
-			TextTokenizer.Kind.OUTLINE_ON:
-				outline = true
-			TextTokenizer.Kind.OUTLINE_OFF:
-				outline = false
-			TextTokenizer.Kind.ALIGN_LEFT:
-				align = HORIZONTAL_ALIGNMENT_LEFT
-				# Only apply to the current line before its first glyph; trailing <L> resets subsequent lines.
-				if not line_has_chars:
-					_line_align[_lines - 1] = align
-			TextTokenizer.Kind.ALIGN_CENTER:
-				align = HORIZONTAL_ALIGNMENT_CENTER
-				if not line_has_chars:
-					_line_align[_lines - 1] = align
-			TextTokenizer.Kind.ALIGN_RIGHT:
-				align = HORIZONTAL_ALIGNMENT_RIGHT
-				if not line_has_chars:
-					_line_align[_lines - 1] = align
-			TextTokenizer.Kind.INSTANT:
-				instant = true
-				if _instant_index < 0:
-					_instant_index = _chars.size()
-			TextTokenizer.Kind.INSTANT_OFF:
-				instant = false
+	for line_idx in parsed_lines.size():
+		var parsed_line: Dictionary = parsed_lines[line_idx]
+		if line_idx > 0:
+			x = line_left
+			y += maxf(CENTER_LINE_HEIGHT, float(row_size) + 6.0) if is_center else float(row_size + LINE_GAP)
+			row_size = int(parsed_line["start_font_px"])
+			_lines += 1
+			_line_align.append(int(parsed_line["align"]))
+			line_widths.append(0.0)
+			line_has_chars = false
+		var chunks: Array = parsed_line["chunks"]
+		for chunk in chunks:
+			var glyph_size: int = int(chunk["size"])
+			var color: Color = chunk["color"]
+			var outline: bool = bool(chunk["outline"])
+			var instant: bool = bool(chunk["instant"])
+			var glyph_speed: float = float(chunk["speed"])
+			var chunk_align: int = int(chunk["align"])
+			var chunk_text: String = String(chunk["text"])
+			for ch in chunk_text:
+				var width := font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, glyph_size).x
+				var can_hang := _is_forbidden_line_start(ch) and x + width <= bubble_right - 2.0
+				if line_has_chars and x + width > right and not can_hang:
+					x = line_left
+					y += maxf(CENTER_LINE_HEIGHT, float(row_size) + 6.0) if is_center else float(row_size + LINE_GAP)
+					row_size = glyph_size
+					_lines += 1
+					_line_align.append(chunk_align)
+					line_widths.append(0.0)
+					line_has_chars = false
+				_chars.append({"ch": ch, "color": color, "x": x, "y": y, "size": glyph_size,
+					"line": _lines - 1, "outline": outline, "instant": instant})
+				_char_speeds.append(glyph_speed)
+				line_has_chars = true
+				var line_width: float = x + width - line_left
+				if line_width > line_widths[_lines - 1]:
+					line_widths[_lines - 1] = line_width
+				row_size = maxi(row_size, glyph_size)
+				x += width
 	_lines = maxi(_lines, 1)
 	while _line_align.size() < _lines:
 		_line_align.append(HORIZONTAL_ALIGNMENT_LEFT)
@@ -537,8 +512,9 @@ func _draw() -> void:
 		var entry: Dictionary = _chars[i]
 		var size: int = entry["size"]
 		var baseline := Vector2(entry["x"], entry["y"] + font.get_ascent(size))
-		draw_string_outline(font, baseline, entry["ch"],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, size, UiSkin.TEXT_OUTLINE_SIZE, outline_color)
+		if bool(entry.get("outline", true)):
+			draw_string_outline(font, baseline, entry["ch"],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, size, UiSkin.TEXT_OUTLINE_SIZE, outline_color)
 		draw_string(font, baseline, entry["ch"],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, size, entry["color"])
 	if (waiting_for_confirm or waiting_for_continue) and not hover_enabled and not _choice_attached:
@@ -549,6 +525,12 @@ func character_size(index: int) -> int:
 	if index < 0 or index >= _chars.size():
 		return 0
 	return _chars[index]["size"]
+
+
+func character_outline(index: int) -> bool:
+	if index < 0 or index >= _chars.size():
+		return false
+	return bool(_chars[index].get("outline", true))
 
 
 func _draw_face_on(target: CanvasItem) -> void:

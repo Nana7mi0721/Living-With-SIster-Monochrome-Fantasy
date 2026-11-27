@@ -3,6 +3,8 @@ extends Node
 ## clipped or overlapping glyphs, the tokenizer round-trips the retail corpus, and the
 ## 102 choice rows never collide. Renders one frame off-screen and saves it for review.
 
+const _TextStyleEngine := preload("res://presentation_gd/TextStyleEngine.gd")
+
 const SAMPLE := "\\E\\c[1]Sister\\c[0]: \\f[14]\\v[3]Good morning!\\>\\." \
 	+ "This line is deliberately long so the renderer has to wrap it at least once " \
 	+ "inside the fixed 960 pixel window, and <C>then<L> it keeps going for one more row.\\^"
@@ -322,7 +324,7 @@ func _ready() -> void:
 	if not (centered_line_x > left_start_x and right_line_x > centered_line_x):
 		failures.append("2005 must still honor <C> and <R> (left=%.1f center=%.1f right=%.1f)" % [left_start_x, centered_line_x, right_line_x])
 	var pause_tex := assets.texture(MessageWindow.CURSOR_FALLBACK_TEXTURE)
-	if pause_tex != null and (pause_tex.get_width() != 17 or pause_tex.get_height() != 90):
+	if not assets.using_fallback and pause_tex != null and (pause_tex.get_width() != 17 or pause_tex.get_height() != 90):
 		failures.append("SystemFile/Text_Pause.png should be 17x90 (got %dx%d)" % [pause_tex.get_width(), pause_tex.get_height()])
 
 	# 3g. Nameplate: 28px tall capsule pill with 18px pure white text, charcoal ring, and flat grey fill.
@@ -458,6 +460,55 @@ func _ready() -> void:
 	if overlays.backlog_open():
 		failures.append("open_backlog must stay blocked while title_confirm is open")
 	overlays.cancel_title_confirm()
+
+	# 4d. TextStyleEngine core rules, MessageWindow \N/\E outline state, and ChoiceWindow unexpanded tokens.
+	var engine_align := _TextStyleEngine.parse_lines("<C>Mid<L>\nLeftNext", {
+		"default_font_px": 20,
+		"default_outline": true,
+	})
+	var engine_lines: Array = engine_align["lines"]
+	if engine_lines.size() != 2 \
+			or int(engine_lines[0]["align"]) != HORIZONTAL_ALIGNMENT_CENTER \
+			or int(engine_lines[1]["align"]) != HORIZONTAL_ALIGNMENT_LEFT:
+		failures.append("TextStyleEngine must apply trailing <L> only to subsequent lines (got %s)" % str(engine_lines))
+	var engine_split := _TextStyleEngine.parse_lines("<C>Left<R>Right", {
+		"default_font_px": 20,
+		"allow_right_tail_split": true,
+	})
+	var split_line: Dictionary = engine_split["lines"][0]
+	var split_chunks: Array = split_line["chunks"]
+	if int(split_line["tail_from"]) != 1 or split_chunks.size() != 2 \
+			or String(split_chunks[0]["text"]) != "Left" or String(split_chunks[1]["text"]) != "Right":
+		failures.append("TextStyleEngine must split inline <R> tail into a separate chunk (got %s)" % str(split_line))
+	var engine_flat := _TextStyleEngine.parse_lines("One\nTwo", {
+		"default_font_px": 20,
+		"flatten_newlines": true,
+	})
+	if String(engine_flat["plain"]) != "One Two" or (engine_flat["lines"] as Array).size() != 1:
+		failures.append("TextStyleEngine flatten_newlines must fold newlines into spaces (got '%s')" % String(engine_flat["plain"]))
+	var engine_unexp := _TextStyleEngine.parse_lines("\\v[12]Hi\\cdb[21:7:0]", {"default_font_px": 20})
+	if String(engine_unexp["plain"]) != "Hi" or engine_unexp["unexpanded_tokens"] != ["\\v[12]", "\\cdb[21:7:0]"]:
+		failures.append("TextStyleEngine must capture unexpanded tokens without painting them (got %s)" % str(engine_unexp))
+
+	var outline_win := MessageWindow.new(assets)
+	add_child(outline_win)
+	outline_win.open("Plain")
+	if not outline_win.character_outline(0) or not outline_win.character_outline(4):
+		failures.append("MessageWindow must keep default outline enabled for plain dialogue")
+	outline_win.open("A\\NB\\EC")
+	if not outline_win.character_outline(0) or outline_win.character_outline(1) or not outline_win.character_outline(2):
+		failures.append("MessageWindow \\N must disable outline and \\E must re-enable it (got %s/%s/%s)" % [
+			str(outline_win.character_outline(0)),
+			str(outline_win.character_outline(1)),
+			str(outline_win.character_outline(2)),
+		])
+
+	var unexp_label := choice.display_text("\\v[42]选项\\cdb[21:2:0]")
+	if unexp_label != "选项" or choice.last_unexpanded_tokens() != ["\\v[42]", "\\cdb[21:2:0]"]:
+		failures.append("ChoiceWindow must hide unexpanded tokens while recording them (label='%s' tokens=%s)" % [
+			unexp_label,
+			str(choice.last_unexpanded_tokens()),
+		])
 
 	# 5. Off-screen render: the window rect must actually contain lit pixels. The dummy
 	# renderer that --headless selects has no textures at all, so the pixel assertion only

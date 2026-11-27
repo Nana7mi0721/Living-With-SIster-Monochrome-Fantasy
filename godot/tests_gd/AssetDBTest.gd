@@ -225,6 +225,62 @@ func _ready() -> void:
 	if not corrupt_db.miss_paths.is_empty():
 		failures.append("clear() must also clear miss_paths")
 
+	# 7. Platform MemoryPolicy, background trim, and low-memory eviction.
+	var desktop_policy := AssetDB.platform_memory_policy(false, false, false)
+	var android_policy := AssetDB.platform_memory_policy(true, false, true)
+	var ios_policy := AssetDB.platform_memory_policy(false, true, true)
+	if desktop_policy.budget_bytes != AssetDB.DEFAULT_BUDGET_BYTES or not is_equal_approx(desktop_policy.background_trim_ratio, 1.0) or not desktop_policy.hd_enabled:
+		failures.append("desktop MemoryPolicy must use 512 MiB, ratio 1.0, hd_enabled=true")
+	if android_policy.budget_bytes != AssetDB.ANDROID_BUDGET_BYTES or not is_equal_approx(android_policy.background_trim_ratio, 0.25) or android_policy.hd_enabled:
+		failures.append("Android MemoryPolicy must use 128 MiB, ratio 0.25, hd_enabled=false")
+	if ios_policy.budget_bytes != AssetDB.IOS_BUDGET_BYTES or not is_equal_approx(ios_policy.background_trim_ratio, 0.25) or ios_policy.hd_enabled:
+		failures.append("iOS MemoryPolicy must use 64 MiB, ratio 0.25, hd_enabled=false")
+
+	var desktop_db := AssetDB.new(base, AssetDB.MemoryPolicy.new("desktop", 16384, 1.0, true))
+	for i in 4:
+		desktop_db.texture("probe_%d.png" % i)
+	var desktop_used_before := desktop_db.used_bytes
+	if desktop_db.on_app_paused() != 0 or desktop_db.evictions != 0 or desktop_db.background_trims != 0 or desktop_db.used_bytes != desktop_used_before:
+		failures.append("desktop on_app_paused must perform 0 evictions and keep cache intact")
+
+	var android_db := AssetDB.new(base, AssetDB.MemoryPolicy.new("android", 16384, 0.25, false))
+	var live_tex: Texture2D = null
+	for i in 4:
+		var t := android_db.texture("probe_%d.png" % i)
+		if i == 1:
+			live_tex = t
+	# Touch probe_0 so it becomes MRU and survives the 25% background trim (4096 bytes = 1 texture).
+	android_db.texture("probe_0.png")
+	var paused_evicted := android_db.on_app_paused()
+	if paused_evicted != 3 or android_db.used_bytes > 4096 or android_db.background_trims != 1 or android_db.evictions != 3:
+		failures.append("mobile on_app_paused must trim to <=25%% budget and increment background_trims (evicted=%d used=%d trims=%d evictions=%d)" % [paused_evicted, android_db.used_bytes, android_db.background_trims, android_db.evictions])
+	if not android_db.has_cached("probe_0.png", "texture") or android_db.has_cached("probe_1.png", "texture"):
+		failures.append("mobile on_app_paused must evict LRU entries first and retain MRU entry")
+	if android_db.on_app_paused() != 0 or android_db.background_trims != 1:
+		failures.append("mobile on_app_paused at/below target must not increment background_trims again")
+
+	var ios_db := AssetDB.new(base, AssetDB.MemoryPolicy.new("ios", 16384, 0.25, false))
+	for i in 4:
+		ios_db.texture("probe_%d.png" % i)
+	if ios_db.on_app_paused() != 3 or ios_db.used_bytes > 4096 or ios_db.background_trims != 1:
+		failures.append("iOS on_app_paused must trim cache to <=25%% budget and increment background_trims")
+
+	var live_rect := TextureRect.new()
+	live_rect.texture = live_tex
+	var live_audio := android_db.audio("probe.wav")
+	var low_mem_evicted := android_db.on_low_memory()
+	if low_mem_evicted < 1 or android_db.used_bytes != 0 or android_db.has_cached("probe_0.png", "texture") or android_db.has_cached("probe.wav", "audio"):
+		failures.append("on_low_memory must trim cache down to 0 bytes (evicted=%d used=%d)" % [low_mem_evicted, android_db.used_bytes])
+	if live_tex == null or not is_instance_valid(live_tex) or live_tex.get_width() != 32 or live_rect.texture != live_tex:
+		failures.append("on_low_memory must keep externally referenced Texture2D valid via RefCounted")
+	if live_audio == null or not is_instance_valid(live_audio):
+		failures.append("on_low_memory must keep externally referenced AudioStream valid via RefCounted")
+	live_rect.free()
+
+	var stats: Dictionary = android_db.memory_stats()
+	if str(stats.get("platform", "")) != "android" or int(stats.get("used_bytes", -1)) != 0 or int(stats.get("budget_bytes", -1)) != 16384 or int(stats.get("background_trims", -1)) != 1 or int(stats.get("evictions", -1)) != android_db.evictions:
+		failures.append("memory_stats must expose accurate platform/used/budget/evictions/background_trims: %s" % str(stats))
+
 	if failures.is_empty():
 		print("ASSETDB_TEST_OK")
 		get_tree().quit(0)
