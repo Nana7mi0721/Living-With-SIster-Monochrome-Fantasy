@@ -10,6 +10,9 @@ const _MediaPakReaderScript = preload("res://presentation/MediaPakReader.cs")
 const STATIC_PATH := "res://assets/boot/splash_static.png"
 const BASE_LOGO_REL := "SystemFile/logo.jpg"
 const PROGRESS_LOGO_REL := "SystemFile/logo2.jpg"
+const BASE_LOGO_STEM := "logo"
+const PROGRESS_LOGO_STEM := "logo2"
+const LOGO_EXTENSIONS: Array[String] = ["jpg", "png", "webp"]
 const REVEAL_SPEED := 3.2
 
 var _base_rect: TextureRect
@@ -18,6 +21,7 @@ var _progress_rect: TextureRect
 var _target_progress := 0.0
 var _display_progress := 0.0
 var _fading_out := false
+var _has_retail_textures := false
 
 
 func _ready() -> void:
@@ -57,12 +61,15 @@ func _ready() -> void:
 	set_process(true)
 
 
-## Dynamically load `SystemFile/logo.jpg` and `SystemFile/logo2.jpg` from AssetDB, loose work/all,
-## or media.pak without committing copyrighted art into the repository.
+## Dynamically load `SystemFile/logo.{jpg,png,webp}` and `SystemFile/logo2.{jpg,png,webp}` from
+## AssetDB, loose work/all, or media.pak without committing copyrighted art into the repository.
 func load_retail_textures(asset_db: Object = null) -> void:
+	if asset_db != null and _has_retail_textures and _base_rect != null and _base_rect.texture != null:
+		return
 	var pair := load_logo_pair(asset_db)
 	var base_tex: Texture2D = pair.get("base", null)
 	var progress_tex: Texture2D = pair.get("progress", null)
+	_has_retail_textures = base_tex != null and not bool(pair.get("is_static_fallback", false))
 	if _base_rect != null:
 		_base_rect.texture = base_tex
 	if _progress_rect != null:
@@ -70,6 +77,26 @@ func load_retail_textures(asset_db: Object = null) -> void:
 	if _reveal_clip != null:
 		_reveal_clip.visible = progress_tex != null
 	_sync_reveal_geometry()
+
+
+func has_retail_textures() -> bool:
+	return _has_retail_textures
+
+
+func _input(event: InputEvent) -> void:
+	if _fading_out or is_queued_for_deletion() or is_reveal_complete():
+		return
+	if event is InputEventKey \
+			or event is InputEventMouseButton \
+			or event is InputEventMouseMotion \
+			or event is InputEventScreenTouch \
+			or event is InputEventScreenDrag \
+			or event is InputEventJoypadButton \
+			or event is InputEventJoypadMotion:
+		if is_inside_tree():
+			var vp := get_viewport()
+			if vp != null:
+				vp.set_input_as_handled()
 
 
 ## Advance horizontal reveal target progress in [0.0, 1.0].
@@ -128,38 +155,112 @@ func fade_out_and_free(duration: float = 0.25) -> void:
 	tw.tween_callback(queue_free)
 
 
-## Resolve `SystemFile/logo.jpg` (base) and `SystemFile/logo2.jpg` (progress overlay) from
-## AssetDB, loose retail directories, or media.pak, falling back to `res://assets/boot/splash_static.png`.
-static func load_logo_pair(asset_db: Object = null) -> Dictionary:
+## Resolve `SystemFile/logo` (base) and `SystemFile/logo2` (progress overlay) across
+## jpg/png/webp from AssetDB, loose retail directories, or media.pak, falling back to
+## `res://assets/boot/splash_static.png` without a mismatched progress overlay.
+static func load_logo_pair(asset_db: Object = null, loose_root_override: String = "") -> Dictionary:
 	var base_tex: Texture2D = null
 	var progress_tex: Texture2D = null
+	var is_static_fallback := false
 
 	if asset_db != null and asset_db.has_method("texture"):
-		var t_base: Variant = asset_db.call("texture", BASE_LOGO_REL)
-		var t_prog: Variant = asset_db.call("texture", PROGRESS_LOGO_REL)
-		if t_base is Texture2D:
-			base_tex = t_base as Texture2D
-		if t_prog is Texture2D:
-			progress_tex = t_prog as Texture2D
+		base_tex = _load_logo_from_asset_db(asset_db, BASE_LOGO_STEM)
+		progress_tex = _load_logo_from_asset_db(asset_db, PROGRESS_LOGO_STEM)
 
 	if base_tex == null or progress_tex == null:
-		var work_all := _AppPaths.package_root().path_join("work").path_join("all")
+		var work_all := loose_root_override if not loose_root_override.is_empty() else _AppPaths.package_root().path_join("work").path_join("all")
 		if base_tex == null:
-			base_tex = _load_texture(work_all.path_join(BASE_LOGO_REL))
+			base_tex = _load_loose_logo(work_all, BASE_LOGO_STEM)
 		if progress_tex == null:
-			progress_tex = _load_texture(work_all.path_join(PROGRESS_LOGO_REL))
+			progress_tex = _load_loose_logo(work_all, PROGRESS_LOGO_STEM)
 
-	if base_tex == null or progress_tex == null:
+	if loose_root_override.is_empty() and (base_tex == null or progress_tex == null):
 		var pak_pair := _load_logo_pair_from_pak()
 		if base_tex == null:
 			base_tex = pak_pair.get("base", null)
 		if progress_tex == null:
 			progress_tex = pak_pair.get("progress", null)
 
-	if base_tex == null and ResourceLoader.exists(STATIC_PATH):
-		base_tex = _load_texture(STATIC_PATH)
+	if base_tex == null:
+		progress_tex = null
+		if ResourceLoader.exists(STATIC_PATH):
+			base_tex = _load_texture(STATIC_PATH)
+			is_static_fallback = base_tex != null
 
-	return {"base": base_tex, "progress": progress_tex}
+	return {"base": base_tex, "progress": progress_tex, "is_static_fallback": is_static_fallback}
+
+
+static func _load_logo_from_asset_db(asset_db: Object, stem: String) -> Texture2D:
+	for ext in LOGO_EXTENSIONS:
+		var tex: Variant = asset_db.call("texture", "SystemFile/%s.%s" % [stem, ext])
+		if tex is Texture2D:
+			return tex as Texture2D
+	return null
+
+
+static func _find_child_entry_ci(parent_dir: String, target_lower: String, want_dir: bool) -> String:
+	var dir := DirAccess.open(parent_dir)
+	if dir == null:
+		return ""
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	var found := ""
+	while not entry.is_empty():
+		if entry != "." and entry != "..":
+			if dir.current_is_dir() == want_dir and entry.to_lower() == target_lower:
+				found = parent_dir.path_join(entry)
+				break
+		entry = dir.get_next()
+	dir.list_dir_end()
+	return found
+
+
+static func _load_loose_logo(work_all: String, stem: String) -> Texture2D:
+	if work_all.is_empty():
+		return null
+	var sys_dir := work_all.path_join("SystemFile")
+	if not DirAccess.dir_exists_absolute(sys_dir):
+		sys_dir = _find_child_entry_ci(work_all, "systemfile", true)
+		if sys_dir.is_empty():
+			return null
+	for ext in LOGO_EXTENSIONS:
+		var exact := sys_dir.path_join("%s.%s" % [stem, ext])
+		if FileAccess.file_exists(exact):
+			var tex := _load_texture(exact)
+			if tex != null:
+				return tex
+	var dir := DirAccess.open(sys_dir)
+	if dir == null:
+		return null
+	var matched_by_ext: Dictionary = {}
+	var stem_prefix := stem.to_lower() + "."
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while not entry.is_empty():
+		if not dir.current_is_dir():
+			var lower := entry.to_lower()
+			if lower.begins_with(stem_prefix):
+				var ext := lower.substr(stem_prefix.length())
+				if ext in LOGO_EXTENSIONS and not matched_by_ext.has(ext):
+					matched_by_ext[ext] = sys_dir.path_join(entry)
+		entry = dir.get_next()
+	dir.list_dir_end()
+	for ext in LOGO_EXTENSIONS:
+		if matched_by_ext.has(ext):
+			var tex := _load_texture(String(matched_by_ext[ext]))
+			if tex != null:
+				return tex
+	return null
+
+
+static func _read_logo_from_pak(reader: Object, stem: String) -> Texture2D:
+	for ext in LOGO_EXTENSIONS:
+		var raw: Variant = reader.Read("SystemFile/%s.%s" % [stem, ext])
+		if raw is PackedByteArray and not (raw as PackedByteArray).is_empty():
+			var tex := decode_image_texture(raw as PackedByteArray, ext)
+			if tex != null:
+				return tex
+	return null
 
 
 static func _load_logo_pair_from_pak() -> Dictionary:
@@ -174,13 +275,9 @@ static func _load_logo_pair_from_pak() -> Dictionary:
 		var reader = _MediaPakReaderScript.new()
 		if reader == null or not reader.Open(pak_path):
 			continue
-		var raw_base: Variant = reader.Read(BASE_LOGO_REL)
-		var raw_prog: Variant = reader.Read(PROGRESS_LOGO_REL)
+		var base_tex := _read_logo_from_pak(reader, BASE_LOGO_STEM)
+		var prog_tex := _read_logo_from_pak(reader, PROGRESS_LOGO_STEM)
 		reader.Close()
-		var base_bytes: PackedByteArray = raw_base if raw_base is PackedByteArray else PackedByteArray()
-		var prog_bytes: PackedByteArray = raw_prog if raw_prog is PackedByteArray else PackedByteArray()
-		var base_tex := decode_image_texture(base_bytes, "jpg")
-		var prog_tex := decode_image_texture(prog_bytes, "jpg")
 		if base_tex != null or prog_tex != null:
 			return {"base": base_tex, "progress": prog_tex}
 	return {"base": null, "progress": null}

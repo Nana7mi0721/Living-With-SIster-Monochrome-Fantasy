@@ -1692,9 +1692,11 @@ static func apply_save_zip(zip_path: String, save_dir: String, backup_dir: Strin
 				return {"ok": false, "error": "导入原版存档 %s 失败：%s" % [leaf, sav_err], "imported": imported, "backup_path": backup_path}
 			imported += 1
 			continue
-		if not _write_file_atomic(save_dir.path_join(leaf), data):
+		var sys_target := _retail_system_target_name(leaf_lower)
+		var target_leaf := sys_target if not sys_target.is_empty() else leaf
+		if not _write_file_atomic(save_dir.path_join(target_leaf), data):
 			reader.close()
-			return {"ok": false, "error": "写入存档文件失败：%s" % leaf, "imported": imported, "backup_path": backup_path}
+			return {"ok": false, "error": "写入存档文件失败：%s" % target_leaf, "imported": imported, "backup_path": backup_path}
 		imported += 1
 	reader.close()
 	return {"ok": true, "error": "", "imported": imported, "backup_path": backup_path}

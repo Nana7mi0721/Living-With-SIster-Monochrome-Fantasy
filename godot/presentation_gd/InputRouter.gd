@@ -194,6 +194,7 @@ var last_input_source := "none"
 ## Tests and scripted playthroughs set this to bypass the real Input singleton.
 var scripted_key_mask := -1
 ## Touch gesture state and host hints.
+var input_blocked := false
 var touch_mode := false
 var touch_scroll_enabled := false
 var sidebar_open_hint := false
@@ -425,6 +426,8 @@ func _set_touch_mode(active: bool) -> void:
 
 ## Route one event. Returns true when the event was consumed.
 func handle_event(event: InputEvent) -> bool:
+	if input_blocked:
+		return true
 	if event is InputEventScreenTouch:
 		return _handle_screen_touch(event as InputEventScreenTouch)
 
@@ -701,6 +704,8 @@ static func _is_direction(keycode: int) -> bool:
 
 ## Bit mask of keys/buttons held right now, for opcode 123 (KeyCodes layout).
 func held_mask(allow_mouse: bool = true) -> int:
+	if input_blocked:
+		return 0
 	_reconcile_pointer_buttons()
 	var mask := scripted_key_mask if scripted_key_mask >= 0 else _physical_mask()
 	mask |= _wheel_bits
@@ -744,6 +749,8 @@ static func _any_pressed(keys: Array) -> bool:
 
 ## Signed wheel notch, +1 up and -1 down, for mask 771 polls.
 func wheel_notch() -> int:
+	if input_blocked:
+		return 0
 	if _wheel_dir != 0:
 		return _wheel_dir
 	return _wheel_pulse_dir if _wheel_pulse_ttl > 0 else 0
@@ -751,16 +758,22 @@ func wheel_notch() -> int:
 
 ## Button state for one frame: true when physically held or clicked within this tick.
 func left_frame_pressed() -> bool:
+	if input_blocked:
+		return false
 	_reconcile_pointer_buttons()
 	return not _action_entry_suppressed and (pointer_pressed or _touch_session.is_pointer_held() or _click_latch or _touch_ok_ttl > 0)
 
 
 func right_frame_pressed() -> bool:
+	if input_blocked:
+		return false
 	_reconcile_pointer_buttons()
 	return right_pressed or _right_click_latch or _touch_cancel_ttl > 0
 
 
 func middle_frame_pressed() -> bool:
+	if input_blocked:
+		return false
 	_reconcile_pointer_buttons()
 	return middle_pressed or _middle_click_latch
 

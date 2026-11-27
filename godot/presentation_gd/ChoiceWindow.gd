@@ -33,6 +33,10 @@ var _last_unexpanded_tokens: Array[String] = []
 
 ## Rects supplied by the owner when rows are drawn as pictures (e.g. title menu slots 3/4/5).
 var override_rects: Array = []
+## Optional lower Y ceiling in design pixels (e.g. above an open bottom MessageWindow); <= 0 disables.
+var bottom_limit_y := -1.0
+## Optional provider returning the current lower Y ceiling (<= 0 disables).
+var bottom_limit_provider: Callable = Callable()
 
 
 func _init(p_assets: AssetDB = null) -> void:
@@ -66,6 +70,12 @@ func is_offscreen_parked() -> bool:
 	return position_hint.y >= 1000.0 or position_hint.y < -100.0 or position_hint.x >= 1200.0 or position_hint.x < -100.0
 
 
+func _effective_bottom_limit_y() -> float:
+	if bottom_limit_provider.is_valid():
+		return float(bottom_limit_provider.call())
+	return bottom_limit_y
+
+
 func window_rect() -> Rect2:
 	var win_size := window_size()
 	if is_offscreen_parked():
@@ -80,7 +90,11 @@ func window_rect() -> Rect2:
 		center.y = 288.0
 	var top_left := center - win_size * 0.5
 	var max_x := maxf(24.0, 1000.0 - win_size.x)
-	var max_y := maxf(48.0, 536.0 - win_size.y)
+	var bottom_bound := 536.0
+	var dynamic_limit := _effective_bottom_limit_y()
+	if dynamic_limit > 0.0:
+		bottom_bound = minf(bottom_bound, dynamic_limit)
+	var max_y := maxf(48.0, bottom_bound - win_size.y)
 	return Rect2(Vector2(clampf(top_left.x, 24.0, max_x), clampf(top_left.y, 48.0, max_y)), win_size)
 
 
@@ -213,7 +227,7 @@ func _label_runs(raw: String) -> Array:
 		return []
 	var runs: Array = []
 	for chunk in lines[0]["chunks"]:
-		_append_run(runs, String(chunk["text"]), int(chunk["size"]), chunk["color"])
+		_append_run(runs, String(chunk["text"]), int(chunk["size"]), chunk["color"], bool(chunk.get("outline", true)))
 	return runs
 
 
@@ -221,15 +235,15 @@ func last_unexpanded_tokens() -> Array[String]:
 	return _last_unexpanded_tokens.duplicate()
 
 
-func _append_run(runs: Array, text: String, size: int, color: Color) -> void:
+func _append_run(runs: Array, text: String, size: int, color: Color, outline: bool = true) -> void:
 	if text.is_empty():
 		return
 	if not runs.is_empty():
 		var last: Dictionary = runs[-1]
-		if last["size"] == size and last["color"] == color:
+		if last["size"] == size and last["color"] == color and bool(last.get("outline", true)) == outline:
 			last["text"] = String(last["text"]) + text
 			return
-	runs.append({"text": text, "size": size, "color": color})
+	runs.append({"text": text, "size": size, "color": color, "outline": outline})
 
 
 ## Move the cursor onto the row under [param point] so a mouse click confirms that row.
@@ -301,6 +315,7 @@ func _draw() -> void:
 				color = run["color"]
 			var run_size: int = run["size"]
 			var label: String = run["text"]
-			draw_string_outline(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, run_size, UiSkin.TEXT_OUTLINE_SIZE, outline_col)
+			if bool(run.get("outline", true)):
+				draw_string_outline(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, run_size, UiSkin.TEXT_OUTLINE_SIZE, outline_col)
 			draw_string(font, baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, run_size, color)
 			baseline.x += font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, run_size).x

@@ -821,6 +821,11 @@ func _slots_in_span(lo: int, hi: int) -> Array[int]:
 			if s >= lo and s <= hi and not seen.has(s):
 				seen[s] = true
 				slots.append(s)
+	for entry in _pending_pictures:
+		var s := int(entry.get("number", 0))
+		if s >= lo and s <= hi and not seen.has(s):
+			seen[s] = true
+			slots.append(s)
 	slots.sort()
 	return slots
 

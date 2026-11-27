@@ -318,6 +318,26 @@ func _ready() -> void:
 	check(not stage._cmds.has(1334) and not stage._cmds.has(1335),
 		"delayed range Erase releases both slots after the fade")
 
+	# Wide-span (>256) delayed Erase and DelayReset must include slots queued in _pending_pictures.
+	stage.draw_picture(500, 0, "", "wide pending show", [0, 1, 1, 1, 255, 100, 100, 100, 0, 0, 0, 5], 0, 2)
+	stage.draw_picture(1, 2, "", "", [0, 10, 0, 1000], 0, 2, [], {"has_span": true})
+	for _i in 6:
+		stage.tick()
+	check(stage._cmds.has(500), "slot 500 delayed Show activates before wide-span delayed Erase")
+	for _i in 5:
+		stage.tick()
+	check(not stage._cmds.has(500), "wide-span delayed Erase 1..1000 must erase pending slot 500")
+	stage.draw_picture(501, 0, "", "wide pending cancel", [0, 1, 1, 1, 255, 100, 100, 100, 0, 0, 0, 5], 0, 2)
+	stage.draw_picture(1, 3, "", "", [1000], 0, 2, [], {"has_span": true})
+	var has_501_pending := false
+	for p_entry in stage._pending_pictures:
+		if int(p_entry.get("number", 0)) == 501:
+			has_501_pending = true
+	check(not has_501_pending, "wide-span DelayReset 1..1000 must cancel pending slot 501")
+	for _i in 10:
+		stage.tick()
+	check(not stage._cmds.has(501), "cancelled wide-span pending slot 501 must never appear")
+
 	# A single-slot Delay Reset cancels only the matching slot's queued action.
 	stage.draw_picture(1326, 0, "", "single reset", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
 	stage.draw_picture(1327, 0, "", "single reset neighbour", [0, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)

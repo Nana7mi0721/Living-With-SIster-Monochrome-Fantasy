@@ -414,6 +414,33 @@ func _ready() -> void:
 	var touch_rows := choice.row_rects()
 	if touch_rows.is_empty() or not choice.hits_any_row(touch_rows[0].get_center()) or choice.hits_any_row(Vector2(10, 10)):
 		failures.append("hits_any_row must match visible row_rects")
+
+	# Tall touch-mode choices stay centered at y=288 without a bottom MessageWindow, and tighten
+	# above bubble_rect().position.y - 8.0 when a bottom MessageWindow is open.
+	var tall_opts := PackedStringArray(["1", "2", "3", "4", "5", "6", "7", "8"])
+	choice.open(tall_opts, Vector2(512, 220), true, 0)
+	if not is_equal_approx(choice.window_rect().get_center().y, 288.0):
+		failures.append("tall touch choice without bottom MessageWindow must stay centered at y=288 (got %s)" % str(choice.window_rect()))
+	var bottom_prompt := MessageWindow.new(assets)
+	add_child(bottom_prompt)
+	bottom_prompt.open("第一行\n第二行\n第三行\n第四行")
+	choice.bottom_limit_provider = func() -> float:
+		if bottom_prompt.is_open() and bottom_prompt.position_mode == WolfConst.MSG_POS_BOTTOM:
+			return bottom_prompt.bubble_rect().position.y - 8.0
+		return -1.0
+	var avoided_rect := choice.window_rect()
+	var prompt_rect := bottom_prompt.bubble_rect()
+	if avoided_rect.intersects(prompt_rect) or avoided_rect.end.y > prompt_rect.position.y - 8.0 + 0.1 or avoided_rect.position.y < 48.0:
+		failures.append("tall touch choice must stay above open bottom MessageWindow (choice=%s msg=%s)" % [str(avoided_rect), str(prompt_rect)])
+	choice.open(PackedStringArray(["是", "否"]), Vector2(512, 220), true, 0)
+	if not is_equal_approx(choice.window_rect().get_center().y, 288.0):
+		failures.append("short choice with open bottom MessageWindow must keep center y=288 (got %s)" % str(choice.window_rect()))
+	bottom_prompt.set_position_mode(WolfConst.MSG_POS_CENTER)
+	choice.open(tall_opts, Vector2(512, 220), true, 0)
+	if not is_equal_approx(choice.window_rect().get_center().y, 288.0):
+		failures.append("tall choice with centered MessageWindow must keep center y=288 (got %s)" % str(choice.window_rect()))
+	choice.bottom_limit_provider = Callable()
+	bottom_prompt.close()
 	choice.set_touch_mode(false)
 
 	# Large \f[32] glyphs expand bubble height without clipping, and confirm fast-forward stops at next \! wait.
@@ -509,6 +536,15 @@ func _ready() -> void:
 			unexp_label,
 			str(choice.last_unexpanded_tokens()),
 		])
+	var plain_runs: Array = choice._label_runs("Plain")
+	if plain_runs.size() != 1 or not bool(plain_runs[0].get("outline", false)):
+		failures.append("ChoiceWindow plain runs must keep default outline enabled (got %s)" % str(plain_runs))
+	var toggle_runs: Array = choice._label_runs("A\\NB\\EC")
+	if toggle_runs.size() != 3 \
+			or not bool(toggle_runs[0].get("outline", false)) \
+			or bool(toggle_runs[1].get("outline", true)) \
+			or not bool(toggle_runs[2].get("outline", false)):
+		failures.append("ChoiceWindow must honor \\N and \\E outline toggles on runs (got %s)" % str(toggle_runs))
 
 	# 5. Off-screen render: the window rect must actually contain lit pixels. The dummy
 	# renderer that --headless selects has no textures at all, so the pixel assertion only

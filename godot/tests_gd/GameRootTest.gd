@@ -963,12 +963,21 @@ func _item_rows_visible(root) -> bool:
 
 
 func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
-	# 1. Hotkeys parser: overrides valid entries and ignores malformed lines cleanly.
+	# 1. Hotkeys parser: overrides valid entries, clears conflicting defaults, and round-trips version=2.
 	var hotkeys: Dictionary = script.parse_hotkeys_text("backlog=F9\nframe_rate = F1\nwindow_size=F2\nbad_line\nquick_save=NotAKey\nunknown=F4\n")
 	if int(hotkeys.get("backlog", KEY_NONE)) != KEY_F9 or int(hotkeys.get("frame_rate", KEY_NONE)) != KEY_F1 or int(hotkeys.get("window_size", KEY_NONE)) != KEY_F2:
 		failures.append("parse_hotkeys_text must apply valid hotkey overrides")
+	if int(hotkeys.get("stats", KEY_NONE)) != KEY_NONE:
+		failures.append("parse_hotkeys_text must clear conflicting untouched default when another action binds its key")
 	if int(hotkeys.get("quick_save", KEY_NONE)) != KEY_F6:
 		failures.append("parse_hotkeys_text must keep default when key string is invalid")
+	var legacy_hotkeys: Dictionary = script.parse_hotkeys_text("backlog=F4\nquick_save=F5\n")
+	if int(legacy_hotkeys.get("backlog", KEY_NONE)) != KEY_F4 or int(legacy_hotkeys.get("quick_save", KEY_NONE)) != KEY_F5 \
+			or int(legacy_hotkeys.get("window_size", KEY_NONE)) != KEY_NONE or int(legacy_hotkeys.get("frame_rate", KEY_NONE)) != KEY_NONE:
+		failures.append("legacy hotkeys F4/F5 overrides must clear conflicting defaults (got %s)" % str(legacy_hotkeys))
+	var formatted_hk: String = script.format_hotkeys_text(legacy_hotkeys)
+	if not formatted_hk.begins_with("version=2\n") or script.parse_hotkeys_text(formatted_hk) != legacy_hotkeys:
+		failures.append("format_hotkeys_text must emit version=2 and round-trip cleanly")
 
 	var root = script.new()
 	add_child(root)
@@ -1159,7 +1168,96 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 		var jpg_tex: Texture2D = splash_script.decode_image_texture(jpg_probe.save_jpg_to_buffer())
 		if jpg_tex == null or jpg_tex.get_width() != 8:
 			failures.append("BootSplashOverlay.decode_image_texture must decode JPEG bytes via magic sniffing")
-		splash_node.call("fade_out_and_free", 0.0)
+
+		# Missing logo.* with present logo2.* must clear progress layer when falling back to static splash.
+		var orphan_dir := transfer_dir.path_join("splash_orphan")
+		DirAccess.make_dir_recursive_absolute(orphan_dir.path_join("SystemFile"))
+		var orphan_f := FileAccess.open(orphan_dir.path_join("SystemFile/logo2.jpg"), FileAccess.WRITE)
+		if orphan_f != null:
+			orphan_f.store_buffer(jpg_probe.save_jpg_to_buffer())
+			orphan_f.close()
+		var orphan_pair: Dictionary = splash_script.load_logo_pair(null, orphan_dir)
+		if orphan_pair.get("progress", null) != null or not bool(orphan_pair.get("is_static_fallback", false)):
+			failures.append("BootSplashOverlay must clear progress layer when falling back to static splash (got %s)" % str(orphan_pair))
+
+		# Loose loader must resolve png/webp extensions and mixed-case SystemFile entries.
+		var ext_dir := transfer_dir.path_join("splash_ext")
+		DirAccess.make_dir_recursive_absolute(ext_dir.path_join("systemfile"))
+		var png_f := FileAccess.open(ext_dir.path_join("systemfile/LOGO.PNG"), FileAccess.WRITE)
+		if png_f != null:
+			png_f.store_buffer(jpg_probe.save_png_to_buffer())
+			png_f.close()
+		var webp_f := FileAccess.open(ext_dir.path_join("systemfile/Logo2.WEBP"), FileAccess.WRITE)
+		if webp_f != null:
+			webp_f.store_buffer(jpg_probe.save_webp_to_buffer())
+			webp_f.close()
+		var ext_pair: Dictionary = splash_script.load_logo_pair(null, ext_dir)
+		if ext_pair.get("base", null) == null or ext_pair.get("progress", null) == null or bool(ext_pair.get("is_static_fallback", true)):
+			failures.append("BootSplashOverlay must resolve mixed-case png/webp logos (got %s)" % str(ext_pair))
+
+		# Skip second decode via AssetDB when retail logos are already loaded.
+		splash_node._base_rect.texture = jpg_tex
+		splash_node._progress_rect.texture = jpg_tex
+		splash_node._reveal_clip.visible = true
+		splash_node._has_retail_textures = true
+		var probe_db := AssetDB.new(orphan_dir)
+		splash_node.call("load_retail_textures", probe_db)
+		if probe_db.hits != 0 or probe_db.misses != 0:
+			failures.append("BootSplashOverlay.load_retail_textures must skip AssetDB decode when retail textures are already loaded (hits=%d misses=%d)" % [probe_db.hits, probe_db.misses])
+
+		# Active boot splash must pause advance_frame() after frame 1 and block keyboard/touch/back input until reveal completes.
+		var prev_splash: Control = root._boot_splash
+		var prev_phase_sp: String = root.phase
+		root.phase = "title"
+		root.frames = 0
+		splash_node.call("set_progress", 0.1, true)
+		root._boot_splash = splash_node
+		root._process(0.05)
+		if root.frames != 1:
+			failures.append("GameRoot must allow one frame under boot splash to render the base scene (got frames=%d)" % root.frames)
+		root._process(0.05)
+		root._process(0.05)
+		if root.frames != 1 or not root.router.input_blocked:
+			failures.append("GameRoot must pause advance_frame and block InputRouter while boot splash is revealing (frames=%d blocked=%s)" % [root.frames, str(root.router.input_blocked)])
+		var splash_actions := [0]
+		var splash_action_cb := func() -> void: splash_actions[0] = int(splash_actions[0]) + 1
+		root.router.action_pressed.connect(splash_action_cb)
+		var sp_touch := InputEventScreenTouch.new()
+		sp_touch.index = 0
+		sp_touch.position = Vector2(512, 288)
+		sp_touch.pressed = true
+		var sp_consumed: bool = root.router.handle_event(sp_touch)
+		var sp_key := InputEventKey.new()
+		sp_key.keycode = KEY_F12
+		sp_key.pressed = true
+		root._unhandled_input(sp_key)
+		var sp_back: String = root.handle_back_request()
+		root.router.action_pressed.disconnect(splash_action_cb)
+		if not sp_consumed or int(splash_actions[0]) != 0 or root.router.has_active_touches() or root.title_confirm_open() or root.overlays.quit_confirm_open() or sp_back != "boot_splash_ignored":
+			failures.append("boot splash must intercept touch, hotkeys, and back requests (consumed=%s actions=%d touches=%s back=%s)" % [str(sp_consumed), int(splash_actions[0]), str(root.router.has_active_touches()), sp_back])
+		splash_node.call("set_progress", 1.0, true)
+		root._process(0.05)
+		if root._boot_splash != null or root.router.input_blocked or root.frames <= 1:
+			failures.append("GameRoot must dismiss boot splash, unblock input, and resume frames after reveal completes (splash=%s blocked=%s frames=%d)" % [str(root._boot_splash), str(root.router.input_blocked), root.frames])
+		root._modal_release_guard = false
+		root.router.input_blocked = false
+		root._boot_splash = prev_splash
+		root.phase = prev_phase_sp
+		if is_instance_valid(splash_node):
+			splash_node.queue_free()
+
+	# Verify legacy F4=backlog override works via _unhandled_input instead of being swallowed by F4=window_size.
+	var prev_hk: Dictionary = root._hotkeys.duplicate()
+	root._hotkeys = script.parse_hotkeys_text("backlog=F4\n")
+	var f4_ev := InputEventKey.new()
+	f4_ev.keycode = KEY_F4
+	f4_ev.pressed = true
+	root._unhandled_input(f4_ev)
+	if not root.backlog_open():
+		failures.append("legacy backlog=F4 override must open backlog instead of being shadowed by window_size")
+	root.close_backlog()
+	root._modal_release_guard = false
+	root._hotkeys = prev_hk
 
 	var export_src_dir := transfer_dir.path_join("export_src")
 	DirAccess.make_dir_recursive_absolute(export_src_dir)
@@ -1240,6 +1338,25 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	var steam_apply: Dictionary = PlayOverlays.apply_save_zip(steam_sidecar_zip, save_dir, backup_dir, root.session)
 	if not bool(steam_apply.get("ok", false)) or int(steam_apply.get("imported", 0)) != 2 or FileAccess.file_exists(save_dir.path_join("steam_autocloud.vdf")) or not FileAccess.file_exists(save_dir.path_join("system2.json")):
 		failures.append("apply_save_zip must import save_01.json + system2.json and skip steam_autocloud.vdf: %s" % str(steam_apply))
+
+	# Case-insensitive ZIP system JSON names must normalize to canonical System.json / system2.json.
+	var case_save_dir := transfer_dir.path_join("case_saves")
+	DirAccess.make_dir_recursive_absolute(case_save_dir)
+	var case_zip := transfer_dir.path_join("case_sys.zip")
+	var zp_case := ZIPPacker.new()
+	if zp_case.open(case_zip) == OK:
+		zp_case.start_file("Save/system.json")
+		zp_case.write_file("{\"schema\":\"lwsmf.save\",\"schema_version\":2,\"vars\":[0,1]}".to_utf8_buffer())
+		zp_case.close_file()
+		zp_case.start_file("Save/System2.json")
+		zp_case.write_file("{\"schema\":\"lwsmf.save\",\"schema_version\":2,\"vars\":[0,1]}".to_utf8_buffer())
+		zp_case.close_file()
+		zp_case.close()
+	var case_apply: Dictionary = PlayOverlays.apply_save_zip(case_zip, case_save_dir, backup_dir, root.session)
+	var case_files := DirAccess.get_files_at(case_save_dir)
+	if not bool(case_apply.get("ok", false)) or int(case_apply.get("imported", 0)) != 2 \
+			or not case_files.has("System.json") or not case_files.has("system2.json"):
+		failures.append("apply_save_zip must normalize system.json/System2.json to System.json/system2.json (res=%s files=%s)" % [str(case_apply), str(case_files)])
 
 	var traversal_sidecar_zip := transfer_dir.path_join("traversal_sidecar.zip")
 	var zp4 := ZIPPacker.new()

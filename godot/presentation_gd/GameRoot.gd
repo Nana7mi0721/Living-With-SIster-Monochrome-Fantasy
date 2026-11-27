@@ -22,6 +22,7 @@ const WINDOW_DOCKBAR_ICON := "res://assets/boot/generated/icon_pc_dockbar.bin"
 const WINDOW_CORNER_ICON := "res://assets/boot/generated/icon_pc_corner.bin"
 const DISPLAY_SETTINGS_PATH := "user://display_settings.cfg"
 const HOTKEYS_SETTINGS_PATH := "user://hotkeys.cfg"
+const HOTKEYS_CONFIG_VERSION := 2
 const DEFAULT_HOTKEYS: Dictionary = {
 	"stats": KEY_F2,
 	"debug": KEY_F3,
@@ -136,11 +137,30 @@ func _should_use_boot_splash() -> bool:
 	return tree != null and get_parent() == tree.root
 
 
+func _is_boot_splash_blocking() -> bool:
+	return _boot_splash != null and is_instance_valid(_boot_splash) and (frames < 1 or not bool(_boot_splash.call("is_reveal_complete")))
+
+
+static func _is_blocked_splash_input(event: InputEvent) -> bool:
+	return event is InputEventKey \
+		or event is InputEventMouseButton \
+		or event is InputEventMouseMotion \
+		or event is InputEventScreenTouch \
+		or event is InputEventScreenDrag \
+		or event is InputEventJoypadButton \
+		or event is InputEventJoypadMotion
+
+
 func _dismiss_boot_splash(duration: float = 0.25) -> void:
 	if _boot_splash == null:
 		return
 	var splash: Control = _boot_splash
 	_boot_splash = null
+	if router != null:
+		router.input_blocked = false
+		router.clear_pointer_latches()
+		router.clear_frame_latches()
+		_arm_modal_release_guard()
 	if is_instance_valid(splash):
 		splash.call("fade_out_and_free", duration)
 
@@ -156,7 +176,8 @@ func _start_game() -> void:
 		return
 	assets = AssetDB.new()
 	if _boot_splash != null:
-		_boot_splash.call("load_retail_textures", assets)
+		if not bool(_boot_splash.call("has_retail_textures")):
+			_boot_splash.call("load_retail_textures", assets)
 		_boot_splash.call("set_progress", 0.35)
 
 	stage = PictureStage.new(assets)
@@ -186,6 +207,7 @@ func _start_game() -> void:
 	nameplate = Nameplate.new(assets)
 	stage.layer(PictureStage.LAYER_NAMEPLATE).add_child(nameplate)
 	choice = ChoiceWindow.new(assets)
+	choice.bottom_limit_provider = Callable(self, "_choice_bottom_limit_y")
 	stage.layer(PictureStage.LAYER_CHOICE_PANEL).add_child(choice)
 
 	audio = AudioManager.new(assets)
@@ -193,6 +215,7 @@ func _start_game() -> void:
 	add_child(audio)
 
 	router = InputRouter.new()
+	router.input_blocked = _is_boot_splash_blocking()
 	add_child(router)
 	router.blank_space_predicate = Callable(self, "is_touch_blank_space")
 	router.touch_action_tap_recorder = Callable(self, "record_touch_action_tap")
@@ -349,13 +372,24 @@ func _process(delta: float) -> void:
 		if phase == "failed" and overlays != null:
 			report_fault(_failure_reason())
 		return
-	# Cap single-frame delta so an I/O or GC hiccup cannot burn through multi-frame UI animations invisibly.
-	_accumulator = minf(_accumulator + minf(delta, STEP * 2.0), STEP * 3.0)
-	var guard := 0
-	while _accumulator >= STEP and guard < MAX_STEPS_PER_FRAME:
-		_accumulator -= STEP
-		advance_frame()
-		guard += 1
+	if _boot_splash != null and frames >= 1 and bool(_boot_splash.call("is_reveal_complete")):
+		_dismiss_boot_splash(0.25)
+	var splash_blocking := _is_boot_splash_blocking()
+	if router != null:
+		router.input_blocked = splash_blocking
+	if splash_blocking:
+		# Allow one frame to render the title scene beneath the splash, then hold game ticks until reveal completes.
+		_accumulator = 0.0
+		if frames < 1:
+			advance_frame()
+	else:
+		# Cap single-frame delta so an I/O or GC hiccup cannot burn through multi-frame UI animations invisibly.
+		_accumulator = minf(_accumulator + minf(delta, STEP * 2.0), STEP * 3.0)
+		var guard := 0
+		while _accumulator >= STEP and guard < MAX_STEPS_PER_FRAME:
+			_accumulator -= STEP
+			advance_frame()
+			guard += 1
 	_sync_title_menu()
 	if _boot_splash != null and frames >= 1 and bool(_boot_splash.call("is_reveal_complete")):
 		_dismiss_boot_splash(0.25)
@@ -567,7 +601,7 @@ func start_event(event_id: int) -> bool:
 # ---- input ---------------------------------------------------------------
 
 func _on_action() -> void:
-	if faulted or _modal_release_guard or _modal_window_open():
+	if _is_boot_splash_blocking() or faulted or _modal_release_guard or _modal_window_open():
 		return
 	var pointer := router.is_pointer_input()
 	var action_denied := (int(session.BasicAllDeny) & 1) != 0
@@ -623,7 +657,7 @@ func _advance_held_message() -> void:
 
 
 func _on_cancel() -> void:
-	if faulted:
+	if _is_boot_splash_blocking() or faulted:
 		return
 	if overlays != null and overlays.is_modal_open():
 		if overlays.close_topmost_modal():
@@ -647,7 +681,7 @@ func _on_cancel() -> void:
 
 
 func _on_wheel(direction: int) -> void:
-	if faulted or _modal_window_open():
+	if _is_boot_splash_blocking() or faulted or _modal_window_open():
 		return
 	if choice.is_open:
 		var bit := 0
@@ -664,7 +698,7 @@ func _on_wheel(direction: int) -> void:
 
 
 func _on_move(dx: int, dy: int) -> void:
-	if faulted or _modal_window_open():
+	if _is_boot_splash_blocking() or faulted or _modal_window_open():
 		return
 	if choice.is_open:
 		var bit := 16 if dy < 0 else 32 if dy > 0 else 0
@@ -677,7 +711,7 @@ func _on_move(dx: int, dy: int) -> void:
 
 ## Only real mouse motion reaches here, so a resting mouse never steals the keyboard cursor.
 func _on_hover(position: Vector2) -> void:
-	if faulted or _modal_window_open():
+	if _is_boot_splash_blocking() or faulted or _modal_window_open():
 		return
 	if choice.is_open:
 		if _choice_hover_lock_pos.x >= 0.0:
@@ -742,6 +776,14 @@ func _on_message_options_changed(_window_id: int, pos_mode: int, _face_id: int, 
 	_active_speaker = speaker.strip_edges()
 	if message != null:
 		message.set_position_mode(pos_mode)
+	if choice != null and choice.is_open:
+		choice.queue_redraw()
+
+
+func _choice_bottom_limit_y() -> float:
+	if message != null and message.is_open() and message.position_mode == _WolfConst.MSG_POS_BOTTOM:
+		return message.bubble_rect().position.y - 8.0
+	return -1.0
 
 
 func _on_speaker_changed(speaker: String) -> void:
@@ -764,6 +806,8 @@ func _on_message(text: String, face: int) -> void:
 	if vm != null and vm.MessageKeptForChoice:
 		message.attach_choice_window()
 	_sync_active_nameplate()
+	if choice != null and choice.is_open:
+		choice.queue_redraw()
 	# Backlog is memory-only history with WOLF escape codes stripped.
 	var entry := TextTokenizer.plain_text(TextTokenizer.tokenize(message.full_text))
 	if not _active_speaker.is_empty() and _active_msg_pos_mode != _WolfConst.MSG_POS_CENTER:
@@ -778,6 +822,8 @@ func _on_message_closed() -> void:
 	# Hide visually between consecutive sentences without clearing _active_speaker.
 	if nameplate != null:
 		nameplate.hide_speaker()
+	if choice != null and choice.is_open:
+		choice.queue_redraw()
 
 
 func _on_message_confirm() -> void:
@@ -1228,9 +1274,14 @@ func _on_message_text() -> String:
 	return message.full_text
 
 
-func _input(_event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if not _is_headless() and OS.low_processor_usage_mode:
 		OS.low_processor_usage_mode = false
+	if _is_boot_splash_blocking() and _is_blocked_splash_input(event):
+		if is_inside_tree():
+			var vp := get_viewport()
+			if vp != null:
+				vp.set_input_as_handled()
 
 
 ## Hotkeys: F2 stats, F3 debug, F4 window growth (Shift+F4 scaling mode), F5 frame rate
@@ -1238,10 +1289,16 @@ func _input(_event: InputEvent) -> void:
 ## F10 diagnostic snapshot, F11 fullscreen/minimum, F12 return-to-title confirm.
 ## Overridable via --hotkeys=<file> or user://hotkeys.cfg.
 func _unhandled_input(event: InputEvent) -> void:
+	if _is_boot_splash_blocking():
+		if _is_blocked_splash_input(event) and is_inside_tree():
+			var vp := get_viewport()
+			if vp != null:
+				vp.set_input_as_handled()
+		return
 	if not (event is InputEventKey):
 		return
 	var key := event as InputEventKey
-	if not key.pressed or key.echo:
+	if not key.pressed or key.echo or key.keycode == KEY_NONE:
 		return
 	if key.keycode == int(_hotkeys.get("fullscreen", KEY_F11)):
 		toggle_fullscreen()
@@ -2029,6 +2086,8 @@ func toggle_titlebar_fps() -> bool:
 
 static func parse_hotkeys_text(raw: String, base: Dictionary = DEFAULT_HOTKEYS) -> Dictionary:
 	var result := base.duplicate()
+	var explicit: Dictionary = {}
+	var explicit_order: Array[String] = []
 	for line in raw.split("\n", false):
 		var trimmed := line.strip_edges()
 		if trimmed.is_empty() or trimmed.begins_with("#") or trimmed.begins_with("["):
@@ -2038,12 +2097,46 @@ static func parse_hotkeys_text(raw: String, base: Dictionary = DEFAULT_HOTKEYS) 
 			continue
 		var action := trimmed.left(eq).strip_edges().to_lower()
 		var key_str := trimmed.substr(eq + 1).strip_edges().trim_prefix("\"").trim_suffix("\"")
+		if action == "version":
+			continue
 		if not result.has(action) or key_str.is_empty():
 			continue
-		var code := OS.find_keycode_from_string(key_str)
+		var code := KEY_NONE
+		if key_str.to_lower() == "none":
+			var prev_none := explicit_order.find(action)
+			if prev_none >= 0:
+				explicit_order.remove_at(prev_none)
+			explicit[action] = KEY_NONE
+			explicit_order.append(action)
+			continue
+		code = OS.find_keycode_from_string(key_str)
 		if code != KEY_NONE:
-			result[action] = code
+			var prev_idx := explicit_order.find(action)
+			if prev_idx >= 0:
+				explicit_order.remove_at(prev_idx)
+			explicit[action] = code
+			explicit_order.append(action)
+	# Apply explicit bindings in order and clear conflicting untouched defaults or earlier duplicates.
+	for action in explicit_order:
+		var code: int = int(explicit[action])
+		result[action] = code
+		if code == KEY_NONE:
+			continue
+		for other in result.keys():
+			if other != action and int(result[other]) == code:
+				result[other] = KEY_NONE
 	return result
+
+
+static func format_hotkeys_text(bindings: Dictionary) -> String:
+	var lines: PackedStringArray = PackedStringArray(["version=%d" % HOTKEYS_CONFIG_VERSION])
+	var keys := bindings.keys()
+	keys.sort()
+	for action in keys:
+		var code := int(bindings.get(action, KEY_NONE))
+		var key_str := "None" if code == KEY_NONE else OS.get_keycode_string(code)
+		lines.append("%s=%s" % [str(action), key_str])
+	return "\n".join(lines) + "\n"
 
 
 func _load_hotkeys() -> void:
@@ -2136,7 +2229,7 @@ func _sync_mobile_and_overlay_state(delta: float) -> void:
 
 
 func _on_touch_sidebar_swipe(open: bool) -> void:
-	if overlays == null or faulted:
+	if _is_boot_splash_blocking() or overlays == null or faulted:
 		return
 	if open:
 		if can_open_quick_ui() and not _modal_window_open():
@@ -2527,6 +2620,8 @@ func _on_quit_confirmed() -> void:
 
 ## 7-level priority router for Android/system back requests.
 func handle_back_request() -> String:
+	if _is_boot_splash_blocking():
+		return "boot_splash_ignored"
 	if phase == "failed" or (faulted and overlays != null and overlays.fault_modal_visible()):
 		if not is_ios_platform() and not _is_headless():
 			get_tree().quit()
