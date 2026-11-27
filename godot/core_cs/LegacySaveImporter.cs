@@ -425,7 +425,11 @@ public sealed class LegacySaveImporter
             }
         }
         int mds1Count = SignedCount(r.ReadU32());
-        var stringVars = new List<string>(mds1Count);
+        if (mds1Count < 0 || mds1Count > Variables.MaxSlots || (ulong)mds1Count * 4UL > (ulong)r.Remaining)
+        {
+            throw new InvalidDataException($"String variable count {mds1Count} exceeds bounds (remaining {r.Remaining})");
+        }
+        var stringVars = new List<string>(Math.Min(mds1Count, 1024));
         for (int i = 0; i < mds1Count; i++)
         {
             stringVars.Add(r.ReadMemDataString(4, $"str_var[{i}]"));

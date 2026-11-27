@@ -1053,10 +1053,10 @@ public sealed class GameSession
                 return null;
             case 221:
             {
-                // Fast-path Sys24 existence probe so empty/populated slot checks never deserialize JSON.
                 if (op.Address == Magic.SysBase + 24)
                 {
-                    return SaveCodec.Exists(path) ? 1 : 0;
+                    if (!SaveCodec.Exists(path)) return 0;
+                    return ReadCachedSave(path).Exists ? 1 : 0;
                 }
                 CachedSaveEntry cached = ReadCachedSave(path);
                 // A missing tier is the normal "no data here" answer for the existence probes.
@@ -1203,7 +1203,7 @@ public sealed class GameSession
                     return 0;
                 }
                 int index = (int)magic.Index;
-                if (index == 24) return SaveCodec.Exists(path) ? 1 : 0;
+                if (index == 24) return 1;
                 if (index == 29) return (int)(state.PlayFrames / 60);
                 return index >= 0 && index < state.SysVars.Count ? state.SysVars[index] : 0;
             }
@@ -1474,14 +1474,10 @@ public sealed class GameSession
         var audit = new SaveAuditReport { SourceKind = SaveAuditSource.RetailImport };
         audit.EncodingWarnings.AddRange(imported.EncodingWarnings);
 
-        var picByNum = new Dictionary<int, SavedPicture>();
-        foreach (SavedPicture pic in data.PictureStates)
+        List<SavedPicture> sanitizedPics = SaveMigrator.SanitizeRestoredPictures(data.PictureStates, audit);
+        var picByNum = new Dictionary<int, SavedPicture>(sanitizedPics.Count);
+        foreach (SavedPicture pic in sanitizedPics)
         {
-            if (IsSaveUiPicture(pic.Number))
-            {
-                audit.StrippedTransientPictures++;
-                continue;
-            }
             picByNum[pic.Number] = pic;
         }
         state.Pictures.AddRange(picByNum.Values.Take(SaveCodec.MaxPictures));
@@ -1578,6 +1574,13 @@ public sealed class GameSession
         foreach (KeyValuePair<int, SelfVars> bank in BuildCommonSelfFromRetail(data))
         {
             state.CommonSelf.Add(SavedSelf(bank.Key, bank.Value));
+        }
+
+        SaveMigrator.Normalize(state);
+        if (!ValidateSaveJson(SaveCodec.ToJson(state), out string validationError))
+        {
+            error = "converted system save failed validation: " + validationError;
+            return false;
         }
 
         string systemPath = ResolveSaveTarget(new SaveTarget(saveTarget));
@@ -2011,7 +2014,7 @@ public sealed class GameSession
         SaveState? sys1 = ReadCachedSave(sys1Path).State;
         if (sys1 != null)
         {
-            int[] sys1MergeVars = [300, 80, 81, 82, 83, 84, 85, 86, 87, 324, 325, 326, 327, 328, 546, 550];
+            int[] sys1MergeVars = [300, 80, 81, 82, 83, 84, 85, 86, 87, 324, 325, 326, 327, 328, 503, 546, 550, 626];
             foreach (int v in sys1MergeVars)
             {
                 int diskVal = GetVarOrDefault(sys1.Vars, v);
@@ -2118,7 +2121,7 @@ public sealed class GameSession
         List<string> savedSysStrings = _vm.Vm.Vars.SnapshotSysStrings();
         _vm.ResetSessionState();
         _vm.Vm.Vars.Restore(savedNums, savedStrings, savedSysNums, savedSysStrings);
-        SyncPersistentSystemVarsFromDisk();
+        if (!ScriptedInput) SyncPersistentSystemVarsFromDisk();
         ResetTransientSessionState();
         // AutoEvents is session-scoped; StopAll does not clear its edge latch. Re-arming
         // here would replay event 38 and shift instance ids. A fresh engine boot

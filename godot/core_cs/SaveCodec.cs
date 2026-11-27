@@ -469,6 +469,14 @@ public static class SaveCodec
             if (!IsSafeAssetPath(pic.File)) return false;
             if (pic.Args.Count > 32) return false;
             if (pic.Anchor is < 0 or > 255) return false;
+            if (pic.Flags != null)
+            {
+                if (pic.Flags.Count > 16) return false;
+                foreach (string key in pic.Flags.Keys)
+                {
+                    if (string.IsNullOrEmpty(key) || key.Length > 32) return false;
+                }
+            }
         }
 
         if (state.Audio.Count > MaxAudio) return false;

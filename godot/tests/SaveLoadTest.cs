@@ -872,13 +872,88 @@ public partial class SaveLoadTest : Node
         Check(!File.Exists(titleSavePath) && harnessTitle.View.Status == "[AutoSave] slot=1 fail",
             $"opcode 220 autosave must refuse during failed phase (got '{harnessTitle.View.Status}')");
 
-        // SaveCodec hardening: PlayFrames > int.MaxValue, NUL path, and DbOverlays bounds.
+        // SaveCodec hardening: PlayFrames > int.MaxValue, NUL path, DbOverlays bounds, and SavedPicture.Flags bounds.
         Check(SaveCodec.FromJson("{\"schema\":\"lwsmf.save\",\"schema_version\":2,\"play_frames\":2147483648}") == null,
             "SaveCodec must reject play_frames > int.MaxValue");
         Check(SaveCodec.FromJson("{\"schema\":\"lwsmf.save\",\"schema_version\":2,\"map_file\":\"bad\\u0000.mps\"}") == null,
             "SaveCodec must reject NUL byte in map_file");
         Check(SaveCodec.FromJson("{\"schema\":\"lwsmf.save\",\"schema_version\":2,\"db_overlays\":{\"nums\":[{\"c\":0,\"t\":0,\"r\":100001,\"k\":0,\"v\":1}]}}") == null,
             "SaveCodec must reject out-of-bounds db_overlays cell coordinates");
+
+        var flagsProbe = new SaveState { MapId = 1, MapFile = "Map001.mps" };
+        flagsProbe.Pictures.Add(new SavedPicture
+        {
+            Number = 1,
+            Action = 0,
+            File = "cg/a.png",
+            Flags = new Dictionary<string, int> { ["blend"] = 1, [new string('k', 32)] = 2 }
+        });
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(flagsProbe)) != null,
+            "SaveCodec must accept valid SavedPicture.Flags within count and key length limits");
+        flagsProbe.Pictures[0].Flags = new Dictionary<string, int> { [""] = 1 };
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(flagsProbe)) == null,
+            "SaveCodec must reject empty SavedPicture.Flags key");
+        flagsProbe.Pictures[0].Flags = new Dictionary<string, int> { [new string('k', 33)] = 1 };
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(flagsProbe)) == null,
+            "SaveCodec must reject SavedPicture.Flags key longer than 32 chars");
+        var tooManyFlags = new Dictionary<string, int>();
+        for (int i = 0; i < 17; i++) tooManyFlags[$"f{i}"] = i;
+        flagsProbe.Pictures[0].Flags = tooManyFlags;
+        Check(SaveCodec.FromJson(SaveCodec.ToJson(flagsProbe)) == null,
+            "SaveCodec must reject SavedPicture.Flags with more than 16 entries");
+
+        // Opcode 221 Sys24 existence probe must reject corrupt JSON when no valid .bak exists,
+        // while still returning 1 for valid saves or corrupt main + valid .bak.
+        string probeSlot9Path = session.SlotSavePath(9);
+        if (File.Exists(probeSlot9Path)) File.Delete(probeSlot9Path);
+        if (File.Exists(probeSlot9Path + ".bak")) File.Delete(probeSlot9Path + ".bak");
+        session.InvalidateSaveCache(probeSlot9Path);
+        var sys24Slot9 = new SaveOp { Opcode = 221, File = new SaveTarget(9), Address = Magic.SysBase + 24 };
+        Check(session.HandleSaveLoad(sys24Slot9) == 0,
+            "op 221 Sys24 must return 0 for empty slot");
+        File.WriteAllText(probeSlot9Path, "{ corrupted");
+        Check(session.HandleSaveLoad(sys24Slot9) == 0,
+            "op 221 Sys24 must return 0 when main slot is corrupt and .bak is missing");
+        File.WriteAllText(probeSlot9Path + ".bak", "{ also corrupted");
+        Check(session.HandleSaveLoad(sys24Slot9) == 0,
+            "op 221 Sys24 must return 0 when both main slot and .bak are corrupt");
+        SaveCodec.Write(probeSlot9Path, new SaveState { MapId = 1005, MapFile = "SampleMapA.mps" });
+        SaveCodec.Write(probeSlot9Path, new SaveState { MapId = 1005, MapFile = "SampleMapA.mps" });
+        session.InvalidateSaveCache(probeSlot9Path);
+        Check(session.HandleSaveLoad(sys24Slot9) == 1,
+            "op 221 Sys24 must return 1 for a valid slot");
+        File.WriteAllText(probeSlot9Path, "{ corrupted");
+        Check(session.HandleSaveLoad(sys24Slot9) == 1,
+            "op 221 Sys24 must return 1 when main slot is corrupt but .bak is valid");
+        File.Delete(probeSlot9Path);
+        Check(session.HandleSaveLoad(sys24Slot9) == 1,
+            "op 221 Sys24 must return 1 when main slot is missing but .bak is valid");
+        File.Delete(probeSlot9Path + ".bak");
+        session.InvalidateSaveCache(probeSlot9Path);
+
+        // StartNewGameNow must merge System.json vars 503/626 when system2.json is absent,
+        // and skip disk sync entirely when ScriptedInput is true.
+        string ngSyncDir = Path.Combine(saveDir, "ng_sync");
+        Directory.CreateDirectory(ngSyncDir);
+        string ngSlotPath = Path.Combine(ngSyncDir, "save_01.json");
+        var ngSysState = new SaveState { Vars = new List<int>(new int[700]) };
+        ngSysState.Vars[503] = 9;
+        ngSysState.Vars[626] = 14;
+        SaveCodec.Write(Path.Combine(ngSyncDir, "System.json"), ngSysState);
+        var ngHarness = new SessionHarness(this, dataPath, ngSlotPath);
+        ngHarness.Session.StartTitle();
+        ngHarness.Vm.Vm.Vars.Set(503, 0);
+        ngHarness.Vm.Vm.Vars.Set(626, 0);
+        ngHarness.Session.ScriptedInput = true;
+        ngHarness.Session.QueueTeleport(0, 3, 0, 0, 0);
+        ngHarness.Session.AdvanceFrame();
+        Check(ngHarness.Vm.Vm.Vars.Get(503) == 0 && ngHarness.Vm.Vm.Vars.Get(626) == 0,
+            $"StartNewGameNow must skip System.json disk sync when ScriptedInput is true (got 503={ngHarness.Vm.Vm.Vars.Get(503)} 626={ngHarness.Vm.Vm.Vars.Get(626)})");
+        ngHarness.Session.ScriptedInput = false;
+        ngHarness.Session.QueueTeleport(0, 3, 0, 0, 0);
+        ngHarness.Session.AdvanceFrame();
+        Check(ngHarness.Vm.Vm.Vars.Get(503) == 9 && ngHarness.Vm.Vm.Vars.Get(626) == 14,
+            $"StartNewGameNow must merge vars 503 and 626 from System.json when system2.json is absent (got 503={ngHarness.Vm.Vm.Vars.Get(503)} 626={ngHarness.Vm.Vm.Vars.Get(626)})");
 
         using (var iconGuard = new WindowIcons())
         {

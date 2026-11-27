@@ -338,6 +338,68 @@ public partial class SaveImportTest : Node
         if (!ExpectInvalidSav(BuildSaveUpToVarDb(-1, 10_000u, 1u), "VariableDatabase fc > remaining")) return false;
         if (!ExpectInvalidSav(BuildSaveUpToVarDb(0, null, uint.MaxValue), "VariableDatabase zero-field infinite row loop")) return false;
 
+        // Oversized mds1Count in SavePart3 must throw InvalidDataException before List<string> pre-allocation (no OOM).
+        byte[] BuildSaveWithMds1Count(uint mds1Count)
+        {
+            using var ms = new MemoryStream();
+            using var bw = new BinaryWriter(ms);
+            bw.Write((ushort)0); bw.Write((ushort)1);
+            bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(0u); bw.Write(0u); bw.Write(uint.MaxValue);
+            bw.Write(0u);
+            for (int i = 0; i < 31; i++) bw.Write(0u);
+            bw.Write(0u); bw.Write(0u);
+            for (int i = 0; i < 11; i++) bw.Write(0u);
+            bw.Write(0u);
+            bw.Write((byte)0); bw.Write((byte)0);
+            for (int i = 0; i < 19; i++) bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+            bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 9; i++) bw.Write(0u);
+            bw.Write((byte)0); bw.Write((ushort)0);
+            bw.Write(0u); bw.Write(0u);
+            for (int i = 0; i < 4; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((byte)0); bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(0u); bw.Write(0u); bw.Write((byte)0);
+            bw.Write(0u); bw.Write(0u);
+            for (int i = 0; i < 11; i++) bw.Write(0u);
+            bw.Write((ushort)0); bw.Write((ushort)0); bw.Write((ushort)0);
+            bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((ushort)0); for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((ushort)0); for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((ushort)0); bw.Write((ushort)0); bw.Write((byte)0);
+            bw.Write((byte)0);
+            for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 9; i++) bw.Write(0u);
+            for (int i = 0; i < 4; i++) bw.Write(0u);
+            bw.Write((byte)0); bw.Write((byte)0);
+            for (int i = 0; i < 32; i++) bw.Write(0u);
+            bw.Write(0u); bw.Write(0u);
+            // SavePart3: var1=0, groupCount=0, rowCount=0, mds1Count=crafted
+            bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(mds1Count);
+            return ms.ToArray();
+        }
+        if (!ExpectInvalidSav(BuildSaveWithMds1Count(0x7FFF_FFFFu), "mds1Count int.MaxValue OOM guard")) return false;
+        if (!ExpectInvalidSav(BuildSaveWithMds1Count((uint)(Variables.MaxSlots + 1)), "mds1Count > MaxSlots guard")) return false;
+        string mds1CraftPath = Path.Combine(Path.GetTempPath(), $"lwsmf_mds1_{Guid.NewGuid():N}.sav");
+        try
+        {
+            File.WriteAllBytes(mds1CraftPath, BuildEncryptedSave(BuildSaveWithMds1Count(0x7FFF_FFFFu)));
+            if (LegacySaveImporter.ValidateFile(mds1CraftPath, out string mds1Err) || string.IsNullOrEmpty(mds1Err))
+            {
+                GD.PrintErr("SAVE_IMPORT_VALIDATION_FAILED: ValidateFile accepted oversized mds1Count");
+                return false;
+            }
+        }
+        finally
+        {
+            if (File.Exists(mds1CraftPath)) File.Delete(mds1CraftPath);
+        }
+
         // Unsafe picName path traversal in SavePart5 (isText=0, picName="../evil.png")
         byte[] BuildSaveWithUnsafePicName(string picName)
         {
@@ -678,6 +740,19 @@ public partial class SaveImportTest : Node
                 Vars = new List<int>(new int[800]),
                 StrVars = ["周六", "", "save/system.sav"],
                 SysVars = [0, 0, 0, 480, 260, 0, 0, 0, 20],
+                SelfVars =
+                [
+                    new EventSelfVars
+                    {
+                        Id = 3,
+                        NumMap = new Dictionary<int, int> { [100] = 1, [104] = 99 }
+                    },
+                    new EventSelfVars
+                    {
+                        Id = 12,
+                        NumMap = new Dictionary<int, int> { [112] = -7 }
+                    }
+                ],
                 CommonSelf =
                 [
                     new EventSelfVars
@@ -737,6 +812,9 @@ public partial class SaveImportTest : Node
                 || rec.Variables["0"] != 3 || rec.Variables["160"] != 25 || rec.Variables["550"] != 22 || rec.Variables["799"] != -99
                 || rec.CommonSelfNumbers[12][0] != 777 || rec.CommonSelfNumbers[12][4] != -42
                 || rec.CommonSelfStrings[12][0] != "你好世界" || rec.CommonSelfStrings[12][4] != "tail"
+                || !rec.MapEventSelfVars.TryGetValue(1, out var map1Self)
+                || !map1Self.TryGetValue(3, out var ev3Self) || ev3Self.Length < 5 || ev3Self[0] != 1 || ev3Self[4] != 99
+                || !map1Self.TryGetValue(12, out var ev12Self) || ev12Self.Length < 13 || ev12Self[12] != -7
                 || rec.PictureStates.Count != 2
                 || rec.PictureStates[0].File != "cg/bg_01.png"
                 || rec.PictureStates[0].Args.Count < 17 || rec.PictureStates[0].Args[3] != 3 || rec.PictureStates[0].Args[16] != 75
@@ -790,6 +868,147 @@ public partial class SaveImportTest : Node
                 || sysAfter.Vars[550] < 22)
             {
                 GD.PrintErr("RETAIL_EXPORT_FAILED: ImportRetailSaveToSlot did not sync System.json slot markers & NG+ var550");
+                return false;
+            }
+            // Verify MapEventSelfVars survive .sav -> JSON -> .sav -> JSON roundtrip.
+            string reExportSav = Path.Combine(tempDir, "SaveData04_rt.sav");
+            string reImpErr = "";
+            if (!harness.Session.ExportSlotToRetailSav(4, reExportSav, out string reExpErr)
+                || !harness.Session.ImportRetailSaveToSlot(reExportSav, 5, out reImpErr))
+            {
+                GD.PrintErr($"RETAIL_EXPORT_FAILED: SelfVars roundtrip export/import failed: {reExpErr} / {reImpErr}");
+                return false;
+            }
+            SaveState? slot5State = SaveCodec.Read(harness.Session.SlotSavePath(5));
+            EventSelfVars? rtEv3 = slot5State?.SelfVars.Find(s => s.Id == 3);
+            EventSelfVars? rtEv12 = slot5State?.SelfVars.Find(s => s.Id == 12);
+            if (rtEv3?.NumMap == null || rtEv3.NumMap.GetValueOrDefault(100) != 1 || rtEv3.NumMap.GetValueOrDefault(104) != 99
+                || rtEv12?.NumMap == null || rtEv12.NumMap.GetValueOrDefault(112) != -7)
+            {
+                GD.PrintErr("RETAIL_EXPORT_FAILED: MapEventSelfVars lost across .sav -> JSON -> .sav -> JSON roundtrip");
+                return false;
+            }
+
+            // ImportRetailSystemSaveTo must validate before writing (PlayFrames > int.MaxValue must fail cleanly).
+            var invalidSysState = new SaveState { PlayFrames = (long)int.MaxValue + 10L };
+            string badSysSavPath = Path.Combine(tempDir, "bad_system.sav");
+            LegacySaveExporter.WriteAtomic(badSysSavPath, LegacySaveExporter.ExportSystemState(invalidSysState, "Bad Sys"));
+            string badSysTargetDir = Path.Combine(tempDir, "bad_sys_target");
+            Directory.CreateDirectory(badSysTargetDir);
+            var badSysHarness = new SessionHarness(this, dataPath, Path.Combine(badSysTargetDir, "save_01.json"));
+            if (badSysHarness.Session.ImportRetailSystemSaveTo(badSysSavPath, "System.sav", out string badSysErr)
+                || string.IsNullOrEmpty(badSysErr)
+                || File.Exists(Path.Combine(badSysTargetDir, "System.json")))
+            {
+                GD.PrintErr("RETAIL_EXPORT_FAILED: ImportRetailSystemSaveTo wrote unvalidated System.json");
+                return false;
+            }
+
+            // ImportRetailSaveToSlot must sanitize transient UI pictures and leaked toilet eye before MaxPictures truncation.
+            byte[] BuildSavWithTransientAnd256ScenePics()
+            {
+                using var ms = new MemoryStream();
+                using var bw = new BinaryWriter(ms);
+                byte[] header = new byte[0x14];
+                header[0] = 0x3A; header[3] = 0x71; header[6] = 0x55; header[9] = 0xC5;
+                bw.Write(header);
+                bw.Write((byte)0x19);
+                bw.Write((ushort)1); bw.Write((byte)0); // save_name
+                bw.Write((ushort)0x008C);
+                // SavePart1
+                bw.Write(1u); bw.Write(0u); bw.Write(0u);
+                bw.Write(64u); bw.Write(36u); bw.Write(uint.MaxValue);
+                bw.Write(0u);
+                for (int i = 0; i < 31; i++) bw.Write(0u);
+                bw.Write(0u); bw.Write(0u);
+                for (int i = 0; i < 11; i++) bw.Write(0u);
+                bw.Write(0u);
+                // SavePart2
+                bw.Write((byte)0); bw.Write((byte)0);
+                for (int i = 0; i < 19; i++) bw.Write(0u);
+                for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+                bw.Write(0u);
+                for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+                for (int i = 0; i < 9; i++) bw.Write(0u);
+                bw.Write((byte)0); bw.Write((ushort)0);
+                bw.Write(0u); bw.Write(0u);
+                for (int i = 0; i < 4; i++) bw.Write((ushort)0);
+                for (int i = 0; i < 3; i++) bw.Write(0u);
+                bw.Write((byte)0); bw.Write(0u); bw.Write(0u); bw.Write(0u);
+                bw.Write(0u); bw.Write(0u); bw.Write((byte)0);
+                bw.Write(0u); bw.Write(0u);
+                for (int i = 0; i < 11; i++) bw.Write(0u);
+                bw.Write((ushort)0); bw.Write((ushort)0); bw.Write((ushort)0);
+                bw.Write(0u);
+                for (int i = 0; i < 3; i++) bw.Write(0u);
+                bw.Write((ushort)0); for (int i = 0; i < 3; i++) bw.Write(0u);
+                bw.Write((ushort)0); for (int i = 0; i < 3; i++) bw.Write(0u);
+                bw.Write((ushort)0); bw.Write((ushort)0); bw.Write((byte)0);
+                bw.Write((byte)0);
+                for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+                for (int i = 0; i < 9; i++) bw.Write(0u);
+                for (int i = 0; i < 4; i++) bw.Write(0u);
+                bw.Write((byte)0); bw.Write((byte)0);
+                for (int i = 0; i < 32; i++) bw.Write(0u);
+                bw.Write(0u); bw.Write(0u);
+                // SavePart3
+                bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u);
+                // SavePart4
+                bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write((byte)0); bw.Write(0u);
+                bw.Write((ushort)0);
+                for (int i = 0; i < 4; i++) bw.Write((ushort)0);
+                bw.Write((byte)0); bw.Write((byte)0);
+                for (int s = 0; s < 2; s++) { for (int i = 0; i < 6; i++) bw.Write((byte)0); bw.Write(0u); }
+                for (int i = 0; i < 6; i++) bw.Write((ushort)0);
+                for (int i = 0; i < 3; i++) bw.Write((byte)0);
+                bw.Write(0u); bw.Write((byte)0); bw.Write((byte)0);
+                for (int i = 0; i < 8; i++) bw.Write(0u);
+                bw.Write((ushort)0);
+                bw.Write(0u); bw.Write((byte)0); bw.Write(0u); bw.Write(0u); bw.Write(0u); bw.Write(0u);
+                bw.Write(0u); bw.Write((byte)0); bw.Write((byte)0); bw.Write(0u); bw.Write(0u);
+                // SavePart5: 10 transient UI (15000..15009) + 1 leaked toilet eye (-6) + 256 scene pictures (1..256)
+                int totalPics = 10 + 1 + SaveCodec.MaxPictures;
+                bw.Write((ushort)totalPics);
+                void WritePicEntry(int picNum, string file)
+                {
+                    bw.Write(unchecked((uint)picNum));
+                    bw.Write((byte)0); bw.Write((byte)0);
+                    bw.Write((ushort)0);
+                    bw.Write((byte)0); bw.Write((byte)0);
+                    byte[] name = System.Text.Encoding.UTF8.GetBytes(file + "\0");
+                    bw.Write((ushort)name.Length);
+                    bw.Write(name);
+                    for (int k = 0; k < 36; k++) bw.Write(0);
+                    bw.Write((byte)0); bw.Write((byte)0); bw.Write((byte)0);
+                    for (int k = 0; k < 66; k++) bw.Write(0u);
+                }
+                for (int i = 0; i < 10; i++) WritePicEntry(15000 + i, "SystemFile/WindowBase.png");
+                WritePicEntry(-6, "DLC_data/dlc_imouto01_eye.png");
+                for (int i = 1; i <= SaveCodec.MaxPictures; i++) WritePicEntry(i, "cg/bg_01.png");
+                // VariableDatabase + SavePart7 + EndByte
+                bw.Write((byte)0x6F); bw.Write(0u);
+                bw.Write((byte)0); bw.Write((byte)0x19);
+                bw.Flush();
+                byte[] plain = ms.ToArray();
+                byte sum = 0;
+                for (int i = 0x14; i < plain.Length; i++) sum = unchecked((byte)(sum + plain[i]));
+                plain[2] = sum;
+                return LegacySaveImporter.Decrypt(plain);
+            }
+            string picOrderSav = Path.Combine(tempDir, "pic_order.sav");
+            LegacySaveExporter.WriteAtomic(picOrderSav, BuildSavWithTransientAnd256ScenePics());
+            if (!harness.Session.ImportRetailSaveToSlot(picOrderSav, 6, out string picOrderErr))
+            {
+                GD.PrintErr($"RETAIL_EXPORT_FAILED: ImportRetailSaveToSlot failed on transient+256 scene pics: {picOrderErr}");
+                return false;
+            }
+            SaveState? slot6State = SaveCodec.Read(harness.Session.SlotSavePath(6));
+            if (slot6State == null
+                || slot6State.Pictures.Count != SaveCodec.MaxPictures
+                || !slot6State.Pictures.Exists(p => p.Number == SaveCodec.MaxPictures)
+                || slot6State.Pictures.Exists(p => p.Number == -6 || SaveMigrator.IsTransientUiPicture(p.Number)))
+            {
+                GD.PrintErr($"RETAIL_EXPORT_FAILED: transient pictures crowded out scene pictures (count={slot6State?.Pictures.Count ?? -1})");
                 return false;
             }
 

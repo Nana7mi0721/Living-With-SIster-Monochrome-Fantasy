@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Godot;
 
 [GlobalClass]
@@ -24,9 +25,89 @@ public partial class WindowIcons : RefCounted
     private const uint RdwFrame = 0x0400;
     private const uint IconResourceVersion = 0x00030000;
 
-    private IntPtr _smallIcon;
-    private IntPtr _taskbarIcon;
-    private IntPtr _bigIcon;
+    private readonly struct SavedWindowHandles
+    {
+        public IntPtr Hwnd { get; init; }
+        public IntPtr OrigClassBig { get; init; }
+        public IntPtr OrigClassSmall { get; init; }
+        public IntPtr OrigMsgSmall { get; init; }
+        public IntPtr OrigMsgSmall2 { get; init; }
+        public IntPtr OrigMsgBig { get; init; }
+        public bool Captured { get; init; }
+    }
+
+    // Owns Win32 HICON lifetime independently of GodotObject's native finalizer so explicit
+    // Release() suppresses handle finalization without suppressing RefCounted cleanup.
+    private sealed class IconHandleSet
+    {
+        private IntPtr _smallIcon;
+        private IntPtr _taskbarIcon;
+        private IntPtr _bigIcon;
+        private int _restored;
+
+        public SavedWindowHandles Target { get; }
+        public SavedWindowHandles Root { get; }
+
+        public IconHandleSet(
+            IntPtr small,
+            IntPtr taskbar,
+            IntPtr big,
+            SavedWindowHandles target,
+            SavedWindowHandles root)
+        {
+            _smallIcon = small;
+            _taskbarIcon = taskbar;
+            _bigIcon = big;
+            Target = target;
+            Root = root;
+        }
+
+        public IntPtr SmallIcon => Volatile.Read(ref _smallIcon);
+        public IntPtr TaskbarIcon => Volatile.Read(ref _taskbarIcon);
+        public IntPtr BigIcon => Volatile.Read(ref _bigIcon);
+
+        public void Release(bool restoreWindow)
+        {
+            if (restoreWindow && OperatingSystem.IsWindows() && Interlocked.Exchange(ref _restored, 1) == 0)
+            {
+                RestoreWindowHandles(Target);
+                if (Root.Captured && Root.Hwnd != Target.Hwnd)
+                    RestoreWindowHandles(Root);
+            }
+            DestroyIcons();
+            GC.SuppressFinalize(this);
+        }
+
+        public void DestroyWithoutRestore()
+        {
+            Interlocked.Exchange(ref _restored, 1);
+            DestroyIcons();
+            GC.SuppressFinalize(this);
+        }
+
+        ~IconHandleSet()
+        {
+            // Never dispatch SendMessage/SetClassLongPtr from the GC finalizer thread.
+            DestroyIcons();
+        }
+
+        private void DestroyIcons()
+        {
+            IntPtr small = Interlocked.Exchange(ref _smallIcon, IntPtr.Zero);
+            IntPtr taskbar = Interlocked.Exchange(ref _taskbarIcon, IntPtr.Zero);
+            IntPtr big = Interlocked.Exchange(ref _bigIcon, IntPtr.Zero);
+            if (!OperatingSystem.IsWindows())
+                return;
+            if (small != IntPtr.Zero)
+                DestroyIcon(small);
+            if (taskbar != IntPtr.Zero)
+                DestroyIcon(taskbar);
+            if (big != IntPtr.Zero)
+                DestroyIcon(big);
+        }
+    }
+
+    private IconHandleSet? _handles;
 
     public bool Apply(long windowHandle, byte[] dockbarIco, byte[] cornerIco)
     {
@@ -35,10 +116,7 @@ public partial class WindowIcons : RefCounted
             || dockbarIco == null
             || cornerIco == null
             || dockbarIco.Length == 0
-            || cornerIco.Length == 0
-            || _smallIcon != IntPtr.Zero
-            || _taskbarIcon != IntPtr.Zero
-            || _bigIcon != IntPtr.Zero)
+            || cornerIco.Length == 0)
         {
             return false;
         }
@@ -63,33 +141,89 @@ public partial class WindowIcons : RefCounted
             return false;
         }
 
-        ApplyIcons(hwnd, small, taskbar, big);
-        _smallIcon = small;
-        _taskbarIcon = taskbar;
-        _bigIcon = big;
+        IconHandleSet? previous = Interlocked.Exchange(ref _handles, null);
+        SavedWindowHandles targetSaved;
+        SavedWindowHandles rootSaved;
+        if (previous != null && previous.Target.Captured && previous.Target.Hwnd == hwnd)
+        {
+            // Keep the original pre-override window/class handles when replacing icons on the same HWND.
+            ApplyIconsWithoutCapture(hwnd, small, taskbar, big);
+            targetSaved = previous.Target;
+            rootSaved = previous.Root;
+            var next = new IconHandleSet(small, taskbar, big, targetSaved, rootSaved);
+            Interlocked.Exchange(ref _handles, next);
+            previous.DestroyWithoutRestore();
+            return true;
+        }
+
+        previous?.Release(restoreWindow: true);
+        ApplyIconsAndCapture(hwnd, small, taskbar, big, out targetSaved, out rootSaved);
+        Interlocked.Exchange(ref _handles, new IconHandleSet(small, taskbar, big, targetSaved, rootSaved));
         return true;
     }
 
     public bool Refresh(long windowHandle)
     {
-        if (!OperatingSystem.IsWindows()
-            || windowHandle == 0
-            || _smallIcon == IntPtr.Zero
-            || _taskbarIcon == IntPtr.Zero
-            || _bigIcon == IntPtr.Zero)
-        {
+        if (!OperatingSystem.IsWindows() || windowHandle == 0)
             return false;
-        }
+
+        IconHandleSet? handles = Volatile.Read(ref _handles);
+        if (handles == null)
+            return false;
+
+        IntPtr small = handles.SmallIcon;
+        IntPtr taskbar = handles.TaskbarIcon;
+        IntPtr big = handles.BigIcon;
+        if (small == IntPtr.Zero || taskbar == IntPtr.Zero || big == IntPtr.Zero)
+            return false;
 
         IntPtr hwnd = new(windowHandle);
         if (!IsWindow(hwnd))
             return false;
 
-        ApplyIcons(hwnd, _smallIcon, _taskbarIcon, _bigIcon);
+        ApplyIconsWithoutCapture(hwnd, small, taskbar, big);
         return true;
     }
 
-    private static void ApplyIcons(IntPtr hwnd, IntPtr small, IntPtr taskbar, IntPtr big)
+    private static void ApplyIconsAndCapture(
+        IntPtr hwnd,
+        IntPtr small,
+        IntPtr taskbar,
+        IntPtr big,
+        out SavedWindowHandles targetSaved,
+        out SavedWindowHandles rootSaved)
+    {
+        IntPtr root = RootWindow(hwnd);
+        targetSaved = ApplyOneAndCapture(hwnd, small, taskbar, big);
+        rootSaved = root != hwnd
+            ? ApplyOneAndCapture(root, small, taskbar, big)
+            : default;
+
+        RefreshWindow(root);
+        if (root != hwnd)
+            RefreshWindow(hwnd);
+    }
+
+    private static SavedWindowHandles ApplyOneAndCapture(IntPtr hwnd, IntPtr small, IntPtr taskbar, IntPtr big)
+    {
+        IntPtr origClassBig = SetClassLongPtrCompat(hwnd, GclpHicon, big);
+        IntPtr origClassSmall = SetClassLongPtrCompat(hwnd, GclpHiconSm, taskbar);
+        IntPtr origMsgSmall = SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall), small);
+        IntPtr origMsgSmall2 = SendMessage(hwnd, WmSetIcon, new IntPtr(IconSmall2), taskbar);
+        IntPtr origMsgBig = SendMessage(hwnd, WmSetIcon, new IntPtr(IconBig), big);
+        return new SavedWindowHandles
+        {
+            Hwnd = hwnd,
+            OrigClassBig = origClassBig,
+            OrigClassSmall = origClassSmall,
+            OrigMsgSmall = origMsgSmall,
+            OrigMsgSmall2 = origMsgSmall2,
+            OrigMsgBig = origMsgBig,
+            Captured = true,
+        };
+    }
+
+    private static void ApplyIconsWithoutCapture(IntPtr hwnd, IntPtr small, IntPtr taskbar, IntPtr big)
     {
         IntPtr root = RootWindow(hwnd);
         SetClassIcon(hwnd, big, taskbar);
@@ -105,6 +239,19 @@ public partial class WindowIcons : RefCounted
             RefreshWindow(hwnd);
     }
 
+    private static void RestoreWindowHandles(SavedWindowHandles saved)
+    {
+        if (!saved.Captured || saved.Hwnd == IntPtr.Zero || !IsWindow(saved.Hwnd))
+            return;
+
+        SendMessage(saved.Hwnd, WmSetIcon, new IntPtr(IconSmall), saved.OrigMsgSmall);
+        SendMessage(saved.Hwnd, WmSetIcon, new IntPtr(IconSmall2), saved.OrigMsgSmall2);
+        SendMessage(saved.Hwnd, WmSetIcon, new IntPtr(IconBig), saved.OrigMsgBig);
+        SetClassLongPtrCompat(saved.Hwnd, GclpHicon, saved.OrigClassBig);
+        SetClassLongPtrCompat(saved.Hwnd, GclpHiconSm, saved.OrigClassSmall);
+        RefreshWindow(saved.Hwnd);
+    }
+
     private static IntPtr RootWindow(IntPtr hwnd)
     {
         IntPtr root = GetAncestor(hwnd, GaRoot);
@@ -113,8 +260,8 @@ public partial class WindowIcons : RefCounted
 
     private static void SetClassIcon(IntPtr hwnd, IntPtr big, IntPtr small)
     {
-        SetClassLongPtr(hwnd, GclpHicon, big);
-        SetClassLongPtr(hwnd, GclpHiconSm, small);
+        SetClassLongPtrCompat(hwnd, GclpHicon, big);
+        SetClassLongPtrCompat(hwnd, GclpHiconSm, small);
     }
 
     private static void SendIcons(IntPtr hwnd, IntPtr small, IntPtr taskbar, IntPtr big)
@@ -139,23 +286,14 @@ public partial class WindowIcons : RefCounted
 
     public void Release()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            if (_smallIcon != IntPtr.Zero)
-                DestroyIcon(_smallIcon);
-            if (_taskbarIcon != IntPtr.Zero)
-                DestroyIcon(_taskbarIcon);
-            if (_bigIcon != IntPtr.Zero)
-                DestroyIcon(_bigIcon);
-        }
-        _smallIcon = IntPtr.Zero;
-        _taskbarIcon = IntPtr.Zero;
-        _bigIcon = IntPtr.Zero;
+        IconHandleSet? handles = Interlocked.Exchange(ref _handles, null);
+        handles?.Release(restoreWindow: true);
     }
 
     protected override void Dispose(bool disposing)
     {
-        Release();
+        IconHandleSet? handles = Interlocked.Exchange(ref _handles, null);
+        handles?.Release(restoreWindow: disposing);
         base.Dispose(disposing);
     }
 
@@ -165,7 +303,21 @@ public partial class WindowIcons : RefCounted
             return IntPtr.Zero;
         byte[] image = new byte[size];
         Buffer.BlockCopy(ico, offset, image, 0, size);
-        return CreateIconFromResourceEx(image, (uint)image.Length, true, IconResourceVersion, 0, 0, 0);
+        int desiredWidth = Math.Max(0, preferredWidth);
+        int desiredHeight = Math.Max(0, preferredHeight);
+        IntPtr icon = CreateIconFromResourceEx(
+            image,
+            (uint)image.Length,
+            true,
+            IconResourceVersion,
+            desiredWidth,
+            desiredHeight,
+            0);
+        if (icon == IntPtr.Zero && (desiredWidth > 0 || desiredHeight > 0))
+        {
+            icon = CreateIconFromResourceEx(image, (uint)image.Length, true, IconResourceVersion, 0, 0, 0);
+        }
+        return icon;
     }
 
     private static bool TrySelectEntry(byte[] ico, int preferredWidth, int preferredHeight, out int offset, out int size)
@@ -211,6 +363,13 @@ public partial class WindowIcons : RefCounted
     private static uint ReadUInt32(byte[] data, int offset) =>
         (uint)(data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24));
 
+    private static IntPtr SetClassLongPtrCompat(IntPtr window, int index, IntPtr newValue)
+    {
+        if (IntPtr.Size == 8)
+            return SetClassLongPtr64(window, index, newValue);
+        return new IntPtr(SetClassLong32(window, index, newValue.ToInt32()));
+    }
+
     [DllImport("user32.dll", EntryPoint = "CreateIconFromResourceEx", SetLastError = true)]
     private static extern IntPtr CreateIconFromResourceEx(
         byte[] resourceBits,
@@ -228,7 +387,10 @@ public partial class WindowIcons : RefCounted
     private static extern IntPtr GetAncestor(IntPtr window, uint flags);
 
     [DllImport("user32.dll", EntryPoint = "SetClassLongPtrW", SetLastError = true)]
-    private static extern IntPtr SetClassLongPtr(IntPtr window, int index, IntPtr newValue);
+    private static extern IntPtr SetClassLongPtr64(IntPtr window, int index, IntPtr newValue);
+
+    [DllImport("user32.dll", EntryPoint = "SetClassLongW", SetLastError = true)]
+    private static extern int SetClassLong32(IntPtr window, int index, int newValue);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(

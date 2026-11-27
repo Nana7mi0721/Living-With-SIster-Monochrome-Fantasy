@@ -21,6 +21,10 @@ public static class LegacySaveExporter
     private const int EventGroups = 550;
     private const int SelfNumCount = 100;
     private const int SelfStrCount = 5;
+    private const int MapSelfBase = 100;
+    private const int MapSelfMinSlots = 10;
+    private const int MapSelfMaxSlots = 100;
+    private const int MaxMapEventId = 4096;
 
     private static readonly uint[] Part1TailVars = [0, 0, 0, 0, 100, 100, 0, 0, 0, 0, 100];
 
@@ -147,7 +151,7 @@ public static class LegacySaveExporter
 
         WritePart1(bw);
         WritePart2(bw, state);
-        WritePart3(bw, state);
+        WritePart3(bw, state, db);
         WritePart4(bw);
         WritePart5(bw, includePictures ? state.Pictures : null);
         WriteVarDb(bw, includeVarDb ? state.DbOverlays : null, db);
@@ -270,10 +274,10 @@ public static class LegacySaveExporter
         bw.Write((uint)Math.Max(0, audio.LoopPoint));
     }
 
-    private static void WritePart3(BinaryWriter bw, SaveState state)
+    private static void WritePart3(BinaryWriter bw, SaveState state, GameDatabase? db)
     {
         bw.Write(0u); // var1
-        bw.Write(0u); // groupCount
+        WriteMapEventSelfVars(bw, state, db);
 
         // Row 0: 800 normal variables.
         bw.Write(1u);
@@ -349,6 +353,110 @@ public static class LegacySaveExporter
         bw.Write((byte)0); bw.Write((byte)0); // var2, var3
         bw.Write(0u); // vars2 count
         bw.Write(0u); // vars3 count
+    }
+
+    private static void WriteMapEventSelfVars(BinaryWriter bw, SaveState state, GameDatabase? db)
+    {
+        if (state.SelfVars == null || state.SelfVars.Count == 0)
+        {
+            bw.Write(0u);
+            return;
+        }
+
+        var byEvent = new Dictionary<int, (int[] Values, int Per)>();
+        int maxEventId = -1;
+        foreach (EventSelfVars bank in state.SelfVars)
+        {
+            if (bank == null || bank.Id is < 0 or > MaxMapEventId) continue;
+            int[]? values = null;
+            int maxSlot = -1;
+
+            if (bank.NumMap != null && bank.NumMap.Count > 0)
+            {
+                foreach (KeyValuePair<int, int> pair in bank.NumMap)
+                {
+                    int k = pair.Key - MapSelfBase;
+                    if (k is < 0 or >= MapSelfMaxSlots || pair.Value == 0) continue;
+                    values ??= new int[MapSelfMaxSlots];
+                    values[k] = pair.Value;
+                    if (k > maxSlot) maxSlot = k;
+                }
+            }
+            else if (bank.Nums != null && bank.Nums.Length > MapSelfBase)
+            {
+                int limit = Math.Min(bank.Nums.Length - MapSelfBase, MapSelfMaxSlots);
+                for (int k = 0; k < limit; k++)
+                {
+                    int val = bank.Nums[MapSelfBase + k];
+                    if (val == 0) continue;
+                    values ??= new int[MapSelfMaxSlots];
+                    values[k] = val;
+                    if (k > maxSlot) maxSlot = k;
+                }
+            }
+
+            if (values == null || maxSlot < 0) continue;
+            int per = Math.Max(MapSelfMinSlots, maxSlot + 1);
+            byEvent[bank.Id] = (values, per);
+            if (bank.Id > maxEventId) maxEventId = bank.Id;
+        }
+
+        if (byEvent.Count == 0 || maxEventId < 0)
+        {
+            bw.Write(0u);
+            return;
+        }
+
+        int mapGroup = ResolveRetailMapGroup(state, db);
+        int groupCount = mapGroup + 1;
+        bw.Write((uint)groupCount);
+        for (int g = 0; g < groupCount; g++)
+        {
+            if (g != mapGroup)
+            {
+                bw.Write(0u);
+                continue;
+            }
+            int eventCount = maxEventId + 1;
+            bw.Write((uint)eventCount);
+            for (int evId = 0; evId < eventCount; evId++)
+            {
+                if (byEvent.TryGetValue(evId, out var entry))
+                {
+                    bw.Write((byte)entry.Per);
+                    for (int k = 0; k < entry.Per; k++) bw.Write(entry.Values[k]);
+                }
+                else
+                {
+                    bw.Write((byte)MapSelfMinSlots);
+                    for (int k = 0; k < MapSelfMinSlots; k++) bw.Write(0);
+                }
+            }
+        }
+    }
+
+    private static int ResolveRetailMapGroup(SaveState state, GameDatabase? db)
+    {
+        if (db != null && !string.IsNullOrEmpty(state.MapFile))
+        {
+            string targetLeaf = Path.GetFileName(state.MapFile.Replace('\\', '/'));
+            int mapRows = db.RowCount(DbContainer.Sys, 0);
+            for (int row = 0; row < mapRows; row++)
+            {
+                string rowPath = db.ReadText(DbContainer.Sys, 0, row, 0);
+                if (string.IsNullOrEmpty(rowPath)) continue;
+                string rowLeaf = Path.GetFileName(rowPath.Replace('\\', '/'));
+                if (string.Equals(rowLeaf, targetLeaf, StringComparison.OrdinalIgnoreCase))
+                    return row;
+            }
+        }
+        if (state.MapId == 1005
+            || string.Equals(Path.GetFileName((state.MapFile ?? "").Replace('\\', '/')),
+                "SampleMapA.mps", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+        return state.MapId is >= 0 and <= 255 ? state.MapId : 1;
     }
 
     private static void WriteEmptyObject(BinaryWriter bw)
