@@ -63,17 +63,25 @@ def find_built_binary(bin_dir: Path, platform_name: str) -> Path:
     if platform_name == "windows":
         patterns = ("godot.windows.template_release.x86_64*.exe", "*windows*template_release*x86_64*.exe")
     elif platform_name == "android":
-        patterns = ("android_release.apk",)
+        # Godot's generateGodotMonoTemplates outputs android_monoRelease.apk when module_mono_enabled=yes.
+        patterns = ("android_monoRelease.apk", "android_release.apk", "android_mono*Release*.apk", "*android*release*.apk")
     elif platform_name == "ios":
         patterns = ("libgodot.ios.template_release.arm64*.a", "*ios*template_release*arm64*.a")
     else:
         raise ValueError(f"unsupported platform: {platform_name}")
 
     for pat in patterns:
-        matches = sorted(p for p in bin_dir.glob(pat) if p.is_file() and ".console." not in p.name)
+        matches = sorted(
+            p
+            for p in bin_dir.glob(pat)
+            if p.is_file() and ".console." not in p.name and "-unsigned." not in p.name
+        )
         if matches:
             return matches[0]
-    raise FileNotFoundError(f"No built {platform_name} template binary found in {bin_dir} (patterns={patterns})")
+    existing = sorted(p.name for p in bin_dir.iterdir()) if bin_dir.is_dir() else []
+    raise FileNotFoundError(
+        f"No built {platform_name} template binary found in {bin_dir} (patterns={patterns}, existing={existing})"
+    )
 
 
 def inject_ios_static_lib(base_ios_zip: Path, custom_lib_a: Path, out_ios_zip: Path) -> int:

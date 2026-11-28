@@ -785,6 +785,12 @@ class MobileToolsTest(unittest.TestCase):
             and_bin.write_bytes(b"apk")
             self.assertEqual(builder.find_built_binary(bin_dir, "android"), and_bin)
 
+            and_mono_bin = bin_dir / "android_monoRelease.apk"
+            and_mono_bin.write_bytes(b"mono-apk")
+            self.assertEqual(builder.find_built_binary(bin_dir, "android"), and_mono_bin)
+            and_bin.unlink()
+            self.assertEqual(builder.find_built_binary(bin_dir, "android"), and_mono_bin)
+
             ios_bin = bin_dir / "libgodot.ios.template_release.arm64.a"
             ios_bin.write_bytes(b"NEW_ARM64_ARCHIVE")
             self.assertEqual(builder.find_built_binary(bin_dir, "ios"), ios_bin)
