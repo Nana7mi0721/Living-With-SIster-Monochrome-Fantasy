@@ -580,45 +580,7 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 			return false
 		if _touch_session.phase == TouchSession.Phase.TRACKING:
 			if _touch_session.max_fingers == 1 and _touch_session.peak_dist < TOUCH_TAP_MAX_DIST:
-				var is_det_blank: bool = mobile_double_tap_cancel_enabled and blank_space_predicate.is_valid() and bool(blank_space_predicate.call(clamped))
-				if is_det_blank:
-					if _last_blank_tap_ms >= 0 and not _last_blank_tap_empirical and (now_ms - _last_blank_tap_ms) <= TOUCH_DOUBLE_TAP_MAX_MS and clamped.distance_to(_last_blank_tap_pos) <= TOUCH_DOUBLE_TAP_MAX_DIST:
-						reset_double_tap_state()
-						hover_position = clamped
-						mouse_seen = true
-						trigger_cancel_pulse("touch")
-					else:
-						_last_blank_tap_ms = now_ms
-						_last_blank_tap_pos = clamped
-						_last_blank_tap_empirical = false
-						_click_latch = false
-						_touch_ok_ttl = 0
-						hover_position = clamped
-						mouse_seen = true
-						last_input_source = "touch"
-				elif mobile_double_tap_cancel_enabled and _last_blank_tap_ms >= 0 and _last_blank_tap_empirical and (now_ms - _last_blank_tap_ms) <= TOUCH_DOUBLE_TAP_MAX_MS and clamped.distance_to(_last_blank_tap_pos) <= TOUCH_DOUBLE_TAP_MAX_DIST and empirical_blank_verifier.is_valid() and bool(empirical_blank_verifier.call(clamped)):
-					reset_double_tap_state()
-					hover_position = clamped
-					mouse_seen = true
-					trigger_cancel_pulse("touch")
-				else:
-					reset_double_tap_state()
-					hover_position = clamped
-					mouse_seen = true
-					last_input_source = "touch"
-					# Two-step battle touch: tapping outside active skill buttons moves hover only.
-					if touch_tap_hover_only_predicate.is_valid() and bool(touch_tap_hover_only_predicate.call(clamped)):
-						return true
-					var arm_empirical := false
-					if mobile_double_tap_cancel_enabled and touch_action_tap_recorder.is_valid():
-						arm_empirical = bool(touch_action_tap_recorder.call(clamped))
-					if arm_empirical:
-						_last_blank_tap_ms = now_ms
-						_last_blank_tap_pos = clamped
-						_last_blank_tap_empirical = true
-					_click_latch = true
-					_touch_ok_ttl = TOUCH_PULSE_TTL_FRAMES
-					action_pressed.emit()
+				_dispatch_single_finger_tap(clamped, now_ms)
 			elif _touch_session.max_fingers == 2 and _touch_session.peak_dist < TOUCH_TWO_FINGER_MAX_DIST:
 				reset_double_tap_state()
 				last_input_source = "touch"
@@ -631,6 +593,49 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 			reset_double_tap_state()
 		clear_touch_state()
 	return true
+
+
+func _dispatch_single_finger_tap(clamped: Vector2, now_ms: int) -> void:
+	var is_det_blank: bool = mobile_double_tap_cancel_enabled and blank_space_predicate.is_valid() and bool(blank_space_predicate.call(clamped))
+	if is_det_blank:
+		if _last_blank_tap_ms >= 0 and not _last_blank_tap_empirical and (now_ms - _last_blank_tap_ms) <= TOUCH_DOUBLE_TAP_MAX_MS and clamped.distance_to(_last_blank_tap_pos) <= TOUCH_DOUBLE_TAP_MAX_DIST:
+			reset_double_tap_state()
+			hover_position = clamped
+			mouse_seen = true
+			trigger_cancel_pulse("touch")
+		else:
+			_last_blank_tap_ms = now_ms
+			_last_blank_tap_pos = clamped
+			_last_blank_tap_empirical = false
+			_click_latch = false
+			_touch_ok_ttl = 0
+			hover_position = clamped
+			mouse_seen = true
+			last_input_source = "touch"
+		return
+	if mobile_double_tap_cancel_enabled and _last_blank_tap_ms >= 0 and _last_blank_tap_empirical and (now_ms - _last_blank_tap_ms) <= TOUCH_DOUBLE_TAP_MAX_MS and clamped.distance_to(_last_blank_tap_pos) <= TOUCH_DOUBLE_TAP_MAX_DIST and empirical_blank_verifier.is_valid() and bool(empirical_blank_verifier.call(clamped)):
+		reset_double_tap_state()
+		hover_position = clamped
+		mouse_seen = true
+		trigger_cancel_pulse("touch")
+		return
+	reset_double_tap_state()
+	hover_position = clamped
+	mouse_seen = true
+	last_input_source = "touch"
+	# Two-step battle touch: tapping outside active skill buttons moves hover only.
+	if touch_tap_hover_only_predicate.is_valid() and bool(touch_tap_hover_only_predicate.call(clamped)):
+		return
+	var arm_empirical := false
+	if mobile_double_tap_cancel_enabled and touch_action_tap_recorder.is_valid():
+		arm_empirical = bool(touch_action_tap_recorder.call(clamped))
+	if arm_empirical:
+		_last_blank_tap_ms = now_ms
+		_last_blank_tap_pos = clamped
+		_last_blank_tap_empirical = true
+	_click_latch = true
+	_touch_ok_ttl = TOUCH_PULSE_TTL_FRAMES
+	action_pressed.emit()
 
 
 func _handle_screen_drag(sd: InputEventScreenDrag) -> bool:

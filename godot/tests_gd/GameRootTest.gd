@@ -1006,16 +1006,33 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	root.phase = "bootstrap"
 	if root.handle_back_request() != "bootstrap_ignored":
 		failures.append("back request during bootstrap must be ignored")
+	root.phase = "setup"
+	if root.handle_back_request() != "setup_ignored":
+		failures.append("back request during setup must be ignored")
 	root.phase = "title"
 	if root.handle_back_request() != "title_quit_confirm" or not root.overlays.quit_confirm_open():
 		failures.append("back request on top-level title must open QuitConfirm")
 	if root.handle_back_request() != "modal_closed" or root.overlays.quit_confirm_open():
 		failures.append("back request with modal open must close QuitConfirm")
 	root.phase = "bedroom"
+	root.vm.ApplyInputPermission(0x202)
 	root.choice.open(PackedStringArray(["A", "B"]), Vector2(-1, -1), true, 0)
+	if root.handle_back_request() != "choice_cancel_blocked":
+		failures.append("back request with open choice submenu must respect BasicAllDeny bit 2")
+	root.vm.ApplyInputPermission(0x002)
 	if root.handle_back_request() != "submenu_cancel":
 		failures.append("back request with open choice submenu must inject submenu_cancel")
 	root.choice.close()
+	root.vm.StartEvent(131)
+	root.stage.draw_picture(12050, 0, "SystemFile/WindowBase.png", "", [0, 1, 1, 1, 255, 512, 230, 100, 0], 1, 0)
+	root.vm.ApplyInputPermission(0x202)
+	if root.handle_back_request() != "save_ui_cancel_blocked":
+		failures.append("back request inside Save UI must respect BasicAllDeny bit 2")
+	root.vm.ApplyInputPermission(0x002)
+	if root.handle_back_request() != "submenu_cancel":
+		failures.append("back request inside Save UI must inject submenu_cancel when allowed")
+	root.vm.StopAll()
+	root.stage.clear_pictures()
 	root._transition_frames = 5
 	if root.can_open_quick_ui():
 		failures.append("can_open_quick_ui must block quick UI during active transitions")
@@ -1049,11 +1066,18 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	if root._window_focused:
 		failures.append("FOCUS_OUT must mark _window_focused=false")
 	root._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
-	if not root._window_focused:
-		failures.append("APPLICATION_RESUMED must restore _window_focused=true")
+	if not root._window_focused or root._app_paused or not root.modal_release_guard():
+		failures.append("APPLICATION_RESUMED must clear _app_paused, restore _window_focused, and arm modal_release_guard")
 	root._notification(Node.NOTIFICATION_APPLICATION_PAUSED)
-	if root.modal_release_guard() or root._window_focused:
-		failures.append("APPLICATION_PAUSED must clear held latches cleanly")
+	if root.modal_release_guard() or root._window_focused or not root._app_paused:
+		failures.append("APPLICATION_PAUSED must set _app_paused and clear held latches cleanly")
+	var paused_frames_before: int = root.frames
+	var paused_acc_before: float = root._accumulator
+	root._process(root.STEP * 2.0)
+	if root.frames != paused_frames_before or root._accumulator != paused_acc_before:
+		failures.append("APPLICATION_PAUSED must freeze VM step and _accumulator during _process")
+	root._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+	root._modal_release_guard = false
 
 	# Lifecycle notifications drive AssetDB background trim and OS memory-warning eviction.
 	var prev_policy: AssetDB.MemoryPolicy = root.assets.memory_policy
@@ -1076,6 +1100,8 @@ func _test_ux_and_multiplatform(script, failures: Array[String]) -> void:
 	if not lifecycle_diag.contains("[AssetDB] used_bytes=0 budget_bytes=8192") or not lifecycle_diag.contains("background_trims=%d" % root.assets.background_trims):
 		failures.append("diagnostic snapshot [AssetDB] must report live memory_stats after lifecycle trims")
 	root.assets.set_memory_policy(prev_policy)
+	root._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+	root._modal_release_guard = false
 
 	# R-P1-1: failed SaveGameToSlot must not overwrite existing slot thumbnail.
 	var fail_thumb_path: String = root.session.SaveDirectory.path_join("save98.jpg")
@@ -1939,6 +1965,59 @@ func _test_ci_and_ux_fixes_regression(script, failures: Array[String]) -> void:
 	root.vm.SetVar(340, 0)
 	if root.is_battle_touch_hover_only(Vector2(200, 305)):
 		failures.append("non-battle state must never activate battle hover-only gate")
+
+	# 3. Hotkeys version upgrade: legacy hotkeys.cfg lacking version=2 falls back to DEFAULT_HOTKEYS and upgrades.
+	var hk_meta: Dictionary = {}
+	script.parse_hotkeys_text("version=2\nbacklog=F9\n", script.DEFAULT_HOTKEYS, hk_meta)
+	if int(hk_meta.get("version", 0)) != 2:
+		failures.append("parse_hotkeys_text must extract version into out_meta")
+	var test_hk_path := "user://test_legacy_hotkeys_upgrade.cfg"
+	var hk_f := FileAccess.open(test_hk_path, FileAccess.WRITE)
+	if hk_f != null:
+		hk_f.store_string("backlog=F4\nquick_save=F5\n")
+		hk_f.close()
+	root._prefs.load_hotkeys(test_hk_path)
+	if int(root._hotkeys.get("backlog", KEY_NONE)) != KEY_F9 or int(root._hotkeys.get("window_size", KEY_NONE)) != KEY_F4:
+		failures.append("legacy user hotkeys without version=2 must fall back to DEFAULT_HOTKEYS (got %s)" % str(root._hotkeys))
+	var upgraded_hk := FileAccess.get_file_as_string(test_hk_path)
+	if not upgraded_hk.begins_with("version=2\n"):
+		failures.append("legacy user hotkeys must be overwritten with version=2")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(test_hk_path))
+
+	# 4. PlayOverlays safe-area layout for backlog/F2/F3 HUD + closed-transfer guard.
+	root.overlays.open_backlog()
+	root.overlays.toggle_stats(root.vm)
+	root.overlays.toggle_debug()
+	root.overlays.apply_safe_area({"left": 24.0, "top": 20.0, "right": 16.0, "bottom": 12.0})
+	if root.overlays._backlog_panel == null or absf(root.overlays._backlog_panel.offset_left - 84.0) > 0.1 or absf(root.overlays._backlog_panel.offset_top - 60.0) > 0.1:
+		failures.append("apply_safe_area must inset _backlog_panel")
+	if root.overlays._stats_root.position.x < 39.9 or root.overlays._debug_root.position.y < 35.9:
+		failures.append("apply_safe_area must inset F2/F3 HUD overlays")
+	root.overlays.close_backlog()
+	root.overlays.close_stats()
+	root.overlays.close_debug()
+	root._modal_release_guard = false
+	root.overlays._file_dialog_mode = "export_zip"
+	root.overlays._transfer_open = false
+	root.overlays._on_transfer_file_selected("user://should_not_run.zip")
+	if FileAccess.file_exists("user://should_not_run.zip"):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://should_not_run.zip"))
+		failures.append("_on_transfer_file_selected must ignore callbacks when _transfer_open is false")
+
+	# 5. 15 FPS tier must catch up 4 steps per 15fps delta (60Hz logic parity, no 0.5x slow-motion).
+	root.phase = "bedroom"
+	root.faulted = false
+	root._app_paused = false
+	root._accumulator = 0.0
+	while root.target_fps() != 15:
+		root.cycle_performance_tier()
+	var fps15_frames_before: int = root.frames
+	root._process(root.STEP * 4.0)
+	if root.frames - fps15_frames_before != 4:
+		failures.append("15 FPS tier must run 4 VM steps per 15fps delta for 60Hz parity (ran %d)" % [root.frames - fps15_frames_before])
+	while root.target_fps() != 60:
+		root.cycle_performance_tier()
+
 	root.queue_free()
 
 

@@ -9,6 +9,7 @@ extends Control
 signal completed(ok: bool)
 
 const _BootSplashOverlayScript = preload("res://presentation_gd/BootSplashOverlay.gd")
+const _SaveTransferArchiveScript = preload("res://presentation_gd/SaveTransferArchive.gd")
 
 const SOURCE_ROOT := "res://mobile_data"
 const TARGET_ROOT := "user://mobile_data"
@@ -35,6 +36,7 @@ var _worker_ok := false
 var _worker_error := ""
 
 var _splash_stage: Control
+var _splash_dual: Control
 var _splash_base_rect: TextureRect
 var _splash_reveal_clip: Control
 var _splash_progress_rect: TextureRect
@@ -208,39 +210,53 @@ func _build_ui() -> void:
 	root_column.add_theme_constant_override("separation", 18)
 	center.add_child(root_column)
 
-	_splash_stage = Control.new()
-	_splash_stage.custom_minimum_size = Vector2(384, 216)
-	_splash_stage.size = Vector2(384, 216)
-	_splash_stage.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_splash_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root_column.add_child(_splash_stage)
+	var boot_script: Script = _BootSplashOverlayScript as Script
+	var dual_cls: Variant = boot_script.get_script_constant_map().get("DualLogoReveal", null) if boot_script != null else null
+	if dual_cls != null:
+		_splash_dual = dual_cls.new()
+		_splash_dual.custom_minimum_size = Vector2(384, 216)
+		_splash_dual.size = Vector2(384, 216)
+		_splash_dual.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		_splash_dual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_splash_stage = _splash_dual
+		root_column.add_child(_splash_dual)
+		_splash_dual.resized.connect(_sync_splash_reveal)
+		_load_splash_textures()
+		_sync_splash_reveal()
+	else:
+		_splash_stage = Control.new()
+		_splash_stage.custom_minimum_size = Vector2(384, 216)
+		_splash_stage.size = Vector2(384, 216)
+		_splash_stage.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		_splash_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root_column.add_child(_splash_stage)
 
-	_splash_base_rect = TextureRect.new()
-	_splash_base_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_splash_base_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_splash_base_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_splash_base_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_splash_stage.add_child(_splash_base_rect)
+		_splash_base_rect = TextureRect.new()
+		_splash_base_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_splash_base_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_splash_base_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_splash_base_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_splash_stage.add_child(_splash_base_rect)
 
-	_splash_reveal_clip = Control.new()
-	_splash_reveal_clip.clip_contents = true
-	_splash_reveal_clip.position = Vector2.ZERO
-	_splash_reveal_clip.size = Vector2(0.0, 216.0)
-	_splash_reveal_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_splash_stage.add_child(_splash_reveal_clip)
+		_splash_reveal_clip = Control.new()
+		_splash_reveal_clip.clip_contents = true
+		_splash_reveal_clip.position = Vector2.ZERO
+		_splash_reveal_clip.size = Vector2(0.0, 216.0)
+		_splash_reveal_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_splash_stage.add_child(_splash_reveal_clip)
 
-	_splash_progress_rect = TextureRect.new()
-	_splash_progress_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_splash_progress_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_splash_progress_rect.position = Vector2.ZERO
-	_splash_progress_rect.size = Vector2(384.0, 216.0)
-	_splash_progress_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_splash_reveal_clip.add_child(_splash_progress_rect)
+		_splash_progress_rect = TextureRect.new()
+		_splash_progress_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_splash_progress_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_splash_progress_rect.position = Vector2.ZERO
+		_splash_progress_rect.size = Vector2(384.0, 216.0)
+		_splash_progress_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_splash_reveal_clip.add_child(_splash_progress_rect)
 
-	_splash_stage.resized.connect(_sync_splash_reveal)
-	_load_splash_textures()
-	_splash_stage.visible = _splash_base_rect.texture != null
-	_sync_splash_reveal()
+		_splash_stage.resized.connect(_sync_splash_reveal)
+		_load_splash_textures()
+		_splash_stage.visible = _splash_base_rect.texture != null
+		_sync_splash_reveal()
 
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(720, 0)
@@ -505,6 +521,10 @@ func _load_splash_textures() -> void:
 	var pair: Dictionary = _BootSplashOverlayScript.load_logo_pair(null)
 	var base_tex: Texture2D = pair.get("base", null)
 	var prog_tex: Texture2D = pair.get("progress", null)
+	if _splash_dual != null:
+		_splash_dual.call("set_textures", base_tex, prog_tex)
+		_splash_dual.visible = base_tex != null
+		return
 	if _splash_base_rect != null:
 		_splash_base_rect.texture = base_tex
 	if _splash_progress_rect != null:
@@ -514,6 +534,10 @@ func _load_splash_textures() -> void:
 
 
 func _sync_splash_reveal() -> void:
+	if _splash_dual != null:
+		_splash_dual.call("set_reveal_progress", clampf(_splash_display_progress, 0.0, 1.0))
+		_splash_dual.call("sync_geometry", _splash_dual.custom_minimum_size)
+		return
 	if _splash_stage == null:
 		return
 	var stage_size := _splash_stage.size
@@ -632,31 +656,11 @@ static func _prune_dir(abs_dir: String, rel_prefix: String, keep: Dictionary) ->
 
 
 static func _write_text_atomic(target_path: String, content: String) -> bool:
-	var target_abs := ProjectSettings.globalize_path(target_path) if target_path.contains("://") else target_path
-	return _write_text_atomic_abs(target_abs, content)
+	return _SaveTransferArchiveScript.write_text_atomic(target_path, content)
 
 
 static func _write_text_atomic_abs(target_abs: String, content: String) -> bool:
-	var dir_err := DirAccess.make_dir_recursive_absolute(target_abs.get_base_dir())
-	if dir_err != OK:
-		return false
-	var part_abs := target_abs + ".part"
-	if FileAccess.file_exists(part_abs):
-		DirAccess.remove_absolute(part_abs)
-	var file := FileAccess.open(part_abs, FileAccess.WRITE)
-	if file == null:
-		return false
-	var wrote := file.store_string(content) and file.get_error() == OK
-	file.close()
-	if not wrote:
-		DirAccess.remove_absolute(part_abs)
-		return false
-	if FileAccess.file_exists(target_abs):
-		DirAccess.remove_absolute(target_abs)
-	if DirAccess.rename_absolute(part_abs, target_abs) != OK:
-		DirAccess.remove_absolute(part_abs)
-		return false
-	return true
+	return _SaveTransferArchiveScript.write_text_atomic(target_abs, content)
 
 
 func _fail(message: String) -> void:

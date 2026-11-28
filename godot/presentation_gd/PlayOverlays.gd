@@ -23,13 +23,15 @@ signal save_page_return_title_requested
 signal save_page_transfer_requested
 signal drawer_action_requested(action: String)
 
+const _SaveTransferArchive := preload("res://presentation_gd/SaveTransferArchive.gd")
+
 const BACKLOG_LIMIT := 200
 const BACKLOG_LINE_STEP := 24
 const MILESTONE_VARS := [40, 42, 44, 53, 503, 531, 550]
-const SAVE_ARCHIVE_MAX_BYTES := 256 * 1024 * 1024
-const SAVE_ARCHIVE_MAX_ENTRIES := 256
-const SAVE_ARCHIVE_MAX_ENTRY_BYTES := 32 * 1024 * 1024
-const URI_COPY_CHUNK_BYTES := 1024 * 1024
+const SAVE_ARCHIVE_MAX_BYTES := SaveTransferArchive.SAVE_ARCHIVE_MAX_BYTES
+const SAVE_ARCHIVE_MAX_ENTRIES := SaveTransferArchive.SAVE_ARCHIVE_MAX_ENTRIES
+const SAVE_ARCHIVE_MAX_ENTRY_BYTES := SaveTransferArchive.SAVE_ARCHIVE_MAX_ENTRY_BYTES
+const URI_COPY_CHUNK_BYTES := SaveTransferArchive.URI_COPY_CHUNK_BYTES
 
 var _toast_label: Label
 var _toast_until := 0
@@ -37,6 +39,7 @@ var _safe_insets := {"left": 0.0, "top": 0.0, "right": 0.0, "bottom": 0.0}
 
 var _backlog: Array[String] = []
 var _backlog_root: Control
+var _backlog_panel: PanelContainer
 var _backlog_header: Label
 var _backlog_label: Label
 var _backlog_scroll: ScrollContainer
@@ -67,6 +70,7 @@ var _quit_confirm_open := false
 var _save_bar_root: PanelContainer
 var _save_bar_button: Button
 var _save_bar_in_title := false
+var _save_bar_last_sig := ""
 
 var _transfer_root: Control
 var _transfer_status: Label
@@ -95,6 +99,7 @@ var _drawer_quickload_btn: Button
 var _drawer_open := false
 var _touch_ui_enabled := false
 var _drawer_tab_context := "hidden"
+var _drawer_last_sig := ""
 
 var _fault_root: Control
 var _fault_reason: Label
@@ -159,36 +164,11 @@ func tick_toast() -> void:
 # ---- F9 Backlog ----------------------------------------------------------
 
 func _build_backlog_overlay() -> void:
-	_backlog_root = Control.new()
-	_backlog_root.name = "MessageBacklog"
-	_backlog_root.z_index = 120
-	_backlog_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	_backlog_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_backlog_root.visible = false
-	add_child(_backlog_root)
-
-	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.0, 0.0, 0.78)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_backlog_root.add_child(dim)
-
-	var panel := PanelContainer.new()
-	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	panel.offset_left = 60.0
-	panel.offset_top = 40.0
-	panel.offset_right = -60.0
-	panel.offset_bottom = -40.0
-	_backlog_root.add_child(panel)
-
-	var margin := MarginContainer.new()
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 14)
-	panel.add_child(margin)
-
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 8)
-	margin.add_child(column)
+	var shell := _create_modal_shell("MessageBacklog", 120, 0.78, Vector2.ZERO, false, [14, 14, 14, 14], 8, [60, 40, 60, 40])
+	_backlog_root = shell["root"]
+	_backlog_panel = shell["panel"]
+	var column: VBoxContainer = shell["column"]
+	_layout_backlog_overlay()
 
 	var header := Label.new()
 	_backlog_header = header
@@ -331,39 +311,9 @@ func _input(event: InputEvent) -> void:
 # ---- F12 Return-to-Title Confirm -----------------------------------------
 
 func _build_title_confirm() -> void:
-	_title_confirm_root = Control.new()
-	_title_confirm_root.name = "ReturnToTitleConfirm"
-	_title_confirm_root.z_index = 130
-	_title_confirm_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	_title_confirm_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_title_confirm_root.visible = false
-	add_child(_title_confirm_root)
-
-	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.0, 0.0, 0.72)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_title_confirm_root.add_child(dim)
-
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -280.0
-	panel.offset_right = 280.0
-	panel.offset_top = -120.0
-	panel.offset_bottom = 120.0
-	panel.add_theme_stylebox_override("panel", _make_modal_card_style())
-	_title_confirm_root.add_child(panel)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_top", 24)
-	margin.add_theme_constant_override("margin_bottom", 24)
-	panel.add_child(margin)
-
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 14)
-	margin.add_child(column)
+	var shell := _create_modal_shell("ReturnToTitleConfirm", 130, 0.72, Vector2(280.0, 120.0), true, [28, 24, 28, 24], 14)
+	_title_confirm_root = shell["root"]
+	var column: VBoxContainer = shell["column"]
 
 	var title := Label.new()
 	title.text = "返回标题？"
@@ -531,8 +481,30 @@ func apply_safe_area(insets: Dictionary) -> void:
 	}
 	if _toast_label != null:
 		_toast_label.position.y = 64.0 + _safe_insets["top"] * 0.5
+	_layout_backlog_overlay()
+	_layout_hud_overlays()
 	_layout_save_page_bar()
 	_layout_drawer()
+
+
+func _layout_backlog_overlay() -> void:
+	if _backlog_panel == null:
+		return
+	_backlog_panel.offset_left = 60.0 + float(_safe_insets.get("left", 0.0))
+	_backlog_panel.offset_top = 40.0 + float(_safe_insets.get("top", 0.0))
+	_backlog_panel.offset_right = -60.0 - float(_safe_insets.get("right", 0.0))
+	_backlog_panel.offset_bottom = -40.0 - float(_safe_insets.get("bottom", 0.0))
+
+
+func _layout_hud_overlays() -> void:
+	var left_inset := float(_safe_insets.get("left", 0.0))
+	var top_inset := float(_safe_insets.get("top", 0.0))
+	var right_inset := float(_safe_insets.get("right", 0.0))
+	if _stats_root != null:
+		_stats_root.position = Vector2(16.0 + left_inset, 16.0 + top_inset)
+	if _debug_root != null:
+		var debug_w := maxf(328.0, _debug_root.size.x)
+		_debug_root.position = Vector2(1024.0 - 16.0 - right_inset - debug_w, 16.0 + top_inset)
 
 
 # ---- Fatal Fault Modal -------------------------------------------------
@@ -543,35 +515,10 @@ func _build_fault_modal(has_save: bool) -> void:
 		if _fault_recover_button != null:
 			_fault_recover_button.disabled = not has_save
 		return
-	_fault_root = Control.new()
-	_fault_root.name = "FaultModal"
-	_fault_root.z_index = 100
-	_fault_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	_fault_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(_fault_root)
-
-	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.0, 0.0, 0.72)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_fault_root.add_child(dim)
-
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -280.0
-	panel.offset_right = 280.0
-	panel.offset_top = -130.0
-	panel.offset_bottom = 130.0
-	_fault_root.add_child(panel)
-
-	var margin := MarginContainer.new()
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 16)
-	panel.add_child(margin)
-
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 10)
-	margin.add_child(column)
+	var shell := _create_modal_shell("FaultModal", 100, 0.72, Vector2(280.0, 130.0), false, [16, 16, 16, 16], 10)
+	_fault_root = shell["root"]
+	_fault_root.visible = true
+	var column: VBoxContainer = shell["column"]
 
 	var title := Label.new()
 	title.text = "运行错误：未实现的指令（Faulted）"
@@ -677,6 +624,7 @@ func _build_stats_overlay() -> void:
 	_stats_root.position = Vector2(16, 16)
 	_stats_root.visible = false
 	add_child(_stats_root)
+	_layout_hud_overlays()
 
 	var margin := MarginContainer.new()
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -742,6 +690,7 @@ func _build_debug_overlay() -> void:
 	_debug_root.custom_minimum_size = Vector2(328, 0)
 	_debug_root.visible = false
 	add_child(_debug_root)
+	_layout_hud_overlays()
 
 	var margin := MarginContainer.new()
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -839,42 +788,66 @@ static func _style_modal_button(btn: Button, boxes: Dictionary, min_size: Vector
 	btn.add_theme_stylebox_override("focus", boxes["focus"])
 
 
-func _build_save_confirm() -> void:
-	if _save_confirm_root != null:
-		return
-	_save_confirm_root = Control.new()
-	_save_confirm_root.name = "SaveOverwriteConfirm"
-	_save_confirm_root.z_index = 135
-	_save_confirm_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	_save_confirm_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_save_confirm_root.visible = false
-	add_child(_save_confirm_root)
+func _create_modal_shell(
+		modal_name: String,
+		z_idx: int,
+		dim_alpha: float,
+		panel_half_size: Vector2,
+		use_card_style: bool,
+		margins: Array[int],
+		separation: int,
+		full_rect_margins: Array[int] = []
+	) -> Dictionary:
+	var root := Control.new()
+	root.name = modal_name
+	root.z_index = z_idx
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.visible = false
+	add_child(root)
 
 	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.0, 0.0, 0.72)
+	dim.color = Color(0.0, 0.0, 0.0, dim_alpha)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_save_confirm_root.add_child(dim)
+	root.add_child(dim)
 
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -280.0
-	panel.offset_right = 280.0
-	panel.offset_top = -120.0
-	panel.offset_bottom = 120.0
-	panel.add_theme_stylebox_override("panel", _make_modal_card_style())
-	_save_confirm_root.add_child(panel)
+	if full_rect_margins.size() == 4:
+		panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		panel.offset_left = float(full_rect_margins[0])
+		panel.offset_top = float(full_rect_margins[1])
+		panel.offset_right = -float(full_rect_margins[2])
+		panel.offset_bottom = -float(full_rect_margins[3])
+	else:
+		panel.set_anchors_preset(Control.PRESET_CENTER)
+		panel.offset_left = -panel_half_size.x
+		panel.offset_right = panel_half_size.x
+		panel.offset_top = -panel_half_size.y
+		panel.offset_bottom = panel_half_size.y
+	if use_card_style:
+		panel.add_theme_stylebox_override("panel", _make_modal_card_style())
+	root.add_child(panel)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_top", 24)
-	margin.add_theme_constant_override("margin_bottom", 24)
+	margin.add_theme_constant_override("margin_left", margins[0])
+	margin.add_theme_constant_override("margin_top", margins[1])
+	margin.add_theme_constant_override("margin_right", margins[2])
+	margin.add_theme_constant_override("margin_bottom", margins[3])
 	panel.add_child(margin)
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 14)
+	column.add_theme_constant_override("separation", separation)
 	margin.add_child(column)
+	return {"root": root, "panel": panel, "column": column}
+
+
+func _build_save_confirm() -> void:
+	if _save_confirm_root != null:
+		return
+	var shell := _create_modal_shell("SaveOverwriteConfirm", 135, 0.72, Vector2(280.0, 120.0), true, [28, 24, 28, 24], 14)
+	_save_confirm_root = shell["root"]
+	var column: VBoxContainer = shell["column"]
 
 	_save_confirm_title = Label.new()
 	_save_confirm_title.text = "存档槽 1"
@@ -999,36 +972,9 @@ func save_confirm_mode_state() -> Dictionary:
 func _build_quit_confirm() -> void:
 	if _quit_confirm_root != null:
 		return
-	_quit_confirm_root = Control.new()
-	_quit_confirm_root.name = "QuitConfirm"
-	_quit_confirm_root.z_index = 135
-	_quit_confirm_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	_quit_confirm_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_quit_confirm_root.visible = false
-	add_child(_quit_confirm_root)
-
-	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.0, 0.0, 0.72)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_quit_confirm_root.add_child(dim)
-
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -220.0
-	panel.offset_right = 220.0
-	panel.offset_top = -84.0
-	panel.offset_bottom = 84.0
-	_quit_confirm_root.add_child(panel)
-
-	var margin := MarginContainer.new()
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 16)
-	panel.add_child(margin)
-
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 12)
-	margin.add_child(column)
+	var shell := _create_modal_shell("QuitConfirm", 135, 0.72, Vector2(220.0, 84.0), false, [16, 16, 16, 16], 12)
+	_quit_confirm_root = shell["root"]
+	var column: VBoxContainer = shell["column"]
 
 	var title := Label.new()
 	title.text = "退出游戏？"
@@ -1130,6 +1076,10 @@ func update_save_page_bar(visible_flag: bool, in_title: bool) -> void:
 	if not visible_flag and _save_bar_root == null:
 		return
 	_build_save_page_bar()
+	var sig := "%s:%s" % [str(visible_flag), str(in_title)]
+	if sig == _save_bar_last_sig:
+		return
+	_save_bar_last_sig = sig
 	_save_bar_in_title = in_title
 	if _save_bar_button != null:
 		_save_bar_button.text = "导入 / 导出存档" if in_title else "回到标题"
@@ -1256,6 +1206,7 @@ func _emit_drawer_action(action: String) -> void:
 
 func set_touch_ui_enabled(enabled: bool) -> void:
 	_touch_ui_enabled = enabled
+	_drawer_last_sig = ""
 	if enabled and _drawer_root == null:
 		_build_drawer()
 	_sync_touch_hint_labels()
@@ -1270,6 +1221,13 @@ func update_drawer_state(in_title: bool, can_quick: bool, perf_label: String, sc
 		_drawer_tab_context = ctx if ctx in ["title", "save"] else "hidden"
 	if _drawer_root == null:
 		return
+	var sig := "%s|%s|%s|%s|%s|%s|%s|%s" % [
+		str(in_title), str(can_quick), perf_label, scale_label,
+		_drawer_tab_context, str(_touch_ui_enabled), str(_drawer_open), str(is_modal_open()),
+	]
+	if sig == _drawer_last_sig:
+		return
+	_drawer_last_sig = sig
 	if _drawer_quicksave_btn != null:
 		_drawer_quicksave_btn.disabled = in_title or not can_quick
 	if _drawer_quickload_btn != null:
@@ -1314,430 +1272,56 @@ func toggle_drawer() -> void:
 
 # ---- Cross-Platform Save Transfer (.zip / .sav) --------------------------
 
-static func _is_safe_save_archive_path(entry_name: String) -> bool:
-	var norm := entry_name.replace("\\", "/").strip_edges()
-	if norm.is_empty() or norm.begins_with("/") or norm.ends_with("/"):
-		return false
-	if entry_name.to_utf8_buffer().has(0) or norm.contains(":"):
-		return false
-	var parts := norm.split("/", false)
-	if parts.is_empty():
-		return false
-	for part in parts:
-		if part.is_empty() or part == "." or part == "..":
-			return false
-	return true
-
-
-static func _is_ignorable_save_archive_entry(entry_name: String) -> bool:
-	if not _is_safe_save_archive_path(entry_name):
-		return false
-	var parts := entry_name.replace("\\", "/").strip_edges().split("/", false)
-	if parts[0].to_lower() == "__macosx":
-		return true
-	var file_name := parts[-1].to_lower()
-	if file_name.begins_with("._"):
-		return true
-	return file_name in [
-		"steam_autocloud.vdf",
-		"remotecache.vdf",
-		".ds_store",
-		"thumbs.db",
-		"desktop.ini",
-	]
-
-
 static func _retail_system_target_name(file_name: String) -> String:
-	match file_name.get_file().to_lower():
-		"system.sav", "system.json":
-			return "System.json"
-		"system2.sav", "system2.json":
-			return "system2.json"
-		_:
-			return ""
+	return _SaveTransferArchive.retail_system_target_name(file_name)
 
 
 static func is_valid_save_archive_entry(entry_name: String) -> bool:
-	if not _is_safe_save_archive_path(entry_name):
-		return false
-	var parts := entry_name.replace("\\", "/").strip_edges().split("/", false)
-	var file_name := parts[-1].to_lower()
-	if file_name == "quicksave.json" or not _retail_system_target_name(file_name).is_empty():
-		return true
-	if file_name.begins_with("save_") and file_name.ends_with(".json") and file_name.length() == 12:
-		var digits := file_name.substr(5, 2)
-		return digits.is_valid_int()
-	if file_name.begins_with("savedata") and file_name.ends_with(".sav") and file_name.length() == 14:
-		var sav_digits := file_name.substr(8, 2)
-		return sav_digits.is_valid_int()
-	if file_name.begins_with("save") and (file_name.ends_with(".jpg") or file_name.ends_with(".jpeg")):
-		return true
-	return false
+	return _SaveTransferArchive.is_valid_save_archive_entry(entry_name)
 
 
 static func _retail_sav_slot_from_name(file_name: String) -> int:
-	var lower := file_name.get_file().to_lower()
-	if lower.begins_with("savedata") and lower.ends_with(".sav") and lower.length() == 14:
-		var digits := lower.substr(8, 2)
-		if digits.is_valid_int():
-			return clampi(int(digits), 1, 99)
-	return -1
+	return _SaveTransferArchive.retail_sav_slot_from_name(file_name)
 
 
 static func _detect_import_kind(file_path: String) -> String:
-	var f := FileAccess.open(file_path, FileAccess.READ)
-	if f == null:
-		return "unknown"
-	var head := f.get_buffer(64)
-	f.close()
-	if head.size() >= 2 and head[0] == 0x50 and head[1] == 0x4B:
-		return "zip"
-	for b in head:
-		if b == 0x20 or b == 0x09 or b == 0x0A or b == 0x0D or b == 0xEF or b == 0xBB or b == 0xBF:
-			continue
-		if b == 0x7B: # '{'
-			return "json"
-		break
-	return "sav"
-
-
-static func _remove_dir_recursive(dir_path: String) -> void:
-	var dir := DirAccess.open(dir_path)
-	if dir == null:
-		return
-	dir.include_hidden = true
-	dir.list_dir_begin()
-	var entry := dir.get_next()
-	while entry != "":
-		if entry != "." and entry != "..":
-			var child := dir_path.path_join(entry)
-			if dir.current_is_dir():
-				_remove_dir_recursive(child)
-			else:
-				DirAccess.remove_absolute(child)
-		entry = dir.get_next()
-	dir.list_dir_end()
-	DirAccess.remove_absolute(dir_path)
+	return _SaveTransferArchive.detect_import_kind(file_path)
 
 
 static func export_retail_sav_zip(dest_zip: String, session_ctrl: Object) -> Dictionary:
-	if session_ctrl == null or not session_ctrl.has_method("ExportAllToRetailSavDir"):
-		return {"ok": false, "error": "当前会话不支持原版 .sav 导出", "count": 0, "path": ""}
-	var stage_dir := ProjectSettings.globalize_path("user://cache/retail_export_%d" % Time.get_ticks_usec())
-	var exported_count := int(session_ctrl.call("ExportAllToRetailSavDir", stage_dir, true))
-	if exported_count <= 0:
-		var err := str(session_ctrl.get("LastError"))
-		_remove_dir_recursive(stage_dir)
-		return {"ok": false, "error": err if not err.is_empty() else "当前存档目录没有可导出的槽位", "count": 0, "path": ""}
-	var zip_res := export_saves_zip(stage_dir, dest_zip)
-	_remove_dir_recursive(stage_dir)
-	return zip_res
+	return _SaveTransferArchive.export_retail_sav_zip(dest_zip, session_ctrl)
 
 
 static func _save_transfer_files(save_dir: String) -> PackedStringArray:
-	var result := PackedStringArray()
-	var dir := DirAccess.open(save_dir)
-	if dir == null:
-		return result
-	dir.list_dir_begin()
-	var entry := dir.get_next()
-	while entry != "":
-		if not dir.current_is_dir() and is_valid_save_archive_entry(entry):
-			result.append(entry)
-		entry = dir.get_next()
-	dir.list_dir_end()
-	result.sort()
-	return result
+	return _SaveTransferArchive.save_transfer_files(save_dir)
 
 
 static func _write_file_atomic(target_path: String, bytes: PackedByteArray) -> bool:
-	var dir_err := DirAccess.make_dir_recursive_absolute(target_path.get_base_dir())
-	if dir_err != OK:
-		return false
-	var tmp_path := target_path + ".tmp"
-	if FileAccess.file_exists(tmp_path):
-		DirAccess.remove_absolute(tmp_path)
-	var f := FileAccess.open(tmp_path, FileAccess.WRITE)
-	if f == null:
-		return false
-	var ok := f.store_buffer(bytes) and f.get_error() == OK
-	f.close()
-	if not ok:
-		DirAccess.remove_absolute(tmp_path)
-		return false
-	if FileAccess.file_exists(target_path):
-		DirAccess.remove_absolute(target_path)
-	if DirAccess.rename_absolute(tmp_path, target_path) != OK:
-		DirAccess.remove_absolute(tmp_path)
-		return false
-	return true
+	return _SaveTransferArchive.write_bytes_atomic(target_path, bytes)
 
 
 static func stage_uri_to_temp_file(src_path: String, temp_dir: String) -> String:
-	if src_path.is_empty():
-		return ""
-	var src := FileAccess.open(src_path, FileAccess.READ)
-	if src == null:
-		return ""
-	var total := src.get_length()
-	if total <= 0 or total > SAVE_ARCHIVE_MAX_BYTES:
-		src.close()
-		return ""
-	if DirAccess.make_dir_recursive_absolute(temp_dir) != OK:
-		src.close()
-		return ""
-	var ext := src_path.get_extension().to_lower()
-	if ext != "zip" and ext != "sav":
-		ext = "bin"
-	var dst_path := temp_dir.path_join("transfer_%d.%s" % [Time.get_ticks_usec(), ext])
-	var dst := FileAccess.open(dst_path, FileAccess.WRITE)
-	if dst == null:
-		src.close()
-		return ""
-	var remaining := total
-	while remaining > 0:
-		var take := mini(remaining, URI_COPY_CHUNK_BYTES)
-		var buf := src.get_buffer(take)
-		if buf.is_empty():
-			dst.close()
-			src.close()
-			DirAccess.remove_absolute(dst_path)
-			return ""
-		if not dst.store_buffer(buf) or dst.get_error() != OK:
-			dst.close()
-			src.close()
-			DirAccess.remove_absolute(dst_path)
-			return ""
-		remaining -= buf.size()
-	dst.close()
-	src.close()
-	return dst_path
+	return _SaveTransferArchive.stage_uri_to_temp_file(src_path, temp_dir)
 
 
 static func export_saves_zip(save_dir: String, dest_zip: String) -> Dictionary:
-	var files := _save_transfer_files(save_dir)
-	if files.is_empty():
-		return {"ok": false, "error": "当前存档目录没有可导出的存档文件", "count": 0, "path": ""}
-	if DirAccess.make_dir_recursive_absolute(dest_zip.get_base_dir()) != OK:
-		return {"ok": false, "error": "无法创建导出目录", "count": 0, "path": ""}
-	var tmp_zip := dest_zip + ".tmp"
-	if FileAccess.file_exists(tmp_zip):
-		DirAccess.remove_absolute(tmp_zip)
-	var packer := ZIPPacker.new()
-	if packer.open(tmp_zip) != OK:
-		return {"ok": false, "error": "无法创建压缩包文件", "count": 0, "path": ""}
-	var count := 0
-	for name in files:
-		var f := FileAccess.open(save_dir.path_join(name), FileAccess.READ)
-		if f == null:
-			continue
-		var data := f.get_buffer(f.get_length())
-		f.close()
-		if packer.start_file(name) == OK:
-			packer.write_file(data)
-			packer.close_file()
-			count += 1
-	packer.close()
-	if count == 0:
-		DirAccess.remove_absolute(tmp_zip)
-		return {"ok": false, "error": "未能读取任何存档内容", "count": 0, "path": ""}
-	if FileAccess.file_exists(dest_zip):
-		DirAccess.remove_absolute(dest_zip)
-	if DirAccess.rename_absolute(tmp_zip, dest_zip) != OK:
-		DirAccess.remove_absolute(tmp_zip)
-		return {"ok": false, "error": "无法写入目标导出路径", "count": 0, "path": ""}
-	return {"ok": true, "error": "", "count": count, "path": dest_zip}
+	return _SaveTransferArchive.export_saves_zip(save_dir, dest_zip)
 
 
 static func inspect_save_zip(zip_path: String, save_dir: String = "", session_ctrl: Object = null) -> Dictionary:
-	var f := FileAccess.open(zip_path, FileAccess.READ)
-	if f == null:
-		return {"ok": false, "error": "无法打开压缩包"}
-	var file_bytes := f.get_length()
-	if file_bytes < 4 or file_bytes > SAVE_ARCHIVE_MAX_BYTES:
-		f.close()
-		return {"ok": false, "error": "压缩包体积超出允许范围（上限 256 MiB）"}
-	var magic := f.get_buffer(4)
-	f.close()
-	if magic.size() < 4 or magic[0] != 0x50 or magic[1] != 0x4B:
-		return {"ok": false, "error": "无效的 ZIP 压缩包签名"}
-
-	var reader := ZIPReader.new()
-	if reader.open(zip_path) != OK:
-		return {"ok": false, "error": "无法解析 ZIP 压缩包"}
-	var entries := reader.get_files()
-	if entries.is_empty():
-		reader.close()
-		return {"ok": false, "error": "压缩包为空"}
-	if entries.size() > SAVE_ARCHIVE_MAX_ENTRIES:
-		reader.close()
-		return {"ok": false, "error": "压缩包内文件数量超过上限（256 项）"}
-
-	var valid_names := PackedStringArray()
-	var conflicts := PackedStringArray()
-	var total_uncompressed := 0
-	for entry_name in entries:
-		if entry_name.ends_with("/") or _is_ignorable_save_archive_entry(entry_name):
-			continue
-		if not is_valid_save_archive_entry(entry_name):
-			reader.close()
-			return {"ok": false, "error": "压缩包包含不支持或非法的路径：%s" % entry_name}
-		var data := reader.read_file(entry_name)
-		if data.size() > SAVE_ARCHIVE_MAX_ENTRY_BYTES:
-			reader.close()
-			return {"ok": false, "error": "单个文件超过 32 MiB 上限：%s" % entry_name}
-		total_uncompressed += data.size()
-		if total_uncompressed > SAVE_ARCHIVE_MAX_BYTES:
-			reader.close()
-			return {"ok": false, "error": "解压总大小超过 256 MiB 上限"}
-		var leaf := entry_name.replace("\\", "/").get_file()
-		var leaf_lower := leaf.to_lower()
-		if leaf_lower.ends_with(".json"):
-			var json_text := data.get_string_from_utf8()
-			if session_ctrl != null and session_ctrl.has_method("ValidateSaveJson"):
-				var err := str(session_ctrl.call("ValidateSaveJson", json_text))
-				if not err.is_empty():
-					reader.close()
-					return {"ok": false, "error": "%s 校验失败：%s" % [leaf, err]}
-			elif not (JSON.parse_string(json_text) is Dictionary):
-				reader.close()
-				return {"ok": false, "error": "%s 不是有效 JSON" % leaf}
-		elif leaf_lower.ends_with(".sav"):
-			if data.size() <= 0x14:
-				reader.close()
-				return {"ok": false, "error": "%s 体积过小，不是有效的原版存档" % leaf}
-			if session_ctrl != null and session_ctrl.has_method("ValidateRetailSave"):
-				var tmp_sav := ProjectSettings.globalize_path("user://cache/inspect_%d.sav" % Time.get_ticks_usec())
-				if _write_file_atomic(tmp_sav, data):
-					var sav_err := str(session_ctrl.call("ValidateRetailSave", tmp_sav))
-					DirAccess.remove_absolute(tmp_sav)
-					if not sav_err.is_empty():
-						reader.close()
-						return {"ok": false, "error": "%s 校验失败：%s" % [leaf, sav_err]}
-		valid_names.append(leaf)
-		var conflict_target := leaf
-		var sys_target := _retail_system_target_name(leaf_lower)
-		if not sys_target.is_empty():
-			conflict_target = sys_target
-		elif leaf_lower.ends_with(".sav"):
-			var sav_slot := _retail_sav_slot_from_name(leaf_lower)
-			if sav_slot > 0:
-				conflict_target = "save_%02d.json" % sav_slot
-		if not save_dir.is_empty() and FileAccess.file_exists(save_dir.path_join(conflict_target)):
-			conflicts.append(conflict_target)
-	reader.close()
-	if valid_names.is_empty():
-		return {"ok": false, "error": "压缩包内未找到有效存档文件"}
-	return {"ok": true, "error": "", "files": valid_names, "conflicts": conflicts}
+	return _SaveTransferArchive.inspect_save_zip(zip_path, save_dir, session_ctrl)
 
 
 static func apply_save_zip(zip_path: String, save_dir: String, backup_dir: String, session_ctrl: Object = null) -> Dictionary:
-	var check := inspect_save_zip(zip_path, save_dir, session_ctrl)
-	if not bool(check.get("ok", false)):
-		return check
-	var backup_path := ""
-	if not _save_transfer_files(save_dir).is_empty() and not backup_dir.is_empty():
-		var bak_target := backup_dir.path_join("pre_import_backup_%d.zip" % int(Time.get_unix_time_from_system()))
-		var bak_res := export_saves_zip(save_dir, bak_target)
-		if bool(bak_res.get("ok", false)):
-			backup_path = str(bak_res.get("path", ""))
-
-	var reader := ZIPReader.new()
-	if reader.open(zip_path) != OK:
-		return {"ok": false, "error": "无法重开 ZIP 压缩包"}
-	# Import save slots & thumbnails first, then System.sav/system2.sav last so authoritative
-	# retail system variables (NG+ var550, clear unlocks) are never overwritten by slot syncs.
-	var regular_entries: Array[String] = []
-	var system_entries: Array[String] = []
-	for entry_name in reader.get_files():
-		if entry_name.ends_with("/") or _is_ignorable_save_archive_entry(entry_name) or not is_valid_save_archive_entry(entry_name):
-			continue
-		var leaf_lower := entry_name.replace("\\", "/").get_file().to_lower()
-		if not _retail_system_target_name(leaf_lower).is_empty():
-			system_entries.append(entry_name)
-		else:
-			regular_entries.append(entry_name)
-	var ordered_entries: Array[String] = []
-	ordered_entries.append_array(regular_entries)
-	ordered_entries.append_array(system_entries)
-	var imported := 0
-	for entry_name in ordered_entries:
-		var data := reader.read_file(entry_name)
-		var leaf := entry_name.replace("\\", "/").get_file()
-		var leaf_lower := leaf.to_lower()
-		if leaf_lower.ends_with(".sav"):
-			var tmp_sav := ProjectSettings.globalize_path("user://cache/apply_%d_%d.sav" % [Time.get_ticks_usec(), imported])
-			if not _write_file_atomic(tmp_sav, data):
-				reader.close()
-				return {"ok": false, "error": "暂存原版存档失败：%s" % leaf, "imported": imported, "backup_path": backup_path}
-			var sav_ok := false
-			var sav_err := "当前会话不支持原版 .sav 导入"
-			var sys_target := _retail_system_target_name(leaf_lower)
-			if sys_target == "System.json":
-				if session_ctrl != null and session_ctrl.has_method("ImportRetailSystemSave"):
-					sav_ok = bool(session_ctrl.call("ImportRetailSystemSave", tmp_sav))
-					sav_err = str(session_ctrl.get("LastError"))
-			elif not sys_target.is_empty():
-				if session_ctrl != null and session_ctrl.has_method("ImportRetailSystemSaveTo"):
-					sav_ok = bool(session_ctrl.call("ImportRetailSystemSaveTo", tmp_sav, leaf_lower))
-					sav_err = str(session_ctrl.get("LastError"))
-			else:
-				var slot_num := _retail_sav_slot_from_name(leaf_lower)
-				if slot_num > 0 and session_ctrl != null and session_ctrl.has_method("ImportRetailSaveToSlot"):
-					sav_ok = bool(session_ctrl.call("ImportRetailSaveToSlot", tmp_sav, slot_num))
-					sav_err = str(session_ctrl.get("LastError"))
-			DirAccess.remove_absolute(tmp_sav)
-			if not sav_ok:
-				reader.close()
-				return {"ok": false, "error": "导入原版存档 %s 失败：%s" % [leaf, sav_err], "imported": imported, "backup_path": backup_path}
-			imported += 1
-			continue
-		var sys_target := _retail_system_target_name(leaf_lower)
-		var target_leaf := sys_target if not sys_target.is_empty() else leaf
-		if not _write_file_atomic(save_dir.path_join(target_leaf), data):
-			reader.close()
-			return {"ok": false, "error": "写入存档文件失败：%s" % target_leaf, "imported": imported, "backup_path": backup_path}
-		imported += 1
-	reader.close()
-	return {"ok": true, "error": "", "imported": imported, "backup_path": backup_path}
+	return _SaveTransferArchive.apply_save_zip(zip_path, save_dir, backup_dir, session_ctrl)
 
 
 func _build_save_transfer() -> void:
 	if _transfer_root != null:
 		return
-	_transfer_root = Control.new()
-	_transfer_root.name = "SaveTransferModal"
-	_transfer_root.z_index = 132
-	_transfer_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	_transfer_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_transfer_root.visible = false
-	add_child(_transfer_root)
-
-	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.0, 0.0, 0.72)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_transfer_root.add_child(dim)
-
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -356.0
-	panel.offset_right = 356.0
-	panel.offset_top = -252.0
-	panel.offset_bottom = 252.0
-	panel.add_theme_stylebox_override("panel", _make_modal_card_style())
-	_transfer_root.add_child(panel)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_top", 22)
-	margin.add_theme_constant_override("margin_bottom", 22)
-	panel.add_child(margin)
-
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 12)
-	margin.add_child(col)
+	var shell := _create_modal_shell("SaveTransferModal", 132, 0.72, Vector2(356.0, 252.0), true, [28, 22, 28, 22], 12)
+	_transfer_root = shell["root"]
+	var col: VBoxContainer = shell["column"]
 
 	var title := Label.new()
 	title.text = "跨端存档导入 / 导出"
@@ -1997,16 +1581,8 @@ func _on_transfer_import_any_pressed() -> void:
 	_open_file_dialog("import_any", PackedStringArray(["*.sav, *.zip, *.json ; Save Files (*.sav, *.zip, *.json)"]))
 
 
-func _on_transfer_import_zip_pressed() -> void:
-	_open_file_dialog("import_zip", PackedStringArray(["*.zip ; ZIP Archive"]))
-
-
-func _on_transfer_import_sav_pressed() -> void:
-	_open_file_dialog("import_sav", PackedStringArray(["*.sav ; WOLF Retail Save"]))
-
-
 func _on_transfer_file_selected(path: String) -> void:
-	if path.is_empty():
+	if not _transfer_open or path.is_empty():
 		return
 	if _file_dialog_mode == "export_retail_zip":
 		var res := export_retail_sav_zip(path, _transfer_session)

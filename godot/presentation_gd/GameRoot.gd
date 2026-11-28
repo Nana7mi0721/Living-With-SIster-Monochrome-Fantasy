@@ -12,32 +12,119 @@ const BootSplashOverlayScript := preload("res://presentation_gd/BootSplashOverla
 const AppPaths := preload("res://presentation_gd/AppPaths.gd")
 const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
 const _PlayOverlays := preload("res://presentation_gd/PlayOverlays.gd")
+const _DisplayAndHotkeyPrefs := preload("res://presentation_gd/DisplayAndHotkeyPrefs.gd")
 
-const SCALE_MODES: Array[String] = ["Integer", "Fit-Nearest", "Fit-Linear"]
+const SCALE_MODES: Array[String] = _DisplayAndHotkeyPrefs.SCALE_MODES
 # Action/skill picture slots polled for execution in Map1005 Ev8 battle click logic.
 const BATTLE_TOUCH_ACTION_SLOTS: Array[int] = [3090, 3200, 3201, 3202, 3203, 3204, 3205, 3206]
-const PERF_FPS_LEVELS: Array[int] = [60, 30, 15]
-const PERF_FPS_LABELS: Array[String] = ["高 (60 fps)", "中 (30 fps)", "低 (15 fps)"]
-const BASE_WINDOW_SIZE := Vector2i(1024, 576)
-const DESKTOP_WINDOW_TITLE := "妹相随～黑白世界的缤纷冒险～"
+const PERF_FPS_LEVELS: Array[int] = _DisplayAndHotkeyPrefs.PERF_FPS_LEVELS
+const PERF_FPS_LABELS: Array[String] = _DisplayAndHotkeyPrefs.PERF_FPS_LABELS
+const BASE_WINDOW_SIZE: Vector2i = _DisplayAndHotkeyPrefs.BASE_WINDOW_SIZE
+const DESKTOP_WINDOW_TITLE: String = _DisplayAndHotkeyPrefs.DESKTOP_WINDOW_TITLE
 const WINDOW_DOCKBAR_ICON := "res://assets/boot/generated/icon_pc_dockbar.bin"
 const WINDOW_CORNER_ICON := "res://assets/boot/generated/icon_pc_corner.bin"
-const DISPLAY_SETTINGS_PATH := "user://display_settings.cfg"
-const HOTKEYS_SETTINGS_PATH := "user://hotkeys.cfg"
-const HOTKEYS_CONFIG_VERSION := 2
-const DEFAULT_HOTKEYS: Dictionary = {
-	"stats": KEY_F2,
-	"debug": KEY_F3,
-	"window_size": KEY_F4,
-	"frame_rate": KEY_F5,
-	"quick_save": KEY_F6,
-	"quick_load": KEY_F7,
-	"save_transfer": KEY_F8,
-	"backlog": KEY_F9,
-	"diag_snapshot": KEY_F10,
-	"fullscreen": KEY_F11,
-	"return_to_title": KEY_F12,
-}
+const DISPLAY_SETTINGS_PATH: String = _DisplayAndHotkeyPrefs.DISPLAY_SETTINGS_PATH
+const HOTKEYS_SETTINGS_PATH: String = _DisplayAndHotkeyPrefs.HOTKEYS_SETTINGS_PATH
+const HOTKEYS_CONFIG_VERSION: int = _DisplayAndHotkeyPrefs.HOTKEYS_CONFIG_VERSION
+const DEFAULT_HOTKEYS: Dictionary = _DisplayAndHotkeyPrefs.DEFAULT_HOTKEYS
+const SESSION_PHASE_NAMES: Array[String] = ["boot", "title", "newgame", "bedroom", "failed"]
+
+
+class EmpiricalBlankTracker extends RefCounted:
+	var active := false
+	var dirty := false
+	var frames := 0
+	var phase := ""
+	var map_id := -1
+	var instances := ""
+	var slots := PackedInt32Array()
+
+	func clear() -> void:
+		active = false
+		dirty = false
+		frames = 0
+		phase = ""
+		map_id = -1
+		instances = ""
+		slots = PackedInt32Array()
+
+	func mark_dirty() -> void:
+		if active:
+			dirty = true
+
+	static func is_strict_nonempty_slot_subset(candidate: PackedInt32Array, baseline: PackedInt32Array) -> bool:
+		if candidate.is_empty() or candidate.size() >= baseline.size():
+			return false
+		for slot in candidate:
+			if not baseline.has(slot):
+				return false
+		return true
+
+	func update_after_frame(
+			stage: PictureStage,
+			cur_phase: String,
+			session: GameSessionController,
+			modal_open: bool,
+			drawer_open: bool,
+			save_ui_active: bool,
+			message: MessageWindow,
+			choice: ChoiceWindow
+		) -> void:
+		if not active:
+			return
+		frames += 1
+		if dirty:
+			return
+		if stage != null and stage.had_hit_match_this_frame():
+			dirty = true
+		elif cur_phase != phase:
+			dirty = true
+		elif session != null and (session.MapId != map_id or session.GetForegroundStackSignature() != instances):
+			dirty = true
+		elif frames <= 2 and stage != null:
+			var cur_slots := stage.foreground_slot_signature()
+			if cur_slots != slots:
+				# Moving off a hovered picture-menu button (e.g. CE245/251/310) erases its
+				# hover-preview slots while keeping interactive hit polls active; accept the
+				# shrunken baseline instead of rejecting blank-space double-tap.
+				if frames == 1 and stage.has_active_hit_polls() \
+						and is_strict_nonempty_slot_subset(cur_slots, slots):
+					slots = cur_slots
+				else:
+					dirty = true
+		if dirty:
+			return
+		if modal_open or drawer_open or save_ui_active:
+			dirty = true
+		elif message != null and message.is_open():
+			dirty = true
+		elif choice != null and choice.is_open and (not choice.is_offscreen_parked() or not choice.override_rects.is_empty()):
+			dirty = true
+
+	func record(cur_phase: String, session: GameSessionController, stage: PictureStage) -> void:
+		active = true
+		dirty = false
+		frames = 0
+		phase = cur_phase
+		map_id = session.MapId if session != null else -1
+		instances = session.GetForegroundStackSignature() if session != null else ""
+		slots = stage.foreground_slot_signature() if stage != null else PackedInt32Array()
+
+	func verify(point: Vector2, cur_phase: String, session: GameSessionController, stage: PictureStage) -> bool:
+		if not active or dirty or frames < 1:
+			return false
+		if stage != null and (stage.has_interactive_hit(point) or stage.had_hit_match_this_frame()):
+			return false
+		if cur_phase != phase:
+			return false
+		if session != null:
+			if session.MapId != map_id:
+				return false
+			if session.GetForegroundStackSignature() != instances:
+				return false
+		if frames <= 2 and stage != null and stage.foreground_slot_signature() != slots:
+			return false
+		return true
 
 var PROF := {}
 var _profile_enabled := OS.get_environment("LWsmf_PROFILE") == "1"
@@ -53,7 +140,7 @@ var router: InputRouter
 var audio: AudioManager
 var overlays: PlayOverlays
 
-# Whole-screen fade for 160/161/162: a black ColorRect and frozen TextureRect above the stage,
+# Whole-screen fade for 161/162 (op160 is a no-op): a black ColorRect and frozen TextureRect above the stage,
 # driven by the same 1/60 s clock as the VM.
 var _transition_rect: ColorRect
 var _transition_freeze_rect: TextureRect
@@ -63,23 +150,23 @@ var _transition_frames := 0
 var _transition_elapsed := 0
 var _boot_splash: Control = null
 
+var _prefs := _DisplayAndHotkeyPrefs.new()
 var _modal_release_guard := false
-var _fullscreen := false
-var _windowed_position := Vector2i.ZERO
-var _windowed_size := Vector2i.ZERO
-var _scale_mode_idx := 2  # Default Fit-Linear
-var _perf_tier := 0
 var _window_focused := true
-var _show_title_fps := false
-var _title_fps_timer := 0.0
-var _last_safe_area := Rect2i()
-var _safe_area_poll_timer := 0.0
+var _app_paused := false
 var _window_icons: WindowIcons
 var _save_arrow_hover_slot := 0
-var _hotkeys: Dictionary = DEFAULT_HOTKEYS.duplicate()
 var _ios_override: int = -1
 var _last_restart_ok := false
 var _pending_post_import_refresh := false
+var _use_packed_vm_bridge := false
+var _use_o1_sys_ui := false
+var _stage_has_defer_render := false
+var _hotkeys: Dictionary:
+	get:
+		return _prefs.hotkeys
+	set(value):
+		_prefs.hotkeys = value
 
 # Row CE43 last painted; Sys20 mirrors it so a cursor move repaints the title menu.
 var _title_menu_cursor := -1
@@ -91,13 +178,7 @@ var _active_speaker := ""
 var _active_msg_pos_mode: int = _WolfConst.MSG_POS_BOTTOM
 var _clean_scene_image: Image
 var _action_input_pending := false
-var _empirical_tap_active := false
-var _empirical_tap_dirty := false
-var _empirical_tap_frames := 0
-var _empirical_tap_phase := ""
-var _empirical_tap_map_id := -1
-var _empirical_tap_instances := ""
-var _empirical_tap_slots := PackedInt32Array()
+var _empirical_blank := EmpiricalBlankTracker.new()
 
 var phase := "boot"
 var frames := 0
@@ -125,9 +206,9 @@ func _ready() -> void:
 		_boot_splash.name = "BootSplashOverlay"
 		add_child(_boot_splash)
 		_boot_splash.call("set_progress", 0.10, true)
-		call_deferred("_start_game")
+		call_deferred("_start_game", true)
 		return
-	_start_game()
+	_start_game(false)
 
 
 func _should_use_boot_splash() -> bool:
@@ -167,7 +248,7 @@ func _dismiss_boot_splash(duration: float = 0.25) -> void:
 		splash.call("fade_out_and_free", duration)
 
 
-func _start_game() -> void:
+func _start_game(staged: bool = false) -> void:
 	if not SetupWizardScript.data_ready():
 		_dismiss_boot_splash(0.0)
 		phase = "setup"
@@ -181,12 +262,16 @@ func _start_game() -> void:
 		if not bool(_boot_splash.call("has_retail_textures")):
 			_boot_splash.call("load_retail_textures", assets)
 		_boot_splash.call("set_progress", 0.35)
+	if staged and is_inside_tree():
+		await get_tree().process_frame
+		if not is_inside_tree():
+			return
 
 	stage = PictureStage.new(assets)
 	add_child(stage)
 
 	_transition_rect = ColorRect.new()
-	# PictureStage bands use z_as_relative=false at z_index 10..50; 60 sits above cursor
+	# PictureStage bands use z_as_relative=false at z_index 0..50; 60 sits above cursor
 	# and below 90+ front-end overlays.
 	_transition_rect.z_index = 60
 	_transition_rect.color = Color(0, 0, 0, 0)
@@ -282,6 +367,18 @@ func _start_game() -> void:
 	vm.connect("ColorChangeRequested", _on_color_change)
 	vm.connect("ProFeatureRequested", _on_pro_feature)
 	vm.connect("ForegroundEventEntered", _on_event_entered)
+	_use_o1_sys_ui = stage != null and stage.has_method("has_visible_system_ui")
+	_stage_has_defer_render = stage != null and stage.has_method("set_defer_render")
+	_use_packed_vm_bridge = vm != null and session != null \
+		and vm.has_method("BeginFrameInputPacked") \
+		and vm.has_method("EndFrameQueryPacked") \
+		and session.has_method("EndFrameSessionPacked")
+	if _boot_splash != null:
+		_boot_splash.call("set_progress", 0.55)
+	if staged and is_inside_tree():
+		await get_tree().process_frame
+		if not is_inside_tree():
+			return
 
 	if not vm.LoadPrograms(""):
 		_dismiss_boot_splash(0.0)
@@ -289,7 +386,11 @@ func _start_game() -> void:
 		push_error("GameRoot: programs.json missing")
 		return
 	if _boot_splash != null:
-		_boot_splash.call("set_progress", 0.75)
+		_boot_splash.call("set_progress", 0.85)
+	if staged and is_inside_tree():
+		await get_tree().process_frame
+		if not is_inside_tree():
+			return
 	_seed_live_rng_if_windowed()
 	if not session.StartTitle():
 		_dismiss_boot_splash(0.0)
@@ -368,7 +469,9 @@ func _process(delta: float) -> void:
 	if overlays != null:
 		overlays.tick_toast()
 	if message != null:
-		message.paused = _modal_window_open()
+		message.paused = _app_paused or _modal_window_open()
+	if _app_paused:
+		return
 	if phase == "boot" or phase == "failed" or phase == "setup" or phase == "bootstrap" or faulted:
 		if not _is_headless() and OS.low_processor_usage_mode:
 			OS.low_processor_usage_mode = false
@@ -386,13 +489,21 @@ func _process(delta: float) -> void:
 		if frames < 1:
 			advance_frame()
 	else:
-		# Cap single-frame delta so an I/O or GC hiccup cannot burn through multi-frame UI animations invisibly.
-		_accumulator = minf(_accumulator + minf(delta, STEP * 2.0), STEP * 3.0)
+		# Scale catch-up budget by target_fps() so 30/15 fps power tiers keep 60Hz logic parity,
+		# and defer PictureStage node rendering until the end of multi-step catch-up loops.
+		var fps := maxi(1, target_fps())
+		var step_budget := clampi(maxi(2, ceili(60.0 / float(fps)) * 2), 2, MAX_STEPS_PER_FRAME)
+		_accumulator = minf(_accumulator + minf(delta, STEP * float(step_budget)), STEP * float(step_budget + 1))
 		var guard := 0
-		while _accumulator >= STEP and guard < MAX_STEPS_PER_FRAME:
+		var deferring_render := _stage_has_defer_render and stage != null and _accumulator >= STEP * 2.0
+		if deferring_render:
+			stage.set_defer_render(true)
+		while _accumulator >= STEP and guard < step_budget:
 			_accumulator -= STEP
 			advance_frame()
 			guard += 1
+		if deferring_render and stage != null:
+			stage.set_defer_render(false)
 	_sync_title_menu()
 	if _boot_splash != null and frames >= 1 and bool(_boot_splash.call("is_reveal_complete")):
 		_dismiss_boot_splash(0.25)
@@ -476,6 +587,8 @@ func _batch_opens_system_ui(batch: Array) -> bool:
 func _system_ui_visible() -> bool:
 	if stage == null:
 		return false
+	if _use_o1_sys_ui:
+		return stage.has_visible_system_ui()
 	for number in range(12000, 12600):
 		if stage.picture_rect(number).size.x > 0.0:
 			return true
@@ -519,14 +632,22 @@ func advance_frame() -> void:
 		router.step_touch_pointer_hold(pointer_hold_eligible)
 	# Pointer starts at (-1,-1) before any mouse event so slots cannot hover at (0,0).
 	var pointer := router.hover_position if router.mouse_seen else Vector2(-1, -1)
-	vm.SetPointer(pointer.x, pointer.y)
 	var guarded := _modal_release_guard
-	vm.SetPointerPressed(router.left_frame_pressed() and not guarded)
-	vm.SetPointerRightPressed(router.right_frame_pressed() and not guarded)
-	vm.SetPointerMiddlePressed(router.middle_frame_pressed() and not guarded)
-	vm.SetFrameWheel(router.wheel_notch())
-	_sync_live_clock_if_windowed()
-	vm.BeginFrameInput()
+	var left_p := router.left_frame_pressed() and not guarded
+	var right_p := router.right_frame_pressed() and not guarded
+	var middle_p := router.middle_frame_pressed() and not guarded
+	var wheel_n := router.wheel_notch()
+	if _use_packed_vm_bridge:
+		var wall_sec := _live_wall_second_or_neg1()
+		vm.BeginFrameInputPacked(pointer.x, pointer.y, left_p, right_p, middle_p, wheel_n, wall_sec)
+	else:
+		vm.SetPointer(pointer.x, pointer.y)
+		vm.SetPointerPressed(left_p)
+		vm.SetPointerRightPressed(right_p)
+		vm.SetPointerMiddlePressed(middle_p)
+		vm.SetFrameWheel(wheel_n)
+		_sync_live_clock_if_windowed()
+		vm.BeginFrameInput()
 	if stage != null:
 		stage.rotate_hit_polls()
 	if _profile_enabled:
@@ -555,19 +676,38 @@ func advance_frame() -> void:
 	_tick_transition()
 	if _clean_scene_image != null and not _system_ui_visible():
 		_clean_scene_image = null
-	_sync_master_audio_volumes()
-	frames = session.Frames
-	phase = session.Phase
-	_update_empirical_tap_after_frame()
-	if vm.Faulted:
-		report_fault(vm.FaultReason)
-		return
-	if vm.ConsumeOkObserved():
-		router.consume_touch_ok()
-	if vm.ConsumeCancelObserved():
-		router.consume_touch_cancel()
-	if vm.ConsumeWheelObserved() or not _save_load_ui_active():
-		router.consume_wheel_pulse()
+	if _use_packed_vm_bridge:
+		var q: PackedInt32Array = vm.EndFrameQueryPacked()
+		var s: PackedInt32Array = session.EndFrameSessionPacked()
+		_apply_master_audio_volumes(q[4], q[5], q[6], q[7])
+		frames = s[0]
+		var pcode := s[1]
+		phase = SESSION_PHASE_NAMES[pcode] if pcode >= 0 and pcode < SESSION_PHASE_NAMES.size() else session.Phase
+		_update_empirical_tap_after_frame()
+		if q[0] != 0:
+			report_fault(vm.FaultReason)
+			return
+		if q[1] != 0:
+			router.consume_touch_ok()
+		if q[2] != 0:
+			router.consume_touch_cancel()
+		var save_ui_active := (q[8] != 0) and _system_ui_visible()
+		if q[3] != 0 or not save_ui_active:
+			router.consume_wheel_pulse()
+	else:
+		_sync_master_audio_volumes()
+		frames = session.Frames
+		phase = session.Phase
+		_update_empirical_tap_after_frame()
+		if vm.Faulted:
+			report_fault(vm.FaultReason)
+			return
+		if vm.ConsumeOkObserved():
+			router.consume_touch_ok()
+		if vm.ConsumeCancelObserved():
+			router.consume_touch_cancel()
+		if vm.ConsumeWheelObserved() or not _save_load_ui_active():
+			router.consume_wheel_pulse()
 	router.clear_frame_latches()
 	_action_input_pending = false
 
@@ -1022,12 +1162,12 @@ func _on_pro_feature(kind: int, _milliseconds: int, path: String) -> void:
 
 func _thumbnail_source_image() -> Image:
 	if _system_ui_visible() and _clean_scene_image != null:
-		return _clean_scene_image.duplicate()
-	var image := _grab_viewport_image()
-	return image.duplicate() if image != null else null
+		return _clean_scene_image
+	return _grab_viewport_image()
 
 
-## Sys3/Sys4 hold the choice window center.
+## Standard ChoiceWindow locks center.y = 288.0 (MOB-04) and uses TOUCH_LINE_HEIGHT (36.0) in touch mode;
+## Sys3/Sys4 supply non-standard overrides.
 func _choice_position() -> Vector2:
 	var x := -1
 	var y := -1
@@ -1093,6 +1233,7 @@ func _notification(what: int) -> void:
 		handle_back_request()
 		return
 	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_app_paused = true
 		_window_focused = false
 		_save_display_settings()
 		_clear_held_input()
@@ -1109,7 +1250,10 @@ func _notification(what: int) -> void:
 			assets.on_low_memory()
 		return
 	if what == NOTIFICATION_APPLICATION_RESUMED:
+		_app_paused = false
 		_window_focused = true
+		_clear_held_input()
+		_arm_modal_release_guard()
 		if audio != null:
 			audio.resume_from_background()
 		_apply_safe_area()
@@ -1202,7 +1346,7 @@ func _on_map_cell_hovered(_cell: Vector2i) -> void:
 func _on_session_hud(x: int, y: int, text: String) -> void:
 	if map_view != null and map_view.visible:
 		map_view.set_leader_cell(Vector2i(x, y))
-	status(text, OS.get_environment("LWsmf_QUIET_HUD") == "1")
+	status(text, OS.get_environment("LWsmf_VERBOSE_HUD") != "1")
 
 
 func _on_session_map(map_id: int, leader_x: int, leader_y: int) -> void:
@@ -1297,14 +1441,19 @@ func _on_message_text() -> String:
 	return message.full_text
 
 
+func _mark_input_handled() -> void:
+	if not is_inside_tree():
+		return
+	var vp := get_viewport()
+	if vp != null:
+		vp.set_input_as_handled()
+
+
 func _input(event: InputEvent) -> void:
 	if not _is_headless() and OS.low_processor_usage_mode:
 		OS.low_processor_usage_mode = false
 	if _is_boot_splash_blocking() and _is_blocked_splash_input(event):
-		if is_inside_tree():
-			var vp := get_viewport()
-			if vp != null:
-				vp.set_input_as_handled()
+		_mark_input_handled()
 
 
 ## Hotkeys: F2 stats, F3 debug, F4 window growth (Shift+F4 scaling mode), F5 frame rate
@@ -1313,10 +1462,8 @@ func _input(event: InputEvent) -> void:
 ## Overridable via --hotkeys=<file> or user://hotkeys.cfg.
 func _unhandled_input(event: InputEvent) -> void:
 	if _is_boot_splash_blocking():
-		if _is_blocked_splash_input(event) and is_inside_tree():
-			var vp := get_viewport()
-			if vp != null:
-				vp.set_input_as_handled()
+		if _is_blocked_splash_input(event):
+			_mark_input_handled()
 		return
 	if not (event is InputEventKey):
 		return
@@ -1325,79 +1472,79 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if key.keycode == int(_hotkeys.get("fullscreen", KEY_F11)):
 		toggle_fullscreen()
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if key.keycode == int(_hotkeys.get("window_size", KEY_F4)):
 		if key.shift_pressed:
 			cycle_scaling_mode()
 		else:
 			cycle_window_size()
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if key.keycode == int(_hotkeys.get("frame_rate", KEY_F5)):
 		if key.shift_pressed:
 			toggle_titlebar_fps()
 		else:
 			cycle_performance_tier()
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if faulted:
 		if (key.keycode == KEY_ESCAPE or key.keycode == int(_hotkeys.get("return_to_title", KEY_F12))) and overlays != null and not overlays.fault_modal_visible():
 			overlays.show_fault_modal(_failure_reason(), session != null and session.HasSave)
-			get_viewport().set_input_as_handled()
+			_mark_input_handled()
 		return
 	if phase == "boot" or phase == "setup" or phase == "bootstrap":
 		return
 	if key.keycode == int(_hotkeys.get("stats", KEY_F2)):
 		if overlays != null:
 			overlays.toggle_stats(vm)
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if key.keycode == int(_hotkeys.get("debug", KEY_F3)):
 		if overlays != null:
 			overlays.toggle_debug()
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if key.keycode == int(_hotkeys.get("diag_snapshot", KEY_F10)):
 		dump_diagnostic_snapshot(true)
 		_show_toast("已导出诊断快照 user://diagnostic_snapshot.txt")
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if key.keycode == KEY_ESCAPE and _modal_window_open():
 		if overlays != null and overlays.close_topmost_modal():
 			_arm_modal_release_guard()
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if key.keycode == int(_hotkeys.get("backlog", KEY_F9)):
 		if _modal_window_open() and not backlog_open():
-			get_viewport().set_input_as_handled()
+			_mark_input_handled()
 			return
 		if backlog_open():
 			if overlays != null and (overlays.title_confirm_open() or overlays.quit_confirm_open() or overlays.save_transfer_open() or overlays.save_confirm_open() or overlays.drawer_open()):
-				get_viewport().set_input_as_handled()
+				_mark_input_handled()
 				return
 			close_backlog()
 		else:
 			open_backlog()
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if _modal_window_open():
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if key.keycode == int(_hotkeys.get("return_to_title", KEY_F12)):
 		request_return_to_title()
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if key.keycode == int(_hotkeys.get("save_transfer", KEY_F8)):
 		open_save_transfer()
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 		return
 	if key.keycode == int(_hotkeys.get("quick_save", KEY_F6)):
 		_trigger_quick_save()
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 	elif key.keycode == int(_hotkeys.get("quick_load", KEY_F7)):
 		_trigger_quick_load()
-		get_viewport().set_input_as_handled()
+		_mark_input_handled()
 
 
 # ---- overlay forwarders & display settings -------------------------------
@@ -1442,139 +1589,58 @@ func close_backlog() -> void:
 
 
 func is_fullscreen() -> bool:
-	return _fullscreen
+	return _prefs.fullscreen
 
 
 func scaling_mode_name() -> String:
-	return SCALE_MODES[_scale_mode_idx]
+	return _prefs.scaling_mode_name()
 
 
 func cycle_scaling_mode() -> String:
-	_scale_mode_idx = (_scale_mode_idx + 1) % SCALE_MODES.size()
-	_apply_scaling_mode()
+	_prefs.scale_mode_idx = (_prefs.scale_mode_idx + 1) % SCALE_MODES.size()
+	_prefs.apply_scaling_mode(self)
 	_save_display_settings()
-	var mode_name := SCALE_MODES[_scale_mode_idx]
+	var mode_name := _prefs.scaling_mode_name()
 	_show_toast("缩放模式: %s" % mode_name)
 	status("scale_mode=%s" % mode_name)
 	return mode_name
 
 
 static func _is_headless() -> bool:
-	return DisplayServer.get_name() == "headless" or OS.has_feature("headless")
+	return _DisplayAndHotkeyPrefs.is_headless()
 
 
 static func is_desktop_platform() -> bool:
-	return not (OS.has_feature("android") or OS.has_feature("ios") or OS.has_feature("mobile"))
+	return _DisplayAndHotkeyPrefs.is_desktop_platform()
 
 
 static func clamp_window_size(desired: Vector2i, usable: Rect2i) -> Vector2i:
-	if usable.size.x <= 0 or usable.size.y <= 0:
-		return desired
-	return Vector2i(
-		clampi(desired.x, mini(320, usable.size.x), usable.size.x),
-		clampi(desired.y, mini(180, usable.size.y), usable.size.y)
-	)
+	return _DisplayAndHotkeyPrefs.clamp_window_size(desired, usable)
 
 
-## Next F4 window size: double the current content, but return an empty vector
-## when the doubled window no longer fits and the caller should enter fullscreen.
 static func window_growth_target(current: Vector2i, usable: Rect2i) -> Vector2i:
-	var from := Vector2i(
-		maxi(BASE_WINDOW_SIZE.x, current.x),
-		maxi(BASE_WINDOW_SIZE.y, current.y)
-	)
-	var target := from * 2
-	if usable.size.x <= 0 or usable.size.y <= 0:
-		return target
-	if target.x <= usable.size.x and target.y <= usable.size.y:
-		return target
-	return Vector2i.ZERO
+	return _DisplayAndHotkeyPrefs.window_growth_target(current, usable)
 
 
-## Shrinks [param desired] uniformly until it fits [param usable]; never enlarges.
 static func fit_window_size(desired: Vector2i, usable: Rect2i) -> Vector2i:
-	if usable.size.x <= 0 or usable.size.y <= 0 or desired.x <= 0 or desired.y <= 0:
-		return desired
-	var factor := minf(1.0, minf(float(usable.size.x) / float(desired.x), float(usable.size.y) / float(desired.y)))
-	if factor >= 1.0:
-		return desired
-	return Vector2i(maxi(1, int(floorf(desired.x * factor))), maxi(1, int(floorf(desired.y * factor))))
-
-
-func _fit_window_to_usable_area() -> void:
-	if _is_headless() or not is_desktop_platform() or DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
-		return
-	var usable := DisplayServer.screen_get_usable_rect()
-	var current := DisplayServer.window_get_size()
-	var fitted := fit_window_size(current, usable)
-	if fitted == current:
-		return
-	DisplayServer.window_set_size(fitted)
-	var pos := DisplayServer.window_get_position()
-	DisplayServer.window_set_position(Vector2i(
-		clampi(pos.x, usable.position.x, maxi(usable.position.x, usable.end.x - fitted.x)),
-		clampi(pos.y, usable.position.y, maxi(usable.position.y, usable.end.y - fitted.y))))
+	return _DisplayAndHotkeyPrefs.fit_window_size(desired, usable)
 
 
 func _apply_scaling_mode() -> void:
-	if _is_headless() or not is_inside_tree():
-		return
-	var win := get_window()
-	if win == null:
-		return
-	var base: Vector2i = win.content_scale_size
-	if base.x <= 0 or base.y <= 0:
-		base = Vector2i(1024, 576)
-	var integer_fit := integer_scale_fits(win.size, base)
-	match _scale_mode_idx:
-		0:  # Integer
-			if integer_fit:
-				win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
-				win.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
-			else:
-				# Below 2x the integer floor collapses to 1x and shrinks the picture into a
-				# corner of an oversized window; fitting beats pixel-perfect there.
-				win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
-				win.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR
-		1:  # Fit-Nearest
-			win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
-			win.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
-		_:  # Fit-Linear
-			win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
-			win.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR
+	_prefs.apply_scaling_mode(self)
 
 
-## Integer stretch is only meaningful when both axes reach at least 2x; anything
-## under 2x would floor to a 1x picture surrounded by letterboxing.
 static func integer_scale_fits(window_size: Vector2i, base_size: Vector2i) -> bool:
-	if base_size.x <= 0 or base_size.y <= 0:
-		return false
-	var fit := minf(float(window_size.x) / float(base_size.x), float(window_size.y) / float(base_size.y))
-	return fit >= 2.0
+	return _DisplayAndHotkeyPrefs.integer_scale_fits(window_size, base_size)
 
 
 func _on_window_size_changed() -> void:
-	_apply_scaling_mode()
+	_prefs.apply_scaling_mode(self)
 	_apply_safe_area()
 
 
 func _save_display_settings() -> void:
-	if _is_headless():
-		return
-	var cfg := ConfigFile.new()
-	var win_size := _windowed_size
-	if not _fullscreen and DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_WINDOWED:
-		win_size = DisplayServer.window_get_size()
-	cfg.set_value("display", "scale_mode", _scale_mode_idx)
-	cfg.set_value("display", "fullscreen", _fullscreen)
-	cfg.set_value("display", "perf_tier", _perf_tier)
-	cfg.set_value("display", "show_title_fps", _show_title_fps)
-	if assets != null:
-		cfg.set_value("display", "hd_textures", assets.hd_enabled)
-	if win_size.x > 0 and win_size.y > 0:
-		cfg.set_value("display", "window_width", win_size.x)
-		cfg.set_value("display", "window_height", win_size.y)
-	cfg.save(DISPLAY_SETTINGS_PATH)
+	_prefs.save_display_settings(assets)
 
 
 func _apply_windows_window_icons() -> void:
@@ -1608,81 +1674,7 @@ func _refresh_windows_window_icons(delay: float) -> void:
 
 
 func _load_display_settings() -> void:
-	if _is_headless():
-		return
-	var cfg := ConfigFile.new()
-	if cfg.load(DISPLAY_SETTINGS_PATH) != OK:
-		_fit_window_to_usable_area()
-		_apply_scaling_mode()
-		_apply_performance_tier()
-		return
-	_scale_mode_idx = clampi(int(cfg.get_value("display", "scale_mode", _scale_mode_idx)), 0, SCALE_MODES.size() - 1)
-	_perf_tier = clampi(int(cfg.get_value("display", "perf_tier", 0)), 0, PERF_FPS_LEVELS.size() - 1)
-	_show_title_fps = bool(cfg.get_value("display", "show_title_fps", false))
-	_apply_scaling_mode()
-	_apply_performance_tier()
-	if assets != null and cfg.has_section_key("display", "hd_textures"):
-		assets.set_hd_enabled(bool(cfg.get_value("display", "hd_textures", assets.hd_enabled)))
-	if not is_desktop_platform():
-		return
-	var w := int(cfg.get_value("display", "window_width", 0))
-	var h := int(cfg.get_value("display", "window_height", 0))
-	var want_fs := bool(cfg.get_value("display", "fullscreen", false))
-	if w > 0 and h > 0:
-		var usable := DisplayServer.screen_get_usable_rect()
-		var clamped := clamp_window_size(Vector2i(w, h), usable)
-		_windowed_size = clamped
-		if not want_fs:
-			DisplayServer.window_set_size(clamped)
-	elif not want_fs:
-		_fit_window_to_usable_area()
-	if want_fs:
-		_windowed_position = DisplayServer.window_get_position()
-		if _windowed_size == Vector2i.ZERO:
-			_windowed_size = BASE_WINDOW_SIZE
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-		_fullscreen = true
-
-
-func _display_is_fullscreen() -> bool:
-	return _fullscreen or (
-		DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-		or DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
-	)
-
-
-func _center_window(win_size: Vector2i) -> void:
-	var usable := DisplayServer.screen_get_usable_rect()
-	if usable.size.x <= 0 or usable.size.y <= 0:
-		return
-	var pos := Vector2i(
-		usable.position.x + maxi(0, (usable.size.x - win_size.x) / 2),
-		usable.position.y + maxi(0, (usable.size.y - win_size.y) / 2)
-	)
-	DisplayServer.window_set_position(Vector2i(
-		clampi(pos.x, usable.position.x, maxi(usable.position.x, usable.end.x - win_size.x)),
-		clampi(pos.y, usable.position.y, maxi(usable.position.y, usable.end.y - win_size.y))))
-
-
-func _apply_windowed_size(desired: Vector2i) -> void:
-	var usable := DisplayServer.screen_get_usable_rect()
-	var fitted := clamp_window_size(fit_window_size(desired, usable), usable)
-	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-	DisplayServer.window_set_size(fitted)
-	_windowed_size = fitted
-	_fullscreen = false
-	_center_window(fitted)
-	_apply_scaling_mode()
-	_apply_safe_area()
-	_save_display_settings()
-
-
-func _enter_fullscreen() -> void:
-	_windowed_position = DisplayServer.window_get_position()
-	_windowed_size = DisplayServer.window_get_size()
-	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-	_fullscreen = true
-	_save_display_settings()
+	_prefs.load_display_settings(self, assets)
 
 
 ## F4: minimum -> 2x -> 4x ... -> fullscreen -> minimum.
@@ -1690,22 +1682,22 @@ func cycle_window_size() -> String:
 	if not is_desktop_platform():
 		return ""
 	if _is_headless():
-		_fullscreen = not _fullscreen
-		var headless_label := "fullscreen" if _fullscreen else "minimum"
+		_prefs.fullscreen = not _prefs.fullscreen
+		var headless_label := "fullscreen" if _prefs.fullscreen else "minimum"
 		status("window=%s (headless)" % headless_label)
 		return headless_label
-	if _display_is_fullscreen():
-		_apply_windowed_size(BASE_WINDOW_SIZE)
+	if _prefs.display_is_fullscreen():
+		_prefs.apply_windowed_size(self, BASE_WINDOW_SIZE, overlays, assets)
 		_show_toast("窗口: 最小 1024×576")
 		status("window=1024x576")
 		return "1024x576"
 	var target := window_growth_target(DisplayServer.window_get_size(), DisplayServer.screen_get_usable_rect())
 	if target == Vector2i.ZERO:
-		_enter_fullscreen()
+		_prefs.enter_fullscreen(assets)
 		_show_toast("窗口: 全屏")
 		status("window=fullscreen")
 		return "fullscreen"
-	_apply_windowed_size(target)
+	_prefs.apply_windowed_size(self, target, overlays, assets)
 	_show_toast("窗口: %d×%d" % [target.x, target.y])
 	status("window=%dx%d" % [target.x, target.y])
 	return "%dx%d" % [target.x, target.y]
@@ -1716,16 +1708,16 @@ func toggle_fullscreen() -> void:
 	if not is_desktop_platform():
 		return
 	if _is_headless():
-		_fullscreen = not _fullscreen
-		status("fullscreen=%s (headless)" % str(_fullscreen))
+		_prefs.fullscreen = not _prefs.fullscreen
+		status("fullscreen=%s (headless)" % str(_prefs.fullscreen))
 		return
-	if _display_is_fullscreen():
-		_apply_windowed_size(BASE_WINDOW_SIZE)
+	if _prefs.display_is_fullscreen():
+		_prefs.apply_windowed_size(self, BASE_WINDOW_SIZE, overlays, assets)
 		_show_toast("窗口: 最小 1024×576")
 	else:
-		_enter_fullscreen()
+		_prefs.enter_fullscreen(assets)
 		_show_toast("窗口: 全屏")
-	status("fullscreen=%s" % str(_fullscreen))
+	status("fullscreen=%s" % str(_prefs.fullscreen))
 
 
 func title_confirm_open() -> bool:
@@ -1733,7 +1725,7 @@ func title_confirm_open() -> bool:
 
 
 func request_return_to_title() -> void:
-	if faulted or phase == "title" or phase == "setup" or phase == "bootstrap" or phase == "failed" or title_confirm_open() or backlog_open():
+	if overlays == null or faulted or phase == "title" or phase == "setup" or phase == "bootstrap" or phase == "failed" or title_confirm_open() or backlog_open():
 		return
 	overlays.open_title_confirm()
 	status("return-to-title confirm opened")
@@ -1759,18 +1751,24 @@ func confirm_return_to_title() -> bool:
 	return _last_restart_ok
 
 
-## Rebuild and restart the title event without touching save slots.
-func restart_title() -> bool:
+func _reset_session_for_rebuild(clear_title_menu: bool = true) -> void:
 	vm.StopAll()
 	vm.ResetDiagnostics()
 	vm.ResetPointer()
 	router.clear_pointer_latches()
 	router.clear_frame_latches()
+	_clear_empirical_tap()
 	_reset_presentation_transient_state()
-	session.SetTitleMenuVisible(false)
+	if clear_title_menu:
+		session.SetTitleMenuVisible(false)
 	stage.clear_pictures()
 	audio.reset()
 	map_view.visible = false
+
+
+## Rebuild and restart the title event without touching save slots.
+func restart_title() -> bool:
+	_reset_session_for_rebuild(true)
 	if not session.Rebuild():
 		phase = "failed"
 		status("return-to-title failed: session rebuild")
@@ -1796,20 +1794,22 @@ func _seed_live_rng_if_windowed() -> void:
 
 
 ## Windowed play mirrors wall-clock seconds into Sys82; headless runs keep Sys82 at 0.
-func _sync_live_clock_if_windowed() -> void:
+func _live_wall_second_or_neg1() -> int:
 	if DisplayServer.get_name() == "headless" or OS.get_environment("WOLF_LIVE_RNG") == "0":
-		return
+		return -1
 	var dt := Time.get_datetime_dict_from_system()
-	vm.SetSys(_WolfConst.SYS_WALL_SECOND, int(dt.get("second", 0)))
+	return int(dt.get("second", 0))
 
 
-func _sync_master_audio_volumes() -> void:
-	if audio == null or vm == null:
+func _sync_live_clock_if_windowed() -> void:
+	var sec := _live_wall_second_or_neg1()
+	if sec >= 0:
+		vm.SetSys(_WolfConst.SYS_WALL_SECOND, sec)
+
+
+func _apply_master_audio_volumes(bgm: int, bgs: int, se: int, v357: int) -> void:
+	if audio == null:
 		return
-	var bgm := vm.GetSys(100)
-	var bgs := vm.GetSys(101)
-	var se := vm.GetSys(102)
-	var v357 := vm.GetVar(357)
 	if bgm == 0 and bgs == 0 and se == 0 and v357 == 0:
 		audio.set_master_volumes(100, 100, 100)
 		return
@@ -1819,6 +1819,12 @@ func _sync_master_audio_volumes() -> void:
 		bgs if bgs > 0 else fallback,
 		se if se > 0 else fallback
 	)
+
+
+func _sync_master_audio_volumes() -> void:
+	if audio == null or vm == null:
+		return
+	_apply_master_audio_volumes(vm.GetSys(100), vm.GetSys(101), vm.GetSys(102), vm.GetVar(357))
 
 
 func modal_release_guard() -> bool:
@@ -1982,16 +1988,7 @@ func export_diagnostics() -> String:
 func restart_after_fault() -> bool:
 	if not faulted:
 		return false
-	vm.StopAll()
-	vm.ResetDiagnostics()
-	vm.ResetPointer()
-	router.clear_pointer_latches()
-	router.clear_frame_latches()
-	_reset_presentation_transient_state()
-	session.SetTitleMenuVisible(false)
-	stage.clear_pictures()
-	audio.reset()
-	map_view.visible = false
+	_reset_session_for_rebuild(true)
 	if not session.Rebuild():
 		phase = "failed"
 		if overlays != null:
@@ -2024,15 +2021,7 @@ func recover_to_last_save() -> bool:
 			overlays.set_fault_hint("没有可用的最近存档。")
 		status("fault recovery failed: no save")
 		return false
-	vm.StopAll()
-	vm.ResetDiagnostics()
-	vm.ResetPointer()
-	router.clear_pointer_latches()
-	router.clear_frame_latches()
-	_reset_presentation_transient_state()
-	stage.clear_pictures()
-	audio.reset()
-	map_view.visible = false
+	_reset_session_for_rebuild(false)
 	if not session.Rebuild():
 		phase = "faulted"
 		if overlays != null:
@@ -2051,7 +2040,7 @@ func recover_to_last_save() -> bool:
 		overlays.clear_diagnostics_path()
 	frames = session.Frames
 	_accumulator = 0.0
-	phase = "bedroom"
+	phase = session.Phase
 	_arm_modal_release_guard()
 	status("fault recovery: loaded last save")
 	return true
@@ -2070,155 +2059,59 @@ func set_ios_override(value: int) -> void:
 
 
 func performance_tier() -> int:
-	return _perf_tier
+	return _prefs.perf_tier
 
 
 func target_fps() -> int:
-	return PERF_FPS_LEVELS[_perf_tier]
+	return _prefs.target_fps()
 
 
 func _apply_performance_tier() -> void:
-	if _is_headless():
-		Engine.max_fps = 0
-		return
-	Engine.max_fps = PERF_FPS_LEVELS[_perf_tier]
+	_prefs.apply_performance_tier()
 
 
 func cycle_performance_tier() -> int:
-	_perf_tier = (_perf_tier + 1) % PERF_FPS_LEVELS.size()
-	_apply_performance_tier()
+	_prefs.perf_tier = (_prefs.perf_tier + 1) % PERF_FPS_LEVELS.size()
+	_prefs.apply_performance_tier()
 	_save_display_settings()
-	var label := PERF_FPS_LABELS[_perf_tier]
+	var label := _prefs.perf_label()
 	_show_toast("帧率: %s" % label)
 	status("frame_rate=%s" % label)
-	return PERF_FPS_LEVELS[_perf_tier]
+	return _prefs.target_fps()
 
 
 func toggle_titlebar_fps() -> bool:
-	_show_title_fps = not _show_title_fps
-	_title_fps_timer = 0.0
+	if not is_desktop_platform():
+		return false
+	_prefs.show_title_fps = not _prefs.show_title_fps
+	_prefs.title_fps_timer = 0.0
 	_save_display_settings()
 	if not _is_headless():
 		DisplayServer.window_set_title(
-			"%s | Screen:%d VM:%d | %s" % [DESKTOP_WINDOW_TITLE, int(Engine.get_frames_per_second()), target_fps(), PERF_FPS_LABELS[_perf_tier]]
-			if _show_title_fps else DESKTOP_WINDOW_TITLE
+			_prefs.format_titlebar_fps() if _prefs.show_title_fps else DESKTOP_WINDOW_TITLE
 		)
-	_show_toast("标题栏帧率显示: %s" % ("开" if _show_title_fps else "关"))
-	return _show_title_fps
+	_show_toast("标题栏帧率显示: %s" % ("开" if _prefs.show_title_fps else "关"))
+	return _prefs.show_title_fps
 
 
-static func parse_hotkeys_text(raw: String, base: Dictionary = DEFAULT_HOTKEYS) -> Dictionary:
-	var result := base.duplicate()
-	var explicit: Dictionary = {}
-	var explicit_order: Array[String] = []
-	for line in raw.split("\n", false):
-		var trimmed := line.strip_edges()
-		if trimmed.is_empty() or trimmed.begins_with("#") or trimmed.begins_with("["):
-			continue
-		var eq := trimmed.find("=")
-		if eq <= 0:
-			continue
-		var action := trimmed.left(eq).strip_edges().to_lower()
-		var key_str := trimmed.substr(eq + 1).strip_edges().trim_prefix("\"").trim_suffix("\"")
-		if action == "version":
-			continue
-		if not result.has(action) or key_str.is_empty():
-			continue
-		var code := KEY_NONE
-		if key_str.to_lower() == "none":
-			var prev_none := explicit_order.find(action)
-			if prev_none >= 0:
-				explicit_order.remove_at(prev_none)
-			explicit[action] = KEY_NONE
-			explicit_order.append(action)
-			continue
-		code = OS.find_keycode_from_string(key_str)
-		if code != KEY_NONE:
-			var prev_idx := explicit_order.find(action)
-			if prev_idx >= 0:
-				explicit_order.remove_at(prev_idx)
-			explicit[action] = code
-			explicit_order.append(action)
-	# Apply explicit bindings in order and clear conflicting untouched defaults or earlier duplicates.
-	for action in explicit_order:
-		var code: int = int(explicit[action])
-		result[action] = code
-		if code == KEY_NONE:
-			continue
-		for other in result.keys():
-			if other != action and int(result[other]) == code:
-				result[other] = KEY_NONE
-	return result
+static func parse_hotkeys_text(raw: String, base: Dictionary = DEFAULT_HOTKEYS, out_meta: Dictionary = {}) -> Dictionary:
+	return _DisplayAndHotkeyPrefs.parse_hotkeys_text(raw, base, out_meta)
 
 
 static func format_hotkeys_text(bindings: Dictionary) -> String:
-	var lines: PackedStringArray = PackedStringArray(["version=%d" % HOTKEYS_CONFIG_VERSION])
-	var keys := bindings.keys()
-	keys.sort()
-	for action in keys:
-		var code := int(bindings.get(action, KEY_NONE))
-		var key_str := "None" if code == KEY_NONE else OS.get_keycode_string(code)
-		lines.append("%s=%s" % [str(action), key_str])
-	return "\n".join(lines) + "\n"
+	return _DisplayAndHotkeyPrefs.format_hotkeys_text(bindings)
 
 
 func _load_hotkeys() -> void:
-	_hotkeys = DEFAULT_HOTKEYS.duplicate()
-	var path := ""
-	for args in [OS.get_cmdline_user_args(), OS.get_cmdline_args()]:
-		for i in args.size():
-			var arg := String(args[i])
-			if arg.begins_with("--hotkeys="):
-				path = arg.substr(10)
-			elif arg == "--hotkeys" and i + 1 < args.size():
-				path = String(args[i + 1])
-	if path.is_empty() and FileAccess.file_exists(HOTKEYS_SETTINGS_PATH):
-		path = HOTKEYS_SETTINGS_PATH
-	if path.is_empty() or not FileAccess.file_exists(path):
-		return
-	var text := FileAccess.get_file_as_string(path)
-	if not text.is_empty():
-		_hotkeys = parse_hotkeys_text(text, DEFAULT_HOTKEYS)
+	_prefs.load_hotkeys()
 
 
 func _apply_safe_area() -> void:
-	if overlays == null:
-		return
-	if _is_headless():
-		overlays.apply_safe_area({})
-		return
-	var win_size := DisplayServer.window_get_size()
-	var safe := DisplayServer.get_display_safe_area()
-	_last_safe_area = safe
-	if win_size.x <= 0 or win_size.y <= 0 or safe.size.x <= 0 or safe.size.y <= 0:
-		overlays.apply_safe_area({})
-		return
-	var base := Vector2i(1024, 576)
-	var integer_stretch := false
-	var win := get_window() if is_inside_tree() else null
-	if win != null:
-		if win.content_scale_size.x > 0 and win.content_scale_size.y > 0:
-			base = win.content_scale_size
-		integer_stretch = win.content_scale_stretch == Window.CONTENT_SCALE_STRETCH_INTEGER
-	overlays.apply_safe_area(safe_area_insets(win_size, safe, base, integer_stretch))
+	_prefs.apply_safe_area(self, overlays)
 
 
-## Display safe-area insets in design pixels. Under aspect keep the content is centred
-## with letterbox bars, so only the part of the cutout that overlaps the content counts.
 static func safe_area_insets(win_size: Vector2i, safe: Rect2i, base: Vector2i, integer_stretch: bool = false) -> Dictionary:
-	if win_size.x <= 0 or win_size.y <= 0 or base.x <= 0 or base.y <= 0:
-		return {}
-	var ratio := minf(float(win_size.x) / float(base.x), float(win_size.y) / float(base.y))
-	if integer_stretch and ratio >= 1.0:
-		ratio = floorf(ratio)
-	var bar_x := maxf(0.0, (float(win_size.x) - float(base.x) * ratio) * 0.5)
-	var bar_y := maxf(0.0, (float(win_size.y) - float(base.y) * ratio) * 0.5)
-	return {
-		"left": maxf(0.0, float(safe.position.x) - bar_x) / ratio,
-		"top": maxf(0.0, float(safe.position.y) - bar_y) / ratio,
-		"right": maxf(0.0, float(win_size.x - safe.end.x) - bar_x) / ratio,
-		"bottom": maxf(0.0, float(win_size.y - safe.end.y) - bar_y) / ratio,
-	}
+	return _DisplayAndHotkeyPrefs.safe_area_insets(win_size, safe, base, integer_stretch)
 
 
 func _sync_mobile_and_overlay_state(delta: float) -> void:
@@ -2234,21 +2127,8 @@ func _sync_mobile_and_overlay_state(delta: float) -> void:
 			drawer_tab_ctx = "save"
 		elif phase == "title" and choice != null and choice.is_open:
 			drawer_tab_ctx = "title"
-		overlays.update_drawer_state(phase == "title", can_open_quick_ui(), PERF_FPS_LABELS[_perf_tier], scaling_mode_name(), drawer_tab_ctx)
-	if not _is_headless():
-		_safe_area_poll_timer += delta
-		if _safe_area_poll_timer >= 0.5:
-			_safe_area_poll_timer = 0.0
-			var current_safe := DisplayServer.get_display_safe_area()
-			if current_safe != _last_safe_area:
-				_apply_safe_area()
-	if _show_title_fps and not _is_headless():
-		_title_fps_timer += delta
-		if _title_fps_timer >= 0.5:
-			_title_fps_timer = 0.0
-			DisplayServer.window_set_title(
-				"%s | Screen:%d VM:%d | %s" % [DESKTOP_WINDOW_TITLE, int(Engine.get_frames_per_second()), target_fps(), PERF_FPS_LABELS[_perf_tier]]
-			)
+		overlays.update_drawer_state(phase == "title", can_open_quick_ui(), _prefs.perf_label(), scaling_mode_name(), drawer_tab_ctx)
+	_prefs.poll_safe_area_and_title_fps(delta, self, overlays)
 
 
 func _on_touch_sidebar_swipe(open: bool) -> void:
@@ -2441,60 +2321,24 @@ func _choice_contains_point(point: Vector2) -> bool:
 
 
 func _clear_empirical_tap() -> void:
-	_empirical_tap_active = false
-	_empirical_tap_dirty = false
-	_empirical_tap_frames = 0
-	_empirical_tap_phase = ""
-	_empirical_tap_map_id = -1
-	_empirical_tap_instances = ""
-	_empirical_tap_slots = PackedInt32Array()
+	_empirical_blank.clear()
 
 
 func _mark_empirical_tap_dirty() -> void:
-	if _empirical_tap_active:
-		_empirical_tap_dirty = true
-
-
-static func _is_strict_nonempty_slot_subset(candidate: PackedInt32Array, baseline: PackedInt32Array) -> bool:
-	if candidate.is_empty() or candidate.size() >= baseline.size():
-		return false
-	for slot in candidate:
-		if not baseline.has(slot):
-			return false
-	return true
+	_empirical_blank.mark_dirty()
 
 
 func _update_empirical_tap_after_frame() -> void:
-	if not _empirical_tap_active:
-		return
-	_empirical_tap_frames += 1
-	if _empirical_tap_dirty:
-		return
-	if stage != null and stage.had_hit_match_this_frame():
-		_empirical_tap_dirty = true
-	elif phase != _empirical_tap_phase:
-		_empirical_tap_dirty = true
-	elif session != null and (session.MapId != _empirical_tap_map_id or session.GetForegroundStackSignature() != _empirical_tap_instances):
-		_empirical_tap_dirty = true
-	elif _empirical_tap_frames <= 2 and stage != null:
-		var cur_slots := stage.foreground_slot_signature()
-		if cur_slots != _empirical_tap_slots:
-			# Moving off a hovered picture-menu button (e.g. CE245/251/310) erases its
-			# hover-preview slots while keeping interactive hit polls active; accept the
-			# shrunken baseline instead of rejecting blank-space double-tap.
-			if _empirical_tap_frames == 1 and stage.has_active_hit_polls() \
-					and _is_strict_nonempty_slot_subset(cur_slots, _empirical_tap_slots):
-				_empirical_tap_slots = cur_slots
-			else:
-				_empirical_tap_dirty = true
-	if _empirical_tap_dirty:
-		return
-	if _modal_window_open() or (overlays != null and overlays.drawer_open()) or _save_load_ui_active():
-		_empirical_tap_dirty = true
-	elif message != null and message.is_open():
-		_empirical_tap_dirty = true
-	elif choice != null and choice.is_open and (not choice.is_offscreen_parked() or not choice.override_rects.is_empty()):
-		_empirical_tap_dirty = true
+	_empirical_blank.update_after_frame(
+		stage,
+		phase,
+		session,
+		_modal_window_open(),
+		overlays != null and overlays.drawer_open(),
+		_save_load_ui_active(),
+		message,
+		choice
+	)
 
 
 func _empirical_screen_supports_blank_cancel() -> bool:
@@ -2537,33 +2381,14 @@ func record_touch_action_tap(point: Vector2) -> bool:
 		return false
 	if stage != null and stage.has_interactive_hit(point):
 		return false
-	_empirical_tap_active = true
-	_empirical_tap_dirty = false
-	_empirical_tap_frames = 0
-	_empirical_tap_phase = phase
-	_empirical_tap_map_id = session.MapId if session != null else -1
-	_empirical_tap_instances = session.GetForegroundStackSignature() if session != null else ""
-	_empirical_tap_slots = stage.foreground_slot_signature() if stage != null else PackedInt32Array()
+	_empirical_blank.record(phase, session, stage)
 	return true
 
 
 func is_empirical_blank_double_tap(point: Vector2) -> bool:
-	if not _empirical_tap_active or _empirical_tap_dirty or _empirical_tap_frames < 1:
-		return false
 	if not _empirical_screen_supports_blank_cancel():
 		return false
-	if stage != null and (stage.has_interactive_hit(point) or stage.had_hit_match_this_frame()):
-		return false
-	if phase != _empirical_tap_phase:
-		return false
-	if session != null:
-		if session.MapId != _empirical_tap_map_id:
-			return false
-		if session.GetForegroundStackSignature() != _empirical_tap_instances:
-			return false
-	if _empirical_tap_frames <= 2 and stage != null and stage.foreground_slot_signature() != _empirical_tap_slots:
-		return false
-	return true
+	return _empirical_blank.verify(point, phase, session, stage)
 
 
 func _maybe_handle_save_ui_action(is_pointer: bool) -> bool:
@@ -2654,17 +2479,21 @@ func handle_back_request() -> String:
 		return "fault_modal_reopened"
 	if phase == "bootstrap":
 		return "bootstrap_ignored"
+	if phase == "setup":
+		return "setup_ignored"
 	if overlays != null and overlays.is_modal_open():
 		var was_drawer := overlays.drawer_open()
 		if overlays.close_topmost_modal():
 			_arm_modal_release_guard()
 		return "drawer_closed" if was_drawer else "modal_closed"
 	if _save_load_ui_active():
+		if session != null and (int(session.BasicAllDeny) & 2) != 0:
+			return "save_ui_cancel_blocked"
 		if router != null:
 			router.trigger_cancel_pulse("touch")
 		return "submenu_cancel"
 	if choice != null and choice.is_open and phase != "title":
-		if not choice.allow_cancel:
+		if not choice.allow_cancel or (session != null and (int(session.BasicAllDeny) & 2) != 0):
 			return "choice_cancel_blocked"
 		if router != null:
 			router.trigger_cancel_pulse("touch")

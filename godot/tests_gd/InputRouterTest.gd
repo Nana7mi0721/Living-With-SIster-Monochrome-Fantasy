@@ -876,10 +876,14 @@ func _ready() -> void:
 		failures.append("hover-only touch tap must suppress action_pressed, click_latch, and MASK_OK")
 	if not _router.hover_position.is_equal_approx(Vector2(200, 300)) or not _router.mouse_seen or _router.last_input_source != "touch":
 		failures.append("hover-only touch tap must still update hover_position, mouse_seen, and last_input_source")
+	if _router.touch_phase() != InputRouter.TouchSession.Phase.IDLE or _router.has_active_touches():
+		failures.append("hover-only touch tap release must reset TouchSession to IDLE (phase=%d active=%s)" % [_router.touch_phase(), str(_router.has_active_touches())])
 	_router.clear_frame_latches()
 	_tap_once(Vector2(450, 300))
 	if _action != gate_actions_before + 1 or not _router.click_latched() or not _router.hover_position.is_equal_approx(Vector2(450, 300)):
 		failures.append("touch tap inside skill area must emit action_pressed and latch click")
+	if _router.touch_phase() != InputRouter.TouchSession.Phase.IDLE:
+		failures.append("touch tap release must reset TouchSession to IDLE (phase=%d)" % _router.touch_phase())
 	_router.consume_touch_ok()
 	_router.clear_frame_latches()
 	var desktop_actions_before := _action
