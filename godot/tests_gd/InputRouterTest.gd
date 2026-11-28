@@ -866,6 +866,33 @@ func _ready() -> void:
 	_router.clear_pointer_latches()
 	_router.clear_frame_latches()
 
+	# 34. Two-step hover-only predicate suppresses touch confirmation outside skill buttons
+	#     while allowing confirmation on matching slots and desktop left clicks.
+	_router.touch_tap_hover_only_predicate = func(pt: Vector2) -> bool:
+		return pt.x < 400.0
+	var gate_actions_before := _action
+	_tap_once(Vector2(200, 300))
+	if _action != gate_actions_before or _router.click_latched() or (_router.held_mask() & InputRouter.MASK_OK) != 0:
+		failures.append("hover-only touch tap must suppress action_pressed, click_latch, and MASK_OK")
+	if not _router.hover_position.is_equal_approx(Vector2(200, 300)) or not _router.mouse_seen or _router.last_input_source != "touch":
+		failures.append("hover-only touch tap must still update hover_position, mouse_seen, and last_input_source")
+	_router.clear_frame_latches()
+	_tap_once(Vector2(450, 300))
+	if _action != gate_actions_before + 1 or not _router.click_latched() or not _router.hover_position.is_equal_approx(Vector2(450, 300)):
+		failures.append("touch tap inside skill area must emit action_pressed and latch click")
+	_router.consume_touch_ok()
+	_router.clear_frame_latches()
+	var desktop_actions_before := _action
+	_router.handle_event(_mouse(MOUSE_BUTTON_LEFT))
+	if _action != desktop_actions_before + 1:
+		failures.append("desktop left click must bypass touch_tap_hover_only_predicate")
+	var desktop_up := _mouse(MOUSE_BUTTON_LEFT)
+	desktop_up.pressed = false
+	_router.handle_event(desktop_up)
+	_router.touch_tap_hover_only_predicate = Callable()
+	_router.clear_pointer_latches()
+	_router.clear_frame_latches()
+
 	bridge.free()
 	_report(failures, "INPUT_ROUTER_TEST_OK")
 

@@ -149,6 +149,18 @@ func _ready() -> void:
 	stage.reset_screen_tint()
 	failures.append_array(await _render_tint_probe())
 
+	var ui_probe := PictureStage.new(null)
+	add_child(ui_probe)
+	for hud_slot in [6000, 6100, 6250, 10003, 12100]:
+		var hud_node := ui_probe.draw_picture(hud_slot, 0, "", "UI", [0, 1, 1, 1, 255, 10, 10, 100, 0], 0, 2)
+		if hud_node == null or hud_node.z_index != PictureStage.SCREEN_TINT_UI_PICTURE_Z:
+			failures.append("UI whitelist slot %d must sit above screen tint (z=%d)" % [hud_slot, -1 if hud_node == null else hud_node.z_index])
+	for scene_slot in [121, 6010, 6800, 7000, 8230, 9999]:
+		var scene_node := ui_probe.draw_picture(scene_slot, 0, "", "Scene", [0, 1, 1, 1, 255, 10, 10, 100, 0], 0, 2)
+		if scene_node == null or scene_node.z_index != 0:
+			failures.append("scene slot %d must stay at z_index=0 (got %d)" % [scene_slot, -1 if scene_node == null else scene_node.z_index])
+	ui_probe.queue_free()
+
 	if failures.is_empty():
 		print("LAYER_ORDER_TEST_OK")
 		get_tree().quit(0)

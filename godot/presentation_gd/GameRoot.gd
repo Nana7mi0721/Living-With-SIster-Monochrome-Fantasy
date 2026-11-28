@@ -14,6 +14,8 @@ const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
 const _PlayOverlays := preload("res://presentation_gd/PlayOverlays.gd")
 
 const SCALE_MODES: Array[String] = ["Integer", "Fit-Nearest", "Fit-Linear"]
+# Action/skill picture slots polled for execution in Map1005 Ev8 battle click logic.
+const BATTLE_TOUCH_ACTION_SLOTS: Array[int] = [3090, 3200, 3201, 3202, 3203, 3204, 3205, 3206]
 const PERF_FPS_LEVELS: Array[int] = [60, 30, 15]
 const PERF_FPS_LABELS: Array[String] = ["高 (60 fps)", "中 (30 fps)", "低 (15 fps)"]
 const BASE_WINDOW_SIZE := Vector2i(1024, 576)
@@ -219,6 +221,7 @@ func _start_game() -> void:
 	add_child(router)
 	router.blank_space_predicate = Callable(self, "is_touch_blank_space")
 	router.touch_action_tap_recorder = Callable(self, "record_touch_action_tap")
+	router.touch_tap_hover_only_predicate = Callable(self, "is_battle_touch_hover_only")
 	router.empirical_blank_verifier = Callable(self, "is_empirical_blank_double_tap")
 	router.ui_touch_consumer = Callable(self, "_overlays_consume_touch_point")
 	router.action_pressed.connect(_on_action)
@@ -876,10 +879,30 @@ func _clear_transition_overlays() -> void:
 		_transition_freeze_rect.texture = null
 
 
+## Battle two-step touch gate: keep single taps hover-only unless hitting an active action slot.
+func is_battle_touch_hover_only(point: Vector2) -> bool:
+	if router == null or not router.touch_mode:
+		return false
+	if faulted or vm == null or stage == null:
+		return false
+	if _modal_window_open() or _save_load_ui_active():
+		return false
+	if message != null and message.is_open():
+		return false
+	if choice != null and choice.is_open:
+		return false
+	if vm.GetVar(340) != 1:
+		return false
+	return not stage.has_visible_hit_in_slots(BATTLE_TOUCH_ACTION_SLOTS, point)
+
+
 func _on_transition(kind: int, flags: int) -> void:
 	_mark_empirical_tap_dirty()
 	_flush_pending_pictures()
 	var phase_mode: int = vm.TransitionPhase if vm != null else 0
+	if phase_mode == 0:
+		status("transition kind=%d flags=%d (phase 0 no-op)" % [kind, flags])
+		return
 	if phase_mode == 1:
 		# 161 PrepareTransition: freeze current scene so 162 can crossfade without dipping to black.
 		_clear_transition_overlays()

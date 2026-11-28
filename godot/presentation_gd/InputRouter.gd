@@ -202,6 +202,7 @@ var mobile_double_tap_cancel_enabled := _default_mobile_double_tap_enabled()
 var blank_space_predicate: Callable = Callable()
 var empirical_blank_verifier: Callable = Callable()
 var touch_action_tap_recorder: Callable = Callable()
+var touch_tap_hover_only_predicate: Callable = Callable()
 var ui_touch_consumer: Callable = Callable()
 var clock_msec_override := -1
 ## One-frame press latches plus consumable multi-frame touch/cancel pulses.
@@ -605,6 +606,9 @@ func _handle_screen_touch(st: InputEventScreenTouch) -> bool:
 					hover_position = clamped
 					mouse_seen = true
 					last_input_source = "touch"
+					# Two-step battle touch: tapping outside active skill buttons moves hover only.
+					if touch_tap_hover_only_predicate.is_valid() and bool(touch_tap_hover_only_predicate.call(clamped)):
+						return true
 					var arm_empirical := false
 					if mobile_double_tap_cancel_enabled and touch_action_tap_recorder.is_valid():
 						arm_empirical = bool(touch_action_tap_recorder.call(clamped))

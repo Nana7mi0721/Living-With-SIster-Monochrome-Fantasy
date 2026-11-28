@@ -352,19 +352,24 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 
 	var prev_state: Dictionary = _states.get(number, {}).duplicate()
 	var prev_cmd: Dictionary = _cmds.get(number, {})
-	# Only the exact same kind/file/text counts as a redraw; a new asset resets effects/pose.
-	var redraws := not prev_cmd.is_empty() \
+	# Only identical kind/file/text redraws directly; kind=2 text changes update in place when reusable.
+	var same_asset := not prev_cmd.is_empty() \
 		and int(prev_cmd.get("kind", -1)) == kind \
-		and str(prev_cmd.get("file", "")) == file \
-		and str(prev_cmd.get("text", "")) == text
-	if redraws and _can_reuse_picture(number, prev_cmd, args, kind):
+		and str(prev_cmd.get("file", "")) == file
+	var redraws := same_asset and str(prev_cmd.get("text", "")) == text
+	var text_update := same_asset \
+		and kind == 2 \
+		and not text.is_empty() \
+		and str(prev_cmd.get("text", "")) != text
+	if (redraws or text_update) and _can_reuse_picture(number, prev_cmd, args, kind):
 		var existing: Control = _pictures[number]
 		if existing != null and is_instance_valid(existing):
-			_base_sizes[number] = existing.get_meta("base_size", existing.size)
-			_states[number] = prev_state
-			_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
-			_store_cmd(number, 0, file, text, _resolved_move_args(number, args), anchor, kind, animate, flags)
-			return existing
+			if not text_update or _update_text_picture(existing, text):
+				_base_sizes[number] = existing.get_meta("base_size", existing.size)
+				_states[number] = prev_state
+				_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
+				_store_cmd(number, 0, file, text, _resolved_move_args(number, args), anchor, kind, animate, flags)
+				return existing
 
 	_free_picture(number)
 	var node := _build_picture(number, file, text, args, anchor, kind, flags)
@@ -1256,8 +1261,15 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 	var has_opacity := args.size() > 4 and int(args[4]) != UNCHANGED
 	if not has_opacity:
 		state["target"]["opacity"] = int(prev_cur.get("opacity", 255))
+	var prev_scale_x := int(prev_cur.get("scale", 100))
+	var prev_scale_y := int(prev_cur.get("scale_y", prev_scale_x))
+	var was_visible := not prev.is_empty() \
+		and not bool(prev.get("hidden", false)) \
+		and int(prev_cur.get("opacity", 0)) > 0 \
+		and prev_scale_x != 0 \
+		and (int(prev_cur.get("scale_mode", 0)) != 3 or prev_scale_y != 0)
 	var show_from: Dictionary = prev_cur.duplicate()
-	if duration > 0:
+	if duration > 0 and not was_visible:
 		show_from["opacity"] = 0
 	state["current"] = show_from
 	if duration > 0 and _pose_differs(show_from, state["target"]):
@@ -1628,8 +1640,42 @@ func _render_picture(number: int) -> void:
 	_effects.apply_blend(node, blend)
 
 
+func _update_text_picture(holder: Control, text: String) -> bool:
+	if holder.get_child_count() != 1:
+		return false
+	var child := holder.get_child(0)
+	if not (child is PictureTextLabel):
+		return false
+	var label := child as PictureTextLabel
+	var layout := _measure_text(text)
+	var size: Vector2 = layout["size"]
+	label.text = layout["text"]
+	label.runs = layout["runs"]
+	label.position = Vector2.ZERO
+	label.size = size
+	label.add_theme_font_size_override("font_size", int(layout["font_size"]))
+	label.queue_redraw()
+	holder.set_meta("base_size", size)
+	holder.size = size
+	return true
+
+
+## Returns true if point hits any currently visible slot in the given list.
+func has_visible_hit_in_slots(slots: Array[int], point: Vector2) -> bool:
+	for slot in slots:
+		if not _cmds.has(slot) or not is_picture_visible(slot):
+			continue
+		var rect := _hit_rect(slot)
+		if rect.size.x > 0.0 and rect.size.y > 0.0 and rect.has_point(point):
+			return true
+	return false
+
+
 static func _is_screen_tint_ui(number: int) -> bool:
-	return number >= HUD_TOP_SLOT_MIN
+	return number == HUD_TOP_SLOT_MIN \
+		or (number >= 6100 and number <= 6299) \
+		or (number >= 10000 and number <= 10199) \
+		or number >= 12000
 
 
 func _apply_pattern_cell(node: Control, state: Dictionary) -> void:

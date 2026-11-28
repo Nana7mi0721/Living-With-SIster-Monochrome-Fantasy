@@ -943,6 +943,7 @@ func _ready() -> void:
 
 	_test_ux_and_multiplatform(script, failures)
 	_test_mobile_4issues_regression(script, failures)
+	_test_ci_and_ux_fixes_regression(script, failures)
 
 	if failures.is_empty():
 		print("GAME_ROOT_TEST_OK")
@@ -1860,6 +1861,85 @@ func _test_mobile_4issues_regression(script, failures: Array[String]) -> void:
 	mob.router.clock_msec_override = -1
 	mob.router.mobile_double_tap_cancel_enabled = mob.router._default_mobile_double_tap_enabled()
 	mob.queue_free()
+
+
+func _test_ci_and_ux_fixes_regression(script, failures: Array[String]) -> void:
+	var root = script.new()
+	add_child(root)
+	root.session.SetScriptedInput(false)
+	# 1. op160 TransitionPhase == 0 must be a hard no-op even for kind >= 0.
+	if root.vm.TransitionPhase != 0:
+		failures.append("fresh VM TransitionPhase must be 0 (got %d)" % root.vm.TransitionPhase)
+	root._transition_frames = 0
+	if root._transition_rect != null:
+		root._transition_rect.visible = false
+	root._on_transition(1, 0)
+	if root._transition_frames != 0 or (root._transition_rect != null and root._transition_rect.visible):
+		failures.append("op160 TransitionPhase == 0 must not activate fullscreen transition overlay (frames=%d)" % root._transition_frames)
+
+	# 2. Battle two-step touch gate: character portrait tap moves hover only without firing click;
+	#    subsequent skill or defense button tap confirms normally.
+	var battle_tap := func(pos: Vector2) -> void:
+		var down := InputEventScreenTouch.new()
+		down.index = 0
+		down.position = pos
+		down.pressed = true
+		root.router.handle_event(down)
+		var up := InputEventScreenTouch.new()
+		up.index = 0
+		up.position = pos
+		up.pressed = false
+		root.router.handle_event(up)
+
+	root.vm.SetVar(340, 1)
+	root.stage.draw_picture(3010, 0, "", "", [0, 200, 250, 1, 255, 395, 360, 100, 0, 0, 0, 0, 100, 100, 100], 1, 3)
+	root.stage.draw_picture(3020, 0, "", "", [0, 200, 250, 1, 255, 200, 305, 100, 0, 0, 0, 0, 100, 100, 100], 1, 3)
+	root.stage.draw_picture(3090, 0, "", "", [0, 78, 68, 1, 255, 450, 150, 100, 0, 0, 0, 0, 100, 100, 100], 1, 3)
+
+	root.router.clear_pointer_latches()
+	root.router.clear_frame_latches()
+	battle_tap.call(Vector2(395, 360))
+	if not root.router.touch_mode or not root.router.hover_position.is_equal_approx(Vector2(395, 360)):
+		failures.append("battle character tap must move touch hover_position")
+	if root.router.click_latched() or (root.router.held_mask() & InputRouter.MASK_OK) != 0:
+		failures.append("battle character tap before skill icons must not confirm on same tap")
+
+	# Reveal skill button 3200 inside portrait 3010; tapping 3200 must now confirm.
+	root.stage.draw_picture(3200, 0, "", "", [0, 138, 68, 1, 255, 380, 320, 100, 0, 0, 0, 0, 100, 100, 100], 1, 3)
+	root.router.clear_frame_latches()
+	battle_tap.call(Vector2(380, 320))
+	if not root.router.click_latched() or (root.router.held_mask() & InputRouter.MASK_OK) == 0:
+		failures.append("tapping revealed battle skill slot 3200 must confirm normally")
+
+	# Tapping a different character card outside 3200/3090 switches hover without misfiring.
+	root.router.consume_touch_ok()
+	root.router.clear_frame_latches()
+	battle_tap.call(Vector2(200, 305))
+	if root.router.click_latched() or (root.router.held_mask() & InputRouter.MASK_OK) != 0:
+		failures.append("tapping another battle character must not confirm active character skill")
+
+	# Tapping visible defense slot 3090 confirms immediately.
+	battle_tap.call(Vector2(450, 150))
+	if not root.router.click_latched() or (root.router.held_mask() & InputRouter.MASK_OK) == 0:
+		failures.append("tapping battle defense slot 3090 must confirm normally")
+
+	# Dialogue during battle must bypass hover-only gating.
+	root.router.consume_touch_ok()
+	root.clear_frame_latches() if root.has_method("clear_frame_latches") else root.router.clear_frame_latches()
+	var msg_actions := [0]
+	var msg_cb := func() -> void: msg_actions[0] = int(msg_actions[0]) + 1
+	root.router.action_pressed.connect(msg_cb)
+	root.message.open("battle dialogue")
+	battle_tap.call(Vector2(512, 480))
+	root.router.action_pressed.disconnect(msg_cb)
+	if int(msg_actions[0]) != 1:
+		failures.append("dialogue advance during battle must remain single-tap (actions=%d)" % int(msg_actions[0]))
+	root.message.close()
+
+	root.vm.SetVar(340, 0)
+	if root.is_battle_touch_hover_only(Vector2(200, 305)):
+		failures.append("non-battle state must never activate battle hover-only gate")
+	root.queue_free()
 
 
 static func _remove_test_tree(path: String) -> void:

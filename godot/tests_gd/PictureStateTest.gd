@@ -409,8 +409,8 @@ func _ready() -> void:
 	stage.track_picture(1380, 0, "", "track a", [10, 1, 1, 1, 255, 100, 100, 100, 0], 0, 2)
 	check((stage._states[1380]["effects"] as Array).size() == 1,
 		"track mode keeps persistent effects on a same-graphic Show")
-	check(float(stage._states[1380]["current"]["opacity"]) == 0.0,
-		"a same-graphic Show with Process Time starts from transparent")
+	check(float(stage._states[1380]["current"]["opacity"]) == 255.0,
+		"a visible same-graphic Show with Process Time preserves live opacity")
 
 	# 150 move honours the UNCHANGED sentinel: x/y stay, only scale and opacity change.
 	stage.draw_picture(1330, 0, "", "unchanged probe", [0, 1, 1, 1, 255, 100, 120, 200, 0], 0, 2)
@@ -455,8 +455,8 @@ func _ready() -> void:
 	var swapped_state: Dictionary = stage._states[1387]
 	check(swapped_state["color_corr"] == [10, 20, 30],
 		"Show on an occupied slot keeps 290 colour correction")
-	check(int(swapped_state["current"]["opacity"]) == 0,
-		"Show on an occupied slot starts from transparent")
+	check(int(swapped_state["current"]["opacity"]) == 128,
+		"Show on an occupied visible slot preserves live opacity")
 	check(int(swapped_state["current"]["x"]) == UiSkin.unit(100) and swapped_state["transition"] != null,
 		"Show on an occupied slot slides from the live pose")
 	for _i in 5:
@@ -818,6 +818,7 @@ func _ready() -> void:
 	stage.clear_pictures()
 
 	_test_assetdb_dir_priority_and_tiebreak()
+	_test_draw_opacity_and_inplace_text_update()
 
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -874,6 +875,49 @@ func _render_viewport(viewport: SubViewport) -> void:
 func _viewport_pixel(viewport: SubViewport) -> Color:
 	var image := viewport.get_texture().get_image()
 	return image.get_pixel(4, 4)
+
+
+func _test_draw_opacity_and_inplace_text_update() -> void:
+	var probe_assets := AssetDB.new()
+	var probe := PictureStage.new(probe_assets)
+	add_child(probe)
+
+	# 1. Fresh empty slot with positive fade starts transparent (opacity=0 -> fade in).
+	probe.draw_picture(1501, 0, "SystemFile/WindowBase.png", "",
+		[10, 1, 1, 1, 255, 200, 200, 100, 0], 1, 0)
+	var s1501: Dictionary = probe._states.get(1501, {})
+	check(int(s1501.get("current", {}).get("opacity", -1)) == 0,
+		"new slot draw with duration=10 must start at opacity=0")
+
+	# 2. Already visible slot redrawn with positive duration preserves opacity=255 (no flash/dip).
+	probe.draw_picture(1502, 0, "SystemFile/WindowBase.png", "",
+		[0, 1, 1, 1, 255, 200, 200, 100, 0], 1, 0)
+	probe.draw_picture(1502, 0, "SystemFile/WindowBase.png", "",
+		[10, 1, 1, 1, 255, 200, 200, 100, 0], 1, 0)
+	var s1502: Dictionary = probe._states.get(1502, {})
+	check(int(s1502.get("current", {}).get("opacity", -1)) == 255,
+		"already-visible slot redraw with duration=10 must preserve opacity=255")
+
+	# 3. Text HUD update reuses existing node in place without opacity dip.
+	var text_node_1 := probe.draw_picture(6235, 0, "", "\\f[12] 5/10",
+		[0, 1, 1, 1, 255, 100, 40, 100, 0], 0, 2)
+	var rect_before := probe.picture_rect(6235)
+	var text_node_2 := probe.draw_picture(6235, 0, "", "\\f[12] 10/10",
+		[5, 1, 1, 1, 255, 100, 40, 100, 0], 0, 2)
+	var s6235: Dictionary = probe._states.get(6235, {})
+	check(text_node_1 != null and text_node_1 == text_node_2,
+		"kind=2 HUD text change must reuse existing Control node in place")
+	check(int(s6235.get("current", {}).get("opacity", -1)) == 255,
+		"kind=2 HUD text update with duration=5 must keep opacity=255")
+	if text_node_2 != null and text_node_2.get_child_count() == 1:
+		var lbl := text_node_2.get_child(0) as Label
+		check(lbl != null and lbl.text == " 10/10",
+			"in-place HUD text update must refresh label text")
+	var rect_after := probe.picture_rect(6235)
+	check(rect_after.size.x >= rect_before.size.x,
+		"in-place HUD text update must recompute base_size for wider text")
+
+	probe.queue_free()
 
 
 func _test_assetdb_dir_priority_and_tiebreak() -> void:
