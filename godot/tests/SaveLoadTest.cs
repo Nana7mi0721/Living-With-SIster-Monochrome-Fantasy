@@ -274,7 +274,7 @@ public partial class SaveLoadTest : Node
         long saveBytes = new FileInfo(savePath).Length;
         Check(saveBytes < 50 * 1024, $"save slot must stay under 50 KB (got {saveBytes} bytes)");
 
-        // Schema guard: future versions are rejected; v1 and pre-versioned (< 1) slots migrate to current.
+        // Schema guard: negative and future versions are rejected; v1 and pre-versioned (0) slots migrate to current.
         string savedJson = File.ReadAllText(savePath);
         string currentSchemaToken = $"\"schema_version\": {SaveState.SchemaVersionNumber}";
         Check(SaveCodec.FromJson(savedJson.Replace(currentSchemaToken, "\"schema_version\": 99")) == null,
@@ -285,10 +285,10 @@ public partial class SaveLoadTest : Node
         SaveState? migratedV0 = SaveCodec.FromJson(savedJson.Replace(currentSchemaToken, "\"schema_version\": 0"));
         Check(migratedV0 != null && migratedV0.SchemaVersion == SaveState.SchemaVersionNumber,
             "schema_version 0 must migrate to current schema version");
-        SaveState? migratedNeg = SaveCodec.FromBytes(System.Text.Encoding.UTF8.GetBytes(
+        SaveState? rejectedNeg = SaveCodec.FromBytes(System.Text.Encoding.UTF8.GetBytes(
             savedJson.Replace(currentSchemaToken, "\"schema_version\": -1")));
-        Check(migratedNeg != null && migratedNeg.SchemaVersion == SaveState.SchemaVersionNumber,
-            "schema_version < 1 via FromBytes must migrate to current schema version");
+        Check(rejectedNeg == null,
+            "negative schema_version via FromBytes must be rejected");
 
         // Corrupt main + good .bak: ReadWithSource must fall back, and the backup must
         // survive a rewrite attempt from the corrupt file.
