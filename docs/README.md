@@ -35,7 +35,7 @@ graph LR
 | 文档 | 状态 | 内容与定位 |
 | :--- | :---: | :--- |
 | [godot/README.md](godot/README.md) | **现行 · 先读** | **Godot 重制阶段唯一规范入口**：环境基线、当前完成状态与维护约定 |
-| [godot/DECISIONS.md](godot/DECISIONS.md) | **现行 · 权威** | **定稿架构决策（D-01..D-104）**：确定采用纯 C# 确定性事件内核 + GDScript 呈现层 |
+| [godot/DECISIONS.md](godot/DECISIONS.md) | **现行 · 权威** | **定稿架构决策（D-01..D-106）**：确定采用纯 C# 确定性事件内核 + GDScript 呈现层 |
 | [godot/PLAN.md](godot/PLAN.md) | **现行 · 权威** | Godot 阶段总体演进路线与 M0–M5 各阶段退出标准 |
 | [BASELINE.json](BASELINE.json) | **现行 · 权威** | 自动化测试与一致性校验基线（包含 Game.dat 字段、公共事件、地图事件统计） |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | **现行 · 权威** | 全局架构设计方案（数据转换管线、运行时状态机、渲染层级） |
@@ -60,7 +60,7 @@ graph LR
 Godot 4.7.2 Mono 架构、视口呈现与运行时交互规范：
 
 - [godot/README.md](godot/README.md) — Godot 重制阶段权威入口与环境基线
-- [godot/DECISIONS.md](godot/DECISIONS.md) — 拍板决策集合（D-01..D-104：确定采用纯 C# 确定性事件内核 + GDScript 呈现层）
+- [godot/DECISIONS.md](godot/DECISIONS.md) — 拍板决策集合（D-01..D-106：确定采用纯 C# 确定性事件内核 + GDScript 呈现层）
 - [godot/PLAN.md](godot/PLAN.md) — Godot 阶段总体演进路线与 M0–M5 各阶段退出标准
 - [godot/DATA_CONTRACT.md](godot/DATA_CONTRACT.md) — 离线转换数据契约（`programs.json`、`database.json`、`manifest.json`）
 - [godot/M0_HANDOFF.md](godot/M0_HANDOFF.md) — M0 验收交接：环境门限、数据对账与 Oracle 对拍机制
