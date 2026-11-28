@@ -27,8 +27,9 @@ PAK_MAGIC = b"WOLFMPK1"
 PLACEHOLDER_SIZE = (1024, 576)
 MAIN_ICON_SIZE = 192
 ADAPTIVE_SIZE = 432
-ADAPTIVE_SAFE_RATIO = 0.62
-ADAPTIVE_SAFE_SIZE = int(round(ADAPTIVE_SIZE * ADAPTIVE_SAFE_RATIO))  # 268
+# Matches sync_release_icons.py (72% adaptive foreground); used for pure-black repo placeholders and boot fallback.
+ADAPTIVE_SAFE_RATIO = 0.72
+ADAPTIVE_SAFE_SIZE = int(round(ADAPTIVE_SIZE * ADAPTIVE_SAFE_RATIO))  # 311
 BLACK_THRESHOLD = 8
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"

@@ -190,7 +190,7 @@ if [ -n "$TEMPLATE_OPT" ] && [ "$OFFICIAL_TEMPLATE" = true ]; then
   echo "ERROR: --template and --official-template are mutually exclusive" >&2
   exit 2
 fi
-if [ -z "$TEMPLATE_OPT" ] && [ "$OFFICIAL_TEMPLATE" != true ] && [ "${LWSMF_OFFICIAL_TEMPLATE:-0}" != "1" ]; then
+if [ "$BUILD_MODE" = "release" ] && [ -z "$TEMPLATE_OPT" ] && [ "$OFFICIAL_TEMPLATE" != true ] && [ "${LWSMF_OFFICIAL_TEMPLATE:-0}" != "1" ]; then
   for _tpl in \
     "$ROOT/work/out/templates/android/android_release.apk" \
     "$ROOT/work/out/android-mono-template/android_monoRelease.apk" \
@@ -313,12 +313,15 @@ if [ -e "$APK_OUT" ] && [ "$FORCE" != true ]; then
 fi
 
 PAK_ARG=()
-if [ "$LOSSLESS" = true ]; then
-  echo "== building true-lossless media.pak for Android =="
-  mkdir -p "$(dirname "$LOSSLESS_PAK")" "$MEDIA_OVERLAY/SystemFile"
+if [ "$LOSSLESS" = true ] || [ "$SLIM" = true ]; then
+  mkdir -p "$MEDIA_OVERLAY/SystemFile"
   if [ -d "$ROOT/work/all/SystemFile" ]; then
     cp -a "$ROOT/work/all/SystemFile/." "$MEDIA_OVERLAY/SystemFile/"
   fi
+fi
+if [ "$LOSSLESS" = true ]; then
+  echo "== building true-lossless media.pak for Android =="
+  mkdir -p "$(dirname "$LOSSLESS_PAK")"
   "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" \
     --from-pak "$WA_WIN/media.pak" \
     --out "$(to_win_path "$LOSSLESS_PAK")" \
@@ -328,7 +331,11 @@ if [ "$LOSSLESS" = true ]; then
 elif [ "$SLIM" = true ]; then
   echo "== building slim media.pak for Android =="
   mkdir -p "$(dirname "$SLIM_PAK")"
-  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" --from-pak "$WA_WIN/media.pak" --out "$(to_win_path "$SLIM_PAK")" --slim
+  "$PYTHON_BIN" "$(to_win_path "$ROOT/tools/pack_media.py")" \
+    --from-pak "$WA_WIN/media.pak" \
+    --out "$(to_win_path "$SLIM_PAK")" \
+    --slim \
+    --extra-root "$(to_win_path "$MEDIA_OVERLAY")"
   PAK_ARG=(--media-pak "$(to_win_path "$SLIM_PAK")")
 elif [ -n "$MEDIA_PAK_OPT" ]; then
   PAK_ARG=(--media-pak "$(to_win_path "$MEDIA_PAK_OPT")")
@@ -359,7 +366,7 @@ cp -f "$PRESET_FILE" "$PRESET_BAK"
 PATCH_SETS=(
   --set "package/name=$APP_LABEL"
   --set "version/name=$VERSION"
-  --set "version/code=$VERSION_CODE"
+  --set-raw "version/code=$VERSION_CODE"
 )
 [ -n "$TEMPLATE_OPT" ] && PATCH_SETS+=(--set "custom_template/${BUILD_MODE}=$(to_win_path "$TEMPLATE_OPT")")
 if [ "$BUILD_MODE" = "debug" ]; then

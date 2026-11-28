@@ -31,6 +31,7 @@ PLATFORM_FLAGS: dict[str, list[str]] = {
         "platform=android",
         "arch=arm64",
         "lto=thin",
+        "swappy=no",
         "generate_apk=yes",
     ],
     "ios": [

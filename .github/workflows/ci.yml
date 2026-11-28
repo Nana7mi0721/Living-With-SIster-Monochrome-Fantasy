@@ -21,19 +21,27 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: |
+            8.0.x
+            9.0.x
 
       - name: Restore dependencies
         run: dotnet restore godot/Lwsmf.csproj
 
       - name: Build C# Core Assembly (Debug)
-        run: dotnet build godot/Lwsmf.csproj -c Debug --no-restore
+        run: dotnet build godot/Lwsmf.csproj -c Debug --no-restore -warnaserror
 
       - name: Build C# Core Assembly (Release)
-        run: dotnet build godot/Lwsmf.csproj -c Release --no-restore
+        run: dotnet build godot/Lwsmf.csproj -c Release --no-restore -warnaserror
 
       - name: Build C# Core Assembly (ExportRelease)
-        run: dotnet build godot/Lwsmf.csproj -c ExportRelease --no-restore
+        run: dotnet build godot/Lwsmf.csproj -c ExportRelease --no-restore -warnaserror
+
+      - name: Restore dependencies (Android net9.0)
+        run: dotnet restore godot/Lwsmf.csproj -p:GodotTargetPlatform=android
+
+      - name: Build C# Core Assembly (Android ExportRelease)
+        run: dotnet build godot/Lwsmf.csproj -c ExportRelease -p:GodotTargetPlatform=android --no-restore -warnaserror
 
       - name: Lint Decisions & Docs Links
         run: python tools/lint_decisions.py
@@ -42,7 +50,7 @@ jobs:
         run: python tools/release_audit.py --repo-scan
 
       - name: Mobile Tools Compile Check
-        run: python -m py_compile tools/mobile/windows_pe.py tools/mobile/android_data.py tools/mobile/env_check.py tools/mobile/export_preset_template.py tools/mobile/ios_inject_data.py tools/mobile/postprocess_android_apk.py tools/mobile/strip_android_static_libs.py tools/mobile/github_ios_ci.py tools/mobile/test_mobile_tools.py tools/audit_cross_platform_assets.py tools/brotli_json.py tools/pack_media.py tools/release_tui.py tools/run_godot_test.py tools/sync_boot_assets.py tools/sync_release_icons.py tools/templates/custom_2d_mono.py tools/templates/build_custom_template.py tools/verify_hd_manifest.py tools/upscale_assets.py tools/release_audit.py tools/lint_decisions.py
+        run: python -m compileall -q tools
 
       - name: Mobile Tools CLI Smoke
         run: python tools/mobile/windows_pe.py --help
@@ -58,7 +66,7 @@ jobs:
 
       - name: Release Script Syntax Check
         shell: bash
-        run: bash -n tools/package_release.sh tools/package_android.sh tools/package_ios.sh tools/godot_check.sh tools/godot_smoke.sh tools/check_oracle.sh
+        run: for f in tools/*.sh; do bash -n "$f"; done
 
   rust-check:
     name: Rust Workspace Check & Oracle Test

@@ -11,7 +11,7 @@
 ## 1. 发布策略概览
 
 - 自 D-53 起发布包自带 `game_data/`（紧凑 JSON）与 `work/all/media.pak`（加密归档）及 `BasicData/*.project`，玩家解压即可直接运行 `game\Lwsmf.exe`，无需安装 Python，也无需预先手动转换。
-- 打包脚本：`tools/package_release.sh [--demo] [--slim|--lossless] [--media-pak FILE] [--hd] [--brotli] [--installer] [--template FILE|--official-template] [--allow-placeholder]`，自动从环境变量、`tools/local.env.sh` 或 `PATH` 探测 `godot`、`dotnet`、Inno Setup 与本地定制 2D Mono 模板（`work/out/templates/windows/windows_release_x86_64.exe`，零本机硬编码路径；传 `--official-template` 可强制回退官方模板），先对 `$STAGE` 执行 `release_audit.py`，通过后再交换进入 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]/` 并生成同名 `.zip` 与 `dist/SHA256SUMS.txt`；`--installer` 另行产出同名 `-setup.exe` 并把 SHA-256 追加进清单。若 `work/all/_publish/` 缺省（如 `--demo` 或纯离线构建），可传 `--allow-placeholder` 或 `LWSMF_ALLOW_PLACEHOLDER_ICONS=1` 生成占位图标。
+- 打包脚本：`tools/package_release.sh [--demo] [--slim|--lossless] [--media-pak FILE] [--hd] [--brotli] [--installer] [--template FILE|--official-template] [--allow-placeholder]`，自动从环境变量、`tools/local.env.sh` 或 `PATH` 探测 `godot`、`dotnet`、Inno Setup 与本地定制 2D Mono 模板（`work/out/templates/windows/windows_release_x86_64.exe`，零本机硬编码路径；传 `--official-template` 可强制回退官方模板），先对 `$STAGE` 执行 `release_audit.py`，通过后再交换进入 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]/` 并生成同名 `.zip` 与独立的 `.zip.sha256`；`--installer` 另行产出同名 `-setup.exe` 与独立的 `-setup.exe.sha256`。若 `work/all/_publish/` 缺省（如 `--demo` 或纯离线构建），可传 `--allow-placeholder` 或 `LWSMF_ALLOW_PLACEHOLDER_ICONS=1` 生成占位图标。
 - 交互式发包界面：`python tools/release_tui.py`（或 Windows 直接双击 `tools/release_packager.bat`），与底层打包脚本共用同一套工具链与模板解析规则，默认以**真无损压缩（`--lossless` + `--brotli`）**作为三端标准版本（不包含有损 slim 档），支持交互切换版本号、导出平台、定制/官方模板、Inno Setup、iOS 数据注入与统一产物验真（`--verify` / `--smoke-setup`）。
 - 发布审计：`tools/release_audit.py --dist <dir>` 与 `tools/release_audit.py --repo-scan`，校验程序集、紧凑 JSON、`media.pak` CRC/资产覆盖、0 `.pdb`、0 `addons/`/`tests/` 渗透以及 0 隐私/本机绝对路径泄露。
 
@@ -35,7 +35,8 @@ export DOTNET_ROOT="/path/to/dotnet8"
 name="Windows Desktop"
 platform="Windows Desktop"
 export_filter="all_resources"
-exclude_filter="tests/*,tests_gd/*,game_data/*,work/*,build/*,addons/*,mobile_data/*,assets/boot/android_*.png,assets/boot/generated/*.png,assets/boot/generated/*.ico"
+include_filter="assets/boot/generated/*.bin,assets/boot/generated/icon_pc_taskbar.png"
+exclude_filter="tests/*,tests_gd/*,game_data/*,work/*,build/*,addons/*,mobile_data/*,assets/boot/android_*.png,assets/boot/generated/android_*.png,assets/boot/generated/ios_*.png,assets/boot/generated/*.ico"
 export_path="build/release/Lwsmf.exe"
 debug/export_console_wrapper=0
 dotnet/include_scripts_content=false
@@ -99,8 +100,8 @@ bash tools/package_release.sh --lossless --brotli --installer
 6. 仅复制 `work/all/BasicData/*.project` 与 `work/all/media.pak`；`--lossless` 调用 `tools/pack_media.py --from-pak ... --lossless --extra-root ...`，`--slim` 调用 `--slim --extra-root ...`，并用 `work/all/SystemFile/` 补齐清单缺失项（只补缺失、不覆盖基包条目），跳过 `work/all/save/` 与冗余 `BasicData/*.dat`/`MapChip/`/`MapData/`/`SystemFile/`。
 7. Staging `converter/`（剥离 `__pycache__`、`.pyc` 与 `tests/`）、最新 `README.txt` 与 `按键说明.txt`。
 8. 在替换 `dist/` 之前先对 `$STAGE` 执行 `python tools/release_audit.py --dist "$STAGE"`。
-9. 通过后替换进 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]`，旧目录备份到 `work/out/dist-backup-*`，随后生成同名 `.zip` 与 `dist/SHA256SUMS.txt` 并打印体积账本。
-10. `--installer` 时以 `tools/installer/lwsmf.iss.tmpl` 生成仅简体中文、欢迎页完整横版海报、目录与快捷方式合并的 Inno Setup LZMA2 安装包；自动探测 `ChineseSimplified.isl`（缺失即失败）并输出 `LWSMF-<版本>-windows-x64[-slim][-hd]-setup.exe`，随后把 Setup SHA-256 追加进 `dist/SHA256SUMS.txt`。
+9. 通过后替换进 `dist/LWSMF-<版本>-windows-x64[-slim][-hd]`，旧目录备份到 `work/out/dist-backup-*`，随后生成同名 `.zip` 与独立的 `<包名>.zip.sha256` 并打印体积账本。
+10. `--installer` 时以 `tools/installer/lwsmf.iss.tmpl` 生成仅简体中文、欢迎页完整横版海报、目录与快捷方式合并的 Inno Setup LZMA2 安装包；自动探测 `ChineseSimplified.isl`（缺失即失败）并输出 `LWSMF-<版本>-windows-x64[-slim][-hd]-setup.exe`，随后生成独立的 `<包名>-setup.exe.sha256`。
 11. 最后执行 `normalize_integrity`：若工作区被外部代理设为 `Low Mandatory Level`，对 `dist/` 递归恢复为 `Medium`；普通令牌无 `WRITE_OWNER` 时先补当前用户 FullControl。可单独运行 `tools/fix_integrity_level.ps1` 修复工作区。
 
 ## 5. 实测包体账本与校验指纹（2026-11-21）

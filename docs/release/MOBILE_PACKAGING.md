@@ -78,23 +78,16 @@ bash tools/package_android.sh --dry-run
 
 ### 3.2 构建定制 Mono 模板（可选但用于当前交付包）
 
-在 **Godot 4.7.2 源码树**中执行。`scons`、Android NDK 与 JDK 需在 `PATH` 或环境中可用：
+在 **Godot 4.7.2 源码树**中通过统一构建脚本 [tools/templates/build_custom_template.py](../../tools/templates/build_custom_template.py)（使用共享配置 [tools/templates/custom_2d_mono.py](../../tools/templates/custom_2d_mono.py)，或由 [.github/workflows/custom-templates.yml](../../.github/workflows/custom-templates.yml) 云端生成）。`scons`、Android NDK 与 JDK 需在 `PATH` 或环境中可用：
 
 ```bash
-scons platform=android target=template_release arch=arm64 ndk_platform=android-24 \
-  production=yes lto=thin opengl3=yes vulkan=no d3d12=no metal=no \
-  accesskit=no sdl=no angle=no swappy=no module_raycast_enabled=no \
-  module_mono_enabled=yes disable_3d=yes disable_physics_3d=yes \
-  disable_navigation_3d=yes -j8
-
-python modules/mono/build_scripts/build_assemblies.py \
-  --godot-output-dir bin --godot-platform android
-
-cd platform/android/java
-./gradlew generateGodotMonoTemplates
+python tools/templates/build_custom_template.py \
+  --platform android \
+  --godot-src /path/to/godot-src \
+  --out work/out/templates/android
 ```
 
-将 `bin/android_monoRelease.apk` 复制到仓库的可选模板位置（例如 `work/out/android-mono-template/`），再通过 `--template` 传给 Android 打包脚本。
+该流水线保持 3D/Viewport 的 ClassDB 绑定完整（严禁传入 `disable_3d=yes`、`disable_physics_3d=yes` 或 `disable_navigation_3d=yes`，否则 `GodotSharp.dll` 初始化会触发 `NativeMethodBindNotFoundException`），默认启用 `swappy=no`、`lto=thin`、`generate_apk=yes` 与 `module_mono_enabled=yes`，并输出 `work/out/templates/android/android_release.apk`（`package_android.sh` 在 `--release` 模式下自动探测该路径，也可通过 `--template` 显式传入）。
 
 ### 3.3 构建可安装 APK
 

@@ -136,10 +136,10 @@ def postprocess(
     apksigner_jar: Path,
     keep_work: bool = False,
 ) -> int:
-    apk = apk.resolve()
-    keystore = keystore.resolve()
     if apk.is_symlink():
         fail(f"refusing symlink APK: {apk}")
+    apk = apk.resolve()
+    keystore = keystore.resolve()
     if not apk.is_file():
         fail(f"APK not found: {apk}")
     if not keystore.is_file():

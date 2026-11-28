@@ -311,6 +311,19 @@ class MobileToolsTest(unittest.TestCase):
                 self.assertEqual(zf.getinfo(media_name).compress_type, zipfile.ZIP_STORED)
             self.assertFalse(Path(str(apk) + ".idsig").exists())
 
+            with mock.patch.object(Path, "is_symlink", autospec=True, side_effect=lambda p: p == apk):
+                with self.assertRaises(SystemExit):
+                    postprocess_android_apk.postprocess(
+                        apk=apk,
+                        keystore=keystore,
+                        ks_user="androiddebugkey",
+                        ks_pass="android",
+                        key_pass=None,
+                        java="java",
+                        zipalign=zipalign,
+                        apksigner_jar=apksigner_jar,
+                    )
+
     def test_android_postprocess_finds_latest_build_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             build_tools = Path(tmp) / "build-tools"
@@ -382,6 +395,21 @@ class MobileToolsTest(unittest.TestCase):
             export_preset_template.patch_option(cfg, "Android", "custom_template/debug", r'C:\Godot\tpl "mono".apk')
             text = cfg.read_text(encoding="utf-8")
             self.assertIn(r'custom_template/debug="C:\\Godot\\tpl \"mono\".apk"', text)
+
+            self.assertEqual(
+                export_preset_template.main(
+                    [
+                        "--preset-file",
+                        str(cfg),
+                        "--preset",
+                        "Android",
+                        "--set-raw",
+                        "version/code=100",
+                    ]
+                ),
+                0,
+            )
+            self.assertIn("version/code=100\n", cfg.read_text(encoding="utf-8"))
 
     def test_env_check_blockers_and_sdk_subdirs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -723,6 +751,7 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("platform=android", and_args)
         self.assertIn("arch=arm64", and_args)
         self.assertIn("lto=thin", and_args)
+        self.assertIn("swappy=no", and_args)
         self.assertIn("generate_apk=yes", and_args)
 
         ios_args = builder.build_scons_args("ios", 4)
@@ -798,8 +827,10 @@ class MobileToolsTest(unittest.TestCase):
             "build-android:",
             "build-ios:",
             "tools/templates/build_custom_template.py",
+            "lib/arm64-v8a/libgodot_android.so",
         ):
             self.assertIn(needle, wf_text)
+        self.assertNotIn("godot-src/bin", wf_text)
 
         for script_rel in ("tools/package_release.sh", "tools/package_ios.sh"):
             script_text = (REPO_ROOT / script_rel).read_text(encoding="utf-8")
@@ -1087,7 +1118,7 @@ class MobileToolsTest(unittest.TestCase):
                 self.assertEqual(sync_boot_assets.read_png_dimensions(fg_path), (432, 432))
                 self.assertEqual(sync_boot_assets.read_png_dimensions(bg_path), (432, 432))
 
-                # Adaptive foreground keeps corners transparent outside the 62% safe zone
+                # Adaptive foreground keeps corners transparent outside the 72% safe zone
                 # and renders the centered logo at the center pixel.
                 fg_w, fg_h, fg_rgba = sync_boot_assets.read_png_rgba(fg_path)
                 self.assertEqual((fg_w, fg_h), (432, 432))
@@ -1189,8 +1220,8 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("assets/boot/generated/icon_pc_taskbar.png", presets["Windows Desktop"]["include_filter"])
         self.assertNotIn("assets/boot/generated/*.png", presets["Windows Desktop"]["exclude_filter"])
         self.assertEqual(presets["iOS"]["icons/icon_1024x1024"], "res://assets/boot/generated/ios_icon_1024.png")
-        self.assertIn("CFBundleDisplayName", presets["iOS"]["application/additional_plist_content"])
-        self.assertIn("妹相随", presets["iOS"]["application/additional_plist_content"])
+        self.assertNotIn("CFBundleDisplayName", presets["iOS"]["application/additional_plist_content"])
+        self.assertNotIn("CFBundleName", presets["iOS"]["application/additional_plist_content"])
         self.assertEqual(presets["iOS"]["entitlements/increased_memory_limit"], "true")
         self.assertEqual(presets["iOS"]["storyboard/use_launch_screen_storyboard"], "true")
         self.assertEqual(presets["iOS"]["storyboard/image_scale_mode"], "1")
@@ -1203,6 +1234,9 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("SplashImage.imageset", ios_script)
         self.assertIn("LWSMF-${VERSION}-ios-arm64.ipa", ios_script)
         self.assertIn("--allow-placeholder", ios_script)
+        self.assertIn("CFBundleDisplayName", ios_script)
+        self.assertIn("CFBundleName", ios_script)
+        self.assertIn("refusing --out-dir outside dist/ios or work/out", ios_script)
 
         rel_script = (REPO_ROOT / "tools/package_release.sh").read_text(encoding="utf-8")
         self.assertIn("if pck.is_file()", rel_script)
@@ -1215,6 +1249,8 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("icon_pc_taskbar.png", rel_script)
         self.assertIn("PROJECT_BAK", rel_script)
         self.assertIn('config/icon="res://assets/boot/generated/icon_pc_taskbar.png"', rel_script)
+        self.assertIn(".sha256", rel_script)
+        self.assertNotIn("SHA256SUMS.txt", rel_script)
 
         android_script = (REPO_ROOT / "tools/package_android.sh").read_text(encoding="utf-8")
         self.assertIn("LWSMF-${VERSION}-android-arm64${SUFFIX}.apk", android_script)
@@ -1225,6 +1261,8 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("ANDROID_DOTNET", android_script)
         self.assertIn('export DOTNET="$(to_win_path "$DOTNET_BIN")"', android_script)
         self.assertIn("ANDROID_DOTNET_ROOT", android_script)
+        self.assertIn('--set-raw "version/code=$VERSION_CODE"', android_script)
+        self.assertIn('"$BUILD_MODE" = "release"', android_script)
 
         game_root = (REPO_ROOT / "godot/presentation_gd/GameRoot.gd").read_text(encoding="utf-8")
         self.assertIn("icon_pc_dockbar.bin", game_root)
@@ -1981,7 +2019,12 @@ class MobileToolsTest(unittest.TestCase):
         self.assertIn("--allow-placeholder", tpl_wf)
 
         ci_wf = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        for target in ("tools/release_tui.py", "tools/mobile/github_ios_ci.py", "tools/run_godot_test.py"):
+        for target in (
+            "python -m compileall -q tools",
+            'for f in tools/*.sh; do bash -n "$f"; done',
+            "-warnaserror",
+            "GodotTargetPlatform=android",
+        ):
             self.assertIn(target, ci_wf)
 
 

@@ -33,7 +33,7 @@ def _preset_sections(lines: list[str]) -> list[tuple[int, int, str]]:
     return sections
 
 
-def patch_option(path: Path, preset_name: str, key: str, value: str) -> None:
+def patch_option(path: Path, preset_name: str, key: str, value: str, *, raw: bool = False) -> None:
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
     sections = _preset_sections(lines)
 
@@ -55,8 +55,13 @@ def patch_option(path: Path, preset_name: str, key: str, value: str) -> None:
     if opt_start < 0:
         fail(f"missing [{options_header}] section in {path}")
 
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    replacement = f'{key}="{escaped}"\n'
+    if raw:
+        if "\n" in value or "\r" in value:
+            fail(f"raw value for {key} cannot contain newlines")
+        replacement = f"{key}={value}\n"
+    else:
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        replacement = f'{key}="{escaped}"\n'
     for idx in range(opt_start + 1, opt_end):
         if lines[idx].lstrip().startswith(f"{key}="):
             lines[idx] = replacement
@@ -70,19 +75,28 @@ def patch_option(path: Path, preset_name: str, key: str, value: str) -> None:
     os.replace(tmp, path)
 
 
+def _apply_assignments(target: Path, preset: str, items: list[str], *, raw: bool) -> None:
+    for item in items:
+        if "=" not in item:
+            fail(f"expected KEY=VALUE, got: {item}")
+        key, val = item.split("=", 1)
+        patch_option(target, preset, key.strip(), val.strip(), raw=raw)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--preset-file", required=True, type=Path)
     parser.add_argument("--preset", required=True)
-    parser.add_argument("--set", dest="assignments", action="append", required=True, metavar="KEY=VALUE")
+    parser.add_argument("--set", dest="assignments", action="append", default=[], metavar="KEY=VALUE")
+    parser.add_argument("--set-raw", dest="raw_assignments", action="append", default=[], metavar="KEY=VALUE")
     args = parser.parse_args(argv)
 
+    if not args.assignments and not args.raw_assignments:
+        fail("at least one --set or --set-raw assignment is required")
+
     target = args.preset_file.resolve()
-    for item in args.assignments:
-        if "=" not in item:
-            fail(f"expected KEY=VALUE, got: {item}")
-        key, val = item.split("=", 1)
-        patch_option(target, args.preset, key.strip(), val.strip())
+    _apply_assignments(target, args.preset, args.assignments, raw=False)
+    _apply_assignments(target, args.preset, args.raw_assignments, raw=True)
     return 0
 
 

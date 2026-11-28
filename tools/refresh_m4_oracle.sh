@@ -20,6 +20,11 @@ if [ -z "$DOTNET" ] || [ ! -x "$DOTNET" ]; then
   echo "dotnet not found: set DOTNET or tools/local.env.sh" >&2
   exit 2
 fi
+PYTHON_BIN="${PYTHON_BIN:-${PYTHON:-$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)}}"
+if [ -z "$PYTHON_BIN" ] || ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "python not found: set PYTHON_BIN or install python3" >&2
+  exit 2
+fi
 DOTNET_DIR="$(cd "$(dirname "$DOTNET")" 2>/dev/null && pwd || dirname "$DOTNET")"
 export DOTNET
 export DOTNET_ROOT="${DOTNET_ROOT:-$DOTNET_DIR}"
@@ -54,7 +59,7 @@ trap 'rm -rf "$SAVE_DIR"' EXIT
 mkdir -p "$IMO/reports"
 
 echo "[1/4] build C# solutions"
-"$GODOT" --headless --path "$IMO/godot" --build-solutions --quit
+"$DOTNET" build "$IMO/godot/Lwsmf.csproj" -c Debug
 
 echo "[2/4] Rust route-full trace"
 rm -f "$RUST_TRACE"
@@ -69,8 +74,8 @@ printf '%s\n' "$out" | grep -q M4_FULL_ROUTE_TRACE_TEST_OK
 test -s "$CS_TRACE"
 
 echo "[4/4] compare, then refresh fixture only on a 100% match"
-python "$IMO/oracle/diff_route.py" "$RUST_TRACE" "$CS_TRACE" --report "$IMO/reports/m4_route_refresh_diff.json"
-python - "$RUST_TRACE" "$FIXTURE" <<'PY'
+"$PYTHON_BIN" "$IMO/oracle/diff_route.py" "$RUST_TRACE" "$CS_TRACE" --report "$IMO/reports/m4_route_refresh_diff.json"
+"$PYTHON_BIN" - "$RUST_TRACE" "$FIXTURE" <<'PY'
 import gzip, os, shutil, sys
 src, dst = sys.argv[1], sys.argv[2]
 tmp = dst + ".tmp"

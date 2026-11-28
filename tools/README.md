@@ -14,7 +14,7 @@
 | `audit_cross_platform_assets.py` | Python 3 | 跨平台（Windows / Android / iOS）素材与字体兼容性静态审查 |
 | `lint_decisions.py` | Python 3 | 校验 `docs/godot/DECISIONS.md` 编号规范与 `docs/README.md` 全局链接有效性 |
 | `refresh_m4_oracle.sh` | Bash + Cargo | 重新生成 M4 Rust 轨迹夹具（仅当与 C# 100% 一致时更新） |
-| `copyright_audit.py` | Python 3 | 源码版权与商业素材隔离检查脚本 |
+| `copyright_audit.py` | Python 3 | 已废弃的兼容包装，请改用 `release_audit.py` |
 | `make_asset_stub.py` | Python 3 | 自动化生成离线测试用的占位桩（Asset Stub）数据 |
 | `visual_regression.py` | Python 3 | 基于 SSIM 算法的图层渲染与立绘像素级视觉回归测试 |
 
@@ -53,7 +53,7 @@
 
 | 脚本文件 | 平台 | 说明 |
 | :--- | :--- | :--- |
-| `env.sh` | Bash / Linux | 快速载入开发环境变量（Cargo, Godot, .NET 路径配置） |
+| `env.sh` | Bash / Linux | 可选开发期 PATH 辅助脚本（配置 `tools/bin`、`cmake`、`ffmpeg` 与 Cargo 路径，不含 Godot/.NET） |
 | `local.env.sh` | Bash | 本机私有（已 `.gitignore`）：供本地覆盖 `GODOT`、`DOTNET` 路径 |
 | `env.ps1` | PowerShell | PowerShell 环境变量初始化脚本 |
 | `setpath.ps1` | PowerShell | 将必要工具链永久写入 Windows 用户 PATH 环境变量 |

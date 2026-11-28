@@ -138,6 +138,33 @@ export DOTNET="${DOTNET:-$DOTNET_BIN}"
 export DOTNET_ROOT="${DOTNET_ROOT:-$(dirname "$DOTNET_BIN")}"
 export PATH="$(dirname "$DOTNET_BIN"):$PATH"
 
+"$PYTHON_BIN" - "$ROOT" "$OUT_DIR" <<'PY'
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+dest = Path(sys.argv[2])
+if dest.is_symlink():
+    print(f"ERROR: refusing symlink output dir: {dest}", file=sys.stderr)
+    raise SystemExit(2)
+resolved = dest.resolve()
+allowed_roots = (
+    (root / "dist" / "ios").resolve(),
+    (root / "work" / "out").resolve(),
+)
+
+def is_child(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return path != parent
+    except ValueError:
+        return False
+
+if not any(is_child(resolved, base) for base in allowed_roots):
+    print(f"ERROR: refusing --out-dir outside dist/ios or work/out: {dest}", file=sys.stderr)
+    raise SystemExit(2)
+PY
+
 if [ -e "$OUT_DIR" ] && [ "$FORCE" != true ]; then
   echo "ERROR: output dir exists (pass --force): $OUT_DIR" >&2
   exit 2
@@ -216,6 +243,39 @@ EXPORT_TARGET="$OUT_DIR/Lwsmf.xcodeproj"
 
 XCODEPROJ="$(find "$OUT_DIR" -maxdepth 3 -type d -name '*.xcodeproj' | head -n1 || true)"
 [ -n "$XCODEPROJ" ] || { echo "ERROR: .xcodeproj not found under $OUT_DIR" >&2; exit 1; }
+
+echo "== patching iOS Info.plist display name =="
+"$PYTHON_BIN" - "$OUT_DIR" <<'PY'
+import plistlib
+import sys
+from pathlib import Path
+
+out_dir = Path(sys.argv[1])
+plists = [
+    p for p in out_dir.rglob("*.plist")
+    if p.is_file() and (p.name == "Info.plist" or p.name.endswith("-Info.plist"))
+    and "DerivedData" not in p.parts
+]
+if not plists:
+    print(f"ERROR: no Info.plist found under {out_dir}", file=sys.stderr)
+    raise SystemExit(1)
+for plist_path in plists:
+    raw = plist_path.read_bytes()
+    fmt = plistlib.FMT_BINARY if raw.startswith(b"bplist") else plistlib.FMT_XML
+    data = plistlib.loads(raw)
+    if not isinstance(data, dict):
+        print(f"ERROR: plist root is not a dictionary: {plist_path}", file=sys.stderr)
+        raise SystemExit(1)
+    data["CFBundleDisplayName"] = "妹相随"
+    data["CFBundleName"] = "妹相随"
+    plist_path.write_bytes(plistlib.dumps(data, fmt=fmt))
+    print(f"IOS_PLIST_PATCH_OK path={plist_path}")
+PY
+if command -v plutil >/dev/null 2>&1; then
+  while IFS= read -r -d '' _plist; do
+    plutil -lint "$_plist"
+  done < <(find "$OUT_DIR" -maxdepth 3 -type f \( -name 'Info.plist' -o -name '*-Info.plist' \) -print0)
+fi
 
 echo "== verifying iOS launch screen SplashImage.imageset =="
 SPLASH_SET="$(find "$OUT_DIR" -type d -name 'SplashImage.imageset' | head -n1 || true)"

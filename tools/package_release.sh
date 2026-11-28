@@ -552,7 +552,7 @@ pak_hd = out_dir / "work/all/media_hd.pak"
 for item in (exe, pak, pak_hd):
     if item.is_file():
         sha_lines.append(f"{sha256_file(item)}  {out_dir.name}/{item.relative_to(out_dir).as_posix()}")
-sha_file = zip_path.parent / "SHA256SUMS.txt"
+sha_file = zip_path.with_name(f"{zip_path.name}.sha256")
 sha_file.write_text("\n".join(sha_lines) + "\n", encoding="utf-8")
 
 # Size ledger
@@ -699,7 +699,7 @@ with Path(sys.argv[1]).open("rb") as handle:
 print(h.hexdigest())
 PY
 )"
-    printf '%s  %s\n' "$SETUP_SHA" "${SETUP_BASE}.exe" >> "$ROOT/dist/SHA256SUMS.txt"
+    printf '%s  %s\n' "$SETUP_SHA" "${SETUP_BASE}.exe" > "$ROOT/dist/${SETUP_BASE}.exe.sha256"
   fi
 fi
 

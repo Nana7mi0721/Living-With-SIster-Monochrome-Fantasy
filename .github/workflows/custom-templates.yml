@@ -53,10 +53,9 @@ jobs:
         with:
           path: |
             dist/templates/windows
-            godot-src/bin
-          key: custom-tpl-${{ env.GODOT_RELEASE }}-windows-${{ hashFiles('tools/templates/**') }}
+          key: custom-tpl-${{ env.GODOT_RELEASE }}-windows-x86_64-${{ hashFiles('tools/templates/build_custom_template.py', 'tools/templates/custom_2d_mono.py') }}
           restore-keys: |
-            custom-tpl-${{ env.GODOT_RELEASE }}-windows-
+            custom-tpl-${{ env.GODOT_RELEASE }}-windows-x86_64-
 
       - name: Checkout Godot 4.7.2-stable source
         if: steps.tpl-cache.outputs.cache-hit != 'true'
@@ -180,9 +179,9 @@ jobs:
         with:
           path: |
             dist/templates/android
-          key: custom-tpl-${{ env.GODOT_RELEASE }}-android-${{ hashFiles('tools/templates/**') }}
+          key: custom-tpl-${{ env.GODOT_RELEASE }}-android-arm64-${{ hashFiles('tools/templates/build_custom_template.py', 'tools/templates/custom_2d_mono.py') }}
           restore-keys: |
-            custom-tpl-${{ env.GODOT_RELEASE }}-android-
+            custom-tpl-${{ env.GODOT_RELEASE }}-android-arm64-
 
       - name: Checkout Godot 4.7.2-stable source
         if: steps.tpl-cache.outputs.cache-hit != 'true'
@@ -200,6 +199,28 @@ jobs:
             --platform android \
             --godot-src godot-src \
             --out dist/templates/android
+
+      - name: Verify Android custom template structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          apk = Path("dist/templates/android/android_release.apk")
+          if not apk.is_file():
+              raise SystemExit(f"ERROR: missing Android template: {apk}")
+          with zipfile.ZipFile(apk, "r") as zf:
+              names = set(zf.namelist())
+              target = "lib/arm64-v8a/libgodot_android.so"
+              if target not in names:
+                  raise SystemExit(f"ERROR: {apk} missing {target}")
+              info = zf.getinfo(target)
+              if info.file_size <= 0:
+                  raise SystemExit(f"ERROR: {target} inside {apk} is empty")
+              print(f"ANDROID_TEMPLATE_VERIFY_OK apk={apk} bytes={apk.stat().st_size} lib_bytes={info.file_size}")
+          PY
 
       - name: Upload Android custom template
         uses: actions/upload-artifact@v4
@@ -246,9 +267,9 @@ jobs:
         with:
           path: |
             dist/templates/ios
-          key: custom-tpl-${{ env.GODOT_RELEASE }}-ios-${{ hashFiles('tools/templates/**') }}
+          key: custom-tpl-${{ env.GODOT_RELEASE }}-ios-arm64-${{ hashFiles('tools/templates/build_custom_template.py', 'tools/templates/custom_2d_mono.py') }}
           restore-keys: |
-            custom-tpl-${{ env.GODOT_RELEASE }}-ios-
+            custom-tpl-${{ env.GODOT_RELEASE }}-ios-arm64-
 
       - name: Download official Godot 4.7.2 Mono editor & base ios.zip
         run: |
