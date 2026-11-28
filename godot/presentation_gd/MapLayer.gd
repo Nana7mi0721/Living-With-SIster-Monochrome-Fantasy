@@ -92,25 +92,22 @@ func load_from_file(path: String, wanted_id: int) -> bool:
 	_update_leader_position()
 	return true
 
-static func _decode_u32(encoded: String) -> PackedInt64Array:
-	var values := PackedInt64Array()
-	if encoded.is_empty():
-		return values
-	var raw := Marshalls.base64_to_raw(encoded)
-	var count := raw.size() / 4
-	values.resize(count)
-	for i in count:
-		values[i] = raw.decode_u32(i * 4)
-	return values
-
 func _build_terrain() -> void:
+	var cell_count := maxi(0, map_width * map_height)
 	_bits = PackedByteArray()
-	_bits.resize(maxi(0, map_width * map_height))
 	if _terrain_bridge == null or not _terrain_bridge.Valid:
+		_bits.resize(cell_count)
 		return
 	if _terrain_bridge.Width != map_width or _terrain_bridge.Height != map_height:
 		push_warning("MapLayer: terrain size mismatch for map %d" % map_id)
+		_bits.resize(cell_count)
 		return
+	if _terrain_bridge.has_method("GetAllMasks"):
+		var packed: PackedByteArray = _terrain_bridge.GetAllMasks()
+		if packed.size() == cell_count:
+			_bits = packed
+			return
+	_bits.resize(cell_count)
 	for y in map_height:
 		for x in map_width:
 			_bits[y * map_width + x] = _terrain_bridge.Mask(x, y)
@@ -189,10 +186,11 @@ func _build_tiles() -> void:
 		node.tile_set = tileset
 		node.z_index = layer_index
 		node.position = Vector2(_origin)
+		node.visible = _debug_visuals and visible
 		node.modulate = Color(1, 1, 1, 1.0 if _debug_visuals else 0.0)
 		add_child(node)
 		_tile_layers.append(node)
-		if layer_index >= _layers.size():
+		if not node.visible or layer_index >= _layers.size():
 			continue
 		var layer := _layers[layer_index]
 		if layer.size() < map_width * map_height:

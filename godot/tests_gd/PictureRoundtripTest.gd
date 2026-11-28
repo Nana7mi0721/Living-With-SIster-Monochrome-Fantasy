@@ -177,6 +177,15 @@ func _ready() -> void:
 	if int(_stage._states[99]["pattern"]["cell"]) != 1:
 		failures.append("290 kind=10 with from==to must stay at 1 (got %d)" % int(_stage._states[99]["pattern"]["cell"]))
 
+	# Deferred render batching commits final pose once on set_defer_render(false).
+	_stage.set_defer_render(true)
+	_stage.draw_picture(100, 0, "", "defer", [0, 1, 1, 1, 255, 100, 100, 100], 0, 2)
+	_stage.draw_picture(100, 1, "", "", [0, 0, 0, 0, 128, 250, 180, 100], 0, -1)
+	_stage.set_defer_render(false)
+	var deferred_node: Control = _stage._pictures.get(100, null)
+	if deferred_node == null or not is_equal_approx(deferred_node.position.x, 250.0) or absf(deferred_node.modulate.a - 128.0 / 255.0) > 0.01:
+		failures.append("set_defer_render(false) must flush final pose to scene node")
+
 	for failure in failures:
 		printerr("PICTURE_ROUNDTRIP_FAIL " + failure)
 	if failures.is_empty():

@@ -165,7 +165,7 @@ func build_window_node(spec: Dictionary, texture: Texture2D, args: Array, assets
 		if shape == "LINE" and sw > 0 and sh == 0:
 			sh = 1
 		var size := Vector2(maxi(1, sw), maxi(1, sh))
-		if shape == "CIRCLE" or shape == "TRI":
+		if shape == "CIRCLE" or shape == "TRI" or shape == "SQUARE_FRAME":
 			var vector := _build_vector_shape_node(spec, size)
 			vector.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			vector.use_parent_material = true
@@ -253,6 +253,14 @@ static func _build_vector_shape_node(spec: Dictionary, initial_size: Vector2) ->
 				_:
 					pts = PackedVector2Array([Vector2(s.x * 0.5, s.y), Vector2(0.0, 0.0), Vector2(s.x, 0.0)])
 			ctrl.draw_colored_polygon(pts, Color.WHITE)
+		elif shape == "SQUARE_FRAME":
+			if s.x <= 2.0 or s.y <= 2.0:
+				ctrl.draw_rect(Rect2(Vector2.ZERO, s), Color.WHITE, true)
+			else:
+				ctrl.draw_rect(Rect2(0.0, 0.0, s.x, 1.0), Color.WHITE, true)
+				ctrl.draw_rect(Rect2(0.0, s.y - 1.0, s.x, 1.0), Color.WHITE, true)
+				ctrl.draw_rect(Rect2(0.0, 1.0, 1.0, s.y - 2.0), Color.WHITE, true)
+				ctrl.draw_rect(Rect2(s.x - 1.0, 1.0, 1.0, s.y - 2.0), Color.WHITE, true)
 	)
 	ctrl.resized.connect(ctrl.queue_redraw)
 	return ctrl

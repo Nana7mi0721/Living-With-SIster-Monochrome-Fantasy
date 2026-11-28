@@ -2,8 +2,9 @@ class_name ChoiceWindow
 extends Control
 ## Opcode-102 choice window, drawn directly onto the canvas.
 ##
-## Center comes from Sys3/Sys4 and row pitch is fixed at LINE_HEIGHT. Hit testing runs
-## directly against drawn row rectangles so no Button nodes steal focus from VM keys.
+## Standard choice windows lock center.y = 288.0 (preserving Sys3 X) with LINE_HEIGHT (27.0)
+## on desktop or TOUCH_LINE_HEIGHT (36.0) in touch mode. Hit testing runs directly against
+## drawn row rectangles so no Button nodes steal focus from VM keys.
 
 signal chosen(index: int)
 
@@ -30,6 +31,13 @@ var touch_mode := false
 
 var _hover := -1
 var _last_unexpanded_tokens: Array[String] = []
+var _cached_options: PackedStringArray = PackedStringArray()
+var _cached_touch_mode := false
+var _cached_has_override := false
+var _cached_font: Font = null
+var _cached_option_data: Array = []  # [{plain: String, runs: Array, width: float}]
+var _cached_visible_indices: Array[int] = []
+var _cached_win_size := Vector2(MIN_WIDTH, LINE_HEIGHT + PADDING_Y * 2.0)
 
 ## Rects supplied by the owner when rows are drawn as pictures (e.g. title menu slots 3/4/5).
 var override_rects: Array = []
@@ -54,6 +62,7 @@ func set_touch_mode(active: bool) -> void:
 		return
 	touch_mode = active
 	if is_open:
+		_rebuild_option_cache()
 		queue_redraw()
 
 
@@ -98,12 +107,43 @@ func window_rect() -> Rect2:
 	return Rect2(Vector2(clampf(top_left.x, 24.0, max_x), clampf(top_left.y, 48.0, max_y)), win_size)
 
 
-func _visible_indices() -> Array[int]:
-	var indices: Array[int] = []
+func _rebuild_option_cache() -> void:
+	var bold := UiSkin.bold_font()
+	_cached_options = options.duplicate()
+	_cached_touch_mode = touch_mode
+	_cached_has_override = not override_rects.is_empty()
+	_cached_font = bold
+	_cached_option_data.clear()
+	_cached_visible_indices.clear()
+	var width := MIN_WIDTH
 	for i in options.size():
-		if not override_rects.is_empty() or not display_text(options[i]).is_empty():
-			indices.append(i)
-	return indices
+		var runs := _label_runs(options[i])
+		var plain := ""
+		var label_w := 0.0
+		for run in runs:
+			var text: String = run["text"]
+			plain += text
+			label_w += bold.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, int(run["size"])).x
+		_cached_option_data.append({"plain": plain, "runs": runs, "width": label_w})
+		if _cached_has_override or not plain.is_empty():
+			_cached_visible_indices.append(i)
+			width = maxf(width, label_w + PADDING_X * 2.0)
+	var height := maxi(_cached_visible_indices.size(), 1) * line_height() + PADDING_Y * 2.0
+	_cached_win_size = Vector2(ceilf(width), ceilf(height))
+
+
+func _ensure_option_cache() -> void:
+	if _cached_options != options \
+			or _cached_touch_mode != touch_mode \
+			or _cached_has_override != (not override_rects.is_empty()) \
+			or _cached_font != UiSkin.bold_font() \
+			or _cached_option_data.size() != options.size():
+		_rebuild_option_cache()
+
+
+func _visible_indices() -> Array[int]:
+	_ensure_option_cache()
+	return _cached_visible_indices
 
 
 func open(p_options: PackedStringArray, p_position: Vector2, p_allow_cancel: bool = true, p_selected: int = 0) -> void:
@@ -112,6 +152,7 @@ func open(p_options: PackedStringArray, p_position: Vector2, p_allow_cancel: boo
 	allow_cancel = p_allow_cancel
 	override_rects = []
 	_hover = -1
+	_rebuild_option_cache()
 	selected = clampi(p_selected, 0, maxi(options.size() - 1, 0))
 	var visible := _visible_indices()
 	if not visible.is_empty() and not (selected in visible):
@@ -125,12 +166,14 @@ func close() -> void:
 	options = PackedStringArray()
 	override_rects = []
 	_hover = -1
+	_rebuild_option_cache()
 	queue_redraw()
 
 
 ## Owner-drawn rows: hit testing uses these rectangles and _draw() draws nothing.
 func set_override_rects(rects: Array) -> void:
 	override_rects = rects
+	_rebuild_option_cache()
 	queue_redraw()
 
 
@@ -187,12 +230,8 @@ func row_rects() -> Array:
 
 
 func window_size() -> Vector2:
-	var width := MIN_WIDTH
-	var visible := _visible_indices()
-	for i in visible:
-		width = maxf(width, label_width(options[i]) + PADDING_X * 2.0)
-	var height := maxi(visible.size(), 1) * line_height() + PADDING_Y * 2.0
-	return Vector2(ceilf(width), ceilf(height))
+	_ensure_option_cache()
+	return _cached_win_size
 
 
 ## Strip WOLF escape codes so option labels paint plain text only.
@@ -249,7 +288,9 @@ func _append_run(runs: Array, text: String, size: int, color: Color, outline: bo
 ## Move the cursor onto the row under [param point] so a mouse click confirms that row.
 func hover_at(point: Vector2) -> int:
 	if not is_open:
-		_hover = -1
+		if _hover != -1:
+			_hover = -1
+			queue_redraw()
 		return -1
 	var visible := _visible_indices()
 	var rects := row_rects()
@@ -257,11 +298,14 @@ func hover_at(point: Vector2) -> int:
 	for row_idx in visible_count:
 		if rects[row_idx].has_point(point):
 			var option_idx := visible[row_idx]
-			_hover = option_idx
-			selected = option_idx
-			queue_redraw()
+			if _hover != option_idx or selected != option_idx:
+				_hover = option_idx
+				selected = option_idx
+				queue_redraw()
 			return option_idx
-	_hover = -1
+	if _hover != -1:
+		_hover = -1
+		queue_redraw()
 	return -1
 
 
@@ -300,7 +344,7 @@ func _draw() -> void:
 				draw_rect(box, Color(1.0, 1.0, 1.0, 0.85), false, 1.0)
 		elif i == _hover:
 			draw_rect(box, Color(1.0, 1.0, 1.0, 0.10))
-		var runs := _label_runs(options[i])
+		var runs: Array = _cached_option_data[i]["runs"]
 		var row_size := FONT_SIZE
 		for run in runs:
 			row_size = maxi(row_size, int(run["size"]))

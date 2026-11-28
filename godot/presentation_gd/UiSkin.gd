@@ -6,6 +6,7 @@ extends RefCounted
 ## corner, and every measurement is taken at the 1024x576 logical resolution.
 
 const _AppPaths = preload("res://presentation_gd/AppPaths.gd")
+const _AssetDB = preload("res://presentation_gd/AssetDB.gd")
 const _MediaPakReader = preload("res://presentation/MediaPakReader.cs")
 const WINDOW_BASE := "SystemFile/WindowBase.png"
 const WINDOW_CORNER := 3
@@ -161,11 +162,32 @@ static func _find_retail_font_path() -> String:
 	return ""
 
 
+static func _read_font_entry_from_pak(reader: Object) -> Dictionary:
+	if reader == null:
+		return {}
+	for entry_name in ["Lolita.ttf", "LOLITA.TTF", "lolita.ttf", "Data/Lolita.ttf", "Data/LOLITA.TTF"]:
+		if reader.Has(entry_name):
+			var bytes = reader.Read(entry_name)
+			if bytes != null and bytes.size() > 0:
+				return {"entry": entry_name, "bytes": bytes}
+	return {}
+
+
 static func _find_retail_font_bytes_in_pak() -> Dictionary:
-	var pak_candidates: Array[String] = []
 	var env_pak := OS.get_environment("LWsmf_MEDIA_PAK").strip_edges()
-	if not env_pak.is_empty():
-		pak_candidates.append(env_pak)
+	if not env_pak.is_empty() and FileAccess.file_exists(env_pak):
+		var env_reader = _MediaPakReader.new()
+		if env_reader.Open(env_pak):
+			var env_hit := _read_font_entry_from_pak(env_reader)
+			env_reader.Close()
+			if not env_hit.is_empty():
+				return env_hit
+	var shared_reader := _AssetDB.get_shared_media_pak()
+	if shared_reader != null:
+		var shared_hit := _read_font_entry_from_pak(shared_reader)
+		if not shared_hit.is_empty():
+			return shared_hit
+	var pak_candidates: Array[String] = []
 	var pkg_root := _AppPaths.package_root()
 	var res_root := _AppPaths.resource_root()
 	var exe_dir := OS.get_executable_path().get_base_dir()
@@ -187,16 +209,10 @@ static func _find_retail_font_bytes_in_pak() -> Dictionary:
 	for pak_path in pak_candidates:
 		if pak_path.is_empty() or not FileAccess.file_exists(pak_path):
 			continue
-		var reader = _MediaPakReader.new()
-		if not reader.Open(pak_path):
-			continue
-		for entry_name in ["Lolita.ttf", "LOLITA.TTF", "lolita.ttf", "Data/Lolita.ttf", "Data/LOLITA.TTF"]:
-			if reader.Has(entry_name):
-				var bytes = reader.Read(entry_name)
-				if bytes != null and bytes.size() > 0:
-					reader.Close()
-					return {"entry": entry_name, "bytes": bytes}
-		reader.Close()
+		var reader := _AssetDB.acquire_shared_media_pak(pak_path)
+		var hit := _read_font_entry_from_pak(reader)
+		if not hit.is_empty():
+			return hit
 	return {}
 
 
@@ -295,13 +311,20 @@ static func _load_base_retail_font(strict: bool) -> FontFile:
 			_base_retail_font = ff
 			_base_retail_source = "file:" + ttf_path.get_file()
 			return _base_retail_font
+	var cache_dir := ProjectSettings.globalize_path("user://cache")
+	var cache_path := cache_dir.path_join("Lolita.ttf")
+	if FileAccess.file_exists(cache_path):
+		var ff_pre := FontFile.new()
+		if ff_pre.load_dynamic_font(cache_path) == OK and ff_pre.has_char(0x4E2D):
+			_configure_font_file(ff_pre, false, strict)
+			_base_retail_font = ff_pre
+			_base_retail_source = "cache:Lolita.ttf"
+			return _base_retail_font
 	var pak_info := _find_retail_font_bytes_in_pak()
 	if not pak_info.is_empty():
 		var pak_bytes: PackedByteArray = pak_info["bytes"]
 		var entry := str(pak_info.get("entry", "Lolita.ttf"))
-		var cache_dir := ProjectSettings.globalize_path("user://cache")
 		DirAccess.make_dir_recursive_absolute(cache_dir)
-		var cache_path := cache_dir.path_join("Lolita.ttf")
 		var needs_write := true
 		if FileAccess.file_exists(cache_path):
 			var existing := FileAccess.open(cache_path, FileAccess.READ)

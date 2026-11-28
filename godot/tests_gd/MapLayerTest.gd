@@ -30,7 +30,22 @@ func _run() -> void:
 	var used := 0
 	for node in layer.layer_nodes():
 		used += node.get_used_cells().size()
-	_check(used == 64 * 36 * 3, "SampleMapA all 3x2304 cells set, got %d" % used)
+	_check(used == 0, "non-debug MapLayer skips TileMapLayer.set_cell(), got %d" % used)
+	layer._debug_visuals = true
+	layer._build_tiles()
+	var debug_used := 0
+	for node in layer.layer_nodes():
+		debug_used += node.get_used_cells().size()
+	_check(debug_used == 64 * 36 * 3, "debug SampleMapA all 3x2304 cells set, got %d" % debug_used)
+	layer.visible = false
+	layer._build_tiles()
+	var hidden_used := 0
+	for node in layer.layer_nodes():
+		hidden_used += node.get_used_cells().size()
+	_check(hidden_used == 0, "hidden MapLayer skips TileMapLayer.set_cell(), got %d" % hidden_used)
+	layer.visible = true
+	layer._debug_visuals = false
+	layer._build_tiles()
 	_check(layer.is_solid_cell(-1, 0) and not layer.is_blocked(0, 0, 0), "bounds semantics")
 
 	var click: Array = [Vector2i(-1, -1)]

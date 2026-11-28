@@ -15,7 +15,8 @@ extends Control
 const _WolfConst := preload("res://presentation_gd/WolfConst.gd")
 const _PictureShapes := preload("res://presentation_gd/PictureShapes.gd")
 const _PictureEffects := preload("res://presentation_gd/PictureEffects.gd")
-const _TextStyleEngine := preload("res://presentation_gd/TextStyleEngine.gd")
+const _PictureTextLayout := preload("res://presentation_gd/PictureTextLayout.gd")
+const _PictureDelayQueue := preload("res://presentation_gd/PictureDelayQueue.gd")
 
 const LAYER_MAP := 0
 const LAYER_SCENE_PICTURE := 10
@@ -45,144 +46,33 @@ const BAND_ORDER: Array[int] = [
 const SCREEN_SIZE := Vector2(1024, 576)
 const UNCHANGED := -1000000
 const FADE_MAX := 600
-const GAUGE_GLYPHS := "■□◆◇●○★☆"
+const GAUGE_GLYPHS := _PictureTextLayout.GAUGE_GLYPHS
+const PictureTextLabel := _PictureTextLayout.PictureTextLabel
 
 var assets: AssetDB
 ## z_index -> band Control, in BAND_ORDER order.
 var layers: Dictionary = {}
 var _screen_tint_overlay: ColorRect
-## In-flight 150 commands waiting out WOLF's Delay field. Each entry keeps the original
-## draw/track mode so activation stays byte-for-byte faithful to the interpreter's command.
-var _pending_pictures: Array = []
-
-
-static func _contains_gauge_glyph(text: String) -> bool:
-	for g in ["■", "□", "◆", "◇", "●", "○", "★", "☆"]:
-		if text.contains(g):
-			return true
-	return false
-
-
-# Square (■/□) and star (★/☆) gauge glyphs use exact px advance so multi-slot
-# overlays (H-scene meters, battle AP stars) never drift across fonts.
-static func _gauge_cell_step(draw_font: Font, glyph: String, px: int) -> float:
-	if glyph == "■" or glyph == "□" or glyph == "★" or glyph == "☆":
-		return float(px)
-	var pair_a := glyph
-	var pair_b := glyph
-	match glyph:
-		"◆", "◇":
-			pair_a = "◆"
-			pair_b = "◇"
-		"●", "○":
-			pair_a = "●"
-			pair_b = "○"
-	var w_a := draw_font.get_string_size(pair_a, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
-	var w_b := draw_font.get_string_size(pair_b, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
-	return maxf(w_a, w_b)
-
-
-static func _measure_run_width(draw_font: Font, text: String, px: int) -> float:
-	if text.is_empty():
-		return 0.0
-	if not _contains_gauge_glyph(text):
-		return draw_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
-	var total := 0.0
-	var span_start := 0
-	var n := text.length()
-	for i in n:
-		var ch := text.substr(i, 1)
-		if GAUGE_GLYPHS.contains(ch):
-			if i > span_start:
-				total += draw_font.get_string_size(text.substr(span_start, i - span_start), HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
-			total += _gauge_cell_step(draw_font, ch, px)
-			span_start = i + 1
-	if span_start < n:
-		total += draw_font.get_string_size(text.substr(span_start, n - span_start), HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
-	return total
-
-
-## Multi-run text renderer used for WOLF opcode-150 kind-2/4 text pictures.
-## Inherits Label so existing node/text/size contracts hold while _draw() paints mixed
-## \f[n] sizes, \c[n] colors, \E outlines, and <R> tails on a common baseline.
-class PictureTextLabel extends Label:
-	var runs: Array = []  # Array of {text, pos, size, color, has_color, outline}
-	var line_pitch_ratio := 1.3
-
-	func _paint_span(draw_font: Font, pos: Vector2, text: String, px: int, col: Color, has_outline: bool, outline_color: Color) -> void:
-		if has_outline:
-			draw_string_outline(draw_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, 2, outline_color)
-		draw_string(draw_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, col)
-
-	func _paint_square_gauge(draw_font: Font, x_cursor: float, baseline_y: float, px: int, filled: bool, col: Color, has_outline: bool, outline_color: Color) -> void:
-		var cell := float(px)
-		var inset := maxf(1.0, floorf(cell * 0.12))
-		var side := maxf(2.0, cell - inset * 2.0)
-		var cell_top := baseline_y - draw_font.get_ascent(px)
-		var rect := Rect2(x_cursor + (cell - side) * 0.5, cell_top + (cell - side) * 0.5, side, side)
-		if filled:
-			if has_outline:
-				draw_rect(rect.grow(1.0), outline_color, true)
-			draw_rect(rect, col, true)
-		else:
-			var border := maxf(1.0, floorf(cell * 0.1))
-			var stroke_rect := rect.grow(-border * 0.5)
-			if has_outline:
-				draw_rect(stroke_rect, outline_color, false, border + 2.0)
-			draw_rect(stroke_rect, col, false, border)
-
-	func _draw() -> void:
-		if runs.is_empty():
-			return
-		var draw_font := UiSkin.font()
-		var outline_color := Color(0, 0, 0, 1)
-		for entry in runs:
-			var r: Dictionary = entry
-			var r_text: String = str(r.get("text", ""))
-			if r_text.is_empty():
-				continue
-			var pos: Vector2 = r.get("pos", Vector2.ZERO)
-			var px: int = int(r.get("size", 20))
-			var col := Color(1, 1, 1, 1)
-			if bool(r.get("has_color", false)):
-				col = r.get("color", Color.WHITE)
-			var has_outline := bool(r.get("outline", false))
-			if not PictureStage._contains_gauge_glyph(r_text):
-				_paint_span(draw_font, pos, r_text, px, col, has_outline, outline_color)
-				continue
-			var x_cursor := pos.x
-			var span_start := 0
-			var n := r_text.length()
-			for i in n:
-				var ch := r_text.substr(i, 1)
-				if PictureStage.GAUGE_GLYPHS.contains(ch):
-					if i > span_start:
-						var span := r_text.substr(span_start, i - span_start)
-						_paint_span(draw_font, Vector2(x_cursor, pos.y), span, px, col, has_outline, outline_color)
-						x_cursor += draw_font.get_string_size(span, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
-					var step := PictureStage._gauge_cell_step(draw_font, ch, px)
-					if ch == "■" or ch == "□":
-						_paint_square_gauge(draw_font, x_cursor, pos.y, px, ch == "■", col, has_outline, outline_color)
-					else:
-						var glyph_w := draw_font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
-						var glyph_x := x_cursor + maxf(0.0, (step - glyph_w) * 0.5)
-						_paint_span(draw_font, Vector2(glyph_x, pos.y), ch, px, col, has_outline, outline_color)
-					x_cursor += step
-					span_start = i + 1
-			if span_start < n:
-				var tail := r_text.substr(span_start, n - span_start)
-				_paint_span(draw_font, Vector2(x_cursor, pos.y), tail, px, col, has_outline, outline_color)
-
+var _text_layout := _PictureTextLayout.new()
+var _delay_queue := _PictureDelayQueue.new()
+var _pending_pictures: Array:
+	get:
+		return _delay_queue.entries
 
 var _pictures: Dictionary = {}     # number -> Control
 var _cmds: Dictionary = {}         # number -> draw command snapshot
 var _base_sizes: Dictionary = {}   # number -> unscaled hit-box source size
 var _states: Dictionary = {}       # number -> animation/effect state (fade, slide, 290)
+var _animating_slots: Dictionary = {}        # number -> true while _state_animating is true
+var _visible_system_ui_slots: Dictionary = {} # 12000..12599 slot -> true when rect.size.x > 0
 var _polled_hit_slots: Dictionary = {}
 var _last_polled_hit_slots: Dictionary = {}
 var _hit_match_this_frame := false
 var _last_frame_hit_match := false
 var _save_arrow_hover_slot := 0
+var _defer_band_sort := false
+var _defer_render := false
+var _dirty_render_slots: Dictionary = {}
 var _shapes := _PictureShapes.new()
 var _effects := _PictureEffects.new()
 
@@ -263,8 +153,9 @@ func set_screen_tint(packed: int, frames: int) -> void:
 
 
 func tick_screen_tint() -> void:
-	if _tint_elapsed < _tint_duration:
-		_tint_elapsed += 1
+	if _tint_elapsed >= _tint_duration:
+		return
+	_tint_elapsed += 1
 	_apply_screen_tint()
 
 
@@ -297,30 +188,76 @@ static func packed_multiplier(packed: int) -> Color:
 
 
 func _apply_screen_tint() -> void:
-	screen_tint = _tint_now()
+	var next_tint := _tint_now()
 	if _screen_tint_overlay == null:
 		_build_layers()
-	_screen_tint_overlay.color = Color(screen_tint.r, screen_tint.g, screen_tint.b, 1.0)
-	_screen_tint_overlay.visible = not _screen_tint_overlay.color.is_equal_approx(Color.WHITE)
+	var next_color := Color(next_tint.r, next_tint.g, next_tint.b, 1.0)
+	var next_visible := not next_color.is_equal_approx(Color.WHITE)
+	if not screen_tint.is_equal_approx(next_tint) \
+			or _screen_tint_overlay.color != next_color \
+			or _screen_tint_overlay.visible != next_visible:
+		screen_tint = next_tint
+		_screen_tint_overlay.color = next_color
+		_screen_tint_overlay.visible = next_visible
+
+
+func set_defer_render(defer: bool) -> void:
+	if _defer_render == defer:
+		return
+	_defer_render = defer
+	if not _defer_render:
+		flush_renders()
+
+
+func flush_renders() -> void:
+	if _dirty_render_slots.is_empty():
+		return
+	var slots := _dirty_render_slots.keys()
+	_dirty_render_slots.clear()
+	for slot in slots:
+		_render_picture_now(int(slot))
+
+
+func has_visible_system_ui() -> bool:
+	return not _visible_system_ui_slots.is_empty()
+
+
+func _sync_system_ui_slot(number: int) -> void:
+	if number < 12000 or number >= 12600:
+		return
+	if _cmds.has(number) and _hit_rect(number).size.x > 0.0:
+		_visible_system_ui_slots[number] = true
+	else:
+		_visible_system_ui_slots.erase(number)
+
+
+func _sync_animating_slot(number: int) -> void:
+	var state: Variant = _states.get(number, null)
+	if state is Dictionary and _state_animating(state as Dictionary):
+		_animating_slots[number] = true
+	else:
+		_animating_slots.erase(number)
 
 
 ## Slot number encoded in the node name built by _build_picture ("Pic%d").
 static func picture_number(node: Node) -> int:
+	if node.has_meta("slot_id"):
+		return int(node.get_meta("slot_id"))
 	var label := str(node.name)
 	if label.begins_with("Pic"):
 		return label.substr(3).to_int()
 	return 0
 
 
-func draw_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int = 0, kind: int = -1, animate: Array = [], flags: Dictionary = {}, defer_delay: bool = true) -> Control:
+func _dispatch_picture_command(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array, flags: Dictionary, defer_delay: bool, track_mode: bool) -> Dictionary:
 	if action == 3:
 		_reset_delayed_pictures(number, args, flags)
-		return null
+		return {"handled": true, "node": null}
 	if defer_delay:
 		var delay := _picture_delay(action, args)
 		if delay > 0:
-			_queue_delayed_picture(number, action, file, text, args, anchor, kind, animate, flags, false, delay)
-			return null
+			_queue_delayed_picture(number, action, file, text, args, anchor, kind, animate, flags, track_mode, delay)
+			return {"handled": true, "node": null}
 	if action == 2:
 		# WOLF's tips document the zero-delay case: erasing a picture immediately
 		# discards every delayed command previously queued for that picture ID.
@@ -329,26 +266,41 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 		if _picture_delay(action, args) == 0:
 			_reset_pending_for_picture_range(number, _picture_endpoint(number, action, args, flags))
 		_start_erase(number, args, flags)
-		return null
-	if kind < 0:
-		kind = 2 if file.is_empty() and not text.is_empty() else 0
+		return {"handled": true, "node": null}
+	var norm_kind := kind
+	if norm_kind < 0:
+		norm_kind = 2 if file.is_empty() and not text.is_empty() else 0
 	if action == 1:
 		var first_node: Control = null
 		for slot in _move_slots(number, args, flags):
 			# A move targeting an empty slot is a no-op; never fabricate a node.
-			if not _pictures.has(slot):
+			if track_mode:
+				if not _cmds.has(slot):
+					continue
+			elif not _pictures.has(slot):
 				continue
 			var prev_slot_cmd: Dictionary = _cmds.get(slot, {})
 			var move_anchor := anchor
 			if move_anchor == 0 and not prev_slot_cmd.is_empty():
 				move_anchor = int(prev_slot_cmd.get("anchor", 0))
-			var moved := _merged_move(slot, file, text, args, move_anchor, kind, flags)
+			var moved := _merged_move(slot, file, text, args, move_anchor, norm_kind, flags)
 			_begin_move(slot, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
 			var cmd_args := _resolved_move_args(slot, moved["args"])
 			_store_cmd(slot, 0, str(moved["file"]), str(moved["text"]), cmd_args, int(moved["anchor"]), int(moved["kind"]), animate, moved["flags"])
-			if first_node == null:
+			if track_mode and not _base_sizes.has(slot):
+				_base_sizes[slot] = Vector2(420, 140)
+			_sync_system_ui_slot(slot)
+			if not track_mode and first_node == null:
 				first_node = _pictures[slot]
-		return first_node
+		return {"handled": true, "node": first_node}
+	return {"handled": false, "kind": norm_kind}
+
+
+func draw_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int = 0, kind: int = -1, animate: Array = [], flags: Dictionary = {}, defer_delay: bool = true) -> Control:
+	var dispatch := _dispatch_picture_command(number, action, file, text, args, anchor, kind, animate, flags, defer_delay, false)
+	if bool(dispatch["handled"]):
+		return dispatch["node"]
+	kind = int(dispatch["kind"])
 
 	var prev_state: Dictionary = _states.get(number, {}).duplicate()
 	var prev_cmd: Dictionary = _cmds.get(number, {})
@@ -369,6 +321,7 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 				_states[number] = prev_state
 				_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
 				_store_cmd(number, 0, file, text, _resolved_move_args(number, args), anchor, kind, animate, flags)
+				_sync_system_ui_slot(number)
 				return existing
 
 	_free_picture(number)
@@ -380,14 +333,17 @@ func draw_picture(number: int, action: int, file: String, text: String, args: Ar
 	if band == null or not is_instance_valid(band):
 		push_warning("draw_picture %d band missing (layers=%d)" % [number, layers.size()])
 		return null
-	band.add_child(node)
-	_sort_band_by_number(band)
+	if _defer_band_sort:
+		band.add_child(node)
+	else:
+		_insert_picture_sorted(band, node, number)
 	_pictures[number] = node
 	_base_sizes[number] = node.get_meta("base_size", node.size)
 	if redraws and not prev_state.is_empty():
 		_states[number] = prev_state
 	_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
 	_store_cmd(number, 0, file, text, _resolved_move_args(number, args), anchor, kind, animate, flags)
+	_sync_system_ui_slot(number)
 	return node
 
 
@@ -496,6 +452,9 @@ func _store_cmd(number: int, action: int, file: String, text: String, args: Arra
 func _free_picture(number: int) -> void:
 	_base_sizes.erase(number)
 	_states.erase(number)
+	_animating_slots.erase(number)
+	_visible_system_ui_slots.erase(number)
+	_dirty_render_slots.erase(number)
 	if _pictures.has(number):
 		var node: Control = _pictures[number]
 		_pictures.erase(number)
@@ -506,89 +465,8 @@ func _free_picture(number: int) -> void:
 			node.queue_free()
 
 
-## Strip text-formatting tokens and lay out multi-run spans with per-run font size,
-## SystemDB colour, outline, baseline alignment, <C>/<R> alignment, and 1.3x line pitch.
 func _measure_text(source: String) -> Dictionary:
-	var default_px := 20
-	var parsed := _TextStyleEngine.parse_lines(source, {
-		"default_font_px": default_px,
-		"min_font_px": 1,
-		"max_font_px": 96,
-		"default_outline": false,
-		"allow_right_tail_split": true,
-		"trim_trailing_empty_line": true,
-	})
-	_TextStyleEngine.warn_unexpanded("PictureStage", source, parsed["unexpanded_tokens"])
-	var plain: String = parsed["plain"]
-	var font_px: int = int(parsed["font_size"])
-	var lines: Array = parsed["lines"]
-
-	var draw_font := UiSkin.font()
-	var line_widths: Array[float] = []
-	var line_max_px: Array[int] = []
-	var block_w := 0.0
-	for line in lines:
-		var lw := 0.0
-		var max_px := 0
-		var chunks: Array = line["chunks"]
-		for c in chunks:
-			var px := int(c["size"])
-			var run_w := _measure_run_width(draw_font, str(c["text"]), px)
-			c["width"] = run_w
-			lw += run_w
-			max_px = maxi(max_px, px)
-		if max_px <= 0:
-			max_px = font_px
-		line_widths.append(lw)
-		line_max_px.append(max_px)
-		block_w = maxf(block_w, lw)
-
-	var placed_runs: Array = []
-	var y_cursor := 0.0
-	for li in lines.size():
-		var line: Dictionary = lines[li]
-		var chunks: Array = line["chunks"]
-		var max_px: int = line_max_px[li]
-		var max_ascent := draw_font.get_ascent(max_px)
-		var tail_from: int = int(line["tail_from"])
-		var line_align: int = int(line["align"])
-		var line_w: float = line_widths[li]
-		var x_left := 0.0
-		if tail_from < 0:
-			if line_align == HORIZONTAL_ALIGNMENT_CENTER:
-				x_left = maxf(0.0, (block_w - line_w) * 0.5)
-			elif line_align == HORIZONTAL_ALIGNMENT_RIGHT:
-				x_left = maxf(0.0, block_w - line_w)
-		var tail_w := 0.0
-		if tail_from >= 0:
-			for ci in range(tail_from, chunks.size()):
-				tail_w += float(chunks[ci]["width"])
-		var x_right := maxf(0.0, block_w - tail_w)
-		for ci in chunks.size():
-			var c: Dictionary = chunks[ci]
-			var run_x := x_left
-			if tail_from >= 0 and ci >= tail_from:
-				run_x = x_right
-				x_right += float(c["width"])
-			else:
-				x_left += float(c["width"])
-			var idx := int(c["color_idx"])
-			placed_runs.append({
-				"text": str(c["text"]),
-				"pos": Vector2(run_x, y_cursor + max_ascent),
-				"size": int(c["size"]),
-				"has_color": idx >= 0,
-				"color": UiSkin.color_for_index(idx) if idx >= 0 else Color.WHITE,
-				"outline": bool(c["outline"]),
-			})
-		y_cursor += ceilf(float(max_px) * 1.3)
-
-	return {
-		"text": plain,
-		"font_size": font_px,
-		"size": Vector2(ceilf(maxf(1.0, block_w)) + 2.0, ceilf(maxf(1.0, y_cursor))),
-		"runs": placed_runs,
-	}
+	return _text_layout.measure_text(source)
 
 
 ## Opcode 124 answers. Fields 8/9 answer for missing pictures too (-1 vs 0); every other
@@ -664,14 +542,14 @@ func visible_slot_signature() -> PackedInt32Array:
 	return slots
 
 
-## Signature of foreground interactive picture slots (excludes blinking HUD/cursor overlays).
+## Signature of foreground interactive picture slots (excludes HUD/status tint-exempt overlays).
 func foreground_slot_signature() -> PackedInt32Array:
 	var slots: PackedInt32Array = []
 	var keys: Array = _cmds.keys()
 	keys.sort()
 	for raw_num in keys:
 		var number := int(raw_num)
-		if number >= HUD_TOP_SLOT_MIN and number < 12000:
+		if _is_hud_tint_ui_slot(number):
 			continue
 		var st: Dictionary = _states.get(number, {})
 		if bool(st.get("hidden", false)) or bool(st.get("erase_after", false)):
@@ -706,15 +584,30 @@ func has_interactive_hit(point: Vector2) -> bool:
 	return false
 
 
+func _insert_picture_sorted(band: Control, node: Control, number: int) -> void:
+	# WOLF paints slots in ascending slot-number order, independent of draw call order.
+	var target_index := band.get_child_count()
+	var children := band.get_children()
+	for i in children.size():
+		var child := children[i]
+		if not child.has_meta("slot_id") and not String(child.name).begins_with("Pic"):
+			continue
+		if picture_number(child) > number:
+			target_index = i
+			break
+	band.add_child(node)
+	if target_index < band.get_child_count() - 1:
+		band.move_child(node, target_index)
+
+
 func _sort_band_by_number(band: Control) -> void:
 	# WOLF paints slots in ascending slot-number order, independent of draw call order.
 	var keys: Array[int] = []
 	var by_key: Dictionary = {}
 	for child in band.get_children():
-		var label := String(child.name)
-		if not label.begins_with("Pic"):
+		if not child.has_meta("slot_id") and not String(child.name).begins_with("Pic"):
 			continue
-		var slot := label.substr(3).to_int()
+		var slot := picture_number(child)
 		keys.append(slot)
 		by_key[slot] = child
 	keys.sort()
@@ -826,11 +719,7 @@ func _slots_in_span(lo: int, hi: int) -> Array[int]:
 			if s >= lo and s <= hi and not seen.has(s):
 				seen[s] = true
 				slots.append(s)
-	for entry in _pending_pictures:
-		var s := int(entry.get("number", 0))
-		if s >= lo and s <= hi and not seen.has(s):
-			seen[s] = true
-			slots.append(s)
+	_delay_queue.collect_slots_in_range(lo, hi, seen, slots)
 	slots.sort()
 	return slots
 
@@ -903,35 +792,10 @@ func _hit_rect(number: int) -> Rect2:
 
 ## Queue/track mode: maintain slot state and hit boxes without instantiating Control nodes.
 func track_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array = [], flags: Dictionary = {}, defer_delay: bool = true) -> void:
-	if action == 3:
-		_reset_delayed_pictures(number, args, flags)
+	var dispatch := _dispatch_picture_command(number, action, file, text, args, anchor, kind, animate, flags, defer_delay, true)
+	if bool(dispatch["handled"]):
 		return
-	if defer_delay:
-		var delay := _picture_delay(action, args)
-		if delay > 0:
-			_queue_delayed_picture(number, action, file, text, args, anchor, kind, animate, flags, true, delay)
-			return
-	if action == 2:
-		if _picture_delay(action, args) == 0:
-			_reset_pending_for_picture_range(number, _picture_endpoint(number, action, args, flags))
-		_start_erase(number, args, flags)
-		return
-	if action == 1:
-		for slot in _move_slots(number, args, flags):
-			if not _cmds.has(slot):
-				continue
-			var move_anchor := anchor
-			if move_anchor == 0:
-				move_anchor = int(_cmds[slot].get("anchor", 0))
-			var moved := _merged_move(slot, file, text, args, move_anchor, kind, flags)
-			_begin_move(slot, str(moved["file"]), str(moved["text"]), moved["args"], int(moved["anchor"]), int(moved["kind"]), animate, flags)
-			var cmd_args := _resolved_move_args(slot, moved["args"])
-			_store_cmd(slot, 0, str(moved["file"]), str(moved["text"]), cmd_args, int(moved["anchor"]), int(moved["kind"]), animate, moved["flags"])
-			if not _base_sizes.has(slot):
-				_base_sizes[slot] = Vector2(420, 140)
-		return
-	if kind < 0:
-		kind = 2 if file.is_empty() and not text.is_empty() else 0
+	kind = int(dispatch["kind"])
 	var prev_state: Dictionary = _states.get(number, {}).duplicate()
 	var base := Vector2.ZERO
 	var sys_track := _PictureShapes.parse_sysgraphic(file) if (kind == 3 or kind == 4) else {}
@@ -951,11 +815,13 @@ func track_picture(number: int, action: int, file: String, text: String, args: A
 	_base_sizes[number] = base
 	_begin_draw(number, file, text, args, anchor, kind, animate, flags, prev_state)
 	_store_cmd(number, 0, file, text, _resolved_move_args(number, args), anchor, kind, animate, flags)
+	_sync_system_ui_slot(number)
 
 
 func _build_picture(number: int, file: String, text: String, args: Array, anchor: int, kind: int, flags: Dictionary = {}) -> Control:
 	var holder := Control.new()
 	holder.name = "Pic%d" % number
+	holder.set_meta("slot_id", number)
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var is_window := kind == 3 or kind == 4
@@ -1205,8 +1071,8 @@ func _new_state(args: Array, anchor: int, base: Vector2, flags: Dictionary = {},
 
 
 ## Show on a free slot fades in from transparent over Process Time. On an occupied slot WOLF
-## defines Show as Move; the transition starts transparent, and only a same-graphic redraw
-## keeps the slot's persistent effects.
+## defines Show as Move: only previously invisible slots start transparent while already-visible
+## slots preserve prev_cur["opacity"], and only a same-graphic redraw keeps persistent effects.
 func _begin_draw(number: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array, flags: Dictionary = {}, previous: Dictionary = {}) -> void:
 	var prev: Dictionary = previous if not previous.is_empty() else _states.get(number, {})
 	var prev_cmd: Dictionary = _cmds.get(number, {})
@@ -1221,6 +1087,7 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 			state["fade_start"] = 0
 			state["current"]["opacity"] = 0
 		_states[number] = state
+		_sync_animating_slot(number)
 		_render_picture(number)
 		return
 
@@ -1267,7 +1134,7 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 		and not bool(prev.get("hidden", false)) \
 		and int(prev_cur.get("opacity", 0)) > 0 \
 		and prev_scale_x != 0 \
-		and (int(prev_cur.get("scale_mode", 0)) != 3 or prev_scale_y != 0)
+		and prev_scale_y != 0
 	var show_from: Dictionary = prev_cur.duplicate()
 	if duration > 0 and not was_visible:
 		show_from["opacity"] = 0
@@ -1282,6 +1149,7 @@ func _begin_draw(number: int, file: String, text: String, args: Array, anchor: i
 	else:
 		state["current"] = state["target"].duplicate()
 	_states[number] = state
+	_sync_animating_slot(number)
 	_render_picture(number)
 
 
@@ -1327,6 +1195,7 @@ func _begin_move(number: int, _file: String, _text: String, args: Array, anchor:
 		state["transition"] = null
 		state["current"] = target.duplicate()
 	_states[number] = state
+	_sync_animating_slot(number)
 	_render_picture(number)
 
 
@@ -1340,16 +1209,19 @@ func _start_erase_one(number: int, args: Array) -> void:
 	if not _cmds.has(number) and not _states.has(number):
 		_free_picture(number)
 		_cmds.erase(number)
+		_sync_system_ui_slot(number)
 		return
 	var state: Dictionary = _states.get(number, {})
 	if bool(state.get("hidden", false)):
 		_free_picture(number)
 		_cmds.erase(number)
+		_sync_system_ui_slot(number)
 		return
 	var fade := clampi(_arg(args, 0, 0), 0, FADE_MAX)
 	if fade <= 0:
 		_free_picture(number)
 		_cmds.erase(number)
+		_sync_system_ui_slot(number)
 		return
 	if state.is_empty():
 		var cmd: Dictionary = _cmds.get(number, {})
@@ -1366,52 +1238,24 @@ func _start_erase_one(number: int, args: Array) -> void:
 		"age": 0,
 	}
 	_states[number] = state
+	_sync_animating_slot(number)
 	_render_picture(number)
 
 
 ## Delay is the tail field at args[11] for Show/Move and args[1] for Erase. It is
 ## separate from Process Time at args[0]; conflating them shifts every scripted beat.
 func _picture_delay(action: int, args: Array) -> int:
-	var delay := 0
-	if action == 0 or action == 1:
-		delay = _arg(args, 11, 0) if args.size() > 11 else 0
-	elif action == 2:
-		delay = _arg(args, 1, 0) if args.size() > 1 else 0
-	return maxi(0, delay)
+	return _PictureDelayQueue.delay_frames(action, args)
 
 
 func _picture_endpoint(number: int, action: int, args: Array, flags: Dictionary = {}) -> int:
-	if not bool(flags.get("has_span", false)):
-		return number
-	if action == 0 or action == 1:
-		return _arg(args, 12, number)
-	if action == 2:
-		return _arg(args, 3, number)
-	return number
+	return _PictureDelayQueue.endpoint(number, action, args, flags)
 
 
 func _queue_delayed_picture(number: int, action: int, file: String, text: String, args: Array, anchor: int, kind: int, animate: Array, flags: Dictionary, track_mode: bool, delay: int) -> void:
 	var endpoint := _picture_endpoint(number, action, args, flags)
-	var target_flags := flags.duplicate()
-	target_flags["has_span"] = false
-	# Queue ownership is per picture slot, matching Delay Reset's picture-ID scope.
-	# A single-slot reset must not cancel a delayed range command for its neighbours.
-	for slot in _slots_in_span(mini(number, endpoint), maxi(number, endpoint)):
-		_pending_pictures.append({
-			"number": slot,
-			"action": action,
-			"file": file,
-			"text": text,
-			"args": args.duplicate(),
-			"anchor": anchor,
-			"kind": kind,
-			"animate": animate.duplicate(),
-			"flags": target_flags.duplicate(),
-			"track": track_mode,
-			# The command's own frame already ran before tick(); Delay=N therefore
-			# starts on the N-th following tick.
-			"remaining": delay + 1,
-		})
+	var slots := _slots_in_span(mini(number, endpoint), maxi(number, endpoint))
+	_delay_queue.enqueue(slots, action, file, text, args, anchor, kind, animate, flags, track_mode, delay)
 
 
 ## WOLF action 3 cancels queued actions that have not started yet. It never erases,
@@ -1422,30 +1266,11 @@ func _reset_delayed_pictures(number: int, args: Array, flags: Dictionary = {}) -
 
 
 func _reset_pending_for_picture_range(number: int, endpoint: int) -> void:
-	var lo := mini(number, endpoint)
-	var hi := maxi(number, endpoint)
-	var kept: Array = []
-	for entry in _pending_pictures:
-		var slot := int(entry.get("number", 0))
-		if slot >= lo and slot <= hi:
-			continue
-		kept.append(entry)
-	_pending_pictures = kept
+	_delay_queue.reset_range(mini(number, endpoint), maxi(number, endpoint))
 
 
 func _activate_delayed_pictures() -> void:
-	if _pending_pictures.is_empty():
-		return
-	var due: Array = []
-	var kept: Array = []
-	for entry in _pending_pictures:
-		var remaining := int(entry.get("remaining", 0)) - 1
-		entry["remaining"] = remaining
-		if remaining <= 0:
-			due.append(entry)
-		else:
-			kept.append(entry)
-	_pending_pictures = kept
+	var due := _delay_queue.pop_due()
 	for entry in due:
 		var action := int(entry.get("action", 0))
 		var number := int(entry.get("number", 0))
@@ -1481,30 +1306,29 @@ static func _pose_differs(a: Dictionary, b: Dictionary) -> bool:
 	return int(a.get("opacity", 255)) != int(b.get("opacity", 255))
 
 
-func _pose_position(pose: Dictionary) -> Vector2i:
-	return Vector2i(int(pose.get("x", 0)), int(pose.get("y", 0)))
-
-
 ## Advance every animating slot once per frame.
 func tick() -> void:
 	_activate_delayed_pictures()
-	for number in _states.keys():
+	if _animating_slots.is_empty():
+		return
+	for raw_number in _animating_slots.keys():
+		var number := int(raw_number)
 		if not _states.has(number):
+			_animating_slots.erase(number)
 			continue
 		var state: Dictionary = _states[number]
 		if _state_animating(state):
 			_advance_picture(number)
+		else:
+			_animating_slots.erase(number)
 
 
 func has_active_animations() -> bool:
 	if _tint_elapsed < _tint_duration:
 		return true
-	if not _pending_pictures.is_empty():
+	if not _delay_queue.is_empty():
 		return true
-	for state in _states.values():
-		if state is Dictionary and _state_animating(state):
-			return true
-	return false
+	return not _animating_slots.is_empty()
 
 
 func _state_animating(state: Dictionary) -> bool:
@@ -1571,6 +1395,8 @@ func _advance_picture(number: int) -> void:
 			state["fade"] = 0
 	_effects.tick_effects(state)
 	_states[number] = state
+	_sync_animating_slot(number)
+	_sync_system_ui_slot(number)
 	_render_picture(number)
 
 
@@ -1585,6 +1411,13 @@ func _lerp_pose(from: Dictionary, to: Dictionary, age: int, duration: int) -> Di
 
 
 func _render_picture(number: int) -> void:
+	if _defer_render:
+		_dirty_render_slots[number] = true
+		return
+	_render_picture_now(number)
+
+
+func _render_picture_now(number: int) -> void:
 	var node: Control = _pictures.get(number, null)
 	var state: Dictionary = _states.get(number, {})
 	if node == null or not is_instance_valid(node) or state.is_empty():
@@ -1671,11 +1504,14 @@ func has_visible_hit_in_slots(slots: Array[int], point: Vector2) -> bool:
 	return false
 
 
-static func _is_screen_tint_ui(number: int) -> bool:
+static func _is_hud_tint_ui_slot(number: int) -> bool:
 	return number == HUD_TOP_SLOT_MIN \
 		or (number >= 6100 and number <= 6299) \
-		or (number >= 10000 and number <= 10199) \
-		or number >= 12000
+		or (number >= 10000 and number <= 10199)
+
+
+static func _is_screen_tint_ui(number: int) -> bool:
+	return _is_hud_tint_ui_slot(number) or number >= 12000
 
 
 func _apply_pattern_cell(node: Control, state: Dictionary) -> void:
@@ -1712,6 +1548,8 @@ func effect(kind: int, duration: int, args: Array) -> bool:
 			state = _new_state(cmd.get("args", []), int(cmd.get("anchor", 0)), _base_sizes.get(number, Vector2.ZERO), cmd.get("flags", {}))
 		_effects.apply_effect(state, kind, duration, args)
 		_states[number] = state
+		_sync_animating_slot(number)
+		_sync_system_ui_slot(number)
 		_render_picture(number)
 	return true
 
@@ -1810,7 +1648,10 @@ func clear_pictures() -> void:
 	_cmds.clear()
 	_base_sizes.clear()
 	_states.clear()
-	_pending_pictures.clear()
+	_animating_slots.clear()
+	_visible_system_ui_slots.clear()
+	_dirty_render_slots.clear()
+	_delay_queue.clear()
 	_polled_hit_slots.clear()
 	_last_polled_hit_slots.clear()
 	_hit_match_this_frame = false
@@ -1874,6 +1715,7 @@ func picture_snapshots() -> Array:
 ## Replay a snapshot taken by picture_snapshots(); used by load-game.
 func restore_pictures(entries: Array) -> void:
 	clear_pictures()
+	_defer_band_sort = true
 	for entry in entries:
 		if not entry is Dictionary:
 			continue
@@ -1914,4 +1756,10 @@ func restore_pictures(entries: Array) -> void:
 					changed = true
 			if changed:
 				_states[number] = st
+				_sync_animating_slot(number)
+				_sync_system_ui_slot(number)
 				_render_picture(number)
+	_defer_band_sort = false
+	var band := layer(LAYER_SCENE_PICTURE)
+	if band != null and is_instance_valid(band) and not entries.is_empty():
+		_sort_band_by_number(band)

@@ -72,6 +72,104 @@ const DIR_PRIORITY: Array[String] = [
 ]
 const AUDIO_EXTENSIONS: Array[String] = [".ogg", ".mp3", ".wav"]
 
+class AssetIndex:
+	extends RefCounted
+
+	var files: Dictionary = {}                 # lowercase relative path -> canonical/absolute path
+	var tex_basenames: Dictionary = {}         # lowercase bare basename -> canonical/absolute path
+	var tex_ranks: Dictionary = {}             # lowercase bare basename -> DIR_PRIORITY rank
+	var tex_keys: Dictionary = {}              # lowercase bare basename -> winning lowercase relative path
+	var audio_basenames: Dictionary = {}       # lowercase bare basename -> canonical/absolute path
+	var audio_ranks: Dictionary = {}           # lowercase bare basename -> DIR_PRIORITY rank
+	var audio_keys: Dictionary = {}            # lowercase bare basename -> winning lowercase relative path
+
+	func clear() -> void:
+		files.clear()
+		tex_basenames.clear()
+		tex_ranks.clear()
+		tex_keys.clear()
+		audio_basenames.clear()
+		audio_ranks.clear()
+		audio_keys.clear()
+
+	func add_entry(lower_rel: String, value: String, bare: String, rank: int, is_tex: bool, is_audio: bool) -> void:
+		files[lower_rel] = value
+		if is_tex:
+			AssetDB._record_basename(tex_basenames, tex_ranks, tex_keys, bare, rank, lower_rel, value)
+		elif is_audio:
+			AssetDB._record_basename(audio_basenames, audio_ranks, audio_keys, bare, rank, lower_rel, value)
+
+
+class MediaSniffer:
+	extends RefCounted
+
+	static func sniff_image_format(bytes: PackedByteArray, fallback_ext: String = "") -> String:
+		if bytes.size() >= 12:
+			if bytes[0] == 0x52 and bytes[1] == 0x49 and bytes[2] == 0x46 and bytes[3] == 0x46 \
+					and bytes[8] == 0x57 and bytes[9] == 0x45 and bytes[10] == 0x42 and bytes[11] == 0x50:
+				return "webp"
+		if bytes.size() >= 8 and bytes[0] == 0x89 and bytes[1] == 0x50 and bytes[2] == 0x4E and bytes[3] == 0x47:
+			return "png"
+		if bytes.size() >= 3 and bytes[0] == 0xFF and bytes[1] == 0xD8 and bytes[2] == 0xFF:
+			return "jpg"
+		if bytes.size() >= 2 and bytes[0] == 0x42 and bytes[1] == 0x4D:
+			return "bmp"
+		return fallback_ext.to_lower()
+
+	static func sniff_audio_format(bytes: PackedByteArray, fallback_ext: String = "") -> String:
+		if bytes.size() >= 4 and bytes[0] == 0x4F and bytes[1] == 0x67 and bytes[2] == 0x67 and bytes[3] == 0x53:
+			return "ogg"
+		if bytes.size() >= 12 and bytes[0] == 0x52 and bytes[1] == 0x49 and bytes[2] == 0x46 and bytes[3] == 0x46 \
+				and bytes[8] == 0x57 and bytes[9] == 0x41 and bytes[10] == 0x56 and bytes[11] == 0x45:
+			return "wav"
+		if bytes.size() >= 3 and bytes[0] == 0x49 and bytes[1] == 0x44 and bytes[2] == 0x33:
+			return "mp3"
+		if bytes.size() >= 2 and bytes[0] == 0xFF and (bytes[1] & 0xE0) == 0xE0:
+			return "mp3"
+		return fallback_ext.to_lower()
+
+	static func image_from_bytes(bytes: PackedByteArray, fallback_ext: String = "") -> Image:
+		if bytes.is_empty():
+			return null
+		var image := Image.new()
+		var error := OK
+		match sniff_image_format(bytes, fallback_ext):
+			"png":
+				error = image.load_png_from_buffer(bytes)
+			"jpg", "jpeg":
+				error = image.load_jpg_from_buffer(bytes)
+			"webp":
+				error = image.load_webp_from_buffer(bytes)
+			"bmp":
+				error = image.load_bmp_from_buffer(bytes)
+			"tga":
+				error = image.load_tga_from_buffer(bytes)
+			_:
+				return null
+		return image if error == OK else null
+
+	static func decode_image_texture(bytes: PackedByteArray, fallback_ext: String = "") -> Texture2D:
+		var image := image_from_bytes(bytes, fallback_ext)
+		if image == null:
+			return null
+		return ImageTexture.create_from_image(image)
+
+	static func audio_from_bytes(bytes: PackedByteArray, fallback_ext: String = "") -> AudioStream:
+		if bytes.is_empty():
+			return null
+		match sniff_audio_format(bytes, fallback_ext):
+			"ogg":
+				return AudioStreamOggVorbis.load_from_buffer(bytes)
+			"mp3":
+				return AudioStreamMP3.load_from_buffer(bytes)
+			"wav":
+				return AudioStreamWAV.load_from_buffer(bytes)
+		return null
+
+
+static var _shared_media_paks: Dictionary = {}  # pak_path -> MediaPakReader
+static var _last_shared_pak_path := ""
+
 var root_dir: String
 ## Directory shared with the active save slots; dynamic Save/*.jpg thumbnails live here.
 var save_dir := ""
@@ -87,37 +185,81 @@ var evictions: int = 0
 var background_trims: int = 0
 var miss_paths: Array[String] = []
 
-var _files: Dictionary = {}                 # lowercase relative path -> absolute path
-var _tex_basenames: Dictionary = {}         # lowercase basename -> absolute image path
-var _tex_basename_rank: Dictionary = {}     # lowercase basename -> DIR_PRIORITY rank
-var _tex_basename_key: Dictionary = {}      # lowercase basename -> winning lowercase relative path
-var _audio_basenames: Dictionary = {}       # lowercase basename -> absolute audio path
-var _audio_basename_rank: Dictionary = {}   # lowercase basename -> DIR_PRIORITY rank
-var _audio_basename_key: Dictionary = {}    # lowercase basename -> winning lowercase relative path
+var _loose_index := AssetIndex.new()
 var media_pak_path := ""
 var media_pak = null                        # MediaPakReader, or null when no pack is present
-var _media_files: Dictionary = {}           # lowercase relative path -> canonical pack path
-var _media_tex_basenames: Dictionary = {}
-var _media_tex_basename_rank: Dictionary = {}
-var _media_tex_basename_key: Dictionary = {}
-var _media_audio_basenames: Dictionary = {}
-var _media_audio_basename_rank: Dictionary = {}
-var _media_audio_basename_key: Dictionary = {}
+var _media_index := AssetIndex.new()
 ## Optional 2x art pack. Entries are logical-path -> {path, scale}; a miss falls
 ## back to the 1x pack, so a partial HD build is always safe to ship.
 var hd_pak_path := ""
 var hd_pak = null
-var _hd_entries: Dictionary = {}
-var _hd_basenames: Dictionary = {}
-var _hd_basename_rank: Dictionary = {}
-var _hd_basename_key: Dictionary = {}
+var _hd_index := AssetIndex.new()           # files: norm_key -> norm_key; tex_basenames: bare -> winning norm_key
+var _hd_entries: Dictionary = {}            # norm_key -> {path, scale}
 var _hd_failed: Dictionary = {}             # HD pack path -> true when it failed to decode
 var _hd_verified: Dictionary = {}           # HD pack path -> true once it decoded
-var _cache: Dictionary = {}                 # normalized key -> Resource
+var _cache: Dictionary = {}                 # normalized key -> Resource (insertion-ordered MRU at tail)
 var _sizes: Dictionary = {}                 # normalized key -> bytes
-var _lru: Array[String] = []                # oldest first
 var _logged_misses: Dictionary = {}
 var _explicit_root := false
+var _injected_media_pak = null
+var _injected_media_pak_path := ""
+var _owns_media_pak := false
+
+
+static func acquire_shared_media_pak(pak_path: String) -> Object:
+	if pak_path.is_empty() or not FileAccess.file_exists(pak_path):
+		return null
+	if _shared_media_paks.has(pak_path):
+		var existing = _shared_media_paks[pak_path]
+		if existing != null and existing.IsOpen:
+			_last_shared_pak_path = pak_path
+			return existing
+		_shared_media_paks.erase(pak_path)
+	var reader = MediaPakReader.new()
+	if reader != null and reader.Open(pak_path):
+		_shared_media_paks[pak_path] = reader
+		_last_shared_pak_path = pak_path
+		return reader
+	return null
+
+
+static func get_shared_media_pak(pak_path: String = "") -> Object:
+	var key := pak_path if not pak_path.is_empty() else _last_shared_pak_path
+	if key.is_empty() or not _shared_media_paks.has(key):
+		return null
+	var reader = _shared_media_paks[key]
+	if reader != null and reader.IsOpen:
+		return reader
+	_shared_media_paks.erase(key)
+	if _last_shared_pak_path == key:
+		_last_shared_pak_path = ""
+	return null
+
+
+static func release_shared_media_pak(pak_path: String = "") -> void:
+	if pak_path.is_empty():
+		for k in _shared_media_paks.keys():
+			var reader = _shared_media_paks[k]
+			if reader != null and reader.has_method("Close"):
+				reader.Close()
+		_shared_media_paks.clear()
+		_last_shared_pak_path = ""
+		return
+	if _shared_media_paks.has(pak_path):
+		var reader = _shared_media_paks[pak_path]
+		if reader != null and reader.has_method("Close"):
+			reader.Close()
+		_shared_media_paks.erase(pak_path)
+		if _last_shared_pak_path == pak_path:
+			_last_shared_pak_path = ""
+
+
+static func image_from_bytes(bytes: PackedByteArray, fallback_ext: String = "") -> Image:
+	return MediaSniffer.image_from_bytes(bytes, fallback_ext)
+
+
+static func decode_image_texture(bytes: PackedByteArray, fallback_ext: String = "") -> Texture2D:
+	return MediaSniffer.decode_image_texture(bytes, fallback_ext)
 
 
 static func platform_memory_policy(
@@ -153,10 +295,14 @@ func set_memory_policy(policy: MemoryPolicy) -> void:
 		return
 	memory_policy = policy
 	budget_bytes = policy.budget_bytes
+	set_hd_enabled(policy.hd_enabled)
+	_evict()
 
 
-func _init(p_root: String = "", p_policy: MemoryPolicy = null) -> void:
+func _init(p_root: String = "", p_policy: MemoryPolicy = null, p_media_pak: Object = null, p_media_pak_path: String = "") -> void:
 	_explicit_root = p_root != ""
+	_injected_media_pak = p_media_pak
+	_injected_media_pak_path = p_media_pak_path
 	root_dir = p_root if _explicit_root else default_root()
 	if p_policy != null:
 		memory_policy = p_policy
@@ -172,12 +318,23 @@ func _init(p_root: String = "", p_policy: MemoryPolicy = null) -> void:
 	_open_hd_pack()
 	# Only the implicit default root falls back to the committed stub tree; an explicit root
 	# (tests, custom installs) keeps reporting its real contents so misses stay visible.
-	if not _explicit_root and _files.is_empty() and media_pak == null:
+	if not _explicit_root and _loose_index.files.is_empty() and media_pak == null:
 		root_dir = fallback_root()
 		using_fallback = true
 		_index()
 		_open_media_pack()
 		_open_hd_pack()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		if hd_pak != null and hd_pak.has_method("Close"):
+			hd_pak.Close()
+		hd_pak = null
+		if _owns_media_pak and media_pak != null and media_pak.has_method("Close"):
+			media_pak.Close()
+		if _owns_media_pak:
+			media_pak = null
 
 
 static func default_root() -> String:
@@ -218,13 +375,7 @@ static func _has_ext(key: String, exts: Array[String]) -> bool:
 
 ## Recursively index the tree: relative path and split texture/audio basenames, lowercase.
 func _index() -> void:
-	_files.clear()
-	_tex_basenames.clear()
-	_tex_basename_rank.clear()
-	_tex_basename_key.clear()
-	_audio_basenames.clear()
-	_audio_basename_rank.clear()
-	_audio_basename_key.clear()
+	_loose_index.clear()
 	var dir := DirAccess.open(root_dir)
 	if dir == null:
 		return
@@ -270,13 +421,11 @@ func _index_dir(dir: DirAccess, prefix: String) -> void:
 		var rel := file_name if prefix == "" else prefix + "/" + file_name
 		var abs_path := root_dir.path_join(rel)
 		var lower_rel := rel.to_lower()
-		_files[lower_rel] = abs_path
-		var base := file_name.get_basename().to_lower()
+		var bare := file_name.get_basename().to_lower()
 		var rank := _dir_rank(lower_rel)
-		if _has_ext(lower_rel, TEXTURE_EXTENSIONS):
-			_record_basename(_tex_basenames, _tex_basename_rank, _tex_basename_key, base, rank, lower_rel, abs_path)
-		elif _has_ext(lower_rel, AUDIO_EXTENSIONS):
-			_record_basename(_audio_basenames, _audio_basename_rank, _audio_basename_key, base, rank, lower_rel, abs_path)
+		var is_tex := _has_ext(lower_rel, TEXTURE_EXTENSIONS)
+		var is_aud := not is_tex and _has_ext(lower_rel, AUDIO_EXTENSIONS)
+		_loose_index.add_entry(lower_rel, abs_path, bare, rank, is_tex, is_aud)
 	for sub_name in subdirs:
 		var rel := sub_name if prefix == "" else prefix + "/" + sub_name
 		var sub := DirAccess.open(root_dir.path_join(rel))
@@ -318,52 +467,52 @@ func resolve(logical: String, media_kind: String = "any") -> String:
 			if FileAccess.file_exists(candidate):
 				return candidate
 
-	if _files.has(key):
+	if _loose_index.files.has(key):
 		if (allow_tex and not _has_ext(key, AUDIO_EXTENSIONS)) or (allow_audio and not _has_ext(key, TEXTURE_EXTENSIONS)):
-			return _files[key]
-	if _media_files.has(key):
+			return _loose_index.files[key]
+	if _media_index.files.has(key):
 		if (allow_tex and not _has_ext(key, AUDIO_EXTENSIONS)) or (allow_audio and not _has_ext(key, TEXTURE_EXTENSIONS)):
-			return MEDIA_PREFIX + str(_media_files[key])
+			return MEDIA_PREFIX + str(_media_index.files[key])
 
 	# Word-effect art lives in hword/word_effect* while some scripts reference Picture/word_effect*.
 	if allow_tex and key.begins_with("picture/word_effect"):
 		var alias := "hword/" + key.get_file()
-		if _files.has(alias):
-			return _files[alias]
-		if _media_files.has(alias):
-			return MEDIA_PREFIX + str(_media_files[alias])
+		if _loose_index.files.has(alias):
+			return _loose_index.files[alias]
+		if _media_index.files.has(alias):
+			return MEDIA_PREFIX + str(_media_index.files[alias])
 		var alias_base := alias.get_basename()
 		for ext in TEXTURE_EXTENSIONS:
-			if _files.has(alias_base + ext):
-				return _files[alias_base + ext]
-			if _media_files.has(alias_base + ext):
-				return MEDIA_PREFIX + str(_media_files[alias_base + ext])
+			if _loose_index.files.has(alias_base + ext):
+				return _loose_index.files[alias_base + ext]
+			if _media_index.files.has(alias_base + ext):
+				return MEDIA_PREFIX + str(_media_index.files[alias_base + ext])
 
 	var base := key.get_basename()
 	if allow_tex:
 		for ext in TEXTURE_EXTENSIONS:
-			if _files.has(base + ext):
-				return _files[base + ext]
-			if _media_files.has(base + ext):
-				return MEDIA_PREFIX + str(_media_files[base + ext])
+			if _loose_index.files.has(base + ext):
+				return _loose_index.files[base + ext]
+			if _media_index.files.has(base + ext):
+				return MEDIA_PREFIX + str(_media_index.files[base + ext])
 	if allow_audio:
 		for ext in AUDIO_EXTENSIONS:
-			if _files.has(base + ext):
-				return _files[base + ext]
-			if _media_files.has(base + ext):
-				return MEDIA_PREFIX + str(_media_files[base + ext])
+			if _loose_index.files.has(base + ext):
+				return _loose_index.files[base + ext]
+			if _media_index.files.has(base + ext):
+				return MEDIA_PREFIX + str(_media_index.files[base + ext])
 
 	var bare := key.get_file().get_basename()
 	if allow_tex:
-		if _tex_basenames.has(bare):
-			return _tex_basenames[bare]
-		if _media_tex_basenames.has(bare):
-			return MEDIA_PREFIX + str(_media_tex_basenames[bare])
+		if _loose_index.tex_basenames.has(bare):
+			return _loose_index.tex_basenames[bare]
+		if _media_index.tex_basenames.has(bare):
+			return MEDIA_PREFIX + str(_media_index.tex_basenames[bare])
 	if allow_audio:
-		if _audio_basenames.has(bare):
-			return _audio_basenames[bare]
-		if _media_audio_basenames.has(bare):
-			return MEDIA_PREFIX + str(_media_audio_basenames[bare])
+		if _loose_index.audio_basenames.has(bare):
+			return _loose_index.audio_basenames[bare]
+		if _media_index.audio_basenames.has(bare):
+			return MEDIA_PREFIX + str(_media_index.audio_basenames[bare])
 
 	if not key.begins_with("<") and not _logged_misses.has(key):
 		_logged_misses[key] = true
@@ -462,17 +611,17 @@ func media_pak_count() -> int:
 ## Opens <root>/media.pak, or the path in LWsmf_MEDIA_PAK when set.
 ## An absent or malformed pack leaves the loose tree in charge.
 func _open_media_pack() -> void:
-	if media_pak != null:
+	if _owns_media_pak and media_pak != null and media_pak.has_method("Close"):
 		media_pak.Close()
 	media_pak = null
 	media_pak_path = ""
-	_media_files.clear()
-	_media_tex_basenames.clear()
-	_media_tex_basename_rank.clear()
-	_media_tex_basename_key.clear()
-	_media_audio_basenames.clear()
-	_media_audio_basename_rank.clear()
-	_media_audio_basename_key.clear()
+	_owns_media_pak = false
+	_media_index.clear()
+	if _injected_media_pak != null and _injected_media_pak.IsOpen:
+		media_pak = _injected_media_pak
+		media_pak_path = _injected_media_pak_path if not _injected_media_pak_path.is_empty() else str(_injected_media_pak.PackPath)
+		_index_media_pak_entries(media_pak)
+		return
 	var candidates: Array[String] = []
 	var override := OS.get_environment("LWsmf_MEDIA_PAK")
 	if not override.is_empty():
@@ -483,25 +632,41 @@ func _open_media_pack() -> void:
 	for candidate in candidates:
 		if not FileAccess.file_exists(candidate):
 			continue
-		var reader = MediaPakReader.new()
-		if reader.Open(candidate):
+		var is_override := not override.is_empty() and candidate == override
+		var reader = null
+		var owns := false
+		if not is_override:
+			reader = get_shared_media_pak(candidate)
+			if reader == null:
+				reader = acquire_shared_media_pak(candidate)
+		else:
+			reader = MediaPakReader.new()
+			if reader != null and reader.Open(candidate):
+				owns = true
+			else:
+				push_warning("AssetDB: cannot open media pack %s: %s" % [candidate, reader.LastError if reader != null else "null"])
+				continue
+		if reader != null and reader.IsOpen:
 			media_pak = reader
 			media_pak_path = candidate
-			var pak_paths: Array[String] = []
-			for entry in reader.Paths():
-				pak_paths.append(str(entry))
-			pak_paths.sort()
-			for canonical in pak_paths:
-				var key := _norm_key(canonical)
-				_media_files[key] = canonical
-				var bare := key.get_file().get_basename()
-				var rank := _dir_rank(key)
-				if _has_ext(key, TEXTURE_EXTENSIONS):
-					_record_basename(_media_tex_basenames, _media_tex_basename_rank, _media_tex_basename_key, bare, rank, key, canonical)
-				elif _has_ext(key, AUDIO_EXTENSIONS):
-					_record_basename(_media_audio_basenames, _media_audio_basename_rank, _media_audio_basename_key, bare, rank, key, canonical)
+			_owns_media_pak = owns
+			_index_media_pak_entries(reader)
 			return
-		push_warning("AssetDB: cannot open media pack %s: %s" % [candidate, reader.LastError])
+		push_warning("AssetDB: cannot open media pack %s" % candidate)
+
+
+func _index_media_pak_entries(reader: Object) -> void:
+	var pak_paths: Array[String] = []
+	for entry in reader.Paths():
+		pak_paths.append(str(entry))
+	pak_paths.sort()
+	for canonical in pak_paths:
+		var key := _norm_key(canonical)
+		var bare := key.get_file().get_basename()
+		var rank := _dir_rank(key)
+		var is_tex := _has_ext(key, TEXTURE_EXTENSIONS)
+		var is_aud := not is_tex and _has_ext(key, AUDIO_EXTENSIONS)
+		_media_index.add_entry(key, canonical, bare, rank, is_tex, is_aud)
 
 
 ## Opens <root>/media_hd.pak (or LWsmf_HD_PAK). The pack is optional: an absent,
@@ -512,9 +677,7 @@ func _open_hd_pack() -> void:
 	hd_pak = null
 	hd_pak_path = ""
 	_hd_entries.clear()
-	_hd_basenames.clear()
-	_hd_basename_rank.clear()
-	_hd_basename_key.clear()
+	_hd_index.clear()
 	_hd_failed.clear()
 	_hd_verified.clear()
 	if not hd_enabled:
@@ -568,7 +731,7 @@ func _index_hd_entries(entries: Dictionary) -> void:
 		_hd_entries[key] = {"path": path, "scale": scale}
 		var bare := key.get_file().get_basename()
 		var rank := _dir_rank(key)
-		_record_basename(_hd_basenames, _hd_basename_rank, _hd_basename_key, bare, rank, key, key)
+		_hd_index.add_entry(key, key, bare, rank, true, false)
 
 
 func hd_available() -> bool:
@@ -590,11 +753,11 @@ func hd_entry_count() -> int:
 ## True when a 1x file or pack entry exists for this exact logical path (extension variants
 ## included); HD basename fallbacks must not override it with art from another folder.
 func _has_exact_1x(key: String) -> bool:
-	if _files.has(key) or _media_files.has(key):
+	if _loose_index.files.has(key) or _media_index.files.has(key):
 		return true
 	var base := key.get_basename()
 	for ext in TEXTURE_EXTENSIONS:
-		if _files.has(base + ext) or _media_files.has(base + ext):
+		if _loose_index.files.has(base + ext) or _media_index.files.has(base + ext):
 			return true
 	return false
 
@@ -635,8 +798,8 @@ func _hd_entry_unchecked(key: String) -> Dictionary:
 		if _has_exact_1x(alias_key):
 			return {}
 	var bare := key.get_file().get_basename()
-	if _hd_basenames.has(bare):
-		return _hd_entries.get(_hd_basenames[bare], {})
+	if _hd_index.tex_basenames.has(bare):
+		return _hd_entries.get(_hd_index.tex_basenames[bare], {})
 	return {}
 
 
@@ -688,51 +851,15 @@ func _bytes_from_media(path: String) -> PackedByteArray:
 
 
 static func _sniff_image_format(bytes: PackedByteArray, fallback_ext: String) -> String:
-	if bytes.size() >= 12:
-		if bytes[0] == 0x52 and bytes[1] == 0x49 and bytes[2] == 0x46 and bytes[3] == 0x46 \
-				and bytes[8] == 0x57 and bytes[9] == 0x45 and bytes[10] == 0x42 and bytes[11] == 0x50:
-			return "webp"
-	if bytes.size() >= 8 and bytes[0] == 0x89 and bytes[1] == 0x50 and bytes[2] == 0x4E and bytes[3] == 0x47:
-		return "png"
-	if bytes.size() >= 3 and bytes[0] == 0xFF and bytes[1] == 0xD8 and bytes[2] == 0xFF:
-		return "jpg"
-	if bytes.size() >= 2 and bytes[0] == 0x42 and bytes[1] == 0x4D:
-		return "bmp"
-	return fallback_ext.to_lower()
+	return MediaSniffer.sniff_image_format(bytes, fallback_ext)
 
 
 static func _sniff_audio_format(bytes: PackedByteArray, fallback_ext: String) -> String:
-	if bytes.size() >= 4 and bytes[0] == 0x4F and bytes[1] == 0x67 and bytes[2] == 0x67 and bytes[3] == 0x53:
-		return "ogg"
-	if bytes.size() >= 12 and bytes[0] == 0x52 and bytes[1] == 0x49 and bytes[2] == 0x46 and bytes[3] == 0x46 \
-			and bytes[8] == 0x57 and bytes[9] == 0x41 and bytes[10] == 0x56 and bytes[11] == 0x45:
-		return "wav"
-	if bytes.size() >= 3 and bytes[0] == 0x49 and bytes[1] == 0x44 and bytes[2] == 0x33:
-		return "mp3"
-	if bytes.size() >= 2 and bytes[0] == 0xFF and (bytes[1] & 0xE0) == 0xE0:
-		return "mp3"
-	return fallback_ext.to_lower()
+	return MediaSniffer.sniff_audio_format(bytes, fallback_ext)
 
 
 static func _image_from_bytes(bytes: PackedByteArray, fallback_ext: String) -> Image:
-	if bytes.is_empty():
-		return null
-	var image := Image.new()
-	var error := OK
-	match _sniff_image_format(bytes, fallback_ext):
-		"png":
-			error = image.load_png_from_buffer(bytes)
-		"jpg", "jpeg":
-			error = image.load_jpg_from_buffer(bytes)
-		"webp":
-			error = image.load_webp_from_buffer(bytes)
-		"bmp":
-			error = image.load_bmp_from_buffer(bytes)
-		"tga":
-			error = image.load_tga_from_buffer(bytes)
-		_:
-			return null
-	return image if error == OK else null
+	return MediaSniffer.image_from_bytes(bytes, fallback_ext)
 
 
 static func _image_from_file(path: String) -> Image:
@@ -757,16 +884,7 @@ func _image_from_media(path: String) -> Image:
 
 
 static func _audio_from_bytes(bytes: PackedByteArray, fallback_ext: String) -> AudioStream:
-	if bytes.is_empty():
-		return null
-	match _sniff_audio_format(bytes, fallback_ext):
-		"ogg":
-			return AudioStreamOggVorbis.load_from_buffer(bytes)
-		"mp3":
-			return AudioStreamMP3.load_from_buffer(bytes)
-		"wav":
-			return AudioStreamWAV.load_from_buffer(bytes)
-	return null
+	return MediaSniffer.audio_from_bytes(bytes, fallback_ext)
 
 
 func has_cached(logical: String, media_kind: String = "any") -> bool:
@@ -782,7 +900,6 @@ func _erase_cache_key(key: String) -> void:
 		used_bytes -= int(_sizes[key])
 	_sizes.erase(key)
 	_cache.erase(key)
-	_lru.erase(key)
 
 
 ## Drop one logical path after a screenshot is rewritten or deleted.
@@ -799,7 +916,6 @@ func invalidate_path(logical: String) -> void:
 func clear() -> void:
 	_cache.clear()
 	_sizes.clear()
-	_lru.clear()
 	_logged_misses.clear()
 	miss_paths.clear()
 	used_bytes = 0
@@ -808,29 +924,36 @@ func clear() -> void:
 func _store(key: String, resource: Resource, size_bytes: int) -> void:
 	if _sizes.has(key):
 		used_bytes -= int(_sizes[key])
+	_cache.erase(key)
 	_cache[key] = resource
 	_sizes[key] = size_bytes
 	used_bytes += size_bytes
-	_touch(key)
 	_evict()
 
 
 func _touch(key: String) -> void:
-	_lru.erase(key)
-	_lru.append(key)
+	if _cache.has(key):
+		var resource = _cache[key]
+		_cache.erase(key)
+		_cache[key] = resource
 
 
 func _evict_to(target_bytes: int, min_entries: int) -> int:
 	var clamped_target := maxi(0, target_bytes)
 	var evicted := 0
-	while (used_bytes > clamped_target or (clamped_target == 0 and not _lru.is_empty())) and _lru.size() > min_entries:
-		var oldest: String = _lru.pop_front()
+	while (used_bytes > clamped_target or (clamped_target == 0 and not _cache.is_empty())) and _cache.size() > min_entries:
+		var oldest := ""
+		for k in _cache:
+			oldest = str(k)
+			break
+		if oldest.is_empty():
+			break
 		used_bytes = maxi(0, used_bytes - int(_sizes.get(oldest, 0)))
 		_sizes.erase(oldest)
 		_cache.erase(oldest)
 		evictions += 1
 		evicted += 1
-	if _lru.is_empty():
+	if _cache.is_empty():
 		used_bytes = 0
 	return evicted
 

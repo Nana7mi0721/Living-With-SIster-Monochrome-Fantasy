@@ -75,6 +75,18 @@ func _ready() -> void:
 		var band := stage.layer(PictureStage.LAYER_SCENE_PICTURE)
 		if band.get_children().find(early) > band.get_children().find(late):
 			failures.append("band 10 must order pictures by slot number")
+		if int(early.get_meta("slot_id", -1)) != 12050 or int(late.get_meta("slot_id", -1)) != 13000:
+			failures.append("picture nodes must record integer slot_id meta")
+	var snap_order := stage.picture_snapshots()
+	stage.restore_pictures(snap_order)
+	var restored_band := stage.layer(PictureStage.LAYER_SCENE_PICTURE)
+	var prev_slot := -1000000
+	for child in restored_band.get_children():
+		var cur_slot := PictureStage.picture_number(child)
+		if cur_slot < prev_slot:
+			failures.append("restore_pictures must sort band children ascending by slot_id")
+			break
+		prev_slot = cur_slot
 
 	# 8. A window picture is an 18x18 nine-patch stretched to its box size (args 1/2), not a
 	#    sprite-sheet cut down to one 18x18 cell.

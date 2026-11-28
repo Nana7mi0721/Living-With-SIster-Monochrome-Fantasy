@@ -31,6 +31,7 @@ var _app_paused := false
 var _prev_master_muted := false
 var _paused_positions: Array[float] = [0.0, 0.0]
 var _paused_playing: Array[bool] = [false, false]
+var _se_unloop_cache: Dictionary = {}  # file -> {src: AudioStream, stream: AudioStream}
 
 
 func _init(assets: AssetDB) -> void:
@@ -92,9 +93,22 @@ func _play_long(channel: int, file: String, volume: int, loop_point: int, tempo:
 
 	# AssetDB caches one AudioStream per file. BGM/BGS need independent loop state, so
 	# duplicate before touching loop properties.
-	var stream := cached.duplicate() as AudioStream
-	if stream == null:
-		stream = cached
+	# Reuse the cached resource zero-copy unless another active player currently holds it.
+	var other := 1 - channel
+	var shared_with_other := _players[other].stream == cached \
+		and (not _tracks[other].is_empty() or _players[other].playing)
+	var shared_with_se := false
+	if not shared_with_other:
+		for voice in _se_players.size():
+			var se_p := _se_players[voice]
+			if se_p.stream == cached and (se_p.playing or _se_pending[voice]):
+				shared_with_se = true
+				break
+	var stream: AudioStream = cached
+	if shared_with_other or shared_with_se:
+		var dup := cached.duplicate() as AudioStream
+		if dup != null:
+			stream = dup
 	_apply_loop(stream, true, loop_point)
 	player.stream = stream
 	player.pitch_scale = _tempo_scale(norm_tempo)
@@ -138,9 +152,15 @@ func _play_se(file: String, volume: int, tempo: int, frames: int) -> bool:
 	var needs_unloop := ("loop" in cached and bool(cached.get("loop"))) \
 		or (cached is AudioStreamWAV and (cached as AudioStreamWAV).loop_mode != AudioStreamWAV.LOOP_DISABLED)
 	if needs_unloop:
-		var dup := cached.duplicate() as AudioStream
-		stream = dup if dup != null else cached
-		_apply_loop(stream, false, 0)
+		var cached_entry: Variant = _se_unloop_cache.get(file, null)
+		if cached_entry is Dictionary and (cached_entry as Dictionary).get("src", null) == cached:
+			stream = (cached_entry as Dictionary).get("stream", cached)
+		else:
+			var dup := cached.duplicate() as AudioStream
+			stream = dup if dup != null else cached
+			_apply_loop(stream, false, 0)
+			if dup != null:
+				_se_unloop_cache[file] = {"src": cached, "stream": dup}
 	var voice := _take_se_voice()
 	var player := _se_players[voice]
 	_invalidate_se_voice(voice)
@@ -192,6 +212,7 @@ func stop(channel: int, frames: int = 0) -> void:
 func reset() -> void:
 	_paused_playing = [false, false]
 	_paused_positions = [0.0, 0.0]
+	_se_unloop_cache.clear()
 	for voice in _se_players.size():
 		_invalidate_se_voice(voice)
 	for channel in _players.size():
@@ -213,13 +234,21 @@ func pause_for_background() -> void:
 		_prev_master_muted = AudioServer.is_bus_mute(0)
 		AudioServer.set_bus_mute(0, true)
 	for channel in [CHANNEL_BGM, CHANNEL_BGS]:
+		_kill_tween(channel)
 		var player := _players[channel]
+		var track: Dictionary = _tracks[channel]
+		if track.is_empty():
+			_paused_playing[channel] = false
+			player.stop()
+			continue
+		player.volume_db = _channel_volume_db(channel, int(track.get("volume", 100)))
 		if player.playing:
 			_paused_positions[channel] = player.get_playback_position()
 			_paused_playing[channel] = true
 			player.stop()
 		else:
 			_paused_playing[channel] = false
+	_stop_all_se(0)
 
 
 func resume_from_background() -> void:
@@ -229,9 +258,12 @@ func resume_from_background() -> void:
 	if AudioServer.get_bus_count() > 0:
 		AudioServer.set_bus_mute(0, _prev_master_muted)
 	for channel in [CHANNEL_BGM, CHANNEL_BGS]:
-		if _paused_playing[channel] and not _tracks[channel].is_empty():
+		var track: Dictionary = _tracks[channel]
+		if _paused_playing[channel] and not track.is_empty():
 			var player := _players[channel]
 			if player.stream != null:
+				player.volume_db = _channel_volume_db(channel, int(track.get("volume", 100)))
+				player.pitch_scale = _tempo_scale(_normalized_tempo(int(track.get("tempo", 100))))
 				player.play(_paused_positions[channel])
 		_paused_playing[channel] = false
 
@@ -247,7 +279,10 @@ func snapshot() -> Array[Dictionary]:
 			continue
 		var player := player_for(channel)
 		var position_ms := 0
-		if player != null:
+		if _app_paused:
+			if _paused_playing[channel]:
+				position_ms = int(_paused_positions[channel] * 1000.0)
+		elif player != null:
 			position_ms = int(player.get_playback_position() * 1000.0)
 		result.append({
 			"channel": channel,

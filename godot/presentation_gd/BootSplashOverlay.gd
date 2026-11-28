@@ -5,19 +5,97 @@ extends Control
 ## as initialization advances from 0.0 to 1.0, falling back to `res://assets/boot/splash_static.png`.
 
 const _AppPaths = preload("res://presentation_gd/AppPaths.gd")
-const _MediaPakReaderScript = preload("res://presentation/MediaPakReader.cs")
+const _AssetDB = preload("res://presentation_gd/AssetDB.gd")
 
 const STATIC_PATH := "res://assets/boot/splash_static.png"
-const BASE_LOGO_REL := "SystemFile/logo.jpg"
-const PROGRESS_LOGO_REL := "SystemFile/logo2.jpg"
 const BASE_LOGO_STEM := "logo"
 const PROGRESS_LOGO_STEM := "logo2"
 const LOGO_EXTENSIONS: Array[String] = ["jpg", "png", "webp"]
 const REVEAL_SPEED := 3.2
 
-var _base_rect: TextureRect
-var _reveal_clip: Control
-var _progress_rect: TextureRect
+
+## Reusable two-layer horizontal logo reveal stage shared by BootSplashOverlay and MobileDataBootstrap.
+class DualLogoReveal:
+	extends Control
+
+	var base_rect: TextureRect
+	var reveal_clip: Control
+	var progress_rect: TextureRect
+	var _progress := 0.0
+
+	func _init(p_default_size: Vector2 = Vector2(1024.0, 576.0)) -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		custom_minimum_size = p_default_size if p_default_size != Vector2(1024.0, 576.0) else Vector2.ZERO
+		size = p_default_size
+
+		base_rect = TextureRect.new()
+		base_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		base_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		base_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		base_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(base_rect)
+
+		reveal_clip = Control.new()
+		reveal_clip.clip_contents = true
+		reveal_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		reveal_clip.position = Vector2.ZERO
+		add_child(reveal_clip)
+
+		progress_rect = TextureRect.new()
+		progress_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		progress_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		progress_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		progress_rect.position = Vector2.ZERO
+		reveal_clip.add_child(progress_rect)
+
+		resized.connect(sync_geometry)
+		sync_geometry()
+
+	func set_textures(base_tex: Texture2D, progress_tex: Texture2D) -> void:
+		if base_rect != null:
+			base_rect.texture = base_tex
+		if progress_rect != null:
+			progress_rect.texture = progress_tex
+		if reveal_clip != null:
+			reveal_clip.visible = progress_tex != null
+		sync_geometry()
+
+	func set_reveal_progress(p: float) -> void:
+		_progress = clampf(p, 0.0, 1.0)
+		sync_geometry()
+
+	func has_progress_layer() -> bool:
+		return progress_rect != null and progress_rect.texture != null
+
+	func reveal_width() -> float:
+		return reveal_clip.size.x if reveal_clip != null else 0.0
+
+	func sync_geometry(target_size: Vector2 = Vector2.ZERO) -> void:
+		var full_size := target_size
+		if full_size.x <= 0.0 or full_size.y <= 0.0:
+			full_size = size
+		if full_size.x <= 0.0 or full_size.y <= 0.0:
+			full_size = custom_minimum_size
+		if full_size.x <= 0.0 or full_size.y <= 0.0:
+			full_size = Vector2(1024.0, 576.0)
+		if progress_rect != null:
+			progress_rect.position = Vector2.ZERO
+			progress_rect.size = full_size
+		if reveal_clip != null:
+			reveal_clip.position = Vector2.ZERO
+			reveal_clip.size = Vector2(full_size.x * _progress, full_size.y)
+
+
+var _logo_reveal: DualLogoReveal
+var _base_rect: TextureRect:
+	get:
+		return _logo_reveal.base_rect if _logo_reveal != null else null
+var _reveal_clip: Control:
+	get:
+		return _logo_reveal.reveal_clip if _logo_reveal != null else null
+var _progress_rect: TextureRect:
+	get:
+		return _logo_reveal.progress_rect if _logo_reveal != null else null
 var _target_progress := 0.0
 var _display_progress := 0.0
 var _fading_out := false
@@ -35,27 +113,10 @@ func _ready() -> void:
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
 
-	_base_rect = TextureRect.new()
-	_base_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_base_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_base_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_base_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_base_rect)
+	_logo_reveal = DualLogoReveal.new()
+	_logo_reveal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_logo_reveal)
 
-	_reveal_clip = Control.new()
-	_reveal_clip.clip_contents = true
-	_reveal_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_reveal_clip.position = Vector2.ZERO
-	add_child(_reveal_clip)
-
-	_progress_rect = TextureRect.new()
-	_progress_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_progress_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_progress_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_progress_rect.position = Vector2.ZERO
-	_reveal_clip.add_child(_progress_rect)
-
-	resized.connect(_sync_reveal_geometry)
 	load_retail_textures(null)
 	_sync_reveal_geometry()
 	set_process(true)
@@ -64,18 +125,14 @@ func _ready() -> void:
 ## Dynamically load `SystemFile/logo.{jpg,png,webp}` and `SystemFile/logo2.{jpg,png,webp}` from
 ## AssetDB, loose work/all, or media.pak without committing copyrighted art into the repository.
 func load_retail_textures(asset_db: Object = null) -> void:
-	if asset_db != null and _has_retail_textures and _base_rect != null and _base_rect.texture != null:
+	if asset_db != null and _has_retail_textures and _logo_reveal != null and _logo_reveal.base_rect.texture != null:
 		return
 	var pair := load_logo_pair(asset_db)
 	var base_tex: Texture2D = pair.get("base", null)
 	var progress_tex: Texture2D = pair.get("progress", null)
 	_has_retail_textures = base_tex != null and not bool(pair.get("is_static_fallback", false))
-	if _base_rect != null:
-		_base_rect.texture = base_tex
-	if _progress_rect != null:
-		_progress_rect.texture = progress_tex
-	if _reveal_clip != null:
-		_reveal_clip.visible = progress_tex != null
+	if _logo_reveal != null:
+		_logo_reveal.set_textures(base_tex, progress_tex)
 	_sync_reveal_geometry()
 
 
@@ -112,11 +169,11 @@ func get_display_progress() -> float:
 
 
 func get_reveal_width() -> float:
-	return _reveal_clip.size.x if _reveal_clip != null else 0.0
+	return _logo_reveal.reveal_width() if _logo_reveal != null else 0.0
 
 
 func has_progress_layer() -> bool:
-	return _progress_rect != null and _progress_rect.texture != null
+	return _logo_reveal != null and _logo_reveal.has_progress_layer()
 
 
 func is_reveal_complete() -> bool:
@@ -130,15 +187,13 @@ func _process(delta: float) -> void:
 
 
 func _sync_reveal_geometry() -> void:
+	if _logo_reveal == null:
+		return
 	var full_size := size
 	if full_size.x <= 0.0 or full_size.y <= 0.0:
 		full_size = Vector2(1024.0, 576.0)
-	if _progress_rect != null:
-		_progress_rect.position = Vector2.ZERO
-		_progress_rect.size = full_size
-	if _reveal_clip != null:
-		_reveal_clip.position = Vector2.ZERO
-		_reveal_clip.size = Vector2(full_size.x * clampf(_display_progress, 0.0, 1.0), full_size.y)
+	_logo_reveal.set_reveal_progress(_display_progress)
+	_logo_reveal.sync_geometry(full_size)
 
 
 ## Fade opacity to zero and free this overlay; safe to call multiple times.
@@ -272,50 +327,19 @@ static func _load_logo_pair_from_pak() -> Dictionary:
 	for pak_path in candidates:
 		if not FileAccess.file_exists(pak_path):
 			continue
-		var reader = _MediaPakReaderScript.new()
-		if reader == null or not reader.Open(pak_path):
+		var reader := _AssetDB.acquire_shared_media_pak(pak_path)
+		if reader == null:
 			continue
 		var base_tex := _read_logo_from_pak(reader, BASE_LOGO_STEM)
 		var prog_tex := _read_logo_from_pak(reader, PROGRESS_LOGO_STEM)
-		reader.Close()
 		if base_tex != null or prog_tex != null:
 			return {"base": base_tex, "progress": prog_tex}
 	return {"base": null, "progress": null}
 
 
-static func _sniff_image_format(raw: PackedByteArray, fallback_ext: String) -> String:
-	if raw.size() >= 12 and raw[0] == 0x52 and raw[1] == 0x49 and raw[2] == 0x46 and raw[3] == 0x46 \
-			and raw[8] == 0x57 and raw[9] == 0x45 and raw[10] == 0x42 and raw[11] == 0x50:
-		return "webp"
-	if raw.size() >= 8 and raw[0] == 0x89 and raw[1] == 0x50 and raw[2] == 0x4E and raw[3] == 0x47:
-		return "png"
-	if raw.size() >= 3 and raw[0] == 0xFF and raw[1] == 0xD8 and raw[2] == 0xFF:
-		return "jpg"
-	if raw.size() >= 2 and raw[0] == 0x42 and raw[1] == 0x4D:
-		return "bmp"
-	return fallback_ext.to_lower()
-
-
 ## Decode PNG / JPEG / WebP / BMP bytes into an ImageTexture using header magic sniffing.
 static func decode_image_texture(raw: PackedByteArray, fallback_ext: String = "") -> Texture2D:
-	if raw.is_empty():
-		return null
-	var img := Image.new()
-	var err := ERR_INVALID_DATA
-	match _sniff_image_format(raw, fallback_ext):
-		"png":
-			err = img.load_png_from_buffer(raw)
-		"jpg", "jpeg":
-			err = img.load_jpg_from_buffer(raw)
-		"webp":
-			err = img.load_webp_from_buffer(raw)
-		"bmp":
-			err = img.load_bmp_from_buffer(raw)
-		_:
-			return null
-	if err != OK:
-		return null
-	return ImageTexture.create_from_image(img)
+	return _AssetDB.decode_image_texture(raw, fallback_ext)
 
 
 static func _load_texture(path: String) -> Texture2D:

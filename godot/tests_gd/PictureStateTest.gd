@@ -819,6 +819,7 @@ func _ready() -> void:
 
 	_test_assetdb_dir_priority_and_tiebreak()
 	_test_draw_opacity_and_inplace_text_update()
+	_test_audit_remediation_regressions(stage)
 
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -966,6 +967,55 @@ func _test_assetdb_dir_priority_and_tiebreak() -> void:
 		"hscene wins over mapchip in DIR_PRIORITY")
 
 	_remove_dir_recursive(tmp_root)
+
+
+func _test_audit_remediation_regressions(stage: PictureStage) -> void:
+	# 1. was_visible checks prev_scale_y != 0 so scale_mode=3, scale_y=0 slots fade in on expand.
+	stage.clear_pictures()
+	stage.draw_picture(1601, 0, "", "collapsed y",
+		[0, 1, 1, 1, 255, 100, 100, 100, 0, 0, 0, 0, 0, 100, 100, 100, 0], 0, 2, [], {"scale_mode": 3})
+	stage.draw_picture(1601, 0, "", "collapsed y",
+		[10, 1, 1, 1, 255, 100, 100, 100, 0, 0, 0, 0, 0, 100, 100, 100, 100], 0, 2, [], {"scale_mode": 3})
+	check(int(stage._states.get(1601, {}).get("current", {}).get("opacity", -1)) == 0,
+		"expanding a scale_y=0 slot with duration>0 must fade in from opacity=0")
+
+	# 2. foreground_slot_signature excludes HUD tint-exempt slots (6000, 6100..6299, 10000..10199)
+	#    while keeping 6800..9999 scene/CG slots visible to blank-tap comparison.
+	stage.clear_pictures()
+	stage.draw_picture(6000, 0, "", "hud", [0, 1, 1, 1, 255, 10, 10, 100], 0, 2)
+	stage.draw_picture(6150, 0, "", "hud2", [0, 1, 1, 1, 255, 10, 20, 100], 0, 2)
+	stage.draw_picture(10003, 0, "", "sd", [0, 1, 1, 1, 255, 10, 30, 100], 0, 2)
+	stage.draw_picture(7500, 0, "", "scene cg", [0, 1, 1, 1, 255, 10, 40, 100], 0, 2)
+	var fg := stage.foreground_slot_signature()
+	check(Array(fg) == [7500], "foreground_slot_signature must include 6800..9999 and exclude HUD slots (got %s)" % str(fg))
+
+	# 3. O(1) has_visible_system_ui() tracks 12000..12599 slots with positive width.
+	check(not stage.has_visible_system_ui(), "has_visible_system_ui false when no 12000..12599 slot is active")
+	stage.draw_picture(12104, 0, "save/SaveData99.jpg", "", [0, 1, 1, 1, 255, 100, 100, 100], 0, 0)
+	check(not stage.has_visible_system_ui(), "missing 0-size save thumbnail must not trigger has_visible_system_ui")
+	stage.draw_picture(12000, 0, "", "sys", [0, 1, 1, 1, 255, 100, 100, 100], 0, 2)
+	check(stage.has_visible_system_ui(), "has_visible_system_ui true when 12000 is visible")
+	stage.draw_picture(12000, 2, "", "", [0])
+	check(not stage.has_visible_system_ui(), "has_visible_system_ui returns false after erase")
+
+	# 4. PictureTextLayout public gauge helpers & bounded 256-entry LRU cache.
+	check(PictureTextLayout.contains_gauge_glyph("HP ■□"), "PictureTextLayout.contains_gauge_glyph detects gauge glyphs")
+	check(is_equal_approx(PictureTextLayout.gauge_cell_step(UiSkin.font(), "■", 20), 20.0),
+		"PictureTextLayout.gauge_cell_step steps square gauge by exact px")
+	var layout_probe := PictureTextLayout.new()
+	for idx in 260:
+		layout_probe.measure_text("cache_item_%d" % idx)
+	check(layout_probe._measure_cache.size() <= PictureTextLayout.MEASURE_CACHE_MAX,
+		"PictureTextLayout measure cache stays bounded at %d" % PictureTextLayout.MEASURE_CACHE_MAX)
+
+	# 5. PictureShapes builds SQUARE_FRAME as a vector Control (not TextureRect).
+	var shapes := PictureShapes.new()
+	var frame_node := shapes.build_window_node(PictureShapes.parse_sysgraphic("<SQUARE><FRAME>"), null, [0, 320, 180], null)
+	check(frame_node != null and not (frame_node is TextureRect) and frame_node.size == Vector2(320, 180),
+		"SQUARE_FRAME builds a vector Control at requested size")
+	if frame_node != null:
+		frame_node.free()
+	stage.clear_pictures()
 
 
 func _remove_dir_recursive(path: String) -> void:

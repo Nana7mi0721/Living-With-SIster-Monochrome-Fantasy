@@ -126,12 +126,14 @@ func _ready() -> void:
 
 	# 3. A tiny budget evicts least-recently-used entries and stays under the cap.
 	# The probe tree lives under user://, so the cache must be rooted there.
-	var tiny := AssetDB.new(base)
-	tiny.budget_bytes = 4096
 	for i in 6:
 		var image := Image.create(32, 32, false, Image.FORMAT_RGBA8)
 		image.fill(Color(0.2 * i, 0.3, 0.4))
 		image.save_png(base.path_join("probe_%d.png" % i))
+	var wav_path := base.path_join("probe.wav")
+	_write_silence_wav(wav_path, 8)
+	var tiny := AssetDB.new(base)
+	tiny.budget_bytes = 4096
 	var loaded := 0
 	for i in 6:
 		if tiny.texture("probe_%d.png" % i) != null:
@@ -144,8 +146,6 @@ func _ready() -> void:
 		failures.append("a budget smaller than the working set must evict")
 
 	# 4. .wav is supported (W2 Day 3 requirement; the retail SE tree is .ogg).
-	var wav_path := base.path_join("probe.wav")
-	_write_silence_wav(wav_path, 8)
 	var stream := tiny.audio("probe.wav")
 	if stream == null:
 		failures.append("audio() should load a .wav file")
@@ -280,6 +280,29 @@ func _ready() -> void:
 	var stats: Dictionary = android_db.memory_stats()
 	if str(stats.get("platform", "")) != "android" or int(stats.get("used_bytes", -1)) != 0 or int(stats.get("budget_bytes", -1)) != 16384 or int(stats.get("background_trims", -1)) != 1 or int(stats.get("evictions", -1)) != android_db.evictions:
 		failures.append("memory_stats must expose accurate platform/used/budget/evictions/background_trims: %s" % str(stats))
+
+	# 8. set_memory_policy syncs hd_enabled and enforces budget immediately; static decode & shared pak reuse.
+	var policy_db := AssetDB.new(base, AssetDB.MemoryPolicy.new("desktop", 16384, 1.0, true))
+	policy_db.set_memory_policy(AssetDB.MemoryPolicy.new("android", 16384, 0.25, false))
+	if policy_db.hd_enabled:
+		failures.append("set_memory_policy must sync hd_enabled")
+	for i in 4:
+		policy_db.texture("probe_%d.png" % i)
+	policy_db.texture("probe_0.png")  # promote probe_0 to MRU so probe_1 is LRU
+	policy_db.set_memory_policy(AssetDB.MemoryPolicy.new("android", 4096, 0.25, false))
+	if policy_db.used_bytes > 4096 or not policy_db.has_cached("probe_0.png", "texture") or policy_db.has_cached("probe_1.png", "texture"):
+		failures.append("set_memory_policy must evict LRU entries down to new budget")
+	var static_png := Image.create(2, 2, false, Image.FORMAT_RGBA8).save_png_to_buffer()
+	if AssetDB.decode_image_texture(static_png, "png") == null:
+		failures.append("AssetDB.decode_image_texture must decode PNG bytes statically")
+	var shared_a := AssetDB.acquire_shared_media_pak(pack_path)
+	var shared_b := AssetDB.acquire_shared_media_pak(pack_path)
+	if shared_a == null or shared_a != shared_b or AssetDB.get_shared_media_pak(pack_path) != shared_a:
+		failures.append("acquire_shared_media_pak must reuse the open MediaPakReader for the same path")
+	var injected_db := AssetDB.new(base, null, shared_a, pack_path)
+	if not injected_db.is_media_pack_open() or injected_db.media_pak != shared_a:
+		failures.append("AssetDB must reuse an injected shared MediaPakReader")
+	AssetDB.release_shared_media_pak(pack_path)
 
 	if failures.is_empty():
 		print("ASSETDB_TEST_OK")

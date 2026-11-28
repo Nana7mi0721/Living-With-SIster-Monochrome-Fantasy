@@ -3,7 +3,8 @@ extends Control
 ## Opcode-101 dialog window, drawn directly onto the canvas.
 ##
 ## Uses custom drawing rather than Label so per-character typewriter reveal, \. beats,
-## and \> instant-reveal work deterministically inside the 960x168 logical box.
+## and \> instant-reveal work deterministically inside the adaptive 712px bubble (up to
+## 480px tall) or the 600px centered narration box.
 
 signal reveal_finished
 signal confirm_requested
@@ -78,6 +79,7 @@ var _choice_attached := false
 var position_mode: int = _WolfConst.MSG_POS_BOTTOM
 
 var _chars: Array = []        # [{ch, color, x, y, size, line, outline, instant}]
+var _draw_batches: Array = [] # [{start, count, text, x, y, size, color, outline}]
 var _char_speeds: Array[float] = []
 var _lines: int = 0
 var _line_align: Array[int] = []
@@ -110,7 +112,7 @@ class _MessageFaceLayer extends Control:
 		size = Vector2(1024, 576)
 	func _draw() -> void:
 		if owner_window != null and owner_window.visible_window and owner_window.face_number > 0:
-			owner_window._draw_face_on(self)
+			owner_window.draw_face_on(self)
 
 
 func _init(p_assets: AssetDB = null) -> void:
@@ -170,6 +172,7 @@ func close() -> void:
 	finished = false
 	_choice_attached = false
 	_chars.clear()
+	_draw_batches.clear()
 	_char_speeds.clear()
 	_boundary_events.clear()
 	_sync_backing_nodes()
@@ -242,8 +245,9 @@ func _process(delta: float) -> void:
 		return
 	if _pause_timer > 0.0:
 		_pause_timer = maxf(0.0, _pause_timer - delta)
-		queue_redraw()
 		return
+	var prev_revealed := int(revealed)
+	var prev_waiting := waiting_for_continue
 	_char_timer += delta
 	while int(revealed) < _chars.size() and not waiting_for_continue and _pause_timer <= 0.0:
 		var speed := _speed_for_index(int(revealed))
@@ -261,7 +265,8 @@ func _process(delta: float) -> void:
 		_dispatch_boundary_events(int(revealed))
 	if int(revealed) >= _chars.size() and not waiting_for_continue:
 		_finish_reveal()
-	queue_redraw()
+	elif int(revealed) != prev_revealed or waiting_for_continue != prev_waiting:
+		queue_redraw()
 
 
 func _speed_for_index(index: int) -> float:
@@ -434,6 +439,38 @@ func _layout() -> void:
 			shift = inner_w - line_widths[line]
 		entry["x"] = float(entry["x"]) + shift
 		entry["y"] = float(entry["y"]) * compact_ratio + y_origin
+	_build_draw_batches()
+
+
+func _build_draw_batches() -> void:
+	_draw_batches.clear()
+	var n := _chars.size()
+	var i := 0
+	while i < n:
+		var first: Dictionary = _chars[i]
+		var line_idx: int = first["line"]
+		var glyph_size: int = first["size"]
+		var color: Color = first["color"]
+		var outline: bool = bool(first.get("outline", true))
+		var parts := PackedStringArray([String(first["ch"])])
+		var j := i + 1
+		while j < n:
+			var nxt: Dictionary = _chars[j]
+			if nxt["line"] != line_idx or nxt["size"] != glyph_size or nxt["color"] != color or bool(nxt.get("outline", true)) != outline:
+				break
+			parts.append(String(nxt["ch"]))
+			j += 1
+		_draw_batches.append({
+			"start": i,
+			"count": j - i,
+			"text": "".join(parts),
+			"x": float(first["x"]),
+			"y": float(first["y"]),
+			"size": glyph_size,
+			"color": color,
+			"outline": outline,
+		})
+		i = j
 
 
 func _is_forbidden_line_start(ch: String) -> bool:
@@ -508,15 +545,20 @@ func _draw() -> void:
 	var font := UiSkin.bold_font()
 	var limit := mini(int(revealed), _chars.size())
 	var outline_color := Color(0.0, 0.0, 0.0, 1.0)
-	for i in limit:
-		var entry: Dictionary = _chars[i]
-		var size: int = entry["size"]
-		var baseline := Vector2(entry["x"], entry["y"] + font.get_ascent(size))
-		if bool(entry.get("outline", true)):
-			draw_string_outline(font, baseline, entry["ch"],
+	for batch in _draw_batches:
+		var start: int = batch["start"]
+		if start >= limit:
+			break
+		var count: int = batch["count"]
+		var show_count := mini(count, limit - start)
+		var text: String = batch["text"] if show_count == count else String(batch["text"]).substr(0, show_count)
+		var size: int = batch["size"]
+		var baseline := Vector2(batch["x"], batch["y"] + font.get_ascent(size))
+		if bool(batch["outline"]):
+			draw_string_outline(font, baseline, text,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, size, UiSkin.TEXT_OUTLINE_SIZE, outline_color)
-		draw_string(font, baseline, entry["ch"],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, size, entry["color"])
+		draw_string(font, baseline, text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, size, batch["color"])
 	if (waiting_for_confirm or waiting_for_continue) and not hover_enabled and not _choice_attached:
 		_draw_cursor(rect)
 
@@ -533,7 +575,7 @@ func character_outline(index: int) -> bool:
 	return bool(_chars[index].get("outline", true))
 
 
-func _draw_face_on(target: CanvasItem) -> void:
+func draw_face_on(target: CanvasItem) -> void:
 	var rect := face_rect()
 	var path: String = FACE_MAP.get(face_number, "")
 	var texture: Texture2D = assets.texture(path) if assets != null and path != "" else null

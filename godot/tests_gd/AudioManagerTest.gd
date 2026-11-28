@@ -177,6 +177,31 @@ func _ready() -> void:
 	if AudioServer.get_bus_count() > 0:
 		_expect(not AudioServer.is_bus_mute(0), "resume_from_background unmutes master bus")
 
+	# 12. Background pause stops pending SE/tweens, preserves paused snapshot positions, and recalibrates volume on resume.
+	mixer.reset()
+	_expect(mixer.play(AudioManager.CHANNEL_BGM, "Sound/stub.wav", 80, 0, 100, 60), "bgm fade-in before background")
+	_expect(mixer.play(AudioManager.CHANNEL_SE, "Sound/stub.wav", 100, 0, 100, 30), "pending delayed SE before background")
+	mixer._paused_positions[AudioManager.CHANNEL_BGM] = 0.0
+	mixer.pause_for_background()
+	_expect(mixer._tweens[AudioManager.CHANNEL_BGM] == null, "pause_for_background kills active BGM tween")
+	_expect(not mixer._se_pending.has(true), "pause_for_background cancels pending delayed SE")
+	if mixer._paused_playing[AudioManager.CHANNEL_BGM]:
+		mixer._paused_positions[AudioManager.CHANNEL_BGM] = 0.42
+		var paused_snap := mixer.snapshot()
+		_expect(paused_snap.size() == 1 and int(paused_snap[0].get("position_ms", 0)) == 420,
+			"snapshot while paused reports _paused_positions instead of 0.0")
+	mixer.set_master_volumes(50, 100, 100)
+	mixer.resume_from_background()
+	_expect(is_equal_approx(mixer.player_for(AudioManager.CHANNEL_BGM).volume_db, mixer._channel_volume_db(AudioManager.CHANNEL_BGM, 80)),
+		"resume_from_background recalibrates channel volume_db before play()")
+	mixer.set_master_volumes(100, 100, 100)
+
+	# 13. Conditional stream duplicate: BGM skips duplicate when no other active player shares cached stream.
+	mixer.reset()
+	_expect(mixer.play(AudioManager.CHANNEL_BGM, "Sound/stub.wav", 80, 0, 100, 0), "bgm zero-copy play")
+	_expect(mixer.player_for(AudioManager.CHANNEL_BGM).stream == assets.audio("Sound/stub.wav"),
+		"idle BGS lets BGM reuse cached stream without duplicating")
+
 	mixer.reset()
 	if failures == 0:
 		print("AUDIO_MANAGER_TEST_OK checks=%d" % checks)

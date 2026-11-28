@@ -213,6 +213,13 @@ func _ready() -> void:
 	paused._process(0.03)
 	if int(paused.revealed) != 1 or paused._pause_timer <= 0.0:
 		failures.append("\\\\. must pause after the preceding glyph (revealed=%d pause=%.2f)" % [int(paused.revealed), paused._pause_timer])
+	paused._process(0.05)
+	if int(paused.revealed) != 1 or paused._pause_timer <= 0.0:
+		failures.append("\\\\. pause tick must hold revealed count without advancing")
+	if not paused.has_method("draw_face_on"):
+		failures.append("MessageWindow.draw_face_on must be public")
+	if paused._draw_batches.size() != 1 or paused._draw_batches[0]["text"] != "ab":
+		failures.append("MessageWindow must batch contiguous same-style chars per line")
 	var waited := MessageWindow.new(assets)
 	add_child(waited)
 	waited.open("a\\|b")
@@ -402,6 +409,10 @@ func _ready() -> void:
 	var hidden_hit := choice.hover_at(choice.row_rects()[1].get_center())
 	if hidden_hit != 1:
 		failures.append("hover on second visible row should return original index 1 (got %d)" % hidden_hit)
+	if choice.hover_at(choice.row_rects()[1].get_center()) != 1:
+		failures.append("repeated hover_at on same row must remain idempotent")
+	if choice._cached_option_data.size() != 3 or choice._cached_option_data[0]["plain"] != "First":
+		failures.append("ChoiceWindow.open must cache parsed option runs and plain text")
 	choice.open(PackedStringArray(["", "VisibleFirst", "VisibleSecond"]), Vector2(260, 220), true, 0)
 	if choice.selected != 1:
 		failures.append("ChoiceWindow.open must snap selected to first visible option when index 0 is empty (got %d)" % choice.selected)
