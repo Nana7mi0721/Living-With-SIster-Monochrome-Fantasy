@@ -64,7 +64,7 @@ public static class GameClock
         if (current is 4 or 5) vars.Set(VarWeekendFlag, 25);
     }
 
-    /// <summary>CE217's 6200 text: minute 0 has no leading zero, 1..9 has one.</summary>
+    /// <summary>CE217's 6200 text: minute 0 formats as :00, 1..9 as :0x.</summary>
     public static string FormatTime(EventVm vm)
     {
         var clock = Read(vm);

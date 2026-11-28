@@ -22,7 +22,7 @@ public sealed class Terrain
     {
         Width = Math.Max(0, width);
         Height = Math.Max(0, height);
-        _blocked = new byte[Width * Height];
+        _blocked = new byte[checked(Width * Height)];
     }
 
     /// <summary>

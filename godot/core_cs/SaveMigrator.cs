@@ -153,7 +153,7 @@ public static class SaveMigrator
     public static SaveState Normalize(SaveState state, SaveAuditReport? report = null)
     {
         int originalSchema = state.SchemaVersion;
-        if (state.SchemaVersion < 1)
+        if (state.SchemaVersion == 0)
         {
             state.SchemaVersion = SaveState.SchemaVersionNumber;
             if (report != null) report.MigratedFromSchema = originalSchema;
@@ -167,6 +167,8 @@ public static class SaveMigrator
         if (state.PlayFrames < 0) state.PlayFrames = 0;
         if (state.MapId < 0) state.MapId = 0;
 
+        state.MapFile ??= "";
+        state.SavedAt ??= "";
         state.Vars ??= new List<int>();
         state.StrVars ??= new List<string>();
         state.SysVars ??= new List<int>();
@@ -177,11 +179,41 @@ public static class SaveMigrator
         state.Instances ??= new List<SavedInstance>();
         state.Pictures ??= new List<SavedPicture>();
         state.Audio ??= new List<SavedAudio>();
+        if (state.Dialogue != null) state.Dialogue.Choices ??= new List<string>();
+        foreach (var audio in state.Audio)
+        {
+            if (audio == null) continue;
+            audio.File ??= "";
+            if (audio.Tempo == 0) audio.Tempo = 100;
+        }
+        foreach (var pic in state.Pictures)
+        {
+            if (pic == null) continue;
+            pic.File ??= "";
+            pic.Text ??= "";
+            pic.Args ??= new List<int>();
+        }
+        foreach (var inst in state.Instances)
+        {
+            if (inst == null) continue;
+            inst.Loops ??= new List<SavedLoop>();
+            inst.Self ??= new EventSelfVars();
+            inst.Kind ??= "ce";
+        }
+        foreach (var ev in state.MapEvents)
+        {
+            if (ev == null) continue;
+            ev.Self ??= new EventSelfVars();
+        }
         if (state.DbOverlays != null)
         {
             state.DbOverlays.RowCounts ??= new List<SavedDbRowCount>();
             state.DbOverlays.Nums ??= new List<SavedDbNumCell>();
             state.DbOverlays.Texts ??= new List<SavedDbTextCell>();
+            foreach (var text in state.DbOverlays.Texts)
+            {
+                if (text != null) text.Value ??= "";
+            }
         }
 
         int strippedPics = state.Pictures.RemoveAll(p => p != null && IsTransientUiPicture(p.Number));

@@ -1,8 +1,6 @@
 using System;
-using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -86,14 +84,8 @@ public sealed class GameDatabase
         public List<Row> Rows { get; init; } = new();
     }
 
-    private sealed class ProjectType
-    {
-        public string Name { get; init; } = "";
-        public List<string> Fields { get; init; } = new();
-    }
-
     private readonly Dictionary<DbContainer, List<Table>> _tables = new();
-    private readonly Dictionary<DbContainer, ProjectType?[]> _projects = new();
+    private readonly Dictionary<DbContainer, WolfProjectParser.ProjectType?[]> _projects = new();
     private readonly Dictionary<(DbContainer, int), int> _rowCounts = new();
     private readonly Dictionary<(DbContainer, int, int, int), int> _cells = new();
     private readonly Dictionary<(DbContainer, int, int, int), string> _texts = new();
@@ -157,11 +149,31 @@ public sealed class GameDatabase
         db.AddContainer(DbContainer.Sys, root.System);
         if (!string.IsNullOrEmpty(basicDataDir))
         {
-            db.LoadProject(DbContainer.CData, Path.Combine(basicDataDir, "CDataBase.project"));
-            db.LoadProject(DbContainer.Data, Path.Combine(basicDataDir, "DataBase.project"));
-            db.LoadProject(DbContainer.Sys, Path.Combine(basicDataDir, "SysDatabase.project"));
+            db.LoadProject(DbContainer.CData, ResolveCaseInsensitivePath(basicDataDir, "CDataBase.project"));
+            db.LoadProject(DbContainer.Data, ResolveCaseInsensitivePath(basicDataDir, "DataBase.project"));
+            db.LoadProject(DbContainer.Sys, ResolveCaseInsensitivePath(basicDataDir, "SysDatabase.project"));
         }
         return db;
+    }
+
+    private static string ResolveCaseInsensitivePath(string dir, string fileName)
+    {
+        string exact = Path.Combine(dir, fileName);
+        if (File.Exists(exact) || !Directory.Exists(dir)) return exact;
+        try
+        {
+            foreach (string candidate in Directory.EnumerateFiles(dir))
+            {
+                if (string.Equals(Path.GetFileName(candidate), fileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return candidate;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+        return exact;
     }
 
     private void AddContainer(DbContainer container, ContainerDto? dto)
@@ -197,7 +209,7 @@ public sealed class GameDatabase
         if (!File.Exists(path)) return;
         try
         {
-            var parsed = ParseProject(File.ReadAllBytes(path), TableCount(container));
+            var parsed = WolfProjectParser.Parse(File.ReadAllBytes(path), TableCount(container));
             if (parsed != null) _projects[container] = parsed;
         }
         catch (Exception ex)
@@ -484,31 +496,31 @@ public sealed class GameDatabase
             if ((index != null && index.Nums.TryGetValue(key, out int number))
                 || _engineCells.TryGetValue(key, out number))
             {
-                return new DbValue(number);
+                return NumValue(number);
             }
             if (index != null && index.Texts.TryGetValue(key, out string? overlayText))
             {
-                return new DbValue(overlayText);
+                return StrValue(overlayText);
             }
             if (_engineTexts.TryGetValue(key, out string? engineText))
             {
-                return new DbValue(engineText);
+                return StrValue(engineText);
             }
         }
         else
         {
             if (index != null && index.Texts.TryGetValue(key, out string? overlayText))
             {
-                return new DbValue(overlayText);
+                return StrValue(overlayText);
             }
             if (_engineTexts.TryGetValue(key, out string? engineText))
             {
-                return new DbValue(engineText);
+                return StrValue(engineText);
             }
             if ((index != null && index.Nums.TryGetValue(key, out int number))
                 || _engineCells.TryGetValue(key, out number))
             {
-                return new DbValue(number);
+                return NumValue(number);
             }
         }
 
@@ -516,8 +528,8 @@ public sealed class GameDatabase
             && dbType >= 0 && dbType < tables.Count;
         if (hasTable && row >= 0 && row < effectiveRowCount)
         {
-            if (TryTableNum(container, dbType, row, column, out int tableNum)) return new DbValue(tableNum);
-            if (TryTableText(container, dbType, row, column, out string tableText)) return new DbValue(tableText);
+            if (TryTableNum(container, dbType, row, column, out int tableNum)) return NumValue(tableNum);
+            if (TryTableText(container, dbType, row, column, out string tableText)) return StrValue(tableText);
         }
         if (row >= ExtensionRowBase) return EmptyLike(wantsText);
         if (row >= 0 && hasOverlayRowCount) return EmptyLike(wantsText);
@@ -551,31 +563,51 @@ public sealed class GameDatabase
 
         bool hasOverlayRowCount = TryFindOverlayRowCount(overlays, container, dbType, out int overlayRowCount);
         int effectiveRowCount = hasOverlayRowCount ? overlayRowCount : BaseRowCount(container, dbType);
-        if (row == RowCountQuery) return new DbValue(effectiveRowCount);
-        if (column == FirstEmptyColumn) return new DbValue(FirstEmptyRowWithOverlay(container, dbType, effectiveRowCount, overlays));
+        if (row == RowCountQuery) return NumValue(effectiveRowCount);
+        if (column == FirstEmptyColumn) return NumValue(FirstEmptyRowWithOverlay(container, dbType, effectiveRowCount, overlays));
         bool wantsText = IsTextDestination(op.Destination);
         if (column < 0) return EmptyLike(wantsText);
 
-        if (TryFindOverlayNum(overlays, container, dbType, row, column, out int number)
-            || _engineCells.TryGetValue((container, dbType, row, column), out number))
+        int number;
+        if (!wantsText)
         {
-            return new DbValue(number);
+            if (TryFindOverlayNum(overlays, container, dbType, row, column, out number)
+                || _engineCells.TryGetValue((container, dbType, row, column), out number))
+            {
+                return NumValue(number);
+            }
+            if (TryFindOverlayText(overlays, container, dbType, row, column, out string overlayText))
+            {
+                return StrValue(overlayText);
+            }
+            if (_engineTexts.TryGetValue((container, dbType, row, column), out string? engineText))
+            {
+                return StrValue(engineText);
+            }
         }
-        if (TryFindOverlayText(overlays, container, dbType, row, column, out string overlayText))
+        else
         {
-            return new DbValue(overlayText);
-        }
-        if (_engineTexts.TryGetValue((container, dbType, row, column), out string? engineText))
-        {
-            return new DbValue(engineText);
+            if (TryFindOverlayText(overlays, container, dbType, row, column, out string overlayText))
+            {
+                return StrValue(overlayText);
+            }
+            if (_engineTexts.TryGetValue((container, dbType, row, column), out string? engineText))
+            {
+                return StrValue(engineText);
+            }
+            if (TryFindOverlayNum(overlays, container, dbType, row, column, out number)
+                || _engineCells.TryGetValue((container, dbType, row, column), out number))
+            {
+                return NumValue(number);
+            }
         }
 
         bool hasTable = _tables.TryGetValue(container, out var tables)
             && dbType >= 0 && dbType < tables.Count;
         if (hasTable && row >= 0 && row < effectiveRowCount)
         {
-            if (TryTableNum(container, dbType, row, column, out number)) return new DbValue(number);
-            if (TryTableText(container, dbType, row, column, out string tableText)) return new DbValue(tableText);
+            if (TryTableNum(container, dbType, row, column, out number)) return NumValue(number);
+            if (TryTableText(container, dbType, row, column, out string tableText)) return StrValue(tableText);
         }
         if (row >= ExtensionRowBase) return EmptyLike(wantsText);
         if (row >= 0 && hasOverlayRowCount) return EmptyLike(wantsText);
@@ -716,26 +748,72 @@ public sealed class GameDatabase
         var container = op.Container;
         var (dbType, column) = ResolveLabels(container, op.DbType, op.ItemId, op.TypeLabel, op.FieldLabel);
         int row = op.DataId;
-        if (row == RowCountQuery) return new DbValue(RowCount(container, dbType));
-        if (column == FirstEmptyColumn) return new DbValue(FirstEmptyRow(container, dbType));
+        if (row == RowCountQuery) return NumValue(RowCount(container, dbType));
+        if (column == FirstEmptyColumn) return NumValue(FirstEmptyRow(container, dbType));
         bool wantsText = IsTextDestination(op.Destination);
         if (column < 0) return EmptyLike(wantsText);
 
-        if (TryEngineNum(container, dbType, row, column, out int number)) return new DbValue(number);
-        if (TryEngineText(container, dbType, row, column, out string text)) return new DbValue(text);
+        if (TryEngineNum(container, dbType, row, column, out int number)) return NumValue(number);
+        if (TryEngineText(container, dbType, row, column, out string text)) return StrValue(text);
 
         bool hasTable = _tables.TryGetValue(container, out var tables)
             && dbType >= 0 && dbType < tables.Count;
         if (hasTable && RowExists(container, dbType, row))
         {
-            if (TryTableNum(container, dbType, row, column, out number)) return new DbValue(number);
-            if (TryTableText(container, dbType, row, column, out string tableText)) return new DbValue(tableText);
+            if (TryTableNum(container, dbType, row, column, out number)) return NumValue(number);
+            if (TryTableText(container, dbType, row, column, out string tableText)) return StrValue(tableText);
         }
         if (row >= ExtensionRowBase) return EmptyLike(wantsText);
         if (row >= 0 && _rowCounts.ContainsKey((container, dbType))) return EmptyLike(wantsText);
         int fieldCount = FieldCount(container, dbType);
         if (fieldCount >= 0 && column >= fieldCount) return EmptyLike(wantsText);
         return null;
+    }
+
+    /// <summary>Zero-allocation numeric read fast path matching <see cref="Read"/> semantics.</summary>
+    public bool TryReadInt(DbContainer container, int dbType, int row, int column, out int value)
+    {
+        if (row == RowCountQuery)
+        {
+            value = RowCount(container, dbType);
+            return true;
+        }
+        if (column == FirstEmptyColumn)
+        {
+            value = FirstEmptyRow(container, dbType);
+            return true;
+        }
+        if (column < 0)
+        {
+            value = 0;
+            return true;
+        }
+        if (TryEngineNum(container, dbType, row, column, out value)) return true;
+        if (TryEngineText(container, dbType, row, column, out _))
+        {
+            value = 0;
+            return false;
+        }
+        bool hasTable = _tables.TryGetValue(container, out var tables)
+            && dbType >= 0 && dbType < tables.Count;
+        if (hasTable && RowExists(container, dbType, row))
+        {
+            if (TryTableNum(container, dbType, row, column, out value)) return true;
+            if (TryTableText(container, dbType, row, column, out _))
+            {
+                value = 0;
+                return false;
+            }
+        }
+        if (row >= ExtensionRowBase
+            || (row >= 0 && _rowCounts.ContainsKey((container, dbType)))
+            || (FieldCount(container, dbType) is int fieldCount && fieldCount >= 0 && column >= fieldCount))
+        {
+            value = 0;
+            return true;
+        }
+        value = 0;
+        return false;
     }
 
     private void Write(DbOp op)
@@ -1027,7 +1105,12 @@ public sealed class GameDatabase
     private static bool IsTextDestination(int? destination)
         => destination is >= Magic.StrBase and < Magic.StrBase + 1_000_000;
 
-    private static DbValue EmptyLike(bool wantsText) => wantsText ? new DbValue("") : new DbValue(0);
+    private static readonly DbValue EmptyStr = new("");
+    private static readonly DbValue EmptyNum = new(0);
+
+    private static DbValue EmptyLike(bool wantsText) => wantsText ? EmptyStr : EmptyNum;
+    private static DbValue NumValue(int value) => value == 0 ? EmptyNum : new DbValue(value);
+    private static DbValue StrValue(string value) => string.IsNullOrEmpty(value) ? EmptyStr : new DbValue(value);
 
     private static string NormaliseLabel(string? label)
     {
@@ -1038,112 +1121,4 @@ public sealed class GameDatabase
             .Replace('　', ' ')
             .Trim();
     }
-
-    private static ProjectType?[]? ParseProject(byte[] data, int typeCount)
-    {
-        if (data.Length < 4 || ReadU32(data, 0) != (uint)typeCount) return null;
-        var result = new ProjectType?[typeCount];
-        int at = 4;
-        for (int i = 0; i < typeCount; i++)
-        {
-            var parsed = ParseProjectType(data, at);
-            if (parsed == null) break;
-            result[i] = parsed.Value.Type;
-            at = parsed.Value.Next;
-        }
-        return result;
-    }
-
-    private static (ProjectType Type, int Next)? ParseProjectType(byte[] data, int at)
-    {
-        if (!NameAt(data, at, out string name, out at)) return null;
-        if (at + 4 > data.Length) return null;
-        uint fieldCount = ReadU32(data, at);
-        at += 4;
-        if (fieldCount > (uint)data.Length / 5) return null;
-        var fields = new List<string>((int)fieldCount);
-        for (uint i = 0; i < fieldCount; i++)
-        {
-            if (!NameAt(data, at, out string field, out at)) return null;
-            fields.Add(field);
-        }
-        if (at + 4 > data.Length) return null;
-        uint rowCount = ReadU32(data, at);
-        at += 4;
-        if (rowCount > (uint)data.Length / 5) return null;
-        for (uint i = 0; i < rowCount; i++)
-        {
-            if (!NameAt(data, at, out _, out at)) return null;
-        }
-        if (!NameAt(data, at, out _, out at)) return null;
-        if (at + 4 > data.Length) return null;
-        uint typeBytes = ReadU32(data, at);
-        at += 4;
-        if (typeBytes > (uint)(data.Length - at)) return null;
-        at += (int)typeBytes;
-
-        if (!SkipNameBlock(data, ref at)) return null;
-        if (at + 4 > data.Length) return null;
-        uint entries = ReadU32(data, at);
-        at += 4;
-        for (uint i = 0; i < entries; i++)
-        {
-            if (at + 4 > data.Length) return null;
-            uint arguments = ReadU32(data, at);
-            at += 4;
-            for (uint j = 0; j < arguments; j++)
-            {
-                if (!NameAt(data, at, out _, out at)) return null;
-            }
-        }
-        if (at + 4 > data.Length) return null;
-        entries = ReadU32(data, at);
-        at += 4;
-        for (uint i = 0; i < entries; i++)
-        {
-            if (at + 4 > data.Length) return null;
-            uint arguments = ReadU32(data, at);
-            at += 4;
-            long bytes = (long)arguments * 4;
-            if (bytes > data.Length - at) return null;
-            at += (int)bytes;
-        }
-        if (at + 4 > data.Length) return null;
-        uint defaults = ReadU32(data, at);
-        at += 4;
-        long defaultBytes = (long)defaults * 4;
-        if (defaultBytes > data.Length - at) return null;
-        at += (int)defaultBytes;
-        return (new ProjectType { Name = name, Fields = fields }, at);
-    }
-
-    private static bool SkipNameBlock(byte[] data, ref int at)
-    {
-        if (at + 4 > data.Length) return false;
-        uint count = ReadU32(data, at);
-        at += 4;
-        for (uint i = 0; i < count; i++)
-        {
-            if (!NameAt(data, at, out _, out at)) return false;
-        }
-        return true;
-    }
-
-    private static bool NameAt(byte[] data, int at, out string name, out int next)
-    {
-        name = "";
-        next = at;
-        if (at < 0 || at + 4 > data.Length) return false;
-        uint length = ReadU32(data, at);
-        if (length == 0 || length > 4096 || length > (uint)(data.Length - at - 4)) return false;
-        int start = at + 4;
-        int count = (int)length;
-        if (data[start + count - 1] != 0) return false;
-        name = Encoding.UTF8.GetString(data, start, count - 1);
-        next = start + count;
-        return true;
-    }
-
-    private static uint ReadU32(byte[] data, int at)
-        => BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(at, 4));
 }

@@ -38,6 +38,14 @@ internal static class JsonArtifactIo
         {
             return raw;
         }
-        return new BrotliStream(raw, CompressionMode.Decompress, leaveOpen: false);
+        try
+        {
+            return new BrotliStream(raw, CompressionMode.Decompress, leaveOpen: false);
+        }
+        catch
+        {
+            raw.Dispose();
+            throw;
+        }
     }
 }

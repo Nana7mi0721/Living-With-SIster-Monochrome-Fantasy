@@ -325,8 +325,7 @@ public static class SaveCodec
             var state = JsonSerializer.Deserialize(json, LwsmfJsonContext.SaveIndented.SaveState);
             if (state == null) return null;
             if (state.Schema != SaveState.SchemaName) return null;
-            if (state.SchemaVersion > SaveState.SchemaVersionNumber) return null;
-            Normalize(state);
+            if (state.SchemaVersion < 0 || state.SchemaVersion > SaveState.SchemaVersionNumber) return null;
             SaveMigrator.Normalize(state, report);
             if (state.SchemaVersion < 1 || state.SchemaVersion > SaveState.SchemaVersionNumber) return null;
             return Validate(state) ? state : null;
@@ -342,58 +341,6 @@ public static class SaveCodec
         catch (EncoderFallbackException)
         {
             return null;
-        }
-    }
-
-    private static void Normalize(SaveState state)
-    {
-        state.Vars ??= new List<int>();
-        state.StrVars ??= new List<string>();
-        state.SysVars ??= new List<int>();
-        state.SysStrVars ??= new List<string>();
-        state.SelfVars ??= new List<EventSelfVars>();
-        state.CommonSelf ??= new List<EventSelfVars>();
-        state.MapEvents ??= new List<SavedMapEvent>();
-        state.Instances ??= new List<SavedInstance>();
-        state.Pictures ??= new List<SavedPicture>();
-        state.Audio ??= new List<SavedAudio>();
-        foreach (var audio in state.Audio)
-        {
-            if (audio == null) continue;
-            audio.File ??= "";
-            if (audio.Tempo == 0) audio.Tempo = 100;
-        }
-        foreach (var pic in state.Pictures)
-        {
-            if (pic == null) continue;
-            pic.File ??= "";
-            pic.Text ??= "";
-            pic.Args ??= new List<int>();
-        }
-        state.MapFile ??= "";
-        state.SavedAt ??= "";
-        if (state.Dialogue != null) state.Dialogue.Choices ??= new List<string>();
-        foreach (var inst in state.Instances)
-        {
-            if (inst == null) continue;
-            inst.Loops ??= new List<SavedLoop>();
-            inst.Self ??= new EventSelfVars();
-            inst.Kind ??= "ce";
-        }
-        foreach (var ev in state.MapEvents)
-        {
-            if (ev == null) continue;
-            ev.Self ??= new EventSelfVars();
-        }
-        if (state.DbOverlays != null)
-        {
-            state.DbOverlays.RowCounts ??= new List<SavedDbRowCount>();
-            state.DbOverlays.Nums ??= new List<SavedDbNumCell>();
-            state.DbOverlays.Texts ??= new List<SavedDbTextCell>();
-            foreach (var text in state.DbOverlays.Texts)
-            {
-                if (text != null) text.Value ??= "";
-            }
         }
     }
 
@@ -521,13 +468,15 @@ public static class SaveCodec
         return true;
     }
 
-    /// A picture file is a logical asset name resolved under work/all, never a path that
-    /// can climb out of it or address another drive.
-    private static bool IsSafeAssetPath(string path)
+    /// <summary>
+    /// True when an asset path stays relative to work/all without NUL bytes, drive
+    /// prefixes, rooted paths, or parent-directory traversal.
+    /// </summary>
+    public static bool IsSafeAssetPath(string path)
     {
         if (string.IsNullOrEmpty(path)) return true;
         if (path.IndexOf('\0') >= 0) return false;
-        if (path[0] == '/' || path[0] == '\\') return false;
+        if (Path.IsPathRooted(path) || path[0] == '/' || path[0] == '\\') return false;
         if (path.Contains(':')) return false;
         foreach (string segment in path.Split('/', '\\'))
         {
@@ -586,41 +535,16 @@ public static class SaveCodec
             {
                 try
                 {
-                    WriteRaw(path + ".bak", current);
+                    AtomicFileIo.WriteText(path + ".bak", current);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    // Backup is best effort; the atomic replace below still protects slot 01.
+                    // Backup is best effort; the atomic replace below still protects the target slot.
                 }
             }
         }
 
-        WriteRaw(path, ToJson(state));
-    }
-
-    /// <summary>Write through path.tmp, fsync, then replace in one move.</summary>
-    private static void WriteRaw(string path, string json)
-    {
-        string temp = path + ".tmp";
-        try
-        {
-            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
-            {
-                writer.Write(json);
-                writer.Flush();
-                stream.Flush(true);
-            }
-            File.Move(temp, path, true);
-        }
-        catch
-        {
-            if (File.Exists(temp))
-            {
-                try { File.Delete(temp); } catch { }
-            }
-            throw;
-        }
+        AtomicFileIo.WriteText(path, ToJson(state));
     }
 
     /// <summary>
@@ -649,7 +573,7 @@ public static class SaveCodec
         _ => "none",
     };
 
-    /// <summary>True when a slot or its backup exists (title menu shows SAVE).</summary>
+    /// <summary>True when a slot (save_01..99.json, quicksave, or System.json) or its backup exists.</summary>
     public static bool Exists(string path)
     {
         return File.Exists(path) || File.Exists(path + ".bak");
@@ -687,7 +611,7 @@ public static class SaveCodec
         }
     }
 
-    public static byte[] ToBytes(SaveState state) => new UTF8Encoding(false).GetBytes(ToJson(state));
+    public static byte[] ToBytes(SaveState state) => AtomicFileIo.Utf8NoBom.GetBytes(ToJson(state));
 
     public static SaveState? FromBytes(byte[]? bytes, SaveAuditReport? report = null)
     {

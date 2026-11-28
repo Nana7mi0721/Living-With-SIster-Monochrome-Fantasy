@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Godot;
 
@@ -25,6 +26,7 @@ public partial class MediaPakReader : RefCounted
     private const int IndexFixed = 22;
     private const ulong DataAlignment = 16;
     private const int StreamBlockSize = 64;
+    private const int GodotReadChunkSize = 64 * 1024;
     private const ulong MaxIndexBytes = 64UL * 1024 * 1024;
     private const ulong MaxEntryBytes = 256UL * 1024 * 1024;
     private const ulong Golden = 0x9E3779B97F4A7C15UL;
@@ -37,8 +39,9 @@ public partial class MediaPakReader : RefCounted
         0x6B, 0xF3, 0x04, 0xBE, 0x57, 0xA1, 0xD8, 0x39,
         0x82, 0x4C, 0xEF, 0x16, 0x75, 0xB0, 0x2D, 0x9A,
     };
+    private static readonly ulong[] SeedWords = BuildSeedWords();
     private static readonly string[] ProbeExtensions = { "png", "jpg", "bmp", "jpeg", "webp" };
-    private static readonly uint[] CrcTable = BuildCrcTable();
+    private static readonly uint[] CrcTables = BuildCrcTables();
 
     private sealed class Entry
     {
@@ -127,15 +130,21 @@ public partial class MediaPakReader : RefCounted
         {
             if (_file == null)
                 throw new IOException("Media pack stream is disposed");
-            if (destination.Length == 0)
-                return;
-            byte[] chunk = _file.GetBuffer(destination.Length);
-            if (chunk.Length != destination.Length)
+            int remaining = destination.Length;
+            int offset = 0;
+            while (remaining > 0)
             {
-                throw new EndOfStreamException(
-                    $"Unexpected EOF reading media pack: expected {destination.Length} bytes, got {chunk.Length}");
+                int toRead = Math.Min(remaining, GodotReadChunkSize);
+                byte[] chunk = _file.GetBuffer(toRead);
+                if (chunk.Length != toRead)
+                {
+                    throw new EndOfStreamException(
+                        $"Unexpected EOF reading media pack: expected {toRead} bytes, got {chunk.Length}");
+                }
+                chunk.AsSpan().CopyTo(destination.Slice(offset, toRead));
+                offset += toRead;
+                remaining -= toRead;
             }
-            chunk.AsSpan().CopyTo(destination);
         }
 
         public byte[] ReadBytes(int length)
@@ -144,13 +153,19 @@ public partial class MediaPakReader : RefCounted
                 throw new IOException("Media pack stream is disposed");
             if (length <= 0)
                 return Array.Empty<byte>();
-            byte[] chunk = _file.GetBuffer(length);
-            if (chunk.Length != length)
+            if (length <= GodotReadChunkSize)
             {
-                throw new EndOfStreamException(
-                    $"Unexpected EOF reading media pack: expected {length} bytes, got {chunk.Length}");
+                byte[] chunk = _file.GetBuffer(length);
+                if (chunk.Length != length)
+                {
+                    throw new EndOfStreamException(
+                        $"Unexpected EOF reading media pack: expected {length} bytes, got {chunk.Length}");
+                }
+                return chunk;
             }
-            return chunk;
+            byte[] bytes = new byte[length];
+            ReadExactly(bytes);
+            return bytes;
         }
 
         public void Dispose()
@@ -618,32 +633,69 @@ public partial class MediaPakReader : RefCounted
         return true;
     }
 
-    private static uint Crc32(ReadOnlySpan<byte> data)
+    internal static uint Crc32(ReadOnlySpan<byte> data)
     {
-        uint crc = 0xFFFF_FFFF;
-        foreach (byte value in data)
+        uint crc = 0xFFFF_FFFFu;
+        int i = 0;
+        uint[] tables = CrcTables;
+        while (i + 8 <= data.Length)
         {
-            crc = CrcTable[(crc ^ value) & 0xFF] ^ (crc >> 8);
+            uint lo = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(i, 4)) ^ crc;
+            uint hi = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(i + 4, 4));
+            crc = tables[7 * 256 + (lo & 0xFF)]
+                ^ tables[6 * 256 + ((lo >> 8) & 0xFF)]
+                ^ tables[5 * 256 + ((lo >> 16) & 0xFF)]
+                ^ tables[4 * 256 + (lo >> 24)]
+                ^ tables[3 * 256 + (hi & 0xFF)]
+                ^ tables[2 * 256 + ((hi >> 8) & 0xFF)]
+                ^ tables[1 * 256 + ((hi >> 16) & 0xFF)]
+                ^ tables[0 * 256 + (hi >> 24)];
+            i += 8;
         }
-        return crc ^ 0xFFFF_FFFF;
+        while (i < data.Length)
+        {
+            crc = tables[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
+            i++;
+        }
+        return crc ^ 0xFFFF_FFFFu;
     }
 
-    private static uint[] BuildCrcTable()
+    private static uint[] BuildCrcTables()
     {
-        uint[] table = new uint[256];
-        for (uint index = 0; index < table.Length; index++)
+        uint[] tables = new uint[8 * 256];
+        for (uint index = 0; index < 256; index++)
         {
             uint value = index;
             for (int bit = 0; bit < 8; bit++)
             {
-                value = (value & 1) != 0 ? (value >> 1) ^ 0xEDB8_8320 : value >> 1;
+                value = (value & 1) != 0 ? (value >> 1) ^ 0xEDB8_8320u : value >> 1;
             }
-            table[index] = value;
+            tables[index] = value;
         }
-        return table;
+        for (int slice = 1; slice < 8; slice++)
+        {
+            int prevBase = (slice - 1) * 256;
+            int curBase = slice * 256;
+            for (int index = 0; index < 256; index++)
+            {
+                uint prev = tables[prevBase + index];
+                tables[curBase + index] = (prev >> 8) ^ tables[prev & 0xFF];
+            }
+        }
+        return tables;
     }
 
-    private static void XorBytes(Span<byte> bytes, ulong offset)
+    private static ulong[] BuildSeedWords()
+    {
+        var words = new ulong[Seed.Length / 8];
+        for (int i = 0; i < words.Length; i++)
+        {
+            words[i] = BinaryPrimitives.ReadUInt64LittleEndian(Seed.AsSpan(i * 8, 8));
+        }
+        return words;
+    }
+
+    internal static void XorBytes(Span<byte> bytes, ulong offset)
     {
         int done = 0;
         ulong currentBlock = ulong.MaxValue;
@@ -659,9 +711,18 @@ public partial class MediaPakReader : RefCounted
                 currentBlock = block;
             }
             int take = Math.Min(StreamBlockSize - within, bytes.Length - done);
-            for (int index = 0; index < take; index++)
+            int index = 0;
+            while (index + 8 <= take)
+            {
+                ulong dataWord = Unsafe.ReadUnaligned<ulong>(ref bytes[done + index]);
+                ulong keyWord = Unsafe.ReadUnaligned<ulong>(ref stream[within + index]);
+                Unsafe.WriteUnaligned(ref bytes[done + index], dataWord ^ keyWord);
+                index += 8;
+            }
+            while (index < take)
             {
                 bytes[done + index] ^= stream[within + index];
+                index++;
             }
             done += take;
         }
@@ -670,10 +731,10 @@ public partial class MediaPakReader : RefCounted
     private static void WriteStreamBlock(ulong block, Span<byte> output)
     {
         ulong state = unchecked(block * Golden);
-        for (int offset = 0; offset < Seed.Length; offset += 8)
+        ulong[] seedWords = SeedWords;
+        for (int i = 0; i < seedWords.Length; i++)
         {
-            ulong seedWord = BinaryPrimitives.ReadUInt64LittleEndian(Seed.AsSpan(offset, 8));
-            state = unchecked((state + seedWord) * Golden);
+            state = unchecked((state + seedWords[i]) * Golden);
             state ^= state >> 29;
         }
         for (int offset = 0; offset < StreamBlockSize; offset += 8)

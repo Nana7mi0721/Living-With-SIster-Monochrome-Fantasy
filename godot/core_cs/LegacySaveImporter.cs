@@ -299,7 +299,7 @@ public sealed class LegacySaveImporter
         }
         string chipImage = r.ReadMemDataString(4, "chip_image");
         for (int i = 0; i < 31; i++) r.ReadMemData(4);
-        int vars2Count = SignedCount(r.ReadU32());
+        int vars2Count = ReadBoundedCount(r, 4, 1_000_000, "vars2_count");
         var switches = new Dictionary<string, bool>();
         for (int i = 0; i < vars2Count; i++)
         {
@@ -310,13 +310,13 @@ public sealed class LegacySaveImporter
             }
         }
 
-        int objectCount = SignedCount(r.ReadU32());
+        int objectCount = ReadBoundedCount(r, 64, 100_000, "object_count");
         for (int i = 0; i < objectCount; i++)
         {
             SkipObject(r);
         }
         for (int i = 0; i < 11; i++) r.ReadU32();
-        int vars3Count = SignedCount(r.ReadU32());
+        int vars3Count = ReadBoundedCount(r, 4, 1_000_000, "vars3_count");
         for (int i = 0; i < vars3Count; i++) r.ReadU32();
 
         // SavePart2
@@ -341,8 +341,8 @@ public sealed class LegacySaveImporter
 
         // block 100
         r.ReadU32(); r.ReadU32(); r.ReadU8();
-        int c1 = SignedCount(r.ReadU32()); for (int i = 0; i < c1; i++) r.ReadMemData(4);
-        int c2 = SignedCount(r.ReadU32()); for (int i = 0; i < c2; i++) r.ReadU32();
+        int c1 = ReadBoundedCount(r, 4, 100_000, "block100_c1"); for (int i = 0; i < c1; i++) r.ReadMemData(4);
+        int c2 = ReadBoundedCount(r, 4, 100_000, "block100_c2"); for (int i = 0; i < c2; i++) r.ReadU32();
         for (int i = 0; i < 5; i++) r.ReadU32();
         for (int i = 0; i < 6; i++) r.ReadU32();
         r.ReadU16();
@@ -350,12 +350,16 @@ public sealed class LegacySaveImporter
         r.ReadU32();
         for (int i = 0; i < 3; i++) r.ReadU32();
         string bgmPath1 = r.ReadMemDataString(2, "bgm_path1");
+        if (!SaveCodec.IsSafeAssetPath(bgmPath1))
+            throw new InvalidDataException($"Unsafe BGM asset path: '{bgmPath1}'");
         int bgmVol = Math.Clamp(r.ReadI32(), 0, 100);
         int bgmTempo = r.ReadI32();
         int bgmLoop = Math.Max(0, r.ReadI32());
         if (bgmTempo <= 0) bgmTempo = 100;
         if (bgmVol == 0 && !string.IsNullOrEmpty(bgmPath1)) bgmVol = 100;
         string bgmPath2 = r.ReadMemDataString(2, "bgm_path2");
+        if (!SaveCodec.IsSafeAssetPath(bgmPath2))
+            throw new InvalidDataException($"Unsafe BGS asset path: '{bgmPath2}'");
         int bgsVol = Math.Clamp(r.ReadI32(), 0, 100);
         int bgsTempo = r.ReadI32();
         int bgsLoop = Math.Max(0, r.ReadI32());
@@ -373,20 +377,22 @@ public sealed class LegacySaveImporter
         for (int i = 0; i < 24; i++) r.ReadU32();
         for (int i = 0; i < 4; i++) r.ReadU32();
         r.ReadMemData(4);
-        int mds2Count = SignedCount(r.ReadU32());
+        int mds2Count = ReadBoundedCount(r, 4, 100_000, "mds2_count");
         for (int i = 0; i < mds2Count; i++) r.ReadMemData(4);
 
         // SavePart3
         r.ReadU32();
-        int groupCount = SignedCount(r.ReadU32());
+        int groupCount = ReadBoundedCount(r, 4, 100_000, "map_event_group_count");
         var mapEventSelfVars = new Dictionary<int, Dictionary<int, int[]>>();
         for (int i = 0; i < groupCount; i++)
         {
-            int gc = SignedCount(r.ReadU32());
+            int gc = ReadBoundedCount(r, 1, 100_000, "map_event_count");
             Dictionary<int, int[]>? byEvent = null;
             for (int j = 0; j < gc; j++)
             {
                 byte per = r.ReadU8();
+                if ((ulong)per * 4UL > (ulong)r.Remaining)
+                    throw new InvalidDataException($"Map event self-var count {per} exceeds remaining {r.Remaining} bytes");
                 int[]? words = null;
                 bool any = false;
                 for (int k = 0; k < per; k++)
@@ -410,11 +416,11 @@ public sealed class LegacySaveImporter
                 mapEventSelfVars[i] = byEvent;
             }
         }
-        int rowCount = SignedCount(r.ReadU32());
+        int rowCount = ReadBoundedCount(r, 4, 100_000, "var_row_count");
         var normalVars = new Dictionary<string, int>();
         for (int i = 0; i < rowCount; i++)
         {
-            int rc = SignedCount(r.ReadU32());
+            int rc = ReadBoundedCount(r, 4, 1_000_000, "var_col_count");
             for (int j = 0; j < rc; j++)
             {
                 int val = r.ReadI32();
@@ -424,30 +430,30 @@ public sealed class LegacySaveImporter
                 }
             }
         }
-        int mds1Count = SignedCount(r.ReadU32());
-        if (mds1Count < 0 || mds1Count > Variables.MaxSlots || (ulong)mds1Count * 4UL > (ulong)r.Remaining)
-        {
-            throw new InvalidDataException($"String variable count {mds1Count} exceeds bounds (remaining {r.Remaining})");
-        }
+        int mds1Count = ReadBoundedCount(r, 4, Variables.MaxSlots, "str_var_count");
         var stringVars = new List<string>(Math.Min(mds1Count, 1024));
         for (int i = 0; i < mds1Count; i++)
         {
             stringVars.Add(r.ReadMemDataString(4, $"str_var[{i}]"));
         }
-        int listCount = SignedCount(r.ReadU32());
+        int listCount = ReadBoundedCount(r, 1, 100_000, "common_self_num_count");
         var commonSelfNumbers = new Dictionary<int, int[]>();
         for (int i = 0; i < listCount; i++)
         {
             byte lc = r.ReadU8();
+            if ((ulong)lc * 4UL > (ulong)r.Remaining)
+                throw new InvalidDataException($"Common self numeric length {lc} exceeds remaining {r.Remaining} bytes");
             var words = new int[lc];
             for (int j = 0; j < lc; j++) words[j] = r.ReadI32();
             commonSelfNumbers[i] = words;
         }
-        int slotCount = SignedCount(r.ReadU32());
+        int slotCount = ReadBoundedCount(r, 1, 100_000, "common_self_str_count");
         var commonSelfStrings = new Dictionary<int, string[]>();
         for (int i = 0; i < slotCount; i++)
         {
             byte sc = r.ReadU8();
+            if ((ulong)sc * 4UL > (ulong)r.Remaining)
+                throw new InvalidDataException($"Common self string length {sc} exceeds remaining {r.Remaining} bytes");
             var strs = new string[sc];
             for (int j = 0; j < sc; j++) strs[j] = r.ReadMemDataString(4, "common_self");
             commonSelfStrings[i] = strs;
@@ -455,12 +461,12 @@ public sealed class LegacySaveImporter
 
         // SavePart4
         SkipObject(r);
-        int p4Count = SignedCount(r.ReadU32());
+        int p4Count = ReadBoundedCount(r, 64, 100_000, "part4_object_count");
         for (int i = 0; i < p4Count; i++) SkipObject(r);
         r.ReadU8(); r.ReadU8();
-        int p4Vars2 = SignedCount(r.ReadU32());
+        int p4Vars2 = ReadBoundedCount(r, 4, 1_000_000, "part4_vars2_count");
         for (int i = 0; i < p4Vars2; i++) r.ReadU32();
-        int p4Vars3 = SignedCount(r.ReadU32());
+        int p4Vars3 = ReadBoundedCount(r, 8, 1_000_000, "part4_vars3_count");
         for (int i = 0; i < p4Vars3; i++) r.ReadU64();
 
         // SavePart5 (Picture table)
@@ -469,6 +475,8 @@ public sealed class LegacySaveImporter
         var pictureStates = new List<SavedPicture>();
         if ((p5Var1 & 0x8000) == 0)
         {
+            if ((ulong)p5Var1 * 128UL > (ulong)r.Remaining)
+                throw new InvalidDataException($"Picture count {p5Var1} exceeds remaining {r.Remaining} bytes");
             for (int i = 0; i < p5Var1; i++)
             {
                 uint picId = r.ReadU32();
@@ -477,7 +485,7 @@ public sealed class LegacySaveImporter
                 byte isText = r.ReadU8();
                 byte isWin = r.ReadU8();
                 string picName = r.ReadMemDataString(2, "picture_name", out byte[] picBytes);
-                if (isText != 1 && !IsSafeAssetPath(picName))
+                if (isText != 1 && !SaveCodec.IsSafeAssetPath(picName))
                 {
                     throw new InvalidDataException($"Unsafe picture asset path: '{picName}'");
                 }
@@ -499,10 +507,10 @@ public sealed class LegacySaveImporter
                 for (int k = 0; k < 3; k++) r.ReadU32();
                 for (int k = 0; k < 21; k++) r.ReadU32();
                 for (int k = 0; k < 5; k++) r.ReadU32();
-                int subCount = SignedCount(r.ReadU32());
+                int subCount = ReadBoundedCount(r, 4, 100_000, "picture_sub_count");
                 for (int subIdx = 0; subIdx < subCount; subIdx++)
                 {
-                    int slen = SignedCount(r.ReadU32());
+                    int slen = ReadBoundedCount(r, 4, 100_000, "picture_sub_len");
                     for (int w = 0; w < slen; w++) r.ReadU32();
                 }
                 for (int k = 0; k < 7; k++) r.ReadU32();
@@ -560,7 +568,7 @@ public sealed class LegacySaveImporter
         // VariableDatabase
         r.ReadU8();
         uint typeCount = r.ReadU32();
-        if ((ulong)typeCount * 8UL > (ulong)r.Remaining)
+        if (typeCount > 100_000 || (ulong)typeCount * 8UL > (ulong)r.Remaining)
             throw new InvalidDataException($"VariableDatabase type count {typeCount} exceeds remaining {r.Remaining} bytes");
         var dbOverrides = new List<int>();
         var dbRowCounts = new Dictionary<int, int>();
@@ -623,7 +631,7 @@ public sealed class LegacySaveImporter
         byte p7Var1 = r.ReadU8();
         if (p7Var1 == 1)
         {
-            int p7Count = SignedCount(r.ReadU32());
+            int p7Count = ReadBoundedCount(r, 2, 100_000, "part7_count");
             for (int i = 0; i < p7Count; i++)
             {
                 byte tag = r.ReadU8();
@@ -693,6 +701,16 @@ public sealed class LegacySaveImporter
     }
 
     private static int SignedCount(uint raw) => (int)raw > 0 ? (int)raw : 0;
+
+    private static int ReadBoundedCount(SaveReader r, int minBytesPerItem, int maxCount, string field)
+    {
+        int count = SignedCount(r.ReadU32());
+        if (count > maxCount || (ulong)count * (ulong)minBytesPerItem > (ulong)r.Remaining)
+        {
+            throw new InvalidDataException($"{field} count {count} exceeds bounds (max {maxCount}, remaining {r.Remaining})");
+        }
+        return count;
+    }
 
     /// <summary>Validate a retail .sav file without altering live session state.</summary>
     public static bool ValidateFile(string path, out string error)
@@ -814,18 +832,6 @@ public sealed class LegacySaveImporter
         _ => 1
     };
 
-    private static bool IsSafeAssetPath(string path)
-    {
-        if (string.IsNullOrEmpty(path)) return true;
-        if (Path.IsPathRooted(path) || path[0] == '/' || path[0] == '\\') return false;
-        if (path.Contains(':')) return false;
-        foreach (string segment in path.Split('/', '\\'))
-        {
-            if (segment == "..") return false;
-        }
-        return true;
-    }
-
     private static void SkipObject(SaveReader r)
     {
         r.ReadU32(); r.ReadU32(); r.ReadU32(); r.ReadU32(); r.ReadU8(); r.ReadU32();
@@ -836,11 +842,19 @@ public sealed class LegacySaveImporter
         {
             for (int i = 0; i < 6; i++) r.ReadU8();
             uint c = r.ReadU32();
+            if (c > 100_000 || (ulong)c * 3UL > (ulong)r.Remaining)
+                throw new InvalidDataException($"Object sub-block count {c} exceeds remaining {r.Remaining} bytes");
             for (int i = 0; i < c; i++)
             {
                 r.ReadU8();
-                byte n1 = r.ReadU8(); for (int j = 0; j < n1; j++) r.ReadU32();
-                byte n2 = r.ReadU8(); for (int j = 0; j < n2; j++) r.ReadU8();
+                byte n1 = r.ReadU8();
+                if ((ulong)n1 * 4UL > (ulong)r.Remaining)
+                    throw new InvalidDataException($"Object u32 sub-count {n1} exceeds remaining {r.Remaining} bytes");
+                for (int j = 0; j < n1; j++) r.ReadU32();
+                byte n2 = r.ReadU8();
+                if ((ulong)n2 > (ulong)r.Remaining)
+                    throw new InvalidDataException($"Object u8 sub-count {n2} exceeds remaining {r.Remaining} bytes");
+                for (int j = 0; j < n2; j++) r.ReadU8();
             }
         }
         for (int i = 0; i < 6; i++) r.ReadU16();
@@ -848,6 +862,8 @@ public sealed class LegacySaveImporter
         uint c1 = r.ReadU32();
         if (c1 < 0x80000000)
         {
+            if (c1 > 1_000_000 || (ulong)c1 * 4UL > (ulong)r.Remaining)
+                throw new InvalidDataException($"Object c1 count {c1} exceeds remaining {r.Remaining} bytes");
             for (int i = 0; i < c1; i++) r.ReadU32();
         }
         r.ReadU8(); r.ReadU8();
@@ -856,6 +872,8 @@ public sealed class LegacySaveImporter
         for (int i = 0; i < 3; i++) r.ReadU32();
         ushort raw = r.ReadU16();
         int count = raw < 0x8000 ? raw : 0;
+        if ((ulong)count * 2UL > (ulong)r.Remaining)
+            throw new InvalidDataException($"Object string count {count} exceeds remaining {r.Remaining} bytes");
         for (int i = 0; i < count; i++) r.ReadMemData(2);
         r.ReadU32(); r.ReadU8(); r.ReadU32(); r.ReadU32();
         r.ReadU32(); r.ReadU32();
@@ -867,8 +885,8 @@ public sealed class LegacySaveImporter
         for (int slot = 1; slot <= 8; slot++)
         {
             string fileName = $"SaveData{slot:D2}.sav";
-            string filePath = Path.Combine(saveDir, fileName);
-            if (!File.Exists(filePath)) continue;
+            string? filePath = ResolveCaseInsensitiveFile(saveDir, fileName);
+            if (filePath == null) continue;
             try
             {
                 var slotResult = ImportFile(filePath, slot, rejectBadChecksum);
@@ -888,41 +906,39 @@ public sealed class LegacySaveImporter
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
             string json = JsonSerializer.Serialize(report, LwsmfJsonContext.Indented.ImportReport);
-            WriteTextAtomic(reportPath, json);
+            AtomicFileIo.WriteText(reportPath, json);
 
             var warnings = new List<string>();
             foreach (var slot in report.Slots) warnings.AddRange(slot.EncodingWarnings);
             if (warnings.Count > 0)
             {
                 string warningPath = Path.Combine(dir ?? ".", "encoding_warnings.json");
-                WriteTextAtomic(warningPath, JsonSerializer.Serialize(warnings, LwsmfJsonContext.Indented.ListString));
+                AtomicFileIo.WriteText(warningPath, JsonSerializer.Serialize(warnings, LwsmfJsonContext.Indented.ListString));
             }
         }
 
         return report;
     }
 
-    private static void WriteTextAtomic(string path, string content)
+    private static string? ResolveCaseInsensitiveFile(string dir, string fileName)
     {
-        string temp = path + ".tmp";
+        if (string.IsNullOrEmpty(dir)) return null;
+        string exact = Path.Combine(dir, fileName);
+        if (File.Exists(exact)) return exact;
+        if (!Directory.Exists(dir)) return null;
         try
         {
-            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var writer = new StreamWriter(stream, Encoding.UTF8))
+            foreach (string candidate in Directory.EnumerateFiles(dir))
             {
-                writer.Write(content);
-                writer.Flush();
-                stream.Flush(true);
+                if (string.Equals(Path.GetFileName(candidate), fileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return candidate;
+                }
             }
-            File.Move(temp, path, overwrite: true);
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            if (File.Exists(temp))
-            {
-                try { File.Delete(temp); } catch { }
-            }
-            throw;
         }
+        return null;
     }
 }

@@ -162,6 +162,27 @@ public partial class TerrainTest : Node
             try { Directory.Delete(brDir, true); } catch (IOException) { }
         }
 
+        // Terrain overflow guard and MapTileData missing-property handling.
+        bool terrainThrew = false;
+        try { _ = new Terrain(int.MaxValue, 2); }
+        catch (OverflowException) { terrainThrew = true; }
+        Check(terrainThrew, "Terrain(int.MaxValue, 2) must throw OverflowException via checked multiplication");
+
+        string badTileDir = Path.Combine(Path.GetTempPath(), "lwsmf_bad_tiles_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(badTileDir);
+        try
+        {
+            string badTilesPath = Path.Combine(badTileDir, "map_tiles.json");
+            File.WriteAllText(badTilesPath, "{\"tilesets\":[{}],\"maps\":[]}");
+            Check(MapTileData.Load(badTilesPath) == null,
+                "MapTileData.Load must return null on JSON missing required properties instead of throwing KeyNotFoundException");
+            MapTileData.ClearCache();
+        }
+        finally
+        {
+            try { Directory.Delete(badTileDir, true); } catch (IOException) { }
+        }
+
         int failures = _failures;
         if (failures == 0)
         {

@@ -1117,6 +1117,62 @@ public partial class SaveLoadTest : Node
         Check(battleVm.Vars.Get(77) == 123,
             $"in-flight autorun page calling child CE must finish even when lower-priority p0 matches (got v77={battleVm.Vars.Get(77)} active={battleRt.Find(8)?.Active} starts={battleRt.Find(8)?.Starts} insts={battleVm.Instances.Count} fault={battleVm.FaultReason})");
 
+        // Negative schema_version rejection, IsSafeAssetPath, AtomicFileIo no-BOM, WriteVarDb null collections,
+        // and MediaPakReader Slicing-by-8 CRC32 / 8-byte ulong XOR parity.
+        Check(SaveCodec.FromJson("{\"schema\":\"lwsmf.save\",\"schema_version\":-1}") == null,
+            "SaveCodec must reject negative schema_version rather than migrating to v2");
+        Check(SaveCodec.IsSafeAssetPath("Picture/face01.png")
+              && !SaveCodec.IsSafeAssetPath("bad\0.png")
+              && !SaveCodec.IsSafeAssetPath("../evil.png")
+              && !SaveCodec.IsSafeAssetPath("/abs/evil.png")
+              && !SaveCodec.IsSafeAssetPath("C:/evil.png"),
+            "SaveCodec.IsSafeAssetPath must enforce relative path invariants");
+
+        string bomCheckPath = Path.Combine(saveDir, "atomic_nobom.json");
+        SaveCodec.Write(bomCheckPath, new SaveState { MapId = 1005, MapFile = "SampleMapA.mps" });
+        byte[] writtenBytes = File.ReadAllBytes(bomCheckPath);
+        Check(writtenBytes.Length > 0 && !(writtenBytes.Length >= 3 && writtenBytes[0] == 0xEF && writtenBytes[1] == 0xBB && writtenBytes[2] == 0xBF),
+            "AtomicFileIo/SaveCodec must write UTF-8 without BOM");
+
+        var nullOverlayColsState = new SaveState
+        {
+            MapId = 1005,
+            MapFile = "SampleMapA.mps",
+            DbOverlays = new SavedDbOverlays { Nums = null!, Texts = null!, RowCounts = null! }
+        };
+        byte[] exportedNullOverlay = LegacySaveExporter.ExportSaveState(nullOverlayColsState);
+        Check(exportedNullOverlay.Length > 0,
+            "LegacySaveExporter.WriteVarDb must tolerate null DbOverlays collections");
+
+        static uint ReferenceCrc32(ReadOnlySpan<byte> span)
+        {
+            uint crc = 0xFFFF_FFFFu;
+            foreach (byte b in span)
+            {
+                crc ^= b;
+                for (int bit = 0; bit < 8; bit++)
+                {
+                    crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB8_8320u : (crc >> 1);
+                }
+            }
+            return crc ^ 0xFFFF_FFFFu;
+        }
+        var rng = new Random(12345);
+        foreach (int len in new[] { 0, 1, 7, 8, 9, 15, 63, 64, 65, 137 })
+        {
+            byte[] sampleBytes = new byte[len];
+            rng.NextBytes(sampleBytes);
+            Check(MediaPakReader.Crc32(sampleBytes) == ReferenceCrc32(sampleBytes),
+                $"MediaPakReader Slicing-by-8 Crc32 mismatch at length {len}");
+
+            byte[] a = (byte[])sampleBytes.Clone();
+            byte[] b = (byte[])sampleBytes.Clone();
+            MediaPakReader.XorBytes(a, 13);
+            MediaPakReader.XorBytes(a, 13);
+            Check(a.AsSpan().SequenceEqual(b),
+                $"MediaPakReader 8-byte XorBytes involution mismatch at length {len}");
+        }
+
         try { Directory.Delete(saveDir, true); }
         catch (IOException) { }
 

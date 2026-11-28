@@ -45,30 +45,7 @@ public static class LegacySaveExporter
     }
 
     /// <summary>Atomically write encrypted <c>.sav</c> bytes via temporary file replacement.</summary>
-    public static void WriteAtomic(string path, byte[] data)
-    {
-        string? dir = Path.GetDirectoryName(Path.GetFullPath(path));
-        if (!string.IsNullOrEmpty(dir))
-            Directory.CreateDirectory(dir);
-        string temp = path + ".tmp";
-        try
-        {
-            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                stream.Write(data, 0, data.Length);
-                stream.Flush(true);
-            }
-            File.Move(temp, path, overwrite: true);
-        }
-        catch
-        {
-            if (File.Exists(temp))
-            {
-                try { File.Delete(temp); } catch { }
-            }
-            throw;
-        }
-    }
+    public static void WriteAtomic(string path, byte[] data) => AtomicFileIo.WriteBytes(path, data);
 
     /// <summary>
     /// Encode a text picture string back into WOLF's SavePart5_1 <c>md1</c> style bytecode
@@ -276,7 +253,7 @@ public static class LegacySaveExporter
 
     private static void WritePart3(BinaryWriter bw, SaveState state, GameDatabase? db)
     {
-        bw.Write(0u); // var1
+        bw.Write(0u);
         WriteMapEventSelfVars(bw, state, db);
 
         // Row 0: 800 normal variables.
@@ -349,7 +326,7 @@ public static class LegacySaveExporter
     private static void WritePart4(BinaryWriter bw)
     {
         WriteEmptyObject(bw);
-        bw.Write(0u); // objects count
+        bw.Write(0u);
         bw.Write((byte)0); bw.Write((byte)0); // var2, var3
         bw.Write(0u); // vars2 count
         bw.Write(0u); // vars3 count
@@ -579,50 +556,62 @@ public static class LegacySaveExporter
         var rowCountsByType = new Dictionary<int, int>();
         int maxType = -1;
 
-        foreach (var cell in overlays.Nums)
+        if (overlays.Nums != null)
         {
-            if (cell.Container != (int)DbContainer.CData
-                || cell.Type is < 0 or > 4096
-                || cell.Row is < 0 or > 100_000
-                || cell.Column is < 0 or > 4096)
+            foreach (var cell in overlays.Nums)
             {
-                continue;
+                if (cell == null
+                    || cell.Container != (int)DbContainer.CData
+                    || cell.Type is < 0 or > 4096
+                    || cell.Row is < 0 or > 100_000
+                    || cell.Column is < 0 or > 4096)
+                {
+                    continue;
+                }
+                if (!numsByType.TryGetValue(cell.Type, out var map))
+                {
+                    map = new Dictionary<(int, int), int>();
+                    numsByType[cell.Type] = map;
+                }
+                map[(cell.Row, cell.Column)] = cell.Value;
+                if (cell.Type > maxType) maxType = cell.Type;
             }
-            if (!numsByType.TryGetValue(cell.Type, out var map))
-            {
-                map = new Dictionary<(int, int), int>();
-                numsByType[cell.Type] = map;
-            }
-            map[(cell.Row, cell.Column)] = cell.Value;
-            if (cell.Type > maxType) maxType = cell.Type;
         }
-        foreach (var cell in overlays.Texts)
+        if (overlays.Texts != null)
         {
-            if (cell.Container != (int)DbContainer.CData
-                || cell.Type is < 0 or > 4096
-                || cell.Row is < 0 or > 100_000
-                || cell.Column is < 0 or > 4096)
+            foreach (var cell in overlays.Texts)
             {
-                continue;
+                if (cell == null
+                    || cell.Container != (int)DbContainer.CData
+                    || cell.Type is < 0 or > 4096
+                    || cell.Row is < 0 or > 100_000
+                    || cell.Column is < 0 or > 4096)
+                {
+                    continue;
+                }
+                if (!textsByType.TryGetValue(cell.Type, out var map))
+                {
+                    map = new Dictionary<(int, int), string>();
+                    textsByType[cell.Type] = map;
+                }
+                map[(cell.Row, cell.Column)] = cell.Value ?? "";
+                if (cell.Type > maxType) maxType = cell.Type;
             }
-            if (!textsByType.TryGetValue(cell.Type, out var map))
-            {
-                map = new Dictionary<(int, int), string>();
-                textsByType[cell.Type] = map;
-            }
-            map[(cell.Row, cell.Column)] = cell.Value ?? "";
-            if (cell.Type > maxType) maxType = cell.Type;
         }
-        foreach (var rc in overlays.RowCounts)
+        if (overlays.RowCounts != null)
         {
-            if (rc.Container != (int)DbContainer.CData
-                || rc.Type is < 0 or > 4096
-                || rc.Count is < 0 or > 100_000)
+            foreach (var rc in overlays.RowCounts)
             {
-                continue;
+                if (rc == null
+                    || rc.Container != (int)DbContainer.CData
+                    || rc.Type is < 0 or > 4096
+                    || rc.Count is < 0 or > 100_000)
+                {
+                    continue;
+                }
+                rowCountsByType[rc.Type] = rc.Count;
+                if (rc.Type > maxType) maxType = rc.Type;
             }
-            rowCountsByType[rc.Type] = rc.Count;
-            if (rc.Type > maxType) maxType = rc.Type;
         }
 
         if (maxType < 0)

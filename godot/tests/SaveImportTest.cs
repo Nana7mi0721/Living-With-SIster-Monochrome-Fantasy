@@ -467,19 +467,75 @@ public partial class SaveImportTest : Node
         }
         if (!ExpectInvalidSav(BuildSaveWithUnsafePicName("../evil.png"), "unsafe picName ..")) return false;
         if (!ExpectInvalidSav(BuildSaveWithUnsafePicName("/etc/passwd"), "unsafe rooted picName")) return false;
+        if (!ExpectInvalidSav(BuildSaveWithUnsafePicName("bad\0.png"), "unsafe NUL picName")) return false;
 
-        // ImportAll per-slot resilience & atomic report write
+        // Unsafe bgmPath1 in SavePart2 block 100 must be rejected via SaveCodec.IsSafeAssetPath.
+        byte[] BuildSaveWithUnsafeBgm(string bgmPath)
+        {
+            using var ms = new MemoryStream();
+            using var bw = new BinaryWriter(ms);
+            bw.Write((ushort)0); bw.Write((ushort)1);
+            bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(0u); bw.Write(0u); bw.Write(uint.MaxValue);
+            bw.Write(0u);
+            for (int i = 0; i < 31; i++) bw.Write(0u);
+            bw.Write(0u); bw.Write(0u);
+            for (int i = 0; i < 11; i++) bw.Write(0u);
+            bw.Write(0u);
+            bw.Write((byte)0); bw.Write((byte)0);
+            for (int i = 0; i < 19; i++) bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+            bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 9; i++) bw.Write(0u);
+            bw.Write((byte)0); bw.Write((ushort)0);
+            bw.Write(0u); bw.Write(0u);
+            for (int i = 0; i < 4; i++) bw.Write((ushort)0);
+            for (int i = 0; i < 3; i++) bw.Write(0u);
+            bw.Write((byte)0); bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            // block 100 up to bgmPath1
+            bw.Write(0u); bw.Write(0u); bw.Write((byte)0);
+            bw.Write(0u); bw.Write(0u);
+            for (int i = 0; i < 11; i++) bw.Write(0u);
+            bw.Write((ushort)0);
+            bw.Write((ushort)0); bw.Write((ushort)0);
+            bw.Write(0u);
+            for (int i = 0; i < 3; i++) bw.Write(0u);
+            byte[] bgmBytes = System.Text.Encoding.UTF8.GetBytes(bgmPath);
+            bw.Write((ushort)bgmBytes.Length);
+            bw.Write(bgmBytes);
+            return ms.ToArray();
+        }
+        if (!ExpectInvalidSav(BuildSaveWithUnsafeBgm("../evil.ogg"), "unsafe bgmPath1 ..")) return false;
+        if (!ExpectInvalidSav(BuildSaveWithUnsafeBgm("bad\0.ogg"), "unsafe bgmPath1 NUL")) return false;
+
+        // Crafted oversized vars2Count in SavePart1 must throw InvalidDataException cleanly.
+        using (var ms = new MemoryStream())
+        using (var bw = new BinaryWriter(ms))
+        {
+            bw.Write((ushort)0); bw.Write((ushort)1);
+            bw.Write(0u); bw.Write(0u); bw.Write(0u);
+            bw.Write(0u); bw.Write(0u); bw.Write(uint.MaxValue);
+            bw.Write(0u);
+            for (int i = 0; i < 31; i++) bw.Write(0u);
+            bw.Write(0x7FFF_FFFFu); // vars2Count
+            if (!ExpectInvalidSav(ms.ToArray(), "oversized vars2Count")) return false;
+        }
+
+        // ImportAll per-slot resilience, case-insensitive filename fallback, & atomic report write (UTF-8 no BOM)
         string batchDir = Path.Combine(Path.GetTempPath(), $"lwsmf_import_batch_{Guid.NewGuid():N}");
         Directory.CreateDirectory(batchDir);
         try
         {
-            File.Copy(sample, Path.Combine(batchDir, "SaveData01.sav"));
+            File.Copy(sample, Path.Combine(batchDir, "savedata01.sav"));
             File.WriteAllBytes(Path.Combine(batchDir, "SaveData02.sav"), new byte[] { 1, 2, 3 });
             string batchReport = Path.Combine(batchDir, "report.json");
             var batch = LegacySaveImporter.ImportAll(batchDir, batchReport);
-            if (batch.Slots.Count != 1 || batch.Errors.Count != 1 || !File.Exists(batchReport) || File.Exists(batchReport + ".tmp"))
+            byte[] reportBytes = File.ReadAllBytes(batchReport);
+            bool hasBom = reportBytes.Length >= 3 && reportBytes[0] == 0xEF && reportBytes[1] == 0xBB && reportBytes[2] == 0xBF;
+            if (batch.Slots.Count != 1 || batch.Errors.Count != 1 || !File.Exists(batchReport) || File.Exists(batchReport + ".tmp") || hasBom)
             {
-                GD.PrintErr($"SAVE_IMPORT_VALIDATION_FAILED: batch isolation slots={batch.Slots.Count} errors={batch.Errors.Count}");
+                GD.PrintErr($"SAVE_IMPORT_VALIDATION_FAILED: batch isolation slots={batch.Slots.Count} errors={batch.Errors.Count} hasBom={hasBom}");
                 return false;
             }
         }

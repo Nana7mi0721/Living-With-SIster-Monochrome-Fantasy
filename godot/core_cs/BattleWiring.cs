@@ -31,6 +31,39 @@ public sealed class BattleWiring
     public const int EventCommandRegister = WolfIds.BattleCommandRegister;
     public const int CmdListType = 14;
     private const int ActingPartySlot = 1;
+    private const int MaxMenuRows = 8;
+
+    private static readonly DbOp CursorReadOp = new()
+    {
+        Container = DbContainer.CData,
+        Direction = DbDirection.Read,
+        Op = 0,
+        DbType = 18,
+        DataId = 73,
+        ItemId = 0,
+        Destination = 0
+    };
+    private static readonly DbOp[] CmdActivatorOps = BuildCmdOps(0);
+    private static readonly DbOp[] CmdSkillOps = BuildCmdOps(3);
+
+    private static DbOp[] BuildCmdOps(int column)
+    {
+        var ops = new DbOp[MaxMenuRows];
+        for (int i = 0; i < ops.Length; i++)
+        {
+            ops[i] = new DbOp
+            {
+                Container = DbContainer.CData,
+                Direction = DbDirection.Read,
+                Op = 0,
+                DbType = CmdListType,
+                DataId = i + 1,
+                ItemId = column,
+                Destination = 0
+            };
+        }
+        return ops;
+    }
 
     private bool? _manualEnable;
     private bool? _manualRoundLoop;
@@ -128,7 +161,7 @@ public sealed class BattleWiring
     /// </summary>
     public int HarvestMenuRegistrations(EventVm vm, Func<DbOp, DbValue?> database)
     {
-        int cursor = ReadNum(database, 18, 73, 0) ?? 1;
+        int cursor = ReadInt(database, CursorReadOp) ?? 1;
         if (cursor < 1) cursor = 1;
         if (_menuCursor < 0)
         {
@@ -146,13 +179,13 @@ public sealed class BattleWiring
 
         int added = 0;
         int first = Math.Max(1, _menuCursor);
-        int last = Math.Min(8, cursor - 1);
+        int last = Math.Min(MaxMenuRows, cursor - 1);
         for (int row = first; row <= last; row++)
         {
             if (_harvestedRows.Contains(row)) continue;
-            var activator = ReadNum(database, CmdListType, row, 0);
+            var activator = ReadInt(database, CmdActivatorOps[row - 1]);
             if (activator is not int slot || slot < 0) continue;
-            int skill = ReadNum(database, CmdListType, row, 3) ?? 0;
+            int skill = ReadInt(database, CmdSkillOps[row - 1]) ?? 0;
             _harvestedRows.Add(row);
             int command = CommandIndexForRow(row);
             _menuSelections.Add(new MenuSelection
@@ -169,18 +202,9 @@ public sealed class BattleWiring
         return added;
     }
 
-    private static int? ReadNum(Func<DbOp, DbValue?> database, int type, int row, int column)
+    private static int? ReadInt(Func<DbOp, DbValue?> database, DbOp op)
     {
-        var value = database(new DbOp
-        {
-            Container = DbContainer.CData,
-            Direction = DbDirection.Read,
-            Op = 0,
-            DbType = type,
-            DataId = row,
-            ItemId = column,
-            Destination = 0
-        });
+        var value = database(op);
         return value == null || value.IsString ? null : value.Num;
     }
 
@@ -273,15 +297,19 @@ public sealed class BattleWiring
 
     public static void StopBattleInstances(EventVm vm)
     {
-        var ids = new List<int>();
-        foreach (var inst in vm.Instances)
+        List<int>? ids = null;
+        var instances = vm.Instances;
+        for (int i = 0; i < instances.Count; i++)
         {
+            var inst = instances[i];
             if (inst.EventId is WolfIds.BattleGauge or EventTurnStart or EventCommandPhase or EventEnemyAction)
             {
+                ids ??= new List<int>();
                 ids.Add(inst.Id);
             }
         }
-        foreach (int id in ids) vm.StopInstance(id);
+        if (ids == null) return;
+        for (int i = 0; i < ids.Count; i++) vm.StopInstance(ids[i]);
     }
 
     private int? StartCommand(EventVm vm, int command)

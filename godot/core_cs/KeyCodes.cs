@@ -81,9 +81,9 @@ public static class KeyCodes
     public static bool MaskTouchesKnownKey(uint mask) => (mask & AllKeys) != 0;
 
     /// <summary>
-    /// Translate WOLF's editor key layout (decide 1, cancel 2, sub 4, down 0x10,
-    /// left 0x20, right 0x40, up 0x80) into this port's host bits. Opcodes 125
-    /// and 126 both name keys in the editor layout; direction bits differ.
+    /// Translate WOLF's editor key layout (decide 1, cancel 2, sub 4, pause 0x08,
+    /// down 0x10, left 0x20, right 0x40, up 0x80) into this port's host bits. Opcodes
+    /// 125 and 126 both name keys in the editor layout; direction bits differ.
     /// </summary>
     public static uint FromWolfBits(uint bits)
     {

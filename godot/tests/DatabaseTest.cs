@@ -118,6 +118,78 @@ public static class DatabaseTest
         var negCleared = store.Read(ReadOp(DbContainer.CData, 0, -3, 0, Magic.VarBase));
         Check(negCleared == null, $"negative row ClearRow must not write overlay, got {Describe(negCleared)}");
 
+        // TryReadInt fast path must match Read() on numeric, sentinel, and string cells.
+        Check(store.TryReadInt(DbContainer.CData, 0, 0, 5, out int fastVal) && fastVal == 0,
+            $"TryReadInt numeric cell expected 0, got {fastVal}");
+        store.Execute(WriteOp(DbContainer.CData, 0, 0, 5, 0, 42));
+        Check(store.TryReadInt(DbContainer.CData, 0, 0, 5, out int fastValUpdated) && fastValUpdated == 42,
+            $"TryReadInt updated numeric cell expected 42, got {fastValUpdated}");
+        Check(store.TryReadInt(DbContainer.CData, 0, -1, 0, out int fastCount) && fastCount == 2,
+            $"TryReadInt RowCountQuery expected 2, got {fastCount}");
+        Check(store.TryReadInt(DbContainer.CData, 0, 100, 0, out int fastExt) && fastExt == 0,
+            $"TryReadInt extension cell expected 0, got {fastExt}");
+        Check(!store.TryReadInt(DbContainer.CData, 0, 0, 0, out _),
+            "TryReadInt must return false for string cell");
+
+        // ReadWithOverlay must match ReadWithOverlayIndex wantsText preference.
+        var dualOverlays = new SavedDbOverlays
+        {
+            Nums = [new SavedDbNumCell { Container = (int)DbContainer.CData, Type = 0, Row = 1, Column = 5, Value = 123 }],
+            Texts = [new SavedDbTextCell { Container = (int)DbContainer.CData, Type = 0, Row = 1, Column = 5, Value = "txt" }]
+        };
+        var ovNum = store.ReadWithOverlay(ReadOp(DbContainer.CData, 0, 1, 5, Magic.VarBase), dualOverlays);
+        var ovText = store.ReadWithOverlay(ReadOp(DbContainer.CData, 0, 1, 5, Magic.StrBase), dualOverlays);
+        Check(ovNum is { IsString: false } && ovNum.Num == 123,
+            $"ReadWithOverlay(!wantsText) expected 123, got {Describe(ovNum)}");
+        Check(ovText is { IsString: true } && ovText.Str == "txt",
+            $"ReadWithOverlay(wantsText) expected txt, got {Describe(ovText)}");
+
+        // WolfProjectParser must reject truncated/crafted counts without OOM or long loops.
+        byte[] craftedProj = new byte[32];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(craftedProj.AsSpan(0, 4), 1u); // typeCount = 1
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(craftedProj.AsSpan(4, 4), 2u); // name len 2
+        craftedProj[8] = (byte)'A'; craftedProj[9] = 0;
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(craftedProj.AsSpan(10, 4), 0x7FFF_FFFFu); // fieldCount
+        var parsedProj = WolfProjectParser.Parse(craftedProj, 1);
+        Check(parsedProj != null && parsedProj.Length == 1 && parsedProj[0] == null,
+            "WolfProjectParser must reject oversized fieldCount safely");
+
+        // Case-insensitive .project filename fallback in GameDatabase.Load.
+        string ciBasicDir = Path.Combine(Path.GetTempPath(), "lwsmf_ci_proj_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(ciBasicDir);
+        try
+        {
+            string srcProj = Path.Combine(basicDir, "DataBase.project");
+            if (File.Exists(srcProj))
+            {
+                File.Copy(srcProj, Path.Combine(ciBasicDir, "database.project"));
+                var ciDb = GameDatabase.Load(Path.Combine(dataDir, "database.json"), ciBasicDir);
+                Check(ciDb != null && ciDb.ResolveLabels(DbContainer.Data, 18, 22, "システム設定", "装備可能欄数") == (17, 22),
+                    "GameDatabase.Load must resolve lowercase database.project fallback");
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(ciBasicDir, true); } catch (IOException) { }
+        }
+
+        // TextExpander ReadOnlySpan<char> path checks (direct coords, nested coords, untouched colour escapes).
+        var expVm = new EventVm();
+        var expProg = Program.FromSlots(999, "ExpTest", new List<Slot>());
+        expVm.RegisterProgram(expProg);
+        var expInst = expVm.CreateInstance(999)!;
+        expInst.Self.Set(expProg.SelfBase + 0, 2);
+        expVm.Vars.Set(1, 3);
+        expVm.Vars.Set(5, 77);
+        expVm.Vars.SetStr(2, "name");
+        string expanded = TextExpander.Expand(
+            "\\E\\f[20]\\v[5]-\\s[2]-\\udb[\\cself[0]:\\v[1]:0]",
+            expInst,
+            expVm.Vars,
+            (kind, t, r, c) => $"{kind}:{t}:{r}:{c}");
+        Check(expanded == "\\E\\f[20]77-name-2:2:3:0",
+            $"TextExpander span path mismatch: '{expanded}'");
+
         var vm = new Lwsmf.Presentation.VmController();
         try
         {

@@ -43,7 +43,8 @@ public sealed class MapTileData
         public MapTileData Data { get; init; } = null!;
     }
 
-    private static readonly Dictionary<string, Cached> Cache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, Cached> Cache =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private static readonly object CacheLock = new();
 
     public List<MapTileset> Tilesets { get; } = new();
@@ -126,7 +127,7 @@ public sealed class MapTileData
             }
             return data;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or FormatException or InvalidOperationException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or FormatException or InvalidOperationException or KeyNotFoundException)
         {
             Console.Error.WriteLine($"[MapTileData] failed to load {path}: {ex.Message}");
             return null;

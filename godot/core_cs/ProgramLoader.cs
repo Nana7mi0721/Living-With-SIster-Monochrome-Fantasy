@@ -28,7 +28,8 @@ public static class ProgramLoader
         public List<ParsedMap> Maps = new();
     }
 
-    private static readonly Dictionary<string, CachedPrograms> Artifacts = new();
+    private static readonly Dictionary<string, CachedPrograms> Artifacts =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private static readonly object CacheLock = new();
 
     public static bool Exists(string jsonPath) => JsonArtifactIo.ResolvePath(jsonPath) != null;
@@ -353,9 +354,9 @@ public static class ProgramLoader
             {
                 string want = mapFile.Replace('\\', '/');
                 string have = entry.File.Replace('\\', '/');
-                matches = have == want
-                          || have.EndsWith("/" + want, StringComparison.Ordinal)
-                          || Path.GetFileName(have) == Path.GetFileName(want);
+                matches = string.Equals(have, want, StringComparison.OrdinalIgnoreCase)
+                          || have.EndsWith("/" + want, StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(Path.GetFileName(have), Path.GetFileName(want), StringComparison.OrdinalIgnoreCase);
             }
             if (matches) return entry;
         }
