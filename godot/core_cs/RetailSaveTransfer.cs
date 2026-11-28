@@ -67,7 +67,7 @@ internal sealed class RetailSaveTransfer
         var state = new SaveState
         {
             SavedAt = DateTime.UtcNow.ToString("o"),
-            PlayFrames = Math.Min(data.PlayTime.Frames, (uint)int.MaxValue),
+            PlayFrames = data.PlayTime.Frames,
             MapId = map1?.Id ?? 1005,
             MapFile = map1?.File ?? "SampleMapA.mps",
             LeaderX = 0,
@@ -179,7 +179,7 @@ internal sealed class RetailSaveTransfer
         var state = new SaveState
         {
             SavedAt = DateTime.UtcNow.ToString("o"),
-            PlayFrames = Math.Min(data.PlayTime.Frames, (uint)int.MaxValue),
+            PlayFrames = data.PlayTime.Frames,
             Vars = BuildRetailVarsList(data),
             StrVars = new List<string>(data.StringVars),
             SysVars = BuildRetailSysVarsList(data),
