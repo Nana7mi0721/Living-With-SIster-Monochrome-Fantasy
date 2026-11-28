@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using Godot;
 using Lwsmf.Core;
 
@@ -425,18 +424,7 @@ public partial class VmController : Node, IHost, IVmSession
     }
 
     /// <summary>True while an instance of the event is live (H scene spawn probes).</summary>
-    public bool HasEvent(int eventId)
-    {
-        foreach (var inst in Vm.Instances)
-        {
-            if (inst.EventId == eventId)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    public bool HasEvent(int eventId) => Vm.HasEvent(eventId);
 
     public string[] GetCurrentChoices() => _currentChoices;
 
@@ -816,7 +804,7 @@ public partial class VmController : Node, IHost, IVmSession
             };
         }
         if (target < 0) return null;
-        var ev = Map?.Events.FirstOrDefault(e => e.Def.Id == target);
+        var ev = Map?.Find(target);
         if (ev == null) return null;
         int direction = ev.Active is int page && page >= 0 && page < ev.Def.Pages.Count
             ? ev.Def.Pages[page].Direction
@@ -970,6 +958,55 @@ public partial class VmController : Node, IHost, IVmSession
         _pointerDeltaX = 0f;
         _pointerDeltaY = 0f;
         _wheelDelta = 0;
+    }
+
+    private readonly int[] _endFramePacked = new int[10];
+
+    /// <summary>
+    /// Packed per-frame input + clock update replacing SetPointer, SetPointer*Pressed,
+    /// SetFrameWheel, SetSys(82, ...), and BeginFrameInput. Pass wallSecond &lt; 0 to leave Sys82 unchanged.
+    /// </summary>
+    public void BeginFrameInputPacked(
+        float pointerX,
+        float pointerY,
+        bool leftPressed,
+        bool rightPressed,
+        bool middlePressed,
+        int wheelNotch,
+        int wallSecond)
+    {
+        PointerX = pointerX;
+        PointerY = pointerY;
+        SetPointerPressed(leftPressed);
+        SetPointerRightPressed(rightPressed);
+        SetPointerMiddlePressed(middlePressed);
+        _wheelDelta = wheelNotch;
+        if (wallSecond >= 0)
+        {
+            Vm.Vars.SetSys(82, wallSecond);
+        }
+        BeginFrameInput();
+    }
+
+    /// <summary>
+    /// Packed end-of-frame VM query returning a 10-element buffer:
+    /// [0]=Faulted, [1]=OkObserved, [2]=CancelObserved, [3]=WheelObserved,
+    /// [4]=Sys100(bgm), [5]=Sys101(bgs), [6]=Sys102(se), [7]=Var357,
+    /// [8]=HasEvent(131), [9]=BasicAllDeny.
+    /// </summary>
+    public int[] EndFrameQueryPacked()
+    {
+        _endFramePacked[0] = Faulted ? 1 : 0;
+        _endFramePacked[1] = ConsumeOkObserved() ? 1 : 0;
+        _endFramePacked[2] = ConsumeCancelObserved() ? 1 : 0;
+        _endFramePacked[3] = ConsumeWheelObserved() ? 1 : 0;
+        _endFramePacked[4] = Vm.Vars.GetSys(100);
+        _endFramePacked[5] = Vm.Vars.GetSys(101);
+        _endFramePacked[6] = Vm.Vars.GetSys(102);
+        _endFramePacked[7] = Vm.Vars.Get(357);
+        _endFramePacked[8] = Vm.HasSaveUi131 ? 1 : 0;
+        _endFramePacked[9] = unchecked((int)Vm.BasicAllDeny);
+        return _endFramePacked;
     }
 
     /// <summary>Turn the latched press into this frame's answer, once per 1/60 s step.</summary>

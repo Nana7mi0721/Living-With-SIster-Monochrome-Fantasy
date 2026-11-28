@@ -26,8 +26,9 @@ public readonly struct AutoSyncReport
 /// Scheduler for run_condition == 2 common events, plus the two battle events
 /// (242/243) that the data gates on 2000350 without an explicit caller. Mirrors the
 /// edge-triggered scheduler semantics: a coroutine that ended on its own is not
-/// restarted while its condition stays true. The HUD painters (216/217) and battle/H-scene
-/// gauge painters (240/339) are allow-listed in ResumeOnLoad to replay every frame.
+/// restarted while its condition stays true. Only the HUD painters (216/217) and
+/// H-scene gauge painter (339) are allow-listed in ResumeOnLoad to replay every frame;
+/// CE240 is strictly excluded because it consumes PRNG.
 /// Event 43 is skipped here because the title entry point starts it explicitly.
 /// </summary>
 public sealed class AutoEvents
@@ -65,16 +66,30 @@ public sealed class AutoEvents
     }
 
     private readonly List<AutoEvent> _events;
+    private readonly HashSet<int> _rebindEventIds = new();
     private readonly Dictionary<int, bool> _latched = new();
     private readonly Dictionary<int, int> _running = new();
     private readonly Dictionary<int, int> _starts = new();
     // Non-allow-listed run_condition==2 events whose condition already held at save load
     // stay suppressed until their gate variable drops back to false (prevents stale CE506/CE337 replay).
     private readonly HashSet<int> _suppressedUntilFalse = new();
+    private readonly HashSet<int> _liveEventIds = new();
+    private readonly HashSet<int> _liveInstanceIds = new();
+    private readonly Dictionary<int, int> _parallelFirstId = new();
+    private readonly Dictionary<int, List<int>> _parallelExtraIds = new();
+    private bool _hasExtraParallel;
 
     private AutoEvents(List<AutoEvent> events)
     {
         _events = events;
+        for (int i = 0; i < events.Count; i++)
+        {
+            var ev = events[i];
+            if (ev.IsParallel || ev.Operator != 0)
+            {
+                _rebindEventIds.Add(ev.Id);
+            }
+        }
     }
 
     public bool Enabled { get; set; } = true;
@@ -111,13 +126,14 @@ public sealed class AutoEvents
     {
         if (!Enabled) return;
         RebindRunning(vm);
+        CollectInstanceIndex(vm);
         _suppressedUntilFalse.Clear();
         foreach (var ev in _events)
         {
             bool now = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
             _latched[ev.Id] = now;
             if (!ev.ResumeOnLoad && !IsLiveLoadResumeExempt(vm, ev.Id)
-                && now && !IsEventLive(vm, ev.Id))
+                && now && !_liveEventIds.Contains(ev.Id))
             {
                 _suppressedUntilFalse.Add(ev.Id);
             }
@@ -129,16 +145,13 @@ public sealed class AutoEvents
     public void RebindRunning(EventVm vm)
     {
         _running.Clear();
-        foreach (var ev in _events)
+        var instances = vm.Instances;
+        for (int i = 0; i < instances.Count; i++)
         {
-            if (!ev.IsParallel && ev.Operator == 0) continue;
-            foreach (var inst in vm.Instances)
+            var inst = instances[i];
+            if (inst.IsParallel && _rebindEventIds.Contains(inst.EventId))
             {
-                if (inst.EventId == ev.Id && inst.IsParallel)
-                {
-                    _running[ev.Id] = inst.Id;
-                    break;
-                }
+                _running.TryAdd(inst.EventId, inst.Id);
             }
         }
     }
@@ -147,14 +160,16 @@ public sealed class AutoEvents
     {
         int started = 0, stopped = 0;
         if (!Enabled) return new AutoSyncReport { Running = RunningCount(vm) };
-        foreach (var ev in _events)
+        CollectInstanceIndex(vm);
+        for (int i = 0; i < _events.Count; i++)
         {
+            var ev = _events[i];
             bool now = ConditionMet(ev.Operator, ConditionValue(vm, ev.Variable), ev.Value);
             if (!now)
             {
                 _suppressedUntilFalse.Remove(ev.Id);
             }
-            bool alive = IsEventLive(vm, ev.Id);
+            bool alive = _liveEventIds.Contains(ev.Id);
             bool before = _latched.TryGetValue(ev.Id, out bool latched) && latched;
             bool suppressed = _suppressedUntilFalse.Contains(ev.Id);
             bool shouldStart;
@@ -186,6 +201,7 @@ public sealed class AutoEvents
                 {
                     inst.IsParallel = true;
                     _running[ev.Id] = inst.Id;
+                    _liveInstanceIds.Add(inst.Id);
                     _starts[ev.Id] = StartsFor(ev.Id) + 1;
                     started++;
                     TraceStart(ev.Id, inst.Id);
@@ -197,41 +213,83 @@ public sealed class AutoEvents
                 if (_running.Remove(ev.Id, out int instanceId))
                 {
                     trackedId = instanceId;
-                    if (vm.FindInstance(instanceId) != null)
+                    if (_liveInstanceIds.Contains(instanceId) && vm.FindInstance(instanceId) != null)
                     {
                         vm.StopInstance(instanceId);
                         stopped++;
                         TraceStop(ev.Id, instanceId);
                     }
                 }
-                List<int>? orphanIds = null;
-                if (ev.IsParallel || ev.Operator != 0)
+                if ((ev.IsParallel || ev.Operator != 0) && _parallelFirstId.TryGetValue(ev.Id, out int firstParallelId))
                 {
-                    foreach (var inst in vm.Instances)
+                    if (firstParallelId != trackedId && vm.FindInstance(firstParallelId) != null)
                     {
-                        if (inst.EventId == ev.Id && inst.IsParallel && inst.Id != trackedId)
-                        {
-                            orphanIds ??= new List<int>();
-                            orphanIds.Add(inst.Id);
-                        }
+                        vm.StopInstance(firstParallelId);
+                        stopped++;
+                        TraceStop(ev.Id, firstParallelId);
                     }
-                }
-                if (orphanIds != null)
-                {
-                    foreach (int orphanId in orphanIds)
+                    if (_hasExtraParallel && _parallelExtraIds.TryGetValue(ev.Id, out var extras))
                     {
-                        if (vm.FindInstance(orphanId) != null)
+                        for (int k = 0; k < extras.Count; k++)
                         {
-                            vm.StopInstance(orphanId);
-                            stopped++;
-                            TraceStop(ev.Id, orphanId);
+                            int orphanId = extras[k];
+                            if (orphanId != trackedId && vm.FindInstance(orphanId) != null)
+                            {
+                                vm.StopInstance(orphanId);
+                                stopped++;
+                                TraceStop(ev.Id, orphanId);
+                            }
                         }
                     }
                 }
             }
             _latched[ev.Id] = now;
         }
-        return new AutoSyncReport { Started = started, Stopped = stopped, Running = RunningCount(vm) };
+        int running = stopped == 0 ? CountTrackedRunningFromIndex() : RunningCount(vm);
+        return new AutoSyncReport { Started = started, Stopped = stopped, Running = running };
+    }
+
+    private void CollectInstanceIndex(EventVm vm)
+    {
+        _liveEventIds.Clear();
+        _liveInstanceIds.Clear();
+        _parallelFirstId.Clear();
+        if (_hasExtraParallel)
+        {
+            foreach (var list in _parallelExtraIds.Values) list.Clear();
+            _hasExtraParallel = false;
+        }
+
+        var instances = vm.Instances;
+        for (int i = 0; i < instances.Count; i++)
+        {
+            var inst = instances[i];
+            _liveInstanceIds.Add(inst.Id);
+            if (inst.Pc < inst.Program.Len || inst.Wait.Kind != WaitStateKind.None)
+            {
+                _liveEventIds.Add(inst.EventId);
+            }
+            if (inst.IsParallel && !_parallelFirstId.TryAdd(inst.EventId, inst.Id))
+            {
+                if (!_parallelExtraIds.TryGetValue(inst.EventId, out var extra))
+                {
+                    extra = new List<int>(2);
+                    _parallelExtraIds[inst.EventId] = extra;
+                }
+                extra.Add(inst.Id);
+                _hasExtraParallel = true;
+            }
+        }
+    }
+
+    private int CountTrackedRunningFromIndex()
+    {
+        int count = 0;
+        foreach (int id in _running.Values)
+        {
+            if (_liveInstanceIds.Contains(id)) count++;
+        }
+        return count;
     }
 
     public int RunningCount(EventVm vm)
@@ -260,16 +318,6 @@ public sealed class AutoEvents
     {
         if (CoreRuntimeConfig.TraceAutoEvents)
             Console.Error.WriteLine($"[AutoEvents] stop event {eventId} instance {instanceId}");
-    }
-
-    private static bool IsEventLive(EventVm vm, int eventId)
-    {
-        foreach (var inst in vm.Instances)
-        {
-            if (inst.EventId != eventId) continue;
-            if (inst.Pc < inst.Program.Len || inst.Wait.Kind != WaitStateKind.None) return true;
-        }
-        return false;
     }
 
     private static int ConditionValue(EventVm vm, int raw)

@@ -106,6 +106,24 @@ public partial class TerrainBridge : Godot.Node
     public int Mask(int x, int y) =>
         _terrain == null ? 0 : _terrain.BlockedMask(x, y);
 
+    /// <summary>Return all cell passability masks in row-major order (y * Width + x) in one bridge call.</summary>
+    public byte[] GetAllMasks()
+    {
+        if (_terrain == null || _width <= 0 || _height <= 0) return Array.Empty<byte>();
+        int w = _width;
+        int h = _height;
+        var masks = new byte[w * h];
+        for (int y = 0; y < h; y++)
+        {
+            int row = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                masks[row + x] = _terrain.BlockedMask(x, y);
+            }
+        }
+        return masks;
+    }
+
     public bool IsBlocked(int x, int y, int step) =>
         _terrain != null && _terrain.IsBlocked(x, y, step);
 

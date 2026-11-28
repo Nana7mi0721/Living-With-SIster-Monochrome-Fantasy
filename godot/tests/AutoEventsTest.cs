@@ -211,6 +211,20 @@ public static class AutoEventsTest
         Check(hCowgirlAuto.IsRunning(hCowgirlVm, 404),
             "imported H-scene save with var[62]>=1 and var[137]==6 must resume CE404");
 
+        // Orphan cleanup in single-pass Sync: multiple parallel instances of one event all stop when condition drops.
+        var orphanVm = new EventVm();
+        AddLoopProg(orphanVm, 335, 2, 2_000_062, 1);
+        var orphanAuto = AutoEvents.FromPrograms(orphanVm.Programs.Values);
+        orphanVm.Vars.Set(62, 1);
+        orphanAuto.Sync(orphanVm);
+        var extraInst = orphanVm.CreateInstance(335)!;
+        extraInst.IsParallel = true;
+        Check(orphanVm.Instances.Count == 2, "expected 2 parallel instances before orphan cleanup");
+        orphanVm.Vars.Set(62, 0);
+        var orphanStop = orphanAuto.Sync(orphanVm);
+        Check(orphanStop.Stopped == 2 && orphanStop.Running == 0 && orphanVm.Instances.Count == 0,
+            $"orphan cleanup must stop all parallel instances (stopped={orphanStop.Stopped}, running={orphanStop.Running}, inst={orphanVm.Instances.Count})");
+
         Console.WriteLine($"AUTO_EVENTS_TEST_OK count={auto.EventCount} start={opened.Started} resume={replayed.Started} gated={gated.Started}");
     }
 

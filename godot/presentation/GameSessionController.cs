@@ -62,6 +62,30 @@ public partial class GameSessionController : Node
     public uint MovementDeny => _session?.MovementDeny ?? 0;
     public uint BasicAllDeny => _session?.BasicAllDeny ?? 0;
 
+    private readonly int[] _endFrameSessionPacked = new int[4];
+
+    /// <summary>
+    /// Packed end-of-frame session query:
+    /// [0]=Frames, [1]=PhaseCode (0=boot, 1=title, 2=newgame, 3=bedroom, 4=failed),
+    /// [2]=HasEvent(131), [3]=BasicAllDeny.
+    /// </summary>
+    public int[] EndFrameSessionPacked()
+    {
+        _endFrameSessionPacked[0] = _session?.Frames ?? 0;
+        _endFrameSessionPacked[1] = (_session?.Phase ?? "boot") switch
+        {
+            "boot" => 0,
+            "title" => 1,
+            "newgame" => 2,
+            "bedroom" => 3,
+            "failed" => 4,
+            _ => -1,
+        };
+        _endFrameSessionPacked[2] = (_session != null && _session.HasEvent(131)) ? 1 : 0;
+        _endFrameSessionPacked[3] = unchecked((int)(_session?.BasicAllDeny ?? 0u));
+        return _endFrameSessionPacked;
+    }
+
     /// <summary>Wire the session to the live VM and the GDScript root. Call before StartTitle.</summary>
     public void Setup(VmController vm, Godot.Control ui) => Setup(vm, ui, "");
 
@@ -285,6 +309,7 @@ public partial class GameSessionController : Node
     /// <summary>View bridge: every core callback becomes one named call on the GDScript root.</summary>
     private sealed class CallableView : IGameSessionView
     {
+        private static readonly string[] SnapshotFlagKeys = { "blend", "scale_mode" };
         private readonly Godot.Control _host;
 
         public CallableView(Godot.Control host) => _host = host;
@@ -396,7 +421,7 @@ public partial class GameSessionController : Node
                 {
                     var flagsDict = flagsVar.AsGodotDictionary();
                     Dictionary<string, int>? parsedFlags = null;
-                    foreach (string key in new[] { "blend", "scale_mode" })
+                    foreach (string key in SnapshotFlagKeys)
                     {
                         if (TryGetInt(flagsDict, key, out int fv) && fv != 0)
                         {

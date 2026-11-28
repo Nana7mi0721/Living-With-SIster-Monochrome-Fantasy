@@ -64,6 +64,7 @@ public static class VmTest
         TestStopAllAnd174Cleanup();
         TestMalformedSlotBoundsAndCallStrings();
         TestGameSessionRestoreAndReset();
+        TestPersistReuseHasEvent131AndHudCache();
         DatabaseTest.Run();
         AutoEventsTest.Run();
         BattleCommandTest.Run();
@@ -2075,6 +2076,133 @@ public static class VmTest
         liveVm.StepFrame();
         if (liveVm.Vars.Get(0) != 2 || liveVm.Vars.Get(1) != 9 || liveVm.Instances.Count != 0)
             throw new Exception($"Live mode (ResumeOnChildReturn=true) expected var0=2,var1=9,instances=0 after 1 frame, got var0={liveVm.Vars.Get(0)},var1={liveVm.Vars.Get(1)},instances={liveVm.Instances.Count}");
+    }
+
+    private static void TestPersistReuseHasEvent131AndHudCache()
+    {
+        Console.WriteLine("  Testing PersistCommonSelf in-place reuse, O(1) HasEvent(131), and GameSession HUD/label checks...");
+
+        // 1. PersistCommonSelf reuses the existing SelfVars instance in CommonSelf[eventId].
+        var reuseVm = new EventVm();
+        reuseVm.RegisterProgram(Program.FromSlots(60, "ReuseCe", new List<Slot>
+        {
+            Slot.Command(121, [1_600_000, 1, 0, 0x0100]),
+            Slot.Command(172)
+        }));
+        reuseVm.CreateInstance(60);
+        reuseVm.StepFrame();
+        SelfVars firstBankRef = reuseVm.CommonSelf[60];
+        reuseVm.CreateInstance(60);
+        reuseVm.StepFrame();
+        if (!ReferenceEquals(reuseVm.CommonSelf[60], firstBankRef) || firstBankRef.Get(600) != 2)
+            throw new Exception("PersistCommonSelf must reuse existing CommonSelf slot in-place");
+
+        // 2. O(1) HasEvent(131) tracks CreateInstance, ReapFinished, StopInstance, StopAll, and op174.
+        var vm131 = new EventVm();
+        vm131.RegisterProgram(Program.FromSlots(131, "SaveUi", new List<Slot>
+        {
+            Slot.Command(180, [5]),
+            Slot.Command(172)
+        }));
+        vm131.RegisterProgram(Program.FromSlots(174, "ReturnTitle", new List<Slot> { Slot.Command(174) }));
+        if (vm131.HasSaveUi131 || vm131.HasEvent(131))
+            throw new Exception("HasEvent(131) must start false");
+        var instA = vm131.CreateInstance(131)!;
+        if (!vm131.HasSaveUi131 || !vm131.HasEvent(131))
+            throw new Exception("HasEvent(131) must be true after CreateInstance(131)");
+        vm131.StopInstance(instA.Id);
+        if (vm131.HasSaveUi131 || vm131.HasEvent(131))
+            throw new Exception("HasEvent(131) must be false after StopInstance");
+        vm131.CreateInstance(131);
+        vm131.StopAll();
+        if (vm131.HasSaveUi131)
+            throw new Exception("HasEvent(131) must be false after StopAll");
+        vm131.CreateInstance(131);
+        vm131.CreateInstance(174);
+        vm131.StepFrame();
+        if (vm131.HasSaveUi131)
+            throw new Exception("HasEvent(131) must be false after opcode 174");
+        vm131.StopAll();
+        vm131.CreateInstance(131);
+        for (int f = 0; f < 8; f++) vm131.StepFrame();
+        if (vm131.HasSaveUi131)
+            throw new Exception("HasEvent(131) must be false after ReapFinished");
+
+        // 3. GameSession HUD change-only callback + dynamic LoadGameFrom status labels.
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"lwsmf_hud_unit_{Guid.NewGuid():N}");
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string progJson = """
+            {
+              "common_events": [],
+              "maps": [
+                { "id": 1, "file": "TitleMap.mps", "name": "Title", "width": 5, "height": 5, "events": [
+                  { "id": 2, "page": 0, "trigger": 1, "stats": { "real_instructions": 1 }, "slots": [{ "op": 180, "params": [10] }] }
+                ]},
+                { "id": 10, "file": "SampleMapA.mps", "name": "Room", "width": 5, "height": 5, "events": [] }
+              ]
+            }
+            """;
+            string progPath = System.IO.Path.Combine(tmpDir, "programs.json");
+            System.IO.File.WriteAllText(progPath, progJson);
+            string savePath = System.IO.Path.Combine(tmpDir, "save_01.json");
+            var stubView = new CountingHudSessionView();
+            var stubVm = new StubVmSession();
+            var session = new GameSession(stubVm, stubView, progPath, savePath);
+            session.StartTitle();
+            var slotState = new SaveState
+            {
+                MapId = 10,
+                MapFile = "SampleMapA.mps",
+                LeaderX = 2,
+                LeaderY = 3
+            };
+            string slot2Path = session.SlotSavePath(2);
+            SaveCodec.Write(slot2Path, slotState);
+            if (!session.LoadGameFrom(slot2Path))
+                throw new Exception("LoadGameFrom(slot 02) failed on synthetic map");
+            if (!stubView.LastStatus.StartsWith("loaded slot 02 from", StringComparison.Ordinal))
+                throw new Exception($"LoadGameFrom must report dynamic slot label, got '{stubView.LastStatus}'");
+            string missingSlot5 = session.SlotSavePath(5);
+            if (session.LoadGameFrom(missingSlot5))
+                throw new Exception("missing slot 05 must fail load");
+            if (stubView.LastStatus != "load: slot 05 missing or unreadable")
+                throw new Exception($"missing slot 05 status mismatch: '{stubView.LastStatus}'");
+
+            int hudCallsAfterLoad = stubView.HudCalls;
+            for (int f = 0; f < 10; f++) session.AdvanceFrame();
+            if (stubView.HudCalls != hudCallsAfterLoad)
+                throw new Exception($"idle map frames must not invoke SetMapHud (before={hudCallsAfterLoad}, after={stubView.HudCalls})");
+            session.MoveLeader(1, 0, 6);
+            if (stubView.HudCalls != hudCallsAfterLoad + 1)
+                throw new Exception("moving leader must invoke SetMapHud once");
+        }
+        finally
+        {
+            ProgramLoader.ClearCache();
+            try { System.IO.Directory.Delete(tmpDir, true); } catch (System.IO.IOException) { }
+        }
+    }
+
+    private sealed class CountingHudSessionView : IGameSessionView
+    {
+        public string LastStatus { get; private set; } = "";
+        public int HudCalls { get; private set; }
+        public void SetStatus(string text) => LastStatus = text;
+        public void SetMapHud(int leaderX, int leaderY, string text) => HudCalls++;
+        public void ShowMap(MapDefinition map, MapRuntime runtime, int leaderX, int leaderY) { }
+        public void ShowMessage(string text, int face) { }
+        public void HideMessage() { }
+        public void ShowChoices(string[] options, int selected) { }
+        public void HideChoices() { }
+        public void ClearPictures() { }
+        public void RestorePictures(IReadOnlyList<SavedPicture> pictures) { }
+        public IReadOnlyList<SavedPicture> SnapshotPictures() => Array.Empty<SavedPicture>();
+        public void RestoreAudio(IReadOnlyList<SavedAudio> audio) { }
+        public IReadOnlyList<SavedAudio> SnapshotAudio() => Array.Empty<SavedAudio>();
+        public bool HasMessage => false;
+        public string MessageText => "";
     }
 
     private sealed class DelegateDbHost(Func<DbOp, DbValue?> handler) : NullHost

@@ -409,11 +409,6 @@ public sealed class MapRuntime
         return true;
     }
 
-    /// <summary>
-    /// map_runtime.rs:660 — pages that react to a key press / player touch at the leader's
-    /// tile, sorted by event id (action key first). Events without a graphic must be stood on
-    /// (map_runtime.rs:755 player_contacts).
-    /// </summary>
     /// <summary>Copy every event's self variables (save slots need the page state they carry).</summary>
     public Dictionary<int, SelfVars> SnapshotSelfVars()
     {
@@ -467,6 +462,11 @@ public sealed class MapRuntime
         }
     }
 
+    /// <summary>
+    /// map_runtime.rs:660 — pages that react to a key press / player touch at the leader's
+    /// tile, sorted by event id (action key first). Events without a graphic must be stood on
+    /// (map_runtime.rs:755 player_contacts).
+    /// </summary>
     public List<(MapEventState State, int Page)> TriggerCandidates(
         bool actionPressed, bool touch, int leaderX, int leaderY, int facing)
     {

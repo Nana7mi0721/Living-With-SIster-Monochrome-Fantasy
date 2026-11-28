@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Linq;
-using System.Text.Json;
 
 namespace Lwsmf.Core;
 
@@ -93,86 +91,26 @@ public interface IGameSessionView
 
 /// <summary>
 /// Core session orchestrating title, new game, map runtime, and save/load state.
-/// Owns map state, the frame clock, the teleport queue, and the save format, talking
-/// to the VM and presentation layers through <see cref="IVmSession"/> and <see cref="IGameSessionView"/>.
+/// Owns map state, the frame clock, and the teleport queue, delegating native slot storage
+/// to <see cref="SaveSlotStore"/> and retail <c>.sav</c> conversion to <see cref="RetailSaveTransfer"/>.
 /// </summary>
 public sealed class GameSession
 {
-    private const int SaveUiPictureFirst = 12000;
-    private const int SaveUiPictureLast = 12599;
-    private const int SaveReadCacheLimit = 32;
-
-    private sealed class CachedSaveEntry
-    {
-        public bool Exists;
-        public long MainLength;
-        public long MainWriteTicks;
-        public long BakLength;
-        public long BakWriteTicks;
-        public SaveState? State;
-        public GameDatabase.OverlayIndex? OverlayIndex;
-    }
-
-    private readonly Dictionary<string, CachedSaveEntry> _saveReadCache = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>Drop cached op-221 save snapshots (all entries, or one file path after write/import).</summary>
-    public void InvalidateSaveCache(string? path = null)
-    {
-        if (string.IsNullOrEmpty(path))
-        {
-            _saveReadCache.Clear();
-            return;
-        }
-        _saveReadCache.Remove(path);
-    }
-
-    private CachedSaveEntry ReadCachedSave(string path)
-    {
-        var mainInfo = new FileInfo(path);
-        var bakInfo = new FileInfo(path + ".bak");
-        bool mainExists = mainInfo.Exists;
-        bool bakExists = bakInfo.Exists;
-        long mainLen = mainExists ? mainInfo.Length : -1;
-        long mainTicks = mainExists ? mainInfo.LastWriteTimeUtc.Ticks : 0;
-        long bakLen = bakExists ? bakInfo.Length : -1;
-        long bakTicks = bakExists ? bakInfo.LastWriteTimeUtc.Ticks : 0;
-
-        if (_saveReadCache.TryGetValue(path, out CachedSaveEntry? cached)
-            && cached.MainLength == mainLen
-            && cached.MainWriteTicks == mainTicks
-            && cached.BakLength == bakLen
-            && cached.BakWriteTicks == bakTicks)
-        {
-            return cached;
-        }
-
-        if (_saveReadCache.Count >= SaveReadCacheLimit)
-        {
-            _saveReadCache.Clear();
-        }
-
-        SaveState? state = (mainExists || bakExists) ? SaveCodec.Read(path) : null;
-        var entry = new CachedSaveEntry
-        {
-            Exists = state != null,
-            MainLength = mainLen,
-            MainWriteTicks = mainTicks,
-            BakLength = bakLen,
-            BakWriteTicks = bakTicks,
-            State = state,
-            OverlayIndex = state != null ? GameDatabase.OverlayIndex.Build(state.DbOverlays) : null,
-        };
-        _saveReadCache[path] = entry;
-        return entry;
-    }
-
     private readonly IVmSession _vm;
     private readonly IGameSessionView _view;
     private readonly string _dataPath;
     private readonly string _savePath;
+    private readonly SaveSlotStore _saveStore;
+    private readonly RetailSaveTransfer _retailTransfer;
     private readonly Queue<PendingTeleport> _teleports = new();
     private AutoEvents? _autoEvents;
     private readonly BattleWiring _battleWiring = new();
+
+    private readonly Func<Instance, bool> _canStepParallelCallback;
+    private readonly Func<DbOp, DbValue?> _databaseCallback;
+    private readonly Action<string> _queueGameLoadCallback;
+    private readonly Action<string> _queueSystemLoadCallback;
+    private readonly Func<string, int, bool> _saveGameToCallback;
 
     private MapDefinition? _map;
     private MapRuntime? _mapRuntime;
@@ -191,12 +129,31 @@ public sealed class GameSession
     private readonly Queue<string> _pendingSystemLoads = new();
     private bool _ev4HasBedroomRefresh;
 
+    private bool _hudInitialized;
+    private int _lastHudMapId;
+    private int _lastHudX;
+    private int _lastHudY;
+    private bool _lastHudBlocked;
+    private bool _lastHudHasSave;
+    private int _lastHudEvents;
+    private int _lastHudAutorun;
+    private int _lastHudParallel;
+    private int _lastHudInstances;
+
     public GameSession(IVmSession vm, IGameSessionView view, string dataPath, string savePath)
     {
         _vm = vm;
         _view = view;
         _dataPath = dataPath;
         _savePath = savePath;
+        _saveStore = new SaveSlotStore(vm, view, savePath);
+        _retailTransfer = new RetailSaveTransfer(vm, dataPath, _saveStore);
+        _canStepParallelCallback = CanStepParallelInstanceImpl;
+        _databaseCallback = _vm.Database;
+        _queueGameLoadCallback = path => _pendingGameLoad = path;
+        _queueSystemLoadCallback = path => _pendingSystemLoads.Enqueue(path);
+        _saveGameToCallback = SaveGameTo;
+
         _actionPressed = false;
         // 220/221/222 must reach the session that owns the slot files.
         _vm.SaveLoadHandler = HandleSaveLoad;
@@ -206,6 +163,12 @@ public sealed class GameSession
         _vm.Vm.ShouldSkipCall = ShouldSkipRedundantBedroomRefresh;
         _vm.Vm.OnInstanceFinished = OnVmInstanceFinished;
     }
+
+    private bool CanStepParallelInstanceImpl(Instance inst) =>
+        _vm.Map!.IsParallelInstanceValid(inst, _vm.Vm);
+
+    /// <summary>Drop cached op-221 save snapshots (all entries, or one file path after write/import).</summary>
+    public void InvalidateSaveCache(string? path = null) => _saveStore.InvalidateSaveCache(path);
 
     private void ErasePictureSpan(int first, int last)
     {
@@ -229,7 +192,7 @@ public sealed class GameSession
     public int Frames { get; private set; }
 
     /// <summary>Non-fatal data loss reported by the last successful slot import; empty when nothing was dropped.</summary>
-    public string LastImportNotice { get; private set; } = "";
+    public string LastImportNotice => _retailTransfer.LastImportNotice;
     public bool HasChoices => _hasChoices;
     public bool ChoiceAllowsCancel { get; private set; } = true;
     public bool MessageOpen => _messageOpen;
@@ -237,12 +200,14 @@ public sealed class GameSession
     public int AutoEventCount => EnsureAutoEvents().EventCount;
     /// <summary>Fresh starts recorded for one auto event in this session (test hook).</summary>
     public int AutoEventStarts(int eventId) => EnsureAutoEvents().StartsFor(eventId);
+
     /// <summary>True while a VM instance for the event is resident (test telemetry).</summary>
-    public bool HasEvent(int eventId) => _vm.Vm.Instances.Any(inst => inst.EventId == eventId);
+    public bool HasEvent(int eventId) => _vm.Vm.HasEvent(eventId);
+
     /// <summary>Test-only: compact live instance list (event:id@pc,parent,wait).</summary>
     public string DescribeEvent(int eventId)
     {
-        var state = _mapRuntime?.Events.FirstOrDefault(e => e.Def.Id == eventId);
+        MapEventState? state = _mapRuntime?.Find(eventId);
         if (state == null) return "missing";
         var inst = state.InstanceId is int id ? _vm.Vm.FindInstance(id) : null;
         return $"active={state.Active} starts={state.Starts} on={state.StartsOnPage} inst={state.InstanceId} pc={inst?.Pc} wait={inst?.Wait.Kind}";
@@ -268,6 +233,7 @@ public sealed class GameSession
         }
         return string.Join(",", ids);
     }
+
     /// <summary>Rebuilt CE242 drive (crates/wolf-game/src/battle_wiring.rs).</summary>
     public BattleWiring BattleWiring => _battleWiring;
     /// <summary>Direction/action bits currently denied by opcode 126.</summary>
@@ -286,7 +252,7 @@ public sealed class GameSession
         }
     }
     public bool AutoPickChoice { get; set; } = true;
-    public bool HasSave => _savePath.Length > 0 && SaveCodec.Exists(_savePath);
+    public bool HasSave => _saveStore.HasSave;
     /// <summary>File that supplied the last successful <see cref="LoadGame"/> call.</summary>
     public SaveSlotSource LoadedFrom { get; private set; } = SaveSlotSource.None;
     public bool LoadedFromBackup => LoadedFrom == SaveSlotSource.Backup;
@@ -343,8 +309,6 @@ public sealed class GameSession
         return true;
     }
 
-    private int _titleMenuInstance = -1;
-
     /// <summary>
     /// CE43 paints the three title rows as pictures 3/4/5 and highlights the row Sys20 names
     /// (docs/engine/ENGINE_EVENTS.md). Run one parallel instance while the title choice is open.
@@ -358,22 +322,20 @@ public sealed class GameSession
         var inst = _vm.Vm.CreateInstance(WolfIds.TitleMenu);
         if (inst == null) return false;
         inst.IsParallel = true;
-        _titleMenuInstance = inst.Id;
         return true;
     }
 
     private void StopTitleMenuInstances()
     {
-        if (_vm.Vm.Instances.Count > 0)
+        var instances = _vm.Vm.Instances;
+        for (int i = instances.Count - 1; i >= 0; i--)
         {
-            var ids = new List<int>();
-            foreach (var inst in _vm.Vm.Instances)
+            if (instances[i].EventId == WolfIds.TitleMenu)
             {
-                if (inst.EventId == WolfIds.TitleMenu) ids.Add(inst.Id);
+                _vm.Vm.StopInstance(instances[i].Id);
+                i = Math.Min(i, instances.Count);
             }
-            foreach (var id in ids) _vm.Vm.StopInstance(id);
         }
-        _titleMenuInstance = -1;
     }
 
     /// <summary>Re-run CE43 so its Sys20 branch repaints the highlighted row.</summary>
@@ -404,14 +366,14 @@ public sealed class GameSession
         _vm.Vm.RelativeCommonCalls = !ScriptedInput;
         _vm.Vm.ResumeOnChildReturn = !ScriptedInput;
         _vm.Vm.CanStepParallelInstance = (!ScriptedInput && _vm.Map != null)
-            ? inst => _vm.Map.IsParallelInstanceValid(inst, _vm.Vm)
+            ? _canStepParallelCallback
             : null;
         // Rust Game::frame syncs conditional common events before the VM step, so a
         // newly-triggered event starts executing in this same frame.
         var autoEvents = EnsureAutoEvents();
         autoEvents.LoopVisualPainters = !ScriptedInput;
         autoEvents.Sync(_vm.Vm);
-        _battleWiring.Tick(_vm.Vm, op => _vm.Database(op), allowAutoCommands: ScriptedInput);
+        _battleWiring.Tick(_vm.Vm, _databaseCallback, allowAutoCommands: ScriptedInput);
         bool battleBeforeStep = _vm.Vm.Vars.Get(WolfIds.VarBattleActive) != 0;
         _vm.StepFrame();
         if (!ScriptedInput && battleBeforeStep && _vm.Vm.Vars.Get(WolfIds.VarBattleActive) == 0)
@@ -487,18 +449,50 @@ public sealed class GameSession
             return;
         }
         while (_teleports.Count > 0) ApplyTeleport(_teleports.Dequeue());
-        while (_pendingSystemLoads.Count > 0) LoadSystemData(_pendingSystemLoads.Dequeue());
+        while (_pendingSystemLoads.Count > 0) _saveStore.LoadSystemData(_pendingSystemLoads.Dequeue());
     }
 
     private void UpdateMapHud(bool blocked)
     {
         if (_mapRuntime == null || _map == null) return;
+        bool hasSave = HasSave;
+        int mapId = _map.Id;
+        int eventCount = _mapRuntime.Events.Count;
+        int autorunCount = _mapRuntime.AutorunCount;
+        int parallelCount = _mapRuntime.ParallelCount;
+        int instCount = _vm.Vm.Instances.Count;
+
+        if (_hudInitialized
+            && _lastHudMapId == mapId
+            && _lastHudX == _leaderX
+            && _lastHudY == _leaderY
+            && _lastHudBlocked == blocked
+            && _lastHudHasSave == hasSave
+            && _lastHudEvents == eventCount
+            && _lastHudAutorun == autorunCount
+            && _lastHudParallel == parallelCount
+            && _lastHudInstances == instCount)
+        {
+            return;
+        }
+
+        _hudInitialized = true;
+        _lastHudMapId = mapId;
+        _lastHudX = _leaderX;
+        _lastHudY = _leaderY;
+        _lastHudBlocked = blocked;
+        _lastHudHasSave = hasSave;
+        _lastHudEvents = eventCount;
+        _lastHudAutorun = autorunCount;
+        _lastHudParallel = parallelCount;
+        _lastHudInstances = instCount;
+
         string hud = blocked
-            ? $"MAP {_map.Id} {_map.File}  {_map.Width}x{_map.Height}    BLOCKED    " +
-              $"LEADER {_leaderX},{_leaderY}    INST {_vm.Vm.Instances.Count}    SAVE {(HasSave ? "01" : "-")}    F {Frames}"
-            : $"MAP {_map.Id} {_map.File}  {_map.Width}x{_map.Height}    " +
-              $"EVENTS {_mapRuntime.Events.Count}  AUTO {_mapRuntime.AutorunCount}  PAR {_mapRuntime.ParallelCount}    " +
-              $"LEADER {_leaderX},{_leaderY}    INST {_vm.Vm.Instances.Count}    SAVE {(HasSave ? "01" : "-")}    F {Frames}";
+            ? $"MAP {mapId} {_map.File}  {_map.Width}x{_map.Height}    BLOCKED    " +
+              $"LEADER {_leaderX},{_leaderY}    INST {instCount}    SAVE {(hasSave ? "01" : "-")}    F {Frames}"
+            : $"MAP {mapId} {_map.File}  {_map.Width}x{_map.Height}    " +
+              $"EVENTS {eventCount}  AUTO {autorunCount}  PAR {parallelCount}    " +
+              $"LEADER {_leaderX},{_leaderY}    INST {instCount}    SAVE {(hasSave ? "01" : "-")}    F {Frames}";
         _view.SetMapHud(_leaderX, _leaderY, hud);
     }
 
@@ -529,12 +523,8 @@ public sealed class GameSession
         _ev4HasBedroomRefresh = false;
         _hasChoices = true;
         ChoiceAllowsCancel = _vm.ChoiceAllowsCancel;
-        _lastChoices = options;
         _view.ShowChoices(options, 0);
     }
-
-    /// <summary>Last window contents; the title menu reopens on a load with no slot.</summary>
-    private string[] _lastChoices = System.Array.Empty<string>();
 
     public void PickChoice(int index)
     {
@@ -586,7 +576,7 @@ public sealed class GameSession
         _teleports.Enqueue(new PendingTeleport(target, map, x, y, options));
     }
 
-    /// <summary>Opcode 116 applied at the frame boundary (target 0 = leader).</summary>
+    /// <summary>Opcode 130 applied at the frame boundary (target -1 or 0 = leader).</summary>
     private void ApplyTeleport(PendingTeleport request)
     {
         _view.SetStatus($"teleport map={request.Map} x={request.X} y={request.Y} options={request.Options}");
@@ -689,27 +679,46 @@ public sealed class GameSession
 
         foreach (var snapshot in _mapRuntime.SnapshotSelfVars())
         {
-            state.SelfVars.Add(SavedSelf(snapshot.Key, snapshot.Value));
+            state.SelfVars.Add(SaveSlotStore.SavedSelf(snapshot.Key, snapshot.Value));
         }
         foreach (var bank in _vm.Vm.CommonSelf)
         {
-            state.CommonSelf.Add(SavedSelf(bank.Key, bank.Value));
+            state.CommonSelf.Add(SaveSlotStore.SavedSelf(bank.Key, bank.Value));
         }
 
         state.MapEvents = _mapRuntime.SnapshotStates(_vm.Vm);
-        var liveInstances = new Dictionary<int, Instance>();
+        var liveInstances = new Dictionary<int, Instance>(_vm.Vm.Instances.Count);
         foreach (Instance inst in _vm.Vm.Instances) liveInstances[inst.Id] = inst;
-        var persistedInstances = new List<Instance>();
+
+        var persistedInstances = new List<Instance>(_vm.Vm.Instances.Count);
+        var persistedIds = new HashSet<int>(_vm.Vm.Instances.Count);
         foreach (Instance inst in _vm.Vm.Instances)
         {
-            if (!HasSaveUiAncestor(inst, liveInstances)) persistedInstances.Add(inst);
+            if (!HasSaveUiAncestor(inst, liveInstances))
+            {
+                persistedInstances.Add(inst);
+                persistedIds.Add(inst.Id);
+            }
         }
-        var persistedIds = persistedInstances.Select(i => i.Id).ToHashSet();
+
+        var mapInstOwners = new Dictionary<int, MapEventState>();
+        foreach (var evState in _mapRuntime.Events)
+        {
+            if (evState.InstanceId is int instId) mapInstOwners[instId] = evState;
+        }
+
+        bool hasMessageWait = false;
+        bool hasChoiceWait = false;
         foreach (Instance inst in persistedInstances)
         {
-            MapEventState? owner = _mapRuntime.Events.FirstOrDefault(e => e.InstanceId == inst.Id);
+            mapInstOwners.TryGetValue(inst.Id, out MapEventState? owner);
             bool childDropped = inst.Wait.Kind == WaitStateKind.Child
                 && !persistedIds.Contains(inst.Wait.ChildId);
+            if (!childDropped)
+            {
+                if (inst.Wait.Kind == WaitStateKind.Message) hasMessageWait = true;
+                else if (inst.Wait.Kind == WaitStateKind.Choice) hasChoiceWait = true;
+            }
             var saved = new SavedInstance
             {
                 Id = inst.Id,
@@ -726,7 +735,7 @@ public sealed class GameSession
                 WaitChild = childDropped ? 0 : inst.Wait.ChildId,
                 WaitKeyTarget = childDropped || inst.Wait.Kind != WaitStateKind.KeyInput ? 0 : inst.Wait.KeyTarget,
                 WaitKeyMask = childDropped || inst.Wait.Kind != WaitStateKind.KeyInput ? 0u : inst.Wait.KeyMask,
-                Self = SavedSelf(inst.EventId, inst.Self)
+                Self = SaveSlotStore.SavedSelf(inst.EventId, inst.Self)
             };
             foreach (LoopCtx loop in inst.Loops)
             {
@@ -735,12 +744,10 @@ public sealed class GameSession
             state.Instances.Add(saved);
         }
 
-        state.Pictures.AddRange(_view.SnapshotPictures().Where(p => !IsSaveUiPicture(p.Number)));
+        AddFilteredScenePictures(state.Pictures, _view.SnapshotPictures());
         state.Audio.AddRange(_view.SnapshotAudio());
         state.DbOverlays = _vm.SnapshotDbOverlays();
 
-        bool hasMessageWait = persistedInstances.Any(i => i.Wait.Kind == WaitStateKind.Message);
-        bool hasChoiceWait = persistedInstances.Any(i => i.Wait.Kind == WaitStateKind.Choice);
         if (hasMessageWait && _view.HasMessage)
         {
             state.Dialogue = new SavedDialogue { Message = _view.MessageText };
@@ -750,7 +757,7 @@ public sealed class GameSession
             state.Dialogue = new SavedDialogue
             {
                 Message = _messageOpen && _view.HasMessage ? _view.MessageText : "",
-                Choices = _vm.GetCurrentChoices().ToList(),
+                Choices = new List<string>(_vm.GetCurrentChoices()),
                 AllowCancel = ChoiceAllowsCancel
             };
         }
@@ -758,8 +765,21 @@ public sealed class GameSession
         return state;
     }
 
-    // Exclude transient screen-overlay UI slots via the single SaveMigrator predicate.
-    private static bool IsSaveUiPicture(int number) => SaveMigrator.IsTransientUiPicture(number);
+    private static void AddFilteredScenePictures(List<SavedPicture> dst, IReadOnlyList<SavedPicture> src)
+    {
+        for (int i = 0; i < src.Count; i++)
+        {
+            var pic = src[i];
+            if (!SaveMigrator.IsTransientUiPicture(pic.Number)) dst.Add(pic);
+        }
+    }
+
+    private static List<SavedPicture> FilterScenePictures(IReadOnlyList<SavedPicture> src)
+    {
+        var dst = new List<SavedPicture>(src.Count);
+        AddFilteredScenePictures(dst, src);
+        return dst;
+    }
 
     private static bool IsSaveUiEvent(int eventId) => eventId is 14 or 94 or 131;
 
@@ -794,10 +814,10 @@ public sealed class GameSession
     public bool SaveGame() => SaveGameTo(_savePath);
 
     /// <summary>Resolve the JSON file path for a 1-based save slot.</summary>
-    public string SlotSavePath(int slot) => ResolveSaveTarget(new SaveTarget(Math.Max(1, slot)));
+    public string SlotSavePath(int slot) => _saveStore.SlotSavePath(slot);
 
     /// <summary>Return true when the given 1-based save slot exists on disk.</summary>
-    public bool SlotExists(int slot) => SaveCodec.Exists(SlotSavePath(slot));
+    public bool SlotExists(int slot) => _saveStore.SlotExists(slot);
 
     /// <summary>Load a 1-based slot directly from disk.</summary>
     public bool LoadGameFromSlot(int slot) => LoadGameFrom(SlotSavePath(slot));
@@ -823,17 +843,7 @@ public sealed class GameSession
 
         SaveState? state = BuildSaveState();
         if (state == null) return false;
-
-        try
-        {
-            SaveCodec.Write(path, state);
-            InvalidateSaveCache(path);
-        }
-        catch (Exception ex)
-        {
-            _view.SetStatus("save failed: " + ex.Message);
-            return false;
-        }
+        if (!_saveStore.WriteSlot(path, slot, state)) return false;
 
         _view.SetStatus($"saved slot {Math.Max(1, slot):00} (map {state.MapId} {state.LeaderX},{state.LeaderY})");
         UpdateMapHud(false);
@@ -848,21 +858,7 @@ public sealed class GameSession
         if (!SaveGameTo(path, clamped)) return false;
 
         _vm.Vm.Vars.Set(546, clamped);
-        string systemPath = ResolveSaveTarget(new SaveTarget("Save/System.sav"));
-        try
-        {
-            SaveState systemState = SaveCodec.Read(systemPath) ?? new SaveState();
-            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + 0, Value = clamped });
-            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + 626, Value = _vm.Vm.Vars.Get(531) });
-            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + 546, Value = clamped });
-            SaveCodec.Write(systemPath, systemState);
-            InvalidateSaveCache(systemPath);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException
-                                   or ArgumentException or NotSupportedException or InvalidOperationException)
-        {
-            _view.SetStatus("system save failed: " + ex.Message);
-        }
+        _saveStore.SyncSystemSlotMarkers(clamped);
 
         if (refreshUi) RefreshSaveUiForSlot(clamped);
         return true;
@@ -911,15 +907,16 @@ public sealed class GameSession
     /// </summary>
     public bool LoadGame() => LoadGameFrom(_savePath);
 
-    /// <summary>Load one full slot from an explicit file, same gates as slot 01.</summary>
+    /// <summary>Load one full slot from an explicit file, with .bak fallback and rollback protection.</summary>
     public bool LoadGameFrom(string path)
     {
         LoadedFrom = SaveSlotSource.None;
+        string slotLabel = SaveSlotStore.FormatSlotLabel(path);
         SaveReadResult read = SaveCodec.ReadWithSource(path);
         SaveState? state = read.State;
         if (state == null)
         {
-            _view.SetStatus("load: slot 01 missing or unreadable");
+            _view.SetStatus($"load: {slotLabel} missing or unreadable");
             return false;
         }
 
@@ -942,7 +939,7 @@ public sealed class GameSession
         {
             if (rollback != null && RestoreAfterFailedLoad(rollback))
             {
-                _view.RestorePictures(rollback.Pictures.Where(p => !IsSaveUiPicture(p.Number)).ToList());
+                _view.RestorePictures(FilterScenePictures(rollback.Pictures));
                 _view.RestoreAudio(rollback.Audio);
                 _view.OnLoadCompleted();
                 RestoreLoadedDialogue(rollback);
@@ -954,12 +951,12 @@ public sealed class GameSession
         LoadedFrom = read.Source;
         LastSaveAudit = audit;
         // EnterMap -> ShowMap clears the layer, so the saved slots are replayed after it.
-        _view.RestorePictures(state.Pictures.Where(p => !IsSaveUiPicture(p.Number)).ToList());
+        _view.RestorePictures(FilterScenePictures(state.Pictures));
         // Audio last: the map load above may start its own track, and the slot wins.
         _view.RestoreAudio(state.Audio);
         _view.OnLoadCompleted();
         RestoreLoadedDialogue(state);
-        _view.SetStatus($"loaded slot 01 from {SaveCodec.SourceName(read.Source)} (map {state.MapId} {state.LeaderX},{state.LeaderY})");
+        _view.SetStatus($"loaded {slotLabel} from {SaveCodec.SourceName(read.Source)} (map {state.MapId} {state.LeaderX},{state.LeaderY})");
         UpdateMapHud(false);
         return true;
     }
@@ -967,8 +964,15 @@ public sealed class GameSession
     private void RestoreLoadedDialogue(SaveState state)
     {
         if (state.Dialogue == null) return;
-        bool messageWait = _vm.Vm.Instances.Any(i => i.Wait.Kind == WaitStateKind.Message);
-        bool choiceWait = _vm.Vm.Instances.Any(i => i.Wait.Kind == WaitStateKind.Choice);
+        bool messageWait = false;
+        bool choiceWait = false;
+        var instances = _vm.Vm.Instances;
+        for (int i = 0; i < instances.Count; i++)
+        {
+            var kind = instances[i].Wait.Kind;
+            if (kind == WaitStateKind.Message) messageWait = true;
+            else if (kind == WaitStateKind.Choice) choiceWait = true;
+        }
         if (messageWait && !string.IsNullOrEmpty(state.Dialogue.Message))
         {
             _vm.RestoreDialogue(state.Dialogue.Message, Array.Empty<string>());
@@ -988,306 +992,9 @@ public sealed class GameSession
 
     // ---- script save/load (opcodes 220/221/222) -------------------------
 
-    /// <summary>
-    /// Map a 220/221/222 file operand onto this port's slots. A numeric slot is one-based
-    /// (WOLF names them SaveDataNN); an explicit path keeps only its file name and lives
-    /// beside slot 01, so a retail "Save/System.sav" can never write outside the user dir.
-    /// </summary>
-    private string ResolveSaveTarget(SaveTarget file)
-    {
-        string dir = Path.GetDirectoryName(_savePath) ?? ".";
-        if (file.IsPath)
-        {
-            string name = Path.GetFileName(file.Path.Replace('\\', '/'));
-            if (name.Length == 0) name = "System.sav";
-            string targetName = Path.ChangeExtension(name, ".json");
-            string candidate = Path.Combine(dir, targetName);
-            if (!File.Exists(candidate) && Directory.Exists(dir))
-            {
-                // Retail scripts mix "save/system.sav" (TitleMap) and "Save/System.sav" (CE131);
-                // share one backing file on case-sensitive filesystems without breaking callers
-                // that inspect System.json on creation.
-                foreach (string existing in Directory.EnumerateFiles(dir, "*.json"))
-                {
-                    if (string.Equals(Path.GetFileName(existing), targetName, StringComparison.OrdinalIgnoreCase))
-                        return existing;
-                }
-                string bakName = targetName + ".bak";
-                foreach (string existingBak in Directory.EnumerateFiles(dir, "*.json.bak"))
-                {
-                    if (string.Equals(Path.GetFileName(existingBak), bakName, StringComparison.OrdinalIgnoreCase))
-                        return existingBak[..^4];
-                }
-            }
-            return candidate;
-        }
-        int slot = file.Slot <= 1 ? 1 : file.Slot;
-        return Path.Combine(dir, $"save_{slot:00}.json");
-    }
-
     /// <summary>220/221/222 entry point. Null means the VM has nothing to store back.</summary>
-    public int? HandleSaveLoad(SaveOp op)
-    {
-        string path = ResolveSaveTarget(op.File);
-        switch (op.Opcode)
-        {
-            case 220:
-                // A path target is the retail system data (banks only); a slot target is a
-                // whole game save. Full loads are queued for the frame boundary.
-                if (op.File.IsPath)
-                {
-                    if (op.Mode == 1) _pendingSystemLoads.Enqueue(path);
-                    else SaveSystemData(path);
-                }
-                else if (op.Mode == 1)
-                {
-                    _pendingGameLoad = path;
-                }
-                else
-                {
-                    int slot = Math.Max(1, op.File.Slot);
-                    bool ok = SaveGameTo(path, slot);
-                    if (op.Owner == 435)
-                        _view.SetStatus($"[AutoSave] slot={slot} {(ok ? "ok" : "fail")}");
-                }
-                return null;
-            case 221:
-            {
-                if (op.Address == Magic.SysBase + 24)
-                {
-                    if (!SaveCodec.Exists(path)) return 0;
-                    return ReadCachedSave(path).Exists ? 1 : 0;
-                }
-                CachedSaveEntry cached = ReadCachedSave(path);
-                // A missing tier is the normal "no data here" answer for the existence probes.
-                return cached.State == null ? 0 : ReadSaveAddress(cached.State, cached.OverlayIndex, op, path);
-            }
-            case 222:
-            {
-                SaveState state = SaveCodec.Read(path) ?? new SaveState();
-                if (WriteSaveAddress(state, op))
-                {
-                    try
-                    {
-                        SaveCodec.Write(path, state);
-                        InvalidateSaveCache(path);
-                    }
-                    catch (Exception ex)
-                    {
-                        _view.SetStatus("save write failed: " + ex.Message);
-                    }
-                }
-                return null;
-            }
-        }
-        return null;
-    }
-
-    /// <summary>Write the retail system-data file: variable banks only, no map state.</summary>
-    private SaveState BuildSystemState()
-    {
-        var state = new SaveState
-        {
-            SavedAt = DateTime.UtcNow.ToString("o"),
-            PlayFrames = Frames,
-            Vars = _vm.Vm.Vars.SnapshotNums(),
-            StrVars = _vm.Vm.Vars.SnapshotStrings(),
-            SysVars = _vm.Vm.Vars.SnapshotSysNums(),
-            SysStrVars = _vm.Vm.Vars.SnapshotSysStrings(),
-        };
-        foreach (var bank in _vm.Vm.CommonSelf) state.CommonSelf.Add(SavedSelf(bank.Key, bank.Value));
-        return state;
-    }
-
-    private void SaveSystemData(string path)
-    {
-        try
-        {
-            SaveCodec.Write(path, BuildSystemState());
-            InvalidateSaveCache(path);
-        }
-        catch (Exception ex)
-        {
-            _view.SetStatus("system save failed: " + ex.Message);
-        }
-    }
-
-    /// <summary>Restore a system-data file: banks only, the live map stays where it is.</summary>
-    private void LoadSystemData(string path)
-    {
-        SaveState? state = SaveCodec.Read(path);
-        if (state == null)
-        {
-            _view.SetStatus("system load: no system data at " + Path.GetFileName(path));
-            return;
-        }
-        _vm.Vm.Vars.Restore(state.Vars, state.StrVars, state.SysVars, state.SysStrVars);
-        _view.SetStatus("system load: restored " + Path.GetFileName(path));
-    }
-
-    /// <summary>Read a 221 address: CData cells read target save's overlay via O(1) index; variable banks decode via Magic.</summary>
-    private int ReadSaveAddress(SaveState state, GameDatabase.OverlayIndex? overlayIndex, SaveOp op, string path)
-    {
-        int address = op.Address;
-        if (address is >= 1_100_000_000 and < 1_200_000_000)
-        {
-            int offset = address - 1_100_000_000;
-            int dbType = offset / 1_000_000;
-            int rem = offset % 1_000_000;
-            int row = rem / 100;
-            int col = rem % 100;
-            var dbOp = new DbOp
-            {
-                Container = DbContainer.CData,
-                Direction = DbDirection.Read,
-                DbType = dbType,
-                DataId = row,
-                ItemId = col,
-                Destination = op.Destination
-            };
-            DbValue? cell = _vm.DatabaseStore != null
-                ? _vm.ReadDatabaseWithOverlayIndex(dbOp, overlayIndex)
-                : _vm.ReadDatabaseWithOverlay(dbOp, state.DbOverlays);
-            if (cell == null) return 0;
-            if (cell.IsString)
-            {
-                op.LoadedString = cell.Str;
-                return 0;
-            }
-            return cell.Num;
-        }
-
-        var magic = Magic.Decode(address);
-        switch (magic.Kind)
-        {
-            case MagicKind.Var:
-            {
-                int index = (int)magic.Index;
-                return index >= 0 && index < state.Vars.Count ? state.Vars[index] : 0;
-            }
-            case MagicKind.StrVar:
-            {
-                int index = (int)magic.Index;
-                op.LoadedString = index >= 0 && index < state.StrVars.Count ? state.StrVars[index] : "";
-                return 0;
-            }
-            case MagicKind.SelfVar:
-            {
-                EventSelfVars? bank = FindSelfBank(state, op.Owner);
-                int index = (int)magic.Index;
-                if (magic.IsStringSlot)
-                {
-                    if (bank == null)
-                    {
-                        op.LoadedString = "";
-                        return 0;
-                    }
-                    if (bank.StrMap != null && bank.StrMap.TryGetValue(index, out string? sVal))
-                    {
-                        op.LoadedString = sVal ?? "";
-                        return 0;
-                    }
-                    op.LoadedString = index >= 0 && index < bank.Strings.Length ? (bank.Strings[index] ?? "") : "";
-                    return 0;
-                }
-                if (bank == null) return 0;
-                if (bank.NumMap != null && bank.NumMap.TryGetValue(index, out int value)) return value;
-                return index >= 0 && index < bank.Nums.Length ? bank.Nums[index] : 0;
-            }
-            case MagicKind.SysVar:
-            {
-                if (magic.IsSysStr)
-                {
-                    int strIdx = (int)(magic.Index - Magic.SysStrOffset);
-                    op.LoadedString = strIdx >= 0 && strIdx < state.SysStrVars.Count ? state.SysStrVars[strIdx] : "";
-                    return 0;
-                }
-                int index = (int)magic.Index;
-                if (index == 24) return 1;
-                if (index == 29) return (int)(state.PlayFrames / 60);
-                return index >= 0 && index < state.SysVars.Count ? state.SysVars[index] : 0;
-            }
-            default:
-                return 0;
-        }
-    }
-
-    /// <summary>Write one 222 value; false means the address is outside every bank.</summary>
-    private static bool WriteSaveAddress(SaveState state, SaveOp op)
-    {
-        var magic = Magic.Decode(op.Address);
-        switch (magic.Kind)
-        {
-            case MagicKind.Var:
-            {
-                int index = (int)magic.Index;
-                if (index < 0 || index >= Variables.MaxSlots) return false;
-                while (state.Vars.Count <= index) state.Vars.Add(0);
-                state.Vars[index] = op.Value;
-                return true;
-            }
-            case MagicKind.StrVar:
-            {
-                int index = (int)magic.Index;
-                if (index < 0 || index >= Variables.MaxSlots) return false;
-                while (state.StrVars.Count <= index) state.StrVars.Add("");
-                state.StrVars[index] = op.StringValue ?? "";
-                return true;
-            }
-            case MagicKind.SelfVar:
-            {
-                int index = (int)magic.Index;
-                if (index < 0 || index >= SelfVars.TotalSlots) return false;
-                EventSelfVars? bank = FindSelfBank(state, op.Owner);
-                if (bank == null)
-                {
-                    bank = new EventSelfVars { Id = op.Owner };
-                    state.SelfVars.Add(bank);
-                }
-                if (magic.IsStringSlot || op.IsString)
-                {
-                    bank.StrMap ??= new Dictionary<int, string>();
-                    bank.StrMap[index] = op.StringValue ?? "";
-                }
-                else
-                {
-                    bank.NumMap ??= new Dictionary<int, int>();
-                    bank.NumMap[index] = op.Value;
-                }
-                return true;
-            }
-            case MagicKind.SysVar:
-            {
-                if (magic.IsSysStr)
-                {
-                    int strIdx = (int)(magic.Index - Magic.SysStrOffset);
-                    if (strIdx < 0 || strIdx >= Variables.MaxSlots) return false;
-                    while (state.SysStrVars.Count <= strIdx) state.SysStrVars.Add("");
-                    state.SysStrVars[strIdx] = op.StringValue ?? "";
-                    return true;
-                }
-                int index = (int)magic.Index;
-                if (index == 29)
-                {
-                    state.PlayFrames = Math.Max(0, op.Value) * 60L;
-                    return true;
-                }
-                if (index < 0 || index >= Variables.MaxSlots) return false;
-                while (state.SysVars.Count <= index) state.SysVars.Add(0);
-                state.SysVars[index] = op.Value;
-                return true;
-            }
-            default:
-                return false;
-        }
-    }
-
-    private static EventSelfVars? FindSelfBank(SaveState state, int owner)
-    {
-        foreach (var bank in state.SelfVars) if (bank.Id == owner) return bank;
-        foreach (var bank in state.CommonSelf) if (bank.Id == owner) return bank;
-        return null;
-    }
+    public int? HandleSaveLoad(SaveOp op) =>
+        _saveStore.HandleSaveLoad(op, Frames, _queueGameLoadCallback, _queueSystemLoadCallback, _saveGameToCallback);
 
     /// <summary>Apply a slot that already passed the codec gates and the map-file check.</summary>
     private bool ApplyLoadedState(SaveState state, SaveAuditReport? audit = null)
@@ -1298,7 +1005,7 @@ public sealed class GameSession
         _vm.Map = null;
         _mapRuntime = null;
         _map = null;
-        Frames = (int)state.PlayFrames;
+        Frames = (int)Math.Clamp(state.PlayFrames, 0L, int.MaxValue);
         _leaderX = state.LeaderX;
         _leaderY = state.LeaderY;
         _facing = state.Facing;
@@ -1356,53 +1063,8 @@ public sealed class GameSession
     private bool CanEnterMap(int mapId) => ResolveMapDefinition(mapId) != null;
 
     /// <summary>Validate remake save JSON against the SaveCodec schema and semantic constraints.</summary>
-    public static bool ValidateSaveJson(string json, out string error)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            error = "save JSON is empty";
-            return false;
-        }
-        try
-        {
-            if (new System.Text.UTF8Encoding(false, true).GetByteCount(json) > SaveCodec.MaxSaveBytes)
-            {
-                error = $"save JSON exceeds {SaveCodec.MaxSaveBytes} bytes";
-                return false;
-            }
-            using JsonDocument doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                error = "save JSON root must be an object";
-                return false;
-            }
-            if (!doc.RootElement.TryGetProperty("schema", out JsonElement schemaProp)
-                || schemaProp.ValueKind != JsonValueKind.String
-                || schemaProp.GetString() != SaveState.SchemaName)
-            {
-                error = $"missing or invalid save schema (expected {SaveState.SchemaName})";
-                return false;
-            }
-            if (!doc.RootElement.TryGetProperty("schema_version", out JsonElement verProp)
-                || verProp.ValueKind != JsonValueKind.Number)
-            {
-                error = "missing or invalid save schema_version";
-                return false;
-            }
-        }
-        catch (Exception ex) when (ex is JsonException or ArgumentException or System.Text.EncoderFallbackException)
-        {
-            error = "malformed save JSON: " + ex.Message;
-            return false;
-        }
-        if (SaveCodec.FromJson(json) == null)
-        {
-            error = "save JSON failed schema or semantic validation";
-            return false;
-        }
-        error = "";
-        return true;
-    }
+    public static bool ValidateSaveJson(string json, out string error) =>
+        SaveSlotStore.ValidateSaveJson(json, out error);
 
     /// <summary>
     /// Import a retail <c>.sav</c> file into a remake slot file (<c>save_NN.json</c>) without
@@ -1410,363 +1072,34 @@ public sealed class GameSession
     /// </summary>
     public bool ImportRetailSaveToSlot(string savPath, int slot, out string error)
     {
-        LastImportNotice = "";
-        if (slot < 1 || slot > 99)
-        {
-            error = $"save slot {slot} out of range (must be 1..99)";
-            return false;
-        }
-        if (string.IsNullOrWhiteSpace(savPath) || !File.Exists(savPath))
-        {
-            error = $"retail save file not found: {savPath}";
-            return false;
-        }
-
-        LegacySaveImporter.SlotResult imported;
-        try
-        {
-            imported = LegacySaveImporter.ImportFile(savPath, Math.Max(0, slot - 1), rejectBadChecksum: true);
-        }
-        catch (Exception ex)
-        {
-            error = "retail import failed: " + ex.Message;
-            return false;
-        }
-
-        if (!imported.ChecksumOk)
-        {
-            error = "retail import failed: checksum mismatch";
-            return false;
-        }
-
-        LegacySaveImporter.RecoveredData data = imported.Recovered;
-        List<int> numbers = BuildRetailVarsList(data);
-        List<int> sysVars = BuildRetailSysVarsList(data);
-
-        string mapPath = _vm.MapPath(1);
-        MapDefinition? map1 = mapPath.Length > 0
-            ? ProgramLoader.LoadMap(_dataPath, mapPath, null)
-            : ProgramLoader.LoadMap(_dataPath, "SampleMapA.mps", 1005);
-
-        var state = new SaveState
-        {
-            SavedAt = DateTime.UtcNow.ToString("o"),
-            PlayFrames = data.PlayTime.Frames,
-            MapId = map1?.Id ?? 1005,
-            MapFile = map1?.File ?? "SampleMapA.mps",
-            LeaderX = 0,
-            LeaderY = 0,
-            Facing = 2,
-            Vars = numbers,
-            StrVars = new List<string>(data.StringVars),
-            SysVars = sysVars,
-        };
-
-        foreach (KeyValuePair<int, SelfVars> bank in BuildCommonSelfFromRetail(data))
-        {
-            state.CommonSelf.Add(SavedSelf(bank.Key, bank.Value));
-        }
-
-        // Preserve retail map-1 event self-vars (including Ev3 one-time migration flags)
-        // while keeping new-game setup event 0 disabled so load never resets the day.
-        ApplyRetailMapEventSelfVars(state, data);
-
-        var audit = new SaveAuditReport { SourceKind = SaveAuditSource.RetailImport };
-        audit.EncodingWarnings.AddRange(imported.EncodingWarnings);
-
-        List<SavedPicture> sanitizedPics = SaveMigrator.SanitizeRestoredPictures(data.PictureStates, audit);
-        var picByNum = new Dictionary<int, SavedPicture>(sanitizedPics.Count);
-        foreach (SavedPicture pic in sanitizedPics)
-        {
-            picByNum[pic.Number] = pic;
-        }
-        state.Pictures.AddRange(picByNum.Values.Take(SaveCodec.MaxPictures));
-
-        state.DbOverlays = BuildRetailDbOverlays(data);
-        AddRetailAudio(state.Audio, data);
-
-        SaveMigrator.Normalize(state, audit);
-        SaveMigrator.ApplyRetailPostLoadTriggerIfNeeded(state, audit);
-        SaveMigrator.InspectSuspiciousLocks(state.Vars, audit);
-
-        if (!ValidateSaveJson(SaveCodec.ToJson(state), out string validationError))
-        {
-            error = "converted save failed validation: " + validationError;
-            return false;
-        }
-
-        string dir = Path.GetDirectoryName(_savePath) ?? ".";
-        int normalizedSlot = slot <= 1 ? 1 : slot;
-        string targetPath = Path.Combine(dir, $"save_{normalizedSlot:00}.json");
-        try
-        {
-            SaveCodec.Write(targetPath, state);
-            InvalidateSaveCache(targetPath);
-            // Sync System.json slot markers & monotonic progression (NG+ var550 / clear flags)
-            // without downgrading existing System.sav data.
-            string systemPath = ResolveSaveTarget(new SaveTarget("Save/System.sav"));
-            SaveState systemState = SaveCodec.Read(systemPath) ?? new SaveState();
-            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + 0, Value = normalizedSlot });
-            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + 546, Value = normalizedSlot });
-            MergeMaxSaveVar(systemState, 626, GetVarOrDefault(state.Vars, 531));
-            MergeMaxSaveVar(systemState, 550, GetVarOrDefault(state.Vars, 550));
-            MergeMaxSaveVar(systemState, 503, GetVarOrDefault(state.Vars, 503));
-            MergeMaxSaveVar(systemState, 300, GetVarOrDefault(state.Vars, 300));
-            for (int v = 80; v <= 87; v++) MergeMaxSaveVar(systemState, v, GetVarOrDefault(state.Vars, v));
-            for (int v = 324; v <= 328; v++) MergeMaxSaveVar(systemState, v, GetVarOrDefault(state.Vars, v));
-            SaveCodec.Write(systemPath, systemState);
-            InvalidateSaveCache(systemPath);
-        }
-        catch (Exception ex)
-        {
-            error = "save write failed: " + ex.Message;
-            return false;
-        }
-
-        LastSaveAudit = audit;
-        error = "";
-        return true;
+        bool ok = _retailTransfer.ImportRetailSaveToSlot(savPath, slot, out SaveAuditReport? audit, out error);
+        if (ok && audit != null) LastSaveAudit = audit;
+        return ok;
     }
 
     /// <summary>Validate a retail .sav file without altering live session state.</summary>
     public static bool ValidateRetailSave(string savPath, out string error) =>
-        LegacySaveImporter.ValidateFile(savPath, out error);
+        RetailSaveTransfer.ValidateRetailSave(savPath, out error);
 
     /// <summary>Import a retail System.sav file into System.json without mutating the live session.</summary>
     public bool ImportRetailSystemSave(string savPath, out string error) =>
         ImportRetailSystemSaveTo(savPath, "System.sav", out error);
 
     /// <summary>Import a retail System.sav or system2.sav file into its matching JSON target without mutating the live session.</summary>
-    public bool ImportRetailSystemSaveTo(string savPath, string targetFileName, out string error)
-    {
-        if (string.IsNullOrWhiteSpace(savPath) || !File.Exists(savPath))
-        {
-            error = "retail system save file not found";
-            return false;
-        }
-        string cleanLeaf = Path.GetFileName((targetFileName ?? "").Replace('\\', '/'));
-        string saveTarget = cleanLeaf.Equals("system2.sav", StringComparison.OrdinalIgnoreCase)
-            || cleanLeaf.Equals("system2.json", StringComparison.OrdinalIgnoreCase)
-            ? "save/system2.sav"
-            : "Save/System.sav";
-
-        LegacySaveImporter.SlotResult parsed;
-        try
-        {
-            parsed = LegacySaveImporter.ImportFile(savPath, 0, rejectBadChecksum: true);
-        }
-        catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or IOException or UnauthorizedAccessException)
-        {
-            error = "retail system save import failed: " + ex.Message;
-            return false;
-        }
-
-        var data = parsed.Recovered;
-        var state = new SaveState
-        {
-            SavedAt = DateTime.UtcNow.ToString("o"),
-            PlayFrames = data.PlayTime.Frames,
-            Vars = BuildRetailVarsList(data),
-            StrVars = new List<string>(data.StringVars),
-            SysVars = BuildRetailSysVarsList(data),
-            DbOverlays = BuildRetailDbOverlays(data),
-        };
-        foreach (KeyValuePair<int, SelfVars> bank in BuildCommonSelfFromRetail(data))
-        {
-            state.CommonSelf.Add(SavedSelf(bank.Key, bank.Value));
-        }
-
-        SaveMigrator.Normalize(state);
-        if (!ValidateSaveJson(SaveCodec.ToJson(state), out string validationError))
-        {
-            error = "converted system save failed validation: " + validationError;
-            return false;
-        }
-
-        string systemPath = ResolveSaveTarget(new SaveTarget(saveTarget));
-        try
-        {
-            SaveCodec.Write(systemPath, state);
-            InvalidateSaveCache(systemPath);
-        }
-        catch (Exception ex)
-        {
-            error = "system save write failed: " + ex.Message;
-            return false;
-        }
-
-        error = "";
-        return true;
-    }
+    public bool ImportRetailSystemSaveTo(string savPath, string targetFileName, out string error) =>
+        _retailTransfer.ImportRetailSystemSaveTo(savPath, targetFileName, out error);
 
     /// <summary>Export one 1-based JSON slot to a retail WOLF .sav file atomically.</summary>
-    public bool ExportSlotToRetailSav(int slot, string destPath, out string error)
-    {
-        if (slot < 1 || slot > 99)
-        {
-            error = $"slot {slot} out of range (1..99)";
-            return false;
-        }
-        if (string.IsNullOrWhiteSpace(destPath))
-        {
-            error = "destination path is empty";
-            return false;
-        }
-        string srcPath = SlotSavePath(slot);
-        SaveState? state = SaveCodec.Read(srcPath);
-        if (state == null)
-        {
-            error = $"save slot {slot:00} not found or unreadable";
-            return false;
-        }
-        try
-        {
-            byte[] encoded = LegacySaveExporter.ExportSaveState(state, _vm.DatabaseStore, $"LWSMF Save {slot:00}");
-            LegacySaveExporter.WriteAtomic(destPath, encoded);
-            error = "";
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
-        {
-            error = "retail export failed: " + ex.Message;
-            return false;
-        }
-    }
+    public bool ExportSlotToRetailSav(int slot, string destPath, out string error) =>
+        _retailTransfer.ExportSlotToRetailSav(slot, destPath, out error);
 
     /// <summary>Export System.json to a retail WOLF System.sav file atomically.</summary>
     public bool ExportSystemToRetailSav(string destPath, out string error) =>
-        ExportSystemTargetToRetailSav("Save/System.sav", destPath, "LWSMF System", out error);
-
-    private bool ExportSystemTargetToRetailSav(string saveTarget, string destPath, string label, out string error)
-    {
-        if (string.IsNullOrWhiteSpace(destPath))
-        {
-            error = "destination path is empty";
-            return false;
-        }
-        string systemPath = ResolveSaveTarget(new SaveTarget(saveTarget));
-        SaveState? state = SaveCodec.Read(systemPath);
-        if (state == null)
-        {
-            error = $"{Path.GetFileName(systemPath)} not found or unreadable";
-            return false;
-        }
-        try
-        {
-            byte[] encoded = LegacySaveExporter.ExportSystemState(state, label);
-            LegacySaveExporter.WriteAtomic(destPath, encoded);
-            error = "";
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
-        {
-            error = "retail system export failed: " + ex.Message;
-            return false;
-        }
-    }
+        _retailTransfer.ExportSystemTargetToRetailSav("Save/System.sav", destPath, "LWSMF System", out error);
 
     /// <summary>Export all existing save_NN.json slots (plus System.json and optional thumbnails) into a directory of retail .sav files.</summary>
-    public bool ExportAllToRetailSavDir(string destDir, bool includeThumbnails, out int exportedCount, out string error)
-    {
-        exportedCount = 0;
-        if (string.IsNullOrWhiteSpace(destDir))
-        {
-            error = "destination directory is empty";
-            return false;
-        }
-        string saveDir = Path.GetDirectoryName(_savePath) ?? ".";
-        if (!Directory.Exists(saveDir))
-        {
-            error = "save directory does not exist";
-            return false;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(destDir);
-            for (int slot = 1; slot <= 99; slot++)
-            {
-                string srcPath = SlotSavePath(slot);
-                if (!SaveCodec.Exists(srcPath)) continue;
-                string outSav = Path.Combine(destDir, $"SaveData{slot:00}.sav");
-                if (!ExportSlotToRetailSav(slot, outSav, out string slotErr))
-                {
-                    error = slotErr;
-                    return false;
-                }
-                exportedCount++;
-                if (includeThumbnails)
-                {
-                    string thumbName = $"save{slot}.jpg";
-                    string thumbSrc = Path.Combine(saveDir, thumbName);
-                    if (File.Exists(thumbSrc))
-                    {
-                        File.Copy(thumbSrc, Path.Combine(destDir, thumbName), overwrite: true);
-                        exportedCount++;
-                    }
-                }
-            }
-
-            foreach (var (sysTarget, outLeaf, label) in new[]
-            {
-                ("Save/System.sav", "System.sav", "LWSMF System"),
-                ("save/system2.sav", "system2.sav", "LWSMF System2")
-            })
-            {
-                string systemPath = ResolveSaveTarget(new SaveTarget(sysTarget));
-                if (SaveCodec.Exists(systemPath)
-                    && ExportSystemTargetToRetailSav(sysTarget, Path.Combine(destDir, outLeaf), label, out _))
-                {
-                    exportedCount++;
-                }
-            }
-
-            if (exportedCount == 0)
-            {
-                error = "no save slots found to export";
-                return false;
-            }
-            error = "";
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            error = "batch retail export failed: " + ex.Message;
-            return false;
-        }
-    }
-
-    private static Dictionary<int, SelfVars> BuildCommonSelfFromRetail(LegacySaveImporter.RecoveredData data)
-    {
-        var result = new Dictionary<int, SelfVars>();
-        foreach (KeyValuePair<int, int[]> pair in data.CommonSelfNumbers)
-        {
-            var bank = new SelfVars();
-            bool any = false;
-            for (int i = 0; i < pair.Value.Length; i++)
-            {
-                if (pair.Value[i] == 0) continue;
-                bank.Set(600 + i, pair.Value[i]);
-                any = true;
-            }
-            if (any) result[pair.Key] = bank;
-        }
-        foreach (KeyValuePair<int, string[]> pair in data.CommonSelfStrings)
-        {
-            SelfVars? bank = result.GetValueOrDefault(pair.Key);
-            for (int i = 0; i < pair.Value.Length; i++)
-            {
-                if (string.IsNullOrEmpty(pair.Value[i])) continue;
-                if (bank == null)
-                {
-                    bank = new SelfVars();
-                    result[pair.Key] = bank;
-                }
-                bank.SetStr(605 + i, pair.Value[i]);
-            }
-        }
-        return result;
-    }
+    public bool ExportAllToRetailSavDir(string destDir, bool includeThumbnails, out int exportedCount, out string error) =>
+        _retailTransfer.ExportAllToRetailSavDir(destDir, includeThumbnails, out exportedCount, out error);
 
     /// <summary>
     /// Load a retail <c>.sav</c> into a live bedroom session. The save's 800 normal variables,
@@ -1801,7 +1134,7 @@ public sealed class GameSession
         _mapRuntime = null;
         _map = null;
 
-        Frames = (int)data.PlayTime.Frames;
+        Frames = (int)Math.Min(data.PlayTime.Frames, (uint)int.MaxValue);
         _leaderX = 0;
         _leaderY = 0;
         _facing = 2;
@@ -1809,14 +1142,14 @@ public sealed class GameSession
         var audit = new SaveAuditReport { SourceKind = SaveAuditSource.RetailImport };
         audit.EncodingWarnings.AddRange(slot.EncodingWarnings);
 
-        List<int> numbers = BuildRetailVarsList(data);
+        List<int> numbers = RetailSaveTransfer.BuildRetailVarsList(data);
         SaveMigrator.ApplyRetailPostLoadVars(numbers, audit);
         SaveMigrator.InspectSuspiciousLocks(numbers, audit);
-        List<int> sysVars = BuildRetailSysVarsList(data);
+        List<int> sysVars = RetailSaveTransfer.BuildRetailSysVarsList(data);
         _vm.Vm.Vars.Restore(numbers, data.StringVars, sysVars, null);
 
         _vm.Vm.CommonSelf.Clear();
-        foreach (KeyValuePair<int, SelfVars> bank in BuildCommonSelfFromRetail(data))
+        foreach (KeyValuePair<int, SelfVars> bank in RetailSaveTransfer.BuildCommonSelfFromRetail(data))
         {
             _vm.Vm.CommonSelf[bank.Key] = bank.Value;
         }
@@ -1825,7 +1158,7 @@ public sealed class GameSession
         _vm.ApplySavedCells(data.DatabaseCells);
         _vm.ApplySavedTextCells(data.DatabaseTextCells);
         _view.ClearPictures();
-        Dictionary<int, SelfVars>? mapSelfVars = BuildRetailMapSelfVars(data);
+        Dictionary<int, SelfVars>? mapSelfVars = RetailSaveTransfer.BuildRetailMapSelfVars(data);
         EnterMap(1, mapSelfVars, null, skipEventId: 0);
         if (_vm.Faulted)
         {
@@ -1837,7 +1170,7 @@ public sealed class GameSession
         EnsureAutoEvents().PrimeLatched(_vm.Vm);
         _view.RestorePictures(SaveMigrator.SanitizeRestoredPictures(data.PictureStates, audit));
         var retailAudio = new List<SavedAudio>();
-        AddRetailAudio(retailAudio, data);
+        RetailSaveTransfer.AddRetailAudio(retailAudio, data);
         if (retailAudio.Count > 0) _view.RestoreAudio(retailAudio);
         _view.OnLoadCompleted();
         LastSaveAudit = audit;
@@ -1845,196 +1178,6 @@ public sealed class GameSession
         _view.SetStatus($"loaded retail save {slot.File} (map 1 day {_vm.Vm.Vars.Get(WolfIds.VarDay)})");
         UpdateMapHud(false);
         return true;
-    }
-
-    private static List<int> BuildRetailVarsList(LegacySaveImporter.RecoveredData data)
-    {
-        int count = WolfIds.VarPollMax;
-        foreach (string key in data.Variables.Keys)
-        {
-            if (int.TryParse(key, out int idx) && idx >= count && idx < Variables.MaxSlots)
-                count = idx + 1;
-        }
-        var numbers = new List<int>(Enumerable.Repeat(0, count));
-        foreach (KeyValuePair<string, int> pair in data.Variables)
-        {
-            if (int.TryParse(pair.Key, out int index) && index >= 0 && index < numbers.Count)
-            {
-                numbers[index] = pair.Value;
-            }
-        }
-        return numbers;
-    }
-
-    private static List<int> BuildRetailSysVarsList(LegacySaveImporter.RecoveredData data)
-    {
-        if (data.SysVars is { Length: > 0 })
-        {
-            return new List<int>(data.SysVars);
-        }
-        var sysVars = new List<int>();
-        if (data.ChoiceAnchor is { Length: >= 2 })
-        {
-            int needed = Math.Max(WolfIds.SysChoiceAnchorX, WolfIds.SysChoiceAnchorY) + 1;
-            while (sysVars.Count < needed) sysVars.Add(0);
-            sysVars[WolfIds.SysChoiceAnchorX] = data.ChoiceAnchor[0];
-            sysVars[WolfIds.SysChoiceAnchorY] = data.ChoiceAnchor[1];
-        }
-        return sysVars;
-    }
-
-    private static Dictionary<int, SelfVars>? BuildRetailMapSelfVars(LegacySaveImporter.RecoveredData data)
-    {
-        if (!data.MapEventSelfVars.TryGetValue(1, out Dictionary<int, int[]>? map1Events) || map1Events.Count == 0)
-            return null;
-        var result = new Dictionary<int, SelfVars>(map1Events.Count);
-        foreach (var pair in map1Events)
-        {
-            var sv = new SelfVars();
-            for (int k = 0; k < pair.Value.Length; k++)
-            {
-                if (pair.Value[k] != 0) sv.Set(100 + k, pair.Value[k]);
-            }
-            result[pair.Key] = sv;
-        }
-        return result;
-    }
-
-    private static void ApplyRetailMapEventSelfVars(SaveState state, LegacySaveImporter.RecoveredData data)
-    {
-        Dictionary<int, SelfVars>? mapSelf = BuildRetailMapSelfVars(data);
-        if (mapSelf != null)
-        {
-            foreach (var pair in mapSelf)
-            {
-                state.SelfVars.Add(SavedSelf(pair.Key, pair.Value));
-            }
-        }
-        EventSelfVars ev0Self = mapSelf != null && mapSelf.TryGetValue(0, out SelfVars? sv0)
-            ? SavedSelf(0, sv0)
-            : new EventSelfVars { Id = 0 };
-        state.MapEvents.Add(new SavedMapEvent
-        {
-            Id = 0,
-            Active = null,
-            InstanceId = null,
-            Runs = false,
-            Starts = 1,
-            StartsOnPage = 1,
-            Self = ev0Self,
-        });
-    }
-
-    private SavedDbOverlays? BuildRetailDbOverlays(LegacySaveImporter.RecoveredData data)
-    {
-        if (data.DatabaseRowCounts.Count == 0 && data.DatabaseCells.Count == 0 && data.DatabaseTextCells.Count == 0)
-            return null;
-        if (_vm.DatabaseStore != null)
-        {
-            return _vm.DatabaseStore.BuildSparseOverlays(data.DatabaseRowCounts, data.DatabaseCells, data.DatabaseTextCells);
-        }
-        var overlays = new SavedDbOverlays();
-        foreach (var rc in data.DatabaseRowCounts)
-        {
-            if (rc.Key < 0 || rc.Value < 0) continue;
-            overlays.RowCounts.Add(new SavedDbRowCount { Container = (int)DbContainer.CData, Type = rc.Key, Count = rc.Value });
-        }
-        foreach (var cell in data.DatabaseCells)
-        {
-            if (cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
-            overlays.Nums.Add(new SavedDbNumCell
-            {
-                Container = (int)DbContainer.CData,
-                Type = cell.Type,
-                Row = cell.Row,
-                Column = cell.Column,
-                Value = cell.Value
-            });
-        }
-        foreach (var cell in data.DatabaseTextCells)
-        {
-            if (cell.Type < 0 || cell.Row < 0 || cell.Column < 0) continue;
-            overlays.Texts.Add(new SavedDbTextCell
-            {
-                Container = (int)DbContainer.CData,
-                Type = cell.Type,
-                Row = cell.Row,
-                Column = cell.Column,
-                Value = cell.Value
-            });
-        }
-        return overlays;
-    }
-
-    private static void AddRetailAudio(List<SavedAudio> target, LegacySaveImporter.RecoveredData data)
-    {
-        if (!string.IsNullOrEmpty(data.BgmFile))
-        {
-            target.Add(new SavedAudio
-            {
-                Channel = 0,
-                File = data.BgmFile,
-                Volume = data.BgmVolume,
-                Loop = true,
-                LoopPoint = data.BgmLoopPoint,
-                Tempo = data.BgmTempo
-            });
-        }
-        if (!string.IsNullOrEmpty(data.BgsFile))
-        {
-            target.Add(new SavedAudio
-            {
-                Channel = 1,
-                File = data.BgsFile,
-                Volume = data.BgsVolume,
-                Loop = true,
-                LoopPoint = data.BgsLoopPoint,
-                Tempo = data.BgsTempo
-            });
-        }
-    }
-
-    private static int GetVarOrDefault(IReadOnlyList<int> vars, int index) =>
-        index >= 0 && index < vars.Count ? vars[index] : 0;
-
-    private static void MergeMaxSaveVar(SaveState systemState, int varIndex, int candidate)
-    {
-        if (candidate <= 0) return;
-        int current = GetVarOrDefault(systemState.Vars, varIndex);
-        if (candidate > current)
-        {
-            WriteSaveAddress(systemState, new SaveOp { Opcode = 222, Address = Magic.VarBase + varIndex, Value = candidate });
-        }
-    }
-
-    /// <summary>Refresh NG+ / clear-unlock variables from System.json and system2.json before New Game.</summary>
-    private void SyncPersistentSystemVarsFromDisk()
-    {
-        string sys1Path = ResolveSaveTarget(new SaveTarget("Save/System.sav"));
-        SaveState? sys1 = ReadCachedSave(sys1Path).State;
-        if (sys1 != null)
-        {
-            int[] sys1MergeVars = [300, 80, 81, 82, 83, 84, 85, 86, 87, 324, 325, 326, 327, 328, 503, 546, 550, 626];
-            foreach (int v in sys1MergeVars)
-            {
-                int diskVal = GetVarOrDefault(sys1.Vars, v);
-                if (diskVal > _vm.Vm.Vars.Get(v)) _vm.Vm.Vars.Set(v, diskVal);
-            }
-            int diskVol = GetVarOrDefault(sys1.Vars, 357);
-            if (diskVol > 0 && _vm.Vm.Vars.Get(357) <= 0) _vm.Vm.Vars.Set(357, diskVol);
-        }
-
-        string sys2Path = ResolveSaveTarget(new SaveTarget("save/system2.sav"));
-        SaveState? sys2 = ReadCachedSave(sys2Path).State;
-        if (sys2 != null)
-        {
-            int v503 = GetVarOrDefault(sys2.Vars, 503);
-            if (v503 > _vm.Vm.Vars.Get(503)) _vm.Vm.Vars.Set(503, v503);
-            int v531 = GetVarOrDefault(sys2.Vars, 531);
-            if (v531 > _vm.Vm.Vars.Get(626)) _vm.Vm.Vars.Set(626, v531);
-            int v550 = GetVarOrDefault(sys2.Vars, 550);
-            if (v550 > _vm.Vm.Vars.Get(550)) _vm.Vm.Vars.Set(550, v550);
-        }
     }
 
     /// <summary>Drop queued loads/teleports, dialogue flags and front-end popups shared by every session restart.</summary>
@@ -2052,6 +1195,7 @@ public sealed class GameSession
         _pendingSystemLoads.Clear();
         _teleports.Clear();
         _ev4HasBedroomRefresh = false;
+        _hudInitialized = false;
         _view.HideMessage();
         _view.HideChoices();
     }
@@ -2121,7 +1265,7 @@ public sealed class GameSession
         List<string> savedSysStrings = _vm.Vm.Vars.SnapshotSysStrings();
         _vm.ResetSessionState();
         _vm.Vm.Vars.Restore(savedNums, savedStrings, savedSysNums, savedSysStrings);
-        if (!ScriptedInput) SyncPersistentSystemVarsFromDisk();
+        if (!ScriptedInput) _saveStore.SyncPersistentSystemVarsFromDisk();
         ResetTransientSessionState();
         // AutoEvents is session-scoped; StopAll does not clear its edge latch. Re-arming
         // here would replay event 38 and shift instance ids. A fresh engine boot
@@ -2143,14 +1287,9 @@ public sealed class GameSession
         _view.SetStatus("new game: " + newGame.Title);
     }
 
-    private static EventSelfVars SavedSelf(int id, SelfVars vars)
-    {
-        return EventSelfVars.Pack(id, vars.SnapshotNums(), vars.SnapshotStrings());
-    }
-
     private void RestoreInstances(SaveState state)
     {
-        var savedById = new Dictionary<int, SavedInstance>();
+        var savedById = new Dictionary<int, SavedInstance>(state.Instances.Count);
         foreach (SavedInstance saved in state.Instances) savedById[saved.Id] = saved;
         foreach (SavedInstance saved in state.Instances)
         {
@@ -2160,7 +1299,7 @@ public sealed class GameSession
             Program? program = null;
             if (saved.Kind == "map" && saved.Page >= 0)
             {
-                MapEventDef? def = _map?.Events.FirstOrDefault(e => e.Id == saved.EventId);
+                MapEventDef? def = FindMapEventDef(_map, saved.EventId);
                 if (def != null && saved.Page < def.Pages.Count)
                 {
                     program = def.Pages[saved.Page].Program;
@@ -2226,6 +1365,16 @@ public sealed class GameSession
         ClearMissingChildWaits();
     }
 
+    private static MapEventDef? FindMapEventDef(MapDefinition? map, int eventId)
+    {
+        if (map == null) return null;
+        for (int i = 0; i < map.Events.Count; i++)
+        {
+            if (map.Events[i].Id == eventId) return map.Events[i];
+        }
+        return null;
+    }
+
     private bool InferLegacyParallel(SavedInstance saved, Program program, IReadOnlyDictionary<int, SavedInstance> byId)
     {
         if (program.RunCondition == 2 || Array.IndexOf(AutoEvents.GatedCallOnly, program.Id) >= 0) return true;
@@ -2236,7 +1385,7 @@ public sealed class GameSession
             if (parent.IsParallel == true) return true;
             if (parent.Kind == "map" && parent.Page >= 0)
             {
-                MapEventDef? def = _map?.Events.FirstOrDefault(e => e.Id == parent.EventId);
+                MapEventDef? def = FindMapEventDef(_map, parent.EventId);
                 if (def != null && parent.Page < def.Pages.Count && def.Pages[parent.Page].Trigger == MapTrigger.Parallel)
                     return true;
             }
@@ -2257,7 +1406,8 @@ public sealed class GameSession
     /// <summary>Save-UI children are intentionally omitted; release any caller left waiting on them.</summary>
     private void ClearMissingChildWaits()
     {
-        var liveIds = _vm.Vm.Instances.Select(i => i.Id).ToHashSet();
+        var liveIds = new HashSet<int>(_vm.Vm.Instances.Count);
+        foreach (Instance inst in _vm.Vm.Instances) liveIds.Add(inst.Id);
         foreach (Instance inst in _vm.Vm.Instances)
         {
             if (inst.Wait.Kind != WaitStateKind.Child || liveIds.Contains(inst.Wait.ChildId)) continue;
@@ -2274,6 +1424,7 @@ public sealed class GameSession
         _messageOpen = false;
         _hasChoices = false;
         ChoiceAllowsCancel = true;
+        _hudInitialized = false;
         _view.HideMessage();
         _view.HideChoices();
         _vm.Map = null;
@@ -2315,7 +1466,7 @@ public sealed class GameSession
         }
         if (skipEventId is int skipped)
         {
-            MapEventState? state = _mapRuntime.Events.FirstOrDefault(e => e.Def.Id == skipped);
+            MapEventState? state = _mapRuntime.Find(skipped);
             if (state != null)
             {
                 state.Runs = false;

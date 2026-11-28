@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Godot;
 using Lwsmf.Core;
+using Lwsmf.Presentation;
 
 namespace Lwsmf.Tests;
 
@@ -26,6 +28,7 @@ public partial class MapRuntimeTest : Node
         ConditionOperators();
         PageSelectionAndAutoStart();
         EventCollision();
+        PackedBridgeAndTerrainMasks();
 
         if (_failures.Count > 0)
         {
@@ -359,5 +362,90 @@ public partial class MapRuntimeTest : Node
         battleRuntime.StartPending(battleVm);
         Check(battleRuntime.Events[0].Active == null && battleRuntime.Events[0].InstanceId == null,
             "StartPending must deactivate invalidated parallel map event at end of frame");
+    }
+
+    private void PackedBridgeAndTerrainMasks()
+    {
+        var vm = new VmController { Name = "PackedBridgeTestVm" };
+        AddChild(vm);
+        vm.Vm.Vars.SetSys(100, 80);
+        vm.Vm.Vars.SetSys(101, 70);
+        vm.Vm.Vars.SetSys(102, 60);
+        vm.Vm.Vars.Set(357, 90);
+        vm.Vm.RegisterProgram(Program.FromSlots(131, "SaveUi", new List<Slot> { Slot.Command(180, [10]) }));
+        vm.Vm.CreateInstance(131);
+        vm.BeginFrameInputPacked(120.0f, 240.0f, true, false, false, 3, 45);
+        Check(vm.PointerX == 120.0f && vm.PointerY == 240.0f, "BeginFrameInputPacked updates pointer");
+        Check(vm.GetSys(82) == 45, "BeginFrameInputPacked writes Sys82 when wallSecond >= 0");
+        Check(vm.EngineStateBridge(7) == 2, "BeginFrameInputPacked latches left press edge");
+        Check(vm.EngineStateBridge(10) == 3, "BeginFrameInputPacked latches wheel notch");
+        int[] packed = vm.EndFrameQueryPacked();
+        Check(packed.Length == 10, "EndFrameQueryPacked length == 10");
+        Check(packed[0] == 0 && packed[4] == 80 && packed[5] == 70 && packed[6] == 60 && packed[7] == 90 && packed[8] == 1,
+            "EndFrameQueryPacked reports audio volumes and HasEvent(131)");
+
+        var session = new GameSessionController { Name = "PackedBridgeTestSession" };
+        AddChild(session);
+        int[] sPacked = session.EndFrameSessionPacked();
+        Check(sPacked.Length == 4 && sPacked[0] == 0 && sPacked[1] == 0 && sPacked[2] == 0,
+            "EndFrameSessionPacked reports default boot state");
+        session.QueueFree();
+        vm.QueueFree();
+
+        var bridge = new TerrainBridge { Name = "PackedTerrainTestBridge" };
+        AddChild(bridge);
+        Check(bridge.GetAllMasks().Length == 0, "unloaded TerrainBridge.GetAllMasks returns empty array");
+        string tmpDir = Path.Combine(Path.GetTempPath(), $"lwsmf_terrain_bridge_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string progJson = """
+            {
+              "common_events": [],
+              "maps": [
+                { "id": 1, "file": "Tiny.mps", "name": "Tiny", "width": 2, "height": 2, "events": [] }
+              ]
+            }
+            """;
+            byte[] passBytes = new byte[2 * 4];
+            BitConverter.GetBytes(0u).CopyTo(passBytes, 0);
+            BitConverter.GetBytes(0xF0u).CopyTo(passBytes, 4);
+            string passB64 = Convert.ToBase64String(passBytes);
+
+            byte[] tileWords = new byte[4 * 4];
+            BitConverter.GetBytes(0u).CopyTo(tileWords, 0);
+            BitConverter.GetBytes(1u).CopyTo(tileWords, 4);
+            BitConverter.GetBytes(0u).CopyTo(tileWords, 8);
+            BitConverter.GetBytes(1u).CopyTo(tileWords, 12);
+            string b64 = Convert.ToBase64String(tileWords);
+            string tilesJson = $$"""
+            {
+              "tilesets": [
+                { "index": 0, "name": "Test", "image": "", "passability": "{{passB64}}" }
+              ],
+              "maps": [
+                { "id": 1, "file": "Tiny.mps", "width": 2, "height": 2, "tileset_id": 0, "layers": ["{{b64}}"] }
+              ]
+            }
+            """;
+            string progPath = Path.Combine(tmpDir, "programs.json");
+            string tilesPath = Path.Combine(tmpDir, "map_tiles.json");
+            File.WriteAllText(progPath, progJson);
+            File.WriteAllText(tilesPath, tilesJson);
+            Check(bridge.LoadMapFromTiles(1, tilesPath, progPath), "synthetic LoadMapFromTiles succeeds");
+            byte[] masks = bridge.GetAllMasks();
+            Check(masks.Length == 4, $"GetAllMasks expected 4 bytes, got {masks.Length}");
+            Check(masks[0] == bridge.Mask(0, 0) && masks[1] == bridge.Mask(1, 0)
+                && masks[2] == bridge.Mask(0, 1) && masks[3] == bridge.Mask(1, 1)
+                && masks[1] == 0b1111 && masks[0] == 0,
+                $"GetAllMasks matches per-cell Mask(x, y): got [{string.Join(",", masks)}]");
+        }
+        finally
+        {
+            ProgramLoader.ClearCache();
+            MapTileData.ClearCache();
+            bridge.QueueFree();
+            try { Directory.Delete(tmpDir, true); } catch (IOException) { }
+        }
     }
 }
